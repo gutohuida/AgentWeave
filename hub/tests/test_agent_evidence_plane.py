@@ -27,7 +27,7 @@ from hub.spec_payload import SCHEMA_VERSION
 BASE = "/api/v1/projects/proj-test/project"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 EVIDENCE = "/api/v1/agent-actions/spec/evidence"
-PATH = "spec/changes/agent-evidence/spec.html"
+PATH = "spec/changes/agent-evidence/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 BETA = {"key": "beta", "statement": "It records a completed watering", "modal": "SHOULD"}
@@ -110,7 +110,7 @@ async def _record(app, headers, identifier="FR-1", summary="18 tests pass"):
     return response.json()
 
 
-SECOND_PATH = "spec/changes/agent-evidence-second/spec.html"
+SECOND_PATH = "spec/changes/agent-evidence-second/spec.json"
 GAMMA = {"key": "gamma", "statement": "It sends a reminder", "modal": "MUST"}
 
 
@@ -255,7 +255,7 @@ async def test_the_operator_read_narrowed_to_a_document_alone_excludes_the_other
 
     missing = await app.get(
         f"{BASE}/spec/evidence",
-        params={"document": "spec/changes/does-not-exist/spec.html"},
+        params={"document": "spec/changes/does-not-exist/spec.json"},
         headers=auth_headers,
     )
     assert missing.status_code == 404, missing.text
@@ -266,7 +266,7 @@ async def test_reading_narrowed_to_an_unknown_document_is_refused(app, auth_head
     """The same 404 `_resolve_requirement` gives an unknown document when narrowing by
     `identifier` — consistent behaviour for the same bad input, whichever way it is scoped."""
     missing = await app.get(
-        EVIDENCE, params={"document": "spec/changes/does-not-exist/spec.html"}, headers=builder
+        EVIDENCE, params={"document": "spec/changes/does-not-exist/spec.json"}, headers=builder
     )
     assert missing.status_code == 404, missing.text
 

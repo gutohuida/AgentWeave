@@ -104,7 +104,7 @@ function isArchived(path: string, phase?: string | null): boolean {
   return path.startsWith(ARCHIVE_PREFIX) || phase === 'archived'
 }
 
-/** `spec/changes/archive/2026-07-29-add-x/spec.html` -> date + change name. */
+/** `spec/changes/archive/2026-07-29-add-x/spec.json` -> date + change name. */
 function parseArchiveSegment(path: string): { date: string | null; name: string | null } {
   if (!isArchived(path)) return { date: null, name: null }
   const dir = path.slice(ARCHIVE_PREFIX.length).split('/')[0]
@@ -116,12 +116,12 @@ function parseArchiveSegment(path: string): { date: string | null; name: string 
 
 /**
  * A readable label for a document the manifest does not describe. A change's
- * directory identifies it better than the repeated `spec.html` basename.
+ * directory identifies it better than the repeated `spec.json` basename.
  */
 function deriveTitle(path: string): string {
   const segments = path.split('/').filter(Boolean)
   const basename = segments[segments.length - 1] ?? path
-  if (basename.toLowerCase() === 'spec.html' && segments.length >= 2) {
+  if (basename.toLowerCase() === 'spec.json' && segments.length >= 2) {
     return segments[segments.length - 2]
   }
   return basename
@@ -269,7 +269,7 @@ function isReadable(inv: SpecInventory, path: string | null | undefined): boolea
 
 /**
  * FR-4: keep what the user is reading; otherwise manifest home, then
- * `spec/spec.html`, then the first readable current document. An archive is
+ * `spec/spec.json`, then the first readable current document. An archive is
  * only ever shown because the user asked for it, never as a fallback.
  */
 export function resolveSelection(
@@ -282,7 +282,7 @@ export function resolveSelection(
   const homeNode = home ? inv.byPath.get(home) : undefined
   if (homeNode && !homeNode.missing && !homeNode.archived) return homeNode.path
 
-  const baseline = inv.byPath.get('spec/spec.html')
+  const baseline = inv.byPath.get('spec/spec.json')
   if (baseline && !baseline.missing && !baseline.archived) return baseline.path
 
   const firstCurrent = inv.nodes

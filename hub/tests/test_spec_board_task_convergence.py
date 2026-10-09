@@ -25,7 +25,7 @@ from hub.spec_payload import SCHEMA_VERSION
 BASE = "/api/v1/projects/proj-test/project"
 TASKS = "/api/v1/projects/proj-test/tasks"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/board-convergence-demo/spec.html"
+PATH = "spec/changes/board-convergence-demo/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 CRITERION = {"key": "c1", "requirement": "alpha", "given": "g", "when": "w", "then": "t"}

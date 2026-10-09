@@ -7,8 +7,8 @@ import {
   ARCHIVE_PREFIX,
 } from '@/components/spec/specNavigation'
 
-const ROADMAP = 'spec/roadmaps/agentweave-reconstruction.html'
-const OTHER_ROADMAP = 'spec/roadmaps/hub-hardening.html'
+const ROADMAP = 'spec/roadmaps/agentweave-reconstruction.json'
+const OTHER_ROADMAP = 'spec/roadmaps/hub-hardening.json'
 
 function response(partial: Partial<SpecListResponse> = {}): SpecListResponse {
   return {
@@ -41,7 +41,7 @@ describe('spec navigation — current library projection (FR-1)', () => {
     const inv = buildInventory(
       response({
         specs: [
-          filed('spec/changes/add-spec-navigation/spec.html', {
+          filed('spec/changes/add-spec-navigation/spec.json', {
             title: 'Add Spec Navigation',
             parent: ROADMAP,
             order: 10,
@@ -54,7 +54,7 @@ describe('spec navigation — current library projection (FR-1)', () => {
     expect(inv.library).toHaveLength(1)
     expect(inv.library[0].node.path).toBe(ROADMAP)
     expect(inv.library[0].children.map((c) => c.node.path)).toEqual([
-      'spec/changes/add-spec-navigation/spec.html',
+      'spec/changes/add-spec-navigation/spec.json',
     ])
     expect(inv.needsAttention).toHaveLength(0)
   })
@@ -63,22 +63,22 @@ describe('spec navigation — current library projection (FR-1)', () => {
     const inv = buildInventory(
       response({
         specs: [
-          filed('spec/c.html', { title: 'C', order: 30 }),
-          filed('spec/a.html', { title: 'A', order: 10 }),
-          filed('spec/b2.html', { title: 'Same', order: 20 }),
-          filed('spec/b1.html', { title: 'Same', order: 20 }),
-          filed('spec/b0.html', { title: 'Earlier', order: 20 }),
+          filed('spec/c.json', { title: 'C', order: 30 }),
+          filed('spec/a.json', { title: 'A', order: 10 }),
+          filed('spec/b2.json', { title: 'Same', order: 20 }),
+          filed('spec/b1.json', { title: 'Same', order: 20 }),
+          filed('spec/b0.json', { title: 'Earlier', order: 20 }),
         ],
       })
     )
 
     // order first; within equal order, title; within equal title, path
     expect(inv.library.map((n) => n.node.path)).toEqual([
-      'spec/a.html',
-      'spec/b0.html',
-      'spec/b1.html',
-      'spec/b2.html',
-      'spec/c.html',
+      'spec/a.json',
+      'spec/b0.json',
+      'spec/b1.json',
+      'spec/b2.json',
+      'spec/c.json',
     ])
   })
 
@@ -86,17 +86,17 @@ describe('spec navigation — current library projection (FR-1)', () => {
     const inv = buildInventory(
       response({
         specs: [
-          filed('spec/agentweave-spec.html', { title: 'Baseline', kind: 'baseline' }),
-          { path: 'spec/scratch.html', state: 'unindexed' as const },
-          { path: 'spec/orphan.html', state: 'unfiled' as const },
+          filed('spec/agentweave-spec.json', { title: 'Baseline', kind: 'baseline' }),
+          { path: 'spec/scratch.json', state: 'unindexed' as const },
+          { path: 'spec/orphan.json', state: 'unfiled' as const },
         ],
       })
     )
 
-    expect(inv.library.map((n) => n.node.path)).toEqual(['spec/agentweave-spec.html'])
+    expect(inv.library.map((n) => n.node.path)).toEqual(['spec/agentweave-spec.json'])
     expect(inv.needsAttention.map((n) => n.path).sort()).toEqual([
-      'spec/orphan.html',
-      'spec/scratch.html',
+      'spec/orphan.json',
+      'spec/scratch.json',
     ])
     // visible, not dropped
     expect(inv.nodes).toHaveLength(3)
@@ -106,13 +106,13 @@ describe('spec navigation — current library projection (FR-1)', () => {
     const inv = buildInventory(
       response({
         specs: [
-          filed('spec/changes/x/spec.html', { title: 'X', parent: 'spec/roadmaps/gone.html' }),
+          filed('spec/changes/x/spec.json', { title: 'X', parent: 'spec/roadmaps/gone.json' }),
         ],
       })
     )
 
     expect(inv.library).toHaveLength(0)
-    expect(inv.needsAttention.map((n) => n.path)).toEqual(['spec/changes/x/spec.html'])
+    expect(inv.needsAttention.map((n) => n.path)).toEqual(['spec/changes/x/spec.json'])
   })
 
   it('lists missing manifest entries under Needs attention and marks them unreadable', () => {
@@ -121,7 +121,7 @@ describe('spec navigation — current library projection (FR-1)', () => {
         specs: [filed(ROADMAP, { title: 'Roadmap', kind: 'roadmap' })],
         missing: [
           {
-            path: 'spec/changes/deleted/spec.html',
+            path: 'spec/changes/deleted/spec.json',
             title: 'Deleted',
             kind: 'change-spec',
             status: 'approved',
@@ -132,7 +132,7 @@ describe('spec navigation — current library projection (FR-1)', () => {
       })
     )
 
-    const node = inv.needsAttention.find((n) => n.path === 'spec/changes/deleted/spec.html')
+    const node = inv.needsAttention.find((n) => n.path === 'spec/changes/deleted/spec.json')
     expect(node).toBeDefined()
     expect(node?.missing).toBe(true)
     // a missing entry must never be nested into the readable library
@@ -141,17 +141,17 @@ describe('spec navigation — current library projection (FR-1)', () => {
 })
 
 describe('spec navigation — history separation (FR-2)', () => {
-  const archivedA = `${ARCHIVE_PREFIX}2026-07-29-add-agent-stream-kinds/spec.html`
-  const archivedB = `${ARCHIVE_PREFIX}2026-07-01-add-spec-manifest/spec.html`
-  const archivedC = `${ARCHIVE_PREFIX}2026-06-15-hub-auth/spec.html`
-  const archivedOrphan = `${ARCHIVE_PREFIX}2026-05-02-standalone/spec.html`
+  const archivedA = `${ARCHIVE_PREFIX}2026-07-29-add-agent-stream-kinds/spec.json`
+  const archivedB = `${ARCHIVE_PREFIX}2026-07-01-add-spec-manifest/spec.json`
+  const archivedC = `${ARCHIVE_PREFIX}2026-06-15-hub-auth/spec.json`
+  const archivedOrphan = `${ARCHIVE_PREFIX}2026-05-02-standalone/spec.json`
 
   const inv = buildInventory(
     response({
       specs: [
         filed(ROADMAP, { title: 'Reconstruction', kind: 'roadmap', parent: null, order: 30 }),
         filed(OTHER_ROADMAP, { title: 'Hub Hardening', kind: 'roadmap', parent: null, order: 40 }),
-        filed('spec/changes/active/spec.html', { title: 'Active', parent: ROADMAP }),
+        filed('spec/changes/active/spec.json', { title: 'Active', parent: ROADMAP }),
         filed(archivedB, { title: 'Add Spec Manifest', parent: ROADMAP }),
         filed(archivedA, { title: 'Add Agent Stream Kinds', parent: ROADMAP }),
         filed(archivedC, { title: 'Hub Auth', parent: OTHER_ROADMAP }),
@@ -170,7 +170,7 @@ describe('spec navigation — history separation (FR-2)', () => {
     }
     walk(inv.library)
 
-    expect(paths).toContain('spec/changes/active/spec.html')
+    expect(paths).toContain('spec/changes/active/spec.json')
     for (const archived of [archivedA, archivedB, archivedC, archivedOrphan]) {
       expect(paths).not.toContain(archived)
     }
@@ -204,8 +204,8 @@ describe('spec navigation — history separation (FR-2)', () => {
   })
 
   it('falls back to path ordering when an archive directory has no leading date', () => {
-    const undated = `${ARCHIVE_PREFIX}no-date-change/spec.html`
-    const dated = `${ARCHIVE_PREFIX}2026-01-01-dated/spec.html`
+    const undated = `${ARCHIVE_PREFIX}no-date-change/spec.json`
+    const dated = `${ARCHIVE_PREFIX}2026-01-01-dated/spec.json`
     const local = buildInventory(
       response({
         specs: [filed(undated, { title: 'Undated' }), filed(dated, { title: 'Dated' })],
@@ -223,7 +223,7 @@ describe('spec navigation — history separation (FR-2)', () => {
     // relocate the file. A document can be archived while its path still sits under
     // `spec/changes/<name>/`, nowhere near ARCHIVE_PREFIX — the Hub's own phase is the only signal
     // for that case, and the tree has to check it or the document reads as an ordinary current one.
-    const path = 'spec/changes/quiet-hours-for-agent-notifications/spec.html'
+    const path = 'spec/changes/quiet-hours-for-agent-notifications/spec.json'
     const local = buildInventory(
       response({
         specs: [filed(path, { title: 'Quiet hours', phase: 'archived' })],
@@ -250,53 +250,53 @@ describe('spec navigation — history separation (FR-2)', () => {
 describe('spec navigation — selection fallback (FR-4)', () => {
   const base = response({
     specs: [
-      filed('spec/spec.html', { title: 'Spec', kind: 'baseline' }),
+      filed('spec/spec.json', { title: 'Spec', kind: 'baseline' }),
       filed(ROADMAP, { title: 'Roadmap', kind: 'roadmap' }),
-      filed(`${ARCHIVE_PREFIX}2026-07-29-old/spec.html`, { title: 'Old' }),
+      filed(`${ARCHIVE_PREFIX}2026-07-29-old/spec.json`, { title: 'Old' }),
     ],
     home: ROADMAP,
   })
 
   it('keeps the current selection while its path stays readable', () => {
     const inv = buildInventory(base)
-    expect(resolveSelection(inv, 'spec/spec.html', ROADMAP)).toBe('spec/spec.html')
+    expect(resolveSelection(inv, 'spec/spec.json', ROADMAP)).toBe('spec/spec.json')
   })
 
   it('keeps an archived selection the user chose explicitly', () => {
     const inv = buildInventory(base)
-    const archived = `${ARCHIVE_PREFIX}2026-07-29-old/spec.html`
+    const archived = `${ARCHIVE_PREFIX}2026-07-29-old/spec.json`
     expect(resolveSelection(inv, archived, ROADMAP)).toBe(archived)
   })
 
   it('falls back to manifest home when the selection disappears', () => {
     const inv = buildInventory(base)
-    expect(resolveSelection(inv, 'spec/gone.html', ROADMAP)).toBe(ROADMAP)
+    expect(resolveSelection(inv, 'spec/gone.json', ROADMAP)).toBe(ROADMAP)
   })
 
-  it('falls back to spec/spec.html when home is unreadable', () => {
+  it('falls back to spec/spec.json when home is unreadable', () => {
     const inv = buildInventory(base)
-    expect(resolveSelection(inv, null, 'spec/missing-home.html')).toBe('spec/spec.html')
+    expect(resolveSelection(inv, null, 'spec/missing-home.json')).toBe('spec/spec.json')
   })
 
-  it('falls back to the first readable current document when home and spec.html are gone', () => {
+  it('falls back to the first readable current document when home and spec.json are gone', () => {
     const inv = buildInventory(
       response({
         specs: [
-          filed('spec/b.html', { title: 'B', order: 20 }),
-          filed('spec/a.html', { title: 'A', order: 10 }),
+          filed('spec/b.json', { title: 'B', order: 20 }),
+          filed('spec/a.json', { title: 'A', order: 10 }),
         ],
       })
     )
-    expect(resolveSelection(inv, null, null)).toBe('spec/a.html')
+    expect(resolveSelection(inv, null, null)).toBe('spec/a.json')
   })
 
   it('never falls back to an archived document or a missing entry', () => {
     const inv = buildInventory(
       response({
-        specs: [filed(`${ARCHIVE_PREFIX}2026-07-29-old/spec.html`, { title: 'Old' })],
+        specs: [filed(`${ARCHIVE_PREFIX}2026-07-29-old/spec.json`, { title: 'Old' })],
         missing: [
           {
-            path: 'spec/spec.html',
+            path: 'spec/spec.json',
             title: 'Spec',
             kind: 'baseline',
             status: 'living',
@@ -304,25 +304,25 @@ describe('spec navigation — selection fallback (FR-4)', () => {
             order: 10,
           },
         ],
-        home: 'spec/spec.html',
+        home: 'spec/spec.json',
       })
     )
-    expect(resolveSelection(inv, null, 'spec/spec.html')).toBeNull()
+    expect(resolveSelection(inv, null, 'spec/spec.json')).toBeNull()
   })
 })
 
 describe('spec navigation — search ranking (FR-3)', () => {
-  const archived = `${ARCHIVE_PREFIX}2026-07-29-add-agent-stream-kinds/spec.html`
+  const archived = `${ARCHIVE_PREFIX}2026-07-29-add-agent-stream-kinds/spec.json`
   const inv = buildInventory(
     response({
       specs: [
-        filed('spec/changes/add-spec-navigation/spec.html', { title: 'Add Spec Navigation' }),
-        filed('spec/system-map.html', { title: 'System Map', kind: 'system-map' }),
+        filed('spec/changes/add-spec-navigation/spec.json', { title: 'Add Spec Navigation' }),
+        filed('spec/system-map.json', { title: 'System Map', kind: 'system-map' }),
         filed(archived, { title: 'Add Agent Stream Kinds' }),
       ],
       missing: [
         {
-          path: 'spec/changes/gone/spec.html',
+          path: 'spec/changes/gone/spec.json',
           title: 'Add Gone Change',
           kind: 'change-spec',
           status: 'approved',
@@ -336,14 +336,14 @@ describe('spec navigation — search ranking (FR-3)', () => {
   it('ranks current readable results before archived results', () => {
     const results = searchDocuments(inv, 'add')
     expect(results.current.map((n) => n.path)).toEqual([
-      'spec/changes/add-spec-navigation/spec.html',
+      'spec/changes/add-spec-navigation/spec.json',
     ])
     expect(results.archived.map((n) => n.path)).toEqual([archived])
   })
 
   it('scores a title match above a path-only match', () => {
     const results = searchDocuments(inv, 'system')
-    expect(results.current[0].path).toBe('spec/system-map.html')
+    expect(results.current[0].path).toBe('spec/system-map.json')
   })
 
   it('matches an archived change by its change name as topic vocabulary', () => {
@@ -352,14 +352,14 @@ describe('spec navigation — search ranking (FR-3)', () => {
   })
 
   it('normalizes case and surrounding whitespace', () => {
-    expect(searchDocuments(inv, '  SYSTEM  ').current[0].path).toBe('spec/system-map.html')
+    expect(searchDocuments(inv, '  SYSTEM  ').current[0].path).toBe('spec/system-map.json')
   })
 
   it('returns missing matches separately so they can be rendered disabled', () => {
     const results = searchDocuments(inv, 'gone')
     expect(results.current).toHaveLength(0)
     expect(results.archived).toHaveLength(0)
-    expect(results.missing.map((n) => n.path)).toEqual(['spec/changes/gone/spec.html'])
+    expect(results.missing.map((n) => n.path)).toEqual(['spec/changes/gone/spec.json'])
   })
 
   it('returns every readable document for an empty query', () => {

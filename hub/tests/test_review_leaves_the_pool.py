@@ -74,7 +74,7 @@ async def _flow_with_task(db, *, suffix):
         SpecDocument(
             id=f"doc-f45-{suffix}",
             project_id="proj-test",
-            path=f"spec/f45-{suffix}.html",
+            path=f"spec/f45-{suffix}.json",
             title=f"F45 {suffix}",
             phase="current",
             kind="capability",

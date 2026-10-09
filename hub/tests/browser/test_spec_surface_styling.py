@@ -29,8 +29,8 @@ from urllib.parse import quote
 import pytest
 from playwright.sync_api import Page, expect
 
-CAPABILITY_DOC = "spec/capabilities/quiet-hours/spec.html"
-ARCHIVED_DOC = "spec/changes/quiet-hours-for-agent-notifications/spec.html"
+CAPABILITY_DOC = "spec/capabilities/quiet-hours/spec.json"
+ARCHIVED_DOC = "spec/changes/quiet-hours-for-agent-notifications/spec.json"
 
 # hub/ui/src/components/spec/hubTheme.ts — the values the frame's background must match.
 HUB_NEUTRALS_BG = {"light": "rgb(250, 250, 250)", "dark": "rgb(10, 10, 11)"}

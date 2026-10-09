@@ -52,7 +52,7 @@ async def test_a_new_change_document_starts_at_intake_with_no_size(app, auth_hea
 
 @pytest.mark.asyncio
 async def test_a_roadmap_has_no_step(app, auth_headers, tmp_path):
-    path = "spec/changes/plan/spec.html"
+    path = "spec/changes/plan/spec.json"
     response = await app.post(
         f"{BASE}/documents",
         json={"path": path, "title": "Plan", "kind": "roadmap"},

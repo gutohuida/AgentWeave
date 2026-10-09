@@ -113,7 +113,7 @@ async def _evidence_naming_a_commit(db, task_id, *, suffix):
         SpecDocument(
             id=f"doc-rd-{suffix}",
             project_id="proj-test",
-            path=f"spec/rd-{suffix}.html",
+            path=f"spec/rd-{suffix}.json",
             title="Ledger",
             phase="current",
             kind="capability",

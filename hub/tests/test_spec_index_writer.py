@@ -45,7 +45,7 @@ def test_no_agent_facing_tool_can_write_the_index():
 async def test_reindex_refuses_a_credential_that_is_not_the_operators(app, tmp_path):
     """The route's other half of the same boundary. `get_project` resolves an operator credential
     (`aw_live_...`) and nothing else, so a run-scoped token cannot reach the writer."""
-    _write(tmp_path, "spec/spec.html")
+    _write(tmp_path, "spec/spec.json")
 
     for header in ({}, {"Authorization": "Bearer aw_run_not_an_operator"}):
         response = await app.post(f"{BASE}/spec/reindex", headers=header)
@@ -59,6 +59,29 @@ def _write(tmp_path, relative: str, content: str = "<html><body>doc</body></html
     target.write_text(content, encoding="utf-8")
 
 
+def _make_hub_block_stale(tmp_path, relative: str) -> str:
+    """Leave a file's hub block disagreeing with its row, as a phase move whose write failed does.
+
+    Returns the file's text as it now stands. The payload is untouched; only the block (the row's
+    copy, never the authority) is wrong.
+    """
+    target = tmp_path / relative
+    text = target.read_text(encoding="utf-8")
+    block = spec_documents.parse_hub(text)
+    block["phase"] = "proposed"
+    stale = spec_documents.serialize(spec_documents.parse_stored(text), block)
+    assert stale != text
+    target.write_text(stale, encoding="utf-8")
+    return stale
+
+
+async def _page(app, auth_headers, path: str) -> str:
+    """The page `GET /spec` renders for a document: navigation and maps are rendered on read."""
+    response = await app.get(f"{BASE}/spec", params={"path": path}, headers=auth_headers)
+    assert response.status_code == 200, response.text
+    return response.json()["content"]
+
+
 def _rows(*specs):
     """`(path, title, kind, phase)` tuples, as `build_index` takes them."""
     return list(specs)
@@ -67,20 +90,20 @@ def _rows(*specs):
 class TestBuildIndex:
     def test_a_lone_document_needs_no_home_decision(self):
         manifest, diagnostics = spec_documents.build_index(
-            ["spec/a.html"], _rows(("spec/a.html", "A", "capability", "current")), None
+            ["spec/a.json"], _rows(("spec/a.json", "A", "capability", "current")), None
         )
         assert manifest is not None
-        assert manifest.home == "spec/a.html"
+        assert manifest.home == "spec/a.json"
         assert diagnostics == []
 
     def test_several_documents_with_no_home_write_nothing(self):
         """The Hub refuses to guess a home, so there is nothing valid to write. This is the case
         the 33-document corpus migration hits immediately."""
         manifest, diagnostics = spec_documents.build_index(
-            ["spec/a.html", "spec/b.html"],
+            ["spec/a.json", "spec/b.json"],
             _rows(
-                ("spec/a.html", "A", "capability", "current"),
-                ("spec/b.html", "B", "capability", "current"),
+                ("spec/a.json", "A", "capability", "current"),
+                ("spec/b.json", "B", "capability", "current"),
             ),
             None,
         )
@@ -91,27 +114,27 @@ class TestBuildIndex:
 
     def test_an_explicit_home_answers_the_question(self):
         manifest, diagnostics = spec_documents.build_index(
-            ["spec/a.html", "spec/b.html"],
+            ["spec/a.json", "spec/b.json"],
             _rows(
-                ("spec/a.html", "A", "capability", "current"),
-                ("spec/b.html", "B", "capability", "current"),
+                ("spec/a.json", "A", "capability", "current"),
+                ("spec/b.json", "B", "capability", "current"),
             ),
             None,
-            home="spec/b.html",
+            home="spec/b.json",
         )
         assert manifest is not None
-        assert manifest.home == "spec/b.html"
+        assert manifest.home == "spec/b.json"
         assert diagnostics == []
 
     def test_an_explicit_home_that_does_not_exist_is_refused_not_substituted(self):
         manifest, diagnostics = spec_documents.build_index(
-            ["spec/a.html", "spec/b.html"],
+            ["spec/a.json", "spec/b.json"],
             _rows(
-                ("spec/a.html", "A", "capability", "current"),
-                ("spec/b.html", "B", "capability", "current"),
+                ("spec/a.json", "A", "capability", "current"),
+                ("spec/b.json", "B", "capability", "current"),
             ),
             None,
-            home="spec/nowhere.html",
+            home="spec/nowhere.json",
         )
         assert manifest is None
         assert any(d["code"] == "home_missing" for d in diagnostics)
@@ -129,10 +152,10 @@ class TestBuildIndex:
             json.dumps(
                 {
                     "version": 1,
-                    "home": "spec/b.html",
+                    "home": "spec/b.json",
                     "documents": [
                         {
-                            "path": "spec/b.html",
+                            "path": "spec/b.json",
                             "title": "B",
                             "kind": "capability",
                             "status": "current",
@@ -140,7 +163,7 @@ class TestBuildIndex:
                             "order": 10,
                         },
                         {
-                            "path": "spec/c.html",
+                            "path": "spec/c.json",
                             "title": "C",
                             "kind": "capability",
                             "status": "current",
@@ -152,64 +175,64 @@ class TestBuildIndex:
             )
         )
         manifest, _ = spec_documents.build_index(
-            ["spec/a.html", "spec/b.html", "spec/c.html"],
+            ["spec/a.json", "spec/b.json", "spec/c.json"],
             _rows(
-                ("spec/a.html", "A", "capability", "current"),
-                ("spec/b.html", "B", "capability", "current"),
-                ("spec/c.html", "C", "capability", "current"),
+                ("spec/a.json", "A", "capability", "current"),
+                ("spec/b.json", "B", "capability", "current"),
+                ("spec/c.json", "C", "capability", "current"),
             ),
             existing,
         )
         by_path = manifest.by_path()
-        assert by_path["spec/b.html"].order == 10, "an arranged document must not move"
-        assert by_path["spec/c.html"].order == 20
-        assert by_path["spec/a.html"].order == 30, "the new document goes after, not among"
+        assert by_path["spec/b.json"].order == 10, "an arranged document must not move"
+        assert by_path["spec/c.json"].order == 20
+        assert by_path["spec/a.json"].order == 30, "the new document goes after, not among"
         orders = [document.order for document in manifest.documents]
         assert len(orders) == len(set(orders)), f"orders collide: {orders}"
 
     def test_order_is_a_stable_path_sort_and_repeats_identically(self):
         args = (
-            ["spec/c.html", "spec/a.html", "spec/b.html"],
+            ["spec/c.json", "spec/a.json", "spec/b.json"],
             _rows(
-                ("spec/c.html", "C", "capability", "current"),
-                ("spec/a.html", "A", "capability", "current"),
-                ("spec/b.html", "B", "capability", "current"),
+                ("spec/c.json", "C", "capability", "current"),
+                ("spec/a.json", "A", "capability", "current"),
+                ("spec/b.json", "B", "capability", "current"),
             ),
             None,
         )
-        first, _ = spec_documents.build_index(*args, home="spec/a.html")
-        second, _ = spec_documents.build_index(*args, home="spec/a.html")
-        assert [d.path for d in first.documents] == ["spec/a.html", "spec/b.html", "spec/c.html"]
+        first, _ = spec_documents.build_index(*args, home="spec/a.json")
+        second, _ = spec_documents.build_index(*args, home="spec/a.json")
+        assert [d.path for d in first.documents] == ["spec/a.json", "spec/b.json", "spec/c.json"]
         assert first == second
 
     def test_documents_are_left_unparented_rather_than_nested_by_directory(self):
         manifest, _ = spec_documents.build_index(
-            ["spec/capabilities/a/spec.html", "spec/changes/b/spec.html"],
+            ["spec/capabilities/a/spec.json", "spec/changes/b/spec.json"],
             _rows(
-                ("spec/capabilities/a/spec.html", "A", "capability", "current"),
-                ("spec/changes/b/spec.html", "B", "change-spec", "archived"),
+                ("spec/capabilities/a/spec.json", "A", "capability", "current"),
+                ("spec/changes/b/spec.json", "B", "change-spec", "archived"),
             ),
             None,
-            home="spec/capabilities/a/spec.html",
+            home="spec/capabilities/a/spec.json",
         )
         assert all(document.parent is None for document in manifest.documents)
 
     def test_a_file_the_hub_has_no_row_for_is_reported_not_invented(self):
         manifest, diagnostics = spec_documents.build_index(
-            ["spec/a.html", "spec/stray.html"],
-            _rows(("spec/a.html", "A", "capability", "current")),
+            ["spec/a.json", "spec/stray.json"],
+            _rows(("spec/a.json", "A", "capability", "current")),
             None,
         )
         assert manifest is not None
-        assert [d.path for d in manifest.documents] == ["spec/a.html"]
+        assert [d.path for d in manifest.documents] == ["spec/a.json"]
         assert any(
-            d["code"] == "unindexable_document" and d["path"] == "spec/stray.html"
+            d["code"] == "unindexable_document" and d["path"] == "spec/stray.json"
             for d in diagnostics
         )
 
     def test_the_phase_is_recorded_as_the_status(self):
         manifest, _ = spec_documents.build_index(
-            ["spec/a.html"], _rows(("spec/a.html", "A", "change-spec", "archived")), None
+            ["spec/a.json"], _rows(("spec/a.json", "A", "change-spec", "archived")), None
         )
         assert manifest.documents[0].status == "archived"
 
@@ -220,18 +243,18 @@ class TestArrangementIsPreserved:
             json.dumps(
                 {
                     "version": 1,
-                    "home": "spec/b.html",
+                    "home": "spec/b.json",
                     "documents": [
                         {
-                            "path": "spec/a.html",
+                            "path": "spec/a.json",
                             "title": "stale title",
                             "kind": "capability",
                             "status": "current",
-                            "parent": "spec/b.html",
+                            "parent": "spec/b.json",
                             "order": 999,
                         },
                         {
-                            "path": "spec/b.html",
+                            "path": "spec/b.json",
                             "title": "B",
                             "kind": "capability",
                             "status": "current",
@@ -247,10 +270,10 @@ class TestArrangementIsPreserved:
 
     def _rebuild(self, **kwargs):
         return spec_documents.build_index(
-            ["spec/a.html", "spec/b.html"],
+            ["spec/a.json", "spec/b.json"],
             _rows(
-                ("spec/a.html", "A", "capability", "current"),
-                ("spec/b.html", "B", "capability", "current"),
+                ("spec/a.json", "A", "capability", "current"),
+                ("spec/b.json", "B", "capability", "current"),
             ),
             self._existing(),
             **kwargs,
@@ -258,24 +281,24 @@ class TestArrangementIsPreserved:
 
     def test_a_recorded_home_survives(self):
         manifest, _ = self._rebuild()
-        assert manifest.home == "spec/b.html"
+        assert manifest.home == "spec/b.json"
 
     def test_recorded_parent_and_order_survive(self):
         """`parent` and `order` have no database column, so the index file is their only copy —
         a rebuild that recomputed them would silently discard the operator's arrangement."""
         manifest, _ = self._rebuild()
-        entry = manifest.by_path()["spec/a.html"]
-        assert entry.parent == "spec/b.html"
+        entry = manifest.by_path()["spec/a.json"]
+        assert entry.parent == "spec/b.json"
         assert entry.order == 999
 
     def test_the_title_is_refreshed_from_the_hub_not_carried(self):
         """Arrangement is the operator's and is preserved; title is the document's and is not."""
         manifest, _ = self._rebuild()
-        assert manifest.by_path()["spec/a.html"].title == "A"
+        assert manifest.by_path()["spec/a.json"].title == "A"
 
     def test_an_explicit_home_overrides_the_recorded_one(self):
-        manifest, _ = self._rebuild(home="spec/a.html")
-        assert manifest.home == "spec/a.html"
+        manifest, _ = self._rebuild(home="spec/a.json")
+        assert manifest.home == "spec/a.json"
 
 
 @pytest.mark.asyncio
@@ -283,10 +306,10 @@ class TestReindexRoute:
     async def test_reindex_writes_an_index_that_files_the_documents(
         self, app, auth_headers, tmp_path
     ):
-        _write(tmp_path, "spec/spec.html")
+        _write(tmp_path, "spec/spec.json")
         created = await app.post(
             f"{BASE}/documents",
-            json={"path": "spec/spec.html", "title": "Only", "kind": "capability"},
+            json={"path": "spec/spec.json", "title": "Only", "kind": "capability"},
             headers=auth_headers,
         )
         assert created.status_code == 201, created.text
@@ -295,7 +318,7 @@ class TestReindexRoute:
         assert response.status_code == 200, response.text
         written = response.json()["index"]["written"]
         assert written["documents"] == 1
-        assert written["home"] == "spec/spec.html"
+        assert written["home"] == "spec/spec.json"
 
         assert (tmp_path / "spec" / "index.json").is_file()
 
@@ -309,16 +332,9 @@ class TestReindexRoute:
     ):
         """The regression that motivated the change: an index the Hub wrote, describing a document
         the Hub rendered, must not disagree with it."""
-        _write(
-            tmp_path,
-            "spec/spec.html",
-            "<html><head><title>Only</title>"
-            '<meta name="aw-spec-kind" content="capability">'
-            '<meta name="aw-spec-status" content="current"></head><body>d</body></html>',
-        )
         await app.post(
             f"{BASE}/documents",
-            json={"path": "spec/spec.html", "title": "Only", "kind": "capability"},
+            json={"path": "spec/spec.json", "title": "Only", "kind": "capability"},
             headers=auth_headers,
         )
         await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
@@ -333,10 +349,10 @@ class TestReindexRoute:
         self, app, auth_headers, tmp_path
     ):
         for name in ("a", "b"):
-            _write(tmp_path, f"spec/{name}.html")
+            _write(tmp_path, f"spec/{name}.json")
             await app.post(
                 f"{BASE}/documents",
-                json={"path": f"spec/{name}.html", "title": name.upper(), "kind": "capability"},
+                json={"path": f"spec/{name}.json", "title": name.upper(), "kind": "capability"},
                 headers=auth_headers,
             )
 
@@ -349,29 +365,29 @@ class TestReindexRoute:
 
     async def test_the_operator_can_name_the_home(self, app, auth_headers, tmp_path):
         for name in ("a", "b"):
-            _write(tmp_path, f"spec/{name}.html")
+            _write(tmp_path, f"spec/{name}.json")
             await app.post(
                 f"{BASE}/documents",
-                json={"path": f"spec/{name}.html", "title": name.upper(), "kind": "capability"},
+                json={"path": f"spec/{name}.json", "title": name.upper(), "kind": "capability"},
                 headers=auth_headers,
             )
 
         response = await app.post(
-            f"{BASE}/spec/reindex", json={"home": "spec/b.html"}, headers=auth_headers
+            f"{BASE}/spec/reindex", json={"home": "spec/b.json"}, headers=auth_headers
         )
-        assert response.json()["index"]["written"]["home"] == "spec/b.html"
+        assert response.json()["index"]["written"]["home"] == "spec/b.json"
 
         listed = (await app.get(f"{BASE}/specs", headers=auth_headers)).json()
-        assert listed["home"] == "spec/b.html"
+        assert listed["home"] == "spec/b.json"
         assert {s["state"] for s in listed["specs"]} == {"filed"}
 
     async def test_rebuilding_twice_leaves_the_file_byte_identical(
         self, app, auth_headers, tmp_path
     ):
-        _write(tmp_path, "spec/spec.html")
+        _write(tmp_path, "spec/spec.json")
         await app.post(
             f"{BASE}/documents",
-            json={"path": "spec/spec.html", "title": "Only", "kind": "capability"},
+            json={"path": "spec/spec.json", "title": "Only", "kind": "capability"},
             headers=auth_headers,
         )
         await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
@@ -428,83 +444,109 @@ class TestReindexCorpusRerender:
     ones with a row, driven from each file's own embedded payload rather than the database (D6).
     """
 
-    async def test_setting_a_parent_rerenders_the_parent_and_the_recursive_home_and_nothing_else(
+    async def test_setting_a_parent_shows_in_the_parent_and_the_recursive_home_and_nothing_else(
         self, app, auth_headers, tmp_path
     ):
         for name in ("home", "area", "other"):
-            _write(tmp_path, f"spec/{name}.html")
+            _write(tmp_path, f"spec/{name}.json")
             created = await app.post(
                 f"{BASE}/documents",
-                json={"path": f"spec/{name}.html", "title": name.upper(), "kind": "capability"},
+                json={"path": f"spec/{name}.json", "title": name.upper(), "kind": "capability"},
                 headers=auth_headers,
             )
             assert created.status_code == 201, created.text
 
         first = await app.post(
-            f"{BASE}/spec/reindex", json={"home": "spec/home.html"}, headers=auth_headers
+            f"{BASE}/spec/reindex", json={"home": "spec/home.json"}, headers=auth_headers
         )
         assert first.status_code == 200, first.text
-        # The home document itself gains no home link (nothing to link to but itself) and, with
-        # no children yet, no map either — so its first render is a no-op change. `area` and
-        # `other` each gain a home link, so both differ from the `corpus=None` starter file
-        # `POST /documents` wrote and are re-rendered.
-        assert set(first.json()["corpus"]["rerendered"]) == {"spec/area.html", "spec/other.html"}
+        # Navigation is rendered when a page is read, never written into a file, so filing the
+        # documents rewrites none of them: the files `POST /documents` wrote are already what the
+        # Hub would write.
+        assert first.json()["corpus"]["rerendered"] == []
         assert first.json()["corpus"]["skipped"] == []
 
-        # Arrange `area` under `home` by hand-editing the index — the operator's other route
-        # (`POST /project/spec/documents/arrange`) is a later section of this same change and
-        # does not exist yet; D4 already documents hand-editing the file as a legitimate way to
-        # rearrange the corpus.
+        home_before = await _page(app, auth_headers, "spec/home.json")
+        other_before = await _page(app, auth_headers, "spec/other.json")
+        assert 'class="aw-map"' not in home_before, "no child yet, so no map"
+        files_before = {
+            name: (tmp_path / "spec" / f"{name}.json").read_bytes()
+            for name in ("home", "area", "other")
+        }
+
+        # Arrange `area` under `home` by hand-editing the index: the operator's other route is
+        # `POST /project/spec/documents/arrange`, and D4 documents hand-editing the file as a
+        # legitimate way to rearrange the corpus.
         index_path = tmp_path / "spec" / "index.json"
         manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
         for doc in manifest_data["documents"]:
-            if doc["path"] == "spec/area.html":
-                doc["parent"] = "spec/home.html"
+            if doc["path"] == "spec/area.json":
+                doc["parent"] = "spec/home.json"
         index_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
-
-        before_other = (tmp_path / "spec" / "other.html").read_text(encoding="utf-8")
 
         second = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
         assert second.status_code == 200, second.text
         body = second.json()
-        # `area` changed directly (it gained a parent link); `home` changed because its map is
-        # recursive over the whole corpus (design D-S2-recursive) and now has one entry. `other`
-        # has no relation to either and its file is untouched — not even rewritten byte-identically.
-        assert set(body["corpus"]["rerendered"]) == {"spec/home.html", "spec/area.html"}
+        assert body["corpus"]["rerendered"] == []
         assert body["corpus"]["skipped"] == []
+        assert files_before == {
+            name: (tmp_path / "spec" / f"{name}.json").read_bytes()
+            for name in ("home", "area", "other")
+        }, "arranging a document changes no stored file"
 
-        after_other = (tmp_path / "spec" / "other.html").read_text(encoding="utf-8")
-        assert before_other == after_other
+        # `area` gained a parent link; `home` gained a map entry because its map is recursive over
+        # the whole corpus (design D-S2-recursive). `other` has no relation to either, and its
+        # page is exactly what it was.
+        home_page = await _page(app, auth_headers, "spec/home.json")
+        assert "AREA" in home_page
+        assert 'class="aw-map"' in home_page
+        assert 'class="aw-nav"' in await _page(app, auth_headers, "spec/area.json")
+        assert await _page(app, auth_headers, "spec/other.json") == other_before
 
-        home_html = (tmp_path / "spec" / "home.html").read_text(encoding="utf-8")
-        assert "AREA" in home_html
-        assert "aw-map" in home_html
-        area_html = (tmp_path / "spec" / "area.html").read_text(encoding="utf-8")
-        assert "aw-nav" in area_html
+    async def test_a_reindex_rewrites_only_the_file_whose_hub_block_is_stale(
+        self, app, auth_headers, tmp_path
+    ):
+        """What a rebuild can still find wrong in a stored file is its hub block (a phase moved
+        while the write failed). Exactly that file is rewritten, to what the Hub would write."""
+        await _three_filed(app, auth_headers, tmp_path)
+        stale_text = _make_hub_block_stale(tmp_path, "spec/area.json")
+        home_bytes = (tmp_path / "spec" / "home.json").read_bytes()
+        other_bytes = (tmp_path / "spec" / "other.json").read_bytes()
+
+        response = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
+
+        assert response.status_code == 200, response.text
+        assert response.json()["corpus"]["rerendered"] == ["spec/area.json"]
+        assert response.json()["corpus"]["skipped"] == []
+        area_text = (tmp_path / "spec" / "area.json").read_text(encoding="utf-8")
+        assert area_text != stale_text
+        assert spec_documents.parse_hub(area_text)["phase"] == "current"
+        assert (tmp_path / "spec" / "home.json").read_bytes() == home_bytes
+        assert (tmp_path / "spec" / "other.json").read_bytes() == other_bytes
 
     async def test_a_rebuild_that_changes_nothing_writes_no_file(self, app, auth_headers, tmp_path):
-        _write(tmp_path, "spec/spec.html")
+        _write(tmp_path, "spec/spec.json")
         await app.post(
             f"{BASE}/documents",
-            json={"path": "spec/spec.html", "title": "Only", "kind": "capability"},
+            json={"path": "spec/spec.json", "title": "Only", "kind": "capability"},
             headers=auth_headers,
         )
         first = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
         assert first.status_code == 200, first.text
 
-        before = (tmp_path / "spec" / "spec.html").stat().st_mtime_ns
+        before = (tmp_path / "spec" / "spec.json").stat().st_mtime_ns
         second = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
         assert second.status_code == 200, second.text
         assert second.json()["corpus"]["rerendered"] == []
         assert second.json()["corpus"]["skipped"] == []
-        after = (tmp_path / "spec" / "spec.html").stat().st_mtime_ns
+        after = (tmp_path / "spec" / "spec.json").stat().st_mtime_ns
         assert before == after
 
     async def test_an_approved_document_regenerates_rather_than_being_refused(
         self, app, auth_headers, run_headers, tmp_path
     ):
-        home_path = "spec/home.html"
-        child_path = "spec/changes/approved-demo/spec.html"
+        home_path = "spec/home.json"
+        child_path = "spec/changes/approved-demo/spec.json"
         for path, title, kind in (
             (home_path, "Home", "capability"),
             (child_path, "Approved demo", "change-spec"),
@@ -549,13 +591,15 @@ class TestReindexCorpusRerender:
         assert refused.status_code == 422
         assert refused.json()["detail"]["code"] == "document_approved"
 
-        # Arrange the approved document under home, forcing a corpus-driven re-render of it.
+        # Arrange the approved document under home, and leave its hub block stale, forcing a
+        # rewrite of it by the rebuild.
         index_path = tmp_path / "spec" / "index.json"
         manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
         for doc in manifest_data["documents"]:
             if doc["path"] == child_path:
                 doc["parent"] = home_path
         index_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
+        _make_hub_block_stale(tmp_path, child_path)
 
         response = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
         assert response.status_code == 200, response.text
@@ -564,10 +608,11 @@ class TestReindexCorpusRerender:
         listed = await app.get(f"{BASE}/specs", headers=auth_headers)
         entry = next(s for s in listed.json()["specs"] if s["path"] == child_path)
         assert entry["state"] == "filed"
-        child_html = (tmp_path / "spec" / "changes" / "approved-demo" / "spec.html").read_text(
+        child_text = (tmp_path / "spec" / "changes" / "approved-demo" / "spec.json").read_text(
             encoding="utf-8"
         )
-        assert "aw-nav" in child_html
+        assert spec_documents.parse_hub(child_text)["phase"] == "approved"
+        assert 'class="aw-nav"' in await _page(app, auth_headers, child_path)
 
     async def test_drift_is_not_reported_after_a_regeneration_but_is_after_an_outside_edit(
         self, app, auth_headers, tmp_path
@@ -579,8 +624,8 @@ class TestReindexCorpusRerender:
         Design D7's promise is exercised here at that boundary: a rerender updates the digest, so
         the very next write reports no divergence; an edit made outside the Hub after that does.
         """
-        home_path = "spec/home.html"
-        child_path = "spec/child.html"
+        home_path = "spec/home.json"
+        child_path = "spec/child.json"
         for path, title in ((home_path, "Home"), (child_path, "Child")):
             _write(tmp_path, path)
             created = await app.post(
@@ -597,6 +642,7 @@ class TestReindexCorpusRerender:
             if doc["path"] == child_path:
                 doc["parent"] = home_path
         index_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
+        _make_hub_block_stale(tmp_path, child_path)
 
         rerendered = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
         assert child_path in rerendered.json()["corpus"]["rerendered"]
@@ -616,9 +662,11 @@ class TestReindexCorpusRerender:
         assert clean_write.status_code == 200, clean_write.text
         assert clean_write.json()["divergence"] is None
 
-        child_file = tmp_path / "spec" / "child.html"
+        # An outside edit that keeps the file a readable document: its layout is changed.
+        child_file = tmp_path / "spec" / "child.json"
         child_file.write_text(
-            child_file.read_text(encoding="utf-8") + "<!-- edited outside -->", encoding="utf-8"
+            json.dumps(json.loads(child_file.read_text(encoding="utf-8")), indent=4),
+            encoding="utf-8",
         )
 
         dirty_write = await app.post(
@@ -646,60 +694,60 @@ class TestArrangeRoute:
 
     async def _seed(self, app, auth_headers, tmp_path, *names):
         for name in names:
-            _write(tmp_path, f"spec/{name}.html")
+            _write(tmp_path, f"spec/{name}.json")
             created = await app.post(
                 f"{BASE}/documents",
-                json={"path": f"spec/{name}.html", "title": name.upper(), "kind": "capability"},
+                json={"path": f"spec/{name}.json", "title": name.upper(), "kind": "capability"},
                 headers=auth_headers,
             )
             assert created.status_code == 201, created.text
         reindexed = await app.post(
-            f"{BASE}/spec/reindex", json={"home": f"spec/{names[0]}.html"}, headers=auth_headers
+            f"{BASE}/spec/reindex", json={"home": f"spec/{names[0]}.json"}, headers=auth_headers
         )
         assert reindexed.status_code == 200, reindexed.text
 
-    async def test_arranging_a_document_rerenders_it_and_its_recursive_home(
+    async def test_arranging_a_document_shows_in_it_and_its_recursive_home(
         self, app, auth_headers, tmp_path
     ):
         await self._seed(app, auth_headers, tmp_path, "home", "area", "other")
 
         response = await app.post(
             f"{BASE}/spec/documents/arrange",
-            json={"path": "spec/area.html", "parent": "spec/home.html"},
+            json={"path": "spec/area.json", "parent": "spec/home.json"},
             headers=auth_headers,
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body["path"] == "spec/area.html"
-        assert body["parent"] == "spec/home.html"
-        assert set(body["corpus"]["rerendered"]) == {"spec/home.html", "spec/area.html"}
+        assert body["path"] == "spec/area.json"
+        assert body["parent"] == "spec/home.json"
+        # Navigation is rendered on read, so no stored file needed rewriting.
+        assert body["corpus"]["rerendered"] == []
         assert body["corpus"]["skipped"] == []
 
         index_path = tmp_path / "spec" / "index.json"
         manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
-        area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.html")
-        assert area_entry["parent"] == "spec/home.html"
-        other_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/other.html")
+        area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.json")
+        assert area_entry["parent"] == "spec/home.json"
+        other_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/other.json")
         assert other_entry["parent"] is None
 
-        home_html = (tmp_path / "spec" / "home.html").read_text(encoding="utf-8")
+        home_html = await _page(app, auth_headers, "spec/home.json")
         assert "AREA" in home_html
-        assert "aw-map" in home_html
-        area_html = (tmp_path / "spec" / "area.html").read_text(encoding="utf-8")
-        assert "aw-nav" in area_html
+        assert 'class="aw-map"' in home_html
+        assert 'class="aw-nav"' in await _page(app, auth_headers, "spec/area.json")
 
     async def test_setting_parent_to_null_unparents(self, app, auth_headers, tmp_path):
         await self._seed(app, auth_headers, tmp_path, "home", "area")
         first = await app.post(
             f"{BASE}/spec/documents/arrange",
-            json={"path": "spec/area.html", "parent": "spec/home.html"},
+            json={"path": "spec/area.json", "parent": "spec/home.json"},
             headers=auth_headers,
         )
         assert first.status_code == 200, first.text
 
         response = await app.post(
             f"{BASE}/spec/documents/arrange",
-            json={"path": "spec/area.html", "parent": None},
+            json={"path": "spec/area.json", "parent": None},
             headers=auth_headers,
         )
         assert response.status_code == 200, response.text
@@ -707,14 +755,14 @@ class TestArrangeRoute:
 
         index_path = tmp_path / "spec" / "index.json"
         manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
-        area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.html")
+        area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.json")
         assert area_entry["parent"] is None
 
     async def test_an_unknown_document_is_refused(self, app, auth_headers, tmp_path):
         await self._seed(app, auth_headers, tmp_path, "home")
         response = await app.post(
             f"{BASE}/spec/documents/arrange",
-            json={"path": "spec/nope.html", "parent": None},
+            json={"path": "spec/nope.json", "parent": None},
             headers=auth_headers,
         )
         assert response.status_code == 404, response.text
@@ -723,7 +771,7 @@ class TestArrangeRoute:
         await self._seed(app, auth_headers, tmp_path, "home", "area")
         response = await app.post(
             f"{BASE}/spec/documents/arrange",
-            json={"path": "spec/area.html", "parent": "spec/nope.html"},
+            json={"path": "spec/area.json", "parent": "spec/nope.json"},
             headers=auth_headers,
         )
         assert response.status_code == 422, response.text
@@ -732,14 +780,14 @@ class TestArrangeRoute:
 
         index_path = tmp_path / "spec" / "index.json"
         manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
-        area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.html")
+        area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.json")
         assert area_entry["parent"] is None
 
     async def test_a_self_parent_is_refused(self, app, auth_headers, tmp_path):
         await self._seed(app, auth_headers, tmp_path, "home", "area")
         response = await app.post(
             f"{BASE}/spec/documents/arrange",
-            json={"path": "spec/area.html", "parent": "spec/area.html"},
+            json={"path": "spec/area.json", "parent": "spec/area.json"},
             headers=auth_headers,
         )
         assert response.status_code == 422, response.text
@@ -750,20 +798,20 @@ class TestArrangeRoute:
         await self._seed(app, auth_headers, tmp_path, "home", "area", "leaf")
         first = await app.post(
             f"{BASE}/spec/documents/arrange",
-            json={"path": "spec/area.html", "parent": "spec/home.html"},
+            json={"path": "spec/area.json", "parent": "spec/home.json"},
             headers=auth_headers,
         )
         assert first.status_code == 200, first.text
         second = await app.post(
             f"{BASE}/spec/documents/arrange",
-            json={"path": "spec/leaf.html", "parent": "spec/area.html"},
+            json={"path": "spec/leaf.json", "parent": "spec/area.json"},
             headers=auth_headers,
         )
         assert second.status_code == 200, second.text
 
         response = await app.post(
             f"{BASE}/spec/documents/arrange",
-            json={"path": "spec/home.html", "parent": "spec/leaf.html"},
+            json={"path": "spec/home.json", "parent": "spec/leaf.json"},
             headers=auth_headers,
         )
         assert response.status_code == 422, response.text
@@ -772,14 +820,14 @@ class TestArrangeRoute:
 
         index_path = tmp_path / "spec" / "index.json"
         manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
-        home_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/home.html")
+        home_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/home.json")
         assert home_entry["parent"] is None
 
     async def test_the_placement_survives_a_subsequent_reindex(self, app, auth_headers, tmp_path):
         await self._seed(app, auth_headers, tmp_path, "home", "area")
         arranged = await app.post(
             f"{BASE}/spec/documents/arrange",
-            json={"path": "spec/area.html", "parent": "spec/home.html"},
+            json={"path": "spec/area.json", "parent": "spec/home.json"},
             headers=auth_headers,
         )
         assert arranged.status_code == 200, arranged.text
@@ -791,8 +839,8 @@ class TestArrangeRoute:
 
         index_path = tmp_path / "spec" / "index.json"
         manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
-        area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.html")
-        assert area_entry["parent"] == "spec/home.html"
+        area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.json")
+        assert area_entry["parent"] == "spec/home.json"
 
 
 # --------------------------------------------------------------------------- the corpus from the app
@@ -804,15 +852,15 @@ class TestArrangeRoute:
 async def _three_filed(app, auth_headers, tmp_path):
     """home, area and other, filed with `home` as the corpus's home."""
     for name in ("home", "area", "other"):
-        _write(tmp_path, f"spec/{name}.html")
+        _write(tmp_path, f"spec/{name}.json")
         created = await app.post(
             f"{BASE}/documents",
-            json={"path": f"spec/{name}.html", "title": name.upper(), "kind": "capability"},
+            json={"path": f"spec/{name}.json", "title": name.upper(), "kind": "capability"},
             headers=auth_headers,
         )
         assert created.status_code == 201, created.text
     first = await app.post(
-        f"{BASE}/spec/reindex", json={"home": "spec/home.html"}, headers=auth_headers
+        f"{BASE}/spec/reindex", json={"home": "spec/home.json"}, headers=auth_headers
     )
     assert first.status_code == 200, first.text
 
@@ -839,10 +887,10 @@ async def test_reindex_broadcasts_after_the_index_is_written(app, auth_headers, 
     """1.1 (D5). An open tab could not learn that a rebuild happened."""
     from unittest.mock import AsyncMock, patch
 
-    _write(tmp_path, "spec/spec.html")
+    _write(tmp_path, "spec/spec.json")
     await app.post(
         f"{BASE}/documents",
-        json={"path": "spec/spec.html", "title": "Only", "kind": "capability"},
+        json={"path": "spec/spec.json", "title": "Only", "kind": "capability"},
         headers=auth_headers,
     )
     seen = []
@@ -868,9 +916,8 @@ async def test_an_index_that_cannot_be_written_still_rebuilds_the_requirements(
     from sqlalchemy import select
 
     from hub.db.models import SpecRequirement
-    from hub.spec_payload import extract_payload
 
-    path = "spec/changes/f434/spec.html"
+    path = "spec/changes/f434/spec.json"
     created = await app.post(
         f"{BASE}/documents", json={"path": path, "title": "F434"}, headers=auth_headers
     )
@@ -894,13 +941,10 @@ async def test_an_index_that_cannot_be_written_still_rebuilds_the_requirements(
     digest_before = await alpha_digest()
     target = tmp_path / path
     content = target.read_text(encoding="utf-8")
-    payload = extract_payload(content)
+    payload = spec_documents.parse_stored(content)
     payload["requirements"][0]["statement"] = "It responds within 100ms"
-    start = content.index('id="aw-spec-payload">') + len('id="aw-spec-payload">')
-    end = content.index("</script>", start)
     target.write_text(
-        content[:start] + json.dumps(payload).replace("<", "\\u003c") + content[end:],
-        encoding="utf-8",
+        spec_documents.serialize(payload, spec_documents.parse_hub(content)), encoding="utf-8"
     )
 
     _failing_write_text(monkeypatch, _is_the_index)
@@ -932,12 +976,8 @@ async def test_a_document_that_cannot_be_rewritten_is_skipped_not_fatal(
     from hub.db.models import SpecDocument
 
     await _three_filed(app, auth_headers, tmp_path)
-    index_path = tmp_path / "spec" / "index.json"
-    manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
-    for doc in manifest_data["documents"]:
-        if doc["path"] == "spec/area.html":
-            doc["parent"] = "spec/home.html"
-    index_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
+    _make_hub_block_stale(tmp_path, "spec/home.json")
+    _make_hub_block_stale(tmp_path, "spec/area.json")
 
     async def digests():
         async with async_session_factory() as session:
@@ -945,20 +985,20 @@ async def test_a_document_that_cannot_be_rewritten_is_skipped_not_fatal(
             return {row.path: row.content_digest for row in rows}
 
     before = await digests()
-    _failing_write_text(monkeypatch, lambda p: p.name == "area.html")
+    _failing_write_text(monkeypatch, lambda p: p.name == "area.json")
     response = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
 
     assert response.status_code == 200, response.text
     corpus = response.json()["corpus"]
     (skipped,) = corpus["skipped"]
-    assert skipped["path"] == "spec/area.html"
+    assert skipped["path"] == "spec/area.json"
     assert skipped["reason"] == "write_failed"
     assert "No space left on device" in skipped["message"]
-    assert corpus["rerendered"] == ["spec/home.html"]
+    assert corpus["rerendered"] == ["spec/home.json"]
     after = await digests()
-    assert after["spec/area.html"] == before["spec/area.html"]
-    home_text = (tmp_path / "spec" / "home.html").read_text(encoding="utf-8")
-    assert after["spec/home.html"] == spec_lifecycle.digest(home_text)
+    assert after["spec/area.json"] == before["spec/area.json"]
+    home_text = (tmp_path / "spec" / "home.json").read_text(encoding="utf-8")
+    assert after["spec/home.json"] == spec_lifecycle.digest(home_text)
 
 
 @pytest.mark.asyncio
@@ -967,13 +1007,15 @@ async def test_an_arrangement_whose_index_cannot_be_written_says_so(
 ):
     """1.14 (D6, F434). A sentence, not a bare 500; nothing placed, nothing re-rendered."""
     await _three_filed(app, auth_headers, tmp_path)
-    files = {p: p.read_bytes() for p in (tmp_path / "spec").glob("*.html")}
+    files = {
+        p: p.read_bytes() for p in (tmp_path / "spec").glob("*.json") if p.name != "index.json"
+    }
     index_before = (tmp_path / "spec" / "index.json").read_bytes()
 
     _failing_write_text(monkeypatch, _is_the_index)
     response = await app.post(
         f"{BASE}/spec/documents/arrange",
-        json={"path": "spec/area.html", "parent": "spec/home.html"},
+        json={"path": "spec/area.json", "parent": "spec/home.json"},
         headers=auth_headers,
     )
 
@@ -993,13 +1035,13 @@ def test_the_hub_writes_documents_and_the_index_with_lf_line_endings(tmp_path):
     from hub.spec_manifest import Manifest, ManifestDocument
 
     workspace = ProjectWorkspace(project_id="proj-test", root=tmp_path, path_key="test:proj-test")
-    spec_documents.write_document(workspace, "spec/a.html", "<html>\n<body>a</body>\n</html>\n")
+    spec_documents.write_document(workspace, "spec/a.json", '{\n  "title": "a"\n}\n')
     manifest = Manifest(
         version=1,
-        home="spec/a.html",
+        home="spec/a.json",
         documents=(
             ManifestDocument(
-                path="spec/a.html",
+                path="spec/a.json",
                 title="A",
                 kind="capability",
                 status="current",
@@ -1010,5 +1052,5 @@ def test_the_hub_writes_documents_and_the_index_with_lf_line_endings(tmp_path):
     )
     spec_documents.write_index(workspace, manifest)
 
-    assert b"\r\n" not in (tmp_path / "spec" / "a.html").read_bytes()
+    assert b"\r\n" not in (tmp_path / "spec" / "a.json").read_bytes()
     assert b"\r\n" not in (tmp_path / "spec" / "index.json").read_bytes()

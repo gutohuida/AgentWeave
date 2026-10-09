@@ -20,8 +20,8 @@ from hub.spec_payload import SCHEMA_VERSION
 BASE = "/api/v1/projects/proj-test/project"
 TASKS = "/api/v1/projects/proj-test/tasks"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/refresh-demo/spec.html"
-OTHER = "spec/changes/other-demo/spec.html"
+PATH = "spec/changes/refresh-demo/spec.json"
+OTHER = "spec/changes/other-demo/spec.json"
 
 
 def _requirement(key):

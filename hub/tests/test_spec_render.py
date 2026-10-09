@@ -649,7 +649,7 @@ def _render_with_corpus(corpus):
 
 def test_the_home_document_gets_no_home_link():
     corpus = CorpusContext(
-        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=()
+        path="spec/agentweave.json", home="spec/agentweave.json", parent=None, children=()
     )
     html = _render_with_corpus(corpus)
     assert 'class="aw-nav"' not in html
@@ -657,19 +657,19 @@ def test_the_home_document_gets_no_home_link():
 
 def test_a_non_home_document_with_no_parent_gets_only_a_home_link():
     corpus = CorpusContext(
-        path="spec/capabilities/x/spec.html", home="spec/agentweave.html", parent=None, children=()
+        path="spec/capabilities/x/spec.json", home="spec/agentweave.json", parent=None, children=()
     )
     html = _render_with_corpus(corpus)
     nav = re.search(r'<p class="aw-nav">(.*?)</p>', html).group(1)
-    assert '<a href="../../agentweave.html">Home</a>' in nav
+    assert '<a href="../../agentweave.json">Home</a>' in nav
     assert "aw-map" not in nav
 
 
 def test_a_document_with_a_parent_gets_both_links_home_first():
     corpus = CorpusContext(
-        path="spec/areas/agents.html",
-        home="spec/agentweave.html",
-        parent=("spec/agentweave.html", "AgentWeave"),
+        path="spec/areas/agents.json",
+        home="spec/agentweave.json",
+        parent=("spec/agentweave.json", "AgentWeave"),
         children=(),
     )
     html = _render_with_corpus(corpus)
@@ -677,27 +677,27 @@ def test_a_document_with_a_parent_gets_both_links_home_first():
     home_pos = nav.index(">Home<")
     parent_pos = nav.index(">AgentWeave<")
     assert home_pos < parent_pos
-    assert '<a href="../agentweave.html">Home</a>' in nav
-    assert '<a href="../agentweave.html">AgentWeave</a>' in nav
+    assert '<a href="../agentweave.json">Home</a>' in nav
+    assert '<a href="../agentweave.json">AgentWeave</a>' in nav
 
 
 def test_relative_links_climb_out_of_nested_directories():
     corpus = CorpusContext(
-        path="spec/capabilities/deep/nested/spec.html",
-        home="spec/agentweave.html",
-        parent=("spec/areas/agents.html", "Agents and execution"),
+        path="spec/capabilities/deep/nested/spec.json",
+        home="spec/agentweave.json",
+        parent=("spec/areas/agents.json", "Agents and execution"),
         children=(),
     )
     html = _render_with_corpus(corpus)
-    assert '<a href="../../../agentweave.html">Home</a>' in html
-    assert '<a href="../../../areas/agents.html">Agents and execution</a>' in html
+    assert '<a href="../../../agentweave.json">Home</a>' in html
+    assert '<a href="../../../areas/agents.json">Agents and execution</a>' in html
 
 
 def test_the_navigation_region_carries_no_external_resource():
     corpus = CorpusContext(
-        path="spec/capabilities/x/spec.html",
-        home="spec/agentweave.html",
-        parent=("spec/agentweave.html", "AgentWeave"),
+        path="spec/capabilities/x/spec.json",
+        home="spec/agentweave.json",
+        parent=("spec/agentweave.json", "AgentWeave"),
         children=(),
     )
     html = _render_with_corpus(corpus)
@@ -711,21 +711,21 @@ def test_a_rendered_file_opened_from_disk_resolves_both_links_with_no_hub_runnin
     href from the nested one, with no HTTP server involved, must land on the file that exists."""
     home_dir = tmp_path / "spec"
     home_dir.mkdir()
-    (home_dir / "agentweave.html").write_text("<html>home</html>", encoding="utf-8")
+    (home_dir / "agentweave.json").write_text("<html>home</html>", encoding="utf-8")
 
     corpus = CorpusContext(
-        path="spec/capabilities/x/spec.html", home="spec/agentweave.html", parent=None, children=()
+        path="spec/capabilities/x/spec.json", home="spec/agentweave.json", parent=None, children=()
     )
     html = _render_with_corpus(corpus)
     href = re.search(r'<a href="([^"]+)">Home</a>', html).group(1)
 
     own_dir = tmp_path / "spec" / "capabilities" / "x"
     own_dir.mkdir(parents=True)
-    doc_path = own_dir / "spec.html"
+    doc_path = own_dir / "spec.json"
     doc_path.write_text(html, encoding="utf-8")
 
     resolved = (doc_path.parent / href).resolve()
-    assert resolved == (home_dir / "agentweave.html").resolve()
+    assert resolved == (home_dir / "agentweave.json").resolve()
     assert resolved.read_text(encoding="utf-8") == "<html>home</html>"
 
 
@@ -737,7 +737,7 @@ def test_a_rendered_file_opened_from_disk_resolves_both_links_with_no_hub_runnin
 
 def test_a_document_with_no_children_gets_no_map_section():
     corpus = CorpusContext(
-        path="spec/capabilities/x/spec.html", home="spec/agentweave.html", parent=None, children=()
+        path="spec/capabilities/x/spec.json", home="spec/agentweave.json", parent=None, children=()
     )
     html = _render_with_corpus(corpus)
     assert 'class="aw-map"' not in html
@@ -745,18 +745,18 @@ def test_a_document_with_no_children_gets_no_map_section():
 
 def test_a_document_with_children_gets_a_map_section():
     child = CorpusChild(
-        path="spec/capabilities/a/spec.html",
+        path="spec/capabilities/a/spec.json",
         title="A",
         kind="capability",
         phase="current",
         summary="What A does.",
     )
     corpus = CorpusContext(
-        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=(child,)
+        path="spec/agentweave.json", home="spec/agentweave.json", parent=None, children=(child,)
     )
     html = _render_with_corpus(corpus)
     section = re.search(r'<section class="aw-map">(.*?)</section>', html).group(1)
-    assert '<a href="capabilities/a/spec.html">A</a>' in section
+    assert '<a href="capabilities/a/spec.json">A</a>' in section
     assert '<span class="aw-chip">capability</span>' in section
     assert '<span class="aw-chip aw-chip-phase-done">current</span>' in section
     assert "<p>What A does.</p>" in section
@@ -767,12 +767,12 @@ def test_children_in_the_map_are_ordered_as_given_not_alphabetically():
     re-sort what it is handed."""
     children = tuple(
         CorpusChild(
-            path=f"spec/{name}.html", title=name, kind="capability", phase="current", summary="s"
+            path=f"spec/{name}.json", title=name, kind="capability", phase="current", summary="s"
         )
         for name in ["z", "a", "m"]
     )
     corpus = CorpusContext(
-        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=children
+        path="spec/agentweave.json", home="spec/agentweave.json", parent=None, children=children
     )
     html = _render_with_corpus(corpus)
     section = re.search(r'<section class="aw-map">(.*?)</section>', html).group(1)
@@ -782,14 +782,14 @@ def test_children_in_the_map_are_ordered_as_given_not_alphabetically():
 
 def test_an_empty_summary_renders_as_no_summary_yet_in_the_empty_style():
     child = CorpusChild(
-        path="spec/capabilities/a/spec.html",
+        path="spec/capabilities/a/spec.json",
         title="A",
         kind="capability",
         phase="current",
         summary="",
     )
     corpus = CorpusContext(
-        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=(child,)
+        path="spec/agentweave.json", home="spec/agentweave.json", parent=None, children=(child,)
     )
     html = _render_with_corpus(corpus)
     assert '<p class="aw-empty">no summary yet</p>' in html
@@ -799,14 +799,14 @@ def test_a_placeholder_summary_renders_as_no_summary_yet():
     """design D8: the sync-created placeholder ('TBD - created by syncing change ...') is
     indistinguishable from a real summary unless named, so it is treated the same as empty."""
     child = CorpusChild(
-        path="spec/capabilities/a/spec.html",
+        path="spec/capabilities/a/spec.json",
         title="A",
         kind="capability",
         phase="current",
         summary="TBD - created by syncing change 2026-08-04-x. Update Purpose after archive.",
     )
     corpus = CorpusContext(
-        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=(child,)
+        path="spec/agentweave.json", home="spec/agentweave.json", parent=None, children=(child,)
     )
     html = _render_with_corpus(corpus)
     assert '<p class="aw-empty">no summary yet</p>' in html
@@ -815,14 +815,14 @@ def test_a_placeholder_summary_renders_as_no_summary_yet():
 
 def test_the_map_region_is_labelled_as_generated():
     child = CorpusChild(
-        path="spec/capabilities/a/spec.html",
+        path="spec/capabilities/a/spec.json",
         title="A",
         kind="capability",
         phase="current",
         summary="s",
     )
     corpus = CorpusContext(
-        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=(child,)
+        path="spec/agentweave.json", home="spec/agentweave.json", parent=None, children=(child,)
     )
     html = _render_with_corpus(corpus)
     section = re.search(r'<section class="aw-map">(.*?)</section>', html).group(1)
@@ -835,14 +835,14 @@ def test_a_grandchild_present_in_the_context_renders_nested_and_links_relative_t
     handed a nested tree (as the home's context is), the renderer walks it and computes every link
     relative to the document actually being rendered, not to the immediate parent in the tree."""
     grandchild = CorpusChild(
-        path="spec/capabilities/leaf/spec.html",
+        path="spec/capabilities/leaf/spec.json",
         title="Leaf",
         kind="capability",
         phase="current",
         summary="A leaf.",
     )
     child = CorpusChild(
-        path="spec/areas/agents.html",
+        path="spec/areas/agents.json",
         title="Agents and execution",
         kind="system-map",
         phase="current",
@@ -850,24 +850,24 @@ def test_a_grandchild_present_in_the_context_renders_nested_and_links_relative_t
         children=(grandchild,),
     )
     corpus = CorpusContext(
-        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=(child,)
+        path="spec/agentweave.json", home="spec/agentweave.json", parent=None, children=(child,)
     )
     html = _render_with_corpus(corpus)
     section = re.search(r'<section class="aw-map">(.*?)</section>', html).group(1)
-    assert '<a href="areas/agents.html">Agents and execution</a>' in section
-    assert '<a href="capabilities/leaf/spec.html">Leaf</a>' in section
+    assert '<a href="areas/agents.json">Agents and execution</a>' in section
+    assert '<a href="capabilities/leaf/spec.json">Leaf</a>' in section
 
 
 def test_the_map_carries_no_external_resource():
     child = CorpusChild(
-        path="spec/capabilities/a/spec.html",
+        path="spec/capabilities/a/spec.json",
         title="A",
         kind="capability",
         phase="current",
         summary="s",
     )
     corpus = CorpusContext(
-        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=(child,)
+        path="spec/agentweave.json", home="spec/agentweave.json", parent=None, children=(child,)
     )
     html = _render_with_corpus(corpus)
     assert "http://" not in html

@@ -92,12 +92,12 @@ describe('S3 — SpecTree gets the same row treatment FileTree has', () => {
     }
   }
   const inventory = {
-    nodes: [makeNode('spec/roadmap/one.html', 'One'), makeNode('spec/roadmap/two.html', 'Two')],
+    nodes: [makeNode('spec/roadmap/one.json', 'One'), makeNode('spec/roadmap/two.json', 'Two')],
   } as SpecInventory
 
   function renderTree(density: 'dialog' | 'rail' = 'dialog') {
     return render(
-      <SpecTree inventory={inventory} currentPath="spec/roadmap/one.html" onSelect={vi.fn()} density={density} />,
+      <SpecTree inventory={inventory} currentPath="spec/roadmap/one.json" onSelect={vi.fn()} density={density} />,
     )
   }
 
@@ -106,7 +106,7 @@ describe('S3 — SpecTree gets the same row treatment FileTree has', () => {
     renderTree()
 
     expect(screen.getByTestId('spec-tree-directory-spec/roadmap')).toHaveClass('row-item')
-    const document = screen.getByTestId('spec-tree-document-spec/roadmap/one.html')
+    const document = screen.getByTestId('spec-tree-document-spec/roadmap/one.json')
     expect(document).toHaveClass('row-item')
     expect(document).toHaveClass('panel-tree-row')
     // The open document is marked by weight and colour, not by a resting fill — the fill is

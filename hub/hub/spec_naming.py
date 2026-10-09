@@ -27,7 +27,7 @@ from .spec_manifest import SPEC_PATH_MAX_LENGTH, validate_spec_path
 
 #: Where explorations live. Matches `EXPLORATION_ROOT` in the UI.
 EXPLORATION_ROOT = "spec/changes"
-DOCUMENT_FILENAME = "spec.html"
+DOCUMENT_FILENAME = "spec.json"
 
 #: How many distinct placeholders to try before falling back to a suffix. The
 #: bound is not an optimisation: a namespace that has filled up must produce an

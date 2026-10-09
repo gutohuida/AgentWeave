@@ -18,7 +18,7 @@ from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/drift-demo/spec.html"
+PATH = "spec/changes/drift-demo/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 
@@ -336,7 +336,7 @@ async def test_a_changed_blob_in_a_repository_raises_a_candidate(
 # `drift-is-scanned-and-answered-on-the-document` (F129, F430, F436): the routes the panel uses.
 # ---------------------------------------------------------------------------
 
-SECOND = "spec/changes/drift-second/spec.html"
+SECOND = "spec/changes/drift-second/spec.json"
 
 
 async def _second_document(app, auth_headers, run_headers):
@@ -414,7 +414,7 @@ async def test_drift_is_listed_for_one_document_and_one_state(app, auth_headers,
     assert [row["id"] for row in only.json()["drift"]] == ["drift-one"]
 
     assert (await _listed(app, auth_headers, state="bogus")).status_code == 422
-    unknown = await _listed(app, auth_headers, document="spec/changes/nothing/spec.html")
+    unknown = await _listed(app, auth_headers, document="spec/changes/nothing/spec.json")
     assert unknown.status_code == 404
 
 

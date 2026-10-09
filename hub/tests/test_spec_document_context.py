@@ -13,7 +13,7 @@ from hub.api.v1.agents import _render_hub_agent_context
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, InboundQueueEntry
 
-SPEC_PATH = "spec/a1-probe.html"
+SPEC_PATH = "spec/a1-probe.json"
 SPEC_HTML = "<html><body><h1>A1 probe</h1></body></html>"
 
 
@@ -84,7 +84,7 @@ async def test_context_omits_a_document_this_project_does_not_have(
     await add_agent("speccer")
     _write_spec(tmp_path)
 
-    context = await _render("speccer", "spec/deleted-yesterday.html")
+    context = await _render("speccer", "spec/deleted-yesterday.json")
 
     assert "### Open specification document" not in context
     assert "deleted-yesterday" not in context

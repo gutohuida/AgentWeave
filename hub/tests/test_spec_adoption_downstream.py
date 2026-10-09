@@ -16,7 +16,7 @@ import json
 
 import pytest
 
-from hub.spec_payload import PAYLOAD_ELEMENT_ID, PAYLOAD_MIME
+from ._spec_files import stored_text
 
 BASE = "/api/v1/projects/proj-test/project"
 
@@ -28,8 +28,9 @@ def _document(
     status: str | None = "current",
     requirements: list | None = None,
 ) -> str:
+    """A document as the Hub stores one: its payload plus the hub block."""
     declared = requirements or []
-    payload = json.dumps(
+    return stored_text(
         {
             "schema_version": 1,
             "kind": kind,
@@ -42,16 +43,7 @@ def _document(
                 }
             },
         },
-        indent=2,
-    )
-    head = f"<title>{title}</title>\n" f'<meta name="aw-spec-kind" content="{kind}">\n'
-    if status is not None:
-        head += f'<meta name="aw-spec-status" content="{status}">\n'
-    return (
-        '<!DOCTYPE html>\n<html lang="en">\n<head>\n'
-        f"{head}</head>\n<body>\n<h1>{title}</h1>\n"
-        f'<script type="{PAYLOAD_MIME}" id="{PAYLOAD_ELEMENT_ID}">\n{payload}\n</script>\n'
-        "</body>\n</html>\n"
+        phase=status,
     )
 
 
@@ -71,7 +63,7 @@ async def _adopt(app, path: str, headers):
 
 @pytest.mark.asyncio
 async def test_an_adopted_documents_requirements_resolve_by_identifier(app, tmp_path, auth_headers):
-    path = "spec/capabilities/one/spec.html"
+    path = "spec/capabilities/one/spec.json"
     _write(
         tmp_path,
         path,
@@ -106,7 +98,7 @@ async def test_an_adopted_change_spec_accepts_a_phase_transition(app, tmp_path, 
 
     The document arrived carrying a lifecycle; the question is whether the row can
     carry it forward."""
-    path = "spec/changes/thing/spec.html"
+    path = "spec/changes/thing/spec.json"
     _write(tmp_path, path, _document(title="Thing", kind="change-spec", status="exploring"))
     assert (await _adopt(app, path, auth_headers)).status_code == 201
 
@@ -123,7 +115,7 @@ async def test_get_specs_reports_a_document_id_and_phase_after_adoption(
 ):
     """Before adoption the tree lists the file with a null id — the UI keys that
     tab by path, the only identity such a document has ever had."""
-    path = "spec/capabilities/one/spec.html"
+    path = "spec/capabilities/one/spec.json"
     _write(tmp_path, path, _document(title="One"))
 
     before = (await app.get(f"{BASE}/specs", headers=auth_headers)).json()
@@ -147,7 +139,7 @@ async def test_reindex_files_a_previously_unindexable_document_after_adoption(
     disk and known to the Hub"*, so a file with no row can never enter
     `spec/index.json` — which is why `project-instructions` and `quiet-hours` are
     permanently `unfiled` in this repository's own corpus."""
-    path = "spec/capabilities/quiet-hours/spec.html"
+    path = "spec/capabilities/quiet-hours/spec.json"
     _write(tmp_path, path, _document(title="Quiet hours"))
 
     before = (await app.post(f"{BASE}/spec/reindex", headers=auth_headers)).json()
@@ -178,20 +170,20 @@ async def test_a_corpus_reconstitutes_from_its_files_alone(app, tmp_path, auth_h
     # `exploring`, matching this repo's real home: a `system-map` cannot be `current`.
     _write(
         tmp_path,
-        "spec/agentweave.html",
+        "spec/agentweave.json",
         _document(title="Home", kind="system-map", status="exploring"),
     )
-    _write(tmp_path, "spec/capabilities/one/spec.html", _document(title="One"))
-    _write(tmp_path, "spec/capabilities/two/spec.html", _document(title="Two"))
+    _write(tmp_path, "spec/capabilities/one/spec.json", _document(title="One"))
+    _write(tmp_path, "spec/capabilities/two/spec.json", _document(title="Two"))
 
     assert (await app.post(f"{BASE}/spec/adopt", headers=auth_headers)).status_code == 200
     reindex = await app.post(
-        f"{BASE}/spec/reindex", json={"home": "spec/agentweave.html"}, headers=auth_headers
+        f"{BASE}/spec/reindex", json={"home": "spec/agentweave.json"}, headers=auth_headers
     )
     assert reindex.status_code == 200, reindex.text
 
     index = json.loads((tmp_path / "spec" / "index.json").read_text(encoding="utf-8"))
-    assert index["home"] == "spec/agentweave.html"
+    assert index["home"] == "spec/agentweave.json"
     assert {document["title"] for document in index["documents"]} == {"Home", "One", "Two"}
 
     specs = (await app.get(f"{BASE}/specs", headers=auth_headers)).json()["specs"]

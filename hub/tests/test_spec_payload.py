@@ -202,14 +202,14 @@ def test_an_imported_entry_needs_no_description_or_requirements():
             tasks=[
                 {
                     "key": "adopt-corpus",
-                    "from": {"document": "spec/areas/interface.html", "key": "adopt-corpus"},
+                    "from": {"document": "spec/areas/interface.json", "key": "adopt-corpus"},
                 },
             ],
         )
     )
     assert payload.tasks[0].description == ""
     assert payload.tasks[0].requirements == []
-    assert payload.tasks[0].from_.document == "spec/areas/interface.html"
+    assert payload.tasks[0].from_.document == "spec/areas/interface.json"
     assert payload.tasks[0].from_.key == "adopt-corpus"
 
 
@@ -223,7 +223,7 @@ def test_a_round_trip_with_local_dependencies_and_an_import_loses_nothing():
         tasks=[
             {
                 "key": "adopt-corpus",
-                "from": {"document": "spec/areas/interface.html", "key": "adopt-corpus"},
+                "from": {"document": "spec/areas/interface.json", "key": "adopt-corpus"},
             },
             {
                 "key": "render-map",
@@ -246,7 +246,7 @@ def test_a_round_trip_with_local_dependencies_and_an_import_loses_nothing():
     assert revalidated == stored
 
     imported, dependent = stored["tasks"]
-    assert imported["from"] == {"document": "spec/areas/interface.html", "key": "adopt-corpus"}
+    assert imported["from"] == {"document": "spec/areas/interface.json", "key": "adopt-corpus"}
     assert imported["description"] == ""
     assert dependent["depends_on"] == ["adopt-corpus"]
 

@@ -198,7 +198,7 @@ def _decide_evidence(**kwargs: Any) -> None:
         (_record_evidence, {"identifier": "FR-1"}),
         (
             _record_evidence,
-            {"identifier": "FR-1", "document": "spec/x.html", "task_id": "task-1"},
+            {"identifier": "FR-1", "document": "spec/x.json", "task_id": "task-1"},
         ),
         (_decide_evidence, {"evidence_id": "ev-1", "decision": "accepted"}),
         (

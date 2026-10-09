@@ -21,8 +21,8 @@ const projects = [
 
 vi.mock('@/api/projects', () => ({ useProjects: () => ({ data: projects, isLoading: false }) }))
 
-const SPEC_HOME = 'spec/spec.html'
-const SPEC_CHANGE = 'spec/changes/queued-message-delivery/spec.html'
+const SPEC_HOME = 'spec/spec.json'
+const SPEC_CHANGE = 'spec/changes/queued-message-delivery/spec.json'
 // Partial mock: `importOriginal` keeps every export this file does not override real, so
 // adding one to `@/api/spec` does not break a test that never used it. The whole-module form
 // this replaced failed the moment the module grew `useSpecDocuments`.
@@ -31,10 +31,10 @@ vi.mock('@/api/spec', async (importOriginal) => ({
   useSpecList: () => ({
     data: {
       specs: [
-        { path: 'spec/spec.html', title: 'Specification', kind: 'baseline', state: 'filed', parent: null, order: 0 },
-        { path: 'spec/changes/queued-message-delivery/spec.html', title: 'Queued message delivery', kind: 'change-spec', state: 'filed', parent: null, order: 10 },
+        { path: 'spec/spec.json', title: 'Specification', kind: 'baseline', state: 'filed', parent: null, order: 0 },
+        { path: 'spec/changes/queued-message-delivery/spec.json', title: 'Queued message delivery', kind: 'change-spec', state: 'filed', parent: null, order: 10 },
       ],
-      home: 'spec/spec.html',
+      home: 'spec/spec.json',
       diagnostics: [],
       missing: [],
     },

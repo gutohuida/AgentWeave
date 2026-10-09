@@ -112,7 +112,7 @@ async def test_silent_for_one_local_task(app, planner):
 
 @pytest.mark.asyncio
 async def test_imported_entries_neither_count_nor_are_named(app, planner):
-    imported = ("imp", {"from": {"document": "spec/changes/x/spec.html", "key": "k"}})
+    imported = ("imp", {"from": {"document": "spec/changes/x/spec.json", "key": "k"}})
     body = await _submit(app, planner, _doc(("a", {}), imported))
     assert _undeclared(body) == []
 

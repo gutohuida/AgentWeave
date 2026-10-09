@@ -1206,7 +1206,7 @@ class TestTheHubsOwnCallCommand:
     # `an-arguments-file-written-from-powershell-is-the-hubs-own` task 1.8: 9.10's form, on the
     # spec turn it was refused on, keyed `PowerShell` through the start event's `powershell`.
     PS_WRITE = (
-        "Set-Content -Path '.agentweave/calls/r.json' -Value '{\"path\":\"spec/x.html\"}' "
+        "Set-Content -Path '.agentweave/calls/r.json' -Value '{\"path\":\"spec/x.json\"}' "
         "-Encoding utf8"
     )
 

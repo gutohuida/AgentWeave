@@ -79,7 +79,7 @@ export function validateFrameMessage(
 export type LinkResolution =
   | { kind: 'fragment'; fragment: string }
   | { kind: 'document'; path: string; fragment: string | null }
-  | { kind: 'rejected'; reason: 'external' | 'unsafe' | 'not-html' | 'unknown' }
+  | { kind: 'rejected'; reason: 'external' | 'unsafe' | 'not-document' | 'unknown' }
 
 // Only used to normalize relative paths; never fetched, never navigated to.
 const RESOLUTION_BASE = 'https://spec.invalid/'
@@ -122,7 +122,10 @@ export function resolveSpecLink(
     return { kind: 'rejected', reason: 'unsafe' }
   }
   if (!path.startsWith(SPEC_ROOT)) return { kind: 'rejected', reason: 'unsafe' }
-  if (!/\.html?$/i.test(path)) return { kind: 'rejected', reason: 'not-html' }
+  // A document is stored as its payload, `spec/.../spec.json`; `spec/index.json` is the index.
+  if (!/\.json$/i.test(path) || path === 'spec/index.json') {
+    return { kind: 'rejected', reason: 'not-document' }
+  }
   if (!readablePaths.has(path)) return { kind: 'rejected', reason: 'unknown' }
 
   const fragment = url.hash ? url.hash.slice(1) : null

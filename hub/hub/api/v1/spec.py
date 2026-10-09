@@ -344,13 +344,24 @@ async def get_spec(
     if content is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="spec not found")
 
+    document = await spec_lifecycle.get_document(session, project_id, path)
+    # The file is the payload; the page is rendered from it here (FR-2). Divergence is still
+    # measured against the stored bytes, which are what the Hub recorded.
+    page = await spec_service.render_page(session, workspace, path, content, document)
+    if page is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": f"{path} holds no readable spec payload",
+                "code": "payload_unreadable",
+            },
+        )
     payload = {
         "path": path,
-        "content": content,
+        "content": page,
         "updated_at": spec_documents.document_updated_at(workspace, path),
     }
     payload.update(await _divergence_fields(session, project_id, path, content))
-    document = await spec_lifecycle.get_document(session, project_id, path)
     if document is not None:
         status_now = await _delivery_status(
             session, project_id, document, spec_documents.parse_stored(content)
@@ -1999,6 +2010,8 @@ async def set_journey(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"message": str(exc), "code": exc.code},
         ) from exc
+    # FR-10: the file's hub block carries the new step and size in the same request.
+    await spec_service.rerender_phase(session, await _workspace(session, project_id), document)
     await session.commit()
     await sse_manager.broadcast(project_id, "spec_updated", {"path": path, "phase": document.phase})
     return _document_view(document)

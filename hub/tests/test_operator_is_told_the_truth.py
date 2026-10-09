@@ -26,7 +26,7 @@ from hub.scheduler import _safe_error_summary
         "mcp__agentweave__record_evidence",
         "this_is_a_perfectly_ordinary_function_name",
         # The Hub mints these itself, from a title an agent chose.
-        "spec/changes/teal-manticore/spec.html",
+        "spec/changes/teal-manticore/spec.json",
     ],
 )
 def test_the_hubs_own_vocabulary_survives_redaction(survivor):

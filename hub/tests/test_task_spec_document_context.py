@@ -4,8 +4,8 @@
 triggered on a **task** the context gave no path and no document id, so the tool it advertised could
 not be called. From the run that found it:
 
-    I tried read_spec_document on several guessed paths (spec/late-fees.html,
-    spec/late-fee-calculator.html, …) and all 404. document_id in the task ledger is
+    I tried read_spec_document on several guessed paths (spec/late-fees.json,
+    spec/late-fee-calculator.json, …) and all 404. document_id in the task ledger is
     spdoc-d5632909 but that's not an accepted path.
 
 It happened twice in one run, in two separate conversations — the second time blocking evidence
@@ -29,7 +29,7 @@ BASE = "/api/v1/projects/proj-test/project"
 TASKS = "/api/v1/projects/proj-test/tasks"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 CONTEXT = "/api/v1/projects/proj-test/agents/agent-context"
-PATH = "spec/changes/task-context/spec.html"
+PATH = "spec/changes/task-context/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 
@@ -273,7 +273,7 @@ async def test_both_render_when_they_name_different_documents(app, auth_headers,
     """The operator reading one document while the task implements another is a real state, and
     collapsing it would hide whichever one it dropped."""
     await _document(app, auth_headers, author)
-    other = "spec/changes/something-else/spec.html"
+    other = "spec/changes/something-else/spec.json"
     context = await _render(document=other, task_document=PATH, task_id="task-1")
 
     assert "### The specification this task implements" in context
@@ -306,7 +306,7 @@ async def test_a_task_derived_document_does_not_start_an_authoring_turn(app, aut
     assert spec_turn_notice(None) is None
 
 
-UNWRITTEN_PATH = "spec/changes/f51-unwritten/spec.html"
+UNWRITTEN_PATH = "spec/changes/f51-unwritten/spec.json"
 
 
 async def _create_only(app, auth_headers):

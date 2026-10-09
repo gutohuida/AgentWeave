@@ -13,11 +13,12 @@ from sqlalchemy import select
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Run, SpecDocument, SpecRequirement, SpecRequirementRevision
-from hub.spec_payload import SCHEMA_VERSION, extract_payload
+from hub.spec_documents import parse_hub, parse_stored, serialize
+from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/index-demo/spec.html"
+PATH = "spec/changes/index-demo/spec.json"
 
 
 @pytest.fixture
@@ -120,14 +121,11 @@ def _edit_payload_by_hand(tmp_path, mutate, path=PATH):
     The Hub is not involved, which is the point: everything reaching the index
     through this helper is an external change and must be recorded as one.
     """
-    from hub.spec_payload import embed_payload
-
     document_file = tmp_path / path
     content = document_file.read_text(encoding="utf-8")
-    stored = extract_payload(content)
+    stored = parse_stored(content)
     mutate(stored)
-    block = content[content.index("<script type=") : content.rindex("</script>") + len("</script>")]
-    document_file.write_text(content.replace(block, embed_payload(stored)), encoding="utf-8")
+    document_file.write_text(serialize(stored, parse_hub(content)), encoding="utf-8")
 
 
 async def _reindex(tmp_path, project_id="proj-test"):

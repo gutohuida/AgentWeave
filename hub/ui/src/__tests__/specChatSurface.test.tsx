@@ -47,15 +47,15 @@ vi.mock('@/api/spec', async (importOriginal) => ({
   useSpecDocuments: () => ({ data: { documents: [] } }),
   useSpecList: () => ({
     data: {
-      specs: [{ path: 'spec/a1-probe.html', title: 'A1 probe', state: 'filed', parent: null, order: 0 }],
-      home: 'spec/a1-probe.html',
+      specs: [{ path: 'spec/a1-probe.json', title: 'A1 probe', state: 'filed', parent: null, order: 0 }],
+      home: 'spec/a1-probe.json',
       diagnostics: [],
       missing: [],
     },
     isLoading: false,
     refetch: () => {},
   }),
-  useSpec: () => ({ data: { path: 'spec/a1-probe.html', content: '<html></html>' }, refetch: () => {} }),
+  useSpec: () => ({ data: { path: 'spec/a1-probe.json', content: '<html></html>' }, refetch: () => {} }),
   useSpecEvents: () => {},
 }))
 
@@ -152,7 +152,7 @@ function conversation(overrides: Partial<AgentConversation> = {}): AgentConversa
 }
 
 function renderChat(
-  documentPath: string | null = 'spec/a1-probe.html',
+  documentPath: string | null = 'spec/a1-probe.json',
   conversationId: string | null = null,
 ) {
   const onOpenDocument = vi.fn()
@@ -250,18 +250,18 @@ describe('a conversation with a document open mounts the one composer', () => {
 
   it('continues the conversation the destination names', () => {
     conversations = [conversation({ id: 'conv-old', title: 'Older' })]
-    renderChat('spec/a1-probe.html', 'conv-old')
+    renderChat('spec/a1-probe.json', 'conv-old')
     expect(screen.getByTestId('session-continuity')).toHaveTextContent('Continuing Older')
   })
 })
 
 describe('the open document travels as context, not as the message', () => {
   it('sends the document the operator is viewing alongside their message', async () => {
-    renderChat('spec/a1-probe.html')
+    renderChat('spec/a1-probe.json')
     await send('why does this say that?')
 
     const body = triggerBody()
-    expect(body.spec_document).toBe('spec/a1-probe.html')
+    expect(body.spec_document).toBe('spec/a1-probe.json')
     // The message is the durable record of what the operator said.
     expect(body.message).toBe('why does this say that?')
   })
@@ -316,7 +316,7 @@ describe('the operator can be involved while a document is open', () => {
         run_id: 'run-1',
         tool_name: 'Write',
         tool_use_id: 'toolu_1',
-        tool_input: { file_path: 'spec/a1-probe.html', content: 'x' },
+        tool_input: { file_path: 'spec/a1-probe.json', content: 'x' },
         status: 'pending',
         dismissed: false,
         created_at: '2026-08-10T10:00:00Z',
@@ -384,7 +384,7 @@ describe('the specification is reached from the composer', () => {
    * about (operator, 2026-08-10). The pill sits with Model / Effort / Permissions because that is
    * what it is: it states which document this turn is written against. */
   it('states which document is open, and opens the picker', async () => {
-    renderChat('spec/a1-probe.html')
+    renderChat('spec/a1-probe.json')
 
     const pill = screen.getByTestId('composer-spec-control')
     expect(pill).toHaveTextContent('A1 probe')
@@ -425,7 +425,7 @@ describe('the specification is reached from the composer', () => {
     // The original concern still holds: a pill whose press means "open" sometimes and "close"
     // other times is two controls wearing one hat. The toggle keeps them as distinct targets
     // with distinct labels rather than overloading one press.
-    renderChat('spec/a1-probe.html')
+    renderChat('spec/a1-probe.json')
     expect(screen.getByTestId('composer-spec-control')).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByTestId('composer-stop-exploring')).toHaveAccessibleName(
       'Close the document',
@@ -437,7 +437,7 @@ describe('the specification is reached from the composer', () => {
     // User test guide step 3 (`2026-08-18-one-shell-three-panels`, task 8): "the composer still
     // names it as attached. If the pill clears, 3.3 is wrong." Only `composer-stop-exploring` — a
     // distinct control, asserted above — may clear it.
-    renderChat('spec/a1-probe.html')
+    renderChat('spec/a1-probe.json')
     expect(screen.getByTestId('composer-spec-control')).toHaveAccessibleName('Spec: A1 probe')
 
     fireEvent.click(screen.getByTestId('spec-document-close'))

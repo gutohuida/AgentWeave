@@ -41,7 +41,7 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
   useSpecDocumentRename(openDocument, onOpenDocument)
   const inventory = useMemo(() => buildInventory(specList), [specList])
 
-  /* Arriving with no document named opens the manifest home, then `spec/spec.html`, then the first
+  /* Arriving with no document named opens the manifest home, then `spec/spec.json`, then the first
    * readable current document — `resolveSelection`'s existing order. Written back to the
    * destination with `replace`, because resolving "the specification" to a document is not a
    * navigation the operator performed. */

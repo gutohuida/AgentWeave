@@ -32,7 +32,7 @@ const COVERAGE_RESPONSE = {
 }
 
 vi.mock('@/api/spec', () => ({
-  useSpecDocuments: () => ({ data: { documents: [{ id: 'doc-1', path: 'spec/thing.html' }] } }),
+  useSpecDocuments: () => ({ data: { documents: [{ id: 'doc-1', path: 'spec/thing.json' }] } }),
   useSpecCoverageMany: (paths: string[]) => paths.map(() => ({ data: COVERAGE_RESPONSE })),
 }))
 

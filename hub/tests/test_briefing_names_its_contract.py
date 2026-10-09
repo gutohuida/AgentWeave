@@ -84,7 +84,7 @@ async def _link_requirement(db, task, *, suffix, identifier="FR-1"):
         SpecDocument(
             id=f"doc-contract-{suffix}",
             project_id=PROJECT,
-            path=f"spec/contract-{suffix}.html",
+            path=f"spec/contract-{suffix}.json",
             title=f"Contract {suffix}",
             phase="approved",
             kind="change-spec",

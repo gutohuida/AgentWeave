@@ -71,7 +71,7 @@ export function isSpecDocumentPath(value: string): boolean {
   // traversal segment past the checks below — `specBridge`'s link resolution refuses it likewise.
   if (value.includes('\\') || value.includes('%')) return false
   if (value !== value.toLowerCase()) return false
-  if (!value.startsWith('spec/') || !value.endsWith('.html')) return false
+  if (!value.startsWith('spec/') || !value.endsWith('.json') || value === 'spec/index.json') return false
   return value
     .split('/')
     .every(

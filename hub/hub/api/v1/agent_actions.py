@@ -1859,6 +1859,20 @@ async def _journey_document(session: AsyncSession, project_id: str, raw_path: st
     return document, payload
 
 
+async def _write_journey(session: AsyncSession, project_id: str, document) -> None:
+    """FR-10: the stored file's hub block carries a journey move in the same request.
+
+    The row is the authority, so a file that cannot be rewritten does not undo the move.
+    """
+    from ... import project_workspace, spec_service
+
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, project_id)
+        await spec_service.rerender_phase(session, workspace, document)
+    except (project_workspace.ProjectWorkspaceError, OSError, ValueError):
+        return
+
+
 @router.post("/spec/documents/advance")
 async def advance_spec_step(
     body: SpecStepAdvance,
@@ -1897,6 +1911,7 @@ async def advance_spec_step(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"message": str(exc), "code": exc.code, "field": "to"},
         ) from exc
+    await _write_journey(session, actor.project_id, document)
     await session.commit()
     await sse_manager.broadcast(
         actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
@@ -1937,6 +1952,7 @@ async def set_spec_size(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"message": str(exc), "code": exc.code, "field": "size"},
         ) from exc
+    await _write_journey(session, actor.project_id, document)
     await session.commit()
     await sse_manager.broadcast(
         actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}

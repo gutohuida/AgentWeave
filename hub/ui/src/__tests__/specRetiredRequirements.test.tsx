@@ -59,7 +59,7 @@ vi.mock('@/api/spec', async (importOriginal) => {
 import { SpecRetiredRequirements } from '@/components/spec/SpecRetiredRequirements'
 import { useSetSpecRigor, useSpecEvents } from '@/api/spec'
 
-const PATH = 'spec/changes/demo/spec.html'
+const PATH = 'spec/changes/demo/spec.json'
 
 function requirement(identifier: string, key: string, state: 'active' | 'retired') {
   return {

@@ -42,7 +42,7 @@ DIGEST = "d" * 64
 BASE = "/api/v1/projects/proj-test/project"
 TASKS = "/api/v1/projects/proj-test/tasks"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/criteria-demo/spec.html"
+PATH = "spec/changes/criteria-demo/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 BETA = {"key": "beta", "statement": "It records a completed watering", "modal": "SHOULD"}
@@ -94,7 +94,7 @@ async def _document(db, suffix, *, keys=("alpha", "beta")):
     document = SpecDocument(
         id=f"doc-crit-{suffix}",
         project_id=PROJECT,
-        path=f"spec/changes/criteria-{suffix}/spec.html",
+        path=f"spec/changes/criteria-{suffix}/spec.json",
         title=f"Criteria {suffix}",
         phase="approved",
         kind="change-spec",

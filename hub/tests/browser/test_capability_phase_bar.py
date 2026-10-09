@@ -23,10 +23,10 @@ import pytest
 from playwright.sync_api import Page, expect
 
 CAPABILITY_DOCS = [
-    "spec/capabilities/quiet-hours/spec.html",
-    "spec/capabilities/project-instructions/spec.html",
+    "spec/capabilities/quiet-hours/spec.json",
+    "spec/capabilities/project-instructions/spec.json",
 ]
-ARCHIVED_CHANGE_DOC = "spec/changes/quiet-hours-for-agent-notifications/spec.html"
+ARCHIVED_CHANGE_DOC = "spec/changes/quiet-hours-for-agent-notifications/spec.json"
 
 PHASE_CONTROLS = ("Propose", "Approve", "Archive", "Reopen")
 

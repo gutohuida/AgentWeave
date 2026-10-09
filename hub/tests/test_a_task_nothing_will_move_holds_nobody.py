@@ -376,7 +376,7 @@ async def _guard_case(db, *, suffix, bookmark_in_live_loop):
         SpecDocument(
             id=f"doc-guard-{suffix}",
             project_id=PROJECT,
-            path=f"spec/guard-{suffix}.html",
+            path=f"spec/guard-{suffix}.json",
             title=f"Guard {suffix}",
             phase="current",
             kind="capability",

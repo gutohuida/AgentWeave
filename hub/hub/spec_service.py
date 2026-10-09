@@ -252,20 +252,10 @@ async def _apply_and_write(
         identifiers, mark, retired, carried
     )
 
-    content = render_document(
-        payload,
-        identifiers,
-        phase=document.phase,
-        stored_payload=stored,
-        # From the row, never from the submission. An agent that could state a rigor in a payload
-        # could lower a gate that is blocking it, which is the one thing this must not permit.
-        rigor=document.rigor,
-        slice_of=slice_of(workspace, payload),
-    )
-
     divergence = spec_lifecycle.divergence(document, existing_content)
 
-    spec_documents.write_document(workspace, document.path, content)
+    # Stored as the payload plus the row's hub block (FR-1); the page is rendered when it is read.
+    content = spec_documents.write_payload(workspace, document.path, stored, hub_block(document))
 
     await spec_lifecycle.record_content(
         session,
@@ -1310,31 +1300,72 @@ async def rerender_phase(
     workspace: ProjectWorkspace,
     document: SpecDocument,
 ) -> None:
-    """Rewrite the document so its visible status matches the phase.
+    """Rewrite the file's hub block so it matches the row's phase, rigor, step and size.
 
-    The metadata in the file is a copy for whoever reads it, never the
-    authority. It is refreshed here so the two do not disagree in front of an
-    operator — but if this fails, the phase in the database is still what
-    counts.
+    The block in the file is a copy for whoever reads it, never the authority. It is refreshed
+    here so the two do not disagree — but if this fails, the row is still what counts. Called
+    after a phase move, a rigor change and a journey move (FR-10).
     """
-    stored = spec_documents.read_payload(workspace, document.path)
+    content = spec_documents.read_document(workspace, document.path)
+    stored = spec_documents.parse_stored(content)
     if stored is None:
         return
+    rewritten = spec_documents.serialize(stored, hub_block(document))
+    if rewritten != content:
+        spec_documents.write_document(workspace, document.path, rewritten)
+    document.content_digest = spec_lifecycle.digest(rewritten)
+
+
+def hub_block(document: SpecDocument) -> Dict[str, Any]:
+    """The row's copy for the stored file (FR-1): phase, rigor, step and size."""
+    return {
+        "phase": document.phase,
+        # From the row, never from a submission. An agent that could state a rigor in a payload
+        # could lower a gate that is blocking it, which is the one thing this must not permit.
+        "rigor": document.rigor or "sketch",
+        "step": document.step,
+        "size": document.size,
+    }
+
+
+async def render_page(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    path: str,
+    content: str,
+    document: Optional[SpecDocument],
+) -> Optional[str]:
+    """The page a stored document shows, rendered on read (FR-2), or ``None`` with no payload.
+
+    The same render a save produced before storage moved to JSON, with the corpus navigation a
+    reindex used to write in when the index files the document. Phase and rigor come from the row
+    where there is one, else from the file's hub block.
+    """
+    stored = spec_documents.parse_stored(content)
+    if stored is None:
+        return None
     try:
         payload = validate_payload(stored)
     except PayloadError:
-        return
+        return None
     identifiers, _ = spec_identity.read_identity(stored)
-    rewritten = render_document(
+    hub = spec_documents.parse_hub(content)
+    phase = document.phase if document is not None else hub.get("phase") or spec_lifecycle.EXPLORING
+    rigor = (document.rigor if document is not None else hub.get("rigor")) or "sketch"
+    corpus = None
+    manifest, _, _ = spec_documents.read_index(workspace)
+    if manifest is not None and path in manifest.by_path():
+        summaries = spec_documents.corpus_summaries(workspace, manifest)
+        corpus = spec_documents.build_corpus_context(manifest, path, summaries)
+    return render_document(
         payload,
         identifiers,
-        phase=document.phase,
+        phase=phase,
         stored_payload=stored,
-        rigor=document.rigor,
+        rigor=rigor,
+        corpus=corpus,
         slice_of=slice_of(workspace, payload),
     )
-    spec_documents.write_document(workspace, document.path, rewritten)
-    document.content_digest = spec_lifecycle.digest(rewritten)
 
 
 async def rerender_corpus(
@@ -1343,24 +1374,18 @@ async def rerender_corpus(
     manifest: Manifest,
     rows: List[SpecDocument],
 ) -> Tuple[List[str], List[Dict[str, Any]]]:
-    """Re-render every document whose corpus navigation or map no longer matches its file.
+    """Rewrite every document whose stored file no longer matches what the Hub would write.
 
-    corpus-aware-documents §4. Every document in the manifest is a candidate — what stays
-    bounded (design D2) is the *write*, not the read: each candidate's freshly rendered bytes
-    are compared against what its file already holds, and only a real difference is written.
-    Comparing rendered bytes rather than manifest structure alone is deliberate: a structural
-    diff (parent, order) would miss a child's summary being filled in after the fact (design
-    D8, §6.7's content backlog) — that edits no manifest field, so a structure-only comparison
-    would leave a parent's map showing "no summary yet" forever. Reindex already reads every
-    document once for the requirement index (`spec_index.reindex_project`) and again for
-    `corpus_summaries`; rendering every candidate for a byte comparison costs no new order of
-    I/O, and it is operator-triggered, not on a hot path.
+    corpus-aware-documents §4, after `a-spec-document-is-stored-as-its-payload`: corpus
+    navigation and child maps are rendered when a document is read (FR-2), so they are never
+    stale in a file. What a rebuild can still find stale is the file's hub block (a phase moved
+    while the write failed) or its layout (a file written by hand). Each candidate's bytes are
+    compared against what the Hub would write and only a real difference is written (design D2).
 
-    Driven from each file's own embedded payload (design D6), never the database, so this works
+    Driven from each file's own payload (design D6), never the database, so this works
     identically for a document the Hub created and one that arrived by clone. A document whose
     file carries no readable payload is skipped and reported, never guessed at (design D6).
     """
-    summaries = spec_documents.corpus_summaries(workspace, manifest)
     by_path = {row.path: row for row in rows}
     actor = spec_lifecycle.Actor(kind="system", name="reindex")
 
@@ -1377,29 +1402,18 @@ async def rerender_corpus(
             skipped.append({"path": entry.path, "reason": "no_readable_payload"})
             continue
         try:
-            payload = validate_payload(stored)
+            validate_payload(stored)
         except PayloadError:
             skipped.append({"path": entry.path, "reason": "no_readable_payload"})
             continue
 
-        identifiers, _ = spec_identity.read_identity(stored)
-        # A path filed in the manifest always has a row today (`build_index` only files
-        # documents that are both on disk and known to the Hub) — the fallback below is
-        # defensive, not reachable through that route, so a future caller that files a
-        # rowless document does not lose its phase and rigor rather than crashing.
+        # The page's corpus navigation is rendered on read now (FR-2), so what a rebuild can find
+        # stale in the file is its hub block or its layout. A path filed in the manifest always
+        # has a row today (`build_index` only files documents that are both on disk and known to
+        # the Hub); a rowless one keeps the block it carries.
         document = by_path.get(entry.path)
-        phase = document.phase if document is not None else entry.status
-        rigor = document.rigor if document is not None else "sketch"
-        context = spec_documents.build_corpus_context(manifest, entry.path, summaries)
-        rendered = render_document(
-            payload,
-            identifiers,
-            phase=phase,
-            stored_payload=stored,
-            rigor=rigor,
-            corpus=context,
-            slice_of=slice_of(workspace, payload),
-        )
+        hub = hub_block(document) if document is not None else spec_documents.parse_hub(current)
+        rendered = spec_documents.serialize(stored, hub)
         if rendered == current:
             continue
 

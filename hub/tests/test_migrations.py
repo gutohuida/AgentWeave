@@ -1877,7 +1877,7 @@ def test_migration_0067_converts_the_live_legacy_references(tmp_path) -> None:
         )
         conn.execute(
             "INSERT INTO spec_documents (id, project_id, path, title, kind, phase, created_at,"
-            " updated_at) VALUES ('d1', 'p1', 'spec/changes/x/spec.html', 'X', 'change-spec',"
+            " updated_at) VALUES ('d1', 'p1', 'spec/changes/x/spec.json', 'X', 'change-spec',"
             " 'approved', '2026-08-13', '2026-08-13')"
         )
         for identifier, requirement_id in (("FR-8", "r8"), ("FR-1", "r1")):
@@ -2854,7 +2854,7 @@ def test_migration_0083_backfills_first_approved_at_from_phase_history(tmp_path)
         )
         conn.execute(
             "INSERT INTO spec_documents (id, project_id, path, title, kind, phase, created_at,"
-            " updated_at, first_approved_at) VALUES ('d1', 'p1', 'spec/x/spec.html', 'X',"
+            " updated_at, first_approved_at) VALUES ('d1', 'p1', 'spec/x/spec.json', 'X',"
             " 'change-spec', 'exploring', '2026-08-13', '2026-08-13', NULL)"
         )
         events = [
@@ -2900,7 +2900,7 @@ def test_migration_0083_leaves_a_never_approved_document_null(tmp_path) -> None:
         )
         conn.execute(
             "INSERT INTO spec_documents (id, project_id, path, title, kind, phase, created_at,"
-            " updated_at, first_approved_at) VALUES ('d2', 'p2', 'spec/y/spec.html', 'Y',"
+            " updated_at, first_approved_at) VALUES ('d2', 'p2', 'spec/y/spec.json', 'Y',"
             " 'change-spec', 'exploring', '2026-08-13', '2026-08-13', NULL)"
         )
         conn.commit()
@@ -4844,7 +4844,7 @@ def _insert_capability(conn, doc_id: str, phase: str) -> None:
         "INSERT INTO spec_documents (id, project_id, path, title, kind, phase, rigor, created_at, "
         "updated_at) VALUES (?, 'proj-1', ?, 't', 'capability', ?, 'sketch', "
         "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-        (doc_id, f"spec/capabilities/{doc_id}/spec.html", phase),
+        (doc_id, f"spec/capabilities/{doc_id}/spec.json", phase),
     )
 
 
@@ -4881,7 +4881,7 @@ def test_migration_0121_lets_a_capability_be_archived_and_downgrades_it_to_curre
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
                 "INSERT INTO spec_documents (id, project_id, path, title, kind, phase, rigor, "
-                "created_at, updated_at) VALUES ('x', 'proj-1', 'spec/changes/x/spec.html', 't', "
+                "created_at, updated_at) VALUES ('x', 'proj-1', 'spec/changes/x/spec.json', 't', "
                 "'change-spec', 'current', 'sketch', '2026-01-01T00:00:00Z', "
                 "'2026-01-01T00:00:00Z')"
             )
@@ -4913,7 +4913,7 @@ def _insert_document(conn, doc_id: str, kind: str, phase: str, digests) -> None:
         "INSERT INTO spec_documents (id, project_id, path, title, kind, phase, rigor, "
         "requirement_digests, created_at, updated_at) VALUES (?, 'proj-1', ?, 't', ?, ?, 'sketch', "
         "?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-        (doc_id, f"spec/changes/{doc_id}/spec.html", kind, phase, digests),
+        (doc_id, f"spec/changes/{doc_id}/spec.json", kind, phase, digests),
     )
 
 

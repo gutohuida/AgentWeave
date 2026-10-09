@@ -19,7 +19,7 @@ from hub.spec_payload import SCHEMA_VERSION
 BASE = "/api/v1/projects/proj-test/project"
 TASKS = "/api/v1/projects/proj-test/tasks"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/requirement-ids/spec.html"
+PATH = "spec/changes/requirement-ids/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 BETA = {"key": "beta", "statement": "It settles the account", "modal": "MUST"}
@@ -132,7 +132,7 @@ async def test_the_list_route_carries_them_too(app, auth_headers, builder):
 
 async def make_numbered_document(app, auth_headers, run_headers, count):
     """A document with *count* requirements, so identifiers run past `FR-9` into two digits."""
-    path = "spec/changes/requirement-order/spec.html"
+    path = "spec/changes/requirement-order/spec.json"
     created = await app.post(
         f"{BASE}/documents", json={"path": path, "title": "Ordering"}, headers=auth_headers
     )

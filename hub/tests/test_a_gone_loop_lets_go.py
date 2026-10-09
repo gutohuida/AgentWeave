@@ -163,7 +163,7 @@ async def _materialise_into(document_id, key):
         document = SpecDocument(
             id=document_id,
             project_id=PROJECT,
-            path=f"spec/changes/{document_id}/spec.html",
+            path=f"spec/changes/{document_id}/spec.json",
             title=document_id,
             phase="approved",
             kind="change-spec",

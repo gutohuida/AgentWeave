@@ -225,7 +225,7 @@ async def test_the_archive_refusal_offers_delivery_before_discard(
 async def test_arranging_with_no_index_names_the_reindex_and_its_home(app, auth_headers):
     refused = await app.post(
         f"{P}/project/spec/documents/arrange",
-        json={"path": "spec/area.html", "parent": None},
+        json={"path": "spec/area.json", "parent": None},
         headers=auth_headers,
     )
 

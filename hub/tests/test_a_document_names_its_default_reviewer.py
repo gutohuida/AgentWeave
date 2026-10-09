@@ -15,8 +15,9 @@ from hub.api.v1.agents import SPEC_PHASE_DUTIES
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent
 from hub.scheduler import resolve_reviewer
-from hub.spec_payload import SCHEMA_VERSION, embed_payload, validate_payload
+from hub.spec_payload import SCHEMA_VERSION, validate_payload
 
+from ._spec_files import stored_text
 from .test_a_document_says_how_it_will_be_built import (
     BASE,
     FLOW,
@@ -38,7 +39,7 @@ pytestmark = pytest.mark.asyncio
 async def _document_declaring(repo, db, *, default=None, task_reviewer=None):
     """A document on disk whose task `t1` names *task_reviewer* and whose delivery names *default*.
 
-    Written with the real `embed_payload`, as `test_reviewer_ladder._declare_reviewer` is.
+    Written with `stored_text`, as `test_reviewer_ladder._declare_reviewer` is.
     """
     from hub.db.models import SpecDocument
 
@@ -46,16 +47,17 @@ async def _document_declaring(repo, db, *, default=None, task_reviewer=None):
     delivery = {"mode": "flow", "agent": AUTHOR, "stop_when_queue_empties": True}
     if default:
         delivery["reviewer"] = default
-    document = repo / "spec" / "changes" / "c" / "spec.html"
+    document = repo / "spec" / "changes" / "c" / "spec.json"
     document.parent.mkdir(parents=True, exist_ok=True)
     document.write_text(
-        embed_payload(
+        stored_text(
             {
                 "schema_version": SCHEMA_VERSION,
                 "kind": "change-spec",
                 "tasks": [task],
                 "delivery": delivery,
-            }
+            },
+            phase="approved",
         ),
         encoding="utf-8",
     )
@@ -63,7 +65,7 @@ async def _document_declaring(repo, db, *, default=None, task_reviewer=None):
         SpecDocument(
             id="doc-default",
             project_id="proj-test",
-            path="spec/changes/c/spec.html",
+            path="spec/changes/c/spec.json",
             title="Default reviewer",
             phase="approved",
             kind="change-spec",
@@ -186,12 +188,12 @@ async def test_delivery_status_names_the_default_reviewer(
 ):
     async def status_of():
         got = await app.get(
-            f"{BASE}/spec", params={"path": "spec/changes/demo/spec.html"}, headers=auth_headers
+            f"{BASE}/spec", params={"path": "spec/changes/demo/spec.json"}, headers=auth_headers
         )
         assert got.status_code == 200, got.text
         return got.json().get("delivery_status")
 
-    path = "spec/changes/demo/spec.html"
+    path = "spec/changes/demo/spec.json"
     await _create(app, auth_headers, path)
     await _agent("dev")
     await _submit_document(app, run_headers, _document(delivery=FLOW), path=path)

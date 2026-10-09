@@ -98,7 +98,7 @@ describe('spec bridge — message validation (FR-7)', () => {
         channel: SPEC_BRIDGE_CHANNEL,
         version: SPEC_BRIDGE_VERSION,
         type: 'navigate',
-        href: '../system-map.html#SM-K-002',
+        href: '../system-map.json#SM-K-002',
       }),
       activeWindow
     )
@@ -131,12 +131,12 @@ describe('spec bridge — message validation (FR-7)', () => {
 })
 
 describe('spec bridge — link resolution (FR-6)', () => {
-  const current = 'spec/changes/add-spec-navigation/spec.html'
+  const current = 'spec/changes/add-spec-navigation/spec.json'
   const readable = new Set([
-    'spec/spec.html',
-    'spec/system-map.html',
-    'spec/changes/add-spec-navigation/spec.html',
-    'spec/roadmaps/agentweave-reconstruction.html',
+    'spec/spec.json',
+    'spec/system-map.json',
+    'spec/changes/add-spec-navigation/spec.json',
+    'spec/roadmaps/agentweave-reconstruction.json',
   ])
 
   it('treats a bare fragment as same-document navigation', () => {
@@ -147,25 +147,25 @@ describe('spec bridge — link resolution (FR-6)', () => {
   })
 
   it('resolves a relative sibling link', () => {
-    expect(resolveSpecLink('../../system-map.html#SM-K-002', current, readable)).toEqual({
+    expect(resolveSpecLink('../../system-map.json#SM-K-002', current, readable)).toEqual({
       kind: 'document',
-      path: 'spec/system-map.html',
+      path: 'spec/system-map.json',
       fragment: 'SM-K-002',
     })
   })
 
   it('resolves a relative link with no fragment', () => {
-    expect(resolveSpecLink('../../spec.html', current, readable)).toEqual({
+    expect(resolveSpecLink('../../spec.json', current, readable)).toEqual({
       kind: 'document',
-      path: 'spec/spec.html',
+      path: 'spec/spec.json',
       fragment: null,
     })
   })
 
   it('resolves a project-root-absolute link', () => {
-    expect(resolveSpecLink('/spec/system-map.html', current, readable)).toEqual({
+    expect(resolveSpecLink('/spec/system-map.json', current, readable)).toEqual({
       kind: 'document',
-      path: 'spec/system-map.html',
+      path: 'spec/system-map.json',
       fragment: null,
     })
   })
@@ -189,12 +189,12 @@ describe('spec bridge — link resolution (FR-6)', () => {
   it('rejects a non-HTML target', () => {
     expect(resolveSpecLink('../../notes.md', current, readable)).toEqual({
       kind: 'rejected',
-      reason: 'not-html',
+      reason: 'not-document',
     })
   })
 
   it('rejects a target that is not in the readable inventory', () => {
-    expect(resolveSpecLink('../../changes/ghost/spec.html', current, readable)).toEqual({
+    expect(resolveSpecLink('../../changes/ghost/spec.json', current, readable)).toEqual({
       kind: 'rejected',
       reason: 'unknown',
     })

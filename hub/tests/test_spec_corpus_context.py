@@ -17,7 +17,8 @@ from hub import spec_documents
 from hub.project_workspace import ProjectWorkspace
 from hub.spec_manifest import load_manifest
 from hub.spec_payload import SCHEMA_VERSION, payload_to_dict, validate_payload
-from hub.spec_render import render_document
+
+from ._spec_files import stored_text
 
 
 @pytest.fixture
@@ -30,8 +31,7 @@ def _write_document(workspace, path, *, summary="", kind="capability"):
         {"schema_version": SCHEMA_VERSION, "kind": kind, "title": path, "summary": summary}
     )
     stored = payload_to_dict(payload)
-    html = render_document(payload, {}, phase="current", stored_payload=stored)
-    spec_documents.write_document(workspace, path, html)
+    spec_documents.write_document(workspace, path, stored_text(stored, phase="current"))
 
 
 def _manifest(home, entries):
@@ -61,41 +61,41 @@ def _manifest(home, entries):
 
 class TestCorpusSummaries:
     def test_reads_each_documents_summary_once(self, workspace):
-        _write_document(workspace, "spec/a.html", summary="What A does.")
-        _write_document(workspace, "spec/b.html", summary="What B does.")
+        _write_document(workspace, "spec/a.json", summary="What A does.")
+        _write_document(workspace, "spec/b.json", summary="What B does.")
         manifest = _manifest(
-            "spec/a.html",
+            "spec/a.json",
             [
-                ("spec/a.html", "A", "capability", "current", None, 10),
-                ("spec/b.html", "B", "capability", "current", None, 20),
+                ("spec/a.json", "A", "capability", "current", None, 10),
+                ("spec/b.json", "B", "capability", "current", None, 20),
             ],
         )
 
         summaries = spec_documents.corpus_summaries(workspace, manifest)
 
-        assert summaries == {"spec/a.html": "What A does.", "spec/b.html": "What B does."}
+        assert summaries == {"spec/a.json": "What A does.", "spec/b.json": "What B does."}
 
     def test_an_empty_summary_is_absent_not_a_blank_string(self, workspace):
-        _write_document(workspace, "spec/a.html", summary="")
+        _write_document(workspace, "spec/a.json", summary="")
         manifest = _manifest(
-            "spec/a.html", [("spec/a.html", "A", "capability", "current", None, 10)]
+            "spec/a.json", [("spec/a.json", "A", "capability", "current", None, 10)]
         )
 
         assert spec_documents.corpus_summaries(workspace, manifest) == {}
 
     def test_a_manifest_entry_with_no_file_on_disk_is_simply_absent(self, workspace):
         manifest = _manifest(
-            "spec/a.html", [("spec/a.html", "A", "capability", "current", None, 10)]
+            "spec/a.json", [("spec/a.json", "A", "capability", "current", None, 10)]
         )
 
         assert spec_documents.corpus_summaries(workspace, manifest) == {}
 
     def test_a_file_with_no_payload_block_is_simply_absent(self, workspace):
         spec_documents.write_document(
-            workspace, "spec/a.html", "<html><body>hand-written</body></html>"
+            workspace, "spec/a.json", "<html><body>hand-written</body></html>"
         )
         manifest = _manifest(
-            "spec/a.html", [("spec/a.html", "A", "capability", "current", None, 10)]
+            "spec/a.json", [("spec/a.json", "A", "capability", "current", None, 10)]
         )
 
         assert spec_documents.corpus_summaries(workspace, manifest) == {}
@@ -104,51 +104,51 @@ class TestCorpusSummaries:
 class TestBuildCorpusContext:
     def test_the_home_has_no_parent(self, workspace):
         manifest = _manifest(
-            "spec/home.html", [("spec/home.html", "Home", "system-map", "approved", None, 10)]
+            "spec/home.json", [("spec/home.json", "Home", "system-map", "approved", None, 10)]
         )
 
-        context = spec_documents.build_corpus_context(manifest, "spec/home.html", {})
+        context = spec_documents.build_corpus_context(manifest, "spec/home.json", {})
 
-        assert context.home == "spec/home.html"
+        assert context.home == "spec/home.json"
         assert context.parent is None
 
     def test_a_filed_documents_parent_is_its_path_and_title(self, workspace):
         manifest = _manifest(
-            "spec/home.html",
+            "spec/home.json",
             [
-                ("spec/home.html", "Home", "system-map", "approved", None, 10),
-                ("spec/a.html", "A", "capability", "current", "spec/home.html", 20),
+                ("spec/home.json", "Home", "system-map", "approved", None, 10),
+                ("spec/a.json", "A", "capability", "current", "spec/home.json", 20),
             ],
         )
 
-        context = spec_documents.build_corpus_context(manifest, "spec/a.html", {})
+        context = spec_documents.build_corpus_context(manifest, "spec/a.json", {})
 
-        assert context.parent == ("spec/home.html", "Home")
+        assert context.parent == ("spec/home.json", "Home")
 
     def test_children_are_ordered_by_the_manifests_order_not_alphabetically(self, workspace):
         manifest = _manifest(
-            "spec/home.html",
+            "spec/home.json",
             [
-                ("spec/home.html", "Home", "system-map", "approved", None, 10),
-                ("spec/z.html", "Z", "capability", "current", "spec/home.html", 20),
-                ("spec/a.html", "A", "capability", "current", "spec/home.html", 30),
+                ("spec/home.json", "Home", "system-map", "approved", None, 10),
+                ("spec/z.json", "Z", "capability", "current", "spec/home.json", 20),
+                ("spec/a.json", "A", "capability", "current", "spec/home.json", 30),
             ],
         )
 
-        context = spec_documents.build_corpus_context(manifest, "spec/home.html", {})
+        context = spec_documents.build_corpus_context(manifest, "spec/home.json", {})
 
-        assert [child.path for child in context.children] == ["spec/z.html", "spec/a.html"]
+        assert [child.path for child in context.children] == ["spec/z.json", "spec/a.json"]
 
     def test_a_document_with_no_children_gets_an_empty_tuple(self, workspace):
         manifest = _manifest(
-            "spec/home.html",
+            "spec/home.json",
             [
-                ("spec/home.html", "Home", "system-map", "approved", None, 10),
-                ("spec/a.html", "A", "capability", "current", "spec/home.html", 20),
+                ("spec/home.json", "Home", "system-map", "approved", None, 10),
+                ("spec/a.json", "A", "capability", "current", "spec/home.json", 20),
             ],
         )
 
-        context = spec_documents.build_corpus_context(manifest, "spec/a.html", {})
+        context = spec_documents.build_corpus_context(manifest, "spec/a.json", {})
 
         assert context.children == ()
 
@@ -156,29 +156,29 @@ class TestBuildCorpusContext:
         """D2/D5: navigation is bounded to direct relationships. A capability nested two deep under
         the home must not show up in the home's own child list."""
         manifest = _manifest(
-            "spec/home.html",
+            "spec/home.json",
             [
-                ("spec/home.html", "Home", "system-map", "approved", None, 10),
-                ("spec/area.html", "Area", "system-map", "approved", "spec/home.html", 20),
-                ("spec/leaf.html", "Leaf", "capability", "current", "spec/area.html", 30),
+                ("spec/home.json", "Home", "system-map", "approved", None, 10),
+                ("spec/area.json", "Area", "system-map", "approved", "spec/home.json", 20),
+                ("spec/leaf.json", "Leaf", "capability", "current", "spec/area.json", 30),
             ],
         )
 
-        context = spec_documents.build_corpus_context(manifest, "spec/home.html", {})
+        context = spec_documents.build_corpus_context(manifest, "spec/home.json", {})
 
-        assert [child.path for child in context.children] == ["spec/area.html"]
+        assert [child.path for child in context.children] == ["spec/area.json"]
 
     def test_each_child_carries_its_summary_from_the_precomputed_map(self, workspace):
         manifest = _manifest(
-            "spec/home.html",
+            "spec/home.json",
             [
-                ("spec/home.html", "Home", "system-map", "approved", None, 10),
-                ("spec/a.html", "A", "capability", "current", "spec/home.html", 20),
+                ("spec/home.json", "Home", "system-map", "approved", None, 10),
+                ("spec/a.json", "A", "capability", "current", "spec/home.json", 20),
             ],
         )
 
         context = spec_documents.build_corpus_context(
-            manifest, "spec/home.html", {"spec/a.html": "What A does."}
+            manifest, "spec/home.json", {"spec/a.json": "What A does."}
         )
 
         assert context.children[0].summary == "What A does."
@@ -187,27 +187,27 @@ class TestBuildCorpusContext:
         self, workspace
     ):
         manifest = _manifest(
-            "spec/home.html",
+            "spec/home.json",
             [
-                ("spec/home.html", "Home", "system-map", "approved", None, 10),
-                ("spec/a.html", "A", "capability", "current", "spec/home.html", 20),
+                ("spec/home.json", "Home", "system-map", "approved", None, 10),
+                ("spec/a.json", "A", "capability", "current", "spec/home.json", 20),
             ],
         )
 
-        context = spec_documents.build_corpus_context(manifest, "spec/home.html", {})
+        context = spec_documents.build_corpus_context(manifest, "spec/home.json", {})
 
         assert context.children[0].summary == ""
 
     def test_a_child_carries_its_kind_and_phase(self, workspace):
         manifest = _manifest(
-            "spec/home.html",
+            "spec/home.json",
             [
-                ("spec/home.html", "Home", "system-map", "approved", None, 10),
-                ("spec/a.html", "A", "change-spec", "proposed", "spec/home.html", 20),
+                ("spec/home.json", "Home", "system-map", "approved", None, 10),
+                ("spec/a.json", "A", "change-spec", "proposed", "spec/home.json", 20),
             ],
         )
 
-        context = spec_documents.build_corpus_context(manifest, "spec/home.html", {})
+        context = spec_documents.build_corpus_context(manifest, "spec/home.json", {})
 
         assert context.children[0].kind == "change-spec"
         assert context.children[0].phase == "proposed"
@@ -216,12 +216,12 @@ class TestBuildCorpusContext:
         """A document being rendered for the first time, before it has a row or an index entry,
         still needs a home to link to."""
         manifest = _manifest(
-            "spec/home.html", [("spec/home.html", "Home", "system-map", "approved", None, 10)]
+            "spec/home.json", [("spec/home.json", "Home", "system-map", "approved", None, 10)]
         )
 
-        context = spec_documents.build_corpus_context(manifest, "spec/not-yet-filed.html", {})
+        context = spec_documents.build_corpus_context(manifest, "spec/not-yet-filed.json", {})
 
-        assert context.home == "spec/home.html"
+        assert context.home == "spec/home.json"
         assert context.parent is None
         assert context.children == ()
 
@@ -231,55 +231,55 @@ class TestBuildCorpusContext:
         but each of those children now carries its own descendants nested inside it, which is what
         lets the renderer show the whole corpus on the home page."""
         manifest = _manifest(
-            "spec/home.html",
+            "spec/home.json",
             [
-                ("spec/home.html", "Home", "system-map", "approved", None, 10),
-                ("spec/area.html", "Area", "system-map", "approved", "spec/home.html", 20),
-                ("spec/leaf.html", "Leaf", "capability", "current", "spec/area.html", 30),
+                ("spec/home.json", "Home", "system-map", "approved", None, 10),
+                ("spec/area.json", "Area", "system-map", "approved", "spec/home.json", 20),
+                ("spec/leaf.json", "Leaf", "capability", "current", "spec/area.json", 30),
             ],
         )
 
-        context = spec_documents.build_corpus_context(manifest, "spec/home.html", {})
+        context = spec_documents.build_corpus_context(manifest, "spec/home.json", {})
 
-        assert [child.path for child in context.children] == ["spec/area.html"]
+        assert [child.path for child in context.children] == ["spec/area.json"]
         area = context.children[0]
-        assert [grandchild.path for grandchild in area.children] == ["spec/leaf.html"]
+        assert [grandchild.path for grandchild in area.children] == ["spec/leaf.json"]
         assert area.children[0].children == ()
 
     def test_a_non_home_documents_children_carry_no_nested_descendants(self, workspace):
         """The area document's own context (built for the area, not the home) gets direct children
         only, at every level — recursion is the home's alone."""
         manifest = _manifest(
-            "spec/home.html",
+            "spec/home.json",
             [
-                ("spec/home.html", "Home", "system-map", "approved", None, 10),
-                ("spec/area.html", "Area", "system-map", "approved", "spec/home.html", 20),
-                ("spec/leaf.html", "Leaf", "capability", "current", "spec/area.html", 30),
+                ("spec/home.json", "Home", "system-map", "approved", None, 10),
+                ("spec/area.json", "Area", "system-map", "approved", "spec/home.json", 20),
+                ("spec/leaf.json", "Leaf", "capability", "current", "spec/area.json", 30),
             ],
         )
 
-        context = spec_documents.build_corpus_context(manifest, "spec/area.html", {})
+        context = spec_documents.build_corpus_context(manifest, "spec/area.json", {})
 
-        assert [child.path for child in context.children] == ["spec/leaf.html"]
+        assert [child.path for child in context.children] == ["spec/leaf.json"]
         assert context.children[0].children == ()
 
     def test_recursion_on_the_home_goes_arbitrarily_deep(self, workspace):
         """Design D5: the renderer is generic over depth. A three-level arrangement — home, area,
         capability, sub-item — must all show up nested under the home without a code change."""
         manifest = _manifest(
-            "spec/home.html",
+            "spec/home.json",
             [
-                ("spec/home.html", "Home", "system-map", "approved", None, 10),
-                ("spec/area.html", "Area", "system-map", "approved", "spec/home.html", 20),
-                ("spec/cap.html", "Cap", "capability", "current", "spec/area.html", 30),
-                ("spec/sub.html", "Sub", "capability", "current", "spec/cap.html", 40),
+                ("spec/home.json", "Home", "system-map", "approved", None, 10),
+                ("spec/area.json", "Area", "system-map", "approved", "spec/home.json", 20),
+                ("spec/cap.json", "Cap", "capability", "current", "spec/area.json", 30),
+                ("spec/sub.json", "Sub", "capability", "current", "spec/cap.json", 40),
             ],
         )
 
-        context = spec_documents.build_corpus_context(manifest, "spec/home.html", {})
+        context = spec_documents.build_corpus_context(manifest, "spec/home.json", {})
 
         area = context.children[0]
         cap = area.children[0]
         sub = cap.children[0]
-        assert sub.path == "spec/sub.html"
+        assert sub.path == "spec/sub.json"
         assert sub.children == ()

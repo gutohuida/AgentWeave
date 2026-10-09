@@ -36,10 +36,11 @@ from hub.db.models import (
 from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT, return_run_entries
 from hub.run_divergence import evaluate_run_end
 from hub.run_task_binding import bind_run_to_task
-from hub.spec_payload import SCHEMA_VERSION, embed_payload
+from hub.spec_payload import SCHEMA_VERSION
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import operator, run_actor
 
+from ._spec_files import stored_text
 from .test_agent_trigger import _init_repo
 from .test_review_turn import _roster
 
@@ -51,14 +52,15 @@ AUTHOR = "rev-author"
 async def _declare_reviewer(repo, db, *, name, document_id="doc-revdiv"):
     """A document on disk declaring *name* as the reviewer of task key `t1`.
 
-    Written with the real `embed_payload`, matching `test_reviewer_ladder.py`: a fixture that fakes
+    Written with `stored_text`, matching `test_reviewer_ladder.py`: a fixture that fakes
     the envelope stops testing the thing that reads it the moment the envelope changes.
     """
-    document = repo / "spec" / "revdiv.html"
+    document = repo / "spec" / "revdiv.json"
     document.parent.mkdir(parents=True, exist_ok=True)
     document.write_text(
-        embed_payload(
-            {"schema_version": SCHEMA_VERSION, "tasks": [{"key": "t1", "reviewer": name}]}
+        stored_text(
+            {"schema_version": SCHEMA_VERSION, "tasks": [{"key": "t1", "reviewer": name}]},
+            phase="current",
         ),
         encoding="utf-8",
     )
@@ -66,7 +68,7 @@ async def _declare_reviewer(repo, db, *, name, document_id="doc-revdiv"):
         SpecDocument(
             id=document_id,
             project_id="proj-test",
-            path="spec/revdiv.html",
+            path="spec/revdiv.json",
             title="Review divergence",
             phase="current",
             kind="capability",

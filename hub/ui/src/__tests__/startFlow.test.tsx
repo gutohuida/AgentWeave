@@ -36,7 +36,7 @@ vi.mock('@/api/agents', () => ({
 function doc(overrides: Record<string, unknown> = {}) {
   return {
     id: 'spdoc-1',
-    path: 'spec/changes/demo/spec.html',
+    path: 'spec/changes/demo/spec.json',
     title: 'Demo',
     kind: 'change-spec',
     phase: 'approved',
@@ -66,7 +66,7 @@ function renderBar(onOpenLoop?: (l: unknown) => void) {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <SpecPhaseBar path="spec/changes/demo/spec.html" onOpenLoop={onOpenLoop} />
+      <SpecPhaseBar path="spec/changes/demo/spec.json" onOpenLoop={onOpenLoop} />
     </QueryClientProvider>,
   )
 }

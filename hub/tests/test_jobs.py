@@ -1368,7 +1368,7 @@ async def test_a_flow_named_by_its_documents_path_adopts_the_documents_tasks(app
     # As long as real ones: the F510 document's path is 99 characters, and the request used to
     # cap this field at 64, so a real path was refused before it was ever resolved (drive, 2026-10-07).
     path = (
-        "spec/changes/a-flow-named-by-its-path-adopts-the-tasks-of-the-document-it-names/spec.html"
+        "spec/changes/a-flow-named-by-its-path-adopts-the-tasks-of-the-document-it-names/spec.json"
     )
     assert len(path) > 64
     await _spec_document("spdoc-f451a", path)
@@ -1394,7 +1394,7 @@ async def test_a_flow_named_by_its_documents_path_adopts_the_documents_tasks(app
 async def test_a_path_that_names_no_document_is_refused(app, auth_headers):
     resp = await app.post(
         "/api/v1/projects/proj-test/jobs",
-        json=_flow_body("Nowhere", "spec/changes/no-such-document/spec.html"),
+        json=_flow_body("Nowhere", "spec/changes/no-such-document/spec.json"),
         headers=auth_headers,
     )
     assert resp.status_code == 422, resp.text
@@ -1403,7 +1403,7 @@ async def test_a_path_that_names_no_document_is_refused(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_a_loop_given_its_document_by_path_later_stores_the_id(app, auth_headers):
-    path = "spec/changes/f451-patched/spec.html"
+    path = "spec/changes/f451-patched/spec.json"
     await _spec_document("spdoc-f451b", path)
     created = await app.post(
         "/api/v1/projects/proj-test/jobs",

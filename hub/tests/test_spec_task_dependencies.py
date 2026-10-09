@@ -140,7 +140,7 @@ async def dependency_references(task_id):
     return rows
 
 
-PATH_LOCAL = "spec/changes/dep-local/spec.html"
+PATH_LOCAL = "spec/changes/dep-local/spec.json"
 
 
 @pytest.mark.asyncio
@@ -239,8 +239,8 @@ async def test_a_revision_adds_a_new_edge_to_an_existing_task_without_touching_i
     assert by_key_after["build-recording"].id == recording_id
 
 
-PATH_IMPORT_SOURCE = "spec/changes/dep-import-source/spec.html"
-PATH_IMPORT_USER = "spec/changes/dep-import-user/spec.html"
+PATH_IMPORT_SOURCE = "spec/changes/dep-import-source/spec.json"
+PATH_IMPORT_USER = "spec/changes/dep-import-user/spec.json"
 
 
 @pytest.mark.asyncio
@@ -367,7 +367,7 @@ async def test_materialise_never_raises_for_a_malformed_import(app, auth_headers
             SpecDocument(
                 id="doc-malformed",
                 project_id="proj-test",
-                path="spec/changes/dep-malformed/spec.html",
+                path="spec/changes/dep-malformed/spec.json",
                 title="Malformed",
                 kind="change-spec",
                 phase="proposed",
@@ -413,7 +413,7 @@ async def test_materialise_never_raises_for_a_malformed_import(app, auth_headers
 # ---------------------------------------------------------------------------
 
 TASKS_BASE = "/api/v1/projects/proj-test/tasks"
-PATH_CHAIN = "spec/changes/dep-chain/spec.html"
+PATH_CHAIN = "spec/changes/dep-chain/spec.json"
 
 
 async def _patch_status(app, auth_headers, task_id, status):

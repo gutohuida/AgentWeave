@@ -15,9 +15,9 @@ from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
-CAP_PATH = "spec/capabilities/demo/spec.html"
-CHANGE_PATH = "spec/changes/demo/spec.html"
-CHANGE2_PATH = "spec/changes/demo-two/spec.html"
+CAP_PATH = "spec/capabilities/demo/spec.json"
+CHANGE_PATH = "spec/changes/demo/spec.json"
+CHANGE2_PATH = "spec/changes/demo-two/spec.json"
 
 
 @pytest.fixture
@@ -162,13 +162,13 @@ async def test_a_merge_naming_a_capability_document_as_source_is_refused(
     capability document's phase is always `current`, so this is the same refusal, not a
     separate one."""
     await _capability(app, auth_headers, path=CAP_PATH)
-    await _capability(app, auth_headers, path="spec/capabilities/other/spec.html")
+    await _capability(app, auth_headers, path="spec/capabilities/other/spec.json")
 
     response = await app.post(
         f"{BASE}/documents/{CAP_PATH}/merge",
         json={
             "payload": _capability_payload(),
-            "from_changes": ["spec/capabilities/other/spec.html"],
+            "from_changes": ["spec/capabilities/other/spec.json"],
         },
         headers=auth_headers,
     )
@@ -349,12 +349,12 @@ async def test_a_merge_naming_a_missing_source_404s_with_the_path(app, auth_head
 
     response = await app.post(
         f"{BASE}/documents/{CAP_PATH}/merge",
-        json={"payload": _capability_payload(), "from_changes": ["spec/changes/nope/spec.html"]},
+        json={"payload": _capability_payload(), "from_changes": ["spec/changes/nope/spec.json"]},
         headers=auth_headers,
     )
 
     assert response.status_code == 404
-    assert "spec/changes/nope/spec.html" in response.json()["detail"]
+    assert "spec/changes/nope/spec.json" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

@@ -23,7 +23,7 @@ vi.mock('@/hooks/useSSE', () => ({
 
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
 
-const PATH = 'spec/changes/demo/spec.html'
+const PATH = 'spec/changes/demo/spec.json'
 
 function document_(overrides: Record<string, unknown> = {}) {
   return {

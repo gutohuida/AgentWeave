@@ -26,7 +26,7 @@ vi.mock('@/api/tasks', async (importOriginal) => {
 function doc(overrides: Record<string, unknown> = {}) {
   return {
     id: 'spdoc-1',
-    path: 'spec/changes/demo/spec.html',
+    path: 'spec/changes/demo/spec.json',
     title: 'Demo',
     kind: 'change-spec',
     phase: 'approved',
@@ -40,7 +40,7 @@ function renderLink(onOpenTasks?: (taskIds: string[]) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <SpecDocumentTasksLink path="spec/changes/demo/spec.html" onOpenTasks={onOpenTasks} />
+      <SpecDocumentTasksLink path="spec/changes/demo/spec.json" onOpenTasks={onOpenTasks} />
     </QueryClientProvider>,
   )
 }

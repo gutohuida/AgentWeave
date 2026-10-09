@@ -97,7 +97,7 @@ def test_kind_none_is_byte_identical_to_today():
 def test_the_delivery_line_precedes_the_unwritten_path_line():
     """R2 D2: the delivery line is appended before the unwritten-path line, not after."""
     notice = spec_turn_notice(
-        "exploring", path="spec/changes/x/y.html", is_unwritten=True, kind="change-spec"
+        "exploring", path="spec/changes/x/y.json", is_unwritten=True, kind="change-spec"
     )
     assert notice.index("how it will be built") < notice.index(
         "is empty and is what you are interviewing for"

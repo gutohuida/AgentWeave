@@ -21,7 +21,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent
 
 BASE = "/api/v1/projects/proj-test/project"
-PATH = "spec/changes/precedence/spec.html"
+PATH = "spec/changes/precedence/spec.json"
 
 
 async def _create_document(app, auth_headers, path=PATH):

@@ -31,7 +31,7 @@ from hub.spec_payload import SCHEMA_VERSION
 BASE = "/api/v1/projects/proj-test/project"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 AGENT_EVIDENCE = "/api/v1/agent-actions/spec/evidence"
-PATH = "spec/changes/duplicate-demo/spec.html"
+PATH = "spec/changes/duplicate-demo/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It records a watering", "modal": "MUST"}
 BETA = {"key": "beta", "statement": "It lists what is due", "modal": "MUST"}

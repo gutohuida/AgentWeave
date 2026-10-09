@@ -12,12 +12,13 @@ from sqlalchemy import select, update
 
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument, SpecDocumentEvent, SpecDocumentMerge, Task
+from hub.spec_documents import parse_hub
 from hub.spec_payload import KEY_RE, SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
-CAP = "spec/capabilities/widgets/spec.html"
-CAP2 = "spec/capabilities/gadgets/spec.html"
-CHANGE = "spec/changes/widgets-glow/spec.html"
+CAP = "spec/capabilities/widgets/spec.json"
+CAP2 = "spec/capabilities/gadgets/spec.json"
+CHANGE = "spec/changes/widgets-glow/spec.json"
 
 
 def _change(**overrides):
@@ -268,7 +269,7 @@ async def test_the_folded_change_s_file_states_it_is_archived(app, auth_headers,
 
     assert response.status_code == 200, response.text
     content = (tmp_path / CHANGE).read_text(encoding="utf-8")
-    assert '<meta name="aw-spec-status" content="archived">' in content
+    assert parse_hub(content)["phase"] == "archived"
 
 
 @pytest.mark.asyncio
@@ -312,7 +313,7 @@ async def test_a_change_touching_two_capabilities_is_folded_twice_archiving_on_t
             {"into": CAP, "requirements": [{"key": "glow", "replaces": "ghost"}]},
             "fold_replaces_unknown",
         ),
-        ("target", {"into": "spec/changes/other/spec.html"}, "fold_target_not_capability"),
+        ("target", {"into": "spec/changes/other/spec.json"}, "fold_target_not_capability"),
         (
             "bad_key",
             {"into": CAP, "requirements": [{"key": "glow", "as_key": "Bad Key"}]},
@@ -324,7 +325,7 @@ async def test_a_refused_fold_writes_nothing(app, auth_headers, tmp_path, case, 
     await _create_capability(app, auth_headers)
     await _approved_change(app, auth_headers)
     if case == "target":
-        await _approved_change(app, auth_headers, path="spec/changes/other/spec.html")
+        await _approved_change(app, auth_headers, path="spec/changes/other/spec.json")
     if case != "task_open":
         await _finish_tasks()
     before = await _digest()
@@ -479,7 +480,7 @@ async def test_fold_state_reads_tasks_open_then_ready_then_folded(app, auth_head
 
 @pytest.mark.asyncio
 async def test_a_long_change_name_is_trimmed_to_a_valid_key(app, auth_headers, tmp_path):
-    long_path = "spec/changes/" + "a-very-long-change-name-" * 3 + "end/spec.html"
+    long_path = "spec/changes/" + "a-very-long-change-name-" * 3 + "end/spec.json"
     await _create_capability(app, auth_headers)
     await _approved_change(app, auth_headers, path=long_path)
 

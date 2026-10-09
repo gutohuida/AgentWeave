@@ -27,7 +27,8 @@ from sqlalchemy import func, select
 from hub import spec_adoption, spec_documents
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument
-from hub.spec_payload import PAYLOAD_ELEMENT_ID, PAYLOAD_MIME
+
+from ._spec_files import stored_text
 
 BASE = "/api/v1/projects/proj-test/project"
 
@@ -38,33 +39,26 @@ def _document(
     kind: str = "capability",
     status: str | None = "current",
     requirements: list | None = None,
-    raw_payload: str | None = None,
+    raw: str | None = None,
 ) -> str:
-    if raw_payload is None:
-        declared = requirements or []
-        raw_payload = json.dumps(
-            {
-                "schema_version": 1,
-                "kind": kind,
-                "title": title,
-                "requirements": declared,
-                "aw_identity": {
-                    "requirements": {
-                        requirement["key"]: f"FR-{index}"
-                        for index, requirement in enumerate(declared, start=1)
-                    }
-                },
+    """A document as the Hub stores one: its payload plus the hub block."""
+    if raw is not None:
+        return raw
+    declared = requirements or []
+    return stored_text(
+        {
+            "schema_version": 1,
+            "kind": kind,
+            "title": title,
+            "requirements": declared,
+            "aw_identity": {
+                "requirements": {
+                    requirement["key"]: f"FR-{index}"
+                    for index, requirement in enumerate(declared, start=1)
+                }
             },
-            indent=2,
-        )
-    head = f"<title>{title}</title>\n" f'<meta name="aw-spec-kind" content="{kind}">\n'
-    if status is not None:
-        head += f'<meta name="aw-spec-status" content="{status}">\n'
-    return (
-        '<!DOCTYPE html>\n<html lang="en">\n<head>\n'
-        f"{head}</head>\n<body>\n<h1>{title}</h1>\n"
-        f'<script type="{PAYLOAD_MIME}" id="{PAYLOAD_ELEMENT_ID}">\n{raw_payload}\n</script>\n'
-        "</body>\n</html>\n"
+        },
+        phase=status,
     )
 
 
@@ -89,7 +83,7 @@ def _snapshot(tmp_path) -> dict:
 
 
 def _corpus(tmp_path) -> None:
-    """Three adoptable documents, one hand-written file, one damaged payload.
+    """Three adoptable documents, one empty file, one damaged file.
 
     Shaped like this repository's own corpus, which is the case the change was
     written for: capability documents at `current`, and a single `system-map` home
@@ -100,13 +94,13 @@ def _corpus(tmp_path) -> None:
     """
     _write(
         tmp_path,
-        "spec/agentweave.html",
+        "spec/agentweave.json",
         _document(title="Home", kind="system-map", status="exploring"),
     )
-    _write(tmp_path, "spec/capabilities/one/spec.html", _document(title="One"))
-    _write(tmp_path, "spec/capabilities/two/spec.html", _document(title="Two"))
-    _write(tmp_path, "spec/notes.html", "<html><body>written by a person</body></html>")
-    _write(tmp_path, "spec/capabilities/broken/spec.html", _document(raw_payload="{ oops"))
+    _write(tmp_path, "spec/capabilities/one/spec.json", _document(title="One"))
+    _write(tmp_path, "spec/capabilities/two/spec.json", _document(title="Two"))
+    _write(tmp_path, "spec/notes.json", "")
+    _write(tmp_path, "spec/capabilities/broken/spec.json", _document(raw="{ oops"))
 
 
 async def _adopt_corpus(app, headers):
@@ -125,12 +119,12 @@ class TestCorpusAdoption:
         body = response.json()
 
         assert set(body["adopted"]) == {
-            "spec/agentweave.html",
-            "spec/capabilities/one/spec.html",
-            "spec/capabilities/two/spec.html",
+            "spec/agentweave.json",
+            "spec/capabilities/one/spec.json",
+            "spec/capabilities/two/spec.json",
         }
-        assert body["documents"]["spec/capabilities/one/spec.html"]["title"] == "One"
-        assert body["documents"]["spec/agentweave.html"]["kind"] == "system-map"
+        assert body["documents"]["spec/capabilities/one/spec.json"]["title"] == "One"
+        assert body["documents"]["spec/agentweave.json"]["kind"] == "system-map"
 
     @pytest.mark.asyncio
     async def test_one_unadoptable_document_does_not_abort_the_sweep(
@@ -143,11 +137,11 @@ class TestCorpusAdoption:
         body = (await _adopt_corpus(app, auth_headers)).json()
 
         assert set(body["skipped"]) == {
-            "spec/notes.html",
-            "spec/capabilities/broken/spec.html",
+            "spec/notes.json",
+            "spec/capabilities/broken/spec.json",
         }
-        assert body["documents"]["spec/notes.html"]["code"] == "payload_absent"
-        assert body["documents"]["spec/capabilities/broken/spec.html"]["code"] == (
+        assert body["documents"]["spec/notes.json"]["code"] == "payload_absent"
+        assert body["documents"]["spec/capabilities/broken/spec.json"]["code"] == (
             "payload_unreadable"
         )
         assert len(body["adopted"]) == 3
@@ -170,7 +164,7 @@ class TestCorpusAdoption:
 
         second = (await _adopt_corpus(app, auth_headers)).json()
         assert second["adopted"] == []
-        for path in ("spec/agentweave.html", "spec/capabilities/one/spec.html"):
+        for path in ("spec/agentweave.json", "spec/capabilities/one/spec.json"):
             assert second["documents"][path]["code"] == "document_exists"
             # Nothing moved underneath the row between the two runs.
             assert second["documents"][path]["differences"] == []
@@ -216,11 +210,11 @@ class TestNothingIsWritten:
     async def test_a_successful_adoption_leaves_the_file_byte_identical(
         self, app, tmp_path, auth_headers
     ):
-        _write(tmp_path, "spec/a.html", _document(title="A"))
+        _write(tmp_path, "spec/a.json", _document(title="A"))
         before = _snapshot(tmp_path)
 
         response = await app.post(
-            f"{BASE}/documents/adopt", json={"path": "spec/a.html"}, headers=auth_headers
+            f"{BASE}/documents/adopt", json={"path": "spec/a.json"}, headers=auth_headers
         )
         assert response.status_code == 201, response.text
         assert _snapshot(tmp_path) == before
@@ -228,9 +222,9 @@ class TestNothingIsWritten:
     @pytest.mark.parametrize(
         ("path", "content", "expected_code"),
         [
-            ("spec/a.html", "<html><body>no payload</body></html>", "payload_absent"),
-            ("spec/a.html", None, "payload_unreadable"),
-            ("spec/a.html", None, "payload_identity_missing"),
+            ("spec/a.json", "", "payload_absent"),
+            ("spec/a.json", None, "payload_unreadable"),
+            ("spec/a.json", None, "payload_identity_missing"),
         ],
     )
     @pytest.mark.asyncio
@@ -238,9 +232,9 @@ class TestNothingIsWritten:
         self, app, tmp_path, auth_headers, path, content, expected_code
     ):
         if expected_code == "payload_unreadable":
-            content = _document(raw_payload="{ not json")
+            content = _document(raw="{ not json")
         elif expected_code == "payload_identity_missing":
-            content = _document(raw_payload=json.dumps({"schema_version": 1, "kind": "capability"}))
+            content = _document(raw=json.dumps({"schema_version": 1, "kind": "capability"}))
         _write(tmp_path, path, content)
         before = _snapshot(tmp_path)
 
@@ -255,14 +249,14 @@ class TestNothingIsWritten:
     async def test_a_refusal_for_an_already_tracked_path_leaves_the_file_byte_identical(
         self, app, tmp_path, auth_headers
     ):
-        _write(tmp_path, "spec/a.html", _document(title="A"))
+        _write(tmp_path, "spec/a.json", _document(title="A"))
         await app.post(
-            f"{BASE}/documents/adopt", json={"path": "spec/a.html"}, headers=auth_headers
+            f"{BASE}/documents/adopt", json={"path": "spec/a.json"}, headers=auth_headers
         )
         before = _snapshot(tmp_path)
 
         response = await app.post(
-            f"{BASE}/documents/adopt", json={"path": "spec/a.html"}, headers=auth_headers
+            f"{BASE}/documents/adopt", json={"path": "spec/a.json"}, headers=auth_headers
         )
         assert response.status_code == 409
         assert _snapshot(tmp_path) == before
@@ -274,11 +268,11 @@ class TestNothingIsWritten:
         """The failure mode in miniature: `POST /documents` would write one here."""
         before = _snapshot(tmp_path)
         response = await app.post(
-            f"{BASE}/documents/adopt", json={"path": "spec/absent.html"}, headers=auth_headers
+            f"{BASE}/documents/adopt", json={"path": "spec/absent.json"}, headers=auth_headers
         )
         assert response.status_code == 422
         assert _snapshot(tmp_path) == before
-        assert not (tmp_path / "spec" / "absent.html").exists()
+        assert not (tmp_path / "spec" / "absent.json").exists()
 
     @pytest.mark.asyncio
     async def test_corpus_adoption_leaves_every_file_in_the_tree_byte_identical(

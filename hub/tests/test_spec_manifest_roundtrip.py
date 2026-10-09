@@ -70,7 +70,7 @@ class TestVocabulary:
 class TestRoundTrip:
     def test_every_legal_kind_and_phase_survives_a_round_trip(self, module):
         documents = [
-            _document(module, f"spec/doc-{index}.html", kind, phase, order=index * 10)
+            _document(module, f"spec/doc-{index}.json", kind, phase, order=index * 10)
             for index, (kind, phase) in enumerate(_legal_pairs(module))
         ]
         original = module.build_manifest(documents, home=documents[0].path)
@@ -81,30 +81,30 @@ class TestRoundTrip:
         assert parsed == original
 
     def test_parent_and_order_survive_a_round_trip(self, module):
-        parent = _document(module, "spec/parent.html", "baseline", "approved", order=10)
+        parent = _document(module, "spec/parent.json", "baseline", "approved", order=10)
         child = _document(
-            module, "spec/child.html", "change-spec", "proposed", parent=parent.path, order=20
+            module, "spec/child.json", "change-spec", "proposed", parent=parent.path, order=20
         )
         original = module.build_manifest([parent, child], home=parent.path)
         parsed, _ = module.load_manifest(module.dump_manifest(original))
 
         assert parsed is not None
-        assert parsed.by_path()["spec/child.html"].parent == "spec/parent.html"
-        assert parsed.by_path()["spec/child.html"].order == 20
+        assert parsed.by_path()["spec/child.json"].parent == "spec/parent.json"
+        assert parsed.by_path()["spec/child.json"].order == 20
 
     def test_dumping_is_byte_stable(self, module):
         """A rebuild that changed nothing must produce an identical file, or every rebuild looks
         like an edit to whatever is watching the tree — git included."""
         documents = [
-            _document(module, "spec/a.html", "capability", "current", order=10),
-            _document(module, "spec/b.html", "change-spec", "archived", order=20),
+            _document(module, "spec/a.json", "capability", "current", order=10),
+            _document(module, "spec/b.json", "change-spec", "archived", order=20),
         ]
-        manifest = module.build_manifest(documents, home="spec/a.html")
+        manifest = module.build_manifest(documents, home="spec/a.json")
         assert module.dump_manifest(manifest) == module.dump_manifest(manifest)
 
     def test_dump_is_valid_json_ending_in_a_newline(self, module):
         manifest = module.build_manifest(
-            [_document(module, "spec/a.html", "capability", "current")], home="spec/a.html"
+            [_document(module, "spec/a.json", "capability", "current")], home="spec/a.json"
         )
         text = module.dump_manifest(manifest)
         assert text.endswith("\n")
@@ -114,9 +114,9 @@ class TestRoundTrip:
         """`build_manifest` never invents a home. The reader refuses to guess one on the grounds
         that a guess is indistinguishable from an operator's decision; the writer must not smuggle
         in the choice the reader declines to make."""
-        documents = [_document(module, "spec/a.html", "capability", "current")]
+        documents = [_document(module, "spec/a.json", "capability", "current")]
         assert module.build_manifest(documents, home=None) is None
-        assert module.build_manifest(documents, home="spec/missing.html") is None
+        assert module.build_manifest(documents, home="spec/missing.json") is None
 
     def test_build_manifest_refuses_an_empty_corpus(self, module):
         assert module.build_manifest([], home=None) is None

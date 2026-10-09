@@ -35,8 +35,8 @@ vi.mock('@/api/spec', async (importOriginal) => {
   }
 })
 
-const CHANGE = 'spec/changes/widgets-glow/spec.html'
-const CAP = 'spec/capabilities/widgets/spec.html'
+const CHANGE = 'spec/changes/widgets-glow/spec.json'
+const CAP = 'spec/capabilities/widgets/spec.json'
 
 function doc(overrides: Record<string, unknown> = {}) {
   return {
@@ -103,7 +103,7 @@ describe('folding a finished change', () => {
   it('offers only current capabilities to fold into, never a retired one (F536)', async () => {
     documents = [
       ...documents,
-      doc({ id: 'spdoc-gone', path: 'spec/capabilities/gone/spec.html', title: 'Gone', kind: 'capability', phase: 'archived' }),
+      doc({ id: 'spdoc-gone', path: 'spec/capabilities/gone/spec.json', title: 'Gone', kind: 'capability', phase: 'archived' }),
     ]
     renderBar()
     await userEvent.click(screen.getByTestId('fold-open'))

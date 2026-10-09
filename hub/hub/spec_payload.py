@@ -459,6 +459,13 @@ def validate_payload(raw: Any) -> SpecPayload:
     if not isinstance(raw, dict):
         raise PayloadError("payload must be an object", field="")
     raw = _lift_read_view(raw)
+    # The stored file's Hub block (`spec_documents.HUB_FIELD`): the row's phase, rigor, step and
+    # size. Refused rather than overwritten, so a submission cannot look as if it set them.
+    if "hub" in raw:
+        raise PayloadError(
+            "'hub' is the Hub's own block in the stored file, not a payload field; drop it",
+            field="hub",
+        )
 
     # Stated before anything else, and by name. A missing version reported as a
     # downstream type error sends the author to fix the wrong thing.

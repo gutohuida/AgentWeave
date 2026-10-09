@@ -185,7 +185,7 @@ async def _flow(db, *, suffix, agent=AGENT1):
         SpecDocument(
             id=f"doc-f365-{suffix}",
             project_id="proj-test",
-            path=f"spec/f365-{suffix}.html",
+            path=f"spec/f365-{suffix}.json",
             title=f"Doc {suffix}",
             phase="current",
             kind="capability",
@@ -489,7 +489,7 @@ async def _document(db, doc_id):
         SpecDocument(
             id=doc_id,
             project_id="proj-test",
-            path=f"spec/{doc_id}.html",
+            path=f"spec/{doc_id}.json",
             title=doc_id,
             phase="current",
             kind="capability",

@@ -755,9 +755,9 @@ def test_spec_turn_notice_is_unchanged_for_a_path_without_an_at_sign() -> None:
     from hub.file_mentions import MENTION_NOTICE
     from hub.launchability import spec_turn_notice
 
-    notice = spec_turn_notice("exploring", path="spec/pale-otter.html", is_unwritten=True)
+    notice = spec_turn_notice("exploring", path="spec/pale-otter.json", is_unwritten=True)
     assert MENTION_NOTICE not in notice
-    assert "`spec/pale-otter.html`" in notice and "path='spec/pale-otter.html'" in notice
+    assert "`spec/pale-otter.json`" in notice and "path='spec/pale-otter.json'" in notice
 
 
 # ---------------------------------------------------------------------------------------------

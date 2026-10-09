@@ -12,7 +12,7 @@ from hub.spec_completeness import check
 from hub.spec_payload import SCHEMA_VERSION, validate_payload
 
 BASE = "/api/v1/projects/proj-test/project"
-CAP = "spec/capabilities/widgets/spec.html"
+CAP = "spec/capabilities/widgets/spec.json"
 
 
 def _capability(**overrides):

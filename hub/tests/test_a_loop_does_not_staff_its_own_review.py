@@ -77,7 +77,7 @@ async def _queue(db, *, suffix, declares_document=False, work_needs_evidence=Tru
             SpecDocument(
                 id=f"doc-f161-{suffix}",
                 project_id="proj-test",
-                path=f"spec/f161-{suffix}.html",
+                path=f"spec/f161-{suffix}.json",
                 title=f"F161 {suffix}",
                 phase="current",
                 kind="capability",

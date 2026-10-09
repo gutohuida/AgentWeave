@@ -206,7 +206,7 @@ async def test_deleting_a_document_takes_what_it_produced_and_its_file(app, auth
 @pytest.mark.asyncio
 async def test_deleting_a_document_drops_it_from_the_index(app, auth_headers, tmp_path):
     await _approved_change(app, auth_headers)
-    other = "spec/changes/other/spec.html"
+    other = "spec/changes/other/spec.json"
     await _approved_change(app, auth_headers, path=other)
     reindexed = await app.post(f"{BASE}/spec/reindex", json={"home": other}, headers=auth_headers)
     assert reindexed.status_code == 200, reindexed.text
@@ -338,7 +338,7 @@ async def test_a_task_with_an_active_run_is_not_deleted(app, auth_headers, tmp_p
 async def test_a_missing_task_or_document_is_a_404(app, auth_headers, tmp_path):
     assert (await app.delete(f"{TASKS}/task-nope", headers=auth_headers)).status_code == 404
     missing = await app.delete(
-        f"{BASE}/documents/spec/changes/nope/spec.html", headers=auth_headers
+        f"{BASE}/documents/spec/changes/nope/spec.json", headers=auth_headers
     )
     assert missing.status_code == 404
 

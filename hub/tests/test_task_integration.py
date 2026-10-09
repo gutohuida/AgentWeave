@@ -32,7 +32,7 @@ TASKS = "/api/v1/projects/proj-test/tasks"
 SETTINGS = "/api/v1/projects/proj-test/settings"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 AGENT_EVIDENCE = "/api/v1/agent-actions/spec/evidence"
-PATH = "spec/changes/integration-demo/spec.html"
+PATH = "spec/changes/integration-demo/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 AGENT_BRANCH = "agentweave/builder"

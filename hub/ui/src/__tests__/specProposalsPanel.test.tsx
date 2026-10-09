@@ -20,7 +20,7 @@ vi.mock('@/api/spec', async (importOriginal) => {
   }
 })
 
-function renderPanel(path = 'spec/changes/demo/spec.html') {
+function renderPanel(path = 'spec/changes/demo/spec.json') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -97,7 +97,7 @@ describe('SpecProposalsPanel', () => {
     await userEvent.click(screen.getByText('Accept'))
 
     expect(acceptMutate).toHaveBeenCalledWith({
-      path: 'spec/changes/demo/spec.html',
+      path: 'spec/changes/demo/spec.json',
       proposalId: 'spprop-1',
     })
   })
@@ -111,7 +111,7 @@ describe('SpecProposalsPanel', () => {
     await userEvent.click(screen.getByText('Confirm reject'))
 
     expect(rejectMutate).toHaveBeenCalledWith({
-      path: 'spec/changes/demo/spec.html',
+      path: 'spec/changes/demo/spec.json',
       proposalId: 'spprop-1',
       reason: 'not now',
     })
@@ -144,7 +144,7 @@ describe('SpecProposalsPanel', () => {
     await userEvent.click(screen.getByText('Withdraw'))
 
     expect(withdrawMutate).toHaveBeenCalledWith({
-      path: 'spec/changes/demo/spec.html',
+      path: 'spec/changes/demo/spec.json',
       proposalId: 'spprop-1',
     })
     expect(rejectMutate).not.toHaveBeenCalled()

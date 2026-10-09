@@ -42,7 +42,7 @@ FILE_CHANGE = codex_appserver.FILE_CHANGE_APPROVAL_METHOD
 # --- the dispatch hands the restriction to the app-server transport ---------------------------
 
 
-@pytest.mark.parametrize("spec_document", ["spec/changes/some-change/spec.html", None])
+@pytest.mark.parametrize("spec_document", ["spec/changes/some-change/spec.json", None])
 async def test_the_dispatch_hands_the_restriction_to_run_turn(
     app, auth_headers, bind_runner, spec_document
 ):

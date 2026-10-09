@@ -32,10 +32,10 @@ from hub.db.models import (
     Task,
     TaskRequirementLink,
 )
+from hub.spec_documents import parse_stored
 from hub.spec_payload import (
     SCHEMA_VERSION,
     PayloadError,
-    extract_payload,
     payload_to_dict,
     validate_payload,
 )
@@ -180,7 +180,7 @@ def test_payload_to_dict_keeps_a_present_delivery():
 async def test_an_unchanged_resubmission_with_no_delivery_key_proposes_nothing(
     app, auth_headers, run_headers
 ):
-    path = "spec/changes/delivery-demo/spec.html"
+    path = "spec/changes/delivery-demo/spec.json"
     document = _payload(
         requirements=[{"key": "alpha", "statement": "It responds within 200ms", "modal": "MUST"}]
     )
@@ -835,7 +835,7 @@ async def test_1_8_the_report_names_what_was_skipped_and_not_honoured_in_order(
 ):
     # Imports from a document that does not exist: the one unresolvable reference B5's gate lets
     # reach approval (`import_not_approved` is excluded there), so it is resolved at materialise.
-    ghost = "spec/changes/ghost/spec.html"
+    ghost = "spec/changes/ghost/spec.json"
     document = _document(
         delivery={"mode": "none"},
         tasks=[
@@ -908,7 +908,7 @@ async def test_1_8_the_newest_report_wins_a_created_at_tie(app, auth_headers, ru
 
 @pytest.mark.asyncio
 async def test_1_8_a_roadmap_approval_writes_a_report_too(app, auth_headers, run_headers):
-    path = "spec/roadmap.html"
+    path = "spec/roadmap.json"
     created = await app.post(
         f"{BASE}/documents",
         json={"path": path, "title": "Plan", "kind": "roadmap"},
@@ -1057,7 +1057,7 @@ async def test_1_12_submit_spec_document_round_trips_delivery_through_mcp(
     response = await app.post(AGENT, json=sent["body"], headers=run_headers)
     assert response.status_code == 200, response.text
 
-    stored = extract_payload((tmp_path / DOC_PATH).read_text(encoding="utf-8"))
+    stored = parse_stored((tmp_path / DOC_PATH).read_text(encoding="utf-8"))
     assert stored["delivery"] == {
         "mode": "flow",
         "agent": "dev",
@@ -1079,7 +1079,7 @@ async def test_1_12_submit_spec_document_round_trips_delivery_through_the_http_r
     response = await _submit_document(app, run_headers, _document(delivery={"mode": "none"}))
     assert response.status_code == 200, response.text
 
-    stored = extract_payload((tmp_path / DOC_PATH).read_text(encoding="utf-8"))
+    stored = parse_stored((tmp_path / DOC_PATH).read_text(encoding="utf-8"))
     assert stored["delivery"] == {
         "mode": "none",
         "agent": None,

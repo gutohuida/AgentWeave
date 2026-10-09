@@ -77,7 +77,7 @@ vi.mock('@/api/spec', () => ({
       documents: [
         {
           id: 'spdoc-1',
-          path: 'spec/example.html',
+          path: 'spec/example.json',
           title: 'Example',
           kind: 'baseline',
           phase: 'approved',
@@ -322,7 +322,7 @@ describe('F4 chips inside the drawer, resolved via requirement_links (6.3)', () 
       onOpenRequirement,
     )
     await userEvent.click(screen.getByText(/It settles the account/))
-    expect(onOpenRequirement).toHaveBeenCalledWith('spec/example.html', 'FR-1')
+    expect(onOpenRequirement).toHaveBeenCalledWith('spec/example.json', 'FR-1')
   })
 })
 

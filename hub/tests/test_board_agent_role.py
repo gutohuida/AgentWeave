@@ -68,7 +68,7 @@ async def _flow(db, *, suffix):
         SpecDocument(
             id=f"doc-board-{suffix}",
             project_id="proj-test",
-            path=f"spec/board-{suffix}.html",
+            path=f"spec/board-{suffix}.json",
             title=f"Board {suffix}",
             phase="current",
             kind="capability",

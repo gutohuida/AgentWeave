@@ -16,7 +16,7 @@ from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/demo/spec.html"
+PATH = "spec/changes/demo/spec.json"
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ async def test_the_same_submission_against_a_sketch_document_still_applies_immed
     app, auth_headers, run_headers
 ):
     """Regression guard (design D1) — the one path that must not change."""
-    path = "spec/changes/sketch-demo/spec.html"
+    path = "spec/changes/sketch-demo/spec.json"
     await app.post(f"{BASE}/documents", json={"path": path, "title": "Demo"}, headers=auth_headers)
     await app.post(AGENT, json={"path": path, "document": _document()}, headers=run_headers)
 

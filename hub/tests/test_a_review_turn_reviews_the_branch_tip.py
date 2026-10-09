@@ -62,7 +62,7 @@ async def _loop(*, work_needs_evidence, document=False, suffix="a"):
                 SpecDocument(
                     id=f"doc-f510-{suffix}",
                     project_id="proj-test",
-                    path=f"spec/f510-{suffix}.html",
+                    path=f"spec/f510-{suffix}.json",
                     title="Doc",
                     phase="current",
                     kind="capability",

@@ -57,7 +57,7 @@ function candidate(id: string, identifier: string, created: string): DriftCandid
     observed: { 'src/ledger.py': { was: 'aaaaaaaaaa', now: 'bbbbbbbbbb' } },
     resolution: null,
     created_at: created,
-    requirement: { identifier, document: 'spec/changes/demo/spec.html' },
+    requirement: { identifier, document: 'spec/changes/demo/spec.json' },
     evidence: { summary: `checked ${identifier}`, locator: 'src/ledger.py', actor: 'operator', actor_kind: 'operator' },
   }
 }
@@ -66,7 +66,7 @@ function panel() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <SpecDriftPanel path="spec/changes/demo/spec.html" />
+      <SpecDriftPanel path="spec/changes/demo/spec.json" />
     </QueryClientProvider>,
   )
 }
@@ -134,7 +134,7 @@ describe('the drift panel', () => {
       unwatched: [
         {
           evidence_id: 'ev-1',
-          requirement: { identifier: 'FR-4', document: 'spec/changes/demo/spec.html' },
+          requirement: { identifier: 'FR-4', document: 'spec/changes/demo/spec.json' },
           summary: 'ran it',
           actor: 'operator',
           reason: 'names_no_file',

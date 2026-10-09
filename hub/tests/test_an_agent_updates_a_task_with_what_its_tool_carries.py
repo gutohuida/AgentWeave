@@ -24,7 +24,7 @@ from hub.spec_payload import SCHEMA_VERSION
 PROJECT = "proj-test"
 BASE = f"/api/v1/projects/{PROJECT}/project"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
-SPEC_PATH = "spec/changes/tool-carries/spec.html"
+SPEC_PATH = "spec/changes/tool-carries/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 

@@ -40,7 +40,7 @@ from playwright.sync_api import Page, expect
 # --- the conversation-with-a-document fixture ---------------------------------------------------
 SPEC_AGENT = "q2verify"
 SPEC_CONVERSATION = "conv-b77949d3"
-DOCUMENT_PATH = "spec/changes/teal-roc/spec.html"
+DOCUMENT_PATH = "spec/changes/teal-roc/spec.json"
 
 # --- the project that actually has loops (the default fixture project — see `project_id`) --------
 LOOP_AGENT = "claude-1"

@@ -44,17 +44,17 @@ from playwright.sync_api import Page, expect
 #: The two documents `document-adoption`'s proposal names as permanently `unfiled` before
 #: this change, because `build_index` files only documents that have a row.
 PREVIOUSLY_UNFILED = [
-    "spec/capabilities/quiet-hours/spec.html",
-    "spec/capabilities/project-instructions/spec.html",
+    "spec/capabilities/quiet-hours/spec.json",
+    "spec/capabilities/project-instructions/spec.json",
 ]
 
 #: A capability document carrying requirements, for the coverage half.
-DOCUMENT_WITH_REQUIREMENTS = "spec/capabilities/agent-charter/spec.html"
+DOCUMENT_WITH_REQUIREMENTS = "spec/capabilities/agent-charter/spec.json"
 
 #: The corpus home — a `system-map`, and the one document in this corpus that is not
 #: `current`. Its presence stops the phase assertions below from passing on a UI that
 #: hardcodes a single phase everywhere.
-HOME_DOCUMENT = "spec/agentweave.html"
+HOME_DOCUMENT = "spec/agentweave.json"
 
 
 def _open_document(goto, path: str) -> Page:
@@ -95,7 +95,7 @@ def test_the_document_title_comes_from_the_payload_not_the_path(goto) -> None:
     """Adoption took the title from the file's own payload. `quiet-hours` on disk would
     yield "Quiet hours" either way through `deriveTitle`'s fallback — so this asserts the
     rendered document, where a path-derived name would be visibly wrong."""
-    page = _open_document(goto, "spec/capabilities/quiet-hours/spec.html")
+    page = _open_document(goto, "spec/capabilities/quiet-hours/spec.json")
     expect(page.get_by_text("Quiet hours").first).to_be_visible()
 
 

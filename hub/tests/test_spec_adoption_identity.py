@@ -11,42 +11,34 @@ though they produce the same phase for the same kind.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from hub import spec_adoption, spec_lifecycle
-from hub.spec_payload import PAYLOAD_ELEMENT_ID, PAYLOAD_MIME
+
+from ._spec_files import stored_text
 
 
 def _document(
     *,
     payload: object = None,
-    raw_payload: str | None = None,
+    raw: str | None = None,
     kind: str = "capability",
     status: str | None = "current",
     title: str = "Agent charter",
 ) -> str:
-    """A rendered document, assembled the way `spec_render` assembles one."""
-    if raw_payload is None:
-        body = (
-            payload if payload is not None else {"schema_version": 1, "kind": kind, "title": title}
-        )
-        raw_payload = json.dumps(body, indent=2)
-    head = f"<title>{title}</title>\n"
-    head += f'<meta name="aw-spec-kind" content="{kind}">\n'
-    if status is not None:
-        head += f'<meta name="aw-spec-status" content="{status}">\n'
-    return (
-        '<!DOCTYPE html>\n<html lang="en">\n<head>\n'
-        f"{head}</head>\n<body>\n<h1>{title}</h1>\n"
-        f'<script type="{PAYLOAD_MIME}" id="{PAYLOAD_ELEMENT_ID}">\n{raw_payload}\n</script>\n'
-        "</body>\n</html>\n"
-    )
+    """A stored document file, assembled the way the Hub writes one (`spec_documents.serialize`).
+
+    `status` is the phase in the file's hub block (`None`: a file with no hub block); `raw` is the
+    file text outright, for the shapes the Hub never writes.
+    """
+    if raw is not None:
+        return raw
+    body = payload if payload is not None else {"schema_version": 1, "kind": kind, "title": title}
+    return stored_text(body, phase=status)
 
 
 def _read(**kwargs) -> spec_adoption.Adoptable:
-    return spec_adoption.identity_from_content("spec/capabilities/x/spec.html", _document(**kwargs))
+    return spec_adoption.identity_from_content("spec/capabilities/x/spec.json", _document(**kwargs))
 
 
 class TestIdentityFromAPayload:
@@ -56,25 +48,15 @@ class TestIdentityFromAPayload:
         assert identity.title == "Agent charter"
         assert identity.kind == "capability"
 
-    def test_the_payload_wins_over_the_meta_tag_for_kind(self):
-        """Design D3: the meta tag is the payload's display copy, so where both
-        carry a value the payload is what the submission actually supplied."""
-        document = _document(payload={"schema_version": 1, "kind": "capability", "title": "T"})
-        document = document.replace(
-            '<meta name="aw-spec-kind" content="capability">',
-            '<meta name="aw-spec-kind" content="roadmap">',
+    def test_a_payload_that_omits_its_kind_is_refused(self):
+        """The payload is the only account of a document's kind: the file has no second copy
+        (the rendered page's meta tag, which used to stand in, is gone), so a payload that
+        omits it names nothing for adoption to fall back on."""
+        refusal = spec_adoption.identity_from_content(
+            "spec/a.json", _document(payload={"schema_version": 1, "title": "T"})
         )
-        identity = spec_adoption.identity_from_content("spec/a.html", document)
-        assert isinstance(identity, spec_adoption.AdoptableIdentity)
-        assert identity.kind == "capability"
-
-    def test_the_meta_tag_supplies_a_kind_the_payload_omits(self):
-        identity = spec_adoption.identity_from_content(
-            "spec/a.html",
-            _document(payload={"schema_version": 1, "title": "T"}, kind="roadmap"),
-        )
-        assert isinstance(identity, spec_adoption.AdoptableIdentity)
-        assert identity.kind == "roadmap"
+        assert isinstance(refusal, spec_adoption.AdoptionRefusal)
+        assert refusal.code == "payload_identity_missing"
 
     def test_the_file_is_carried_so_the_caller_digests_what_it_adopted(self):
         identity = _read()
@@ -96,7 +78,7 @@ class TestPhase:
         from a fresh document — the file is the only account of a phase the row
         was never walked through on this machine."""
         identity = spec_adoption.identity_from_content(
-            "spec/a.html", _document(kind="change-spec", status=status)
+            "spec/a.json", _document(kind="change-spec", status=status)
         )
         assert isinstance(identity, spec_adoption.AdoptableIdentity)
         assert identity.phase == status
@@ -141,7 +123,7 @@ class TestPhase:
         rather than stranding the corpus over a metadata value the operator can
         neither see nor easily repair."""
         identity = spec_adoption.identity_from_content(
-            "spec/a.html", _document(kind=kind, status=status)
+            "spec/a.json", _document(kind=kind, status=status)
         )
         assert isinstance(identity, spec_adoption.AdoptableIdentity)
         assert identity.phase == expected
@@ -168,32 +150,28 @@ class TestPhase:
 
 
 class TestRefusals:
-    def test_no_payload_block_is_refused_as_absent(self):
-        refusal = spec_adoption.identity_from_content(
-            "spec/a.html", "<html><head><title>T</title></head><body>hand written</body></html>"
-        )
+    def test_an_empty_file_is_refused_as_absent(self):
+        refusal = spec_adoption.identity_from_content("spec/a.json", "  \n")
         assert isinstance(refusal, spec_adoption.AdoptionRefusal)
         assert refusal.code == "payload_absent"
 
-    def test_a_malformed_payload_block_is_refused_as_unreadable(self):
+    def test_a_malformed_file_is_refused_as_unreadable(self):
         """Distinct from absent (task 1.3): the remedies differ — write the
-        document through the Hub, versus repair a block that is already there."""
-        refusal = spec_adoption.identity_from_content(
-            "spec/a.html", _document(raw_payload="{not json,")
-        )
+        document through the Hub, versus repair a file that is already there."""
+        refusal = spec_adoption.identity_from_content("spec/a.json", _document(raw="{not json,"))
         assert isinstance(refusal, spec_adoption.AdoptionRefusal)
         assert refusal.code == "payload_unreadable"
 
     def test_a_payload_that_is_not_an_object_is_refused_as_unreadable(self):
         refusal = spec_adoption.identity_from_content(
-            "spec/a.html", _document(raw_payload='["a list is not a document"]')
+            "spec/a.json", _document(raw='["a list is not a document"]')
         )
         assert isinstance(refusal, spec_adoption.AdoptionRefusal)
         assert refusal.code == "payload_unreadable"
 
     def test_a_payload_with_no_title_is_refused_rather_than_named_from_its_path(self):
         refusal = spec_adoption.identity_from_content(
-            "spec/capabilities/quiet-hours/spec.html",
+            "spec/capabilities/quiet-hours/spec.json",
             _document(payload={"schema_version": 1, "kind": "capability"}),
         )
         assert isinstance(refusal, spec_adoption.AdoptionRefusal)
@@ -202,7 +180,7 @@ class TestRefusals:
 
     def test_a_blank_title_is_no_title(self):
         refusal = spec_adoption.identity_from_content(
-            "spec/a.html",
+            "spec/a.json",
             _document(payload={"schema_version": 1, "kind": "capability", "title": "   "}),
         )
         assert isinstance(refusal, spec_adoption.AdoptionRefusal)
@@ -211,7 +189,7 @@ class TestRefusals:
     def test_an_unknown_kind_is_refused_and_names_what_is_allowed(self):
         """A kind outside the enum would reach `spec/index.json`, which travels."""
         refusal = spec_adoption.identity_from_content(
-            "spec/a.html",
+            "spec/a.json",
             _document(
                 payload={"schema_version": 1, "kind": "invention", "title": "T"},
                 kind="invention",
@@ -223,7 +201,7 @@ class TestRefusals:
 
     def test_every_refusal_reports_an_empty_difference_list(self):
         """Never omitted, so an absent list and an empty one are unambiguous."""
-        refusal = spec_adoption.identity_from_content("spec/a.html", "<html></html>")
+        refusal = spec_adoption.identity_from_content("spec/a.json", "<html></html>")
         assert isinstance(refusal, spec_adoption.AdoptionRefusal)
         assert refusal.to_dict()["differences"] == []
 
@@ -236,28 +214,28 @@ def _workspace(tmp_path):
 
 class TestReadIdentityAgainstAWorkspace:
     def test_a_missing_file_is_refused_by_name(self, tmp_path):
-        refusal = spec_adoption.read_identity(_workspace(tmp_path), "spec/nothing-here.html")
+        refusal = spec_adoption.read_identity(_workspace(tmp_path), "spec/nothing-here.json")
         assert isinstance(refusal, spec_adoption.AdoptionRefusal)
         assert refusal.code == "file_missing"
 
     def test_a_path_escaping_the_spec_tree_is_refused_before_the_file_is_read(self, tmp_path):
         workspace = _workspace(tmp_path)
-        outside = tmp_path / "secrets.html"
+        outside = tmp_path / "secrets.json"
         outside.write_text(_document(), encoding="utf-8")
 
-        for path in ("secrets.html", "../secrets.html", "/etc/passwd", "spec/../../x.html"):
+        for path in ("secrets.json", "../secrets.json", "/etc/passwd", "spec/../../x.json"):
             refusal = spec_adoption.read_identity(workspace, path)
             assert isinstance(refusal, spec_adoption.AdoptionRefusal), path
             assert refusal.code == "unsafe_document_path", path
 
     def test_a_real_file_reads_its_identity(self, tmp_path):
         workspace = _workspace(tmp_path)
-        target = tmp_path / "spec" / "capabilities" / "agent-charter" / "spec.html"
+        target = tmp_path / "spec" / "capabilities" / "agent-charter" / "spec.json"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(_document(title="Agent charter"), encoding="utf-8")
 
         identity = spec_adoption.read_identity(
-            workspace, "spec/capabilities/agent-charter/spec.html"
+            workspace, "spec/capabilities/agent-charter/spec.json"
         )
         assert isinstance(identity, spec_adoption.AdoptableIdentity)
         assert identity.title == "Agent charter"

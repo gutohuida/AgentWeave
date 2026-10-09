@@ -29,7 +29,7 @@ vi.mock('@/api/client', async (importOriginal) => {
       if (path.includes('/loops')) return loops
       if (path.includes('/project/spec?')) {
         return {
-          path: 'spec/changes/demo/spec.html',
+          path: 'spec/changes/demo/spec.json',
           content: '<html></html>',
           updated_at: '2026-09-27T00:00:00Z',
           ...(specDelivery ? { delivery_status: specDelivery } : {}),
@@ -52,7 +52,7 @@ vi.mock('@/api/agents', () => ({
 function doc(overrides: Record<string, unknown> = {}) {
   return {
     id: 'spdoc-1',
-    path: 'spec/changes/demo/spec.html',
+    path: 'spec/changes/demo/spec.json',
     title: 'Demo',
     kind: 'change-spec',
     phase: 'proposed',
@@ -91,7 +91,7 @@ function renderPhaseBar() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <SpecPhaseBar path="spec/changes/demo/spec.html" />
+      <SpecPhaseBar path="spec/changes/demo/spec.json" />
     </QueryClientProvider>,
   )
 }
@@ -100,7 +100,7 @@ function renderReport() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <SpecApprovalReport path="spec/changes/demo/spec.html" />
+      <SpecApprovalReport path="spec/changes/demo/spec.json" />
     </QueryClientProvider>,
   )
 }
@@ -112,8 +112,8 @@ function renderPanelPair() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <SpecPhaseBar path="spec/changes/demo/spec.html" />
-      <SpecApprovalReport path="spec/changes/demo/spec.html" />
+      <SpecPhaseBar path="spec/changes/demo/spec.json" />
+      <SpecApprovalReport path="spec/changes/demo/spec.json" />
     </QueryClientProvider>,
   )
 }

@@ -23,8 +23,8 @@ vi.mock('@/hooks/useSSE', () => ({
   __resetSSEStateForTest: () => {},
 }))
 
-const HOME = 'spec/spec.html'
-const CHANGE = 'spec/changes/queued-message-delivery/spec.html'
+const HOME = 'spec/spec.json'
+const CHANGE = 'spec/changes/queued-message-delivery/spec.json'
 
 let listResult: {
   data: {

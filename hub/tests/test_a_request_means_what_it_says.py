@@ -181,9 +181,9 @@ async def test_unarchiving_an_open_agent_changes_nothing(app, auth_headers):
 @pytest.mark.parametrize(
     "route",
     [
-        "/project/documents/phase?path=spec/none.html&to=approved",
-        "/project/documents/spec/none.html/proposals/prop-none/accept",
-        "/project/documents/spec/none.html/proposals/prop-none/reject",
+        "/project/documents/phase?path=spec/none.json&to=approved",
+        "/project/documents/spec/none.json/proposals/prop-none/accept",
+        "/project/documents/spec/none.json/proposals/prop-none/reject",
     ],
 )
 async def test_a_bodyless_decision_reaches_the_route(app, auth_headers, route):

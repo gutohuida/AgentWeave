@@ -47,7 +47,7 @@ TASKS = "/api/v1/projects/proj-test/tasks"
 JOBS = "/api/v1/projects/proj-test/jobs"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 AGENT_EVIDENCE = "/api/v1/agent-actions/spec/evidence"
-PATH = "spec/changes/f155/spec.html"
+PATH = "spec/changes/f155/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 BETA = {"key": "beta", "statement": "It says when the list was last refreshed", "modal": "MUST"}

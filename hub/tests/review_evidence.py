@@ -41,7 +41,7 @@ async def record_review_evidence(
         SpecDocument(
             id=f"doc-rev-{suffix}",
             project_id=project_id,
-            path=f"spec/rev-{suffix}.html",
+            path=f"spec/rev-{suffix}.json",
             title=f"Reviewable {suffix}",
             phase="current",
             kind="capability",

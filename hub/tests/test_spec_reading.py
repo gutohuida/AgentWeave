@@ -18,7 +18,7 @@ BASE = "/api/v1/projects/proj-test/project"
 TASKS = "/api/v1/projects/proj-test/tasks"
 AGENT_TASKS = "/api/v1/agent-actions/tasks"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/reading-demo/spec.html"
+PATH = "spec/changes/reading-demo/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 BETA = {"key": "beta", "statement": "It records a completed watering", "modal": "SHOULD"}

@@ -17,7 +17,7 @@ from hub.db.models import Run, SpecDocument, SpecDocumentEvent
 BASE = "/api/v1/projects/proj-test/project"
 CREATE = "/api/v1/agent-actions/spec/documents/create"
 
-PLACEHOLDER = "spec/changes/amber-griffin/spec.html"
+PLACEHOLDER = "spec/changes/amber-griffin/spec.json"
 
 
 @pytest.fixture
@@ -151,7 +151,7 @@ async def test_a_body_carrying_identity_or_placement_fields_has_them_ignored(
         CREATE,
         json={
             "title": "Legit title",
-            "path": "spec/capabilities/agent-charter/spec.html",
+            "path": "spec/capabilities/agent-charter/spec.json",
             "actor": "operator",
             "agent": "someone-else",
             "run_id": "not-this-run",
@@ -161,7 +161,7 @@ async def test_a_body_carrying_identity_or_placement_fields_has_them_ignored(
 
     assert response.status_code == 201, response.text
     path = response.json()["path"]
-    assert path != "spec/capabilities/agent-charter/spec.html"
+    assert path != "spec/capabilities/agent-charter/spec.json"
     assert path.startswith("spec/changes/")
 
     row = await _row(path)
@@ -221,7 +221,7 @@ async def test_an_unresolvable_workspace_is_a_409(app, run_headers, monkeypatch)
 async def test_creating_documents_repeatedly_never_touches_a_pre_existing_file(
     app, auth_headers, run_headers, tmp_path
 ):
-    existing_path = "spec/changes/houseplant-watering-tracker/spec.html"
+    existing_path = "spec/changes/houseplant-watering-tracker/spec.json"
     created = await app.post(
         f"{BASE}/documents",
         json={"path": existing_path, "title": "Pre-existing"},

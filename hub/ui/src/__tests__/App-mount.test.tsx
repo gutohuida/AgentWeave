@@ -85,7 +85,7 @@ vi.mock('@/components/tasks/DependencyBoardView', () => ({
 vi.mock('@/api/spec', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/spec')>()),
   useSpecList: () => ({
-    data: { specs: [{ path: 'spec/spec.html' }], home: 'spec/spec.html', diagnostics: [], missing: [] },
+    data: { specs: [{ path: 'spec/spec.json' }], home: 'spec/spec.json', diagnostics: [], missing: [] },
     isLoading: false,
     refetch: () => {},
   }),
@@ -212,7 +212,7 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     window.history.pushState(
       null,
       '',
-      '?project=proj-test&agent=claude&conversation=conv-1&document=spec%2Fspec.html',
+      '?project=proj-test&agent=claude&conversation=conv-1&document=spec%2Fspec.json',
     )
     render(withQueryClient(<App />))
 
@@ -245,7 +245,7 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     // The loop tab lives in the conversation panel, which the Spec screen does not mount. Passing
     // the document along would let ConversationView's mount effect open the document's tab in
     // front of the loop, so the destination carries none.
-    window.history.pushState(null, '', '/?project=proj-test&tab=spec&document=spec%2Fchanges%2Fx%2Fspec.html')
+    window.history.pushState(null, '', '/?project=proj-test&tab=spec&document=spec%2Fchanges%2Fx%2Fspec.json')
     render(withQueryClient(<App />))
     fireEvent.click(screen.getByText('open flow'))
 
@@ -318,14 +318,14 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
   it('keeps an open document open when the agent changes', () => {
     window.history.pushState(
       null, '',
-      '?project=proj-test&agent=claude&conversation=conv-1&document=spec%2Fspec.html',
+      '?project=proj-test&agent=claude&conversation=conv-1&document=spec%2Fspec.json',
     )
     render(withQueryClient(<App />))
 
     fireEvent.click(screen.getByTestId('rail-agent-proj-test-codex'))
 
     expect(window.location.search).toContain('agent=codex')
-    expect(window.location.search).toContain('document=spec%2Fspec.html')
+    expect(window.location.search).toContain('document=spec%2Fspec.json')
   })
 
   it('keeps it closed when it was closed', () => {
@@ -342,7 +342,7 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     // The memory is of what is on screen, not a preference that outlives leaving the surface.
     window.history.pushState(
       null, '',
-      '?project=proj-test&agent=claude&conversation=conv-1&document=spec%2Fspec.html',
+      '?project=proj-test&agent=claude&conversation=conv-1&document=spec%2Fspec.json',
     )
     render(withQueryClient(<App />))
     // The project tab bar only exists on a project destination, so leave the conversation first.

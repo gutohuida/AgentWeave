@@ -48,7 +48,7 @@ async def _declare_document(db, loop, suffix):
         SpecDocument(
             id=f"doc-press-{suffix}",
             project_id=PROJECT,
-            path=f"spec/press-{suffix}.html",
+            path=f"spec/press-{suffix}.json",
             title=f"Press {suffix}",
             phase="current",
             kind="capability",

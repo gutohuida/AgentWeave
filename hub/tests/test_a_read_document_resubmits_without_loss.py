@@ -14,11 +14,12 @@ import pytest
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run
-from hub.spec_payload import SCHEMA_VERSION, extract_payload
+from hub.spec_documents import parse_stored
+from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
 DOCS = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/roundtrip-demo/spec.html"
+PATH = "spec/changes/roundtrip-demo/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 BETA = {"key": "beta", "statement": "It records a watering", "modal": "SHOULD"}
@@ -87,7 +88,7 @@ async def _read(app, builder):
 
 
 def _stored(workspace):
-    return extract_payload((workspace / PATH).read_text(encoding="utf-8"))
+    return parse_stored((workspace / PATH).read_text(encoding="utf-8"))
 
 
 @pytest.mark.asyncio

@@ -18,7 +18,7 @@ vi.mock('@/hooks/useSSE', () => ({
 import { EvidencePieces } from '@/components/spec/EvidencePieces'
 import { useDecideEvidence } from '@/api/spec'
 
-const PATH = 'spec/changes/demo/spec.html'
+const PATH = 'spec/changes/demo/spec.json'
 
 function piece(overrides: Record<string, unknown> = {}) {
   return {

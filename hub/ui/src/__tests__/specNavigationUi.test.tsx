@@ -17,9 +17,9 @@ vi.mock('@/hooks/useSSE', () => ({
   __resetSSEStateForTest: () => {},
 }))
 
-const ROADMAP = 'spec/roadmaps/agentweave-reconstruction.html'
-const CHANGE = 'spec/changes/add-spec-navigation/spec.html'
-const ARCHIVED = 'spec/changes/archive/2026-07-29-add-agent-stream-kinds/spec.html'
+const ROADMAP = 'spec/roadmaps/agentweave-reconstruction.json'
+const CHANGE = 'spec/changes/add-spec-navigation/spec.json'
+const ARCHIVED = 'spec/changes/archive/2026-07-29-add-agent-stream-kinds/spec.json'
 
 let specListResult: {
   data: {
@@ -389,7 +389,7 @@ describe('outline and link routing (FR-5, FR-6, FR-7)', () => {
       channel: SPEC_BRIDGE_CHANNEL,
       version: SPEC_BRIDGE_VERSION,
       type: 'navigate',
-      href: '../changes/add-spec-navigation/spec.html#requirements',
+      href: '../changes/add-spec-navigation/spec.json#requirements',
     })
 
     await waitFor(() => expect(openedDocuments).toEqual([CHANGE]))
@@ -423,7 +423,7 @@ describe('outline and link routing (FR-5, FR-6, FR-7)', () => {
       channel: SPEC_BRIDGE_CHANNEL,
       version: SPEC_BRIDGE_VERSION,
       type: 'navigate',
-      href: '../ghost/spec.html',
+      href: '../ghost/spec.json',
     })
     expect(await screen.findByTestId('spec-nav-status')).toHaveTextContent(/not in the current/i)
   })
@@ -482,7 +482,7 @@ describe('document search (FR-3, FR-9)', () => {
   })
 
   it('groups archived matches after current ones and disables missing matches', async () => {
-    specListResult.data.missing = [{ path: 'spec/changes/gone/spec.html', title: 'Add Gone Change' }]
+    specListResult.data.missing = [{ path: 'spec/changes/gone/spec.json', title: 'Add Gone Change' }]
     const user = userEvent.setup()
     renderView()
 

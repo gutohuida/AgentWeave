@@ -14,15 +14,14 @@ content before and after.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 from sqlalchemy import select
 
 from hub import spec_lifecycle
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument, SpecDocumentEvent
-from hub.spec_payload import PAYLOAD_ELEMENT_ID, PAYLOAD_MIME
+
+from ._spec_files import stored_text
 
 BASE = "/api/v1/projects/proj-test/project"
 
@@ -33,9 +32,9 @@ def _document(
     kind: str = "capability",
     status: str | None = "current",
     requirements: list | None = None,
-    raw_payload: str | None = None,
+    raw: str | None = None,
 ) -> str:
-    """A document as `spec_render` would have written it.
+    """A document as the Hub stores one: its payload plus the hub block (`serialize`).
 
     Including `aw_identity`, which is the Hub's own map of requirement key to
     minted identifier. A payload without it indexes nothing — deliberately, since
@@ -43,30 +42,22 @@ def _document(
     the wrong thing — so a fixture omitting it would prove requirement indexing
     works when it had simply been skipped.
     """
-    if raw_payload is None:
-        declared = requirements or []
-        payload = {
-            "schema_version": 1,
-            "kind": kind,
-            "title": title,
-            "requirements": declared,
-            "aw_identity": {
-                "requirements": {
-                    requirement["key"]: f"FR-{index}"
-                    for index, requirement in enumerate(declared, start=1)
-                }
-            },
-        }
-        raw_payload = json.dumps(payload, indent=2)
-    head = f"<title>{title}</title>\n" f'<meta name="aw-spec-kind" content="{kind}">\n'
-    if status is not None:
-        head += f'<meta name="aw-spec-status" content="{status}">\n'
-    return (
-        '<!DOCTYPE html>\n<html lang="en">\n<head>\n'
-        f"{head}</head>\n<body>\n<h1>{title}</h1>\n"
-        f'<script type="{PAYLOAD_MIME}" id="{PAYLOAD_ELEMENT_ID}">\n{raw_payload}\n</script>\n'
-        "</body>\n</html>\n"
-    )
+    if raw is not None:
+        return raw
+    declared = requirements or []
+    payload = {
+        "schema_version": 1,
+        "kind": kind,
+        "title": title,
+        "requirements": declared,
+        "aw_identity": {
+            "requirements": {
+                requirement["key"]: f"FR-{index}"
+                for index, requirement in enumerate(declared, start=1)
+            }
+        },
+    }
+    return stored_text(payload, phase=status)
 
 
 def _requirement(key: str = "r1", statement: str = "The Hub adopts a document.") -> dict:
@@ -94,7 +85,7 @@ class TestAdoptingOneDocument:
     async def test_a_document_with_a_payload_is_adopted_from_its_own_identity(
         self, app, tmp_path, auth_headers
     ):
-        path = "spec/capabilities/agent-charter/spec.html"
+        path = "spec/capabilities/agent-charter/spec.json"
         before = _write(tmp_path, path, _document(title="Agent charter", kind="capability"))
 
         response = await _adopt(app, path, auth_headers)
@@ -123,7 +114,7 @@ class TestAdoptingOneDocument:
     async def test_the_content_digest_records_the_file_as_found(self, app, tmp_path, auth_headers):
         """Design D6. Without a baseline the first outside edit after adoption is
         undetectable, so drift detection would start from nothing."""
-        path = "spec/a.html"
+        path = "spec/a.json"
         content = _document(title="A")
         _write(tmp_path, path, content)
 
@@ -138,7 +129,7 @@ class TestAdoptingOneDocument:
         """`approved` is unreachable from a fresh row through `transition()` — it
         would need walking the document through `proposed` and approving it, which
         invents a history to record one that really happened elsewhere."""
-        path = "spec/changes/thing/spec.html"
+        path = "spec/changes/thing/spec.json"
         _write(tmp_path, path, _document(title="Thing", kind="change-spec", status="approved"))
 
         response = await _adopt(app, path, auth_headers)
@@ -148,7 +139,7 @@ class TestAdoptingOneDocument:
 
     @pytest.mark.asyncio
     async def test_a_defaulted_phase_is_reported_as_defaulted(self, app, tmp_path, auth_headers):
-        path = "spec/a.html"
+        path = "spec/a.json"
         _write(tmp_path, path, _document(title="A", kind="capability", status=None))
 
         response = await _adopt(app, path, auth_headers)
@@ -161,7 +152,7 @@ class TestAdoptingOneDocument:
     async def test_an_unrecognised_phase_is_reported_with_its_value(
         self, app, tmp_path, auth_headers
     ):
-        path = "spec/a.html"
+        path = "spec/a.json"
         _write(tmp_path, path, _document(title="A", kind="capability", status="in-review"))
 
         response = await _adopt(app, path, auth_headers)
@@ -173,7 +164,7 @@ class TestAdoptingOneDocument:
     async def test_the_requirements_are_indexed_against_the_new_row(
         self, app, tmp_path, auth_headers
     ):
-        path = "spec/a.html"
+        path = "spec/a.json"
         _write(
             tmp_path,
             path,
@@ -188,7 +179,7 @@ class TestAdoptingOneDocument:
     async def test_a_document_with_no_requirements_reports_none_rather_than_failing(
         self, app, tmp_path, auth_headers
     ):
-        path = "spec/a.html"
+        path = "spec/a.json"
         _write(tmp_path, path, _document(title="A", requirements=[]))
 
         response = await _adopt(app, path, auth_headers)
@@ -197,7 +188,7 @@ class TestAdoptingOneDocument:
 
     @pytest.mark.asyncio
     async def test_adoption_is_recorded_in_the_document_history(self, app, tmp_path, auth_headers):
-        path = "spec/a.html"
+        path = "spec/a.json"
         _write(tmp_path, path, _document(title="A"))
         response = await _adopt(app, path, auth_headers)
         document_id = response.json()["id"]
@@ -224,7 +215,7 @@ class TestAdoptingOneDocument:
 class TestRefusals:
     @pytest.mark.asyncio
     async def test_a_missing_file_is_refused(self, app, tmp_path, auth_headers):
-        response = await _adopt(app, "spec/not-here.html", auth_headers)
+        response = await _adopt(app, "spec/not-here.json", auth_headers)
         assert response.status_code == 422, response.text
         assert response.json()["detail"]["code"] == "file_missing"
 
@@ -232,8 +223,8 @@ class TestRefusals:
     async def test_a_file_with_no_payload_is_refused_and_left_alone(
         self, app, tmp_path, auth_headers
     ):
-        path = "spec/hand-written.html"
-        before = _write(tmp_path, path, "<html><body>written by a person</body></html>")
+        path = "spec/hand-written.json"
+        before = _write(tmp_path, path, "")
 
         response = await _adopt(app, path, auth_headers)
         assert response.status_code == 422, response.text
@@ -250,8 +241,8 @@ class TestRefusals:
 
     @pytest.mark.asyncio
     async def test_an_unreadable_payload_is_refused_distinctly(self, app, tmp_path, auth_headers):
-        path = "spec/broken.html"
-        before = _write(tmp_path, path, _document(raw_payload="{ half a payload"))
+        path = "spec/broken.json"
+        before = _write(tmp_path, path, _document(raw="{ half a payload"))
 
         response = await _adopt(app, path, auth_headers)
         assert response.status_code == 422, response.text
@@ -260,10 +251,10 @@ class TestRefusals:
 
     @pytest.mark.asyncio
     async def test_a_path_outside_the_spec_tree_is_refused(self, app, tmp_path, auth_headers):
-        outside = tmp_path / "notes.html"
+        outside = tmp_path / "notes.json"
         outside.write_text(_document(title="Notes"), encoding="utf-8")
 
-        for path in ("notes.html", "../notes.html", "/etc/passwd", "spec/../../escape.html"):
+        for path in ("notes.json", "../notes.json", "/etc/passwd", "spec/../../escape.json"):
             response = await _adopt(app, path, auth_headers)
             assert response.status_code == 400, (path, response.text)
             assert response.json()["detail"]["code"] == "unsafe_document_path"
@@ -272,10 +263,10 @@ class TestRefusals:
     async def test_a_body_naming_anything_but_a_path_is_refused(self, app, tmp_path, auth_headers):
         """Title, kind and phase come from the file. A caller able to state them
         could state them differently from what the file says."""
-        _write(tmp_path, "spec/a.html", _document(title="A"))
+        _write(tmp_path, "spec/a.json", _document(title="A"))
         response = await app.post(
             f"{BASE}/documents/adopt",
-            json={"path": "spec/a.html", "title": "Something else", "kind": "roadmap"},
+            json={"path": "spec/a.json", "title": "Something else", "kind": "roadmap"},
             headers=auth_headers,
         )
         assert response.status_code == 422, response.text
@@ -284,16 +275,16 @@ class TestRefusals:
     async def test_adoption_refuses_a_credential_that_is_not_the_operators(self, app, tmp_path):
         """`get_project` resolves an operator credential (`aw_live_...`) and nothing
         else, so a run-scoped token cannot bring a document into existence."""
-        _write(tmp_path, "spec/a.html", _document(title="A"))
+        _write(tmp_path, "spec/a.json", _document(title="A"))
         for headers in ({}, {"Authorization": "Bearer aw_run_not_an_operator"}):
-            response = await _adopt(app, "spec/a.html", headers)
+            response = await _adopt(app, "spec/a.json", headers)
             assert response.status_code == 401, response.text
 
 
 class TestDisagreementIsReportedNotResolved:
     @pytest.mark.asyncio
     async def test_an_already_tracked_path_is_refused(self, app, tmp_path, auth_headers):
-        path = "spec/a.html"
+        path = "spec/a.json"
         _write(tmp_path, path, _document(title="A"))
         assert (await _adopt(app, path, auth_headers)).status_code == 201
 
@@ -307,7 +298,7 @@ class TestDisagreementIsReportedNotResolved:
     ):
         """Present and empty, never omitted — an absent list and an empty one must
         not be ambiguous to a reader."""
-        path = "spec/a.html"
+        path = "spec/a.json"
         _write(tmp_path, path, _document(title="A"))
         await _adopt(app, path, auth_headers)
 
@@ -318,7 +309,7 @@ class TestDisagreementIsReportedNotResolved:
     async def test_each_differing_field_is_named_with_both_values(
         self, app, tmp_path, auth_headers
     ):
-        path = "spec/a.html"
+        path = "spec/a.json"
         _write(tmp_path, path, _document(title="A", kind="capability", status="current"))
         await _adopt(app, path, auth_headers)
 
@@ -342,7 +333,7 @@ class TestDisagreementIsReportedNotResolved:
         D3a. Comparing the resolved value would find it equal to the row and report
         nothing — telling the operator the file and row agree about a file that
         visibly says otherwise. Found against a real corpus document."""
-        path = "spec/a.html"
+        path = "spec/a.json"
         _write(tmp_path, path, _document(title="A", kind="capability", status="current"))
         await _adopt(app, path, auth_headers)
 
@@ -359,7 +350,7 @@ class TestDisagreementIsReportedNotResolved:
     ):
         """The other half of the same rule: a file that says nothing about its
         phase is not disagreeing with anything."""
-        path = "spec/a.html"
+        path = "spec/a.json"
         _write(tmp_path, path, _document(title="A", kind="capability", status="current"))
         await _adopt(app, path, auth_headers)
 
@@ -371,7 +362,7 @@ class TestDisagreementIsReportedNotResolved:
     async def test_neither_the_row_nor_the_file_changes_when_disagreement_is_reported(
         self, app, tmp_path, auth_headers
     ):
-        path = "spec/a.html"
+        path = "spec/a.json"
         _write(tmp_path, path, _document(title="A", kind="capability", status="current"))
         await _adopt(app, path, auth_headers)
 

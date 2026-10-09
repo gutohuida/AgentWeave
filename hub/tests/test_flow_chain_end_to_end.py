@@ -82,7 +82,7 @@ async def _flow_with_a_then_b(db, *, commit: str, branch: str):
         SpecDocument(
             id="doc-chain",
             project_id="proj-test",
-            path="spec/ledger.html",
+            path="spec/ledger.json",
             title="Ledger",
             phase="current",
             kind="capability",

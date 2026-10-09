@@ -17,7 +17,8 @@ import pytest
 
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument
-from hub.spec_payload import SCHEMA_VERSION, extract_payload
+from hub.spec_documents import parse_hub, parse_stored, serialize
+from hub.spec_payload import SCHEMA_VERSION
 
 from . import test_read_spec_document as _reading
 from .test_read_spec_document import BASE, PATH, READ, SUBMIT
@@ -278,14 +279,11 @@ def _add_an_unindexed_requirement(project_root):
     """A requirement the file declares, the index has not seen, and the identity block names not."""
     target = project_root / PATH
     content = target.read_text(encoding="utf-8")
-    payload = extract_payload(content)
+    payload = parse_stored(content)
     payload["requirements"].append(
         {"key": "zeta", "statement": "An unindexed requirement " + "z" * 600, "modal": "MAY"}
     )
-    start = content.index('id="aw-spec-payload">') + len('id="aw-spec-payload">')
-    end = content.index("</script>", start)
-    encoded = json.dumps(payload).replace("<", "\\u003c")
-    target.write_text(content[:start] + encoded + content[end:], encoding="utf-8", newline="\n")
+    target.write_text(serialize(payload, parse_hub(content)), encoding="utf-8", newline="\n")
 
 
 @pytest.mark.asyncio

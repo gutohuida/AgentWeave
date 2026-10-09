@@ -28,8 +28,9 @@ import pytest
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, AIJob, JobRun, Loop, Run, SpecDocument, Task
 from hub.scheduler import _agents_that_are_free, _stall_run_to_increment, resolve_reviewer
-from hub.spec_payload import SCHEMA_VERSION, embed_payload
+from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_files import stored_text
 from .test_agent_trigger import _init_repo
 from .test_review_turn import _roster
 
@@ -55,14 +56,15 @@ async def _task(db, *, task_id="task-ladder", document_id=None, task_key=None, s
 async def _declare_reviewer(repo, db, *, name):
     """A document on disk declaring *name* as the reviewer of task key `t1`.
 
-    Written with the real `embed_payload` rather than a hand-rolled envelope: a fixture that fakes
+    Written with `stored_text` rather than a hand-rolled envelope: a fixture that fakes
     the envelope stops testing the thing that reads it the moment the envelope changes.
     """
-    document = repo / "spec" / "ladder.html"
+    document = repo / "spec" / "ladder.json"
     document.parent.mkdir(parents=True, exist_ok=True)
     document.write_text(
-        embed_payload(
-            {"schema_version": SCHEMA_VERSION, "tasks": [{"key": "t1", "reviewer": name}]}
+        stored_text(
+            {"schema_version": SCHEMA_VERSION, "tasks": [{"key": "t1", "reviewer": name}]},
+            phase="current",
         ),
         encoding="utf-8",
     )
@@ -70,7 +72,7 @@ async def _declare_reviewer(repo, db, *, name):
         SpecDocument(
             id="doc-ladder",
             project_id="proj-test",
-            path="spec/ladder.html",
+            path="spec/ladder.json",
             title="Ladder",
             phase="current",
             kind="capability",

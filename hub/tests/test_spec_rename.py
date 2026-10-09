@@ -15,14 +15,15 @@ from sqlalchemy import select, update
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import InboundQueueEntry, Run, SpecDocument, SpecDocumentEvent, Task
-from hub.spec_payload import SCHEMA_VERSION, extract_payload
+from hub.spec_documents import parse_stored
+from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 RENAME = "/api/v1/agent-actions/spec/documents/rename"
 
-PLACEHOLDER = "spec/changes/amber-griffin/spec.html"
-NAMED = "spec/changes/houseplant-watering-tracker/spec.html"
+PLACEHOLDER = "spec/changes/amber-griffin/spec.json"
+NAMED = "spec/changes/houseplant-watering-tracker/spec.json"
 SUBJECT = "Houseplant watering tracker"
 
 
@@ -151,7 +152,7 @@ async def test_identity_content_and_identifiers_survive_the_move(
     assert row.id == created["id"], "identity is the row's id and never was the path"
     assert (tmp_path / NAMED).read_text(encoding="utf-8") == content_before
 
-    payload = extract_payload(content_before)
+    payload = parse_stored(content_before)
     assert payload["aw_identity"]["requirements"] == identifiers_before
 
 
@@ -407,7 +408,7 @@ async def test_a_file_somebody_put_there_by_hand_is_refused(
 
 @pytest.mark.asyncio
 async def test_renaming_a_document_that_does_not_exist_says_so(app, run_headers):
-    response = await _rename(app, run_headers, path="spec/changes/nothing-here/spec.html")
+    response = await _rename(app, run_headers, path="spec/changes/nothing-here/spec.json")
     assert response.status_code == 404
 
 
@@ -432,7 +433,7 @@ async def test_the_agent_cannot_express_a_destination(app, auth_headers, run_hea
 
     response = await app.post(
         RENAME,
-        json={"path": PLACEHOLDER, "subject": SUBJECT, "to": "spec/../../evil.html"},
+        json={"path": PLACEHOLDER, "subject": SUBJECT, "to": "spec/../../evil.json"},
         headers=run_headers,
     )
 
@@ -450,7 +451,7 @@ async def test_a_traversal_in_the_subject_becomes_an_ordinary_name(
 
     assert response.status_code == 200
     path = response.json()["path"]
-    assert path == "spec/changes/etc-passwd/spec.html"
+    assert path == "spec/changes/etc-passwd/spec.json"
     assert (tmp_path / path).is_file()
 
 

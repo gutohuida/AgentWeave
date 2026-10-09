@@ -10,7 +10,7 @@ whether a refusal message is understandable — is taste and stays with the oper
 
 **What this does not do.** It does not perform the rejection. `proj-5e960453` already
 holds exactly one piece of evidence (`ev-5e7bd066` against requirement `FR-1` of
-`spec/changes/quiet-hours-for-agent-notifications/spec.html`) and its `review_state` is
+`spec/changes/quiet-hours-for-agent-notifications/spec.json`) and its `review_state` is
 already `rejected`, recorded by an earlier session. So this asserts the *read* side: given
 rejected evidence, the bar says Rejected and does not say In progress. That is the
 regression F3/F6 existed to fix; driving a fresh rejection would re-test the write path,
@@ -24,7 +24,7 @@ from urllib.parse import quote
 
 from playwright.sync_api import Locator, Page, expect
 
-DOCUMENT = "spec/changes/quiet-hours-for-agent-notifications/spec.html"
+DOCUMENT = "spec/changes/quiet-hours-for-agent-notifications/spec.json"
 
 COVERAGE = '[data-testid="spec-coverage"]'
 REJECTED = '[data-testid="coverage-count-rejected"]'

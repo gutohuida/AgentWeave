@@ -16,9 +16,9 @@ from hub.db.models import SpecDocument, SpecDocumentEvent, SpecRequirement
 from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
-OLD = "spec/capabilities/old/spec.html"
-NEW = "spec/capabilities/new/spec.html"
-CHANGE = "spec/changes/widgets-glow/spec.html"
+OLD = "spec/capabilities/old/spec.json"
+NEW = "spec/capabilities/new/spec.json"
+CHANGE = "spec/changes/widgets-glow/spec.json"
 REASON = "Describes nothing the product does any more."
 
 
@@ -195,7 +195,7 @@ async def test_a_merge_or_fold_into_a_retired_capability_is_refused(app, auth_he
         ({"reason": "   "}, "retire_needs_reason"),
         ({"reason": REASON, "absorbed_by": OLD}, "absorber_invalid"),
         (
-            {"reason": REASON, "absorbed_by": "spec/capabilities/nowhere/spec.html"},
+            {"reason": REASON, "absorbed_by": "spec/capabilities/nowhere/spec.json"},
             "absorber_invalid",
         ),
     ],

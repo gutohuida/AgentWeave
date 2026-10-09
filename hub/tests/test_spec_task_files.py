@@ -82,7 +82,7 @@ def test_an_ordered_pair_is_silent_directly_and_transitively():
 def test_tasks_without_files_and_imported_entries_are_never_named():
     imported = {
         "key": "imp",
-        "from": {"document": "spec/changes/x/spec.html", "key": "k"},
+        "from": {"document": "spec/changes/x/spec.json", "key": "k"},
         "files": ["x.py"],
     }
     tasks = _tasks(("a", {"files": ["x.py"]}), ("b", {})) + [imported]

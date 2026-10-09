@@ -29,7 +29,7 @@ BASE = "/api/v1/projects/proj-test/project"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 AGENT_EVIDENCE = "/api/v1/agent-actions/spec/evidence"
 OPERATOR_EVIDENCE = f"{BASE}/spec/evidence"
-PATH = "spec/changes/footprint-demo/spec.html"
+PATH = "spec/changes/footprint-demo/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It records a check-in", "modal": "MUST"}
 

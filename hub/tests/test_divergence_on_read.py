@@ -17,12 +17,13 @@ from sqlalchemy import select
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run, SpecDocument
+from hub.spec_documents import parse_hub, parse_stored, serialize
 from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
 AGENT_SPEC = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/divergence-demo/spec.html"
-TAMPER = "<p>TAMPERED BEHIND THE HUB</p>"
+PATH = "spec/changes/divergence-demo/spec.json"
+TAMPER = "TAMPERED BEHIND THE HUB"
 
 
 @pytest.fixture
@@ -70,7 +71,10 @@ async def _make_document(app, auth_headers, run_headers):
 def _tamper(tmp_path):
     """Edit the file behind the Hub's back, exactly as the sweep did."""
     target = tmp_path / PATH
-    target.write_text(target.read_text(encoding="utf-8") + TAMPER, encoding="utf-8")
+    content = target.read_text(encoding="utf-8")
+    payload = parse_stored(content)
+    payload["summary"] += " " + TAMPER
+    target.write_text(serialize(payload, parse_hub(content)), encoding="utf-8", newline="\n")
 
 
 async def _recorded_digest():

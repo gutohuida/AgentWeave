@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
 import { useConfigStore } from '@/store/configStore'
 
-const PATH = 'spec/changes/slice-one/spec.html'
+const PATH = 'spec/changes/slice-one/spec.json'
 const posts: Array<{ path: string; body: Record<string, unknown> }> = []
 let roadmapSlice: { document: string; slice: string } | undefined
 let approveResponse: Record<string, unknown> = {}
@@ -83,7 +83,7 @@ afterEach(() => cleanup())
 
 describe('Draft the next slice', () => {
   it('is offered, on by default, for a document that names a roadmap slice, and travels with Approve', async () => {
-    roadmapSlice = { document: 'spec/changes/the-plan/spec.html', slice: 's1' }
+    roadmapSlice = { document: 'spec/changes/the-plan/spec.json', slice: 's1' }
     renderPhaseBar()
 
     const box = (await screen.findByLabelText('Draft the next slice')) as HTMLInputElement
@@ -95,7 +95,7 @@ describe('Draft the next slice', () => {
   })
 
   it('sends false when the operator unticks it', async () => {
-    roadmapSlice = { document: 'spec/changes/the-plan/spec.html', slice: 's1' }
+    roadmapSlice = { document: 'spec/changes/the-plan/spec.json', slice: 's1' }
     renderPhaseBar()
 
     fireEvent.click(await screen.findByLabelText('Draft the next slice'))
@@ -116,7 +116,7 @@ describe('Draft the next slice', () => {
   })
 
   it('says what the approval did about the next slice', async () => {
-    roadmapSlice = { document: 'spec/changes/the-plan/spec.html', slice: 's1' }
+    roadmapSlice = { document: 'spec/changes/the-plan/spec.json', slice: 's1' }
     approveResponse = { next_slice: { state: 'queued', slice: 's2', agent: 'planner' } }
     renderPhaseBar()
 
@@ -128,7 +128,7 @@ describe('Draft the next slice', () => {
   })
 
   it('says the next slice waits for the open tasks', async () => {
-    roadmapSlice = { document: 'spec/changes/the-plan/spec.html', slice: 's1' }
+    roadmapSlice = { document: 'spec/changes/the-plan/spec.json', slice: 's1' }
     approveResponse = {
       next_slice: { state: 'waiting', slice: 's2', agent: 'planner', open_tasks: 2 },
     }

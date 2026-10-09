@@ -16,13 +16,14 @@ from sqlalchemy import select
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run, SpecDocument, SpecRigorEvent, TaskTransition
-from hub.spec_payload import SCHEMA_VERSION, extract_payload
+from hub.spec_documents import parse_hub, parse_stored
+from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
 TASKS = "/api/v1/projects/proj-test/tasks"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 AGENT_EVIDENCE = "/api/v1/agent-actions/spec/evidence"
-PATH = "spec/changes/gate-demo/spec.html"
+PATH = "spec/changes/gate-demo/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 BETA = {"key": "beta", "statement": "It records a completed watering", "modal": "SHOULD"}
@@ -812,7 +813,7 @@ async def test_promotion_is_refused_on_a_document_that_does_not_parse(
     app, auth_headers, builder, tmp_path
 ):
     await _document(app, auth_headers, builder)
-    (tmp_path / PATH).write_text("<html><body>hand written</body></html>", encoding="utf-8")
+    (tmp_path / PATH).write_text("this is not a stored document", encoding="utf-8")
 
     response = await _set_rigor(app, auth_headers, "gate")
 
@@ -828,7 +829,7 @@ async def test_demotion_works_on_a_document_that_does_not_parse(
     parsing."""
     await _document(app, auth_headers, builder)
     await _set_rigor(app, auth_headers, "gate")
-    (tmp_path / PATH).write_text("<html><body>hand written</body></html>", encoding="utf-8")
+    (tmp_path / PATH).write_text("this is not a stored document", encoding="utf-8")
 
     response = await _set_rigor(app, auth_headers, "sketch")
 
@@ -937,8 +938,8 @@ async def test_the_document_itself_states_its_rigor(app, auth_headers, builder, 
     await _set_rigor(app, auth_headers, "gate")
 
     content = (tmp_path / PATH).read_text(encoding="utf-8")
-    assert 'name="aw-spec-rigor" content="gate"' in content
-    # And a save afterwards does not silently reset it — the row is what the renderer reads.
+    assert parse_hub(content)["rigor"] == "gate"
+    # And a save afterwards does not silently reset it — the row is what the file's block copies.
     await app.post(
         SUBMIT,
         json={
@@ -952,16 +953,16 @@ async def test_the_document_itself_states_its_rigor(app, auth_headers, builder, 
         },
         headers=builder,
     )
-    assert 'content="gate"' in (tmp_path / PATH).read_text(encoding="utf-8")
+    assert parse_hub((tmp_path / PATH).read_text(encoding="utf-8"))["rigor"] == "gate"
 
 
 @pytest.mark.asyncio
 async def test_an_agent_cannot_set_rigor_through_the_payload(app, auth_headers, builder, tmp_path):
-    """The renderer takes rigor from the row. A payload field would be an agent lowering its own gate.
+    """The stored file's rigor is the row's copy. A payload field would be an agent lowering its own gate.
 
     At `gate` rigor a submission is only proposed, not applied
     (`openspec/changes/2026-08-17-authoring-rigor-and-scope` F1) — accept the resulting metadata
-    proposal to reach the write this test is actually about, then check what got rendered.
+    proposal to reach the write this test is actually about, then check what got stored.
     """
     await _document(app, auth_headers, builder)
     await _set_rigor(app, auth_headers, "gate")
@@ -999,10 +1000,11 @@ async def test_an_agent_cannot_set_rigor_through_the_payload(app, auth_headers, 
             .first()
         )
     assert document.rigor == "gate"
-    stored = extract_payload((tmp_path / PATH).read_text(encoding="utf-8"))
+    text = (tmp_path / PATH).read_text(encoding="utf-8")
+    stored = parse_stored(text)
     # The submitted field survives as data — unknown fields round-trip — and governs nothing.
     assert stored.get("rigor") == "sketch"
-    assert 'name="aw-spec-rigor" content="gate"' in (tmp_path / PATH).read_text(encoding="utf-8")
+    assert parse_hub(text)["rigor"] == "gate"
 
 
 # ---------------------------------------------------------------------------

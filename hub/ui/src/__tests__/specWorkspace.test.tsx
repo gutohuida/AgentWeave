@@ -25,7 +25,7 @@ vi.mock('@/hooks/useSSE', () => ({
   __resetSSEStateForTest: () => {},
 }))
 
-const HOME = 'spec/spec.html'
+const HOME = 'spec/spec.json'
 
 // Partial mock: `importOriginal` keeps every export this file does not override real, so
 // adding one to `@/api/spec` does not break a test that never used it. The whole-module form

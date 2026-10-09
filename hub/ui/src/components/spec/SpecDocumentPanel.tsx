@@ -19,7 +19,7 @@ import type { LoopSummary } from '@/api/loops'
 const REJECTION_TEXT: Record<string, string> = {
   external: 'That link points outside the specification and was not opened.',
   unsafe: 'That link is not a valid specification path and was not opened.',
-  'not-html': 'That link is not a specification document and was not opened.',
+  'not-document': 'That link is not a specification document and was not opened.',
   unknown: 'That document is not in the current specification inventory.',
 }
 

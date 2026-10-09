@@ -82,9 +82,9 @@ def test_create_spec_document_reaches_the_create_route_with_no_title(hub):
     from hub.mcp_server import create_spec_document
 
     calls, responses = hub
-    responses.append(b'{"path": "spec/changes/amber-griffin/spec.html", "phase": "exploring"}')
+    responses.append(b'{"path": "spec/changes/amber-griffin/spec.json", "phase": "exploring"}')
     assert create_spec_document() == {
-        "path": "spec/changes/amber-griffin/spec.html",
+        "path": "spec/changes/amber-griffin/spec.json",
         "phase": "exploring",
     }
     request = calls[0]
@@ -96,7 +96,7 @@ def test_create_spec_document_sends_only_the_title_it_was_given(hub):
     from hub.mcp_server import create_spec_document
 
     calls, responses = hub
-    responses.append(b'{"path": "spec/changes/amber-griffin/spec.html", "phase": "exploring"}')
+    responses.append(b'{"path": "spec/changes/amber-griffin/spec.json", "phase": "exploring"}')
     create_spec_document(title="A finding worth writing up")
     assert _body(calls[0]) == {"title": "A finding worth writing up"}
 

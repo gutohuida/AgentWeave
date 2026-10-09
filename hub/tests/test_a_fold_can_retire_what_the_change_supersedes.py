@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument, SpecDocumentMerge
-from hub.spec_payload import extract_payload
+from hub.spec_documents import parse_stored
 from tests.test_a_finished_change_is_folded_into_its_capability import (
     BASE,
     CAP,
@@ -42,7 +42,7 @@ async def _ready(app, auth_headers):
 
 
 async def _capability_on_disk(tmp_path):
-    return extract_payload((tmp_path / CAP).read_text(encoding="utf-8"))
+    return parse_stored((tmp_path / CAP).read_text(encoding="utf-8"))
 
 
 @pytest.mark.asyncio

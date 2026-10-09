@@ -31,7 +31,7 @@ from .test_evidence_footprint_root import commit_in, git, head_of, init_repo
 BASE = "/api/v1/projects/proj-test/project"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 AGENT_EVIDENCE = "/api/v1/agent-actions/spec/evidence"
-PATH = "spec/changes/restamp-demo/spec.html"
+PATH = "spec/changes/restamp-demo/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It records a check-in", "modal": "MUST"}
 BETA = {"key": "beta", "statement": "It records a check-out", "modal": "MUST"}

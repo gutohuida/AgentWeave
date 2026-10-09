@@ -18,7 +18,7 @@ from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/archive-demo/spec.html"
+PATH = "spec/changes/archive-demo/spec.json"
 
 
 @pytest.fixture
@@ -115,7 +115,7 @@ async def test_the_specs_tree_reports_phase_for_a_document_that_never_moved(
     app, auth_headers, run_headers, tmp_path
 ):
     """Archiving is a phase transition, not a move — `PATH` here is `spec/changes/archive-demo/
-    spec.html`, nowhere near `spec/changes/archive/`. The tree the UI builds its navigation from
+    spec.json`, nowhere near `spec/changes/archive/`. The tree the UI builds its navigation from
     has no other way to learn the document is archived, so `/project/specs` has to carry the phase
     alongside the path rather than leaving archived-detection to a directory convention this flow
     never follows."""
@@ -267,7 +267,7 @@ async def test_transition_itself_refuses_an_agent_actor_archiving(app, auth_head
         document = await spec_lifecycle.create_document(
             session,
             "proj-test",
-            "spec/changes/archive-direct/spec.html",
+            "spec/changes/archive-direct/spec.json",
             actor=spec_lifecycle.Actor(kind="operator", name="operator"),
             title="Direct",
         )
@@ -294,7 +294,7 @@ async def test_first_approved_at_is_set_once_and_survives_a_reopen(
     reopen, `first_approved_at` is set the first time a document is approved and never touched
     again — not on reopening, and not on a second approval."""
     operator = spec_lifecycle.Actor(kind="operator", name="operator")
-    path = "spec/changes/first-approved-demo/spec.html"
+    path = "spec/changes/first-approved-demo/spec.json"
     # Created and written through the API so the file carries a complete payload: the move to
     # `proposed` now runs the completeness checks (F207), and `create_document` alone does not.
     await app.post(

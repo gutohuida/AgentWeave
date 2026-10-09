@@ -52,7 +52,7 @@ let specListResult: {
 vi.mock('@/api/spec', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/spec')>()),
   useSpecList: () => specListResult,
-  useSpec: () => ({ data: { path: 'spec/spec.html', content: '<html></html>' }, refetch: () => {} }),
+  useSpec: () => ({ data: { path: 'spec/spec.json', content: '<html></html>' }, refetch: () => {} }),
   useSpecEvents: () => {},
 }))
 
@@ -79,7 +79,7 @@ function withQueryClient(node: ReactNode) {
   return <QueryClientProvider client={queryClient}>{node}</QueryClientProvider>
 }
 
-function renderPanel(document: string | null = 'spec/spec.html') {
+function renderPanel(document: string | null = 'spec/spec.json') {
   return render(
     withQueryClient(
       <ConversationView
@@ -104,7 +104,7 @@ describe('the document panel — manifest drift report', () => {
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     specListResult = {
       data: {
-        specs: [{ path: 'spec/spec.html', state: 'unindexed' }],
+        specs: [{ path: 'spec/spec.json', state: 'unindexed' }],
         home: null,
         diagnostics: [],
         missing: [],
@@ -129,8 +129,8 @@ describe('the document panel — manifest drift report', () => {
 
   it('shows the drift banner with a count when the Hub reports drift', () => {
     specListResult.data.diagnostics = [
-      { code: 'unfiled_document', path: 'spec/extra.html' },
-      { code: 'stale_row', path: 'spec/old.html' },
+      { code: 'unfiled_document', path: 'spec/extra.json' },
+      { code: 'stale_row', path: 'spec/old.json' },
     ]
     renderPanel()
     expect(screen.getByText('2 spec manifest drift items')).toBeInTheDocument()
@@ -138,28 +138,28 @@ describe('the document panel — manifest drift report', () => {
 
   it('does not double-count missing documents reported in both diagnostics and missing', () => {
     specListResult.data.diagnostics = [
-      { code: 'unfiled_document', path: 'spec/extra.html' },
-      { code: 'missing_document', path: 'spec/changes/gone/spec.html' },
+      { code: 'unfiled_document', path: 'spec/extra.json' },
+      { code: 'missing_document', path: 'spec/changes/gone/spec.json' },
     ]
-    specListResult.data.missing = [{ path: 'spec/changes/gone/spec.html' }]
+    specListResult.data.missing = [{ path: 'spec/changes/gone/spec.json' }]
     renderPanel()
     expect(screen.getByText('2 spec manifest drift items')).toBeInTheDocument()
     fireEvent.click(screen.getByText('2 spec manifest drift items'))
     // The missing path appears exactly once (from `missing`, not duplicated by the
     // `missing_document` diagnostic).
-    expect(screen.getAllByText(/spec\/changes\/gone\/spec\.html/)).toHaveLength(1)
+    expect(screen.getAllByText(/spec\/changes\/gone\/spec.json/)).toHaveLength(1)
   })
 
   it('expands to list diagnostic details on click', () => {
-    specListResult.data.diagnostics = [{ code: 'unfiled_document', path: 'spec/extra.html' }]
+    specListResult.data.diagnostics = [{ code: 'unfiled_document', path: 'spec/extra.json' }]
     renderPanel()
     expect(screen.queryByText(/unfiled_document/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('1 spec manifest drift item'))
-    expect(screen.getByText(/unfiled_document — spec\/extra\.html/)).toBeInTheDocument()
+    expect(screen.getByText(/unfiled_document — spec\/extra.json/)).toBeInTheDocument()
   })
 
   it('reports drift without offering to repair it', () => {
-    specListResult.data.diagnostics = [{ code: 'stale_row', path: 'spec/old.html' }]
+    specListResult.data.diagnostics = [{ code: 'stale_row', path: 'spec/old.json' }]
     renderPanel()
 
     expect(screen.getByText('1 spec manifest drift item')).toBeInTheDocument()
@@ -169,7 +169,7 @@ describe('the document panel — manifest drift report', () => {
   })
 
   it('reports nothing at all when no document is open', () => {
-    specListResult.data.diagnostics = [{ code: 'stale_row', path: 'spec/old.html' }]
+    specListResult.data.diagnostics = [{ code: 'stale_row', path: 'spec/old.json' }]
     renderPanel(null)
     // Drift belongs to the document panel. With no document open the conversation is the whole
     // surface, and nothing specification-shaped is left on screen.

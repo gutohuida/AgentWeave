@@ -60,7 +60,7 @@ async def _loop_with_one_task(db, *, suffix, status="pending", declares_document
             SpecDocument(
                 id=f"doc-actor-{suffix}",
                 project_id="proj-test",
-                path=f"spec/actor-{suffix}.html",
+                path=f"spec/actor-{suffix}.json",
                 title=f"Actor {suffix}",
                 phase="current",
                 kind="capability",

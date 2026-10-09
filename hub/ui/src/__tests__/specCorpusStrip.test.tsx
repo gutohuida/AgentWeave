@@ -43,15 +43,15 @@ vi.mock('@/api/spec', async (importOriginal) => {
 function list(overrides: Partial<SpecListResponse> = {}): SpecListResponse {
   return {
     specs: [
-      { path: 'spec/home.html', title: 'Home', state: 'filed', document_id: 'spdoc-1', parent: null },
-      { path: 'spec/area.html', title: 'Area', state: 'filed', document_id: 'spdoc-2', parent: 'spec/home.html' },
-      { path: 'spec/other.html', title: 'Other', state: 'filed', document_id: 'spdoc-3', parent: null },
-      { path: 'spec/loose.html', state: 'unfiled', document_id: null },
-      { path: 'spec/stray.html', state: 'unfiled', document_id: null },
+      { path: 'spec/home.json', title: 'Home', state: 'filed', document_id: 'spdoc-1', parent: null },
+      { path: 'spec/area.json', title: 'Area', state: 'filed', document_id: 'spdoc-2', parent: 'spec/home.json' },
+      { path: 'spec/other.json', title: 'Other', state: 'filed', document_id: 'spdoc-3', parent: null },
+      { path: 'spec/loose.json', state: 'unfiled', document_id: null },
+      { path: 'spec/stray.json', state: 'unfiled', document_id: null },
     ],
-    home: 'spec/home.html',
+    home: 'spec/home.json',
     manifest: { state: 'valid', version: 1 },
-    missing: [{ path: 'spec/gone.html', title: 'Gone', kind: 'capability', status: 'current', parent: null, order: 0 }],
+    missing: [{ path: 'spec/gone.json', title: 'Gone', kind: 'capability', status: 'current', parent: null, order: 0 }],
     diagnostics: [],
     ...overrides,
   }
@@ -61,12 +61,12 @@ function reindexAnswer(overrides: Partial<ReindexResult['index']> & { skipped?: 
   const { skipped = [], ...index } = overrides
   return {
     documents: {
-      'spec/home.html': { created: ['FR-1', 'FR-2'], reworded: ['FR-3'], retired: [], restored: [], unchanged: [] },
-      'spec/area.html': { created: ['FR-1'], reworded: [], retired: ['FR-4'], restored: [], unchanged: [] },
-      'spec/loose.html': null,
+      'spec/home.json': { created: ['FR-1', 'FR-2'], reworded: ['FR-3'], retired: [], restored: [], unchanged: [] },
+      'spec/area.json': { created: ['FR-1'], reworded: [], retired: ['FR-4'], restored: [], unchanged: [] },
+      'spec/loose.json': null,
     },
     index: { written: null, diagnostics: [], ...index },
-    corpus: { rerendered: ['spec/area.html'], skipped },
+    corpus: { rerendered: ['spec/area.json'], skipped },
   }
 }
 
@@ -108,9 +108,9 @@ describe('the corpus strip', () => {
     fireEvent.click(screen.getByTestId('spec-corpus-rebuild'))
     expect(state.calls.reindex).toEqual([{}])
 
-    fireEvent.change(screen.getByTestId('spec-corpus-home-select'), { target: { value: 'spec/area.html' } })
+    fireEvent.change(screen.getByTestId('spec-corpus-home-select'), { target: { value: 'spec/area.json' } })
     fireEvent.click(screen.getByTestId('spec-corpus-home-confirm'))
-    expect(state.calls.reindex).toEqual([{}, { home: 'spec/area.html' }])
+    expect(state.calls.reindex).toEqual([{}, { home: 'spec/area.json' }])
   })
 
   it('1.4 keys on index_home_required, not on its position', () => {
@@ -123,8 +123,8 @@ describe('the corpus strip', () => {
   it('1.5 summarises a written index, its totals and each skip', () => {
     state.answers.reindex.push({
       ok: reindexAnswer({
-        written: { path: 'spec/index.json', documents: 3, home: 'spec/home.html' },
-        skipped: [{ path: 'spec/other.html', reason: 'write_failed', message: 'No space left on device' }],
+        written: { path: 'spec/index.json', documents: 3, home: 'spec/home.json' },
+        skipped: [{ path: 'spec/other.json', reason: 'write_failed', message: 'No space left on device' }],
       }),
     })
     strip()
@@ -135,7 +135,7 @@ describe('the corpus strip', () => {
     expect(summary).toContain('reworded 1')
     expect(summary).toContain('retired 1')
     expect(summary).toContain('re-rendered 1')
-    expect(summary).toContain('Skipped spec/other.html: write_failed (No space left on device)')
+    expect(summary).toContain('Skipped spec/other.json: write_failed (No space left on device)')
   })
 
   it('1.10 offers only tracked documents as the home, and says when there is nothing to index', () => {
@@ -145,7 +145,7 @@ describe('the corpus strip', () => {
     const options = within(screen.getByTestId('spec-corpus-home-select'))
       .getAllByRole('option')
       .map((o) => (o as HTMLOptionElement).value)
-    expect(options).toEqual(['', 'spec/home.html', 'spec/area.html', 'spec/other.html'])
+    expect(options).toEqual(['', 'spec/home.json', 'spec/area.json', 'spec/other.json'])
     cleanup()
 
     state.answers.reindex.push({ ok: reindexAnswer() })
@@ -176,11 +176,11 @@ describe('the corpus strip', () => {
     state.answers.adoptAll.push({
       ok: {
         documents: {
-          'spec/loose.html': { adopted: true, path: 'spec/loose.html' },
-          'spec/stray.html': { adopted: false, path: 'spec/stray.html', code: 'payload_absent', message: 'no payload block' },
+          'spec/loose.json': { adopted: true, path: 'spec/loose.json' },
+          'spec/stray.json': { adopted: false, path: 'spec/stray.json', code: 'payload_absent', message: 'no payload block' },
         },
-        adopted: ['spec/loose.html'],
-        skipped: ['spec/stray.html'],
+        adopted: ['spec/loose.json'],
+        skipped: ['spec/stray.json'],
         diagnostics: [{ code: 'discovery_truncated', path: 'spec/' }],
       },
     })
@@ -189,7 +189,7 @@ describe('the corpus strip', () => {
     expect(screen.getByTestId('spec-corpus-adopt-all').textContent).toBe('Adopt all 2')
     expect(state.calls.adoptAll).toBe(1)
     const result = screen.getByTestId('spec-corpus-adopt-result').textContent ?? ''
-    expect(result).toContain('spec/stray.html: no payload block')
+    expect(result).toContain('spec/stray.json: no payload block')
     expect(result).toContain('discovery_truncated — spec/')
   })
 
@@ -197,18 +197,18 @@ describe('the corpus strip', () => {
     state.answers.adoptAll.push({
       ok: {
         documents: {
-          'spec/a.html': { adopted: false, path: 'spec/a.html', code: 'document_exists', message: 'already tracked', differences: [] },
-          'spec/b.html': {
+          'spec/a.json': { adopted: false, path: 'spec/a.json', code: 'document_exists', message: 'already tracked', differences: [] },
+          'spec/b.json': {
             adopted: false,
-            path: 'spec/b.html',
+            path: 'spec/b.json',
             code: 'document_exists',
             message: 'already tracked, and it disagrees',
             differences: [{ field: 'title', file: 'B', row: 'Bee' }],
           },
-          'spec/c.html': { adopted: false, path: 'spec/c.html', code: 'payload_absent', message: 'no payload block' },
+          'spec/c.json': { adopted: false, path: 'spec/c.json', code: 'payload_absent', message: 'no payload block' },
         },
         adopted: [],
-        skipped: ['spec/a.html', 'spec/b.html', 'spec/c.html'],
+        skipped: ['spec/a.json', 'spec/b.json', 'spec/c.json'],
         diagnostics: [],
       },
     })
@@ -216,17 +216,17 @@ describe('the corpus strip', () => {
     fireEvent.click(screen.getByTestId('spec-corpus-adopt-all'))
     const text = screen.getByTestId('spec-corpus-adopt-result').textContent ?? ''
     expect(text).toContain('Adopted 0; 1 already tracked; skipped 2.')
-    expect(text).not.toContain('spec/a.html')
-    expect(text).toContain('spec/b.html: already tracked, and it disagrees')
-    expect(text).toContain('spec/c.html: no payload block')
+    expect(text).not.toContain('spec/a.json')
+    expect(text).toContain('spec/b.json: already tracked, and it disagrees')
+    expect(text).toContain('spec/c.json: no payload block')
   })
 
   it('a rebuild after adopting clears "rebuild the index to file them"', () => {
     state.answers.adoptAll.push({
-      ok: { documents: {}, adopted: ['spec/loose.html'], skipped: [], diagnostics: [] },
+      ok: { documents: {}, adopted: ['spec/loose.json'], skipped: [], diagnostics: [] },
     })
     state.answers.reindex.push({
-      ok: reindexAnswer({ written: { path: 'spec/index.json', documents: 4, home: 'spec/home.html' } }),
+      ok: reindexAnswer({ written: { path: 'spec/index.json', documents: 4, home: 'spec/home.json' } }),
     })
     strip()
     fireEvent.click(screen.getByTestId('spec-corpus-adopt-all'))
@@ -254,28 +254,28 @@ describe('Adopt beside an untracked document', () => {
     state.answers.adopt.push({
       error: refusal(409, {
         message: 'a record already exists for this path',
-        path: 'spec/loose.html',
+        path: 'spec/loose.json',
         code: 'document_exists',
         differences: [{ field: 'title', file: 'Loose', row: 'Old title' }],
       }),
     })
     browser()
-    expect(screen.queryByTestId('spec-adopt-spec/home.html')).toBeNull()
-    expect(screen.queryByTestId('spec-adopt-spec/gone.html')).toBeNull()
-    const adopt = screen.getByTestId('spec-adopt-spec/loose.html')
+    expect(screen.queryByTestId('spec-adopt-spec/home.json')).toBeNull()
+    expect(screen.queryByTestId('spec-adopt-spec/gone.json')).toBeNull()
+    const adopt = screen.getByTestId('spec-adopt-spec/loose.json')
 
     fireEvent.click(within(adopt).getByRole('button', { name: 'Adopt' }))
-    expect(state.calls.adopt).toEqual([{ path: 'spec/loose.html' }])
+    expect(state.calls.adopt).toEqual([{ path: 'spec/loose.json' }])
     const alert = within(adopt).getByRole('alert').textContent ?? ''
     expect(alert).toContain('a record already exists for this path')
     expect(alert).toContain('title: file Loose vs record Old title')
   })
 
   it('1.11 after an adopt, the strip says a rebuild files it, with Rebuild as the primary action', () => {
-    state.answers.adopt.push({ ok: { path: 'spec/loose.html' } })
+    state.answers.adopt.push({ ok: { path: 'spec/loose.json' } })
     browser()
     expect(screen.queryByTestId('spec-corpus-adopted-note')).toBeNull()
-    fireEvent.click(within(screen.getByTestId('spec-adopt-spec/loose.html')).getByRole('button'))
+    fireEvent.click(within(screen.getByTestId('spec-adopt-spec/loose.json')).getByRole('button'))
     expect(screen.getByTestId('spec-corpus-adopted-note').textContent).toBe(
       'Adopted documents are filed in the index on the next rebuild.',
     )
@@ -290,22 +290,22 @@ describe('Place under…', () => {
     state.answers = { reindex: [], adoptAll: [], adopt: [], arrange: [] }
   })
 
-  function place(path = 'spec/area.html', parent: string | null = 'spec/home.html') {
+  function place(path = 'spec/area.json', parent: string | null = 'spec/home.json') {
     render(<SpecPlaceUnder path={path} parent={parent} specList={list()} />)
     fireEvent.click(screen.getByTestId('spec-place-under'))
   }
 
   it('1.8 lists the filed documents minus this one, preselects the parent, and sends the choice', () => {
-    state.answers.arrange.push({ ok: { path: 'spec/area.html', parent: 'spec/other.html' } })
+    state.answers.arrange.push({ ok: { path: 'spec/area.json', parent: 'spec/other.json' } })
     place()
     const select = screen.getByTestId('spec-place-under-select') as HTMLSelectElement
     const values = within(select).getAllByRole('option').map((o) => (o as HTMLOptionElement).value)
-    expect(values).toEqual(['__none__', 'spec/home.html', 'spec/other.html'])
-    expect(select.value).toBe('spec/home.html')
+    expect(values).toEqual(['__none__', 'spec/home.json', 'spec/other.json'])
+    expect(select.value).toBe('spec/home.json')
 
-    fireEvent.change(select, { target: { value: 'spec/other.html' } })
+    fireEvent.change(select, { target: { value: 'spec/other.json' } })
     fireEvent.click(screen.getByTestId('spec-place-under-confirm'))
-    expect(state.calls.arrange).toEqual([{ path: 'spec/area.html', parent: 'spec/other.html' }])
+    expect(state.calls.arrange).toEqual([{ path: 'spec/area.json', parent: 'spec/other.json' }])
   })
 
   it('1.8 No parent sends null', () => {
@@ -313,7 +313,7 @@ describe('Place under…', () => {
     place()
     fireEvent.change(screen.getByTestId('spec-place-under-select'), { target: { value: '__none__' } })
     fireEvent.click(screen.getByTestId('spec-place-under-confirm'))
-    expect(state.calls.arrange).toEqual([{ path: 'spec/area.html', parent: null }])
+    expect(state.calls.arrange).toEqual([{ path: 'spec/area.json', parent: null }])
   })
 
   it('1.9 a 409 shows the message and offers the rebuild; a 422 lists its diagnostics', () => {
@@ -331,15 +331,15 @@ describe('Place under…', () => {
     state.answers.arrange.push({
       error: refusal(422, {
         message: 'this placement is not allowed',
-        diagnostics: [{ code: 'parent_cycle', path: 'spec/home.html' }],
+        diagnostics: [{ code: 'parent_cycle', path: 'spec/home.json' }],
       }),
     })
-    place('spec/home.html', null)
-    fireEvent.change(screen.getByTestId('spec-place-under-select'), { target: { value: 'spec/area.html' } })
+    place('spec/home.json', null)
+    fireEvent.change(screen.getByTestId('spec-place-under-select'), { target: { value: 'spec/area.json' } })
     fireEvent.click(screen.getByTestId('spec-place-under-confirm'))
     const text = screen.getByTestId('spec-place-under-refusal').textContent ?? ''
     expect(text).toContain('this placement is not allowed')
-    expect(text).toContain('parent_cycle — spec/home.html')
+    expect(text).toContain('parent_cycle — spec/home.json')
     expect(screen.queryByTestId('spec-corpus-rebuild')).toBeNull()
   })
 })

@@ -268,7 +268,7 @@ describe('declaring an exploration before the first message', () => {
   })
 
   it('creates the document from the first message and opens the one the Hub minted', async () => {
-    const minted = 'spec/changes/amber-griffin/spec.html'
+    const minted = 'spec/changes/amber-griffin/spec.json'
     fetchMock.mockImplementation((url: string) =>
       Promise.resolve(
         String(url).includes('/project/documents')
@@ -347,7 +347,7 @@ describe('declaring an exploration before the first message', () => {
 })
 
 describe('a refused exploring first message leaves no document behind (F330)', () => {
-  const minted = 'spec/changes/emerald-fenrir/spec.html'
+  const minted = 'spec/changes/emerald-fenrir/spec.json'
 
   beforeEach(() => {
     cleanup()

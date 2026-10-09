@@ -19,7 +19,7 @@ BASE = "/api/v1/projects/proj-test/project"
 TASKS = "/api/v1/projects/proj-test/tasks"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 AGENT_EVIDENCE = "/api/v1/agent-actions/spec/evidence"
-PATH = "spec/changes/coverage-demo/spec.html"
+PATH = "spec/changes/coverage-demo/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 BETA = {"key": "beta", "statement": "It records a completed watering", "modal": "SHOULD"}
@@ -439,7 +439,7 @@ async def test_two_documents_declaring_the_same_identifier_are_told_apart_in_uns
     """
     await _document(app, auth_headers, builder)
 
-    second_path = "spec/changes/coverage-demo-two/spec.html"
+    second_path = "spec/changes/coverage-demo-two/spec.json"
     created = await app.post(
         f"{BASE}/documents",
         json={"path": second_path, "title": "Coverage demo two"},

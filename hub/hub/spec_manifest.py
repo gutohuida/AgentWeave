@@ -25,8 +25,8 @@ HTML_HEAD_MAX_BYTES = 64 * 1024
 # the Hub itself validated. One list, deliberately.
 VALID_KINDS = {"baseline", "system-map", "roadmap", "change-spec", "capability"}
 
-# A document's index status is its lifecycle phase — the value `spec_render` writes into the
-# rendered document's own `aw-spec-status`, and therefore the value `compute_intrinsic_conflicts`
+# A document's index status is its lifecycle phase — the value its stored file's `hub` block
+# carries (`spec_documents.serialize`), and therefore the value `compute_intrinsic_conflicts`
 # compares an entry against. These mirror `hub/hub/spec_lifecycle.py` and are restated rather than
 # imported: this module is carried verbatim in the CLI twin, which has no lifecycle module. The
 # twin-agreement test is what holds the two copies together.
@@ -54,8 +54,19 @@ class SpecPathError(ValueError):
     """A candidate spec path fails the safe-path contract."""
 
 
+DOCUMENT_SUFFIX = ".json"
+LEGACY_SUFFIX = ".html"
+#: `spec/index.json` is the corpus index, never a document.
+INDEX_PATH = "spec/index.json"
+
+
 def validate_spec_path(path: str) -> str:
-    """Validate a repo-relative spec HTML path (see CLI twin for full contract)."""
+    """Validate a repo-relative spec document path: lowercase, POSIX, beneath `spec/`, `.json`.
+
+    A document is stored as its payload (`a-spec-document-is-stored-as-its-payload` FR-5), so a
+    path ends in `.json`; `spec/index.json` is the index and never a document. A legacy `.html`
+    path is refused with the `.json` path it converts to.
+    """
     if not isinstance(path, str) or not path:
         raise SpecPathError(f"path must be a non-empty string: {path!r}")
     if "\\" in path:
@@ -66,8 +77,14 @@ def validate_spec_path(path: str) -> str:
         raise SpecPathError(f"path exceeds {SPEC_PATH_MAX_LENGTH} characters: {path!r}")
     if not path.startswith("spec/"):
         raise SpecPathError(f"path must begin with 'spec/': {path!r}")
-    if not path.endswith(".html"):
-        raise SpecPathError(f"path must end with '.html': {path!r}")
+    if path.endswith(LEGACY_SUFFIX):
+        raise SpecPathError(
+            f"spec documents are stored as .json: use {json_path_for(path)!r}, not {path!r}"
+        )
+    if not path.endswith(DOCUMENT_SUFFIX):
+        raise SpecPathError(f"path must end with '.json': {path!r}")
+    if path == INDEX_PATH:
+        raise SpecPathError(f"{INDEX_PATH!r} is the corpus index, not a document")
     for segment in path.split("/"):
         if not segment or segment in (".", ".."):
             raise SpecPathError(f"path has an empty or dot segment: {path!r}")
@@ -76,6 +93,16 @@ def validate_spec_path(path: str) -> str:
         if _CONTROL_CHAR_RE.search(segment):
             raise SpecPathError(f"path has a control character: {path!r}")
     return path
+
+
+def json_path_for(path: str) -> str:
+    """The `.json` path a legacy `.html` document path converts to (extension swap, design D1)."""
+    return path[: -len(LEGACY_SUFFIX)] + DOCUMENT_SUFFIX if path.endswith(LEGACY_SUFFIX) else path
+
+
+def html_path_for(path: str) -> str:
+    """The `.html` path a `.json` document path converts back to."""
+    return path[: -len(DOCUMENT_SUFFIX)] + LEGACY_SUFFIX if path.endswith(DOCUMENT_SUFFIX) else path
 
 
 @dataclass(frozen=True)
@@ -403,17 +430,16 @@ def parse_html_head(text: str) -> Dict[str, Optional[str]]:
 
 
 def compute_intrinsic_conflicts(
-    manifest: Manifest, content_by_path: Dict[str, str]
+    manifest: Manifest, declared_by_path: Dict[str, Dict[str, Optional[str]]]
 ) -> List[ManifestDiagnostic]:
-    """Compare each manifest document's cached title/kind/status against the
-    live HTML `<head>` of its synced content (documents present in both).
+    """Compare each manifest document's cached title/kind/status against what its own file
+    declares (`{"title", "kind", "status"}`, documents present in both).
     """
     diagnostics: List[ManifestDiagnostic] = []
     for doc in manifest.documents:
-        content = content_by_path.get(doc.path)
-        if content is None:
+        head = declared_by_path.get(doc.path)
+        if head is None:
             continue
-        head = parse_html_head(content)
         for field, expected, actual in (
             ("title", doc.title, head["title"]),
             ("kind", doc.kind, head["kind"]),

@@ -29,7 +29,7 @@ from playwright.sync_api import Page, expect
 
 AGENT = "q2verify"
 CONVERSATION_ID = "conv-b77949d3"
-DOCUMENT_PATH = "spec/changes/teal-roc/spec.html"
+DOCUMENT_PATH = "spec/changes/teal-roc/spec.json"
 FIXTURE_FILE_PATH = "src/widgets/Button.tsx"
 FIXTURE_FILE_CONTENT = "export function Button() {\n  return null\n}\n"
 

@@ -23,7 +23,7 @@ vi.mock('@/hooks/useSSE', () => ({
 
 import { SpecCoverageBar } from '@/components/spec/SpecCoverageBar'
 
-const PATH = 'spec/changes/demo/spec.html'
+const PATH = 'spec/changes/demo/spec.json'
 
 function entry(overrides: Record<string, unknown> = {}) {
   return {

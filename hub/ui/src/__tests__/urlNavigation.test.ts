@@ -139,9 +139,9 @@ describe('phase 5 URL navigation contract', () => {
       // spec open").
       const back = agentSettingsBackDestination(
         agentSettingsDestination('proj-1', 'claude', 'access'),
-        'spec/capabilities/runner-registry/spec.html',
+        'spec/capabilities/runner-registry/spec.json',
       )
-      expect(back.document).toBe('spec/capabilities/runner-registry/spec.html')
+      expect(back.document).toBe('spec/capabilities/runner-registry/spec.json')
     })
 
     it('still returns with nothing open when nothing was open', () => {
@@ -249,7 +249,7 @@ describe('phase 5 URL navigation contract', () => {
 })
 
 describe('the open document is part of the conversation destination', () => {
-  const DOC = 'spec/roadmaps/agentweave-reconstruction.html'
+  const DOC = 'spec/roadmaps/agentweave-reconstruction.json'
 
   it('round-trips a conversation with a document open beside it', () => {
     const destination = agentDestination('proj-1', 'claude', 'conv-123', DOC)
@@ -266,7 +266,7 @@ describe('the open document is part of the conversation destination', () => {
     const base = agentDestination('proj-1', 'claude', 'conv-123')
     const opened = withDocument(base, DOC)
     expect(opened).toEqual({ ...base, document: DOC })
-    expect(withDocument(opened, 'spec/spec.html').document).toBe('spec/spec.html')
+    expect(withDocument(opened, 'spec/spec.json').document).toBe('spec/spec.json')
     expect(withDocument(opened, null).document).toBeNull()
   })
 
@@ -275,14 +275,14 @@ describe('the open document is part of the conversation destination', () => {
     // document", never an error page.
     const illegal = [
       '../etc/passwd',
-      'spec/../../secret.html',
-      'notspec/spec.html',
+      'spec/../../secret.json',
+      'notspec/spec.json',
       'spec/spec.txt',
-      'spec/SPEC.html',
-      'spec//spec.html',
-      'spec/.hidden/spec.html',
-      'spec/%2e%2e/spec.html',
-      'spec\\windows\\spec.html',
+      'spec/SPEC.json',
+      'spec//spec.json',
+      'spec/.hidden/spec.json',
+      'spec/%2e%2e/spec.json',
+      'spec\\windows\\spec.json',
       '',
     ]
     for (const value of illegal) {
@@ -324,7 +324,7 @@ describe('the open document is part of the conversation destination', () => {
 /** F4 (`design.md` D7): a task's requirement chip lands on the Spec tab not just at the document,
  *  but scrolled to the requirement — which needs the destination to carry a fragment. */
 describe('a cross-tab click can carry a requirement anchor onto the Spec tab', () => {
-  const DOC = 'spec/roadmaps/agentweave-reconstruction.html'
+  const DOC = 'spec/roadmaps/agentweave-reconstruction.json'
 
   it('carries the anchor only alongside a document, on the Spec tab', () => {
     const destination = projectDestination('proj-1', 'spec', DOC, 'FR-3')

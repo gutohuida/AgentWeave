@@ -6,8 +6,8 @@ the read path is keyed on the row, so a corpus that arrives without one — a
 clone, a migration, a restored machine — is readable and inert.
 
 **This module never writes to disk, and that is structural rather than a
-convention.** It imports nothing that writes: `read_document` and
-`parse_html_head` read, `spec_documents.parse_stored` parses a string. The one function here
+convention.** It imports nothing that writes: `read_document` reads,
+`spec_documents.parse_stored` and `parse_hub` parse a string. The one function here
 that reaches the database (`adopt`) calls `spec_lifecycle.create_document`, which
 takes no workspace and therefore *cannot* touch the filesystem. A reviewer
 checking that adoption is read-only does not have to read the whole call tree —
@@ -16,11 +16,10 @@ there is no writer in it to find.
 Identity is read from two places in one file, because no single place carries all
 of it:
 
-    title, kind   <- the `aw-spec-payload` block; what the submission supplied
-    phase         <- the `aw-spec-status` meta tag; the payload has no status key
+    title, kind   <- the stored payload; what the submission supplied
+    phase         <- the file's `hub` block; the payload has no status key
 
-The payload wins for `kind`, which appears in both: the meta tag is its display
-copy. Where the status names no phase this Hub knows, the phase falls back to
+Where the status names no phase this Hub knows, the phase falls back to
 what a newly created document of that kind would receive, and the fallback is
 *reported* — a defaulted phase must never be mistaken for one that was read.
 """
@@ -35,8 +34,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import spec_documents, spec_index, spec_lifecycle
 from .db.models import SpecDocument
 from .project_workspace import ProjectPathError, ProjectWorkspace
-from .spec_manifest import SpecPathError, parse_html_head, validate_spec_path
-from .spec_payload import KINDS, has_payload_block
+from .spec_manifest import SpecPathError, validate_spec_path
+from .spec_payload import KINDS
 
 #: Every phase a row may hold. `current` is included and `transition()` never
 #: accepts it — a capability document reaches it through creation only, which is
@@ -191,24 +190,21 @@ def identity_from_content(path: str, content: str) -> Adoptable:
     payload = spec_documents.parse_stored(content)
     if payload is None:
         # The two ways a payload can be missing need different remedies — write
-        # the document through the Hub, versus repair a block that is already
+        # the document through the Hub, versus repair a file that is already
         # there — so they are refused separately rather than as one "no payload".
-        if has_payload_block(content):
+        if content.strip():
             return AdoptionRefusal(
                 path=path,
                 code="payload_unreadable",
-                message=(
-                    "the document's payload block is present but is not readable JSON "
-                    "describing an object"
-                ),
+                message="the document's file is not readable JSON describing an object",
             )
         return AdoptionRefusal(
             path=path,
             code="payload_absent",
-            message="the document carries no aw-spec-payload block",
+            message="the document's file is empty",
         )
 
-    head = parse_html_head(content)
+    hub = spec_documents.parse_hub(content)
 
     title = _text(payload.get("title"))
     if not title:
@@ -221,7 +217,7 @@ def identity_from_content(path: str, content: str) -> Adoptable:
             message="the document's payload declares no title",
         )
 
-    kind = _text(payload.get("kind")) or _text(head.get("kind"))
+    kind = _text(payload.get("kind"))
     if kind not in KINDS:
         return AdoptionRefusal(
             path=path,
@@ -232,7 +228,7 @@ def identity_from_content(path: str, content: str) -> Adoptable:
             ),
         )
 
-    status = _text(head.get("status"))
+    status = _text(hub.get("phase"))
     if status in PHASES and phase_is_holdable(status, kind):
         return AdoptableIdentity(
             path=path,

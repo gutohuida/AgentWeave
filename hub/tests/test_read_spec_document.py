@@ -21,7 +21,7 @@ from hub.spec_payload import SCHEMA_VERSION
 BASE = "/api/v1/projects/proj-test/project"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 READ = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/read-demo/spec.html"
+PATH = "spec/changes/read-demo/spec.json"
 
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 BETA = {
@@ -201,7 +201,7 @@ async def test_a_document_with_no_payload_says_so(app, auth_headers, builder, tm
 @pytest.mark.asyncio
 async def test_an_unknown_document_is_refused_by_name(app, auth_headers, builder):
     response = await app.get(
-        READ, params={"path": "spec/changes/nothing-here/spec.html"}, headers=builder
+        READ, params={"path": "spec/changes/nothing-here/spec.json"}, headers=builder
     )
     assert response.status_code == 404, response.text
     assert "nothing-here" in response.json()["detail"]

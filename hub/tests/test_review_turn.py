@@ -26,8 +26,9 @@ from hub.db.models import (
     SpecRequirement,
     Task,
 )
-from hub.spec_payload import SCHEMA_VERSION, embed_payload
+from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_files import stored_text
 from .test_agent_trigger import _await_background_run, _fake_pty, _init_repo
 
 NOW = datetime(2026, 8, 24, 12, 0, 0, tzinfo=timezone.utc)
@@ -58,7 +59,7 @@ async def _reviewable_task(
     branch: str = "agentweave/builder",
     task_id: str = "task-1",
     reviewer_declaration: str = None,
-    document_path: str = "spec/ledger.html",
+    document_path: str = "spec/ledger.json",
 ):
     """A completed task carrying evidence that names *commit*."""
     async with async_session_factory() as session:
@@ -530,13 +531,14 @@ async def test_a_declared_reviewer_not_on_the_roster_is_surfaced_never_substitut
     await bind_project_workspace(repo)
     # A roster with a plausible near-miss on it. The point is that `auditor` is NOT chosen.
     await _roster(app, auth_headers, bind_runner, "auditor")
-    document = repo / "spec" / "ledger.html"
+    document = repo / "spec" / "ledger.json"
     document.parent.mkdir(parents=True, exist_ok=True)
-    # The real embedder, not a hand-written tag: a fixture that fakes the envelope stops testing
+    # The real writer, not a hand-written file: a fixture that fakes the envelope stops testing
     # the thing that reads it the moment the envelope changes.
     document.write_text(
-        embed_payload(
-            {"schema_version": SCHEMA_VERSION, "tasks": [{"key": "t1", "reviewer": "critic"}]}
+        stored_text(
+            {"schema_version": SCHEMA_VERSION, "tasks": [{"key": "t1", "reviewer": "critic"}]},
+            phase="current",
         ),
         encoding="utf-8",
     )
@@ -546,7 +548,7 @@ async def test_a_declared_reviewer_not_on_the_roster_is_surfaced_never_substitut
             SpecDocument(
                 id="doc-1",
                 project_id="proj-test",
-                path="spec/ledger.html",
+                path="spec/ledger.json",
                 title="Ledger",
                 phase="current",
                 kind="capability",
@@ -583,11 +585,12 @@ async def test_a_declared_reviewer_that_is_archived_falls_back_rather_than_being
     repo = _init_repo(tmp_path / "repo")
     await bind_project_workspace(repo)
     await _roster(app, auth_headers, bind_runner, "critic")
-    document = repo / "spec" / "ledger.html"
+    document = repo / "spec" / "ledger.json"
     document.parent.mkdir(parents=True, exist_ok=True)
     document.write_text(
-        embed_payload(
-            {"schema_version": SCHEMA_VERSION, "tasks": [{"key": "t1", "reviewer": "critic"}]}
+        stored_text(
+            {"schema_version": SCHEMA_VERSION, "tasks": [{"key": "t1", "reviewer": "critic"}]},
+            phase="current",
         ),
         encoding="utf-8",
     )
@@ -599,7 +602,7 @@ async def test_a_declared_reviewer_that_is_archived_falls_back_rather_than_being
             SpecDocument(
                 id="doc-1",
                 project_id="proj-test",
-                path="spec/ledger.html",
+                path="spec/ledger.json",
                 title="Ledger",
                 phase="current",
                 kind="capability",
@@ -637,11 +640,12 @@ async def test_a_declared_reviewer_on_the_roster_resolves_to_itself(
     repo = _init_repo(tmp_path / "repo")
     await bind_project_workspace(repo)
     await _roster(app, auth_headers, bind_runner, "critic")
-    document = repo / "spec" / "ledger.html"
+    document = repo / "spec" / "ledger.json"
     document.parent.mkdir(parents=True, exist_ok=True)
     document.write_text(
-        embed_payload(
-            {"schema_version": SCHEMA_VERSION, "tasks": [{"key": "t1", "reviewer": "critic"}]}
+        stored_text(
+            {"schema_version": SCHEMA_VERSION, "tasks": [{"key": "t1", "reviewer": "critic"}]},
+            phase="current",
         ),
         encoding="utf-8",
     )
@@ -651,7 +655,7 @@ async def test_a_declared_reviewer_on_the_roster_resolves_to_itself(
             SpecDocument(
                 id="doc-1",
                 project_id="proj-test",
-                path="spec/ledger.html",
+                path="spec/ledger.json",
                 title="Ledger",
                 phase="current",
                 kind="capability",

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "specjson-t2b-impl",
-    "next_action": "Do queue item specjson-t2b-impl: flip spec-document storage to spec.json behind the seam landed in iteration 3 (spec_documents.parse_stored/read_payload). Plan and decisions in the night log, iteration 3. Lands green in one commit: product flip + test-suite fallout together; run hub suite with -n auto and the CLI suite before committing.",
+    "current": "specjson-t3-impl",
+    "next_action": "Do queue item specjson-t3-impl: POST /project/spec/convert?to=json|html (new hub/hub/spec_conversion.py): files, spec_documents.path, undelivered inbound_queue_entries.spec_document, payload refs (roadmap.document, task from.document), spec/index.json; idempotent; 409 naming active runs. Failing Hub tests first, same commit. Then restructure scripts/drive/d1010_spec_json.py (setup creates .json, converts to html to make the legacy corpus) and fix its check 7b (statement pair + FR-1 digest pair); see night log iteration 4.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -30,16 +30,17 @@
         },
         {
             "id": "specjson-t2b-impl",
-            "status": "open",
+            "status": "done",
             "title": "spec-storage task storage, part b: flip to spec.json (writes, paths, discovery, GET /spec renders, journey hub block)",
-            "detail": "parse_stored reads JSON (pops 'hub'); new write_payload (sort_keys, indent 2, LF, trailing NL, hub={phase,rigor,step,size}) replaces every write of rendered HTML; GET /spec renders with corpus ctx; validate_spec_path/discovery/spec_naming on .json (index.json reserved), .html create 400, legacy_html_document diag; conflicts from hub block; journey writes hub. Tests: sed spec/*.html->.json, then ~33 files build HTML and ~74 read file text. Must land green in one commit; plan in log iteration 3.",
+            "detail": "done 2026-10-09 iteration 4: spec.json storage, render on read, json paths, legacy diag, journey hub block; suites green.",
             "model": "opus"
         },
         {
             "id": "specjson-t3-impl",
             "status": "open",
             "title": "spec-storage task convert: POST /project/spec/convert?to=json|html, 409 while busy",
-            "detail": "storage payload change a-spec-document-is-stored-as-its-payload, payload keys tasks: drive-first, storage, convert, corpus (corpus FENCED, not tonight). Failing Hub tests first."
+            "detail": "POST /project/spec/convert?to=json|html, 409 while busy. Use spec_manifest.json_path_for/html_path_for; legacy read via spec_payload.extract_payload inside spec_documents (seam guard allows it there); html write = render_page output. d1010 setup now 400s at .html create: restructure it; check 7b must allow the FR-1 digest line (log it4).",
+            "model": "opus"
         },
         {
             "id": "specjson-drive",

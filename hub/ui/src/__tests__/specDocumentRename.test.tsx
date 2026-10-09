@@ -28,8 +28,8 @@ vi.mock('@/hooks/useSSE', () => ({
 
 import { useSpecDocumentRename } from '@/api/spec'
 
-const PLACEHOLDER = 'spec/changes/amber-griffin/spec.html'
-const NAMED = 'spec/changes/houseplant-watering-tracker/spec.html'
+const PLACEHOLDER = 'spec/changes/amber-griffin/spec.json'
+const NAMED = 'spec/changes/houseplant-watering-tracker/spec.json'
 
 function Harness({ open, onMoved }: { open: string | null; onMoved: (path: string) => void }) {
   useSpecDocumentRename(open, onMoved)
@@ -64,7 +64,7 @@ describe('following a renamed document', () => {
 
   it('leaves a different open document alone', () => {
     const onMoved = vi.fn()
-    render(<Harness open="spec/changes/something-else/spec.html" onMoved={onMoved} />)
+    render(<Harness open="spec/changes/something-else/spec.json" onMoved={onMoved} />)
 
     emit({ project_id: 'proj-a', path: NAMED, previous_path: PLACEHOLDER })
 

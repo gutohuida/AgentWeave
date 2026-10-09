@@ -287,7 +287,7 @@ def test_the_predicate_is_total(workspace, monkeypatch, asked):
 # powershell-is-the-hubs-own`, design D2). The notice's fallback route for case 3's write. ---------
 
 P = "'.agentweave/calls/r.json'"
-V = """'{"path":"spec/x.html"}'"""
+V = """'{"path":"spec/x.json"}'"""
 WRITE_9_10 = f"Set-Content -Path {P} -Value {V} -Encoding utf8"
 _PARTS = {"-Path": P, "-Value": V, "-Encoding": "utf8"}
 _ORDERS = [
@@ -341,7 +341,7 @@ def test_the_9_10_form_is_allowed_by_the_judge_alone(workspace, monkeypatch):
     """What case 4 overrode, until `the-shell-judge-reads-a-word-whole` (design D2) stopped rule 6
     reading an embedded `/` as an absolute tail. Before that change `_decide` refused the 9.10 form
     ('/x.html' is outside your workspace'); now the literal's `/x.html` fragment is read as the
-    relative piece it actually is (`spec/x.html`, inside), so this exact literal is no longer
+    relative piece it actually is (`spec/x.json`, inside), so this exact literal is no longer
     refused on its own. Case 4 still gives the command standing for every other row in STANDING."""
     answer = _without_case_4(monkeypatch, *_ps(WRITE_9_10))
     assert answer["allow"] is True, answer

@@ -21,19 +21,19 @@ from hub.spec_manifest import (
 
 class TestValidateSpecPath:
     def test_accepts_baseline_path(self):
-        assert validate_spec_path("spec/agentweave-spec.html") == "spec/agentweave-spec.html"
+        assert validate_spec_path("spec/agentweave-spec.json") == "spec/agentweave-spec.json"
 
     def test_rejects_backslash(self):
         with pytest.raises(SpecPathError):
-            validate_spec_path("spec\\spec.html")
+            validate_spec_path("spec\\spec.json")
 
     def test_rejects_uppercase(self):
         with pytest.raises(SpecPathError):
-            validate_spec_path("spec/Spec.html")
+            validate_spec_path("spec/Spec.json")
 
     def test_rejects_missing_spec_prefix(self):
         with pytest.raises(SpecPathError):
-            validate_spec_path("docs/spec.html")
+            validate_spec_path("docs/spec.json")
 
     def test_rejects_non_html(self):
         with pytest.raises(SpecPathError):
@@ -41,21 +41,21 @@ class TestValidateSpecPath:
 
     def test_rejects_dot_dot_segment(self):
         with pytest.raises(SpecPathError):
-            validate_spec_path("spec/../secret.html")
+            validate_spec_path("spec/../secret.json")
 
     def test_rejects_hidden_segment(self):
         with pytest.raises(SpecPathError):
-            validate_spec_path("spec/.hidden/spec.html")
+            validate_spec_path("spec/.hidden/spec.json")
 
 
 class TestLoadManifest:
     def _valid_manifest(self) -> dict:
         return {
             "version": 1,
-            "home": "spec/agentweave-spec.html",
+            "home": "spec/agentweave-spec.json",
             "documents": [
                 {
-                    "path": "spec/agentweave-spec.html",
+                    "path": "spec/agentweave-spec.json",
                     "title": "Baseline",
                     "kind": "baseline",
                     "status": "approved",
@@ -63,11 +63,11 @@ class TestLoadManifest:
                     "order": 10,
                 },
                 {
-                    "path": "spec/changes/add-thing/spec.html",
+                    "path": "spec/changes/add-thing/spec.json",
                     "title": "Add thing",
                     "kind": "change-spec",
                     "status": "exploring",
-                    "parent": "spec/agentweave-spec.html",
+                    "parent": "spec/agentweave-spec.json",
                     "order": 20,
                 },
             ],
@@ -77,7 +77,7 @@ class TestLoadManifest:
         manifest, diagnostics = load_manifest(json.dumps(self._valid_manifest()))
         assert manifest is not None
         assert diagnostics == []
-        assert manifest.home == "spec/agentweave-spec.html"
+        assert manifest.home == "spec/agentweave-spec.json"
         assert len(manifest.documents) == 2
 
     def test_malformed_json(self):
@@ -86,7 +86,7 @@ class TestLoadManifest:
         assert diagnostics[0].code == "manifest_invalid_json"
 
     def test_too_large(self):
-        raw = json.dumps({"version": 1, "home": "spec/spec.html", "documents": []})
+        raw = json.dumps({"version": 1, "home": "spec/spec.json", "documents": []})
         padded = raw[:-1] + (" " * (MANIFEST_MAX_BYTES + 1)) + raw[-1]
         manifest, diagnostics = load_manifest(padded)
         assert manifest is None
@@ -112,14 +112,14 @@ class TestLoadManifest:
 
     def test_invalid_home(self):
         data = self._valid_manifest()
-        data["home"] = "spec/does-not-exist.html"
+        data["home"] = "spec/does-not-exist.json"
         manifest, diagnostics = load_manifest(json.dumps(data))
         assert manifest is None
         assert diagnostics[-1].code == "manifest_invalid_home"
 
     def test_unknown_parent(self):
         data = self._valid_manifest()
-        data["documents"][1]["parent"] = "spec/nonexistent.html"
+        data["documents"][1]["parent"] = "spec/nonexistent.json"
         manifest, diagnostics = load_manifest(json.dumps(data))
         assert manifest is None
         assert any(d.code == "manifest_unknown_parent" for d in diagnostics)
@@ -141,7 +141,7 @@ class TestLoadManifest:
         data = self._valid_manifest()
         data["documents"].append(
             {
-                "path": "spec/capabilities/thing/spec.html",
+                "path": "spec/capabilities/thing/spec.json",
                 "title": "Thing",
                 "kind": "capability",
                 "status": "current",
@@ -152,7 +152,7 @@ class TestLoadManifest:
         manifest, diagnostics = load_manifest(json.dumps(data))
         assert manifest is not None
         assert diagnostics == []
-        assert manifest.by_path()["spec/capabilities/thing/spec.html"].kind == "capability"
+        assert manifest.by_path()["spec/capabilities/thing/spec.json"].kind == "capability"
 
     def test_archived_change_spec_can_be_indexed(self):
         """`archived` was unrepresentable: the old model allowed only draft|approved here."""
@@ -200,7 +200,7 @@ class TestLoadManifest:
         manifest, diagnostics = load_manifest(json.dumps(data))
         assert manifest is None
         conflict = next(d for d in diagnostics if d.code == "manifest_duplicate_order")
-        assert "spec/changes/add-thing/spec.html" in conflict.actual
+        assert "spec/changes/add-thing/spec.json" in conflict.actual
 
     def test_distinct_orders_are_accepted(self):
         manifest, _ = load_manifest(json.dumps(self._valid_manifest()))
@@ -215,10 +215,10 @@ class TestComputeIntrinsicConflicts:
     def _manifest(self):
         data = {
             "version": 1,
-            "home": "spec/agentweave-spec.html",
+            "home": "spec/agentweave-spec.json",
             "documents": [
                 {
-                    "path": "spec/agentweave-spec.html",
+                    "path": "spec/agentweave-spec.json",
                     "title": "Baseline",
                     "kind": "baseline",
                     "status": "approved",
@@ -233,18 +233,14 @@ class TestComputeIntrinsicConflicts:
 
     def test_no_conflict_when_content_matches(self):
         manifest = self._manifest()
-        content = (
-            "<html><head><title>Baseline</title>"
-            '<meta name="aw-spec-kind" content="baseline">'
-            '<meta name="aw-spec-status" content="approved"></head></html>'
-        )
-        conflicts = compute_intrinsic_conflicts(manifest, {"spec/agentweave-spec.html": content})
+        declared = {"title": "Baseline", "kind": "baseline", "status": "approved"}
+        conflicts = compute_intrinsic_conflicts(manifest, {"spec/agentweave-spec.json": declared})
         assert conflicts == []
 
     def test_title_conflict_detected(self):
         manifest = self._manifest()
-        content = "<html><head><title>Renamed</title></head></html>"
-        conflicts = compute_intrinsic_conflicts(manifest, {"spec/agentweave-spec.html": content})
+        declared = {"title": "Renamed", "kind": None, "status": None}
+        conflicts = compute_intrinsic_conflicts(manifest, {"spec/agentweave-spec.json": declared})
         assert len(conflicts) == 1
         assert conflicts[0].field == "title"
 

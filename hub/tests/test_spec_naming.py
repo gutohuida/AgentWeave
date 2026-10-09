@@ -24,7 +24,7 @@ from hub.spec_naming import (
 
 _FREE = lambda path: False  # noqa: E731 - a predicate this small reads better inline
 
-PLACEHOLDER_RE = re.compile(r"^spec/changes/([a-z]+)-([a-z]+)/spec\.html$")
+PLACEHOLDER_RE = re.compile(r"^spec/changes/([a-z]+)-([a-z]+)/spec\.json$")
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ def test_a_full_namespace_refuses_rather_than_hanging():
 
 def test_a_crowded_namespace_falls_back_to_a_suffix():
     plain = {
-        f"spec/changes/{colour}-{animal}/spec.html"
+        f"spec/changes/{colour}-{animal}/spec.json"
         for colour in COLOURS
         for animal in MYTHIC_ANIMALS
     }
@@ -116,7 +116,7 @@ def test_a_long_subject_is_truncated_within_the_path_budget():
 
 
 def test_truncation_does_not_leave_a_trailing_hyphen():
-    # Truncating mid-separator is the case that produces `.../a-b-/spec.html`,
+    # Truncating mid-separator is the case that produces `.../a-b-/spec.json`,
     # which is legal but reads as a mistake.
     subject = "ab " * 400
     slug = slugify(subject)
@@ -127,7 +127,7 @@ def test_truncation_does_not_leave_a_trailing_hyphen():
 def test_a_subject_becomes_a_valid_document_path():
     assert (
         document_path_for("Personal houseplant watering tracker")
-        == "spec/changes/personal-houseplant-watering-tracker/spec.html"
+        == "spec/changes/personal-houseplant-watering-tracker/spec.json"
     )
 
 

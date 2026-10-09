@@ -69,7 +69,7 @@ async def _flow_with_completed_task(db, *, suffix):
         SpecDocument(
             id=f"doc-ev-{suffix}",
             project_id="proj-test",
-            path=f"spec/ev-{suffix}.html",
+            path=f"spec/ev-{suffix}.json",
             title="Ledger",
             phase="current",
             kind="capability",

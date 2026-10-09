@@ -30,7 +30,7 @@ from playwright.sync_api import Page, expect
 
 AGENT = "q2verify"
 CONVERSATION_ID = "conv-b77949d3"
-DOCUMENT_PATH = "spec/changes/teal-roc/spec.html"
+DOCUMENT_PATH = "spec/changes/teal-roc/spec.json"
 
 PANEL_SHELL = '[data-testid="panel-shell"]'
 TAB_STRIP = '[data-testid="panel-tab-strip"]'
@@ -40,7 +40,7 @@ DOCUMENT_PANEL = '[data-testid="spec-document-panel"]'
 @pytest.fixture(scope="module")
 def spec_tab_id(api, spec_project_id: str) -> str:
     """The live tab key for `DOCUMENT_PATH` — its Hub document id where one exists, else the path
-    itself (design D4, task 3.2). Resolved from the API rather than hardcoded: `teal-roc/spec.html`
+    itself (design D4, task 3.2). Resolved from the API rather than hardcoded: `teal-roc/spec.json`
     already carries a real `spec_documents` row (created through an earlier exploration), so its
     key is `spec:<id>`, not `spec:<path>` — hardcoding the path here would silently test against a
     tab that section 3 no longer opens."""

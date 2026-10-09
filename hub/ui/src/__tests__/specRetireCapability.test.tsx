@@ -29,8 +29,8 @@ vi.mock('@/api/spec', async (importOriginal) => {
   }
 })
 
-const OLD = 'spec/capabilities/old/spec.html'
-const NEW = 'spec/capabilities/new/spec.html'
+const OLD = 'spec/capabilities/old/spec.json'
+const NEW = 'spec/capabilities/new/spec.json'
 
 function capability(path: string, title: string, phase = 'current') {
   return {
@@ -56,7 +56,7 @@ function renderBar() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  documents = [capability(OLD, 'Old'), capability(NEW, 'New'), capability('spec/capabilities/gone/spec.html', 'Gone', 'archived')]
+  documents = [capability(OLD, 'Old'), capability(NEW, 'New'), capability('spec/capabilities/gone/spec.json', 'Gone', 'archived')]
   retired = undefined
 })
 

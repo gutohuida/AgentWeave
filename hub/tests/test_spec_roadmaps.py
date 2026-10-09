@@ -23,7 +23,7 @@ from hub.spec_payload import (
     validate_payload,
 )
 
-ROADMAP_PATH = "spec/changes/the-plan/spec.html"
+ROADMAP_PATH = "spec/changes/the-plan/spec.json"
 
 
 def _slices():
@@ -674,7 +674,7 @@ async def test_a_slice_the_operator_created_has_no_author_to_ask(
     app, auth_headers, planner, scheduled
 ):
     roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    slice_path = "spec/changes/operator-slice/spec.html"
+    slice_path = "spec/changes/operator-slice/spec.json"
     created = await app.post(
         f"{BASE}/documents", json={"path": slice_path, "title": "Slice one"}, headers=auth_headers
     )
@@ -896,7 +896,9 @@ async def test_a_slice_document_says_whose_slice_it_is(app, auth_headers, planne
     roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
     slice_path = await _proposed_slice(app, auth_headers, planner, roadmap_path)
 
-    html = (tmp_path / slice_path).read_text(encoding="utf-8")
+    # The page is rendered on read from the stored payload (the file holds no HTML).
+    got = await app.get(f"{BASE}/spec", params={"path": slice_path}, headers=auth_headers)
+    html = got.json()["content"]
     line = html[html.index("aw-slice-of") :].split("</p>", 1)[0]
     assert "s1" in line and "Slice one" in line and "The plan" in line
 

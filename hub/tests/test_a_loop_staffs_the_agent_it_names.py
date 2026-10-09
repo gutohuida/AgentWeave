@@ -60,7 +60,7 @@ async def _loop_job(db, *, suffix, agent="gamma", declares_document=False):
             SpecDocument(
                 id=f"doc-alsn-{suffix}",
                 project_id="proj-test",
-                path=f"spec/alsn-{suffix}.html",
+                path=f"spec/alsn-{suffix}.json",
                 title=f"ALSN {suffix}",
                 phase="current",
                 kind="capability",

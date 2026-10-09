@@ -19,7 +19,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent, SpecDocument
 
 BASE = "/api/v1/projects/proj-test/project"
-PATH = "spec/changes/interview/spec.html"
+PATH = "spec/changes/interview/spec.json"
 
 
 async def _create_document(app, auth_headers):
@@ -123,7 +123,7 @@ async def test_a_charterless_exploring_turn_gets_all_of_it(app, auth_headers, tm
 # (change `a-document-says-how-it-will-be-built-and-approval-starts-it`)
 # ---------------------------------------------------------------------------
 
-ROADMAP_PATH = "spec/changes/interview-roadmap/spec.html"
+ROADMAP_PATH = "spec/changes/interview-roadmap/spec.json"
 
 
 async def _create_roadmap_document(app, auth_headers, path):

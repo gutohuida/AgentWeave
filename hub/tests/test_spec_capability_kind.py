@@ -17,8 +17,8 @@ from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
-CAP_PATH = "spec/capabilities/demo/spec.html"
-CHANGE_PATH = "spec/changes/demo/spec.html"
+CAP_PATH = "spec/capabilities/demo/spec.json"
+CHANGE_PATH = "spec/changes/demo/spec.json"
 
 
 @pytest.fixture

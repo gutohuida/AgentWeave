@@ -15,13 +15,14 @@ from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Run, SpecDocumentEvent
 from hub.main import create_app
-from hub.spec_payload import SCHEMA_VERSION, extract_payload
+from hub.spec_documents import parse_hub, parse_stored
+from hub.spec_payload import SCHEMA_VERSION
 
 from ._routing import iter_api_routes
 
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
-PATH = "spec/changes/demo/spec.html"
+PATH = "spec/changes/demo/spec.json"
 
 
 @pytest.fixture
@@ -117,7 +118,7 @@ async def test_creating_the_same_document_twice_is_refused(app, auth_headers, tm
 @pytest.mark.asyncio
 async def test_an_unsafe_document_path_is_refused(app, auth_headers, tmp_path):
     response = await app.post(
-        f"{BASE}/documents", json={"path": "../escape.html"}, headers=auth_headers
+        f"{BASE}/documents", json={"path": "../escape.json"}, headers=auth_headers
     )
     assert response.status_code == 400
 
@@ -210,7 +211,7 @@ async def test_submitting_to_a_document_that_does_not_exist_says_how_to_start_on
 ):
     """`agent-created-documents` retires the old wording that named the operator as the only
     remedy — an agent can create the document itself now, so the refusal names that instead."""
-    response = await _submit(app, run_headers, _document(), path="spec/changes/absent/spec.html")
+    response = await _submit(app, run_headers, _document(), path="spec/changes/absent/spec.json")
     assert response.status_code == 404
     assert "create_spec_document" in response.json()["detail"]
 
@@ -258,7 +259,7 @@ async def test_unknown_payload_fields_survive_the_round_trip(
     await _create(app, auth_headers)
     await _submit(app, run_headers, _document(gate_policy={"rigor": "gate"}))
 
-    stored = extract_payload((tmp_path / PATH).read_text(encoding="utf-8"))
+    stored = parse_stored((tmp_path / PATH).read_text(encoding="utf-8"))
     assert stored["gate_policy"] == {"rigor": "gate"}
 
 
@@ -382,9 +383,9 @@ async def test_the_full_operator_path_reaches_approved(app, auth_headers, run_he
     assert approved.status_code == 200
     assert approved.json()["phase"] == "approved"
 
-    # The visible status in the file follows the phase rather than leading it.
+    # The phase in the file's hub block follows the row's phase rather than leading it.
     content = (tmp_path / PATH).read_text(encoding="utf-8")
-    assert 'name="aw-spec-status" content="approved"' in content
+    assert parse_hub(content)["phase"] == "approved"
 
 
 @pytest.mark.asyncio
@@ -469,7 +470,7 @@ async def test_an_illegal_transition_is_refused(app, auth_headers, tmp_path):
 
 import re  # noqa: E402 - kept beside the tests that need it
 
-PLACEHOLDER_RE = re.compile(r"^spec/changes/[a-z]+-[a-z]+(-[0-9a-f]+)?/spec\.html$")
+PLACEHOLDER_RE = re.compile(r"^spec/changes/[a-z]+-[a-z]+(-[0-9a-f]+)?/spec\.json$")
 
 
 @pytest.mark.asyncio
@@ -517,7 +518,7 @@ async def test_the_placeholder_never_becomes_the_title(app, auth_headers, tmp_pa
     content = (tmp_path / created["path"]).read_text(encoding="utf-8")
 
     assert created["title"] == "Untitled exploration"
-    assert "<title>Untitled exploration</title>" in content
+    assert parse_stored(content)["title"] == "Untitled exploration"
     for word in placeholder.split("-"):
         assert word not in created["title"].lower()
 

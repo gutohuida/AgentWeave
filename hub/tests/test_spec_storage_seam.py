@@ -1,8 +1,8 @@
 """One storage seam: no Hub module parses a stored specification file itself.
 
 `a-spec-document-is-stored-as-its-payload` FR-4. Every reader of a document's payload goes through
-`spec_documents.parse_stored` / `read_payload`, so changing what a stored file is (HTML today,
-`spec.json` next) is an edit to that one function. Twenty call sites parsed file content before.
+`spec_documents.parse_stored` / `read_payload`, so changing what a stored file is (now `spec.json`)
+is an edit to that one function. Twenty call sites parsed file content before.
 """
 
 from __future__ import annotations
@@ -43,9 +43,7 @@ def test_only_the_seam_parses_a_stored_file():
 
 def test_the_seam_reads_what_a_save_wrote(tmp_path):
     from hub.project_workspace import ProjectWorkspace
-    from hub.spec_documents import parse_stored, read_payload, write_document
-    from hub.spec_payload import validate_payload
-    from hub.spec_render import render_document
+    from hub.spec_documents import parse_stored, read_payload, write_payload
 
     stored = {
         "schema_version": 1,
@@ -54,12 +52,11 @@ def test_the_seam_reads_what_a_save_wrote(tmp_path):
         "summary": "Answer ping.",
         "requirements": [{"key": "pong", "statement": "The service MUST answer.", "modal": "MUST"}],
     }
-    payload = validate_payload(stored)
-    content = render_document(payload, {}, phase="exploring", stored_payload=stored)
     workspace = ProjectWorkspace(project_id="p", root=tmp_path, path_key="test:p")
-    write_document(workspace, "spec/changes/ping/spec.html", content)
+    hub = {"phase": "exploring", "rigor": "sketch", "step": "intake", "size": None}
+    content = write_payload(workspace, "spec/changes/ping/spec.json", stored, hub)
 
-    assert read_payload(workspace, "spec/changes/ping/spec.html") == stored
+    assert read_payload(workspace, "spec/changes/ping/spec.json") == stored
     assert parse_stored(content) == stored
-    assert read_payload(workspace, "spec/changes/absent/spec.html") is None
+    assert read_payload(workspace, "spec/changes/absent/spec.json") is None
     assert parse_stored(None) is None and parse_stored("") is None

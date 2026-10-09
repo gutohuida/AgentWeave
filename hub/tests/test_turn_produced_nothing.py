@@ -20,7 +20,7 @@ from hub.db.models import (
 )
 from hub.run_divergence import evaluate_run_end
 
-DOC = "spec/changes/teal-manticore/spec.html"
+DOC = "spec/changes/teal-manticore/spec.json"
 
 
 def _content_event(document_id: str, suffix: str) -> SpecDocumentEvent:
@@ -212,7 +212,7 @@ async def test_a_populated_digest_alone_does_not_mean_the_document_was_written(a
     without one. Gating on it made the whole check unreachable, and the six tests above passed
     anyway because the fixture built a null-digest document the product never produces.
 
-    The original subject is the proof: `spec/changes/teal-manticore/spec.html`, the document the
+    The original subject is the proof: `spec/changes/teal-manticore/spec.json`, the document the
     author was given and never wrote, records `created` and `content` at the same microsecond.
     """
     await _setup("run-f41-digest")

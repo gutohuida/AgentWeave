@@ -46,7 +46,7 @@ vi.mock('@/api/spec', () => ({
       documents: [
         {
           id: 'spdoc-1',
-          path: 'spec/example.html',
+          path: 'spec/example.json',
           title: 'Example',
           kind: 'baseline',
           phase: 'approved',
@@ -228,7 +228,7 @@ describe('the requirement chip row (F4)', () => {
   it('gives a chip the rejected tone from its document coverage state, not requirement_links[].state', () => {
     // Both links carry the same lifecycle state (`active`) — if the chip read `state`, as the
     // design's first draft wrongly did (R1), the two chips below could not be told apart.
-    setCoverage('spec/example.html', [
+    setCoverage('spec/example.json', [
       coverageEntry({ identifier: 'FR-1', state: 'rejected' }),
       coverageEntry({ identifier: 'FR-2', state: 'verified' }),
     ])
@@ -264,7 +264,7 @@ describe('the requirement chip row (F4)', () => {
   })
 
   it('gives a chip awaiting review the pending tone, and one with no coverage row the neutral tone', () => {
-    setCoverage('spec/example.html', [coverageEntry({ identifier: 'FR-1', state: 'evidence_awaiting_review' })])
+    setCoverage('spec/example.json', [coverageEntry({ identifier: 'FR-1', state: 'evidence_awaiting_review' })])
     renderCollapsed(
       makeTask({
         requirement_ids: ['FR-1', 'FR-2'],
@@ -296,7 +296,7 @@ describe('the requirement chip row (F4)', () => {
   })
 
   it('shows a one-line summary by coverage state once there are more than four chips', () => {
-    setCoverage('spec/example.html', [
+    setCoverage('spec/example.json', [
       coverageEntry({ identifier: 'FR-1', state: 'verified' }),
       coverageEntry({ identifier: 'FR-2', state: 'verified' }),
       coverageEntry({ identifier: 'FR-3', state: 'rejected' }),
@@ -322,7 +322,7 @@ describe('the requirement chip row (F4)', () => {
   })
 
   it('shows no summary for a task with four or fewer linked requirements', () => {
-    setCoverage('spec/example.html', [
+    setCoverage('spec/example.json', [
       coverageEntry({ identifier: 'FR-1', state: 'verified' }),
       coverageEntry({ identifier: 'FR-2', state: 'verified' }),
       coverageEntry({ identifier: 'FR-3', state: 'rejected' }),
@@ -365,7 +365,7 @@ describe('the requirement chip row (F4)', () => {
 
     await userEvent.click(screen.getByTestId('task-requirement-chip-task-1-FR-1'))
 
-    expect(onOpenRequirement).toHaveBeenCalledWith('spec/example.html', 'FR-1')
+    expect(onOpenRequirement).toHaveBeenCalledWith('spec/example.json', 'FR-1')
   })
 
   it('is not clickable when the requirement resolves to no document', async () => {

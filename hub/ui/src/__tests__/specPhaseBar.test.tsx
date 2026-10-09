@@ -39,7 +39,7 @@ vi.mock('@/api/spec', async (importOriginal) => {
   }
 })
 
-function renderBar(path = 'spec/changes/demo/spec.html') {
+function renderBar(path = 'spec/changes/demo/spec.json') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -51,7 +51,7 @@ function renderBar(path = 'spec/changes/demo/spec.html') {
 function doc(overrides: Record<string, unknown> = {}) {
   return {
     id: 'spdoc-1',
-    path: 'spec/changes/demo/spec.html',
+    path: 'spec/changes/demo/spec.json',
     title: 'Demo',
     kind: 'change-spec',
     phase: 'exploring',
@@ -116,7 +116,7 @@ describe('SpecPhaseBar', () => {
       renderBar()
       await userEvent.click(screen.getByTestId('spec-journey-step-intake'))
       expect(setJourney).toHaveBeenCalledWith(
-        { path: 'spec/changes/demo/spec.html', step: 'intake' },
+        { path: 'spec/changes/demo/spec.json', step: 'intake' },
         expect.anything(),
       )
     })
@@ -126,7 +126,7 @@ describe('SpecPhaseBar', () => {
       renderBar()
       await userEvent.selectOptions(screen.getByTestId('spec-journey-size'), 'large')
       expect(setJourney).toHaveBeenCalledWith(
-        { path: 'spec/changes/demo/spec.html', size: 'large' },
+        { path: 'spec/changes/demo/spec.json', size: 'large' },
         expect.anything(),
       )
     })
@@ -196,7 +196,7 @@ describe('SpecPhaseBar', () => {
     await userEvent.click(screen.getByText('Approve'))
 
     expect(setPhase).toHaveBeenCalledWith(
-      { path: 'spec/changes/demo/spec.html', to: 'approved' },
+      { path: 'spec/changes/demo/spec.json', to: 'approved' },
       expect.anything(),
     )
   })
@@ -250,7 +250,7 @@ describe('SpecPhaseBar', () => {
     await userEvent.click(screen.getByText('Reopen'))
 
     expect(setPhase).toHaveBeenCalledWith({
-      path: 'spec/changes/demo/spec.html',
+      path: 'spec/changes/demo/spec.json',
       to: 'exploring',
     })
   })
@@ -319,7 +319,7 @@ describe('SpecPhaseBar', () => {
     await userEvent.click(within(screen.getByRole('dialog')).getByText('Archive'))
 
     expect(setPhase).toHaveBeenCalledWith(
-      { path: 'spec/changes/demo/spec.html', to: 'archived' },
+      { path: 'spec/changes/demo/spec.json', to: 'archived' },
       expect.anything(),
     )
   })
@@ -354,7 +354,7 @@ describe('SpecPhaseBar', () => {
  * `a-documents-rigor-history-and-retired-requirements-are-on-screen`).
  */
 describe('SpecPhaseBar — rigor history and the reason for a change', () => {
-  const PATH = 'spec/changes/demo/spec.html'
+  const PATH = 'spec/changes/demo/spec.json'
 
   function event(id: string, from: string, to: string, reason: string, createdAt: string) {
     return { id, from, to, actor_kind: 'operator', actor: 'operator', reason, created_at: createdAt }

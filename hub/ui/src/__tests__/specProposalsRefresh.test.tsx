@@ -23,7 +23,7 @@ vi.mock('@/api/client', async (importOriginal) => {
   }
 })
 
-const PATH = 'spec/changes/demo/spec.html'
+const PATH = 'spec/changes/demo/spec.json'
 
 beforeEach(() => {
   useConfigStore.setState({

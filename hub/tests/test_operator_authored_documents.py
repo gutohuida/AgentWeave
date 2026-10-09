@@ -18,12 +18,13 @@ from hub import spec_lifecycle
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Run, SpecDocumentEvent
+from hub.spec_documents import parse_hub, parse_stored
 from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
-CAP_PATH = "spec/capabilities/demo/spec.html"
-CHANGE_PATH = "spec/changes/demo/spec.html"
+CAP_PATH = "spec/capabilities/demo/spec.json"
+CHANGE_PATH = "spec/changes/demo/spec.json"
 
 
 @pytest.fixture
@@ -142,8 +143,8 @@ class TestTheOperatorCanWrite:
 
         content = (tmp_path / CAP_PATH).read_text(encoding="utf-8")
         assert "It responds within 200ms" in content
-        assert 'name="aw-spec-kind" content="capability"' in content
-        assert 'name="aw-spec-status" content="current"' in content
+        assert parse_stored(content)["kind"] == "capability"
+        assert parse_hub(content)["phase"] == "current"
 
     async def test_the_operator_writes_a_change_document_too(self, app, auth_headers, tmp_path):
         """Not capability-specific: the operator can write anything an agent could."""

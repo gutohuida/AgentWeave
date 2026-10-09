@@ -16,11 +16,11 @@ import type { SpecListResponse } from '@/api/spec'
  * "show the tree of spec... how each files are organized the folder etc").
  */
 
-const HOME = 'spec/spec.html'
-const ROADMAP = 'spec/roadmaps/collaboration.html'
-const CHANGE = 'spec/changes/queued-message-delivery/spec.html'
-const SECOND = 'spec/changes/agent-handoff/spec.html'
-const ARCHIVED = 'spec/changes/archive/2026-07-29-add-agent-stream-kinds/spec.html'
+const HOME = 'spec/spec.json'
+const ROADMAP = 'spec/roadmaps/collaboration.json'
+const CHANGE = 'spec/changes/queued-message-delivery/spec.json'
+const SECOND = 'spec/changes/agent-handoff/spec.json'
+const ARCHIVED = 'spec/changes/archive/2026-07-29-add-agent-stream-kinds/spec.json'
 
 const LIST: SpecListResponse = {
   specs: [
@@ -32,7 +32,7 @@ const LIST: SpecListResponse = {
   ],
   home: HOME,
   manifest: null,
-  missing: [{ path: 'spec/changes/gone/spec.html', title: 'Gone Change', kind: 'change-spec', status: 'draft', parent: null, order: 50 }],
+  missing: [{ path: 'spec/changes/gone/spec.json', title: 'Gone Change', kind: 'change-spec', status: 'draft', parent: null, order: 50 }],
   diagnostics: [],
 }
 
@@ -82,7 +82,7 @@ describe('buildPathTree — the folder hierarchy', () => {
   it('includes archived and missing documents — a folder view that hides drift lies', () => {
     const paths = buildPathTree(inventory.nodes).filter((r) => r.kind === 'document').map((r) => r.path)
     expect(paths).toContain(ARCHIVED)
-    expect(paths).toContain('spec/changes/gone/spec.html')
+    expect(paths).toContain('spec/changes/gone/spec.json')
   })
 
   it('is empty for an empty inventory rather than inventing a root', () => {
@@ -99,25 +99,25 @@ describe('the picker browses before it searches', () => {
     expect(results.getByTestId(`spec-tree-document-${CHANGE}`)).toHaveTextContent('Queued message delivery')
   })
 
-  it('shows the filename beside the title, because spec.html repeats down a column', () => {
+  it('shows the filename beside the title, because spec.json repeats down a column', () => {
     renderPicker()
-    expect(screen.getByTestId(`spec-tree-document-${CHANGE}`)).toHaveTextContent('spec.html')
+    expect(screen.getByTestId(`spec-tree-document-${CHANGE}`)).toHaveTextContent('spec.json')
   })
 
   it('does not print the filename twice when it is also the title', () => {
     // An unfiled document has no manifest title, so its label falls back to the filename. Showing
-    // both rendered `a1-probe.html a1-probe.html` on one row.
+    // both rendered `a1-probe.json a1-probe.json` on one row.
     const unfiled = buildInventory({
       ...LIST,
-      specs: [{ path: 'spec/a1-probe.html', state: 'unindexed' }],
+      specs: [{ path: 'spec/a1-probe.json', state: 'unindexed' }],
       missing: [],
     })
     cleanup()
     render(
       <SpecDocumentPicker open onOpenChange={() => {}} inventory={unfiled} onSelect={vi.fn()} />,
     )
-    const row = screen.getByTestId('spec-tree-document-spec/a1-probe.html')
-    expect(row.textContent?.match(/a1-probe\.html/g)).toHaveLength(1)
+    const row = screen.getByTestId('spec-tree-document-spec/a1-probe.json')
+    expect(row.textContent?.match(/a1-probe.json/g)).toHaveLength(1)
   })
 
   it('still shows the archive date rather than the filename for an archived document', () => {
@@ -139,7 +139,7 @@ describe('the picker browses before it searches', () => {
 
   it('keeps a missing document visible and unselectable in the tree', () => {
     const { onSelect } = renderPicker()
-    const missing = screen.getByTestId('spec-tree-document-spec/changes/gone/spec.html')
+    const missing = screen.getByTestId('spec-tree-document-spec/changes/gone/spec.json')
     expect(missing).toBeDisabled()
     fireEvent.click(missing)
     expect(onSelect).not.toHaveBeenCalled()

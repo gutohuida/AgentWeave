@@ -18,6 +18,7 @@ written.
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -26,7 +27,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .project_workspace import ProjectPathError, ProjectWorkspace
 from .spec_manifest import (
-    HTML_HEAD_MAX_BYTES,
+    INDEX_PATH,
+    LEGACY_SUFFIX,
     MANIFEST_MAX_BYTES,
     Manifest,
     ManifestDocument,
@@ -34,14 +36,22 @@ from .spec_manifest import (
     build_manifest,
     compute_intrinsic_conflicts,
     dump_manifest,
+    json_path_for,
     load_manifest,
     validate_spec_path,
 )
-from .spec_payload import extract_payload
 from .spec_render import CorpusChild, CorpusContext
 
 SPEC_DIR = "spec"
-INDEX_RELATIVE = "spec/index.json"
+INDEX_RELATIVE = INDEX_PATH
+
+#: The stored file's Hub-owned block: the document's phase, rigor, step and size, copied from its
+#: row for whoever reads the file (`a-spec-document-is-stored-as-its-payload` FR-1, D3). The row is
+#: the authority; a payload may not carry this key (`spec_payload.validate_payload`).
+HUB_FIELD = "hub"
+
+#: The route a legacy `.html` document is converted by, named in its diagnostic (FR-6).
+CONVERT_ROUTE = "POST /project/spec/convert?to=json"
 
 # A tree far past this is a sign of something other than a specification tree —
 # a vendored directory, a build output. Discovery stops and says so rather than
@@ -85,7 +95,8 @@ def discover(workspace: ProjectWorkspace) -> Tuple[List[str], List[Dict[str, Any
     """Every safe document beneath ``spec/``, plus a diagnostic for each excluded one.
 
     Nested archives, roadmaps and system maps are documents; discovery is not
-    limited to ``spec/changes/*/spec.html``.
+    limited to ``spec/changes/*/spec.json``. A legacy ``.html`` document is not listed: it is
+    reported as a ``legacy_html_document`` diagnostic naming the conversion route (FR-6).
     """
     diagnostics: List[Dict[str, Any]] = []
     try:
@@ -103,7 +114,8 @@ def discover(workspace: ProjectWorkspace) -> Tuple[List[str], List[Dict[str, Any
         # one invites `.git` on a large repository.
         dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
         for filename in sorted(filenames):
-            if not filename.lower().endswith(".html"):
+            lowered = filename.lower()
+            if not lowered.endswith((".json", LEGACY_SUFFIX)):
                 continue
             if len(found) >= MAX_DISCOVERED_DOCUMENTS:
                 truncated = True
@@ -112,6 +124,18 @@ def discover(workspace: ProjectWorkspace) -> Tuple[List[str], List[Dict[str, Any
             try:
                 relative = absolute.relative_to(workspace.root).as_posix()
             except ValueError:  # pragma: no cover - walk stays under root
+                continue
+            if relative == INDEX_RELATIVE:
+                continue
+            if lowered.endswith(LEGACY_SUFFIX):
+                diagnostics.append(
+                    _diag(
+                        "legacy_html_document",
+                        path=relative,
+                        expected=json_path_for(relative),
+                        actual=f"stored as HTML; convert it with {CONVERT_ROUTE}",
+                    )
+                )
                 continue
             try:
                 validate_spec_path(relative)
@@ -143,16 +167,57 @@ def read_document(workspace: ProjectWorkspace, path: str) -> Optional[str]:
     return resolved.read_text(encoding="utf-8")
 
 
+def _load_stored(content: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not content:
+        return None
+    try:
+        parsed = json.loads(content)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def parse_stored(content: Optional[str]) -> Optional[Dict[str, Any]]:
     """The payload a stored document file holds, or ``None`` when it holds none.
 
     The one interpretation of a stored file (`a-spec-document-is-stored-as-its-payload` FR-4):
     every Hub reader of a document's payload gets it here or through `read_payload`, and none
     parses file content itself, so changing what a stored file is changes this function alone.
+    A stored file is JSON: the payload plus the Hub's block, which is not part of the payload and
+    is removed here (`parse_hub` reads it).
     """
-    if not content:
+    stored = _load_stored(content)
+    if stored is None:
         return None
-    return extract_payload(content)
+    stored.pop(HUB_FIELD, None)
+    return stored
+
+
+def parse_hub(content: Optional[str]) -> Dict[str, Any]:
+    """The Hub block a stored file carries (phase, rigor, step, size), or ``{}`` when none."""
+    stored = _load_stored(content)
+    block = stored.get(HUB_FIELD) if stored is not None else None
+    return block if isinstance(block, dict) else {}
+
+
+def serialize(stored: Dict[str, Any], hub: Dict[str, Any]) -> str:
+    """A stored file's text: deterministic, so one reworded requirement is a one-line diff (FR-3).
+
+    Sorted keys, two-space indent, one value per line, LF and a trailing newline: the same payload
+    and block always produce the same bytes.
+    """
+    data = {key: value for key, value in stored.items() if key != HUB_FIELD}
+    data[HUB_FIELD] = hub
+    return json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
+
+
+def write_payload(
+    workspace: ProjectWorkspace, path: str, stored: Dict[str, Any], hub: Dict[str, Any]
+) -> str:
+    """Store a document as its payload plus the Hub block, returning the text written."""
+    content = serialize(stored, hub)
+    write_document(workspace, path, content)
+    return content
 
 
 def read_payload(workspace: ProjectWorkspace, path: str) -> Optional[Dict[str, Any]]:
@@ -178,7 +243,7 @@ def document_exists(workspace: ProjectWorkspace, path: str) -> bool:
 
 
 def write_document(workspace: ProjectWorkspace, path: str, content: str) -> Path:
-    """Write a rendered document, creating its parent directories."""
+    """Write a document's stored text, creating its parent directories."""
     validate_spec_path(path)
     resolved = workspace.resolve_relative(path)
     resolved.parent.mkdir(parents=True, exist_ok=True)
@@ -339,7 +404,7 @@ def build_index(
                 kind=kind,
                 status=phase,
                 # `parent` is carried or left unset — never derived from directory nesting.
-                # `spec/capabilities/a/spec.html` and `spec/changes/b/spec.html` share no
+                # `spec/capabilities/a/spec.json` and `spec/changes/b/spec.json` share no
                 # meaningful parent document, and inventing one writes a hierarchy the operator
                 # never chose into a file that travels with the folder.
                 parent=carried.parent if carried is not None else None,
@@ -468,18 +533,24 @@ def build_corpus_context(manifest: Manifest, path: str, summaries: Dict[str, str
     return CorpusContext(path=path, home=manifest.home, parent=parent, children=children)
 
 
-def _read_head(workspace: ProjectWorkspace, path: str) -> Optional[str]:
+def _read_declared(workspace: ProjectWorkspace, path: str) -> Optional[Dict[str, Optional[str]]]:
+    """The title, kind and status a stored file declares, for the index conflict check."""
     try:
-        resolved = workspace.resolve_relative(path)
-    except ProjectPathError:  # pragma: no cover - path already validated
+        content = read_document(workspace, path)
+    except (SpecPathError, ProjectPathError, OSError):
         return None
-    if not resolved.is_file():
+    stored = parse_stored(content)
+    if stored is None:
         return None
-    try:
-        with resolved.open("r", encoding="utf-8", errors="replace") as handle:
-            return handle.read(HTML_HEAD_MAX_BYTES)
-    except OSError:
-        return None
+
+    def _text(value: Any) -> Optional[str]:
+        return (value.strip() or None) if isinstance(value, str) else None
+
+    return {
+        "title": _text(stored.get("title")),
+        "kind": _text(stored.get("kind")),
+        "status": _text(parse_hub(content).get("phase")),
+    }
 
 
 def _select_home(
@@ -487,7 +558,7 @@ def _select_home(
 ) -> Tuple[Optional[str], List[Dict[str, Any]]]:
     """Preserve an explicit home; ask rather than choose when it is ambiguous.
 
-    The previous implementation fell back to ``spec/spec.html`` and then to the
+    The previous implementation fell back to ``spec/spec.json`` and then to the
     first document alphabetically. That is a choice made on the operator's
     behalf, and it is indistinguishable from a home they set. The shell still
     resolves a document to display; what it must not do is call the result an
@@ -568,14 +639,14 @@ def compute_state(workspace: ProjectWorkspace) -> DocumentTreeState:
             )
             diagnostics.append(_diag("missing_document", path=document.path))
 
-        heads: Dict[str, str] = {}
+        declared: Dict[str, Dict[str, Optional[str]]] = {}
         for document in manifest.documents:
             if document.path not in available:
                 continue
-            head = _read_head(workspace, document.path)
+            head = _read_declared(workspace, document.path)
             if head is not None:
-                heads[document.path] = head
-        for conflict in compute_intrinsic_conflicts(manifest, heads):
+                declared[document.path] = head
+        for conflict in compute_intrinsic_conflicts(manifest, declared):
             diagnostics.append(conflict.to_dict())
 
     home, home_diagnostics = _select_home(manifest, on_disk)
@@ -584,7 +655,7 @@ def compute_state(workspace: ProjectWorkspace) -> DocumentTreeState:
     def _sort_key(entry: Dict[str, Any]) -> Tuple[int, Any, str]:
         if entry.get("state") == "filed":
             return (0, entry["order"], entry["path"])
-        return (1, entry["path"] != "spec/spec.html", entry["path"])
+        return (1, entry["path"] != "spec/spec.json", entry["path"])
 
     specs.sort(key=_sort_key)
 
