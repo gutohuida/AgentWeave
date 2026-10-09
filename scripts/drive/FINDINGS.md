@@ -35280,3 +35280,11 @@ Specified earlier and never built (the specs now say so): a live thinking sectio
 A roadmap's slices are specified later, one at a time, in their own change documents (`spec_payload.py` `_check_kind_shape`). So a question that only that slice's spec can answer is a normal thing for a roadmap to carry. One example is "is the map rendered into every turn?", which belongs to the vault slice. `spec_completeness.py:264-272` blocks proposing any document with an unresolved question, roadmaps included. The author then has two bad choices: answer early, as a guess, or hide the question in a slice's `intent` prose, where nothing tracks it. That second choice is the workaround used here.
 
 **Fix shape (not decided):** let an open question name the slice it belongs to (`slice: <key>`). On a roadmap, only questions with no slice block proposing it. The question should then show up when that slice's change document is written. Tier 1.
+
+## F574 (C) -- a document written whole through the content route always warns "steps skipped" on approval
+
+**Status:** open 2026-10-09. Found while approving `spdoc-a78776d50704` (`the-hubs-background-jobs-are-configured-on-a-manager-page`), interactive.
+
+The operator wrote that change document in one PUT. It had every section filled: requirements, acceptance criteria with how-to-check, tasks, design and delivery. Approval still answered 409 `approval_warnings` with `steps_skipped`: "the document is at step 'intake' ... goes on to requirements, acceptance, approach, tasks, delivery, which it never reached". The step-skipped warning judges the document by its recorded step, not by what it contains. So every document authored outside a stepwise conversation gets the warning, including `scripts/drive/author_change.py` documents and imported ones. A warning that fires on every complete document trains the operator to click "approve anyway". Approved anyway here.
+
+**Fix shape (not decided):** compute the warning from the content each skipped step produces (requirements present, criteria with `how_to_check`, tasks), or advance the step on a content write that fills the later steps. Tier 0 or 1.
