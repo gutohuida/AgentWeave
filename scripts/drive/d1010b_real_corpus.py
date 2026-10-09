@@ -9,11 +9,9 @@ renders each, and convert back restores the same .html set. Never touches the re
     py -3.11 scripts/drive/d1010b_real_corpus.py
 """
 
-import json
 import pathlib
 import shutil
 import sys
-import time
 import urllib.parse
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
