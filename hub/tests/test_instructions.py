@@ -90,5 +90,3 @@ async def test_get_agent_context_places_instructions_before_charter(app, auth_he
 
     assert "# Global Rule\n\nBe concise." in content
     assert content.index("# Global Rule") < content.index("Charter guidance")
-
-
