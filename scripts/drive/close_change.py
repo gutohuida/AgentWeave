@@ -824,10 +824,14 @@ elif sys.argv[1:] == ["--fold-journey"]:
     fold_split("fjourney", JOURNEY_FOLD)
 elif sys.argv[1:2] == ["--fold-change"]:
     target = CHANGE_FOLDS[sys.argv[2]]
+
+    def cap(name: str) -> str:
+        return f"spec/capabilities/{name}/spec.json"
+
     if isinstance(target, dict):
-        fold_split(sys.argv[2], target)
+        fold_split(sys.argv[2], {cap(name): keys for name, keys in target.items()})
     else:
-        fold(sys.argv[2], target)
+        fold(sys.argv[2], cap(target))
 else:
     for arg in sys.argv[1:]:
         close(arg)

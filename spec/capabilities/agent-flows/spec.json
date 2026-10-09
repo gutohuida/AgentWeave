@@ -1525,6 +1525,24 @@
       "requirement": "n10",
       "then": "a reviewer_undeclared warning is returned, and ready_to_propose is unchanged",
       "when": "it is submitted"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow document whose delivery names tester tess and reviewer rev, one task naming no reviewer and one naming rev",
+      "how_to_check": "Hub unit test on scheduler review staffing",
+      "key": "a-tester-drives-the-built-product-and-keeps-the-spe-named-tester",
+      "requirement": "a-tester-drives-the-built-product-and-keeps-the-s-tester-default",
+      "then": "the first review goes to tess and the second to rev",
+      "when": "each task is completed and the flow stages its review"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a review turn of a flow document with tester absent, and one with tester false",
+      "how_to_check": "Hub unit test on the composed briefing",
+      "key": "a-tester-drives-the-built-product-and-keeps-the-spec-true-brief",
+      "requirement": "a-tester-drives-the-built-product-and-keeps-the-spec-test-brief",
+      "then": "the first carries the drive-the-product, within-criteria and side-findings lines and names amend_spec_document; the second carries none of them",
+      "when": "the briefings are composed"
     }
   ],
   "algorithms": [],
@@ -1573,13 +1591,15 @@
       "FR-46": "e7bbabeed4bb05de59733e94a0b7512c30c5784ba4fa62152dce7263fb048d91",
       "FR-47": "304def36088d99e7aabff893af9868ebcf9fac663f8aba832958b516e534cd30",
       "FR-48": "13e67eac4f2173f883c4bd40be6f5c8a48c1758dcedb555a98ad7f394fa3f53b",
+      "FR-49": "8ab4a178948ebfba1be6250c6036bb6adf93cf309356c58f22a1246a6bf094bf",
       "FR-5": "2bf5a8b71078c495b84638bc27e232dfa4d54e1f12f07abd04d97b99e390cba4",
+      "FR-50": "462329d752d9d87f935ad2a618aafb5a8f73b27b3405c1d70ac4e285903ac1dc",
       "FR-6": "cc139f28e5d55807598615bf73a5621f0b45542840fde940b9caf8e6500966eb",
       "FR-7": "7686a10b0bf967730d0b843a55dc2a0997d4e4a44836d14294793091b795bce4",
       "FR-8": "85b8ed980e83db0077ba703df3273ad47c908341da0a23b3bf1fec615a2716b8",
       "FR-9": "d9f72cd8351cffecaa2b8b77dbcf64ffb44e7950651a9275dd844ebaae25c628"
     },
-    "high_water": 48,
+    "high_water": 50,
     "requirements": {
       "a-change-document-declares-how-it-will-be-built-before-it-is": "FR-46",
       "a-completed-task-is-claimable-by-an-agent-that-did-not-compl": "FR-3",
@@ -1613,6 +1633,8 @@
       "a-task-a-flow-declines-to-staff-for-review-is-named-to-the-o": "FR-15",
       "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint": "FR-40",
       "a-task-reported-as-in-flight-is-one-an-agent-is-actually-wor": "FR-42",
+      "a-tester-drives-the-built-product-and-keeps-the-s-tester-default": "FR-49",
+      "a-tester-drives-the-built-product-and-keeps-the-spec-test-brief": "FR-50",
       "an-active-task-makes-its-assignee-unavailable-only-while-som": "FR-21",
       "an-agent-attributed-to-a-task-shall-be-attributed-in-a-state": "FR-44",
       "an-agent-fired-to-review-a-completed-task-is-given-a-review-": "FR-7",
@@ -1984,6 +2006,20 @@
       "party": null,
       "rationale": "The Hub cannot read a reviewer promised in prose, so it says what the fields will do (F508).",
       "statement": "When a flow-delivered document names no reviewer, neither as `delivery.reviewer` nor on any local task, the submission's answer SHOULD carry an advisory `reviewer_undeclared` warning saying any free agent will review."
+    },
+    {
+      "key": "a-tester-drives-the-built-product-and-keeps-the-s-tester-default",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On by default (roadmap slice); absent means on, so no stored payload changes.",
+      "statement": "A flow document's review turns MUST be test turns unless its delivery sets tester to false; when delivery.tester names an agent, the flow MUST staff a task's review with that agent before delivery.reviewer, and a task's own reviewer MUST still come first."
+    },
+    {
+      "key": "a-tester-drives-the-built-product-and-keeps-the-spec-test-brief",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A reviewer prompted to find gaps reports some (research, over-reporting).",
+      "statement": "A test turn's briefing MUST tell the agent to drive the running product against the task's criteria as well as review code and evidence, to amend the document only within its stated criteria, and to put side findings in a task outside the flow; a review turn with testing off MUST NOT carry it."
     }
   ],
   "schema_version": 1,

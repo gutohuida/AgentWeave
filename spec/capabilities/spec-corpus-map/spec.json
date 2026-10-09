@@ -454,6 +454,24 @@
       "requirement": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
       "then": "it carries no parent or placement field",
       "when": "a document's payload is read back from its rendered file"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project",
+      "how_to_check": "Hub route test",
+      "key": "a-spec-document-is-stored-as-its-payload-html-create-refused",
+      "requirement": "a-spec-document-is-stored-as-its-payload-json-paths",
+      "then": "the route answers 400 naming spec/changes/x/spec.json",
+      "when": "a document is created at spec/changes/x/spec.html"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec/ holding a legacy .html document",
+      "how_to_check": "Hub route test",
+      "key": "a-spec-document-is-stored-as-its-payload-legacy-diagnostic",
+      "requirement": "a-spec-document-is-stored-as-its-payload-legacy-reported",
+      "then": "it carries a legacy_html_document diagnostic for that path and no document entry",
+      "when": "the documents list is read"
     }
   ],
   "algorithms": [],
@@ -472,6 +490,8 @@
       "FR-19": "ce955f46820ddc6d377a5c919a2f7bf55fb6eb2fcb746310e9cbe2b4042a2350",
       "FR-2": "be820b15f1fe106beefe4397ecdef12098f88202d0b06e34c846dd135516c31a",
       "FR-20": "91971fd538698f17c7a700785189ef4408151826091ec55c39b3b062e88867f0",
+      "FR-21": "330c7f79d1225e6b62e83289d13b907a0f0d8fc015fc99f0f51d2da49c2134f4",
+      "FR-22": "5cebc531668e0a983cee83b2fd0e02647467ce73c3c6628f5dd7d85541166f2c",
       "FR-3": "e225931898f43d2bfeb9c14a36a940dde339f5f666b876852168970065e7099a",
       "FR-4": "c2ff3098ff78186b4122f907f5c0579b302dbd9857418edc565a2c880bc2fafc",
       "FR-5": "aa8e923ff00dfc7369cc2a347395cdf51bc4dbcffbe224fdb9078a50e51e6c59",
@@ -480,7 +500,7 @@
       "FR-8": "0d2fd5668d5055574085355ee5e32d07bb073a11e0ffc67f25126fd6aec83a4b",
       "FR-9": "95783265b823d41c9e550a93ea5540732b4f0660ae684dd7655686592c8a87e5"
     },
-    "high_water": 20,
+    "high_water": 22,
     "requirements": {
       "a-child-with-no-usable-summary-is-reported-as-such": "FR-3",
       "a-document-s-place-in-the-corpus-is-operator-set-and-held-in": "FR-4",
@@ -488,6 +508,8 @@
       "a-failure-to-write-the-index-does-not-abandon-the-requiremen": "FR-19",
       "a-re-render-is-driven-from-the-file-and-is-not-an-authored-c": "FR-6",
       "a-rendered-document-carries-navigation-to-its-home-and-its-p": "FR-1",
+      "a-spec-document-is-stored-as-its-payload-json-paths": "FR-21",
+      "a-spec-document-is-stored-as-its-payload-legacy-reported": "FR-22",
       "an-unreadable-or-absent-index-degrades-visibly": "FR-14",
       "both-index-implementations-agree-on-the-vocabulary": "FR-20",
       "document-discovery-covers-every-safe-document": "FR-12",
@@ -667,6 +689,20 @@
       "party": null,
       "rationale": "The two modules deliberately share no import, so only a test holds them together.",
       "statement": "The Hub's and the CLI's index validators SHALL accept exactly the same kinds and phases."
+    },
+    {
+      "key": "a-spec-document-is-stored-as-its-payload-json-paths",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A document path MUST end in /spec.json: validate_spec_path, discovery, path naming and spec/index.json MUST use it, and creating a document at an .html path MUST be refused with a message naming the .json path."
+    },
+    {
+      "key": "a-spec-document-is-stored-as-its-payload-legacy-reported",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A document missing from a list looks identical to one never written; the diagnostic says why and what to do.",
+      "statement": "Discovery MUST report each legacy .html spec document as a legacy_html_document diagnostic naming the conversion route, and MUST NOT list it as a document."
     }
   ],
   "schema_version": 1,

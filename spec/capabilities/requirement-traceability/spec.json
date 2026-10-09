@@ -804,6 +804,15 @@
       "requirement": "n16",
       "then": "its coverage state is reported as verified",
       "when": "a requirement whose only prior evidence was rejected later receives accepted evidence against the same wording"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a requirement with accepted evidence at its current digest and a not-reviewed change_criterion amendment",
+      "how_to_check": "Hub unit test on requirement_coverage",
+      "key": "a-tester-drives-the-built-product-and-keeps-the-spec-relax-state",
+      "requirement": "a-tester-drives-the-built-product-and-keeps-the-spe-relax-blocks",
+      "then": "it is amendment_unreviewed before and verified after; an add_criterion amendment alone never makes it amendment_unreviewed",
+      "when": "coverage is read before and after the operator marks the amendment reviewed"
     }
   ],
   "algorithms": [
@@ -880,11 +889,12 @@
       "FR-54": "9371c370bae967e20011547df6945755263e4fb92261dce4c899885cf2ca80ec",
       "FR-55": "d3f730102892c55da148d56d393997c8d129dfcd9e55c344d88c1bdaeccb6cde",
       "FR-56": "c5a1fac12b5a350dcbf7e7f2505e66bb487fc8ebcdc3664fae5542e2a7ffa13f",
+      "FR-57": "9342c0f5200146de894696b56a8b5c00f32810d87b540571440629b8c0759249",
       "FR-7": "822fa2cbcc9ee98f412a7040d2bd7738941a2c762b8af112c3c1ff28d0a26c47",
       "FR-8": "e320eebf6045fc12d206c38c7d6e54299432f7f6fe1c4948faddb267d400fea3",
       "FR-9": "da908b42a1d65c2b719f110fe3b3f6d9af59a64cde27ad8f1118a0164cdc9ee3"
     },
-    "high_water": 56,
+    "high_water": 57,
     "requirements": {
       "a-changed-implementation-raises-a-candidate-never-an-edit": "FR-11",
       "a-committed-turn-s-footprints-are-repointed-at-its-commit": "FR-55",
@@ -896,6 +906,7 @@
       "a-retired-requirement-stays-reachable-from-its-document": "FR-18",
       "a-task-card-shows-where-each-requirement-it-serves-stands": "FR-17",
       "a-task-states-what-its-requirements-say": "FR-50",
+      "a-tester-drives-the-built-product-and-keeps-the-spe-relax-blocks": "FR-57",
       "an-agent-can-record-read-and-decide-requirement-evidence": "FR-51",
       "an-agent-held-from-a-decision-is-told-when-it-can-decide": "FR-14",
       "coverage-is-one-computation-with-one-precedence": "FR-10",
@@ -1312,6 +1323,13 @@
       "party": null,
       "rationale": "Two footprints that name no line of work must carry the same value, and drift and integration read this field.",
       "statement": "A footprint's branch SHALL name the line of work its commit is on: the one branch whose tip is the commit, else the evidence's task branch where it contains the commit, else the one branch that contains it, else empty; never `HEAD` or other text git prints for a detached checkout."
+    },
+    {
+      "key": "a-tester-drives-the-built-product-and-keeps-the-spe-relax-blocks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Marking alone is not enough: a relaxing amendment cannot satisfy until a human has looked (research).",
+      "statement": "A requirement with a not-reviewed change_criterion, remove_criterion or cannot_satisfy amendment MUST NOT be verified, whatever evidence it holds, and MUST report the state amendment_unreviewed; once the operator marks the amendment reviewed its evidence MUST count again."
     }
   ],
   "schema_version": 1,

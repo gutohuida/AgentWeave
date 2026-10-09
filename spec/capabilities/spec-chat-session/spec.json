@@ -363,6 +363,33 @@
       "requirement": "a-spec-is-written-one-step-at-a-time-context-preview",
       "then": "the answer equals the briefing a turn on that document receives",
       "when": "GET /agent-context?agent=a&spec_document=<path>"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8099 with a fresh database, a project with one Haiku agent, and a change document (scripts/drive/d1011_project_steps.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1011_project_steps.py",
+      "key": "a-project-orders-its-own-spec-steps-drive",
+      "requirement": "a-project-orders-its-own-spec-steps-custom-step-runs",
+      "then": "the intake preview holds the sentinel and the requirements preview does not; the turn's advance lands on threat-model and its instructions hold [step: threat-model] and the pasted Markdown; the threat-model preview names the step and not the sentinel; spec/journey.json in the project equals the PUT body's steps; in Chromium the phase bar shows threat-model between requirements and acceptance and the project page lists it. Fails on today's Hub at the first check (no journey route).",
+      "when": "the drive PUTs a journey with custom step threat-model after requirements (sizes large) and an instruction appended to intake holding a sentinel, sizes the document large, moves it to requirements, and lets a real Haiku turn at requirements continue here"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an instruction appended to intake",
+      "how_to_check": "Hub route test",
+      "key": "a-project-orders-its-own-spec-steps-append-scoped",
+      "requirement": "a-project-orders-its-own-spec-steps-append-own-step",
+      "then": "only the intake preview holds it; advance's instructions for requirements do not",
+      "when": "the agent-context preview is read at intake and at requirements, and advance moves intake to requirements"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator's own project with one custom step",
+      "how_to_check": "operator, in the app",
+      "key": "a-project-orders-its-own-spec-steps-reads-well",
+      "requirement": "a-project-orders-its-own-spec-steps-custom-step-runs",
+      "then": "the agent follows the pasted Markdown and says where it wrote the result",
+      "when": "they explore a change through that step"
     }
   ],
   "algorithms": [],
@@ -383,6 +410,8 @@
       "FR-20": "a61e594b40d809f137f681625c33ebffb8bd59fa87376ddbb96733b63801ac1c",
       "FR-21": "a0bec4a6d5eb568c08f4620a764da10f4bf2602dc2928c9272aa468d54b1973c",
       "FR-22": "1ca8d3a245a31f95b4eaf938642989889399c328d9349cc6a7da45f4fd2a4b95",
+      "FR-23": "2be87a8f834c8c7c4b5516a1fccda56934ca3572d9139a9cce3304c196e39d4e",
+      "FR-24": "4b0d9a5fd032a7ce92837fe65482975a5c16f24ea6787e6ca345e847982ab54d",
       "FR-3": "ffc6f55ce539912c79844a531cce01507c3f7c1b6fcbb66c06d9a357db9a8142",
       "FR-4": "6aa65cdc5ffa3cfb23055e4fd59c66406d6649b949b3965d1924f4649b6dcc74",
       "FR-5": "50527755b7316342bccd5d8f365c1afec72cce261b6d331edd54293326ddfd72",
@@ -391,8 +420,10 @@
       "FR-8": "b2fcffc5ae0e9dfc3171dcad2628cd28b3285bffd501001745b2beeef5905af0",
       "FR-9": "3f0d78af3319472281c1f2eefe4ca1fc55af248d6248f2349e787a5b60b202bf"
     },
-    "high_water": 22,
+    "high_water": 24,
     "requirements": {
+      "a-project-orders-its-own-spec-steps-append-own-step": "FR-24",
+      "a-project-orders-its-own-spec-steps-custom-step-runs": "FR-23",
       "a-spec-is-written-one-step-at-a-time-acceptance-step": "FR-21",
       "a-spec-is-written-one-step-at-a-time-context-preview": "FR-22",
       "a-spec-is-written-one-step-at-a-time-intake-sizes": "FR-20",
@@ -590,6 +621,20 @@
       "party": null,
       "rationale": "What an agent is told becomes observable, by the drive and by the operator.",
       "statement": "GET /agent-context MUST accept a spec_document and return the briefing a turn on that document receives."
+    },
+    {
+      "key": "a-project-orders-its-own-spec-steps-custom-step-runs",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A turn on a custom step MUST be briefed with the journey line, the marker [step: <key>], the step's title and Markdown, a line saying to write the result where the instructions say or, when they name no place, to choose a document section or file and tell the operator where, and the ask-to-advance protocol; advance and the operator's step move MUST enter and leave it in the file's order."
+    },
+    {
+      "key": "a-project-orders-its-own-spec-steps-append-own-step",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An appended instruction MUST appear in its own step's briefing and in advance's instructions for that step, and in no other step's."
     }
   ],
   "schema_version": 1,
