@@ -222,7 +222,7 @@ async def test_3_1_a_tasks_criteria_follow_its_requirements(app, auth_headers, a
         moved = await app.post(
             f"{BASE}/documents/phase",
             params={"path": PATH, "to": phase},
-            json={"reason": "looks right"},
+            json={"reason": "looks right", "approve_anyway": phase == "approved"},
             headers=auth_headers,
         )
         assert moved.status_code == 200, moved.text

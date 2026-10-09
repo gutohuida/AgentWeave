@@ -234,7 +234,7 @@ class TestNoRuleIsRelaxedForTheOperator:
         moved = await app.post(
             f"{BASE}/documents/phase",
             params={"path": CHANGE_PATH, "to": "approved"},
-            json={"reason": "test"},
+            json={"reason": "test", "approve_anyway": True},
             headers=auth_headers,
         )
         assert moved.status_code == 200, moved.text

@@ -290,7 +290,9 @@ async def _propose(app, auth_headers, path):
 
 async def _approve(app, auth_headers, path, **body):
     return await app.post(
-        f"{BASE}/documents/phase?path={path}&to=approved", json=body, headers=auth_headers
+        f"{BASE}/documents/phase?path={path}&to=approved",
+        json={"approve_anyway": True, **body},
+        headers=auth_headers,
     )
 
 

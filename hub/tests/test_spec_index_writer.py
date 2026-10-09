@@ -577,7 +577,7 @@ class TestReindexCorpusRerender:
         approved = await app.post(
             f"{BASE}/documents/phase",
             params={"path": child_path, "to": "approved"},
-            json={"reason": ""},
+            json={"reason": "", "approve_anyway": True},
             headers=auth_headers,
         )
         assert approved.status_code == 200, approved.text

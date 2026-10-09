@@ -85,7 +85,7 @@ async def approve(app, auth_headers, *, path):
         moved = await app.post(
             f"{BASE}/documents/phase",
             params={"path": path, "to": phase},
-            json={"reason": "looks right"},
+            json={"reason": "looks right", "approve_anyway": phase == "approved"},
             headers=auth_headers,
         )
         assert moved.status_code == 200, moved.text
@@ -340,7 +340,7 @@ async def test_an_unresolvable_import_is_preserved_and_reported_not_raised(
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH_IMPORT_USER, "to": "approved"},
-        json={"reason": "looks right"},
+        json={"reason": "looks right", "approve_anyway": True},
         headers=auth_headers,
     )
     assert approved.status_code == 200, approved.text

@@ -423,6 +423,9 @@ class PhaseRequest(RequestModel):
     # Retiring a capability (to=archived on a current capability, F536): the current capability
     # that absorbed what it described, if any. Refused on any other move.
     absorbed_by: Optional[str] = Field(default=None, max_length=255)
+    # Approving over the gaps the first attempt listed (409 `approval_warnings`). Refused on any
+    # other move; a refusal (`document_incomplete`) is not a gap and is not approved over.
+    approve_anyway: bool = False
 
 
 class MergeRequest(RequestModel):
@@ -530,6 +533,27 @@ async def _require_document(session: AsyncSession, project_id: str, path: str):
     return document
 
 
+async def _approval_overrides(session: AsyncSession, documents) -> Dict[str, List[Dict[str, Any]]]:
+    """For each approved document, the gaps its latest approval went over (possibly none).
+
+    Read from the approval's phase event, so a reopened document has no entry: its next approval
+    records its own.
+    """
+    approved = {document.id for document in documents if document.phase == "approved"}
+    if not approved:
+        return {}
+    rows = await session.execute(
+        select(SpecDocumentEvent.document_id, SpecDocumentEvent.detail)
+        .where(SpecDocumentEvent.document_id.in_(approved), SpecDocumentEvent.kind == "phase")
+        .order_by(SpecDocumentEvent.created_at, SpecDocumentEvent.id)
+    )
+    latest: Dict[str, List[Dict[str, Any]]] = {}
+    for document_id, detail in rows:
+        if isinstance(detail, dict) and detail.get("to") == "approved":
+            latest[document_id] = list(detail.get("warnings_overridden") or [])
+    return latest
+
+
 @router.get("/documents")
 async def list_documents(
     project: Tuple[str, str] = Depends(get_project),
@@ -556,9 +580,12 @@ async def list_documents(
         workspace = None
 
     steps = spec_journey.load(workspace) if workspace is not None else spec_journey.BUILT_IN
+    overridden = await _approval_overrides(session, documents)
     views = []
     for document in documents:
         view = _document_view(document, steps)
+        if document.id in overridden:
+            view["approval_warnings_overridden"] = overridden[document.id]
         if workspace is not None:
             with contextlib.suppress(OSError, SpecPathError, project_workspace.ProjectPathError):
                 on_disk = spec_documents.read_document(workspace, document.path)
@@ -2187,7 +2214,9 @@ async def propose_document(
     document = await _require_document(session, project_id, path)
 
     try:
-        blocking = await spec_service.propose(session, workspace, document, actor=_operator())
+        blocking, warnings = await spec_service.propose(
+            session, workspace, document, actor=_operator()
+        )
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -2205,6 +2234,7 @@ async def propose_document(
             **await _project_document_view(session, project_id, document),
             "proposed": False,
             "blocking": blocking,
+            "warnings": warnings,
         }
     await sse_manager.broadcast(
         project_id, "spec_updated", {"path": document.path, "phase": document.phase}
@@ -2213,6 +2243,7 @@ async def propose_document(
         **await _project_document_view(session, project_id, document),
         "proposed": True,
         "blocking": [],
+        "warnings": warnings,
     }
 
 
@@ -2258,6 +2289,13 @@ async def set_phase(
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     document = await _require_document(session, project_id, path)
+
+    if body.approve_anyway and to != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="approve_anyway approves over the gaps an approval lists; send it only with "
+            "to=approved",
+        )
 
     if body.draft_next_slice and to != "approved":
         raise HTTPException(
@@ -2315,6 +2353,7 @@ async def set_phase(
             reason=body.reason,
             no_capability_change=body.no_capability_change,
             absorbed_by=absorbed_by,
+            approve_anyway=body.approve_anyway,
         )
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
@@ -2325,6 +2364,8 @@ async def set_phase(
         detail: Dict[str, Any] = {"message": str(exc), "code": exc.code}
         if exc.blocking:
             detail["blocking"] = exc.blocking
+        if exc.warnings:
+            detail["warnings"] = exc.warnings
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
 
     # Approval is what turns a decomposition from a description into work: the board is

@@ -114,13 +114,15 @@ async def test_a_hand_made_task_satisfies_propose_without_a_declared_task(
 
 
 @pytest.mark.asyncio
-async def test_propose_still_refuses_when_nothing_covers_the_requirement(app, auth_headers, author):
-    """Same document, no hand-made task and no declared task: the gate still works."""
+async def test_propose_still_warns_when_nothing_covers_the_requirement(app, auth_headers, author):
+    """Same document, no hand-made task and no declared task: the uncovered requirement is listed
+    (a gap now, not a refusal: approve-lists-what-is-missing FR-3)."""
     await make_document(app, auth_headers, author, tasks=None)
 
     proposed = await close_and_propose(app, auth_headers)
     assert proposed.status_code == 200, proposed.text
-    codes = {finding["code"] for finding in proposed.json()["blocking"]}
+    assert proposed.json()["blocking"] == []
+    codes = {finding["code"] for finding in proposed.json()["warnings"]}
     assert "requirement_without_task" in codes
 
 
@@ -153,7 +155,7 @@ async def test_approving_does_not_duplicate_a_requirement_a_hand_made_task_alrea
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": "the hand-made task already covers this"},
+        json={"reason": "the hand-made task already covers this", "approve_anyway": True},
         headers=auth_headers,
     )
     assert approved.status_code == 200, approved.text

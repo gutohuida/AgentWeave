@@ -1270,23 +1270,6 @@ async def _completeness(
     return payload, findings
 
 
-async def phase_blockers(
-    session: AsyncSession,
-    workspace: ProjectWorkspace,
-    document: SpecDocument,
-    to_phase: str,
-) -> List[Dict[str, Any]]:
-    """Every reason `to_phase` may not be reached yet, or [] (F207, F113).
-
-    'Not yet' only: a move the phase map forbids, or an actor who may not make it, is not a
-    blocker — `transition()` refuses those first, as the authority it already is.
-    """
-    if to_phase not in (spec_lifecycle.PROPOSED, spec_lifecycle.APPROVED):
-        return []
-    _payload, findings = await _completeness(session, workspace, document, to_phase)
-    return [finding.to_dict() for finding in findings]
-
-
 def _steps_skipped(
     workspace: ProjectWorkspace, document: SpecDocument
 ) -> List[spec_completeness.Finding]:
@@ -1336,15 +1319,18 @@ async def propose(
     document: SpecDocument,
     *,
     actor: spec_lifecycle.Actor,
-) -> List[Dict[str, Any]]:
-    """Move a document to `proposed`, or return what is blocking it.
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Move a document to `proposed`: `(blocking, warnings)`.
+
+    `blocking` is the refusals, and the document stays put when there are any. `warnings` are the
+    gaps, which proposal passes and the operator sees again at approval.
 
     The checks run inside `transition()` against the payload the document actually carries, so
     this is the same answer whoever asks. A document whose file no longer parses cannot be
     proposed at all — there is nothing to check.
     """
     try:
-        await spec_lifecycle.transition(
+        event = await spec_lifecycle.transition(
             session,
             document,
             to_phase=spec_lifecycle.PROPOSED,
@@ -1353,10 +1339,10 @@ async def propose(
         )
     except spec_lifecycle.PhaseError as exc:
         if exc.code == "document_incomplete":
-            return exc.blocking
+            return exc.blocking, exc.warnings
         raise
     await rerender_phase(session, workspace, document)
-    return []
+    return [], list(event.detail.get("warnings") or [])
 
 
 async def rerender_phase(

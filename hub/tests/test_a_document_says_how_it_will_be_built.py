@@ -220,7 +220,7 @@ async def _propose(app, auth_headers, path=DOC_PATH):
 
 
 @pytest.mark.asyncio
-async def test_proposing_with_no_delivery_is_refused(app, auth_headers, run_headers):
+async def test_proposing_with_no_delivery_warns(app, auth_headers, run_headers):
     await _create(app, auth_headers)
     await _submit_document(app, run_headers, _document(delivery=None))
     await _close_exploration(app, auth_headers)
@@ -229,12 +229,13 @@ async def test_proposing_with_no_delivery_is_refused(app, auth_headers, run_head
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["phase"] == "exploring"
-    assert "delivery_unanswered" in {b["code"] for b in body["blocking"]}
+    # A gap (approve-lists-what-is-missing FR-3): proposal passes it and lists it.
+    assert body["phase"] == "proposed"
+    assert "delivery_unanswered" in {w["code"] for w in body["warnings"]}
 
 
 @pytest.mark.asyncio
-async def test_proposing_a_flow_with_no_agent_is_refused(app, auth_headers, run_headers):
+async def test_proposing_a_flow_with_no_agent_warns(app, auth_headers, run_headers):
     await _create(app, auth_headers)
     await _submit_document(
         app,
@@ -247,12 +248,12 @@ async def test_proposing_a_flow_with_no_agent_is_refused(app, auth_headers, run_
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["phase"] == "exploring"
-    assert "delivery_flow_incomplete" in {b["code"] for b in body["blocking"]}
+    assert body["phase"] == "proposed"
+    assert "delivery_flow_incomplete" in {w["code"] for w in body["warnings"]}
 
 
 @pytest.mark.asyncio
-async def test_proposing_a_flow_with_no_stop_condition_is_refused(app, auth_headers, run_headers):
+async def test_proposing_a_flow_with_no_stop_condition_warns(app, auth_headers, run_headers):
     await _create(app, auth_headers)
     await _submit_document(
         app,
@@ -265,8 +266,8 @@ async def test_proposing_a_flow_with_no_stop_condition_is_refused(app, auth_head
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["phase"] == "exploring"
-    assert "delivery_flow_incomplete" in {b["code"] for b in body["blocking"]}
+    assert body["phase"] == "proposed"
+    assert "delivery_flow_incomplete" in {w["code"] for w in body["warnings"]}
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +372,7 @@ async def _phase(app, auth_headers, to, path=DOC_PATH, **body):
 
 
 async def _approve(app, auth_headers, path=DOC_PATH, **body):
+    body.setdefault("approve_anyway", True)
     response = await _phase(app, auth_headers, "approved", path, **body)
     assert response.status_code == 200, response.text
     assert response.json()["phase"] == "approved"

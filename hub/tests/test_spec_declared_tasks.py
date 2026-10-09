@@ -105,7 +105,7 @@ async def approve(app, auth_headers):
         moved = await app.post(
             f"{BASE}/documents/phase",
             params={"path": PATH, "to": phase},
-            json={"reason": "looks right"},
+            json={"reason": "looks right", "approve_anyway": phase == "approved"},
             headers=auth_headers,
         )
         assert moved.status_code == 200, moved.text
@@ -232,11 +232,12 @@ async def test_work_already_under_way_is_left_alone(app, auth_headers, author):
 
 
 @pytest.mark.asyncio
-async def test_a_document_that_declares_no_tasks_creates_none_and_is_not_proposed(
+async def test_a_document_that_declares_no_tasks_creates_none_and_is_not_approved_unasked(
     app, auth_headers, author
 ):
-    """F207: requirements alone used to be enough to approve; a requirement nothing implements now
-    blocks the move to `proposed`, so no approval and no board rows follow."""
+    """F207: requirements alone used to be enough to approve; a requirement nothing implements is
+    now a gap, listed at proposal and stopping approval until the operator approves anyway, so no
+    approval and no board rows follow."""
     await make_document(app, auth_headers, author, tasks=None)
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
@@ -244,8 +245,14 @@ async def test_a_document_that_declares_no_tasks_creates_none_and_is_not_propose
     moved = await app.post(
         f"{BASE}/documents/phase", params={"path": PATH, "to": "proposed"}, headers=auth_headers
     )
-    assert moved.status_code == 409, moved.text
-    assert moved.json()["detail"]["code"] == "document_incomplete"
+    assert moved.status_code == 200, moved.text
+    refused = await app.post(
+        f"{BASE}/documents/phase", params={"path": PATH, "to": "approved"}, headers=auth_headers
+    )
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["code"] == "approval_warnings"
+    assert "requirement_without_task" in {w["code"] for w in detail["warnings"]}
     assert await board(app, auth_headers) == []
 
 

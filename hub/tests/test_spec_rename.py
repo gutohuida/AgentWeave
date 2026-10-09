@@ -264,7 +264,7 @@ async def _approve(app, auth_headers, run_headers, path=PLACEHOLDER):
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},
-        json={"reason": "looks right"},
+        json={"reason": "looks right", "approve_anyway": True},
         headers=auth_headers,
     )
     assert approved.status_code == 200, approved.text

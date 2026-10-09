@@ -70,7 +70,7 @@ async def _approved_document(app, auth_headers, run_headers, path=PATH):
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},
-        json={"reason": ""},
+        json={"reason": "", "approve_anyway": True},
         headers=auth_headers,
     )
 
@@ -315,7 +315,12 @@ async def test_first_approved_at_is_set_once_and_survives_a_reopen(
             session, document, to_phase=spec_lifecycle.PROPOSED, actor=operator, workspace=workspace
         )
         await spec_lifecycle.transition(
-            session, document, to_phase=spec_lifecycle.APPROVED, actor=operator, workspace=workspace
+            session,
+            document,
+            to_phase=spec_lifecycle.APPROVED,
+            actor=operator,
+            workspace=workspace,
+            approve_anyway=True,
         )
         first_stamp = document.first_approved_at
         assert first_stamp is not None
@@ -337,6 +342,11 @@ async def test_first_approved_at_is_set_once_and_survives_a_reopen(
             session, document, to_phase=spec_lifecycle.PROPOSED, actor=operator, workspace=workspace
         )
         await spec_lifecycle.transition(
-            session, document, to_phase=spec_lifecycle.APPROVED, actor=operator, workspace=workspace
+            session,
+            document,
+            to_phase=spec_lifecycle.APPROVED,
+            actor=operator,
+            workspace=workspace,
+            approve_anyway=True,
         )
         assert document.first_approved_at == first_stamp

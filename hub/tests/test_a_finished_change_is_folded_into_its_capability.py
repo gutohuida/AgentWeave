@@ -109,7 +109,7 @@ async def _approved_change(app, auth_headers, path=CHANGE, payload=None):
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},
-        json={},
+        json={"approve_anyway": True},
         headers=auth_headers,
     )
     assert approved.json()["phase"] == "approved", approved.text

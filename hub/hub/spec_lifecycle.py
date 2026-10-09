@@ -85,10 +85,14 @@ class PhaseError(RuntimeError):
         *,
         code: str = "phase_refused",
         blocking: Optional[List[Dict[str, Any]]] = None,
+        warnings: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         self.code = code
         # Set only for `document_incomplete`: every reason the move is not yet possible.
         self.blocking: List[Dict[str, Any]] = list(blocking or [])
+        # Set for `approval_warnings` (the gaps the operator may approve over) and, beside
+        # `blocking`, for a `document_incomplete` that also found gaps.
+        self.warnings: List[Dict[str, Any]] = list(warnings or [])
         super().__init__(message)
 
 
@@ -298,8 +302,15 @@ async def transition(
     reason: str = "",
     no_capability_change: bool = False,
     absorbed_by: Optional[str] = None,
+    approve_anyway: bool = False,
 ) -> SpecDocumentEvent:
     """Move a document between phases, or refuse and say why.
+
+    **Refusals and gaps** (approve-lists-what-is-missing-and-can-approve-anyway). A refusal makes
+    approval's own work wrong and nothing passes it (`document_incomplete`). A gap describes
+    completeness: proposal passes it and returns it on the event's `warnings`, approval stops on it
+    with `approval_warnings` unless `approve_anyway`, and then records what it approved over as
+    `warnings_overridden` on the phase event.
 
     **Archiving an approved change is a close-out.** It is refused while a task the document
     declared is still open, and until a merge names the change or the operator states, with a
@@ -378,19 +389,30 @@ async def transition(
                 code="archive_not_folded",
             )
 
+    gaps: List[Dict[str, Any]] = []
     if to_phase in (PROPOSED, APPROVED):
         # Required `workspace`: a caller with none cannot move a document at all, rather than
         # moving it unchecked (F207). Imported here because `spec_service` imports this module.
         from . import spec_service
 
-        blocking = await spec_service.phase_blockers(session, workspace, document, to_phase)
-        if blocking:
+        found = await spec_service.phase_findings(session, workspace, document, to_phase)
+        if found.refusals:
             raise PhaseError(
                 f"this document cannot move to {to_phase} yet: "
-                + ", ".join(b["code"] for b in blocking),
+                + ", ".join(b["code"] for b in found.refusals),
                 code="document_incomplete",
-                blocking=blocking,
+                blocking=found.refusals,
+                warnings=found.gaps,
             )
+        if to_phase == APPROVED and found.gaps and not approve_anyway:
+            raise PhaseError(
+                "this document has gaps: "
+                + ", ".join(dict.fromkeys(g["code"] for g in found.gaps))
+                + "; fix them, or approve anyway",
+                code="approval_warnings",
+                warnings=found.gaps,
+            )
+        gaps = found.gaps
 
     previous = document.phase
     document.phase = to_phase
@@ -405,6 +427,11 @@ async def transition(
         document.first_approved_at = datetime.now(timezone.utc)
 
     detail: Dict[str, Any] = {"from": previous, "to": to_phase, "reason": reason}
+    if to_phase == APPROVED:
+        # What the operator approved over: [] for a clean approval, so "clean" is a recorded fact.
+        detail["warnings_overridden"] = gaps
+    elif to_phase == PROPOSED and gaps:
+        detail["warnings"] = gaps
     if previous == CURRENT:
         detail["absorbed_by"] = absorbed_by
     return await record_event(session, document, kind="phase", actor=actor, detail=detail)

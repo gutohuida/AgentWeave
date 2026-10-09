@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 16,
+    "iteration": 17,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "approval-warnings-t3-impl",
-    "next_action": "approval-warnings-t3-impl: switch spec_lifecycle.transition (spec_lifecycle.py:381-393) from spec_service.phase_blockers to spec_service.phase_findings: refusals -> 409 document_incomplete (approve_anyway notwithstanding); at approve, gaps without approve_anyway -> 409 {detail:{code:'approval_warnings', message, warnings:[...]}} leaving the document proposed; with approve_anyway approve and record warnings_overridden (list, [] when none) on the approval's phase event detail; propose passes gaps and returns them as warnings beside blocking (spec_service.propose + set_phase route api/v1/spec.py:2241); PhaseRequest.approve_anyway with to != approved -> 400 before anything moves; documents view carries approval_warnings_overridden while approved, none once reopened. Then retire phase_blockers if unused. Failing Hub route tests first (criteria refusal-holds, propose-lists, clean-and-reopen, anyway-400, skipped as a route test). Existing tests that expect propose to refuse a gap will need updating. Run d1012 on scratch :8101 after: checks 1-4 should pass (5 is the page, t4). FR-1, FR-3..6. Hub tasks stay open.",
+    "current": "approval-warnings-t4-impl",
+    "next_action": "approval-warnings-t4-impl: SpecPhaseBar (hub/ui/src/components/spec/SpecPhaseBar.tsx; approval path near :64-71,185-203,725) groups the 409 approval_warnings by code and offers an 'Approve anyway' button that resends the phase request with approve_anyway:true; shows the propose response's `warnings`; once approved shows the document's approval_warnings_overridden. Testids fixed by scripts/drive/d1012_approval_warnings.py: approval-warnings, approval-warning-<code> (one per code), button 'Approve anyway', approval-overridden (contains approval-warning-<code> lines). Failing vitest first (page-groups criterion); API types in hub/ui/src/api/spec.ts (documents view gains approval_warnings_overridden; propose result gains warnings; phase mutation takes approve_anyway and surfaces the 409 body). Commit hub/ui/src and hub/hub/static/ui together via scripts/refresh_ui_bundle.py (read .claude/rules for hub/ui); run test_surface_ceilings.py and npm run lint. Then run d1012 on scratch :8101: all of checks 1-5 should pass. FR-7. Hub tasks stay open.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -106,9 +106,10 @@
         },
         {
             "id": "approval-warnings-t3-impl",
-            "status": "open",
+            "status": "done",
             "title": "approval-warnings task approve: propose warns, 409 approval_warnings, approve_anyway, warnings_overridden record + document view field",
-            "detail": "spec_lifecycle, spec_service, api/v1/spec.py; failing Hub tests first. FR-1, FR-3..6. Existing tests that expect propose to refuse a gap will need updating."
+            "detail": "done 2026-10-09 iteration 17: transition/phase_findings, approve_anyway, 409 approval_warnings, warnings_overridden, documents view field; 10 route tests; 13 test files updated to approve_anyway; d1012 checks 1-4 PASS on :8101.",
+            "model": "opus"
         },
         {
             "id": "approval-warnings-t4-impl",

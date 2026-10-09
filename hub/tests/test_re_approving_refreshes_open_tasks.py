@@ -80,7 +80,7 @@ async def approve(app, auth_headers, path=PATH):
         moved = await app.post(
             f"{BASE}/documents/phase",
             params={"path": path, "to": phase},
-            json={"reason": "looks right"},
+            json={"reason": "looks right", "approve_anyway": phase == "approved"},
             headers=auth_headers,
         )
         assert moved.status_code == 200, moved.text

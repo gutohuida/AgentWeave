@@ -295,7 +295,7 @@ async def test_an_agent_cannot_approve_a_document(app, auth_headers, run_headers
     attempted = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": ""},
+        json={"reason": "", "approve_anyway": True},
         headers=run_headers,
     )
     assert attempted.status_code in (401, 403)
@@ -306,7 +306,11 @@ async def test_proposing_reports_every_blocking_check_instead_of_transitioning(
     app, auth_headers, run_headers, tmp_path
 ):
     await _create(app, auth_headers)
-    await _submit(app, run_headers, _document(tasks=[], scope={"in_scope": [], "non_goals": []}))
+    tasks = [
+        {"key": "a", "description": "a", "requirements": ["alpha"], "depends_on": ["b"]},
+        {"key": "b", "description": "b", "requirements": ["alpha"], "depends_on": ["a", "ghost"]},
+    ]
+    await _submit(app, run_headers, _document(tasks=tasks, scope={"in_scope": [], "non_goals": []}))
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
@@ -320,7 +324,10 @@ async def test_proposing_reports_every_blocking_check_instead_of_transitioning(
     assert body["phase"] == "exploring", "a blocked proposal must not transition"
     assert body["proposed"] is False, "F528: a refused proposal says so in a field, not by omission"
     codes = {item["code"] for item in body["blocking"]}
-    assert {"non_goals_empty", "requirement_without_task"} <= codes
+    assert {"dependency_cycle", "depends_on_unresolved"} <= codes
+    # What approval may be approved over is listed beside the refusals, not among them.
+    assert "non_goals_empty" not in codes
+    assert "non_goals_empty" in {item["code"] for item in body["warnings"]}
 
 
 @pytest.mark.asyncio
@@ -355,8 +362,10 @@ async def test_proposing_a_document_whose_content_was_refused_says_it_did_not_pr
     )
 
     body = response.json()
-    assert body["proposed"] is False
-    assert body["phase"] != "proposed"
+    # An empty document is a gap (approve-lists-what-is-missing FR-3), not a refusal, so it is
+    # proposed -- and the field must say what the phase says, with the gap listed beside it.
+    assert body["proposed"] is (body["phase"] == "proposed")
+    assert "no_requirements" in {w["code"] for w in body["warnings"]}
 
 
 @pytest.mark.asyncio
@@ -377,7 +386,7 @@ async def test_the_full_operator_path_reaches_approved(app, auth_headers, run_he
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": "looks right"},
+        json={"reason": "looks right", "approve_anyway": True},
         headers=auth_headers,
     )
     assert approved.status_code == 200
@@ -403,7 +412,7 @@ async def test_an_approved_document_refuses_further_submissions(
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": ""},
+        json={"reason": "", "approve_anyway": True},
         headers=auth_headers,
     )
 
@@ -426,7 +435,7 @@ async def test_a_reopened_approved_document_proposes_again_without_closing_explo
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": ""},
+        json={"reason": "", "approve_anyway": True},
         headers=auth_headers,
     )
 
@@ -452,7 +461,7 @@ async def test_an_illegal_transition_is_refused(app, auth_headers, tmp_path):
     response = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": ""},
+        json={"reason": "", "approve_anyway": True},
         headers=auth_headers,
     )
     assert response.status_code == 409
@@ -577,7 +586,7 @@ async def test_document_events_are_append_only_with_no_route_to_change_or_delete
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": "looks right"},
+        json={"reason": "looks right", "approve_anyway": True},
         headers=auth_headers,
     )
 

@@ -80,7 +80,7 @@ async def _approve(app, auth_headers, run_headers, path):
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},
-        json={"reason": ""},
+        json={"reason": "", "approve_anyway": True},
         headers=auth_headers,
     )
 

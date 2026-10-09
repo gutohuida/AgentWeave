@@ -58,7 +58,10 @@ async def _approve_document(app, auth_headers):
         assert response.status_code == 200, response.text
         assert not response.json().get("blocking"), response.text
     response = await app.post(
-        f"{DOC}/phase", params={"path": PATH, "to": "approved"}, headers=auth_headers
+        f"{DOC}/phase",
+        params={"path": PATH, "to": "approved"},
+        json={"approve_anyway": True},
+        headers=auth_headers,
     )
     assert response.status_code == 200, response.text
 

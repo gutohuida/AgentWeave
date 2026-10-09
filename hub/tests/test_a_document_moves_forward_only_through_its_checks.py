@@ -31,11 +31,11 @@ async def _close(app, auth_headers):
     assert closed.status_code == 200, closed.text
 
 
-async def _phase(app, auth_headers, to):
+async def _phase(app, auth_headers, to, **body):
     return await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": to},
-        json={"reason": ""},
+        json={"reason": "", **body},
         headers=auth_headers,
     )
 
@@ -53,21 +53,28 @@ async def _tasks_of_document():
 
 
 @pytest.mark.asyncio
-async def test_1_1_the_phase_route_will_not_propose_an_empty_document(app, auth_headers, tmp_path):
+async def test_1_1_the_phase_route_will_not_approve_an_empty_document_unasked(
+    app, auth_headers, tmp_path
+):
+    """An empty document is a gap, not a refusal (approve-lists-what-is-missing FR-3): it proposes,
+    and approval lists what it lacks and waits for the operator to approve anyway."""
     await _create(app, auth_headers)
     await _close(app, auth_headers)
 
-    response = await _phase(app, auth_headers, "proposed")
+    proposed = await _phase(app, auth_headers, "proposed")
+    assert proposed.status_code == 200, proposed.text
+
+    response = await _phase(app, auth_headers, "approved")
 
     assert response.status_code == 409, response.text
     detail = response.json()["detail"]
-    assert detail["code"] == "document_incomplete"
-    assert detail["blocking"]
+    assert detail["code"] == "approval_warnings"
+    assert "no_requirements" in {w["code"] for w in detail["warnings"]}
     async with async_session_factory() as session:
         row = (
             await session.execute(select(SpecDocument).where(SpecDocument.path == PATH))
         ).scalar_one()
-        assert row.phase == "exploring"
+        assert row.phase == "proposed"
 
 
 @pytest.mark.asyncio
@@ -89,13 +96,13 @@ async def test_1_2_an_edit_after_proposing_is_checked_again_at_approval(
 
     assert response.status_code == 409, response.text
     detail = response.json()["detail"]
-    assert detail["code"] == "document_incomplete"
-    assert "requirement_without_task" in {b["code"] for b in detail["blocking"]}
+    assert detail["code"] == "approval_warnings"
+    assert "requirement_without_task" in {w["code"] for w in detail["warnings"]}
     assert await _tasks_of_document() == []
 
 
 @pytest.mark.asyncio
-async def test_1_3_propose_lists_every_blocker_and_no_longer_an_open_exploration(
+async def test_1_3_propose_lists_every_gap_and_no_longer_an_open_exploration(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
 ):
     await _create(app, auth_headers)
@@ -107,11 +114,12 @@ async def test_1_3_propose_lists_every_blocker_and_no_longer_an_open_exploration
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["phase"] == "exploring"
-    codes = [b["code"] for b in body["blocking"]]
+    codes = [w["code"] for w in body["warnings"]]
     # The operator's "exploration is complete" step is retired (step-journey FR-11).
     assert "explore_not_closed" not in codes
     assert {"non_goals_empty", "requirement_without_task"} <= set(codes)
+    # Both are gaps: listed, and proposal passes them.
+    assert body["blocking"] == [] and body["phase"] == "proposed"
 
 
 @pytest.mark.asyncio
@@ -123,7 +131,7 @@ async def test_1_6_a_complete_document_still_goes_propose_then_approve(
     await _close(app, auth_headers)
     await app.post(f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers)
 
-    response = await _phase(app, auth_headers, "approved")
+    response = await _phase(app, auth_headers, "approved", approve_anyway=True)
 
     assert response.status_code == 200, response.text
     assert response.json()["phase"] == "approved"
@@ -167,20 +175,18 @@ async def test_1_9_transition_itself_runs_the_checks_for_any_caller(app, auth_he
         ).scalar_one()
         workspace = await project_workspace.resolve_project_workspace(session, "proj-test")
 
-        with pytest.raises(spec_lifecycle.PhaseError) as excinfo:
-            await spec_lifecycle.transition(
-                session,
-                document,
-                to_phase=spec_lifecycle.PROPOSED,
-                actor=OPERATOR,
-                workspace=workspace,
-            )
-        assert excinfo.value.code == "document_incomplete"
-        assert excinfo.value.blocking
-        assert document.phase == "exploring"
+        # Proposal passes the stub's gaps and records them on the event...
+        event = await spec_lifecycle.transition(
+            session,
+            document,
+            to_phase=spec_lifecycle.PROPOSED,
+            actor=OPERATOR,
+            workspace=workspace,
+        )
+        assert document.phase == spec_lifecycle.PROPOSED
+        assert event.detail["warnings"]
 
-        # The same for approval, on a proposed document whose payload is the stub.
-        document.phase = spec_lifecycle.PROPOSED
+        # ...approval stops on them, for any caller, unless told to approve anyway.
         with pytest.raises(spec_lifecycle.PhaseError) as excinfo:
             await spec_lifecycle.transition(
                 session,
@@ -189,5 +195,6 @@ async def test_1_9_transition_itself_runs_the_checks_for_any_caller(app, auth_he
                 actor=OPERATOR,
                 workspace=workspace,
             )
-        assert excinfo.value.code == "document_incomplete"
+        assert excinfo.value.code == "approval_warnings"
+        assert excinfo.value.warnings
         assert document.phase == spec_lifecycle.PROPOSED

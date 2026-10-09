@@ -164,7 +164,7 @@ async def test_the_declared_task_link_still_holds(app, auth_headers, author):
         moved = await app.post(
             f"{BASE}/documents/phase",
             params={"path": PATH, "to": phase},
-            json={"reason": "looks right"},
+            json={"reason": "looks right", "approve_anyway": phase == "approved"},
             headers=auth_headers,
         )
         assert moved.status_code == 200, moved.text
