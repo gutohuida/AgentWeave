@@ -35251,7 +35251,7 @@ Expensive shared dependency directories (`node_modules`, a venv) are linked into
 
 ## F569 (C) -- `checkpoint_access.participants()` is called only from tests
 
-**Status:** open 2026-10-09. Found by reading code (overhaul decision `overhaul-participants`, operator 2026-10-09).
+**Status:** fixed 2026-10-10 (Tier 0). Found by reading code (overhaul decision `overhaul-participants`, operator 2026-10-09). `participants()` deleted from `checkpoint_access.py` (with the `Run`/`Task`/`Any` imports it alone used); its two tests replaced by `test_participants_is_retired`, which failed before. Checked by grep: no other caller in `src/`, `hub/`, `tests/`, `scripts/`. No live-Hub drive: a pure deletion, nothing routed through it.
 
 `hub/hub/checkpoint_access.py:242` derives which agents touched a conversation's work; nothing in the product calls it since the peer-checkpoint restriction it served was removed (migration 0111). **Decided:** delete it and its tests.
 

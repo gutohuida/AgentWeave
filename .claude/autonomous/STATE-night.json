@@ -8,18 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f569-impl",
-    "next_action": "Do queue item f569-impl: spec-queue/APPROVALS.md (section 2026-10-09, night window) describes it; read F569 in scripts/drive/FINDINGS.md and its DECISIONS.md row. Test failing at the seam first, fix, lint, drive where named, set Status.",
+    "current": "f558-impl",
+    "next_action": "Do queue item f558-impl: spec-queue/APPROVALS.md (section 2026-10-09, night window) describes it; read F558 in scripts/drive/FINDINGS.md and its DECISIONS.md row. Test failing at the seam first, fix, lint, drive where named, set Status.",
     "queue": [
-        {
-            "id": "f569-impl",
-            "status": "open",
-            "title": "Tier 0 fix F569: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
-        },
         {
             "id": "f558-impl",
             "status": "open",

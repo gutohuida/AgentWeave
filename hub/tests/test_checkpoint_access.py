@@ -16,14 +16,13 @@ from hub.checkpoint_access import (
     build_citations,
     may_read_checkpoint,
     may_recall,
-    participants,
     read_checkpoint,
     readable_checkpoints,
     recall_observation,
 )
 from hub.checkpoints import compute_envelope, create_checkpoint
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, AgentOutput, Charter, Conversation, Run, Task
+from hub.db.models import Agent, AgentOutput, Charter, Conversation, Run
 
 PROJECT = "proj-test"
 OWNER = "claude-1"
@@ -259,45 +258,11 @@ async def test_the_tester_scenario_end_to_end(app):
 # --------------------------------------------------------------------------- participation
 
 
-@pytest.mark.asyncio
-async def test_participation_is_derived_from_runs_not_stored(app):
-    """Task 7.6. Every mutation carries a run id and every run carries an agent and a
-    conversation, so this is a join. Storing it would be a second graph to keep correct — and
-    lineage, which is linear and single-agent, is a different shape entirely."""
-    async with async_session_factory() as db:
-        await _conversation(db, "conv-a", agent=OWNER)
-        await _conversation(db, "conv-b", agent=PEER)
-        db.add(Run(id="run-a", project_id=PROJECT, agent=OWNER, conversation_id="conv-a"))
-        db.add(Run(id="run-b", project_id=PROJECT, agent=PEER, conversation_id="conv-b"))
-        db.add(
-            Task(
-                id="t1",
-                project_id=PROJECT,
-                title="Shared work",
-                created_by_run_id="run-a",
-                updated_by_run_id="run-b",
-            )
-        )
-        await db.commit()
+def test_participants_is_retired():
+    """F569: nothing in the product called it since the peer-checkpoint restriction went (0111)."""
+    import hub.checkpoint_access as module
 
-        found = await participants(db, PROJECT, "conv-a")
-
-    # The task was created in conv-a and last touched by the peer in conv-b — which is exactly
-    # the cross-agent fact the query exists to surface.
-    assert found == [
-        {
-            "agent": PEER,
-            "conversation_id": "conv-b",
-            "tasks": [{"id": "t1", "title": "Shared work"}],
-        }
-    ]
-
-
-@pytest.mark.asyncio
-async def test_a_conversation_that_touched_no_work_has_no_participants(app):
-    async with async_session_factory() as db:
-        await _conversation(db, "conv-quiet")
-        assert await participants(db, PROJECT, "conv-quiet") == []
+    assert not hasattr(module, "participants")
 
 
 @pytest.mark.asyncio

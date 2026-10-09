@@ -17,11 +17,11 @@ persuaded to write would be an authorisation mechanism.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 from sqlalchemy import select
 
-from .db.models import Agent, AgentOutput, Checkpoint, Run, Task
+from .db.models import Agent, AgentOutput, Checkpoint
 
 # How much of a cited observation the checkpoint itself shows. Enough to recognise, short enough
 # that citing is not quietly a way to inline the whole transcript.
@@ -237,55 +237,3 @@ async def recall_observation(db, reader_name: str, project_id: str, output_id: s
             }
 
     raise AccessDeniedError("No recorded observation by that id is available to you.")
-
-
-async def participants(db, project_id: str, conversation_id: str) -> List[dict]:
-    """Which agents touched the work this conversation did.
-
-    **Derived, never stored.** Every task mutation already carries a run id, and every run carries
-    an agent and a conversation, so `Task.created_by_run_id -> Run -> (agent, conversation)`
-    answers this as a join with no new bookkeeping. Storing it would be a second graph to keep
-    correct, and lineage — which is linear and single-agent — is a different shape entirely;
-    conflating them gives a `lineage_id` that means two things.
-    """
-    run_ids = (
-        (await db.execute(select(Run.id).where(Run.conversation_id == conversation_id)))
-        .scalars()
-        .all()
-    )
-    if not run_ids:
-        return []
-
-    task_ids = (
-        (
-            await db.execute(
-                select(Task.id).where(
-                    Task.project_id == project_id,
-                    Task.created_by_run_id.in_(list(run_ids)),
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if not task_ids:
-        return []
-
-    rows = list(
-        (
-            await db.execute(
-                select(Task.id, Task.title, Run.agent, Run.conversation_id)
-                .join(Run, Run.id == Task.updated_by_run_id)
-                .where(Task.id.in_(list(task_ids)))
-            )
-        ).all()
-    )
-
-    seen: dict = {}
-    for task_id, title, agent, other_conversation in rows:
-        key = (agent, other_conversation)
-        entry: Any = seen.setdefault(
-            key, {"agent": agent, "conversation_id": other_conversation, "tasks": []}
-        )
-        entry["tasks"].append({"id": task_id, "title": title})
-    return list(seen.values())
