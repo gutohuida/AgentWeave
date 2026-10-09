@@ -144,6 +144,76 @@ describe('the Vault tab', () => {
     })
   })
 
+  // `the-manager-distils-vault-sources-into-cited-facts`, task tab-facts. The map lists each
+  // source followed by its facts, as `GET /vault/map` returns them.
+  const SOURCE = { ...ENTRIES[1], kind: 'source' }
+  const REFUND = {
+    id: 'fct-111111111111', kind: 'fact', name: 'Refunds up to 437 euros need no approval.', type: 'fact',
+    visibility: 'tracked', created_at: '2026-10-09T15:03:00.000000Z', holder: null, available: true,
+    opening: 'Refunds up to 437 euros need no approval.', sources: ['src-aaaaaaaaaaaa'],
+  }
+  const RETURNS = {
+    ...REFUND, id: 'fct-222222222222', name: 'Goods may be returned within 30 days.',
+    opening: 'Goods may be returned within 30 days.',
+  }
+  function withFacts(extra?: Route): Route {
+    return (url, init) => {
+      const answered = extra?.(url, init)
+      if (answered) return answered
+      if (url.endsWith('/vault/map')) return { status: 200, body: { entries: [SOURCE, REFUND, RETURNS] } }
+      if (url.includes('/vault/entries/src-aaaaaaaaaaaa?offset=0')) {
+        return {
+          status: 200,
+          body: { ...SOURCE, content: 'Kickoff.\nSmall talk.\nDana: the refund limit is 437 euros.\n', next_offset: null, note: null },
+        }
+      }
+      if (url.includes('/vault/entries/fct-111111111111')) {
+        return {
+          status: 200,
+          body: {
+            ...REFUND, claim: REFUND.opening, content: 'Fact: ...', next_offset: null, note: null,
+            citations: [{ source: 'src-aaaaaaaaaaaa', quote: 'the refund limit is 437 euros.', line_start: 3, line_end: 3 }],
+          },
+        }
+      }
+      if (url.endsWith('/vault/settings')) return { status: 200, body: SETTINGS }
+      return undefined
+    }
+  }
+
+  it("lists a source's facts under it and highlights a fact's cited lines", async () => {
+    vault = withFacts()
+    render(<VaultPage />, { wrapper })
+    fireEvent.click(await screen.findByTestId('vault-entry-src-aaaaaaaaaaaa'))
+    expect(await screen.findByTestId('vault-fact-fct-111111111111')).toHaveTextContent('437 euros need no approval')
+    expect(screen.getByTestId('vault-fact-fct-222222222222')).toHaveTextContent('within 30 days')
+    // Facts sit under their source, not as rows of their own in the entry list.
+    expect(screen.queryByTestId('vault-entry-fct-111111111111')).toBeNull()
+    expect(screen.getByTestId('vault-entry-src-aaaaaaaaaaaa')).toHaveTextContent('2 facts')
+
+    expect(await screen.findByTestId('vault-line-3')).toHaveAttribute('data-highlighted', 'false')
+    fireEvent.click(screen.getByTestId('vault-fact-link-fct-111111111111'))
+    await waitFor(() => expect(screen.getByTestId('vault-line-3')).toHaveAttribute('data-highlighted', 'true'))
+    expect(screen.getByTestId('vault-line-3')).toHaveTextContent('437 euros')
+    expect(screen.getByTestId('vault-line-1')).toHaveAttribute('data-highlighted', 'false')
+  })
+
+  it('distils a source on request and shows why the Hub refused', async () => {
+    vault = withFacts((url, init) =>
+      url.endsWith('/vault/sources/src-aaaaaaaaaaaa/distil') && init?.method === 'POST'
+        ? { status: 409, body: { detail: 'The vault distillation job is disabled. Enable it on the Manager page.' } }
+        : undefined,
+    )
+    render(<VaultPage />, { wrapper })
+    fireEvent.click(await screen.findByTestId('vault-entry-src-aaaaaaaaaaaa'))
+    fireEvent.click(await screen.findByTestId('vault-distil'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enable it on the Manager page')
+    expect(sent[0]).toMatchObject({
+      url: 'http://hub/api/v1/projects/proj-a/vault/sources/src-aaaaaaaaaaaa/distil',
+      method: 'POST',
+    })
+  })
+
   it("shows the Hub's reason when it refuses a private location", async () => {
     const routed = vault
     vault = (url, init) => {

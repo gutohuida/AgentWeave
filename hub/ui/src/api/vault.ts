@@ -22,8 +22,21 @@ export interface VaultEntry {
   holder: string | null
   /** False for a private entry whose text is on another machine. */
   available: boolean
-  /** The text's first lines, cut at 300 characters; null when the text is not here. */
+  /** The text's first lines, cut at 300 characters; null when the text is not here. For a fact,
+   *  its claim. */
   opening: string | null
+  /** Absent on a Hub that predates facts, whose entries are all sources. */
+  kind?: 'source' | 'fact'
+  /** A fact's: the sources it cites. */
+  sources?: string[]
+}
+
+/** Where a fact's quote sits in its source, 1-based lines found by the Hub, not the model. */
+export interface VaultCitation {
+  source: string
+  quote: string
+  line_start: number
+  line_end: number
 }
 
 /** One page of an entry's text (`GET /vault/entries/{id}?offset=`). */
@@ -33,6 +46,13 @@ export interface VaultEntryPage extends VaultEntry {
   next_offset: number | null
   /** Why there is no text, for an entry held elsewhere. */
   note: string | null
+  /** A fact's claim and citations, when its record is on this machine. */
+  claim?: string
+  citations?: VaultCitation[]
+}
+
+export function isFact(entry: VaultEntry): boolean {
+  return entry.kind === 'fact'
 }
 
 export interface VaultSettings {
@@ -55,13 +75,26 @@ export function isNoVault(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404
 }
 
-export function useVaultMap() {
+/** `refetchMs`: poll while a distillation may still be writing facts; false otherwise. */
+export function useVaultMap(refetchMs: number | false = false) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<VaultEntry[]>({
     queryKey: ['project', projectId, 'vault', 'map'],
     queryFn: async () => (await getJson<{ entries: VaultEntry[] }>(`/api/v1/projects/${projectId}/vault/map`)).entries,
     enabled: isConfigured && !!projectId,
     retry: (count, error) => !isNoVault(error) && count < 2,
+    refetchInterval: refetchMs,
+  })
+}
+
+/** Ask the manager to distil one source again. 202: it runs in the background, and its facts
+ *  reach the map when it finishes. 409 carries the reason it cannot run (the job is off, has no
+ *  runner, or the text is on another machine). */
+export function useDistilVaultSource() {
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: (sourceId: string) =>
+      postJson<{ source: string; queued: boolean }>(`/api/v1/projects/${projectId}/vault/sources/${sourceId}/distil`, {}),
   })
 }
 

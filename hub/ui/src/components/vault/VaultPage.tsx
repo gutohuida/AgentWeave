@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { readableApiError } from '@/api/client'
 import {
   VAULT_TYPES,
+  isFact,
   isNoVault,
+  useDistilVaultSource,
   useUpdateVaultSettings,
   useUploadVaultSource,
   useVaultEntry,
@@ -27,12 +29,28 @@ import { hubDate } from '@/lib/hubTime'
  *
  * A Hub that predates the vault answers its routes 404. The bundle reaches the operator's app on
  * reload, possibly before their server restarts, so that reads as a state rather than an error.
+ *
+ * Facts (`the-manager-distils-vault-sources-into-cited-facts`) are listed under the source they
+ * cite, not as rows of their own; a fact whose source is not in the map is listed as a row. After
+ * an upload or a Distil, the map is re-read for a few minutes, because the manager writes facts in
+ * the background.
  */
+const WATCH_MS = 3 * 60 * 1000
+const WATCH_EVERY_MS = 3000
+
 export function VaultPage() {
-  const map = useVaultMap()
+  const [watching, setWatching] = useState(0)
+  const map = useVaultMap(watching ? WATCH_EVERY_MS : false)
   const settings = useVaultSettings()
   const [selected, setSelected] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  // Each watch restarts the clock: a later Distil gets its own few minutes.
+  useEffect(() => {
+    if (!watching) return
+    const timer = setTimeout(() => setWatching(0), WATCH_MS)
+    return () => clearTimeout(timer)
+  }, [watching])
+  const watch = () => setWatching((count) => count + 1)
 
   if (isNoVault(map.error) || isNoVault(settings.error)) {
     return (
@@ -44,6 +62,12 @@ export function VaultPage() {
 
   const entries = map.data ?? []
   const current = entries.find((entry) => entry.id === selected) ?? null
+  const sourceIds = new Set(entries.filter((entry) => !isFact(entry)).map((entry) => entry.id))
+  const factsOf = (id: string) => entries.filter((entry) => isFact(entry) && (entry.sources ?? []).includes(id))
+  // A fact is listed under each source it cites that is here; one citing none of them is a row.
+  const rows = entries.filter(
+    (entry) => !isFact(entry) || !(entry.sources ?? []).some((source) => sourceIds.has(source)),
+  )
 
   return (
     <div className="flex flex-col gap-6 p-6" data-testid="vault-page">
@@ -80,10 +104,11 @@ export function VaultPage() {
               Nothing yet. Add a transcript, a rule or a document, and agents can read it.
             </p>
           ) : (
-            entries.map((entry) => (
+            rows.map((entry) => (
               <EntryRow
                 key={entry.id}
                 entry={entry}
+                factCount={isFact(entry) ? 0 : factsOf(entry.id).length}
                 active={entry.id === selected}
                 onOpen={() => {
                   setSelected(entry.id)
@@ -101,11 +126,12 @@ export function VaultPage() {
               onDone={(id) => {
                 setAdding(false)
                 setSelected(id)
+                watch()
               }}
               onCancel={() => setAdding(false)}
             />
           ) : current ? (
-            <EntryView entry={current} />
+            <EntryView key={current.id} entry={current} facts={factsOf(current.id)} onDistilling={watch} />
           ) : (
             <p className="text-xs" style={{ color: 'var(--text-3)' }}>
               Choose an entry to read it.
@@ -119,7 +145,17 @@ export function VaultPage() {
   )
 }
 
-function EntryRow({ entry, active, onOpen }: { entry: VaultEntry; active: boolean; onOpen: () => void }) {
+function EntryRow({
+  entry,
+  factCount,
+  active,
+  onOpen,
+}: {
+  entry: VaultEntry
+  factCount: number
+  active: boolean
+  onOpen: () => void
+}) {
   return (
     <button
       type="button"
@@ -136,26 +172,57 @@ function EntryRow({ entry, active, onOpen }: { entry: VaultEntry; active: boolea
       <span className="line-clamp-2 text-xs" style={{ color: 'var(--text-3)' }}>
         {entry.available ? entry.opening : `Held on ${entry.holder ?? 'another machine'}`}
       </span>
+      {factCount > 0 && (
+        <span className="text-xs" style={{ color: 'var(--text-2)' }}>
+          {factCount === 1 ? '1 fact' : `${factCount} facts`}
+        </span>
+      )}
     </button>
   )
 }
 
-function EntryView({ entry }: { entry: VaultEntry }) {
+function EntryView({
+  entry,
+  facts,
+  onDistilling,
+}: {
+  entry: VaultEntry
+  facts: VaultEntry[]
+  onDistilling: () => void
+}) {
   const pages = useVaultEntry(entry.id)
   const loaded = pages.data?.pages ?? []
   const first = loaded[0]
   const text = loaded.map((page) => page.content ?? '').join('')
+  // The fact whose citation is shown: its card carries the lines, found by the Hub.
+  const [citing, setCiting] = useState<string | null>(null)
+  const card = useVaultEntry(citing)
+  const ranges = (card.data?.pages[0]?.citations ?? [])
+    .filter((citation) => citation.source === entry.id)
+    .map((citation) => [citation.line_start, citation.line_end] as const)
+  const source = !isFact(entry)
 
   return (
     <article className="flex flex-col gap-3">
-      <header>
-        <h3 className="text-sm font-semibold">{entry.name}</h3>
-        <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
-          {entry.type} · {entry.visibility === 'private' ? `private, held on ${entry.holder ?? 'another machine'}` : 'tracked in the repository'}
-          {' · '}
-          {hubDate(entry.created_at).toLocaleString()} · <code>{entry.id}</code>
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">{entry.name}</h3>
+          <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
+            {entry.type} · {entry.visibility === 'private' ? `private, held on ${entry.holder ?? 'another machine'}` : 'tracked in the repository'}
+            {' · '}
+            {hubDate(entry.created_at).toLocaleString()} · <code>{entry.id}</code>
+          </p>
+        </div>
+        {source && <DistilButton entry={entry} onDistilling={onDistilling} />}
       </header>
+      {source && facts.length > 0 && (
+        <FactList facts={facts} citing={citing} onCite={setCiting} />
+      )}
+      {card.error ? (
+        <p className="text-xs" style={{ color: 'var(--amber)' }} role="alert">
+          {readableApiError(card.error, 'Could not read where this fact says so.')}
+        </p>
+      ) : null}
       {pages.error ? (
         <p className="text-xs" style={{ color: 'var(--amber)' }} role="alert">
           {readableApiError(pages.error, 'Could not read this entry.')}
@@ -166,13 +233,7 @@ function EntryView({ entry }: { entry: VaultEntry }) {
         <p className="text-xs" style={{ color: 'var(--text-3)' }}>{first.note}</p>
       ) : (
         <>
-          <pre
-            data-testid="vault-entry-text"
-            className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-md p-4 text-sm"
-            style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', fontFamily: 'inherit' }}
-          >
-            {text}
-          </pre>
+          <SourceText text={text} ranges={ranges} />
           {pages.hasNextPage && (
             <Button
               size="sm"
@@ -186,6 +247,123 @@ function EntryView({ entry }: { entry: VaultEntry }) {
         </>
       )}
     </article>
+  )
+}
+
+function DistilButton({ entry, onDistilling }: { entry: VaultEntry; onDistilling: () => void }) {
+  const distil = useDistilVaultSource()
+  return (
+    <div className="flex max-w-xs flex-col items-end gap-1">
+      <Button
+        size="sm"
+        variant="ghost"
+        data-testid="vault-distil"
+        disabled={distil.isPending || !entry.available}
+        title="Ask the manager to read this source and write the facts it states"
+        onClick={() => distil.mutate(entry.id, { onSuccess: onDistilling })}
+      >
+        Distil
+      </Button>
+      {distil.error ? (
+        <p className="text-right text-xs" style={{ color: 'var(--amber)' }} role="alert">
+          {readableApiError(distil.error, 'Could not distil this source.')}
+        </p>
+      ) : distil.isSuccess ? (
+        <p className="text-right text-xs" style={{ color: 'var(--text-3)' }}>
+          Distilling in the background. Its facts appear here when it finishes.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function FactList({
+  facts,
+  citing,
+  onCite,
+}: {
+  facts: VaultEntry[]
+  citing: string | null
+  onCite: (id: string) => void
+}) {
+  return (
+    <section aria-label="Facts from this source" className="flex flex-col gap-1">
+      <h4 className="settings-group-heading">Facts</h4>
+      <ul className="flex flex-col gap-1">
+        {facts.map((fact) => (
+          <li
+            key={fact.id}
+            data-testid={`vault-fact-${fact.id}`}
+            className="flex items-start justify-between gap-3 rounded-md px-3 py-2 text-sm"
+            style={{
+              background: fact.id === citing ? 'var(--row-selected)' : 'var(--surface-2)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            <span className="min-w-0">
+              {fact.available ? fact.opening : `A private fact, held on ${fact.holder ?? 'another machine'}`}
+              {fact.visibility === 'private' && (
+                <>
+                  {' '}
+                  <Badge variant="warning">private</Badge>
+                </>
+              )}
+            </span>
+            {fact.available && (
+              <button
+                type="button"
+                data-testid={`vault-fact-link-${fact.id}`}
+                className="shrink-0 text-xs underline"
+                style={{ color: 'var(--accent)' }}
+                onClick={() => onCite(fact.id)}
+              >
+                Where it says so
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+/** A source's text a line at a time, so a fact's citation can mark the lines it rests on. */
+function SourceText({ text, ranges }: { text: string; ranges: ReadonlyArray<readonly [number, number]> }) {
+  const lines = (text.endsWith('\n') ? text.slice(0, -1) : text).split('\n')
+  const firstLit = ranges.length ? Math.min(...ranges.map(([start]) => start)) : null
+  const firstLitRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    // Not in jsdom, which has no layout.
+    firstLitRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+  }, [firstLit])
+
+  return (
+    <div
+      data-testid="vault-entry-text"
+      className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-md py-4 text-sm"
+      style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+    >
+      {lines.map((line, index) => {
+        const number = index + 1
+        const lit = ranges.some(([start, end]) => number >= start && number <= end)
+        return (
+          <div
+            key={number}
+            ref={number === firstLit ? firstLitRef : undefined}
+            data-testid={`vault-line-${number}`}
+            data-highlighted={lit ? 'true' : 'false'}
+            className="px-4"
+            style={
+              lit
+                ? { background: 'var(--row-selected)', boxShadow: 'inset 3px 0 0 var(--accent)' }
+                : undefined
+            }
+          >
+            {line || ' '}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
