@@ -470,6 +470,10 @@ export interface SpecDocumentRecord {
   step?: string | null
   size?: SpecSize | null
   journey?: string[] | null
+  /** The gaps the latest approval overrode with `approve_anyway`, while the document stays approved
+   *  (`approve-lists-what-is-missing-and-can-approve-anyway` FR-5). Absent otherwise, and from a Hub
+   *  that predates it. */
+  approval_warnings_overridden?: SpecBlockingFinding[]
   updated_at: string
 }
 
@@ -578,7 +582,11 @@ export function useSaveProjectJourney() {
 export function useProposeSpecDocument() {
   return useSpecMutation<
     { path: string },
-    SpecDocumentRecord & { blocking: SpecBlockingFinding[] }
+    SpecDocumentRecord & {
+      blocking: SpecBlockingFinding[]
+      /** Gaps proposal let through; approval will list them again. Absent from an older Hub. */
+      warnings?: SpecBlockingFinding[]
+    }
   >((projectId, { path }) =>
     postJson(
       `/api/v1/projects/${projectId}/project/documents/propose?path=${encodeURIComponent(path)}`,
@@ -718,6 +726,7 @@ export function useSetSpecPhase() {
       draft_next_slice,
       no_capability_change,
       absorbed_by,
+      approve_anyway,
     }: {
       path: string
       to: string
@@ -736,6 +745,9 @@ export function useSetSpecPhase() {
        *  (the strip never appears without it) must never send this to a Hub that predates it,
        *  which would 422 an unknown field. */
       delivery_agent?: string
+      /** Approve over the gaps a refused approval listed (409 `approval_warnings`). Sent only on
+       *  that resend: a Hub that answers `approval_warnings` is the one that accepts it. */
+      approve_anyway?: boolean
     }) =>
       postJson<
         SpecDocumentRecord & {
@@ -750,6 +762,7 @@ export function useSetSpecPhase() {
           ...(draft_next_slice !== undefined ? { draft_next_slice } : {}),
           ...(no_capability_change ? { no_capability_change } : {}),
           ...(absorbed_by ? { absorbed_by } : {}),
+          ...(approve_anyway ? { approve_anyway } : {}),
         },
       ),
     onSuccess: () => {

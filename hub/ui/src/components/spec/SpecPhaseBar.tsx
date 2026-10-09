@@ -59,20 +59,91 @@ function nextSliceMessage(outcome: SpecNextSliceOutcome): string {
   }
 }
 
+interface Refusal {
+  /** What stops the move outright: Approve anyway does not get past these. */
+  blocking: SpecBlockingFinding[]
+  /** Gaps the Hub listed beside the refusal. */
+  gaps: SpecBlockingFinding[]
+  /** `approval_warnings`: the only refusal Approve anyway answers. */
+  overridable: boolean
+}
+
 /**
- * What a refused phase move says, as findings. The Hub answers an incomplete document with
- * `detail.blocking` (the same list `propose` returns with a 200); any other refusal is one message.
- * `ApiError.message` is the response body verbatim, so the detail is parsed back out of it.
+ * What a refused phase move says. The Hub answers an incomplete document with `detail.blocking`
+ * (the same list `propose` returns with a 200) and the gaps beside it as `detail.warnings`; an
+ * approval stopped only by gaps answers `approval_warnings` with `detail.warnings`; any other
+ * refusal is one message. `ApiError.message` is the response body verbatim, so the detail is parsed
+ * back out of it.
  */
-function findingsFromRefusal(error: unknown, fallback: string): SpecBlockingFinding[] {
+function readRefusal(error: unknown, fallback: string): Refusal {
   try {
     const raw = error instanceof Error ? error.message : String(error)
-    const detail = (JSON.parse(raw) as { detail?: { blocking?: SpecBlockingFinding[] } }).detail
-    if (detail?.blocking?.length) return detail.blocking
+    const detail = (
+      JSON.parse(raw) as {
+        detail?: { code?: string; blocking?: SpecBlockingFinding[]; warnings?: SpecBlockingFinding[] }
+      }
+    ).detail
+    const gaps = detail?.warnings ?? []
+    if (detail?.code === 'approval_warnings' && gaps.length) {
+      return { blocking: [], gaps, overridable: true }
+    }
+    if (detail?.blocking?.length) return { blocking: detail.blocking, gaps, overridable: false }
   } catch {
     // not JSON: fall through to the readable message
   }
-  return [{ code: 'refused', where: '', message: readableApiError(error, fallback) }]
+  return {
+    blocking: [{ code: 'refused', where: '', message: readableApiError(error, fallback) }],
+    gaps: [],
+    overridable: false,
+  }
+}
+
+/** How many places a gap line names before it says how many more (FR-7: short enough to read). */
+const PLACES_SHOWN = 3
+
+/** Gaps grouped by code, in the order the Hub listed them. */
+function groupGaps(gaps: SpecBlockingFinding[]): Array<[string, SpecBlockingFinding[]]> {
+  const groups = new Map<string, SpecBlockingFinding[]>()
+  for (const gap of gaps) {
+    const group = groups.get(gap.code)
+    if (group) group.push(gap)
+    else groups.set(gap.code, [gap])
+  }
+  return [...groups.entries()]
+}
+
+/** One line per code: its count, the first gap's message, and up to three places. */
+function GapLines({ gaps }: { gaps: SpecBlockingFinding[] }) {
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {groupGaps(gaps).map(([code, group]) => {
+        const places = group.map((gap) => gap.where).filter(Boolean)
+        const more = places.length - PLACES_SHOWN
+        return (
+          <li key={code} data-testid={`approval-warning-${code}`} className="flex items-start gap-1.5">
+            <Icon name="warning" size={13} />
+            <span>
+              <code>{code}</code>
+              {group.length > 1 ? ` ×${group.length}` : ''} — {group[0].message}
+              {places.length > 0 && (
+                <>
+                  {' ('}
+                  {places.slice(0, PLACES_SHOWN).map((place, index) => (
+                    <span key={`${place}:${index}`}>
+                      {index > 0 ? ', ' : ''}
+                      <code>{place}</code>
+                    </span>
+                  ))}
+                  {more > 0 ? ` and ${more} more` : ''}
+                  {')'}
+                </>
+              )}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
+  )
 }
 
 /**
@@ -105,6 +176,10 @@ export function SpecPhaseBar({
   const setPhase = useSetSpecPhase()
   const setRigor = useSetSpecRigor()
   const [blocking, setBlocking] = useState<SpecBlockingFinding[]>([])
+  // Gaps the Hub listed at propose or approve (`approve-lists-what-is-missing-and-can-approve-
+  // anyway`). Only an `approval_warnings` refusal makes them overridable: the one Approve anyway answers.
+  const [gaps, setGaps] = useState<SpecBlockingFinding[]>([])
+  const [gapsOverridable, setGapsOverridable] = useState(false)
   const [rigorRefusal, setRigorRefusal] = useState<string[]>([])
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [archiveRefusal, setArchiveRefusal] = useState<string | null>(null)
@@ -168,22 +243,36 @@ export function SpecPhaseBar({
     )
   }
 
-  async function onPropose() {
+  function showRefusal(refusal: Refusal) {
+    setBlocking(refusal.blocking)
+    setGaps(refusal.gaps)
+    setGapsOverridable(refusal.overridable)
+  }
+
+  function clearFindings() {
     setBlocking([])
+    setGaps([])
+    setGapsOverridable(false)
+  }
+
+  async function onPropose() {
+    clearFindings()
     try {
       const result = await propose.mutateAsync({ path })
       // A blocked proposal is the normal case while a document is being written,
       // so it reports rather than throws. Showing every finding at once matters:
       // one per attempt turns five problems into five round trips.
       setBlocking(result.blocking ?? [])
+      // Gaps do not stop proposal; they are said now so approval's list is no surprise.
+      setGaps(result.warnings ?? [])
     } catch (error) {
       // 422 (no payload / payload invalid) used to reject unhandled and show nothing.
-      setBlocking(findingsFromRefusal(error, 'The Hub refused to propose this document.'))
+      showRefusal(readRefusal(error, 'The Hub refused to propose this document.'))
     }
   }
 
-  function onApprove() {
-    setBlocking([])
+  function onApprove(anyway = false) {
+    clearFindings()
     setNextSliceOutcome(null)
     setPhase.mutate(
       {
@@ -195,12 +284,15 @@ export function SpecPhaseBar({
         ...(deliveryAgentChoice !== NO_CHOICE ? { delivery_agent: deliveryAgentChoice } : {}),
         // Only for a slice document: the Hub that named `roadmap_slice` is the one that accepts it.
         ...(roadmapSlice ? { draft_next_slice: draftNextSlice } : {}),
+        // Only on the resend from the gap list, never on a plain Approve (FR-1).
+        ...(anyway ? { approve_anyway: true } : {}),
       },
       {
         onSuccess: (result) => setNextSliceOutcome(result.next_slice ?? null),
-        // F207: approval runs the completeness checks again and answers 409 with the findings.
+        // F207: approval runs the completeness checks again. Gaps alone answer `approval_warnings`,
+        // which Approve anyway gets past; a refusal answers `document_incomplete`.
         onError: (error: unknown) =>
-          setBlocking(findingsFromRefusal(error, 'The Hub refused to approve this document.')),
+          showRefusal(readRefusal(error, 'The Hub refused to approve this document.')),
       },
     )
   }
@@ -478,7 +570,7 @@ export function SpecPhaseBar({
           <button
             type="button"
             disabled={busy}
-            onClick={onApprove}
+            onClick={() => onApprove()}
             className="rounded-[var(--radius-sm)] px-2 py-1 hover:bg-[var(--row-hover)]"
           >
             Approve
@@ -720,6 +812,41 @@ export function SpecPhaseBar({
             </li>
           ))}
         </ul>
+      )}
+
+      {gaps.length > 0 && (
+        <div
+          data-testid="approval-warnings"
+          className="flex flex-col gap-1 rounded-[var(--radius-sm)] px-2 py-1.5"
+          style={{ background: 'color-mix(in srgb, var(--amber) 10%, transparent)', color: 'var(--text-2)' }}
+        >
+          <span>
+            {gapsOverridable
+              ? 'Not approved: the Hub found these gaps. Approve anyway records them on the document.'
+              : 'Gaps approval will list:'}
+          </span>
+          <GapLines gaps={gaps} />
+          {gapsOverridable && document.phase === 'proposed' && (
+            <div>
+              <Button variant="primary" size="xs" disabled={busy} onClick={() => onApprove(true)}>
+                Approve anyway
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* What the approval overrode stays beside the phase while the document is approved (FR-5,
+          FR-7): the record of the operator's judgement, not a to-do. */}
+      {document.phase === 'approved' && (document.approval_warnings_overridden?.length ?? 0) > 0 && (
+        <div
+          data-testid="approval-overridden"
+          className="flex flex-col gap-0.5"
+          style={{ color: 'var(--text-3)' }}
+        >
+          <span>Approved over these gaps:</span>
+          <GapLines gaps={document.approval_warnings_overridden ?? []} />
+        </div>
       )}
 
       {blocking.length > 0 && (

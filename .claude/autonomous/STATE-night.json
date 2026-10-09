@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "approval-warnings-t4-impl",
-    "next_action": "approval-warnings-t4-impl: SpecPhaseBar (hub/ui/src/components/spec/SpecPhaseBar.tsx; approval path near :64-71,185-203,725) groups the 409 approval_warnings by code and offers an 'Approve anyway' button that resends the phase request with approve_anyway:true; shows the propose response's `warnings`; once approved shows the document's approval_warnings_overridden. Testids fixed by scripts/drive/d1012_approval_warnings.py: approval-warnings, approval-warning-<code> (one per code), button 'Approve anyway', approval-overridden (contains approval-warning-<code> lines). Failing vitest first (page-groups criterion); API types in hub/ui/src/api/spec.ts (documents view gains approval_warnings_overridden; propose result gains warnings; phase mutation takes approve_anyway and surfaces the 409 body). Commit hub/ui/src and hub/hub/static/ui together via scripts/refresh_ui_bundle.py (read .claude/rules for hub/ui); run test_surface_ceilings.py and npm run lint. Then run d1012 on scratch :8101: all of checks 1-5 should pass. FR-7. Hub tasks stay open.",
+    "current": "tester-amends-spec",
+    "next_action": "tester-amends-spec: author the tester-amends slice change document on :8010 (see queue detail).",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -113,15 +113,15 @@
         },
         {
             "id": "approval-warnings-t4-impl",
-            "status": "open",
+            "status": "done",
             "title": "approval-warnings task page: SpecPhaseBar groups gaps by code with Approve anyway, shows propose warnings and overridden gaps; bundle refreshed",
-            "detail": "FR-7; vitest page-groups criterion; commit hub/ui/src and hub/hub/static/ui together; run test_surface_ceilings.py."
+            "detail": "done 2026-10-09 interactive session: SpecPhaseBar gap list grouped by code (count + 3 places), Approve anyway resend, propose warnings, approval-overridden block; specApprovalWarnings.test.tsx 7 (4 failed first); bundle refreshed; vitest 1978 passed."
         },
         {
             "id": "approval-warnings-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive approval-warnings on a scratch Hub; log evidence + METRICS row",
-            "detail": "Own port, fresh db, haiku turns only."
+            "detail": "done 2026-10-09 interactive session: d1012 7/7 on scratch :8101 (drive now opens the document from the tree: the app has no doc URL parameter); METRICS row."
         },
         {
             "id": "tester-amends-spec",

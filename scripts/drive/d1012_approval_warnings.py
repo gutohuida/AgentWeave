@@ -174,8 +174,24 @@ def drive():
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1500, "height": 1100})
         page.add_init_script(seed)
-        page.goto(f"{d.HUB}/?project={pid}&tab=spec&doc={second_q}", wait_until="domcontentloaded")
-        d.poll(lambda: page.locator("[data-testid=spec-phase]").inner_text() == "proposed", 20)
+        # The app has no document URL parameter: open the second document from the tree, as an
+        # operator would (d1010's recipe).
+        page.goto(f"{d.HUB}/?project={pid}&tab=spec", wait_until="domcontentloaded")
+        target = page.locator(f'[data-testid="spec-tree-document-{SECOND}"]')
+        d.poll(lambda: page.locator("[data-testid^=spec-tree-directory-]").count() > 0, 20)
+        closed = page.locator("[data-testid^=spec-tree-directory-][aria-expanded=false]")
+        for _ in range(6):
+            if target.count() or not closed.count():
+                break
+            closed.first.click()
+        d.poll(lambda: target.count() == 1, 10)
+        if target.count() == 1:
+            target.click()
+        shown = d.poll(lambda: page.locator("[data-testid=spec-phase]").count() == 1
+                       and page.locator("[data-testid=spec-phase]").inner_text() == "proposed", 20)
+        page.screenshot(path=str(d.SHOT) + "_proposed.png", full_page=True)
+        d.check("5 the second document opens in the app, proposed", shown,
+                f"spec-phase elements={page.locator('[data-testid=spec-phase]').count()}")
         page.get_by_role("button", name="Approve", exact=True).click()
         warned = d.poll(lambda: page.locator("[data-testid=approval-warnings]").count() == 1, 15)
         lines = [line.get_attribute("data-testid").removeprefix("approval-warning-")
