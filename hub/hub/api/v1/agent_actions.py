@@ -1851,12 +1851,14 @@ async def _journey_document(session: AsyncSession, project_id: str, raw_path: st
             "document is written step by step.",
         )
     payload = None
+    steps = spec_journey.BUILT_IN
     try:
         workspace = await project_workspace.resolve_project_workspace(session, project_id)
+        steps = spec_journey.load(workspace)
         payload = spec_documents.read_payload(workspace, path)
     except (project_workspace.ProjectWorkspaceError, OSError, ValueError):
         payload = None
-    return document, payload
+    return document, payload, steps
 
 
 async def _write_journey(session: AsyncSession, project_id: str, document) -> None:
@@ -1883,28 +1885,30 @@ async def advance_spec_step(
     the answer names what the step left empty, and carries the new step's instructions."""
     from ... import spec_journey, spec_lifecycle
 
-    document, payload = await _journey_document(session, actor.project_id, body.path)
+    document, payload, steps = await _journey_document(session, actor.project_id, body.path)
     left = document.step
-    target = body.to or spec_journey.next_step(document.size, left)
     gaps = spec_journey.missing(left, payload, document.size)
-    if target is None:
-        return {
-            "path": document.path,
-            "step": left,
-            "previous_step": left,
-            "size": document.size,
-            "journey": spec_journey.journey(document.size),
-            "missing": gaps,
-            "instructions": "",
-            "message": f"{left} is the last step of this journey; the document is ready for the "
-            "operator to propose.",
-        }
     try:
+        # A step the project removed has no next one (FR-8): only a named target leaves it.
+        target = body.to or spec_journey.next_step(document.size, left, steps)
+        if target is None:
+            return {
+                "path": document.path,
+                "step": left,
+                "previous_step": left,
+                "size": document.size,
+                "journey": spec_journey.journey(document.size, steps),
+                "missing": gaps,
+                "instructions": "",
+                "message": f"{left} is the last step of this journey; the document is ready for "
+                "the operator to propose.",
+            }
         await spec_journey.set_step(
             session,
             document,
             target,
             actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+            steps=steps,
         )
     except spec_journey.JourneyError as exc:
         raise HTTPException(
@@ -1921,9 +1925,9 @@ async def advance_spec_step(
         "step": target,
         "previous_step": left,
         "size": document.size,
-        "journey": spec_journey.journey(document.size),
+        "journey": spec_journey.journey(document.size, steps),
         "missing": gaps,
-        "instructions": spec_journey.duty(target),
+        "instructions": spec_journey.duty(target, steps),
         "message": f"moved from {left} to {target}"
         + (f"; {left} left empty: {', '.join(gaps)}" if gaps else ""),
     }
@@ -1938,7 +1942,7 @@ async def set_spec_size(
     """Record the work's size and why; the journey follows it from the next step on."""
     from ... import spec_journey, spec_lifecycle
 
-    document, _ = await _journey_document(session, actor.project_id, body.path)
+    document, _, steps = await _journey_document(session, actor.project_id, body.path)
     try:
         await spec_journey.set_size(
             session,
@@ -1961,7 +1965,7 @@ async def set_spec_size(
         "path": document.path,
         "size": document.size,
         "step": document.step,
-        "journey": spec_journey.journey(document.size),
+        "journey": spec_journey.journey(document.size, steps),
     }
 
 

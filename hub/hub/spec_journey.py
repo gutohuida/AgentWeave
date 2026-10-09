@@ -2,8 +2,9 @@
 
 A spec is written one step at a time (`a-spec-is-written-one-step-at-a-time`). The step is a column
 on the document, not conversation state (D1), so a fresh conversation, another day or another agent
-picks it up where it was left. The journey is derived from the size by the one table below (D2), so
-a project-defined journey can later replace that table without a second migration.
+picks it up where it was left. The journey is derived from the size by the one table below (D2), and
+a project replaces that table with its own `spec/journey.json` (`a-project-orders-its-own-spec-steps`):
+the built-ins in their order, custom steps anywhere among them, an instruction appended to any step.
 
 Moving is never refused for a missing output (D3): warn, never gate. What a step left empty is
 reported by the agent's advance tool and is the approval warnings' input.
@@ -11,10 +12,14 @@ reported by the agent's advance tool and is the approval warnings' input.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+import json
+import re
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import project_workspace
 from .db.models import SpecDocument
 from .spec_lifecycle import INTAKE_STEP, Actor, record_event
 
@@ -58,8 +63,161 @@ class JourneyError(ValueError):
         super().__init__(message)
 
 
-def journey(size: Optional[str]) -> List[str]:
-    return list(JOURNEYS[size if size in JOURNEYS else None])
+# ---------------------------------------------------------------------------------------------
+# The project's steps (`spec/journey.json`). The built-ins are named by key and fixed in order
+# (D1); a custom step sits anywhere and joins the sizes it lists, small and large when it lists none
+# (D2). A broken file is reported and the built-in table is used meanwhile (D4): no turn is refused.
+# ---------------------------------------------------------------------------------------------
+
+JOURNEY_FILE = "spec/journey.json"
+#: Per instruction text, above today's longest duty (1,805 characters with its advance protocol).
+TEXT_CAP = 2000
+#: The document's step column is String(48).
+KEY_MAX = 48
+_SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+#: A custom step that lists no sizes; an unsized document is briefed as large.
+DEFAULT_CUSTOM_SIZES = ("small", "large")
+INVALID = "journey_file_invalid"
+
+
+@dataclass(frozen=True)
+class Step:
+    """One entry of a project's steps: a built-in by key, or a custom step with its Markdown."""
+
+    key: str
+    title: str = ""
+    instructions: str = ""
+    sizes: Optional[Tuple[str, ...]] = None
+    append: str = ""
+
+    @property
+    def custom(self) -> bool:
+        return self.key not in STEP_ORDER
+
+    def in_journey(self, size: Optional[str]) -> bool:
+        if not self.custom:
+            return self.key in JOURNEYS[size if size in JOURNEYS else None]
+        return (size if size in SIZES else "large") in (self.sizes or DEFAULT_CUSTOM_SIZES)
+
+
+@dataclass(frozen=True)
+class ProjectSteps:
+    """A project's steps in file order, and what was wrong with its file, if anything."""
+
+    steps: Tuple[Step, ...]
+    diagnostics: Tuple[Dict[str, str], ...] = ()
+
+    def order(self) -> List[str]:
+        return [step.key for step in self.steps]
+
+    def get(self, key: Optional[str]) -> Optional[Step]:
+        return next((step for step in self.steps if step.key == key), None)
+
+
+BUILT_IN = ProjectSteps(tuple(Step(key) for key in STEP_ORDER))
+
+
+def _text(entry: Dict[str, Any], field: str, where: str, problems: List[str]) -> str:
+    value = entry.get(field, "")
+    if not isinstance(value, str):
+        problems.append(f"{where}: {field} must be text")
+        return ""
+    if len(value) > TEXT_CAP:
+        problems.append(f"{where}: {field} is {len(value):,} characters; the limit is {TEXT_CAP:,}")
+    return value
+
+
+def parse(document: Any) -> Tuple[ProjectSteps, List[str]]:
+    """The steps a journey document names, and every rule it breaks (FR-1, FR-2, FR-5, FR-7).
+
+    With any problem the steps returned are the built-in table: a caller reports the problems and
+    carries on (D4), or refuses to save them.
+    """
+    problems: List[str] = []
+    entries = document.get("steps") if isinstance(document, dict) else None
+    if not isinstance(entries, list):
+        return BUILT_IN, [f'{JOURNEY_FILE} must be an object with a "steps" list']
+    steps: List[Step] = []
+    seen: set = set()
+    for index, entry in enumerate(entries):
+        key = entry.get("key") if isinstance(entry, dict) else None
+        if not isinstance(key, str) or not key:
+            problems.append(f"steps[{index}] needs a key")
+            continue
+        where = f"step {key!r}"
+        if key in seen:
+            problems.append(f"{where}: duplicate key")
+        seen.add(key)
+        append = _text(entry, "append", where, problems)
+        if "title" not in entry and "instructions" not in entry:
+            if key not in STEP_ORDER:
+                problems.append(
+                    f"{where} is not a built-in step ({', '.join(STEP_ORDER)}); a custom step "
+                    "needs a title and instructions"
+                )
+            steps.append(Step(key, append=append))
+            continue
+        if key in STEP_ORDER:
+            problems.append(f"{where} is a built-in step; it cannot carry a title or instructions")
+            continue
+        if len(key) > KEY_MAX or not _SLUG.match(key):
+            problems.append(
+                f"{where}: a custom key is a lowercase slug (a-z, 0-9, hyphens) of at most "
+                f"{KEY_MAX} characters"
+            )
+        title = _text(entry, "title", where, problems)
+        instructions = _text(entry, "instructions", where, problems)
+        if not title.strip() or not instructions.strip():
+            problems.append(f"{where}: a custom step needs a title and instructions")
+        sizes = entry.get("sizes")
+        if sizes is not None and (
+            not isinstance(sizes, list) or any(size not in SIZES for size in sizes)
+        ):
+            problems.append(f"{where}: sizes {sizes!r} must be a list of {', '.join(SIZES)}")
+            sizes = None
+        steps.append(Step(key, title, instructions, tuple(sizes) if sizes else None, append))
+    built_ins = [step.key for step in steps if not step.custom]
+    if built_ins != list(STEP_ORDER):
+        problems.append(
+            "the built-in steps must all be present, in their built-in order: "
+            + ", ".join(STEP_ORDER)
+        )
+    if problems:
+        return BUILT_IN, problems
+    return ProjectSteps(tuple(steps)), []
+
+
+def load(workspace: project_workspace.ProjectWorkspace) -> ProjectSteps:
+    """The project's steps from `spec/journey.json`; the built-in table with no file (FR-1) or,
+    with its diagnostics, for a file that does not parse or breaks a rule (FR-7)."""
+    try:
+        file = workspace.resolve_relative(JOURNEY_FILE)
+        if not file.is_file():
+            return BUILT_IN
+        document = json.loads(file.read_text(encoding="utf-8"))
+    except (OSError, ValueError, project_workspace.ProjectPathError) as exc:
+        problems = [f"{JOURNEY_FILE} cannot be read or does not parse: {exc}"]
+    else:
+        steps, problems = parse(document)
+        if not problems:
+            return steps
+    return ProjectSteps(
+        BUILT_IN.steps, tuple({"code": INVALID, "message": message} for message in problems)
+    )
+
+
+async def project_steps(session: AsyncSession, project_id: str) -> ProjectSteps:
+    """The project's steps, or the built-in table when its directory is unavailable."""
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, project_id)
+    except project_workspace.ProjectWorkspaceError:
+        return BUILT_IN
+    return load(workspace)
+
+
+def journey(size: Optional[str], steps: Optional[ProjectSteps] = None) -> List[str]:
+    """The steps a document of this size visits, in the project's order (FR-2)."""
+    return [step.key for step in (steps or BUILT_IN).steps if step.in_journey(size)]
 
 
 def has_journey(document: SpecDocument) -> bool:
@@ -67,18 +225,29 @@ def has_journey(document: SpecDocument) -> bool:
     return document.kind == "change-spec"
 
 
-def next_step(size: Optional[str], step: Optional[str]) -> Optional[str]:
+def next_step(
+    size: Optional[str], step: Optional[str], steps: Optional[ProjectSteps] = None
+) -> Optional[str]:
     """The step after `step` on this size's journey, or None at its end.
 
     A step the journey does not hold (the size changed under it) moves to the journey's first step
-    that comes after it in `STEP_ORDER` — forward, never back.
+    that comes after it in the project's order — forward, never back. A step the project no longer
+    has at all is refused (FR-8): there is no forward from it, so the operator names where to resume.
     """
-    steps = journey(size)
-    if step in steps:
-        index = steps.index(step)
-        return steps[index + 1] if index + 1 < len(steps) else None
-    place = STEP_ORDER.index(step) if step in STEP_ORDER else -1
-    return next((s for s in steps if STEP_ORDER.index(s) > place), None)
+    steps = steps or BUILT_IN
+    path = journey(size, steps)
+    if step in path:
+        index = path.index(step)
+        return path[index + 1] if index + 1 < len(path) else None
+    order = steps.order()
+    if step is not None and step not in order:
+        raise JourneyError(
+            f"the step {step!r} was removed from this project's journey; name the step to resume "
+            "at with `to`, one of: " + ", ".join(path),
+            code="step_not_in_journey",
+        )
+    place = order.index(step) if step is not None else -1
+    return next((s for s in path if order.index(s) > place), None)
 
 
 def _require_journey(document: SpecDocument) -> None:
@@ -91,14 +260,20 @@ def _require_journey(document: SpecDocument) -> None:
 
 
 async def set_step(
-    session: AsyncSession, document: SpecDocument, step: str, *, actor: Actor
+    session: AsyncSession,
+    document: SpecDocument,
+    step: str,
+    *,
+    actor: Actor,
+    steps: Optional[ProjectSteps] = None,
 ) -> Dict[str, Optional[str]]:
-    """Move the document to `step`, recorded with the actor's run. Any step, back or forward."""
+    """Move the document to `step`, recorded with the actor's run. Any of the project's steps, back
+    or forward."""
     _require_journey(document)
-    if step not in STEP_ORDER:
+    if step not in (steps or BUILT_IN).order():
         raise JourneyError(
             f"unknown step {step!r}; this document's journey is "
-            + ", ".join(journey(document.size)),
+            + ", ".join(journey(document.size, steps)),
             code="unknown_step",
         )
     move = {"from": document.step, "to": step}
@@ -236,19 +411,45 @@ STEP_DUTIES: Dict[str, str] = {
 }
 
 
-def duty(step: Optional[str]) -> str:
-    """The step's instructions with the ask-to-advance protocol, or "" for an unknown step."""
-    text = STEP_DUTIES.get(step or "")
-    if not text:
+#: A custom step's output is named in its own Markdown (D3); this line covers Markdown that does not.
+WRITE_WHERE = (
+    "- Write this step's result where the instructions above say. When they name no place, choose "
+    "a section of the document or a file, and tell the operator where you wrote it."
+)
+
+
+def duty(step: Optional[str], steps: Optional[ProjectSteps] = None) -> str:
+    """The step's instructions, the project's appended instruction for that step and no other
+    (FR-4), and the ask-to-advance protocol; "" for a step the project does not have."""
+    entry = (steps or BUILT_IN).get(step)
+    if entry is None:
         return ""
+    if entry.custom:
+        text = f"{marker(entry.key)} **{entry.title}.**\n{entry.instructions}\n{WRITE_WHERE}"
+    else:
+        text = STEP_DUTIES[entry.key]
+    if entry.append:
+        text += "\n- **This project adds to this step:** " + entry.append
     return text if step == DELIVERY else text + "\n" + ASK_TO_ADVANCE
 
 
-def journey_line(size: Optional[str], step: Optional[str]) -> str:
+def removed(step: str, size: Optional[str], steps: Optional[ProjectSteps] = None) -> str:
+    """The briefing for a document whose step the project removed (FR-8)."""
+    return (
+        f"{marker(step)} **The step {step!r} was removed from this project's journey.** Do not "
+        "continue it. Call `ask_user` with one question: which step to resume at, offering this "
+        f"journey's steps ({', '.join(journey(size, steps))}). Then call "
+        "`advance_spec_step(path, to=<their choice>)` and follow the instructions it returns."
+    )
+
+
+def journey_line(
+    size: Optional[str], step: Optional[str], steps: Optional[ProjectSteps] = None
+) -> str:
     """One line naming the journey and the current step (FR-3)."""
-    steps = [f"**{s}**" if s == step else s for s in journey(size)]
+    named = [f"**{s}**" if s == step else s for s in journey(size, steps)]
     sized = f"size {size}" if size else "not sized yet, so every step"
-    return f"- Journey ({sized}): " + " → ".join(steps) + f". You are at **{step}**."
+    return f"- Journey ({sized}): " + " → ".join(named) + f". You are at **{step}**."
 
 
 def missing(step: Optional[str], payload: Optional[Dict], size: Optional[str]) -> List[str]:

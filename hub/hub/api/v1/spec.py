@@ -461,7 +461,8 @@ class FoldRequest(RequestModel):
     retire_criteria: list[str] = Field(default_factory=list, max_length=256)
 
 
-def _document_view(document) -> dict:
+def _document_view(document, steps: Optional[spec_journey.ProjectSteps] = None) -> dict:
+    """The document as the app shows it; `steps` are its project's (built-in when omitted)."""
     return {
         "id": document.id,
         "path": document.path,
@@ -477,10 +478,17 @@ def _document_view(document) -> dict:
         "step": document.step,
         "size": document.size,
         "journey": (
-            spec_journey.journey(document.size) if spec_journey.has_journey(document) else None
+            spec_journey.journey(document.size, steps)
+            if spec_journey.has_journey(document)
+            else None
         ),
         "updated_at": document.updated_at.isoformat(),
     }
+
+
+async def _project_document_view(session: AsyncSession, project_id: str, document) -> dict:
+    """The document's view with the journey its project's `spec/journey.json` gives it (FR-9)."""
+    return _document_view(document, await spec_journey.project_steps(session, project_id))
 
 
 async def _fold_state(session: AsyncSession, document) -> Optional[Dict[str, Any]]:
@@ -547,9 +555,10 @@ async def list_documents(
         # listing the documents into an error.
         workspace = None
 
+    steps = spec_journey.load(workspace) if workspace is not None else spec_journey.BUILT_IN
     views = []
     for document in documents:
-        view = _document_view(document)
+        view = _document_view(document, steps)
         if workspace is not None:
             with contextlib.suppress(OSError, SpecPathError, project_workspace.ProjectPathError):
                 on_disk = spec_documents.read_document(workspace, document.path)
@@ -701,7 +710,7 @@ async def set_document_rigor(
     await sse_manager.broadcast(
         project_id, "spec_updated", {"path": document.path, "rigor": document.rigor}
     )
-    return _document_view(document)
+    return await _project_document_view(session, project_id, document)
 
 
 @router.put("/documents/{path:path}/content")
@@ -1949,7 +1958,10 @@ async def create_document(
     )
     await session.commit()
     await sse_manager.broadcast(project_id, "spec_updated", {"path": path, "phase": document.phase})
-    return {**_document_view(document), "blocking": result.blocking}
+    return {
+        **await _project_document_view(session, project_id, document),
+        "blocking": result.blocking,
+    }
 
 
 #: What adoption refuses for, mapped to the status each refusal deserves. A path
@@ -2005,7 +2017,10 @@ async def adopt_document(
         "spec_updated",
         {"path": outcome.document.path, "phase": outcome.document.phase},
     )
-    return {**_document_view(outcome.document), **outcome.to_dict()}
+    return {
+        **await _project_document_view(session, project_id, outcome.document),
+        **outcome.to_dict(),
+    }
 
 
 class JourneyChange(RequestModel):
@@ -2043,23 +2058,27 @@ async def set_journey(
                 "code": "no_journey",
             },
         )
+    workspace = await _workspace(session, project_id)
+    steps = spec_journey.load(workspace)
     try:
         if body.size is not None:
             await spec_journey.set_size(
                 session, document, body.size, actor=_operator(), reason=body.reason
             )
         if body.step is not None:
-            await spec_journey.set_step(session, document, body.step, actor=_operator())
+            await spec_journey.set_step(
+                session, document, body.step, actor=_operator(), steps=steps
+            )
     except spec_journey.JourneyError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"message": str(exc), "code": exc.code},
         ) from exc
     # FR-10: the file's hub block carries the new step and size in the same request.
-    await spec_service.rerender_phase(session, await _workspace(session, project_id), document)
+    await spec_service.rerender_phase(session, workspace, document)
     await session.commit()
     await sse_manager.broadcast(project_id, "spec_updated", {"path": path, "phase": document.phase})
-    return _document_view(document)
+    return _document_view(document, steps)
 
 
 @router.post("/documents/close-exploration")
@@ -2084,7 +2103,7 @@ async def close_exploration(
             detail={"message": str(exc), "code": exc.code},
         ) from exc
     await session.commit()
-    return _document_view(document)
+    return await _project_document_view(session, project_id, document)
 
 
 @router.post("/documents/propose")
@@ -2118,11 +2137,19 @@ async def propose_document(
 
     await session.commit()
     if blocking:
-        return {**_document_view(document), "proposed": False, "blocking": blocking}
+        return {
+            **await _project_document_view(session, project_id, document),
+            "proposed": False,
+            "blocking": blocking,
+        }
     await sse_manager.broadcast(
         project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
-    return {**_document_view(document), "proposed": True, "blocking": []}
+    return {
+        **await _project_document_view(session, project_id, document),
+        "proposed": True,
+        "blocking": [],
+    }
 
 
 async def _refresh_index_entry(
@@ -2313,7 +2340,7 @@ async def set_phase(
         await _hand_job_to_scheduler(session, created_job.id, created_job)
 
     response = {
-        **_document_view(document),
+        **await _project_document_view(session, project_id, document),
         "tasks_created": [task["id"] for task in (report or {}).get("created", [])],
     }
     if report is not None:
@@ -2597,7 +2624,7 @@ async def merge_document(
     # support fails loudly here instead of 500ing after the write is already durable.
     if isinstance(result, spec_service.ProposeResult):
         response = {
-            **_document_view(document),
+            **await _project_document_view(session, project_id, document),
             "proposals": result.proposals,
             "unchanged": result.unchanged,
             "already_pending": result.already_pending,
@@ -2605,7 +2632,7 @@ async def merge_document(
         }
     else:
         response = {
-            **_document_view(document),
+            **await _project_document_view(session, project_id, document),
             "blocking": result.blocking,
             "divergence": result.divergence,
             "merged": len(sources),
@@ -2754,7 +2781,7 @@ async def fold_document(
         ) from exc
 
     response: Dict[str, Any] = {
-        **_document_view(change),
+        **await _project_document_view(session, project_id, change),
         "capability": _document_view(capability),
         "archived": archived,
         "fold_state": await _fold_state(session, change),

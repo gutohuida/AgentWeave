@@ -2257,8 +2257,14 @@ async def _render_hub_agent_context(
                 # step is read from the document, so any conversation resumes it (FR-6).
                 on_journey = is_change_spec and phase == "exploring" and row.step is not None
                 if on_journey:
-                    lines.append(spec_journey.journey_line(row.size, row.step))
-                    lines.append(spec_journey.duty(row.step))
+                    # The project's own steps (`spec/journey.json`): a custom step is briefed with
+                    # its Markdown, an appended instruction reaches only its step (FR-3, FR-4).
+                    steps = await spec_journey.project_steps(db, project_id)
+                    lines.append(spec_journey.journey_line(row.size, row.step, steps))
+                    lines.append(
+                        spec_journey.duty(row.step, steps)
+                        or spec_journey.removed(row.step, row.size, steps)
+                    )
                 else:
                     lines.append(_phase_duty(phase, row.kind if row is not None else None))
                 if is_change_spec and phase in ("exploring", "proposed"):
