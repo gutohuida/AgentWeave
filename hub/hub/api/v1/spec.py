@@ -510,7 +510,15 @@ async def _fold_state(session: AsyncSession, document) -> Optional[Dict[str, Any
         state = "tasks_open"
     else:
         state = "ready"
-    return {"state": state, "open_tasks": open_tasks, "capabilities": capabilities}
+    from ... import spec_reconcile
+
+    return {
+        "state": state,
+        "open_tasks": open_tasks,
+        "capabilities": capabilities,
+        # reconcile-and-measure FR-3: the latest reconcile result, or `{"state": "none"}`.
+        "reconcile": spec_reconcile.view(await spec_reconcile.latest(session, document.id)),
+    }
 
 
 def _operator() -> spec_lifecycle.Actor:
@@ -843,6 +851,109 @@ async def rigor_history(
             for event in events
         ]
     }
+
+
+class ReconcileAsk(RequestModel):
+    """The agent the operator asks to reconcile a change with its code."""
+
+    agent: str = Field(max_length=64)
+
+
+@router.post("/documents/{path:path}/reconcile", status_code=status.HTTP_202_ACCEPTED)
+async def ask_reconcile(
+    path: str,
+    body: ReconcileAsk,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Start `agent`'s turn reconciling an approved change with its code, with the Hub's brief."""
+    from ... import spec_reconcile
+    from .agent_trigger import TriggerAgentRequest, trigger_agent
+
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    if document.kind != "change-spec" or document.phase != spec_lifecycle.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "reconcile_not_approved",
+                "message": "only an approved change is reconciled with its code",
+            },
+        )
+    return await trigger_agent(
+        TriggerAgentRequest(
+            agent=body.agent, message=spec_reconcile.brief(document), spec_document=document.path
+        ),
+        project=project,
+        session=session,
+    )
+
+
+class DefectRecord(RequestModel):
+    """A defect the operator records against a change, and the step that caught it."""
+
+    summary: str = Field(max_length=2000)
+    caught_by: str = Field(max_length=64)
+
+
+@router.post("/documents/{path:path}/defects", status_code=status.HTTP_201_CREATED)
+async def record_defect(
+    path: str,
+    body: DefectRecord,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Record a defect against a change, caught at a journey step or a post-approval stage."""
+    from ... import spec_defects
+
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    workspace = await _workspace(session, project_id)
+    allowed = spec_defects.steps(spec_journey.load(workspace).order())
+    try:
+        result = await spec_defects.record(
+            session,
+            document,
+            summary=body.summary,
+            caught_by=body.caught_by,
+            allowed_steps=allowed,
+            actor=_operator(),
+        )
+    except spec_defects.DefectRefused as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "defect_invalid", "message": str(exc), "field": exc.field},
+        ) from exc
+    await session.commit()
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": document.path})
+    return result
+
+
+@router.get("/spec/defects")
+async def defects_report(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Each change with defects, the step that caught each, and a count per step."""
+    from ... import spec_defects
+
+    project_id, _ = project
+    documents = await spec_lifecycle.list_documents(session, project_id)
+    found = await spec_defects.for_documents(session, documents)
+    by_id = {document.id: document for document in documents}
+    changes = [
+        {
+            "document_id": document_id,
+            "path": by_id[document_id].path,
+            "title": by_id[document_id].title,
+            "phase": by_id[document_id].phase,
+            "defects": defects,
+            "by_step": spec_defects.by_step(defects),
+        }
+        for document_id, defects in found.items()
+        if defects
+    ]
+    return {"changes": changes}
 
 
 class AmendmentReviewRequest(RequestModel):

@@ -1405,6 +1405,19 @@ def _operations() -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="record_reconcile",
+            args="path, summary, gaps",
+            method="POST",
+            path="/spec/documents/reconcile",
+            fields=("path", "summary", "gaps"),
+            required=("path", "summary"),
+            text=(
+                "record what reconciling an approved change with its code found: each gap "
+                "`{class, requirement, where, summary}`, `class` one of `missing`, `partial`, "
+                "`contradicts`, `unrequested`. Only when asked to reconcile; changes nothing."
+            ),
+        ),
+        _Operation(
             tool="report_cannot_satisfy",
             args="path, criterion, reason",
             method="POST",

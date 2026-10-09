@@ -208,11 +208,9 @@ class Delivery(_Part):
         max_length=32,
         description="The agent that reviews every task whose own `reviewer` is empty, by name. A name that is not an open agent stops the review rather than giving it to someone else. Empty: any free agent reviews.",
     )
-    tester: Optional[Literal[False] | Annotated[str, StringConstraints(max_length=32)]] = (
-        Field(
-            default=None,
-            description="Who tests each finished task by driving the running product, by name; tests every task whose own `reviewer` is empty, ahead of `reviewer`. Empty: testing is on and the reviewer (or any free agent) tests. false: no testing, review only.",
-        )
+    tester: Optional[Literal[False] | Annotated[str, StringConstraints(max_length=32)]] = Field(
+        default=None,
+        description="Who tests each finished task by driving the running product, by name; tests every task whose own `reviewer` is empty, ahead of `reviewer`. Empty: testing is on and the reviewer (or any free agent) tests. false: no testing, review only.",
     )
     stop_when_queue_empties: bool = Field(
         default=False,

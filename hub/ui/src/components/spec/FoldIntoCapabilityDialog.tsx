@@ -6,9 +6,11 @@ import { readableApiError } from '@/api/client'
 import {
   useFoldDocument,
   useFoldDraft,
+  useSpec,
   useSpecDocuments,
   type SpecFoldDraftRequirement,
 } from '@/api/spec'
+import { ReconcileSummary } from './ReconcileSummary'
 
 interface Row {
   from: string
@@ -52,6 +54,8 @@ export function FoldIntoCapabilityDialog({
     (d) => d.kind === 'capability' && d.phase === 'current',
   )
   const [into, setInto] = useState<string | null>(null)
+  // The change's reconcile result rides the same `spec/<path>` read the document panel holds.
+  const { data: spec, isError: specError } = useSpec(path)
   const draft = useFoldDraft(path, into)
   const fold = useFoldDocument()
   const [rows, setRows] = useState<Row[]>([])
@@ -148,6 +152,14 @@ export function FoldIntoCapabilityDialog({
           The change’s requirements are copied into the capability you choose. Edit a key or a
           statement where the change’s wording does not suit the capability.
         </p>
+
+        {/* What reconciling the change with its code found, before its requirements become the
+            capability's (reconcile-and-measure FR-3). Shown, never a gate. */}
+        {specError ? (
+          <p style={{ color: 'var(--amber)' }}>Could not load whether this change was reconciled.</p>
+        ) : (
+          <ReconcileSummary path={path} result={spec?.fold_state?.reconcile} />
+        )}
 
         <label className="flex items-center gap-2">
           <span style={{ color: 'var(--text-2)' }}>Capability</span>

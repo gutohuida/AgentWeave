@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { useSpecList } from '@/api/spec'
 import { buildInventory } from './specNavigation'
 import { SpecTree } from './SpecTree'
+import { SpecDefectsReport } from './SpecDefectsReport'
 
 interface SpecRailNavProps {
   projectName: string
@@ -67,6 +68,7 @@ export function SpecRailNav({ projectName, currentPath, onSelect, onBack }: Spec
           density="rail"
         />
       </nav>
+      <SpecDefectsReport currentPath={currentPath} onSelect={onSelect} />
     </>
   )
 }

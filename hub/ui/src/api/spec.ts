@@ -156,6 +156,81 @@ export interface SpecFoldState {
   state: 'tasks_open' | 'ready' | 'folded'
   open_tasks: string[]
   capabilities: string[]
+  /** The change's latest reconcile result (`a-change-is-reconciled-with-its-code-before-it-is-
+   *  folded`). Absent from a Hub that predates it. */
+  reconcile?: SpecReconcileResult
+}
+
+export type SpecReconcileClass = 'missing' | 'partial' | 'contradicts' | 'unrequested'
+
+export interface SpecReconcileGap {
+  class: SpecReconcileClass
+  requirement: string | null
+  where: string
+  summary: string
+}
+
+export type SpecReconcileResult =
+  | { state: 'none' }
+  | {
+      state: 'recorded'
+      id: string
+      author: string
+      run_id: string | null
+      at: string | null
+      summary: string
+      counts: Record<SpecReconcileClass, number>
+      gaps: SpecReconcileGap[]
+    }
+
+/** One defect of a change and the step that caught it, derived by the Hub from its own records. */
+export interface SpecDefect {
+  source: 'amendment' | 'cannot_satisfy' | 'review' | 'reconcile' | 'operator'
+  caught_by: string
+  summary: string
+  at: string | null
+  by: string
+}
+
+export interface SpecDefectsChange {
+  document_id: string
+  path: string
+  title: string
+  phase: string
+  defects: SpecDefect[]
+  by_step: Record<string, number>
+}
+
+/** Defects per change, by the step that caught them. Oldest first within a change. */
+export function useSpecDefects() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ changes: SpecDefectsChange[] }>({
+    // Under `specs`, so `spec_updated` and every spec mutation refresh it.
+    queryKey: ['project', projectId, 'specs', 'defects'],
+    queryFn: () =>
+      getJson<{ changes: SpecDefectsChange[] }>(`/api/v1/projects/${projectId}/project/spec/defects`),
+    enabled: isConfigured && !!projectId,
+  })
+}
+
+/** The stages after approval a defect can be caught at, after the project's journey steps. Restates
+ *  `spec_defects.POST_APPROVAL_STEPS`; the Hub refuses anything else with 422 naming `caught_by`. */
+export const POST_APPROVAL_STEPS = ['build', 'review', 'test', 'reconcile', 'after-fold'] as const
+
+/** Record a defect against a change, and the step that caught it. */
+export function useRecordDefect() {
+  return useSpecMutation<{ path: string; summary: string; caught_by: string }, SpecDefect>(
+    (projectId, { path, ...body }) =>
+      postJson(`/api/v1/projects/${projectId}/project/documents/${path}/defects`, body),
+  )
+}
+
+/** Ask an agent to reconcile an approved change with its code; the Hub writes the brief. */
+export function useAskReconcile() {
+  return useSpecMutation<{ path: string; agent: string }, { agent: string; status: string }>(
+    (projectId, { path, agent }) =>
+      postJson(`/api/v1/projects/${projectId}/project/documents/${path}/reconcile`, { agent }),
+  )
 }
 
 export interface SpecDocument {

@@ -6,6 +6,7 @@ import { DeleteConfirmDialog } from '@/components/common/DeleteConfirmDialog'
 import { FoldIntoCapabilityDialog } from '@/components/spec/FoldIntoCapabilityDialog'
 import { RetireCapabilityDialog } from '@/components/spec/RetireCapabilityDialog'
 import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
+import { ReconcileSummary } from '@/components/spec/ReconcileSummary'
 import { useDocumentFlow, type LoopSummary } from '@/api/loops'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
@@ -468,6 +469,11 @@ export function SpecPhaseBar({
             Fold into capability…
           </Button>
         </div>
+      )}
+      {/* reconcile-and-measure: what reconciling the change with its code found, while it is
+          approved. Its full form, and the ask, are in the fold dialog. */}
+      {document.phase === 'approved' && (
+        <ReconcileSummary path={document.path} result={foldState?.reconcile} compact />
       )}
       {foldState?.state === 'folded' && (
         <p data-testid="fold-state" data-state="folded" style={{ color: 'var(--text-3)' }}>

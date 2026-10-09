@@ -90,7 +90,7 @@ def payload():
             {"key": "t-ping", "title": "Serve /ping", "description": "In app.py.", "requirements": ["ping"],
              "depends_on": [], "files": ["app.py"], "from": None, "reviewer": None},
             {"key": "t-health", "title": "Serve /health", "description": "In app.py.",
-             "requirements": ["health"], "depends_on": ["t-ping"], "files": ["app.py"], "from": None,
+             "requirements": ["health"], "depends_on": [], "files": ["app.py"], "from": None,
              "reviewer": None},
         ],
         "algorithms": [], "design": "One handler.", "evidence": {"checked": ["app.py"], "limits": []},

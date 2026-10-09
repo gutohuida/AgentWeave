@@ -2031,6 +2031,45 @@ def _amendment_refused(exc) -> HTTPException:
     )
 
 
+class ReconcileRecord(RequestModel):
+    """A reconcile result: the gaps between an approved change and its code."""
+
+    path: str = Field(max_length=255)
+    summary: str = Field(max_length=2000)
+    gaps: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+@router.post("/spec/documents/reconcile", status_code=status.HTTP_201_CREATED)
+async def record_reconcile(
+    body: ReconcileRecord,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Record what reconciling a change with its code found. Recorded with this run; changes nothing."""
+    from ... import spec_lifecycle, spec_reconcile
+
+    workspace, document = await _amendable_document(session, actor, body.path)
+    try:
+        result = await spec_reconcile.record(
+            session,
+            workspace,
+            document,
+            summary=body.summary,
+            gaps=body.gaps,
+            actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+        )
+    except spec_reconcile.ReconcileRefused as exc:
+        raise HTTPException(
+            status_code=exc.status,
+            detail={"message": str(exc), "code": exc.code, "field": exc.field},
+        ) from exc
+    await session.commit()
+    await sse_manager.broadcast(
+        actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    return result
+
+
 @router.post("/spec/documents/amend", status_code=status.HTTP_201_CREATED)
 async def amend_spec_document(
     body: SpecAmendment,

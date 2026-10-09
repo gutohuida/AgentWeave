@@ -479,6 +479,8 @@ async def report_cannot_satisfy(
             "reason": reason_text,
             "how_to_check": found.get("how_to_check") or "",
             "task_id": task.id if task else None,
+            # Which step caught it, for the defects report: the builder's run, or the tester's.
+            "role": "build" if worked is not None else "test",
             "before": found,
         },
     )

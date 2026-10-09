@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "reconcile-and-measure-t2-impl",
-    "next_action": "tester-amends-drive: d1013 on :8102 with Haiku; then METRICS row; then reconcile-and-measure-spec.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -179,27 +179,27 @@
         },
         {
             "id": "reconcile-and-measure-t2-impl",
-            "status": "open",
+            "status": "done",
             "title": "reconcile-and-measure reconcile: tool, ask route, fold_state.reconcile",
-            "detail": "Failing tests first."
+            "detail": "done 2026-10-09 morning: built t2-t4 together; d1014 4/4 on :8103 (testbed/drive1014-reconcile/094842); METRICS row."
         },
         {
             "id": "reconcile-and-measure-t3-impl",
-            "status": "open",
+            "status": "done",
             "title": "reconcile-and-measure defects: derived list, operator record, report",
-            "detail": "Failing tests first."
+            "detail": "done 2026-10-09 morning: built t2-t4 together; d1014 4/4 on :8103 (testbed/drive1014-reconcile/094842); METRICS row."
         },
         {
             "id": "reconcile-and-measure-t4-impl",
-            "status": "open",
+            "status": "done",
             "title": "reconcile-and-measure page: fold dialog reconcile section, defects report, bundle",
-            "detail": "Failing tests first."
+            "detail": "done 2026-10-09 morning: built t2-t4 together; d1014 4/4 on :8103 (testbed/drive1014-reconcile/094842); METRICS row."
         },
         {
             "id": "reconcile-and-measure-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive reconcile-and-measure on a scratch Hub; log evidence + METRICS row",
-            "detail": "Own port, fresh db, haiku turns only."
+            "detail": "done 2026-10-09 morning: built t2-t4 together; d1014 4/4 on :8103 (testbed/drive1014-reconcile/094842); METRICS row."
         }
     ],
     "decisions_for_user": [

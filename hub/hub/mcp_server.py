@@ -4182,6 +4182,28 @@ def amend_spec_document(
 
 
 @_tool()
+def record_reconcile(
+    path: str, summary: str, gaps: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    """Record what reconciling an approved change with its code found. Changes nothing else.
+
+    Args:
+        path: The change document, e.g. `spec/changes/<name>/spec.json`.
+        summary: What you read and ran, and the overall result.
+        gaps: Each gap between the document and the code, as `{class, requirement, where, summary}`:
+            `class` is `missing` (a requirement the code does not do), `partial` (does some of it),
+            `contradicts` (does something else) or `unrequested` (code no requirement asks for);
+            `requirement` is the requirement's key or FR identifier (leave it out for
+            `unrequested`); `where` is a file, route or line. An empty list says you found none.
+    """
+    return _hub_request(
+        "POST",
+        "/spec/documents/reconcile",
+        {"path": path, "summary": summary, "gaps": gaps or []},
+    )
+
+
+@_tool()
 def report_cannot_satisfy(path: str, criterion: str, reason: str) -> Dict[str, Any]:
     """Say that a criterion of the document cannot be satisfied as written, and why.
 

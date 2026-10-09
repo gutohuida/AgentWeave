@@ -474,7 +474,12 @@ async def test_fold_state_reads_tasks_open_then_ready_then_folded(app, auth_head
     folded = await fold_state()
 
     assert open_state["state"] == "tasks_open" and len(open_state["open_tasks"]) == 1
-    assert ready == {"state": "ready", "open_tasks": [], "capabilities": []}
+    assert ready == {
+        "state": "ready",
+        "open_tasks": [],
+        "capabilities": [],
+        "reconcile": {"state": "none"},
+    }
     assert folded["state"] == "folded" and folded["capabilities"] == [CAP]
 
 

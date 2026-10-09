@@ -229,6 +229,7 @@ HUB_MCP_TOOLS = frozenset(
         "read_checkpoint",
         "read_spec_document",
         "recall",
+        "record_reconcile",
         "report_cannot_satisfy",
         "record_evidence",
         "rename_spec_document",
