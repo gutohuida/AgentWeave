@@ -2355,3 +2355,15 @@ disappears is indistinguishable from one that was forgotten.
 - **On a roadmap, any `open_questions` entry with `resolved: false` blocks proposing it** (F573). Put slice-level questions in that slice's `intent`.
 - **`ruff` is not on Git Bash's PATH.** Use `py -3.11 -m ruff`.
 - **`GET /projects/{P}/tasks?limit=500` rows carry `spec_document_id` and `spec_task_key`.** Filter on those to find a change document's tasks.
+
+### 2026-10-09 (late afternoon session, handoff 0187)
+
+- **The full Hub suite takes 30-52 min on this machine, and `-x` hides failures.** The first run stopped at its first failure after 4407 tests; the rerun without `-x` found 4 more in another file. Run it without `-x`, in the background, and grep the log for `^FAILED`. Also, `cmd > log; tail log` exits 0 even when pytest failed, so don't trust the background task's "exit code 0". (Confirmed 2026-10-09.)
+- **Two Hub tests are ratchets that every new table or new UI query trips:**
+  - `hub/tests/test_project_delete_api.py` lists every project-scoped table by name. Add a new table to `PROJECT_SCOPED_TABLE_NAMES` and to `_seed_full_project`.
+  - `hub/tests/test_surface_ceilings.py` (n11, `scripts/drive/n11_query_error_surface.py`) fails on any UI `useQuery`-hook call outside `api/` that does not bind *and* use its `error`. Handle the error; don't raise the ceiling.
+  Neither is in `.claude/rules/`; run both before committing a new table or panel. (Confirmed 2026-10-09.)
+- **Editing a CRLF or LF file with Python's default text mode on Windows rewrites its line endings.** Git normalised them on commit, so no churn landed, but `newline=''` with explicit `\r\n` handling is the safe pattern. (Confirmed 2026-10-09.)
+- **`grep -rn ... hub/` walks `hub/ui/node_modules` and times out at 120 s.** Use the Grep tool, or limit the search to `hub/hub hub/tests`.
+- **After a fold, `spec/index.json` still shows the change as `approved`** until `POST /projects/{P}/project/spec/reindex` (trial Hub, bootstrap key from `~/.agentweave/hub/profiles/trial/bootstrap-key.txt`). Run it, then commit the index.
+- **The auto-mode classifier blocked listing `.claude/loops/` straight after `git branch -f autonomous/<date>-daily master && git push`.** The branch move had already succeeded, so `arm-cycle.ps1 -Window night -DryRun` was left to the operator. Expect that check to need the operator.
