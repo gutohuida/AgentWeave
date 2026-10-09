@@ -21,14 +21,12 @@ const SEVERITY_ACTIVE_STYLE: Record<Severity, { bg: string; color: string }> = {
   debug: { bg: 'var(--surface-3)', color: 'var(--text-2)' },
 }
 
-const CATEGORIES = ['all', 'transport', 'watchdog', 'runner', 'proxy', 'setup', 'jobs', 'stderr'] as const
+const CATEGORIES = ['all', 'runner', 'proxy', 'setup', 'jobs', 'stderr'] as const
 type Category = (typeof CATEGORIES)[number]
 
 function eventCategory(eventType: string, data?: Record<string, unknown>): Category | 'other' {
   const category = typeof data?.category === 'string' ? data.category : ''
   const value = `${eventType} ${category}`.toLowerCase()
-  if (value.includes('transport') || value.includes('hub_')) return 'transport'
-  if (value.includes('watchdog')) return 'watchdog'
   if (value.includes('runner') || value.includes('launch') || value.includes('cli')) return 'runner'
   if (value.includes('proxy') || value.includes('api_key')) return 'proxy'
   if (value.includes('setup') || value.includes('sync') || value.includes('registration')) return 'setup'

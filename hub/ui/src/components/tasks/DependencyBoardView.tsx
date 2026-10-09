@@ -26,15 +26,16 @@ export function DependencyBoardView({ onOpenRequirement }: DependencyBoardViewPr
   const selectedId = manualSelection !== undefined ? manualSelection : boards[0]?.spec_document_id ?? null
 
   // Task 8.10: this board draws structure, it never writes it (design D5, "the document is the
-  // only writer of edges") — there is no add/remove-edge affordance anywhere in this component or
-  // `DependencyBoard` for that reason, not by omission. The one place an operator might reasonably
-  // look for one is right here, above the board, so it says where structure actually comes from
-  // rather than leaving the absence to be discovered by trying. The "no document" board gets its
-  // own wording: a hand-made task belongs to no document, so nothing can ever declare its edges
-  // (D5's own stated consequence), not merely "edit elsewhere."
+  // only writer of edges" for a document's tasks) — there is no add/remove-edge affordance anywhere
+  // in this component or `DependencyBoard` for that reason, not by omission. The one place an
+  // operator might reasonably look for one is right here, above the board, so it says where
+  // structure actually comes from rather than leaving the absence to be discovered by trying. The
+  // "no document" board gets its own wording: a hand-made task belongs to no document, so no
+  // document declares its edges. It does not say it cannot have any — it can, since F36, through
+  // the task-dependency route (F552).
   const structureHint =
     selectedId === null
-      ? 'Hand-made tasks belong to no document, so they can never have a dependency.'
+      ? 'Hand-made tasks belong to no document, so no document declares their dependencies.'
       : 'Dependencies are set in the document — edit its depends_on field to change them.'
 
   if (isLoading) {

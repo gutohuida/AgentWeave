@@ -261,6 +261,9 @@ async def test_a_granted_agent_is_told_what_it_may_read(app, auth_headers, revie
     context = rendered.json()["context"]
 
     assert "You may read your peers' checkpoints" in context
+    # F552: migration 0111 removed the per-checkpoint visibility the briefing still alluded to;
+    # the grant reaches every checkpoint, with no "where those are shared" condition.
+    assert "shared with the project" not in context
     assert "returns a cited observation verbatim" in context
     assert "your own checkpoints and no one else's" not in context
 

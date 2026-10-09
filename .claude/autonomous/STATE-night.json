@@ -8,18 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f552-impl",
-    "next_action": "Do queue item f552-impl: spec-queue/APPROVALS.md (section 2026-10-09, night window) describes it; read F552 in scripts/drive/FINDINGS.md and correct every stale sentence it lists as Tier 0 (test first, fix, lint, set Status). Full ORDER and the item notes are in APPROVALS.md.",
+    "current": "f553-impl",
+    "next_action": "Do queue item f553-impl: spec-queue/APPROVALS.md (section 2026-10-09, night window) describes it; read F553 in scripts/drive/FINDINGS.md (delete SharedStreamRenderer.tsx, streamModel.ts, AgentActivityTab.tsx and their tests; make /model open the composer's existing model picker; leave parse_opencode_line and panelTabsStore.reconcile and say so in F553's status). Test first, fix, lint, refresh the UI bundle (make ui equivalent: npm run build then py -3.11 scripts/refresh_ui_bundle.py), set Status.",
     "queue": [
-        {
-            "id": "f552-impl",
-            "status": "open",
-            "title": "Tier 0 fix F552: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
-        },
         {
             "id": "f553-impl",
             "status": "open",

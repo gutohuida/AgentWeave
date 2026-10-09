@@ -259,3 +259,7 @@ async def test_a_roadmap_keeps_todays_exploring_duty(app, auth_headers, tmp_path
 
     assert _markers(text) == []
     assert "Size it as a slice" in text
+    # F552: the next slice is drafted once the approved one is built (`slice_drafting`), not once
+    # it is approved; the briefing said the second and sent the agent to draft early.
+    assert "once the one before it is built" in text
+    assert "once the one before it is approved" not in text

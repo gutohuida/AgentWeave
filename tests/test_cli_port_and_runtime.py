@@ -133,6 +133,28 @@ class TestDoctorExaminesTheInstanceTheProjectUses:
         assert "8010" in result.message
         assert result.hint
 
+    def test_the_start_hint_is_a_command_the_parser_accepts(self, monkeypatch):
+        """F552: the hint named `hub-start`, a subcommand the CLI no longer has."""
+        import re
+        import shlex
+
+        from agentweave import diagnostics
+        from agentweave.cli import create_parser
+
+        def _boom(*a, **k):
+            raise OSError("connection refused")
+
+        monkeypatch.setattr("urllib.request.urlopen", _boom)
+
+        hint = diagnostics.check_hub_instance(8010).hint
+        command = re.search(r"`([^`]+)`", hint).group(1)
+        argv = shlex.split(command)
+        assert argv[0] == "agentweave"
+
+        parsed = create_parser().parse_args(argv[1:])  # exits on an unknown subcommand
+        assert parsed.port == 8010
+        assert getattr(parsed, "command", None) is None
+
     def test_a_running_hub_reports_what_it_is(self, monkeypatch):
         from agentweave import diagnostics
 

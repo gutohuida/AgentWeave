@@ -80,7 +80,8 @@ class AgentMessageCreate(RequestModel):
     task_id: Optional[str] = Field(default=None, max_length=128)
     # Which of the recipient's conversations to send into. Unset — which is the common case,
     # because a sending agent usually has no reason to know another agent's conversation ids —
-    # means their most recent open one, opening a new one if they have none.
+    # means the recipient's open conversation bound to the sender's own (a new one, bound, if none
+    # is), not their most recent one.
     #
     # `extra: "forbid"` below is why this field's absence was not a missing feature but a total
     # outage: `mcp_server.send_message` puts `conversation_id` in every body it builds, null

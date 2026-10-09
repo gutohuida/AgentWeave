@@ -139,6 +139,27 @@ def test_send_message_docstring_does_not_claim_recency_and_declares_start_new_th
     assert default is False
 
 
+def test_send_message_docstring_says_a_checkpoint_cutover_changes_the_thread():
+    """F552: a cutover closes the recipient's thread and opens its successor, which inherits the
+    binding. The tool said nothing, so an agent saw its next message land in a conversation with
+    a different id and no account of why."""
+    from hub.mcp_server import send_message
+
+    doc = (send_message.__doc__ or "").lower()
+    assert "cutover" in doc
+
+
+def test_the_slice_guidance_says_built_not_approved():
+    """F552: `slice_drafting` drafts the next slice once the approved one is built."""
+    from hub import mcp_server
+
+    for tool in (mcp_server.submit_spec_document, mcp_server.create_spec_document):
+        doc = " ".join((tool.__doc__ or "").split())
+        if "Size it as a slice" in doc:
+            assert "once the one before it is built" in doc
+            assert "once the one before it is approved" not in doc
+
+
 def test_effect_refuses_unbound_run_credential(hub, monkeypatch):
     from hub.mcp_server import send_message
 

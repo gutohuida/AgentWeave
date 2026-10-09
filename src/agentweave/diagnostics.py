@@ -266,7 +266,7 @@ def check_hub_instance(port: int = 8000) -> DiagnosticResult:
             "hub_not_running",
             f"port:{port}",
             f"No Hub answered on port {port} ({exc}).",
-            hint=f"Start it with `agentweave --port {port} hub-start`, if it should be running.",
+            hint=f"Start it with `agentweave --port {port}`, if it should be running.",
             category="environment",
             data={"port": port},
         )

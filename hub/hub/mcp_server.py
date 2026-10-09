@@ -287,8 +287,11 @@ def send_message(
         task_id: Optional task this message relates to.
         conversation_id: Which of the recipient's conversations to send into. Leave unset to
             continue the thread already bound between you and them, or to start one if none is
-            bound yet. Sending to an archived conversation fails and returns your content back,
-            so you can retry without it.
+            bound yet. A checkpoint cutover, yours or theirs, closes the conversation it ends
+            and opens a successor that keeps the binding: your next message reaches the
+            successor, which begins from the checkpoint and not from the old transcript, under
+            a new conversation id. Sending to an archived conversation fails and returns your
+            content back, so you can retry without it.
         start_new_thread: Bypass the bound thread and start a fresh one with this recipient,
             which becomes the new bound thread for later messages. Refused together with an
             explicit conversation_id — naming a thread and asking for a new one are
@@ -3789,7 +3792,7 @@ def create_spec_document(
     `roadmap` plus the first slice's change document, not as one large document. A slice is
     about a dozen requirements or fewer, as a few tasks; later slices are recorded in the
     roadmap as `slices`, not specified, and each is drafted once the one before it is
-    approved.
+    built.
 
     A roadmap carries `slices` and no requirements or tasks. Each slice's change document names it
     with `roadmap: {"document": <roadmap path>, "slice": <key>}`, and can be proposed only once
@@ -3850,7 +3853,7 @@ def submit_spec_document(
     `roadmap` plus the first slice's change document, not as one large document. A slice is
     about a dozen requirements or fewer, as a few tasks; later slices are recorded in the
     roadmap as `slices`, not specified, and each is drafted once the one before it is
-    approved.
+    built.
 
     The document must already exist — call `create_spec_document` first if you don't have one yet.
     Submitting repeatedly is normal and expected — a document under discussion is incomplete, and

@@ -1845,7 +1845,7 @@ SPEC_PHASE_DUTIES = {
         "- **Size it as a slice.** A request larger than one demonstrable outcome is written as a "
         "`roadmap` plus the first slice's change document, not one large document. A slice is "
         "about a dozen requirements or fewer, as a few tasks; later slices are recorded in the "
-        "roadmap, not specified, and each is drafted once the one before it is approved.\n"
+        "roadmap, not specified, and each is drafted once the one before it is built.\n"
         "- **Declare files and order the tasks.** For each task you write, list in `files` the "
         "repo-relative paths it will edit. Chain any two tasks that share a path with "
         "`depends_on` (sibling task keys), so same-file tasks are built in order rather than in "
@@ -2529,7 +2529,7 @@ async def _render_hub_agent_context(
         if may_read:
             lines.append(
                 "- You may read your peers' checkpoints — the summaries an agent leaves when its "
-                "conversation is cut over — where those are shared with the project. "
+                "conversation is cut over — whichever conversation they came from. "
                 "`list_checkpoints()` is how you find them and `read_checkpoint(id)` opens one."
             )
         else:

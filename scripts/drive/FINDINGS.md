@@ -35112,7 +35112,7 @@ is never cleared; requirement identifiers sort as text (`FR-10` before `FR-2`).
 
 ## F552 (C) -- operator- and agent-facing text that describes things that no longer exist
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code). Each is a sentence to correct:
+**Status:** fixed 2026-10-09 (Tier 0, night iteration 3). Seven sentences corrected, each with a test that failed first at its seam: the board hint now says no document declares a hand-made task's dependencies (and no longer that it cannot have one; the picker is F571); the doctor hint is `agentweave --port N` and a test parses it with the real parser; the Logs chips lose `transport`/`watchdog` (a `hub_` event now falls under `other`); the briefing drops "where those are shared with the project"; `send_message` documents the cutover successor (it keeps the binding, under a new conversation id, so the finding's "new thread" is stated as that); slice guidance says "built" in the briefing and both MCP docstrings; the `agent_actions.py` comment now says binding, not recency (a comment, so no test). Not driven in a browser: the hint and chips are covered by rendered vitest tests only. Filed 2026-10-08 (spec overhaul audit, reading code). Each is a sentence to correct:
 - the dependency board's hint says a hand-made task "can never have a dependency", false since F36
   (`DependencyBoardView.tsx:37`, `tasks.py:957`);
 - `diagnostics.py:269` tells the operator to run `agentweave --port N hub-start`; there is no `hub-start`

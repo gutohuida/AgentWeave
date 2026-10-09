@@ -135,11 +135,11 @@ describe('DependencyBoardView', () => {
     )
 
     fireEvent.click(screen.getByTestId('dependency-board-picker-none'))
-    // The "no document" board gets D5's own stated consequence, not the generic wording — a
-    // hand-made task belongs to no document, so nothing can ever declare its edges.
-    expect(screen.getByTestId('dependency-board-structure-hint')).toHaveTextContent(
-      'Hand-made tasks belong to no document, so they can never have a dependency.',
-    )
+    // The "no document" board says why no document declares these edges, and does not claim a
+    // hand-made task cannot have one — it can, since F36 (F552).
+    const hint = screen.getByTestId('dependency-board-structure-hint')
+    expect(hint).toHaveTextContent('Hand-made tasks belong to no document')
+    expect(hint).not.toHaveTextContent('never have a dependency')
   })
 
   it('shows an empty state when no board has any tasks', async () => {
