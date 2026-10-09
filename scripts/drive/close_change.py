@@ -401,6 +401,367 @@ CHANGES = {
              "The acceptance drive, written and run before the build: 1/9 on today's Hub."),
         ],
     },
+    "fstorage": {
+        "document": 'spec/changes/a-spec-document-is-stored-as-its-payload/spec.json',
+        "commit": '3b7663d',
+        "tasks": ['task-824bfa945a0a', 'task-3173c0f6ef88', 'task-55c62bc9c6d0', 'task-e7eec913ea2b'],
+        "evidence": [
+            ('FR-1', 'task-3173c0f6ef88', 'test_result', 'hub/tests/test_spec_json_storage.py',
+             'test_a_submitted_document_is_stored_as_its_payload_and_the_hub_block and '
+             'test_the_hub_block_is_not_part_of_the_payload assert the saved spec.json holds the '
+             'payload verbatim plus a hub block (phase, rigor, step, size); '
+             'test_a_payload_may_not_carry_the_hub_block asserts the refusal.'),
+            ('FR-2', 'task-3173c0f6ef88', 'test_result', 'hub/tests/test_spec_json_storage.py',
+             'test_get_spec_renders_the_page_from_the_stored_payload asserts GET /spec returns HTML '
+             'rendered from the stored spec.json; d1010 checks 4 and 6 compare the page, statement and '
+             'phase chip before and after conversion.'),
+            ('FR-3', 'task-3173c0f6ef88', 'test_result', 'hub/tests/test_spec_json_storage.py',
+             'test_the_same_payload_is_written_to_the_same_bytes asserts deterministic bytes; '
+             'test_rewording_one_requirement_changes_only_its_line asserts a one-requirement reword '
+             "changes only that requirement's lines."),
+            ('FR-3', 'task-55c62bc9c6d0', 'manual_observation', 'scripts/drive/d1010_spec_json.py',
+             'd1010 check 7b rewords one requirement on the converted corpus and asserts the diff '
+             "holds only that requirement's statement and digest lines."),
+            ('FR-4', 'task-3173c0f6ef88', 'test_result', 'hub/tests/test_spec_storage_seam.py',
+             'test_only_the_seam_parses_a_stored_file is an AST guard failing if any module other than '
+             'spec_documents calls extract_payload (mutation-checked); '
+             'test_the_seam_reads_what_a_save_wrote asserts the seam reads a saved file.'),
+            ('FR-5', 'task-3173c0f6ef88', 'test_result', 'hub/tests/test_spec_json_storage.py',
+             'test_creating_a_document_at_an_html_path_names_the_json_path asserts the refusal names '
+             'the .json path; test_the_index_is_not_a_document_path and '
+             'test_a_minted_path_is_a_json_path assert path validation and naming.'),
+            ('FR-6', 'task-3173c0f6ef88', 'test_result', 'hub/tests/test_spec_json_storage.py',
+             'test_a_legacy_html_document_is_reported_not_listed asserts discovery reports a legacy '
+             '.html file as a legacy_html_document diagnostic and does not list it as a document.'),
+            ('FR-6', 'task-55c62bc9c6d0', 'manual_observation', 'scripts/drive/d1010_spec_json.py',
+             'd1010 check 3 asserts that after conversion the document list holds the same ids at '
+             '.json paths with no legacy diagnostic.'),
+            ('FR-7', 'task-55c62bc9c6d0', 'manual_observation', 'scripts/drive/d1010_spec_json.py',
+             'd1010 checks 1-5 (11/11 green) convert a legacy .html corpus to spec.json over HTTP and '
+             'assert ids, rendered pages, requirement identifiers and evidence are unchanged.'),
+            ('FR-7', 'task-55c62bc9c6d0', 'test_result', 'hub/tests/test_spec_conversion.py',
+             'test_converting_to_html_writes_the_page_and_rewrites_every_path asserts rewrites of '
+             'spec_documents.path, index.json, embedded roadmap.document and task from.document; '
+             'test_undelivered_queue_entries_follow_the_document_and_delivered_ones_keep_history '
+             'asserts queue rewrites.'),
+            ('FR-7', 'task-e7eec913ea2b', 'manual_observation', 'scripts/drive/d1010b_real_corpus.py',
+             'd1010b converted the real corpus on a Hub: every .html document converted, none skipped, '
+             "and GET /spec rendered every converted document (78/78). On 2026-10-09 this repo's spec/ "
+             'converted the same way: 82 converted, 0 skipped, payloads identical.'),
+            ('FR-8', 'task-55c62bc9c6d0', 'test_result', 'hub/tests/test_spec_conversion.py',
+             'test_converting_back_restores_the_stored_files_byte_for_byte and '
+             'test_a_second_conversion_changes_nothing assert the reverse conversion restores the '
+             'files and is idempotent.'),
+            ('FR-8', 'task-e7eec913ea2b', 'manual_observation', 'scripts/drive/d1010b_real_corpus.py',
+             'd1010b converted the real corpus to json and back and asserted the reverse restored the '
+             'same .html set with no .json documents.'),
+            ('FR-9', 'task-55c62bc9c6d0', 'test_result', 'hub/tests/test_spec_conversion.py',
+             'test_the_conversion_is_refused_while_a_run_is_active_and_changes_nothing asserts 409 '
+             'conversion_run_active naming run-busy, with the file tree and rows unchanged.'),
+            ('FR-10', 'task-3173c0f6ef88', 'test_result', 'hub/tests/test_spec_json_storage.py',
+             'test_an_operator_journey_move_rewrites_the_hub_block, '
+             'test_an_agent_journey_move_rewrites_the_hub_block and '
+             "test_a_phase_move_rewrites_the_hub_block assert the file's hub block is rewritten in the "
+             'same request.'),
+            ('FR-10', 'task-55c62bc9c6d0', 'manual_observation', 'scripts/drive/d1010_spec_json.py',
+             "d1010 check 8 asserts a journey move rewrites the converted file's hub block."),
+            ('FR-1', 'task-824bfa945a0a', 'manual_observation', 'scripts/drive/d1010_spec_json.py',
+             'Acceptance drive d1010, committed in bc76323 failing at check 1 (conversion route '
+             'answered 405) before the build; green 11/11 at f8041ee.'),
+        ],
+    },
+    "fsteps": {
+        "document": 'spec/changes/a-project-orders-its-own-spec-steps/spec.json',
+        "commit": '9a73e23',
+        "tasks": ['task-09f97da0049e', 'task-847b1c1b7810', 'task-2800a1609906', 'task-80a919c0cc4c'],
+        "evidence": [
+            ('FR-1', 'task-847b1c1b7810', 'test_result', 'hub/tests/test_project_spec_steps.py',
+             'test_with_no_file_every_journey_and_duty_is_the_built_in_table and the broken-file '
+             'parametrized test read steps from spec/journey.json; with no file the built-in table is '
+             'served and a bad file yields journey_file_invalid with built-ins used.'),
+            ('FR-1', 'task-847b1c1b7810', 'manual_observation', 'scripts/drive/d1011b_project_steps_fallback.py',
+             'Drive d1011b 4/4: with no spec/journey.json GET /project/journey returned the seven '
+             'built-ins and no diagnostics, and the briefing preview held the built-in requirements '
+             'duty.'),
+            ('FR-2', 'task-847b1c1b7810', 'test_result', 'hub/tests/test_project_spec_steps.py',
+             'Parametrized test_a_broken_file_is_a_diagnostic... asserted a missing built-in, '
+             'reordered built-ins and a custom key colliding with a built-in were diagnosed; custom- '
+             'step size tests showed a custom step joins small/large and not fix, per-size membership '
+             'unchanged.'),
+            ('FR-3', 'task-847b1c1b7810', 'test_result', 'hub/tests/test_project_spec_steps.py',
+             'test_a_custom_step_is_entered_by_advance_and_briefed_with_its_markdown asserted advance '
+             'moved requirements to threat-model and the briefing held the [step: key] marker, title, '
+             'Markdown, a tell-the-operator-where line and the journey line.'),
+            ('FR-3', 'task-09f97da0049e', 'manual_observation', 'scripts/drive/d1011_project_steps.py',
+             'Drive d1011 checks 4 and 5a/5b: a real agent turn advanced onto the custom threat-model '
+             'step; its preview named the step and held its Markdown; the documents view listed it '
+             'after requirements.'),
+            ('FR-4', 'task-847b1c1b7810', 'test_result', 'hub/tests/test_project_spec_steps.py',
+             'test_an_appended_instruction_reaches_only_its_own_step asserted the appended sentence '
+             "appeared in its step's briefing and advance instructions and in no other step's; d1011 "
+             'checks 3a/3b repeated this through the live Hub.'),
+            ('FR-5', 'task-2800a1609906', 'test_result', 'hub/tests/test_project_spec_steps.py',
+             'test_put_refuses_an_over_long_text_naming_the_step_and_the_cap_and_writes_nothing '
+             'asserted PUT refused over-2,000-character instructions or appended text, named the step '
+             'and the cap, and wrote no file; the parametrized file test also covered the 2,000 cases.'),
+            ('FR-6', 'task-2800a1609906', 'test_result', 'hub/tests/test_project_spec_steps.py',
+             'test_get_answers_the_built_ins..., '
+             'test_put_saves_the_steps_and_get_returns_them_in_that_order, '
+             'test_put_writes_the_same_bytes_for_the_same_journey_however_the_body_is_ordered and '
+             'test_put_names_the_field_it_cannot_honour covered GET/PUT /project/journey.'),
+            ('FR-6', 'task-80a919c0cc4c', 'test_result', 'hub/ui/src/__tests__/specStepsSection.test.tsx',
+             'Vitest specs for SpecStepsSection: lists steps in file order, inserts pasted Markdown '
+             'after a chosen step, appends an instruction, removes custom (not built-in) steps, moves '
+             'custom steps, shows diagnostics, refuses empty or duplicate-key steps.'),
+            ('FR-6', 'task-09f97da0049e', 'manual_observation', 'scripts/drive/d1011_project_steps.py',
+             'Drive d1011 checks 1, 2, 6 and 7: GET answered built-ins, PUT wrote spec/journey.json '
+             "with the PUT body's steps, and the project page showed the step and a pasted Markdown "
+             'step landed right after requirements.'),
+            ('FR-7', 'task-847b1c1b7810', 'test_result', 'hub/tests/test_project_spec_steps.py',
+             'test_a_broken_file_is_a_diagnostic_and_the_built_in_table_is_used (13 broken-file cases) '
+             'asserted journey_file_invalid with the reason and built-ins used; '
+             'test_a_broken_file_never_refuses_a_turn asserted turns still ran.'),
+            ('FR-7', 'task-09f97da0049e', 'manual_observation', 'scripts/drive/d1011b_project_steps_fallback.py',
+             "Drive d1011b: with spec/journey.json set to '{ this is not json' GET returned only "
+             'journey_file_invalid with the built-ins served, and the briefing preview was still the '
+             'built-in requirements duty.'),
+            ('FR-8', 'task-847b1c1b7810', 'test_result', 'hub/tests/test_project_spec_steps.py',
+             'test_a_removed_step_is_briefed_as_removed_and_bare_advance_is_refused asserted a '
+             'document on a removed step was told it was removed and to ask_user, and advance with no '
+             'target answered 422 step_not_in_journey.'),
+            ('FR-8', 'task-847b1c1b7810', 'test_result', 'hub/tests/test_project_spec_steps.py',
+             'test_the_operator_moves_a_document_onto_a_custom_step_and_not_an_unknown_one asserted '
+             'the operator can move onto a custom step and an unknown step is refused.'),
+            ('FR-9', 'task-847b1c1b7810', 'test_result', 'hub/tests/test_project_spec_steps.py',
+             'test_the_documents_view_lists_the_projects_journey asserted the documents view journey '
+             "field held the project's steps for the document's size, custom steps included, in file "
+             'order.'),
+            ('FR-9', 'task-09f97da0049e', 'manual_observation', 'scripts/drive/d1011_project_steps.py',
+             'Drive d1011 checks 5b and 6: the documents view listed threat-model after requirements, '
+             'and the phase bar and project page showed it between requirements and acceptance in a '
+             'real browser.'),
+            ('FR-6', 'task-09f97da0049e', 'manual_observation', 'scripts/drive/d1011_project_steps.py',
+             'Acceptance drive d1011 was written first (commit 3eac20d) and failed at check 1 on the '
+             'then-current Hub (no /project/journey route); it passed after the build, with d1011b as '
+             'the fallback 4/4 (9a73e23).'),
+        ],
+    },
+    "fwarn": {
+        "document": 'spec/changes/approve-lists-what-is-missing-and-can-approve-anyway/spec.json',
+        "commit": 'c9e94ed',
+        "tasks": ['task-c63101dbca2d', 'task-8888aa20b760', 'task-810c13a6c629', 'task-7740673542f3'],
+        "evidence": [
+            ('FR-1', 'task-810c13a6c629', 'test_result', 'hub/tests/test_approval_warnings_routes.py',
+             'test_approve_lists_the_gaps_and_stays_proposed_until_approve_anyway: plain approve '
+             'answered 409 approval_warnings with the gap list and left the document proposed; '
+             'approve_anyway=true then returned 200, phase approved, one task created.'),
+            ('FR-1', 'task-c63101dbca2d', 'manual_observation', 'scripts/drive/d1012_approval_warnings.py',
+             'Acceptance drive d1012 on a scratch Hub (:8101): check 2 asserted 409 approval_warnings '
+             'listing the gap and the document still proposed; check 3 asserted approve_anyway '
+             'approved. Recorded failing at check 1 in a978af2, 7/7 in c9e94ed.'),
+            ('FR-2', 'task-8888aa20b760', 'test_result', 'hub/tests/test_approval_gaps.py',
+             'Tests for requirement_without_criterion (MUST/SHALL gap, SHOULD/MAY not a gap), '
+             'criterion_without_check, no_acceptance_drive (including a drive reached through another '
+             'task), and steps_skipped naming the journey steps (and none when the document has no '
+             'step).'),
+            ('FR-2', 'task-810c13a6c629', 'test_result', 'hub/tests/test_approval_warnings_routes.py',
+             'test_skipped_journey_steps_are_listed_at_approval: at the route, approval answered 409 '
+             'with exactly one warning, steps_skipped, for a large change placed at the requirements '
+             'step.'),
+            ('FR-3', 'task-8888aa20b760', 'test_result', 'hub/tests/test_approval_gaps.py',
+             'test_what_makes_approval_wrong_is_a_refusal_and_completeness_is_a_gap: dependency_cycle, '
+             'depends_on_unresolved and unknown_field were refusals; unresolved_question and '
+             'non_goals_empty were gaps; no gap code was in REFUSAL_CODES.'),
+            ('FR-3', 'task-810c13a6c629', 'test_result', 'hub/tests/test_approval_warnings_routes.py',
+             'test_a_refusal_holds_against_approve_anyway: with a dependency cycle, approve with '
+             'approve_anyway=true answered 409 document_incomplete naming dependency_cycle, left the '
+             'document proposed and recorded no approval event.'),
+            ('FR-4', 'task-810c13a6c629', 'test_result', 'hub/tests/test_approval_warnings_routes.py',
+             'test_propose_passes_a_gap_and_lists_it_under_warnings (phase proposed, blocking empty, '
+             'warnings criterion_without_check) and '
+             'test_propose_still_holds_a_refusal_and_lists_the_gaps_beside_it (cycle stayed in '
+             'blocking, gap in warnings).'),
+            ('FR-4', 'task-c63101dbca2d', 'manual_observation', 'scripts/drive/d1012_approval_warnings.py',
+             'Drive check 1: propose returned 200, proposed true, blocking empty and the gap under '
+             'warnings.'),
+            ('FR-5', 'task-810c13a6c629', 'test_result', 'hub/tests/test_approval_warnings_routes.py',
+             'test_approve_lists_..._until_approve_anyway asserted warnings_overridden on the approval '
+             'event and approval_warnings_overridden in the listing; '
+             'test_a_clean_approval_records_that_it_overrode_nothing_and_a_reopen_forgets asserted [] '
+             'when clean and the field gone after reopening; '
+             'test_approve_anyway_with_no_gap_still_records_an_empty_list.'),
+            ('FR-5', 'task-c63101dbca2d', 'manual_observation', 'scripts/drive/d1012_approval_warnings.py',
+             "Drive check 4 read the view's approval_warnings_overridden and the spec_document_events "
+             'row from the database: both carried the overridden gaps, exactly one event.'),
+            ('FR-6', 'task-810c13a6c629', 'test_result', 'hub/tests/test_approval_warnings_routes.py',
+             'test_approve_anyway_on_any_other_move_is_a_400_before_anything_moves, parametrised over '
+             'proposed, exploring and archived: each answered 400 naming approve_anyway and the '
+             'document stayed proposed.'),
+            ('FR-7', 'task-7740673542f3', 'test_result', 'hub/ui/src/__tests__/specApprovalWarnings.test.tsx',
+             'Vitest: gaps grouped by code, one line per code with count and up to three places; '
+             'Approve anyway resent with approve_anyway; plain Approve never sent it; incomplete '
+             'refusal offered no button; approved document showed the overridden block, absent when '
+             'empty.'),
+            ('FR-7', 'task-c63101dbca2d', 'manual_observation', 'scripts/drive/d1012_approval_warnings.py',
+             'Drive checks 5, 5a, 5b ran in Chromium: Approve showed the gaps grouped by code with the '
+             'document still proposed; Approve anyway approved and the phase bar showed what was '
+             'overridden.'),
+            ('FR-1', 'task-c63101dbca2d', 'manual_observation', 'scripts/drive/d1012_approval_warnings.py',
+             'Acceptance drive written before the build (a978af2): it failed at check 1 on the then- '
+             'current Hub because propose answered blocking requirement_without_criterion; passed 7/7 '
+             'after c9e94ed.'),
+        ],
+    },
+    "ftester": {
+        "document": 'spec/changes/a-tester-drives-the-built-product-and-keeps-the-spec-true/spec.json',
+        "commit": '2367622',
+        "tasks": ['task-36601c1e6a66', 'task-86c06ee69d17', 'task-9bcf48c030b9', 'task-9b392e629ebb', 'task-2a8589108daf'],
+        "evidence": [
+            ('FR-1', 'task-9b392e629ebb', 'test_result', 'hub/tests/test_tester_amendments.py',
+             'test_a_named_tester_reviews_before_the_default_reviewer_and_after_the_task_s_own '
+             'resolved t1 to the named tester tess and t2 to its own reviewer rev. '
+             'test_a_flow_review_is_a_test_turn_by_default and test_tester_false_leaves_a_plain_review '
+             'covered default-on and tester false.'),
+            ('FR-1', 'task-9b392e629ebb', 'manual_observation', 'scripts/drive/d1013_tester_amends.py',
+             'Drive d1013 check 4 asserted the review of the README task was queued to the named '
+             'tester tess; the drive passed 9/9 against a live Hub with a real Haiku tester and '
+             'builder.'),
+            ('FR-2', 'task-9b392e629ebb', 'test_result', 'hub/tests/test_tester_amendments.py',
+             "test_a_flow_review_is_a_test_turn_by_default asserted the duty text holds 'Drive the "
+             "running product', the amend_spec_document call for the path, the side finding "
+             'instruction and report_cannot_satisfy. test_tester_false_leaves_a_plain_review asserted '
+             'the duty is empty with testing off.'),
+            ('FR-3', 'task-86c06ee69d17', 'test_result', 'hub/tests/test_tester_amendments.py',
+             'test_the_builder_is_refused_and_the_tester_amends asserted the builder run got 403 '
+             'amend_not_tester with the stored document unchanged and the tester run got 201. '
+             'test_testing_off_refuses_even_the_test_turn and '
+             'test_a_document_not_approved_is_not_amended covered the other refusals.'),
+            ('FR-4', 'task-86c06ee69d17', 'test_result', 'hub/tests/test_tester_amendments.py',
+             'test_an_amendment_names_only_what_the_document_holds_and_says_how_to_check asserted '
+             'unknown targets and a missing how_to_check were refused. '
+             'test_an_added_task_joins_the_live_flow_at_once asserted an added task was materialised '
+             'into the flow; test_the_builder_is_refused_and_the_tester_amends asserted add_criterion '
+             'applied to the stored document.'),
+            ('FR-4', 'task-86c06ee69d17', 'manual_observation', 'scripts/drive/d1013_tester_amends.py',
+             "Drive d1013 checks 5-7: tess's real test turn recorded an add_task amendment, the task "
+             'appeared pending on the flow board, and alice took it and produced a calc.py printing 1 '
+             'for -2 3.'),
+            ('FR-5', 'task-86c06ee69d17', 'test_result', 'hub/tests/test_tester_amendments.py',
+             'test_each_amendment_records_author_and_run_and_is_not_reviewed asserted op, author, run '
+             'and reviewed false. test_the_operator_marks_reviewed_per_item_then_for_the_document '
+             'asserted marking by id then for the whole document; '
+             'test_marking_an_amendment_the_document_does_not_hold_is_refused covered an unknown id.'),
+            ('FR-6', 'task-9bcf48c030b9', 'test_result', 'hub/tests/test_tester_amendments.py',
+             'test_a_changed_criterion_holds_its_requirement_until_reviewed asserted a requirement '
+             'with accepted evidence and a not-reviewed change_criterion read amendment_unreviewed and '
+             'read verified after the operator marked it reviewed. '
+             'test_an_added_criterion_alone_never_holds_its_requirement covered the non-relaxing case.'),
+            ('FR-6', 'task-9bcf48c030b9', 'manual_observation', 'scripts/drive/d1013_tester_amends.py',
+             'Drive d1013 checks 8-9 asserted accepted evidence with a not-reviewed relaxing amendment '
+             'read amendment_unreviewed and verified once marked reviewed. The relaxing amendment was '
+             'inserted by the drive, not chosen by a Haiku turn.'),
+            ('FR-7', 'task-86c06ee69d17', 'test_result', 'hub/tests/test_tester_amendments.py',
+             'test_the_builder_reports_a_criterion_it_cannot_satisfy asserted a 201 with task_blocked, '
+             "the in-progress task moved to blocked with 'cannot satisfy criterion c1', and a not- "
+             'reviewed relaxing cannot_satisfy amendment by dev. '
+             'test_a_run_on_no_task_of_the_document_cannot_report covered the refusal.'),
+            ('FR-8', 'task-9bcf48c030b9', 'test_result', 'hub/tests/test_tester_amendments.py',
+             'test_a_reapproval_with_unreviewed_amendments_lists_the_gap asserted approval returned '
+             '409 approval_warnings listing amendments_unreviewed. '
+             'test_the_documents_view_counts_the_amendments_not_reviewed covered the document view '
+             'counts.'),
+            ('FR-9', 'task-2a8589108daf', 'test_result', 'hub/ui/src/__tests__/specAmendmentsPanel.test.tsx',
+             "specAmendmentsPanel tests (5): 'lists each amendment with author, run, reason and how to "
+             "check', 'offers Mark reviewed only on the one not reviewed, and sends its id', 'marks "
+             "every amendment reviewed for the document', the relaxing-hold notice, and empty render."),
+            ('FR-1', 'task-36601c1e6a66', 'manual_observation', 'scripts/drive/d1013_tester_amends.py',
+             'Acceptance drive d1013 was written in 477e69e and failed at check 1 (405) on the Hub '
+             'before the build; after 2367622 and a747907 it passed 9/9 with a real Haiku tester and '
+             'builder.'),
+        ],
+    },
+    "freconcile": {
+        "document": 'spec/changes/a-change-is-reconciled-with-its-code-before-it-is-folded/spec.json',
+        "commit": 'e2ca744',
+        "tasks": ['task-c5f6051efb4b', 'task-87647dce826b', 'task-1d686b0b8b41', 'task-21c0580dbd0f'],
+        "evidence": [
+            ('FR-1', 'task-87647dce826b', 'test_result', 'hub/tests/test_reconcile_and_defects.py',
+             'test_a_reconcile_result_is_checked_and_recorded_with_its_run: an unknown class and a '
+             'non-unrequested gap with no requirement were refused 422 (naming gaps[0].class / '
+             'gaps[0].requirement); an empty-gap result was accepted 201 with author rex, run run-rex '
+             'and zero counts. test_an_exploring_change_is_not_reconciled: 409.'),
+            ('FR-1', 'task-87647dce826b', 'manual_observation', 'scripts/drive/d1014_reconcile.py',
+             'Drive d1014 check 2: a real Haiku agent (rex) recorded a reconcile result through '
+             'record_reconcile with a missing and an unrequested gap; the drive passed 4/4 at e2ca744.'),
+            ('FR-2', 'task-87647dce826b', 'test_result', 'hub/tests/test_reconcile_and_defects.py',
+             'test_asking_an_agent_to_reconcile_starts_its_turn_with_the_brief: the operator POST '
+             'returned 202; the queued request named agent rex and the change path, and its message '
+             'contained each brief word the test checks.'),
+            ('FR-2', 'task-87647dce826b', 'manual_observation', 'scripts/drive/d1014_reconcile.py',
+             "Drive d1014 check 1: the operator's POST .../reconcile returned 202 and started rex's "
+             'real Haiku turn (it returned 405 on the pre-build Hub).'),
+            ('FR-3', 'task-87647dce826b', 'test_result', 'hub/tests/test_reconcile_and_defects.py',
+             'test_the_fold_state_carries_the_latest_result_and_fold_is_not_refused: '
+             'fold_state.reconcile was {state: none} before any result; after two results it carried '
+             'the second (summary, counts missing 1 / unrequested 1, gaps, requirement stored as its '
+             'key).'),
+            ('FR-3', 'task-87647dce826b', 'test_result', 'hub/tests/test_a_finished_change_is_folded_into_its_capability.py',
+             'test_fold_state_reads_tasks_open_then_ready_then_folded: the ready fold_state was '
+             'updated to include reconcile {state: none}, and the folded and tasks_open states still '
+             'held.'),
+            ('FR-3', 'task-21c0580dbd0f', 'test_result', 'hub/ui/src/__tests__/specReconcile.test.tsx',
+             "'the phase bar says what reconciling found' and 'the fold dialog shows the counts and "
+             "every gap' asserted the reconcile-result testid with author, counts and gaps; 'a change "
+             "never reconciled says so' asserted reconcile-none and the ask call. Written after the "
+             'components.'),
+            ('FR-3', 'task-21c0580dbd0f', 'manual_observation', 'scripts/drive/d1014_reconcile.py',
+             'Drive d1014 check 4: in Chromium the phase bar and the fold dialog showed the reconcile '
+             'result once both tasks were decided.'),
+            ('FR-4', 'task-1d686b0b8b41', 'test_result', 'hub/tests/test_reconcile_and_defects.py',
+             'test_a_change_s_defects_are_derived_each_with_the_step_that_caught_it: an add_task '
+             'amendment, a cannot_satisfy report, a task moved to revision_needed and a reconcile gap '
+             'were listed with by_step test 1, build 1, review 1, reconcile 1; the operator-record '
+             'source is covered under FR-6.'),
+            ('FR-4', 'task-1d686b0b8b41', 'manual_observation', 'scripts/drive/d1014_reconcile.py',
+             'Drive d1014 check 3: the defects report listed the change with a reconcile defect, a '
+             'review send-back and an after-fold defect.'),
+            ('FR-5', 'task-1d686b0b8b41', 'test_result', 'hub/tests/test_reconcile_and_defects.py',
+             'test_a_change_s_defects_are_derived_each_with_the_step_that_caught_it: GET '
+             '/project/spec/defects returned 200 with the change entry (path, defects, by_step counts '
+             'per step).'),
+            ('FR-5', 'task-21c0580dbd0f', 'test_result', 'hub/ui/src/__tests__/specReconcile.test.tsx',
+             "'lists each change with its count per step, and opens it' and 'is absent while no change "
+             "has a defect' asserted the spec-defects section rows. Written after the component."),
+            ('FR-5', 'task-21c0580dbd0f', 'manual_observation', 'scripts/drive/d1014_reconcile.py',
+             "Drive d1014 check 4: the spec page's defects section counted the change's defects by "
+             'step in Chromium.'),
+            ('FR-6', 'task-1d686b0b8b41', 'test_result', 'hub/tests/test_reconcile_and_defects.py',
+             'test_the_operator_records_a_defect_at_a_step: the operator POST .../defects returned 201 '
+             'with caught_by after-fold, an unknown step was refused 422 on caught_by, and the defect '
+             'listed under by_step after-fold with its summary. '
+             "test_a_journey_step_is_a_step_a_defect_can_be_caught_at: caught_by 'acceptance' returned "
+             '201.'),
+            ('FR-6', 'task-21c0580dbd0f', 'test_result', 'hub/ui/src/__tests__/specReconcile.test.tsx',
+             "'records one against the open change with the step that caught it' asserted the record- "
+             'a-defect form call. Written after the component.'),
+            ('FR-6', 'task-c5f6051efb4b', 'manual_observation', 'scripts/drive/d1014_reconcile.py',
+             'Drive d1014 check 3 recorded an after-fold operator defect through the route and saw it '
+             'in the report.'),
+            ('FR-1', 'task-c5f6051efb4b', 'manual_observation', 'scripts/drive/d1014_reconcile.py',
+             'Acceptance drive d1014 was committed in 174bf2a before the build and failed at check 1 '
+             'with 405 on the then-current Hub; after e2ca744 it passed 4/4 (reconcile ask, real Haiku '
+             'result, defects report, Chromium page).'),
+        ],
+    },
+}
+
+# Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
+CHANGE_FOLDS = {
+    "fstorage": {'spec-document-authority': ['stored-as-json', 'rendered-on-open', 'diff-clean', 'one-seam', 'journey-written', 'conversion', 'reversible', 'refuses-while-busy'], 'spec-corpus-map': ['json-paths', 'legacy-reported']},
+    "fsteps": {'spec-document-authority': ['journey-file', 'builtins-fixed', 'size-cap', 'operator-edits', 'invalid-reported', 'step-gone', 'bar-shows-journey'], 'spec-chat-session': ['custom-step-runs', 'append-own-step']},
+    "fwarn": 'spec-document-authority',
+    "ftester": {'agent-flows': ['tester-default', 'test-brief'], 'spec-document-authority': ['amend-who', 'amend-ops', 'amend-record', 'cannot-satisfy', 'unreviewed-gap', 'page'], 'requirement-traceability': ['relax-blocks']},
+    "freconcile": 'spec-document-authority',
 }
 
 
@@ -461,6 +822,12 @@ if sys.argv[1:2] == ["--fold"]:
     fold(sys.argv[2], sys.argv[3])
 elif sys.argv[1:] == ["--fold-journey"]:
     fold_split("fjourney", JOURNEY_FOLD)
+elif sys.argv[1:2] == ["--fold-change"]:
+    target = CHANGE_FOLDS[sys.argv[2]]
+    if isinstance(target, dict):
+        fold_split(sys.argv[2], target)
+    else:
+        fold(sys.argv[2], target)
 else:
     for arg in sys.argv[1:]:
         close(arg)
