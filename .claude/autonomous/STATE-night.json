@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "project-steps-spec",
-    "next_action": "Author the slice change document on trial Hub :8010 (proj-d85a82bf4216) per APPROVALS 2026-10-09 authorisation 1; model on spdoc-06fd85087a9f; propose+approve; commit the file. Slice 'project-steps' from roadmap a-spec-is-written-one-step-at-a-time-roadmap.",
+    "current": "project-steps-t1-impl",
+    "next_action": "project-steps-t1-impl: write scripts/drive/d1011_project_steps.py (model on d1009_step_journey.py; scratch Hub :8099, fresh db) per the 'drive' and 'page-edits' criteria of spec/changes/a-project-orders-its-own-spec-steps/spec.html (spdoc-3759e366caf1, approved on :8010; Hub tasks task-09f97da0049e, task-847b1c1b7810, task-2800a1609906, task-80a919c0cc4c -- do not close them), run it and record it FAILING at check 1; commit.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -50,15 +50,34 @@
         },
         {
             "id": "project-steps-spec",
-            "status": "open",
+            "status": "done",
             "title": "Author project-steps slice change document",
-            "detail": "Author the slice change document on trial Hub :8010 (proj-d85a82bf4216) per APPROVALS 2026-10-09 authorisation 1; model on spdoc-06fd85087a9f; propose+approve; commit the file. Slice 'project-steps' from roadmap a-spec-is-written-one-step-at-a-time-roadmap."
+            "detail": "done 2026-10-09 iteration 7: spec/changes/a-project-orders-its-own-spec-steps/spec.html (spdoc-3759e366caf1, approved on :8010; Hub tasks task-09f97da0049e, task-847b1c1b7810, task-2800a1609906, task-80a919c0cc4c -- do not close them); 9 FR, 12 criteria, 4 tasks; decisions night-1009-1..4 OPEN."
         },
         {
-            "id": "project-steps-impl",
+            "id": "project-steps-t1-impl",
             "status": "open",
-            "title": "Build project-steps slice against spec.json storage",
-            "detail": "Only if its -spec is approved. Split by the change's tasks (<id>-t<n>-impl) if one firing cannot finish."
+            "title": "project-steps task drive-first: write scripts/drive/d1011_project_steps.py, record it FAILING",
+            "detail": "Scratch Hub :8099, fresh db, one Haiku turn, Chromium for bar + project page; criteria 'drive' and 'page-edits'. Must fail at check 1 (no /project/journey route). Read the payload of spec/changes/a-project-orders-its-own-spec-steps/spec.html (spdoc-3759e366caf1, approved on :8010; Hub tasks task-09f97da0049e, task-847b1c1b7810, task-2800a1609906, task-80a919c0cc4c -- do not close them)"
+        },
+        {
+            "id": "project-steps-t2-impl",
+            "status": "open",
+            "title": "project-steps task journey: spec/journey.json read+validated in spec_journey; briefing, advance, operator move, documents view use it",
+            "detail": "FR-1..4, FR-7..9. Failing Hub tests first.",
+            "model": "opus"
+        },
+        {
+            "id": "project-steps-t3-impl",
+            "status": "open",
+            "title": "project-steps task routes: GET/PUT /project/journey, deterministic write, 2,000-char cap",
+            "detail": "FR-5, FR-6, FR-7. Failing Hub tests first."
+        },
+        {
+            "id": "project-steps-t4-impl",
+            "status": "open",
+            "title": "project-steps task page: Spec steps section on the project page, bundle refreshed",
+            "detail": "Commit hub/ui/src and hub/hub/static/ui together; run test_surface_ceilings.py."
         },
         {
             "id": "project-steps-drive",
@@ -122,7 +141,12 @@
             "detail": "Own port, fresh db, haiku turns only."
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": [
+        "night-1009-1",
+        "night-1009-2",
+        "night-1009-3",
+        "night-1009-4"
+    ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

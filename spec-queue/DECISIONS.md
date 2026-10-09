@@ -20,6 +20,15 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### Slice project-steps: design choices the night took -- 2026-10-09 night (APPROVALS authorisation 2)
+
+Recorded as decision records D1-D4 in `spec/changes/a-project-orders-its-own-spec-steps` (`spdoc-3759e366caf1`).
+
+- OPEN      night-1009-1  Taken by the night: one ordered steps list in `spec/journey.json`, built-in steps named by key and fixed in their built-in order, custom steps at any position; rejected anchored insertions (`after: requirements`, which has no place in the small journey) and free reordering of built-ins. Confirm or reverse.
+- OPEN      night-1009-2  Taken by the night: a custom step that lists no sizes joins the small and large journeys, not fix; rejected joining every size (a fix's three-step path is the point of sizing). Confirm or reverse.
+- OPEN      night-1009-3  Taken by the night: where a step's output goes is said in its own Markdown, plus one Hub line "follow it, or choose and say where"; rejected a structured `output` field. Confirm or reverse.
+- OPEN      night-1009-4  Taken by the night: a broken hand-edited `spec/journey.json` is a diagnostic and turns use the built-in steps meanwhile (PUT refuses it up front); rejected refusing turns until it is fixed. Confirm or reverse.
+
 ### Spec overhaul 2026-10-08: product questions the audit could not settle from the code -- interactive
 
 The specs now describe what the code does; each row asks whether that is what is wanted. Filed, not
