@@ -336,3 +336,155 @@ async def test_the_routes_work_unchanged_on_another_storage(
     assert read.json()["content"] == TRANSCRIPT
     assert memory.files
     assert not (tmp_path / "knowledge").exists()
+
+
+# ---------------------------------------------------------------------------
+# agent-tools
+# ---------------------------------------------------------------------------
+
+
+async def _run_headers(run_id: str, agent: str) -> dict:
+    """A live run's minted credential: the only identity the agent-actions routes accept."""
+    from hub.agent_auth import hash_run_token
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Agent, Run
+
+    token = f"aw_run_{run_id}-secret"
+    async with async_session_factory() as db:
+        db.add(Agent(id=f"agent-{agent}", project_id="proj-test", name=agent))
+        db.add(
+            Run(
+                id=run_id,
+                project_id="proj-test",
+                agent=agent,
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await db.commit()
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+async def test_an_agent_reads_the_map_and_an_entry_with_its_run_credential(
+    app, auth_headers
+) -> None:
+    entry = await _upload(app, auth_headers)
+    headers = await _run_headers("run-vault-reader", "reader")
+
+    listed = await app.get("/api/v1/agent-actions/vault/map", headers=headers)
+    assert listed.status_code == 200, listed.text
+    assert [e["id"] for e in listed.json()["entries"]] == [entry["id"]]
+
+    read = await app.get(f"/api/v1/agent-actions/vault/entries/{entry['id']}", headers=headers)
+    assert read.status_code == 200, read.text
+    assert read.json()["content"] == TRANSCRIPT
+
+    unknown = await app.get("/api/v1/agent-actions/vault/entries/src-ffffffffffff", headers=headers)
+    assert unknown.status_code == 404, unknown.text
+    anonymous = await app.get("/api/v1/agent-actions/vault/map")
+    assert anonymous.status_code in (401, 403), anonymous.text
+
+
+@pytest.mark.asyncio
+async def test_no_agent_route_writes_to_the_vault(app) -> None:
+    """Only the operator (and later the manager) writes: every agent-actions vault route is a GET."""
+    from hub.main import app as fastapi_app
+
+    methods = {
+        method
+        for route in fastapi_app.routes
+        if "/agent-actions/vault" in getattr(route, "path", "")
+        for method in getattr(route, "methods", set())
+    }
+    assert methods and methods <= {"GET", "HEAD"}
+
+
+def test_the_two_tools_are_on_every_runners_surface() -> None:
+    from hub import mcp_server
+    from hub.api.v1.agents import _operations
+    from hub.copilot_acp import HUB_MCP_TOOLS
+
+    for tool in ("vault_map", "vault_read"):
+        assert tool in mcp_server._CALLABLE_TOOLS
+        assert tool in HUB_MCP_TOOLS
+        assert tool in {operation.tool for operation in _operations()}
+
+
+# ---------------------------------------------------------------------------
+# map-in-turn
+# ---------------------------------------------------------------------------
+
+
+async def _context() -> dict:
+    from sqlalchemy import select
+
+    from hub.api.v1.agents import _render_hub_agent_context
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Agent
+
+    async with async_session_factory() as db:
+        row = (
+            await db.execute(
+                select(Agent).where(Agent.project_id == "proj-test", Agent.name == "vaulter")
+            )
+        ).scalar_one()
+        return await _render_hub_agent_context(
+            agent="vaulter",
+            project_id="proj-test",
+            db=db,
+            session_data=None,
+            agent_row=row,
+            work_dir="/tmp/project",
+            access_path="mcp",
+            runner="copilot",
+        )
+
+
+@pytest.mark.asyncio
+async def test_an_empty_vault_adds_nothing_to_a_turn(app, auth_headers, add_agent) -> None:
+    await add_agent("vaulter")
+    rendered = await _context()
+    assert "Knowledge vault" not in rendered["context"]
+
+
+@pytest.mark.asyncio
+async def test_a_turn_lists_the_vault_newest_first_in_its_per_turn_part(
+    app, auth_headers, add_agent
+) -> None:
+    await add_agent("vaulter")
+    first = await _upload(app, auth_headers, name="First meeting")
+    second = await _upload(app, auth_headers, name="Refund rules", type="rules")
+    rendered = await _context()
+    per_turn = rendered["per_turn"]
+    assert "### Knowledge vault" in per_turn
+    assert "Knowledge vault" not in rendered["stable"]
+    assert "vault_read" in per_turn
+    assert per_turn.index(second["id"]) < per_turn.index(first["id"])
+    assert f"`{second['id']}` rules: Refund rules" in per_turn
+
+
+@pytest.mark.asyncio
+async def test_a_large_vault_is_cut_to_the_cap_and_counts_what_it_left_out(
+    app, auth_headers, add_agent, tmp_path
+) -> None:
+    await add_agent("vaulter")
+    for i in range(200):
+        vault.add_source(
+            tmp_path,
+            vault.default_private_location("proj-test"),
+            name=f"Meeting number {i:03d} with a fairly long descriptive name",
+            type="transcript",
+            content=f"Meeting {i}.\n",
+            visibility="tracked",
+        )
+    rendered = await _context()
+    section = rendered["per_turn"][rendered["per_turn"].index("### Knowledge vault") :]
+    section = section.split("\n\n")[0]
+    assert len(section) <= vault.TURN_INDEX_CHARS
+    last = section.splitlines()[-1]
+    shown = section.count("`src-")
+    assert shown < 200
+    assert f"and {200 - shown} more" in last
+    assert "vault_map()" in last

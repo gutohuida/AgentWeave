@@ -5,6 +5,7 @@ import contextlib
 import logging
 import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Literal, NamedTuple, Optional, Tuple, get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -1472,6 +1473,32 @@ def _operations() -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="vault_map",
+            args="",
+            method="GET",
+            path="/vault/map",
+            fields=(),
+            required=(),
+            text=(
+                "the project's knowledge vault: meeting transcripts, business rules, documents and "
+                "examples the operator gave the project, newest first, each with its id, type, "
+                "name and opening lines. Read it to find what the business decided before you "
+                "guess; an entry marked unavailable is private to another machine."
+            ),
+        ),
+        _Operation(
+            tool="vault_read",
+            args="entry_id, offset=0",
+            method="GET",
+            path="/vault/entries/{entry_id}",
+            fields=("offset",),
+            required=(),
+            text=(
+                "one vault entry by its id, with up to 50,000 characters of its text from "
+                "`offset`. When `next_offset` is not null, read again from it for the rest."
+            ),
+        ),
+        _Operation(
             tool="request_agent",
             args="name, template, task",
             method="POST",
@@ -1909,6 +1936,23 @@ async def write_copilot_home_after_commit(
             "Could not write %s's Copilot home; its next turn writes it before spawning",
             agent_row.name,
         )
+
+
+async def _vault_index_lines(db: AsyncSession, project_id: str) -> List[str]:
+    """The Knowledge vault section, or nothing. A vault that cannot be read is left out rather
+    than failing the turn: the tools still answer, and say why."""
+    from ... import vault
+
+    try:
+        workspace = await project_workspace.resolve_project_workspace(db, project_id)
+        settings = await vault.get_settings(db, project_id)
+        entries = await asyncio.to_thread(
+            vault.build_map, workspace.root, Path(settings["effective_private_location"])
+        )
+    except (project_workspace.ProjectWorkspaceError, OSError) as exc:
+        logger.warning("Vault index left out of %s's context: %s", project_id, exc)
+        return []
+    return vault.render_turn_index(entries)
 
 
 async def _render_hub_agent_context(
@@ -2507,6 +2551,13 @@ async def _render_hub_agent_context(
                 "cited as this boundary and not as a missing record — asking the agent that "
                 "recorded it is the way through."
             )
+        lines.append("")
+
+    # The vault's index (`a-vault-the-operator-fills-with-text-and-agents-can-read` D2): per turn,
+    # because it changes with every upload; absent when the vault is empty.
+    vault_lines = await _vault_index_lines(db, project_id)
+    if vault_lines:
+        lines.extend(vault_lines)
         lines.append("")
 
     _part("stable")

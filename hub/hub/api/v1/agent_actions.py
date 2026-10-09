@@ -462,6 +462,34 @@ async def get_readable_checkpoint(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.get("/vault/map")
+async def read_vault_map(
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """The project's knowledge vault map, as the operator's `GET /vault/map` answers it.
+
+    Read-only, like every vault route in this namespace: only the operator, and later the manager,
+    writes to the vault (`a-vault-the-operator-fills-with-text-and-agents-can-read`).
+    """
+    from . import vault as vault_routes
+
+    return await vault_routes.read_map(session, actor.project_id)
+
+
+@router.get("/vault/entries/{entry_id}")
+async def read_vault_entry(
+    entry_id: str,
+    offset: int = Query(default=0, ge=0),
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """One vault entry with a page of its text, from *offset*."""
+    from . import vault as vault_routes
+
+    return await vault_routes.read_one(session, actor.project_id, entry_id, offset)
+
+
 @router.post("/mcp-adapter-online", status_code=status.HTTP_204_NO_CONTENT)
 async def report_mcp_adapter_online(
     actor: AgentActor = Depends(get_agent_actor),

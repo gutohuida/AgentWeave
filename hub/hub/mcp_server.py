@@ -712,6 +712,29 @@ def recall(observation_id: str) -> Dict[str, Any]:
 
 
 @_tool()
+def vault_map() -> Dict[str, Any]:
+    """The project's knowledge vault: what the business has told this project, newest first.
+
+    Meeting transcripts, business rules, documents and examples the operator uploaded. Each entry
+    has its `id`, `type`, `name` and `opening` lines; read one in full with `vault_read`. **Check
+    here before guessing at what the business decided.** An entry with `available: false` is
+    private to another machine (`holder` names it): its text is not here, so ask the operator.
+    """
+    return _hub_request("GET", "/vault/map")
+
+
+@_tool()
+def vault_read(entry_id: str, offset: int = 0) -> Dict[str, Any]:
+    """One vault entry by its id (`src-…`), with up to 50,000 characters of its text.
+
+    `content` is the text from `offset`. When `next_offset` is not null there is more: call again
+    with `offset=next_offset`. The vault is read-only to agents; if an entry looks wrong, say so
+    to the operator rather than working around it.
+    """
+    return _hub_request("GET", f"/vault/entries/{entry_id}", params={"offset": offset or None})
+
+
+@_tool()
 def request_agent(name: str, template: str, task: str) -> Dict[str, Any]:
     """Request a new agent, modelled on an existing open agent of this project.
 
