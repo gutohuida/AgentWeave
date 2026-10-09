@@ -1111,6 +1111,28 @@ class ManagerJob(Base):
     __table_args__ = (PrimaryKeyConstraint("project_id", "job", name="pk_manager_jobs"),)
 
 
+class VaultSettings(Base):
+    """Where a project's knowledge vault puts what it is given (migration 0124).
+
+    `a-vault-the-operator-fills-with-text-and-agents-can-read`. The vault's records are files
+    (`hub/hub/vault.py`); this row holds only the operator's two choices. A project with no row
+    uses the defaults: new sources are tracked, and private ones go to the Hub's own folder,
+    `~/.agentweave/hub/vaults/<project id>`. `private_location` is per machine, which is why it is
+    here and not in the repository.
+    """
+
+    __tablename__ = "vault_settings"
+
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), primary_key=True)
+    private_location: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    default_visibility: Mapped[str] = mapped_column(
+        String(16), default="tracked", server_default="tracked", nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
+    )
+
+
 class AgentHeartbeat(Base):
     __tablename__ = "agent_heartbeats"
 

@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0123"
+HEAD_REVISION = "0124"
 
 
 # ---------------------------------------------------------------------------
@@ -4963,12 +4963,13 @@ def test_migration_0122_downgrades_to_the_schema_before_it(tmp_path) -> None:
 
 
 def _database_at_0122(tmp_path, name: str) -> tuple:
-    """Every table from the models, minus what 0123 adds, stamped at 0122."""
+    """Every table from the models, minus what 0123 and later add, stamped at 0122."""
     db_file = tmp_path / name
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run(_create_all_at(db_url))
     with sqlite3.connect(db_file) as conn:
         conn.execute("DROP TABLE manager_jobs")
+        conn.execute("DROP TABLE vault_settings")
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0122')")
         conn.commit()
@@ -5048,3 +5049,51 @@ def test_migration_manager_jobs_downgrade_keeps_what_the_job_became(tmp_path) ->
     _downgrade_to(db_url, "0122")
 
     assert _title_columns(db_file) == {"gen": ("truncate", "runner-c")}
+
+
+# ---------------------------------------------------------------------------------------------
+# 0124 -- vault_settings (`a-vault-the-operator-fills-with-text-and-agents-can-read`). A new
+# table only: nothing is copied, and the downgrade drops it.
+# ---------------------------------------------------------------------------------------------
+
+
+def _database_at_0123(tmp_path, name: str) -> tuple:
+    """Every table from the models, minus what 0124 adds, stamped at 0123."""
+    db_file = tmp_path / name
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("DROP TABLE vault_settings")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0123')")
+        conn.commit()
+    return db_file, db_url
+
+
+def test_migration_vault_settings_creates_the_table_and_its_downgrade_drops_it(tmp_path) -> None:
+    db_file, db_url = _database_at_0123(tmp_path, "vault.db")
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p', 'p', '2026-01-01T00:00:00Z')"
+        )
+        conn.commit()
+
+    _upgrade_to(db_url, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT count(*) FROM vault_settings").fetchone() == (0,)
+        conn.execute(
+            "INSERT INTO vault_settings (project_id, updated_at) "
+            "VALUES ('p', '2026-01-01T00:00:00Z')"
+        )
+        assert conn.execute(
+            "SELECT default_visibility, private_location FROM vault_settings"
+        ).fetchone() == ("tracked", None)
+        conn.commit()
+
+    _downgrade_to(db_url, "0123")
+
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert conn.execute("SELECT id FROM projects").fetchall() == [("p",)]
+    assert "vault_settings" not in tables

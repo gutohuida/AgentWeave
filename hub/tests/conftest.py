@@ -1170,6 +1170,17 @@ def _no_real_copilot_probe(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _vaults_stay_out_of_the_real_home(tmp_path_factory, monkeypatch):
+    """A project's default private vault is `~/.agentweave/hub/vaults/<project id>`
+    (`a-vault-the-operator-fills-with-text-and-agents-can-read` D3). The suite gets a temporary
+    root instead, so no test reads or writes the operator's real private vaults."""
+    from hub import vault
+
+    root = tmp_path_factory.mktemp("vaults-root")
+    monkeypatch.setattr(vault, "vaults_root", lambda: root)
+
+
+@pytest.fixture(autouse=True)
 def _copilot_homes_stay_out_of_the_real_home(tmp_path_factory, monkeypatch):
     """Binding or creating a Copilot agent writes its Hub-owned home
     (`a-copilot-agent-runs-over-acp` D4), which lives under `Path.home()`. A test that does not
