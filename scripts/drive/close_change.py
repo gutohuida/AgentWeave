@@ -40,6 +40,8 @@ SETTINGS_TESTS = "hub/ui/src/__tests__/projectSettingsPanel.test.tsx"
 PROJECT_PAGE_DRIVE = "scripts/drive/d1008_project_page_settings.py"
 MANAGER_TESTS = "hub/tests/test_manager_jobs.py"
 MANAGER_DRIVE = "scripts/drive/d1012_manager_framework.py"
+VAULT_TESTS = "hub/tests/test_vault.py"
+VAULT_DRIVE = "scripts/drive/d1015_vault_text_sources.py"
 
 JOURNEY_TESTS = "hub/tests/test_spec_journey.py"
 BRIEFING_TESTS = "hub/tests/test_spec_journey_briefing.py"
@@ -800,6 +802,54 @@ CHANGES = {
              "(GET /manager/jobs 404) at 14:27; after 1b73e84 it passed 13/13."),
         ],
     },
+    "fvault": {
+        "document": "spec/changes/a-vault-the-operator-fills-with-text-and-agents-can-read/spec.json",
+        "commit": "d0b863a",
+        "tasks": ["task-dc529944bb06", "task-9b5325764989", "task-c09ec5d256bb", "task-bb3538ce93f4"],
+        "evidence": [
+            ("FR-1", "task-9b5325764989", "test_result", VAULT_TESTS,
+             "test_settings_refuse_locations_in_the_project_and_bad_values: a relative path, the project, "
+             "a path inside it, inside its worktrees, through '..', and under a file, plus a bad "
+             "visibility, all 400 with nothing stored; a valid outside path is stored and created. "
+             "Drive d1015 check 2a/2b."),
+            ("FR-2", "task-9b5325764989", "test_result", VAULT_TESTS,
+             "test_a_tracked_source_is_written_under_knowledge_byte_for_byte, "
+             "test_a_private_source_leaves_only_a_stub_in_the_project, "
+             "test_invalid_uploads_are_refused_and_write_nothing (400s, 413), default visibility. "
+             "Drive checks 3 and 4: the CANARY text appears nowhere in the repository."),
+            ("FR-3", "task-9b5325764989", "test_result", VAULT_TESTS,
+             "test_the_map_is_built_from_the_files_newest_first: three entries newest first, a private "
+             "entry listed once, a foreign stub available false with opening null, opening cut at 300; "
+             "non-record files skipped."),
+            ("FR-4", "task-9b5325764989", "test_result", VAULT_TESTS,
+             "test_a_long_source_is_read_in_pages: 120,000 characters in three pages, rebuilt exactly; "
+             "test_a_stub_held_elsewhere_and_unknown_ids: available false naming the holder, 404s."),
+            ("FR-5", "task-c09ec5d256bb", "test_result", VAULT_TESTS,
+             "test_an_agent_reads_the_map_and_an_entry_with_its_run_credential, "
+             "test_no_agent_route_writes_to_the_vault, test_the_two_tools_are_on_every_runners_surface "
+             "(MCP, call mode, Copilot's allowlist)."),
+            ("FR-6", "task-c09ec5d256bb", "manual_observation", VAULT_DRIVE,
+             "Drive d1015 check 6 (scratch Hub, real Haiku turn): the agent called vault_read with the "
+             "transcript's id taken from its per-turn index, without vault_map, and answered 437 euros. "
+             "Unit: empty vault adds nothing; 200 entries cut within 2,000 characters with a count."),
+            ("FR-7", "task-9b5325764989", "test_result", VAULT_TESTS,
+             "test_the_routes_work_unchanged_on_another_storage: an in-memory storage substituted for "
+             "vault.storage serves upload, map and read, and nothing reaches the disk."),
+            ("FR-8", "task-9b5325764989", "test_result", "hub/tests/test_migrations.py",
+             "-k vault: 0123 -> head creates vault_settings with default tracked; the downgrade drops "
+             "it and leaves projects untouched."),
+            ("FR-9", "task-bb3538ce93f4", "test_result", "hub/ui/src/__tests__/vaultTab.test.tsx",
+             "404 reads 'This Hub has no vault yet' with no alert; entries in route order; paged text; "
+             "a stub's holder note; upload sends the default visibility; a refused location shows the "
+             "Hub's reason."),
+            ("FR-9", "task-bb3538ce93f4", "manual_observation", VAULT_DRIVE,
+             "Drive d1015 check 7 in Chromium: the Vault tab listed both entries and showed the "
+             "transcript's text. Screenshot testbed/drive1015-vault-text-sources/181809/shot_vault_entry.png."),
+            ("FR-6", "task-dc529944bb06", "manual_observation", VAULT_DRIVE,
+             "Acceptance drive d1015 was committed in 910c1f1 before the build and failed at check 1 "
+             "(GET /vault/settings 404); after d0b863a it passed 10/10."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -809,6 +859,7 @@ CHANGE_FOLDS = {
     "fwarn": 'spec-document-authority',
     "ftester": {'agent-flows': ['tester-default', 'test-brief'], 'spec-document-authority': ['amend-who', 'amend-ops', 'amend-record', 'cannot-satisfy', 'unreviewed-gap', 'page'], 'requirement-traceability': ['relax-blocks']},
     "freconcile": 'spec-document-authority',
+    "fvault": 'knowledge-vault',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [

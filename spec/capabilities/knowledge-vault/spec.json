@@ -4,8 +4,8 @@
       "checked_by": "agent",
       "given": "a scratch Hub on :8099 with a fresh database, and a scratch git repository registered as the project, with a Haiku agent (scripts/drive/d1015_vault_text_sources.py)",
       "how_to_check": "py -3.11 scripts/drive/d1015_vault_text_sources.py",
-      "key": "drive",
-      "requirement": "map-in-turn",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-read-drive",
+      "requirement": "a-vault-the-operator-fills-with-text-and-agents-can-map-in-turn",
       "then": "The setting inside the repository is refused with 400, and the one outside is stored. The transcript is in knowledge/sources as .md and .json. The note's text is at the private location only, and the repository holds only its stub. The map lists both, newest first. The agent's run calls vault_read with the transcript's id, and its reply says 437. The Vault tab lists both entries and shows the transcript's text. The drive fails on today's Hub at its first check (no vault route).",
       "when": "the drive does the following. It sets the private location inside the repository, then outside it. It uploads a tracked transcript stating a refund limit of 437 euros, and a private note. It asks the agent what refund limit the meeting agreed, and opens the Vault tab in Chromium"
     },
@@ -13,8 +13,8 @@
       "checked_by": "agent",
       "given": "a Hub test client and a project bound to a temporary directory",
       "how_to_check": "py -3.11 -m pytest hub/tests/test_vault.py",
-      "key": "settings-routes",
-      "requirement": "vault-settings",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-settings-routes",
+      "requirement": "a-vault-the-operator-fills-with-text-and-agents-c-vault-settings",
       "then": "The defaults come first. Each bad PUT answers 400 and leaves the stored values as they were. The valid PUT is read back.",
       "when": "a test reads the settings, then PUTs a relative path, a path inside the project, a path inside its worktrees, a path under a file, a bad visibility, and finally a valid outside path with private as the default"
     },
@@ -22,8 +22,8 @@
       "checked_by": "agent",
       "given": "a project with a private location in a temporary directory outside it",
       "how_to_check": "py -3.11 -m pytest hub/tests/test_vault.py",
-      "key": "upload-files",
-      "requirement": "source-uploaded",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-upload-files",
+      "requirement": "a-vault-the-operator-fills-with-text-and-agents-source-uploaded",
       "then": "The tracked text and its metadata are under knowledge/sources, with the text byte for byte. The private text is at the private location, and the project holds only its stub, which contains no text. The invalid uploads answer 400 and the oversized one 413, and none of them writes a file.",
       "when": "a test uploads one tracked and one private source, then a source with each invalid field, then one over the size limit"
     },
@@ -31,8 +31,8 @@
       "checked_by": "agent",
       "given": "two sources uploaded in order, plus a stub written by hand for a private entry held on another machine",
       "how_to_check": "py -3.11 -m pytest hub/tests/test_vault.py",
-      "key": "map-from-files",
-      "requirement": "map-listed",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-c-map-from-files",
+      "requirement": "a-vault-the-operator-fills-with-text-and-agents-can-r-map-listed",
       "then": "There are three entries, newest first, each private entry listed once. The foreign stub has available false and opening null. Each opening is cut at 300 characters.",
       "when": "a test reads the map"
     },
@@ -40,8 +40,8 @@
       "checked_by": "agent",
       "given": "a source of 120,000 characters and a foreign stub",
       "how_to_check": "py -3.11 -m pytest hub/tests/test_vault.py",
-      "key": "read-pages",
-      "requirement": "entry-read",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-r-read-pages",
+      "requirement": "a-vault-the-operator-fills-with-text-and-agents-can-r-entry-read",
       "then": "The three pages rebuild the text exactly, and the last page has next_offset null. The stub answers available false and names its holder. The unknown id answers 404.",
       "when": "a test reads the source from offset 0, then from each next_offset, then reads the stub and an unknown id"
     },
@@ -49,8 +49,8 @@
       "checked_by": "agent",
       "given": "the MCP server module, the call-mode operations and Copilot's allowlist",
       "how_to_check": "py -3.11 -m pytest hub/tests/test_vault.py hub/tests/test_mcp_server.py",
-      "key": "tools-surface",
-      "requirement": "agent-tools",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-ca-tools-surface",
+      "requirement": "a-vault-the-operator-fills-with-text-and-agents-can-agent-tools",
       "then": "vault_map and vault_read are on all three surfaces, and their agent-actions routes answer the map and an entry under a run credential",
       "when": "the tool-surface tests run"
     },
@@ -58,8 +58,8 @@
       "checked_by": "agent",
       "given": "three projects: one with an empty vault, one with two entries, and one with 200 entries",
       "how_to_check": "py -3.11 -m pytest hub/tests/test_vault.py",
-      "key": "turn-section",
-      "requirement": "map-in-turn",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-turn-section",
+      "requirement": "a-vault-the-operator-fills-with-text-and-agents-can-map-in-turn",
       "then": "The first context has no Knowledge vault section. The second lists both entries, newest first, in the per-turn part. The third is at most 2,000 characters and ends with the count of entries left out and vault_map.",
       "when": "a test renders an agent's context for each"
     },
@@ -67,8 +67,8 @@
       "checked_by": "agent",
       "given": "an in-memory storage implementation substituted for the local one",
       "how_to_check": "py -3.11 -m pytest hub/tests/test_vault.py",
-      "key": "fake-backend",
-      "requirement": "one-storage-interface",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-fake-backend",
+      "requirement": "a-vault-the-operator-fills-with-text-and-a-one-storage-interface",
       "then": "All three work, and nothing is written to disk",
       "when": "a test uploads, lists and reads through the routes"
     },
@@ -76,8 +76,8 @@
       "checked_by": "agent",
       "given": "a database at 0123",
       "how_to_check": "py -3.11 -m pytest hub/tests/test_migrations.py -k vault",
-      "key": "migration",
-      "requirement": "settings-migration",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-re-migration",
+      "requirement": "a-vault-the-operator-fills-with-text-and-agen-settings-migration",
       "then": "The table exists with the default tracked, and after the downgrade it is gone",
       "when": "the test upgrades it to the new head, then downgrades it"
     },
@@ -85,8 +85,8 @@
       "checked_by": "agent",
       "given": "the Vault tab rendered against routes that answer 404",
       "how_to_check": "cd hub/ui && npx vitest run src/__tests__/vaultTab.test.tsx",
-      "key": "tab-old-hub",
-      "requirement": "vault-view",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-tab-old-hub",
+      "requirement": "a-vault-the-operator-fills-with-text-and-agents-can-r-vault-view",
       "then": "it says this Hub has no vault yet, and renders no error",
       "when": "a vitest renders it"
     },
@@ -94,8 +94,8 @@
       "checked_by": "operator",
       "given": "the drive's screenshots of the Vault tab",
       "how_to_check": "open testbed/drive1015-vault-text-sources/<stamp>/shot_vault*.png",
-      "key": "tab-look",
-      "requirement": "vault-view",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-rea-tab-look",
+      "requirement": "a-vault-the-operator-fills-with-text-and-agents-can-r-vault-view",
       "then": "the list, the entry's text and the upload form read clearly as a wiki",
       "when": "the operator looks at them"
     }
@@ -115,229 +115,104 @@
     },
     "high_water": 9,
     "requirements": {
-      "agent-tools": "FR-5",
-      "entry-read": "FR-4",
-      "map-in-turn": "FR-6",
-      "map-listed": "FR-3",
-      "one-storage-interface": "FR-7",
-      "settings-migration": "FR-8",
-      "source-uploaded": "FR-2",
-      "vault-settings": "FR-1",
-      "vault-view": "FR-9"
+      "a-vault-the-operator-fills-with-text-and-a-one-storage-interface": "FR-7",
+      "a-vault-the-operator-fills-with-text-and-agen-settings-migration": "FR-8",
+      "a-vault-the-operator-fills-with-text-and-agents-c-vault-settings": "FR-1",
+      "a-vault-the-operator-fills-with-text-and-agents-can-agent-tools": "FR-5",
+      "a-vault-the-operator-fills-with-text-and-agents-can-map-in-turn": "FR-6",
+      "a-vault-the-operator-fills-with-text-and-agents-can-r-entry-read": "FR-4",
+      "a-vault-the-operator-fills-with-text-and-agents-can-r-map-listed": "FR-3",
+      "a-vault-the-operator-fills-with-text-and-agents-can-r-vault-view": "FR-9",
+      "a-vault-the-operator-fills-with-text-and-agents-source-uploaded": "FR-2"
     },
     "retired": {}
   },
-  "delivery": {
-    "agent": null,
-    "cron": "*/5 * * * *",
-    "mode": "none",
-    "reviewer": null,
-    "stop_at": null,
-    "stop_when_queue_empties": false
-  },
-  "design": "D1 Hazard and rollback (Tier 2). Migration 0124 creates vault_settings on :8000's real database at its next restart, and the bundle reaches :8000's app at its next reload, in either order (the tab's 404 state covers the gap). Rollback is the downgrade, which drops the table and loses only the two settings. Vault files are never touched by a migration. A tracked upload writes into the operator's working tree, and nothing else in the repository is changed. Also new: the Hub writes files outside any project, at the private location. It writes only there, and only under paths built from Hub-minted ids.\n\nD2 The map in every turn is a capped index (operator, 2026-10-09, F573 a). There is one line per entry (id, type, name, and the holder when the text is elsewhere), cut at 2,000 characters, and the section is absent when the vault is empty. It sits in the per-turn part of the context (agents.py, the part_starts split), because it changes with every upload, and Copilot's stable part is written once into its agent file.\n\nD3 A private location inside the project is refused (operator, 2026-10-09, F573 b). The default, ~/.agentweave/hub/vaults/<project id>, is the Hub's own data directory, so the operator never has to choose. Refusal is checked on resolved paths, so neither a symlink nor a .. component can get past it. The worktrees are inside the project, so they are covered too.\n\nD4 File layout. knowledge/sources/<id>.md holds the raw text, and <id>.json beside it holds id, name, type, visibility, created_at, holder and media type. A private entry has the same pair at the private location, and a stub under knowledge/sources holds the metadata without the text. Sources are never rewritten: an upload always mints a new id.\n\nD5 No index table yet. The map is built from the record files on each read. That is enough at the size a vault reaches by hand, and it means a colleague's pulled files appear with no import step. A table arrives when a later slice needs to query entries, such as fetch counts in access-tuning.\n\nD6 A stub reveals its name, type and holder (roadmap D3). That is the cost of colleagues knowing the entry exists. The upload form says so when private is chosen.\n\nD7 The holder is this machine's network name (platform.node()). There is no other identity for a person on a local Hub.\n\nD8 Text arrives as a JSON string, not a multipart upload. This keeps the route free of a new dependency, and the app reads a chosen file as text in the browser. Images and PDFs bring their own route in their slice.",
+  "design": "",
   "evidence": {
-    "checked": [
-      "hub/hub/api/v1/agents.py:2018-2590: the context is split into stable, per_turn and tool_surface parts; Copilot gets the stable part once, in its agent file",
-      "hub/hub/project_workspace.py:52-66: ProjectWorkspace.root, and worktree_root at .agentweave/worktrees inside the project",
-      "hub/hub/copilot_home.py:88-90: the Hub's per-machine data lives under ~/.agentweave/hub",
-      "hub/hub/mcp_server.py:226-262: agent tools call /api/v1/agent-actions under the bound run token",
-      "hub/hub/copilot_acp.py:215-245 and hub/hub/api/v1/agents.py:1300-1340: the Copilot allowlist and the call-mode operations that a new tool joins",
-      "hub/hub/migrations/versions: head is 0123_manager_jobs",
-      "hub/ui/src/lib/navigation.ts: PROJECT_TABS is overview, tasks, spec, jobs, activity"
-    ],
-    "limits": [
-      "Docker mode is not driven; the default private location there is inside the container's home",
-      "Nothing driven yet"
-    ]
+    "checked": [],
+    "limits": []
   },
   "hub": {
-    "phase": "archived",
+    "phase": "current",
     "rigor": "sketch",
     "size": null,
-    "step": "intake"
+    "step": null
   },
-  "kind": "change-spec",
-  "lifecycle": "When closed, this change folds into a new knowledge-vault capability, and the roadmap's vault-text-sources slice is then done.",
+  "kind": "capability",
+  "lifecycle": "",
   "open_questions": [],
-  "problem": "The knowledge vault roadmap (spdoc-7c75066d6403) needs a place to put business knowledge before anything can be distilled from it. Today a transcript reaches an agent only by being pasted into one conversation. Nothing keeps it for the next conversation, another harness, or a colleague on the same project. The manager framework now exists (hub/hub/manager.py), but its jobs would have nothing to read. This slice is the vault's floor: the operator can put sources in, people can read them, and agents can find them and read them, without any model in the loop.",
+  "problem": "",
   "requirements": [
     {
-      "key": "vault-settings",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-c-vault-settings",
       "modal": "MUST",
       "party": null,
       "rationale": "Decided by the operator on 2026-10-09 (F573 b): a private location inside the repository is refused. A private folder inside the working tree can be swept into a commit by git add -A, or become tracked when .gitignore changes. Worktrees live at .agentweave/worktrees inside the project (project_workspace.py:58).",
       "statement": "GET /api/v1/projects/{id}/vault/settings MUST answer private_location, effective_private_location and default_visibility. With nothing stored, private_location is null, effective_private_location is ~/.agentweave/hub/vaults/<project id>, and default_visibility is tracked. PUT MUST store either field. It MUST answer 400 and change nothing when private_location is relative, is inside the project's directory (its worktrees included), or cannot be created; it MUST also answer 400 when default_visibility is neither tracked nor private."
     },
     {
-      "key": "source-uploaded",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-source-uploaded",
       "modal": "MUST",
       "party": null,
       "rationale": "Roadmap D2: files are the record, one file per source so merges stay clean. D3: tracked by default, and a private entry is a stub in the map. The id is minted by the Hub (src- followed by 12 hex characters), so no caller-chosen name ever becomes a path.",
       "statement": "POST /api/v1/projects/{id}/vault/sources with name, type and content MUST answer 201 with the entry as the map lists it. visibility is optional and falls back to the project default. A tracked source MUST be written as knowledge/sources/<id>.md (the text, byte for byte) plus knowledge/sources/<id>.json (its metadata) under the project's directory. A private source MUST be written the same way at the effective private location, and only a stub (id, name, type, visibility, holder, created_at) MUST be written as knowledge/sources/<id>.json; no part of the text may be written inside the project. The route MUST answer 400 for an empty name, a name over 200 characters, a type outside transcript, document, rules, example and note, or empty content. It MUST answer 413 for content over 1,048,576 UTF-8 bytes."
     },
     {
-      "key": "map-listed",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-r-map-listed",
       "modal": "MUST",
       "party": null,
       "rationale": "Roadmap D2 and D5: a source is in the map the moment it is uploaded, with no model involved. A colleague who pulls knowledge/ has none of this Hub's rows, so the map is read from files.",
       "statement": "GET /api/v1/projects/{id}/vault/map MUST answer {\"entries\": [...]}, newest first. It is built on every read from knowledge/sources and the effective private location. Each entry holds id, name, type, visibility, created_at, holder, available, and opening. opening is the source's first non-blank lines, joined and cut at 300 characters, and is null when the text is not on this machine. A private source held on this machine MUST be listed once, from its full record. A stub whose text is not here MUST be listed with available false."
     },
     {
-      "key": "entry-read",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-r-entry-read",
       "modal": "MUST",
       "party": null,
       "rationale": "A transcript can be longer than one tool result. Paging by offset keeps every answer bounded without a file round-trip.",
       "statement": "GET /api/v1/projects/{id}/vault/entries/{entry_id}?offset=N MUST answer the entry as listed, plus content: at most 50,000 characters of the text from offset N (default 0), and next_offset, which is null when the text ends within that page. For an entry whose text is not on this machine, it MUST answer 200 with available false, content null, and a sentence naming the holder. An unknown or malformed id MUST answer 404."
     },
     {
-      "key": "agent-tools",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-agent-tools",
       "modal": "MUST",
       "party": null,
       "rationale": "Roadmap D6: only the manager writes. Agents read the map freely and fetch by id.",
       "statement": "Working agents MUST have two read-only tools, vault_map() and vault_read(entry_id, offset=0), answering what map-listed and entry-read answer, through the agent-actions routes under the run's own credentials. They MUST be on every runner's tool surface (MCP, the call-mode command, and Copilot's allowlist). No agent-callable route may write to the vault."
     },
     {
-      "key": "map-in-turn",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-map-in-turn",
       "modal": "MUST",
       "party": null,
       "rationale": "Decided by the operator on 2026-10-09 (F573 a): a capped index. With nothing in the turn, agents would not know the vault exists. The whole map would cost more with every upload, on every turn and for every agent.",
       "statement": "When the project's map holds at least one entry, every turn's context MUST include a Knowledge vault section in its per-turn part. The section names vault_read, then gives one line per entry, newest first: id, type, name, and for an entry not available here, the holder. The lines are cut so that the section stays within 2,000 characters, and a last line then says how many entries were left out and that vault_map lists them all. When the map is empty, the section MUST be absent."
     },
     {
-      "key": "one-storage-interface",
+      "key": "a-vault-the-operator-fills-with-text-and-a-one-storage-interface",
       "modal": "MUST",
       "party": null,
       "rationale": "Roadmap D9: a cloud backend is a later implementation of this interface, not a rewrite.",
       "statement": "Every vault read and write MUST go through one storage interface (write a record, read a record, list records under a root), whose only implementation in this slice is the local filesystem. The routes MUST work unchanged when a test substitutes another implementation."
     },
     {
-      "key": "settings-migration",
+      "key": "a-vault-the-operator-fills-with-text-and-agen-settings-migration",
       "modal": "MUST",
       "party": null,
       "rationale": "It runs on :8000's real database at its next restart. It creates a table only; nothing existing is copied or changed.",
       "statement": "The migration MUST create vault_settings (project_id primary key, private_location nullable, default_visibility not null, default tracked, updated_at). Its downgrade MUST drop the table and touch no vault file."
     },
     {
-      "key": "vault-view",
+      "key": "a-vault-the-operator-fills-with-text-and-agents-can-r-vault-view",
       "modal": "MUST",
       "party": null,
       "rationale": "A committed bundle reaches :8000's app on its next reload, possibly before its server restarts (the same hazard as the manager section).",
       "statement": "The app's project view MUST have a Vault tab. It lists the map's entries, opens an entry's text, uploads a source (name, type, visibility starting at the project default, the text pasted or read from a chosen text file), and shows and changes the two settings, showing the Hub's 400 message when the Hub refuses a setting. Where the Hub answers 404 for the vault routes, the tab MUST say that this Hub has no vault yet, instead of failing."
     }
   ],
-  "roadmap": {
-    "document": "spec/changes/the-knowledge-vault-and-its-manager-roadmap/spec.json",
-    "slice": "vault-text-sources"
-  },
   "schema_version": 1,
   "scope": {
-    "in_scope": [
-      "Vault settings per project: the private location and the default visibility (tracked or private), with a migration for their table",
-      "Upload of a text source with a name, a type, the text, and optionally a visibility",
-      "One storage interface with a local filesystem backend, used for every vault read and write",
-      "A map built from the record files on every read: tracked entries, private entries held on this machine, and stubs of private entries held elsewhere",
-      "Reading one entry by id, in pages",
-      "Two read-only agent tools, vault_map and vault_read",
-      "A capped index of the map in every turn's context",
-      "A Vault tab in the app: the list, an entry's text, upload, and the two settings"
-    ],
-    "non_goals": [
-      "Facts, contradictions, reports and any manager job: these are later slices",
-      "Images, PDFs and binary files: text only in this slice",
-      "Editing or deleting a source: sources are raw and never edited, and deleting one is left for later",
-      "Committing the files: the Hub writes knowledge/ into the working tree, and the operator's own git flow commits it",
-      "A database index of entries, and fetch counting (access-tuning slice)",
-      "Search in the wiki",
-      "Any agent-callable write to the vault"
-    ]
+    "in_scope": [],
+    "non_goals": []
   },
-  "summary": "A project gets a knowledge vault. The operator uploads text sources such as meeting transcripts, business rules and example documents, and reads them in a Vault tab. A source is tracked under knowledge/ in the repository by default, so colleagues share it. The operator can also make it private: it is then stored at a location outside the repository, and only a stub names it under knowledge/. Every source enters the map the moment it is uploaded, with its name, type and opening lines; no model is involved. Working agents see a short index of the map in every turn, and read entries through two read-only tools. Tier 2: a new table and migration, the first upload route, and files written outside the repository.",
-  "tasks": [
-    {
-      "depends_on": [],
-      "description": "scripts/drive/d1015_vault_text_sources.py uses a scratch Hub on :8099, a fresh database, a scratch git repository as the project, one Haiku turn, and Chromium for the tab. It is the 'drive' criterion, and it is recorded failing at its first check before any build task.",
-      "files": [
-        "scripts/drive/d1015_vault_text_sources.py"
-      ],
-      "from": null,
-      "key": "drive-first",
-      "requirements": [
-        "map-in-turn"
-      ],
-      "reviewer": null,
-      "title": "Acceptance drive, failing on today's Hub"
-    },
-    {
-      "depends_on": [
-        "drive-first"
-      ],
-      "description": "hub/hub/vault.py holds the storage interface, the local backend, the record format, the map builder and the location checks. It comes with the VaultSettings model, migration 0124 with its downgrade, and hub/hub/api/v1/vault.py with the settings, upload, map and entry routes. Failing tests come first, in test_vault.py and the migration test. The new table also joins the project-delete sweep's ratchet.",
-      "files": [
-        "hub/hub/vault.py",
-        "hub/hub/db/models.py",
-        "hub/hub/migrations/versions",
-        "hub/hub/api/v1/vault.py",
-        "hub/hub/api/v1/__init__.py",
-        "hub/tests/test_vault.py",
-        "hub/tests/test_migrations.py",
-        "hub/tests/test_project_delete_api.py"
-      ],
-      "from": null,
-      "key": "vault-backend",
-      "requirements": [
-        "vault-settings",
-        "source-uploaded",
-        "map-listed",
-        "entry-read",
-        "one-storage-interface",
-        "settings-migration"
-      ],
-      "reviewer": null,
-      "title": "Storage interface, settings table, migration and vault routes"
-    },
-    {
-      "depends_on": [
-        "vault-backend"
-      ],
-      "description": "This task adds agent-actions routes for the map and an entry, and the vault_map and vault_read MCP tools with call-mode operations and Copilot's allowlist. It also adds the Knowledge vault section to the per-turn context, capped at 2,000 characters. Failing tests come first.",
-      "files": [
-        "hub/hub/api/v1/agent_actions.py",
-        "hub/hub/mcp_server.py",
-        "hub/hub/copilot_acp.py",
-        "hub/hub/api/v1/agents.py",
-        "hub/tests/test_vault.py",
-        "hub/tests/test_mcp_server.py"
-      ],
-      "from": null,
-      "key": "agent-reads",
-      "requirements": [
-        "agent-tools",
-        "map-in-turn"
-      ],
-      "reviewer": null,
-      "title": "vault_map and vault_read, and the index in every turn"
-    },
-    {
-      "depends_on": [
-        "vault-backend"
-      ],
-      "description": "A vault project tab: an entries list (data-testid vault-entry-<id>), an entry view (vault-entry-text), an upload form (vault-upload-*), and the settings (vault-settings-*). A 404 reads as 'no vault yet'. The vitest comes first, and the refreshed bundle is committed with the source.",
-      "files": [
-        "hub/ui/src/components/vault",
-        "hub/ui/src/api/vault.ts",
-        "hub/ui/src/lib/navigation.ts",
-        "hub/ui/src/__tests__/vaultTab.test.tsx",
-        "hub/hub/static/ui"
-      ],
-      "from": null,
-      "key": "vault-tab",
-      "requirements": [
-        "vault-view"
-      ],
-      "reviewer": null,
-      "title": "The Vault tab in the app"
-    }
-  ],
-  "title": "A vault the operator fills with text sources, and agents can read"
+  "summary": "",
+  "tasks": [],
+  "title": "Knowledge vault"
 }

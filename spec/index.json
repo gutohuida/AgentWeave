@@ -251,6 +251,14 @@
       "order": 720
     },
     {
+      "path": "spec/capabilities/knowledge-vault/spec.json",
+      "title": "Knowledge vault",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 850
+    },
+    {
       "path": "spec/capabilities/local-project-workspace/spec.json",
       "title": "Local project workspace",
       "kind": "capability",
@@ -593,6 +601,14 @@
       "status": "archived",
       "parent": null,
       "order": 810
+    },
+    {
+      "path": "spec/changes/a-vault-the-operator-fills-with-text-and-agents-can-read/spec.json",
+      "title": "A vault the operator fills with text sources, and agents can read",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 860
     },
     {
       "path": "spec/changes/approve-lists-what-is-missing-and-can-approve-anyway/spec.json",
