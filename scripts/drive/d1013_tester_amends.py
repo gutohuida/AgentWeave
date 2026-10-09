@@ -8,7 +8,8 @@ says `python calc.py -2 3` prints 1; its one task asks only for a README usage l
 
   1. the agent amend route exists (401 without a run credential, not 404/405) -- spends no turn;
   2. approval creates the flow, with delivery.tester tess;
-  3. alice's firing completes the README task;
+  3. the README task is built by the drive (a commit on `work`, accepted operator evidence), so
+     the planted bug survives the build;
   4. the next firing queues its review to tess (the named tester goes first);
   5. tess's test turn records an add_task amendment, author tess, with its run, not reviewed;
   6. the added task is pending on the flow's board;
@@ -33,6 +34,7 @@ Fails on today's Hub at check 1. Stops at the first failure. Spends Haiku turns 
     py -3.11 scripts/drive/d1013_tester_amends.py
 """
 
+import os
 import pathlib
 import secrets
 import subprocess
@@ -84,7 +86,8 @@ def payload():
         "algorithms": [], "design": "One line.", "evidence": {"checked": ["calc.py exists"], "limits": []},
         "lifecycle": "", "open_questions": [],
         "delivery": {"mode": "flow", "agent": "alice", "tester": "tess", "reviewer": None,
-                     "stop_when_queue_empties": False, "stop_at": None, "cron": "0 3 1 1 *"},
+                     "stop_when_queue_empties": False, "stop_at": "2027-10-01T00:00:00+00:00",
+                     "cron": "0 3 1 1 *"},
     }
 
 
@@ -126,6 +129,9 @@ def coverage_state(base, identifier):
 def tester_run(pid, task_id):
     """A running tess run whose delivered entry is a review of `task_id` (the Hub tests' pattern)."""
     sys.path.insert(0, str(d.REPO / "hub"))
+    # Importing the Hub's models loads its settings, which refuse to guess a database: name the
+    # scratch one, never a default.
+    os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{d.DB.as_posix()}"
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
@@ -197,17 +203,30 @@ def drive():
     d.check("2 approval creates the flow", code == 200 and bool(job_id), f"{code} flow={flow}")
     (usage,) = out["tasks_created"][:1]
     try:
-        # 3: alice builds.
-        for _ in range(3):
-            fire(base, job_id, pid)
-            if status(usage)[0] in ("completed", "under_review", "approved"):
-                break
-        d.check("3 alice completes the README task", status(usage)[0] in ("completed", "under_review"),
-                str(status(usage)))
+        # 3: the README task is built by the drive, as d1008 builds its task: a Haiku builder told
+        #    to "change nothing else" fixed calc.py anyway on the first run (artefacts 093412), which
+        #    leaves the tester nothing to find. The planted bug has to survive the build.
+        d.git(root, "checkout", "-q", "-b", "work", "main")
+        (root / "README.md").write_text("# calc\n\nA tiny adder.\n\nUsage: python calc.py A B\n",
+                                        encoding="utf-8")
+        d.git(root, "add", "README.md")
+        d.git(root, "commit", "-q", "-m", "usage line")
+        code, ev = d.api("POST", f"{base}/project/spec/evidence", {
+            "identifier": identifier, "summary": "README has the usage line", "kind": "test_result",
+            "locator": "README.md", "task_id": usage, "document": DOC})
+        assert code == 201, (code, ev)
+        code, out = d.api("POST", f"{base}/project/spec/evidence/{ev['id']}/decision",
+                          {"decision": "accepted", "reason": "drive"})
+        assert code == 200, (code, out)
+        d.git(root, "checkout", "-q", "main")
+        for step in ("in_progress", "completed"):
+            code, out = d.api("PATCH", f"{base}/tasks/{usage}", {"status": step})
+            assert code == 200, (step, code, out)
+        d.check("3 the README task is completed with accepted evidence naming its commit",
+                status(usage)[0] == "completed", str(status(usage)))
         # 4: the review goes to the named tester.
-        if status(usage)[0] == "completed":
-            d.api("POST", f"{base}/jobs/{job_id}/run")
-            time.sleep(3)
+        d.api("POST", f"{base}/jobs/{job_id}/run")
+        time.sleep(3)
         entries = d.ro("select agent from inbound_queue_entries where review_task_id=? order by sequence",
                        (usage,))
         d.check("4 the review is queued to the tester tess", [a for (a,) in entries][:1] == ["tess"],

@@ -12,7 +12,7 @@
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "tester-amends-drive",
+    "current": "reconcile-and-measure-t2-impl",
     "next_action": "tester-amends-drive: d1013 on :8102 with Haiku; then METRICS row; then reconcile-and-measure-spec.",
     "queue": [
         {
@@ -161,9 +161,9 @@
         },
         {
             "id": "tester-amends-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive tester-amends on a scratch Hub; log evidence + METRICS row",
-            "detail": "Own port, fresh db, haiku turns only."
+            "detail": "done 2026-10-09 morning: d1013 9/9 on :8102 (testbed/drive1013-tester-amends/094607); METRICS row."
         },
         {
             "id": "reconcile-and-measure-spec",
