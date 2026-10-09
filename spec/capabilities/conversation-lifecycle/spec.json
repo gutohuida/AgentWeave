@@ -202,6 +202,15 @@
       "requirement": "n2-triggering-an-unavailable-conversation-says-why",
       "then": "the Hub answers 409 naming `B` as its owner",
       "when": "a trigger for `A` names it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8099 with a fresh database, a project with a Haiku agent and a second runner whose model is Sonnet 5 (scripts/drive/d1012_manager_framework.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1012_manager_framework.py",
+      "key": "the-hubs-background-jobs-are-configured-on-a-manager-page-drive",
+      "requirement": "the-hubs-background-jobs-are-configured-on-a-mana-title-is-a-job",
+      "then": "the job list holds conversation-titles disabled; after enabling, the settings route reports generate and the runner; the first conversation's title is the firing's recorded title, not its message, and its firing names the second runner, model Haiku, outcome written, with exactly one Run row in the project for that turn; the second conversation keeps its message as its title and records no firing; in Chromium Environment > Manager shows the job and the firing, and Settings shows no conversation title control. Fails on today's Hub at the first check (no manager route).",
+      "when": "the drive lists the jobs, enables conversation-titles on the second runner with the job model set to Haiku, starts a conversation with a short message, then disables the job and starts another"
     }
   ],
   "algorithms": [],
@@ -214,10 +223,11 @@
       "FR-14": "e0277e0fdf915afb86ba1674d055fac2c536676ed9a9b20d1cdb2454cabfba8a",
       "FR-15": "0c969f6796dc802c21ca39287f145eb7b11bb1c2688a6a463a3ca43addf7f738",
       "FR-16": "4f464747c99cbee84af013ebce8ba7be226a9447e8b20cd34bc70bfcadcd76b9",
+      "FR-17": "3aca51149b86c6d460811dea3f48d0acb04ca091e5c7da6919e2f1fdb5a68a0b",
       "FR-8": "3ea6e7c849e3c5a0dd1e29eb0fb935bce253b9d484c68c3da8ead71151298a36",
       "FR-9": "63eb5d56f42c0485fad0e0b71fea49a9ffccbe4019254748733d24b3b9969813"
     },
-    "high_water": 16,
+    "high_water": 17,
     "requirements": {
       "a-conversation-can-be-archived-and-unarchived": "FR-12",
       "a-conversation-carries-a-human-readable-title": "FR-8",
@@ -226,6 +236,7 @@
       "archiving-is-refused-while-work-is-outstanding": "FR-13",
       "n1-title-generation-never-affects-the-conversation": "FR-15",
       "n2-triggering-an-unavailable-conversation-says-why": "FR-16",
+      "the-hubs-background-jobs-are-configured-on-a-mana-title-is-a-job": "FR-17",
       "the-operator-can-rename-a-conversation": "FR-10",
       "title-generation-is-a-project-setting-off-by-default": "FR-11"
     },
@@ -316,6 +327,13 @@
       "party": null,
       "rationale": "One generic sentence for a typo, another agent's thread and an archived one named no repair.",
       "statement": "A trigger naming a conversation that cannot be continued SHALL be refused with 409 and a sentence distinguishing the cause: unknown in this project, belonging to another agent (naming it), or archived (advising to unarchive it), each also saying that omitting `conversation_id` starts a new conversation."
+    },
+    {
+      "key": "the-hubs-background-jobs-are-configured-on-a-mana-title-is-a-job",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today's behaviour (conversation_titles.py:200-216, 235), with the model now choosable per job.",
+      "statement": "A conversation MUST be given a generated title only while its project's conversation-titles job is enabled; the spawn MUST use the job's runner, else the conversation's agent's bound runner, and the job's model, else that runner's model. Truncation stays the floor: a disabled job, an unresolvable runner or a failed spawn leaves the truncated title."
     }
   ],
   "schema_version": 1,

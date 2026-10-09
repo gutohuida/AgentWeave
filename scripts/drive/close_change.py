@@ -757,7 +757,7 @@ CHANGES = {
     },
     "fmanager": {
         "document": "spec/changes/the-hubs-background-jobs-are-configured-on-a-manager-page/spec.json",
-        "commit": "a04c01c",
+        "commit": "1b73e84",
         "tasks": ["task-305e02593119", "task-d0ebb045d2d4", "task-402d75406e76", "task-7e3f1410556f"],
         "evidence": [
             ("FR-1", "task-d0ebb045d2d4", "test_result", MANAGER_TESTS,
@@ -797,7 +797,7 @@ CHANGES = {
              "testbed/drive1012-manager-framework/145608/shot_manager.png."),
             ("FR-3", "task-305e02593119", "manual_observation", MANAGER_DRIVE,
              "Acceptance drive d1012 was committed in e04403e before the build and failed at check 1 "
-             "(GET /manager/jobs 404) at 14:27; after a04c01c it passed 13/13."),
+             "(GET /manager/jobs 404) at 14:27; after 1b73e84 it passed 13/13."),
         ],
     },
 }

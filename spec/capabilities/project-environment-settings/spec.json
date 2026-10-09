@@ -146,6 +146,87 @@
       "requirement": "agent-budget-is-described-as-what-it-caps",
       "then": "the agent budget text mentions agents staffing agents and does not contain 'at the same time'",
       "when": "they render"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub test client and a project with one runner",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_manager_jobs.py",
+      "key": "the-hubs-background-jobs-are-configured-on-a-manager-page-routes",
+      "requirement": "the-hubs-background-jobs-are-configured-on-a-mana-job-configured",
+      "then": "404, then 400 with the job unchanged, then 200 with the job as listed",
+      "when": "a test PATCHes an unknown job, a foreign runner, then a valid runner and model"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a new project with no manager rows",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_manager_jobs.py",
+      "key": "the-hubs-background-jobs-are-configured-on-a-manage-jobs-default",
+      "requirement": "the-hubs-background-jobs-are-configured-on-a-manager-jobs-listed",
+      "then": "conversation-titles is listed with enabled false and runner_id and model null",
+      "when": "a test lists its jobs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with the title job enabled and a stubbed titler process",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_title_generation.py hub/tests/test_manager_jobs.py",
+      "key": "the-hubs-background-jobs-are-configured-on-a-manage-firing-shape",
+      "requirement": "the-hubs-background-jobs-are-configured-on-a-man-firing-recorded",
+      "then": "two manager_job_fired events (written, empty) with every field present, and none for the already-titled one",
+      "when": "a test titles one conversation successfully, one whose spawn prints nothing, and one already titled from the same excerpt"
+    },
+    {
+      "checked_by": "agent",
+      "given": "three recorded firings for two jobs at increasing times",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_manager_jobs.py",
+      "key": "the-hubs-background-jobs-are-configured-on-a-mana-activity-order",
+      "requirement": "the-hubs-background-jobs-are-configured-on-a-man-activity-listed",
+      "then": "newest first; two entries; only that job's entries",
+      "when": "a test lists activity with no filter, with limit 2, and filtered by job"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with the title job enabled and a stubbed titler",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_manager_jobs.py",
+      "key": "the-hubs-background-jobs-are-configured-on-a-manager-no-run-row",
+      "requirement": "the-hubs-background-jobs-are-configured-on-a-manage-not-an-agent",
+      "then": "no Run row is created by the titling and the firing holds no agent field",
+      "when": "a conversation is titled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_manager_jobs.py hub/tests/test_title_generation.py",
+      "key": "the-hubs-background-jobs-are-configured-on-a-manager-page-compat",
+      "requirement": "the-hubs-background-jobs-are-configured-on-a-settings-compatible",
+      "then": "the job is enabled with that runner, then settings report truncate with the runner kept",
+      "when": "a test PUTs settings with conversation_title_mode generate and a runner, reads the job, PATCHes the job off, and reads settings"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a database at the previous head with three projects: generate with a runner, truncate with a runner, truncate with none",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_migrations.py -k manager",
+      "key": "the-hubs-background-jobs-are-configured-on-a-manager-p-migration",
+      "requirement": "the-hubs-background-jobs-are-configure-migration-keeps-behaviour",
+      "then": "two rows (enabled, disabled), each with its runner, none for the third; after downgrade the project columns hold the original values and the table is gone",
+      "when": "the test upgrades to the new head, then downgrades"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Manager section rendered against routes answering 404",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/managerSection.test.tsx",
+      "key": "the-hubs-background-jobs-are-configured-on-a-man-section-old-hub",
+      "requirement": "the-hubs-background-jobs-are-configured-on-a-man-manager-section",
+      "then": "it says this Hub has no manager yet and renders no error",
+      "when": "a vitest renders it"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the drive's screenshots of Environment > Manager",
+      "how_to_check": "open testbed/drive1012-manager-framework/<stamp>/shot_manager.png",
+      "key": "the-hubs-background-jobs-are-configured-on-a-manage-section-look",
+      "requirement": "the-hubs-background-jobs-are-configured-on-a-man-manager-section",
+      "then": "the jobs and the activity list read clearly and fit the rest of Environment",
+      "when": "the operator looks at them"
     }
   ],
   "algorithms": [],
@@ -155,7 +236,15 @@
       "FR-10": "bac1d28331c5ade740d470a108ce08b108f84b9219da0077d12fccd105ead1e6",
       "FR-11": "cb3d09c3cb2f85f48b6423bcc7cf2ffc3daa0feac2dd25c8f68bcf754db3c85b",
       "FR-12": "6ced368e9aa03ce8304bb2f777aeb74698517ab70e9cfd8df6c594325baa5ac2",
+      "FR-13": "16ff8fd1771365e305a0fcaa060f84efc394aa614f290ff5d029b040127e3864",
+      "FR-14": "c34f074ed68b4fb6e56fadd370cbd0f0c3e22fa76f65f410e5ed62a3ebb8d735",
+      "FR-15": "fcd39e31a230880fd163d849370cfb20edf2495e861858eff0d65141c34f667c",
+      "FR-16": "7fb99303ad88b0b1d3db7a548b4bdb7311c77ddc0734c7f9d63bb7cf8178eb68",
+      "FR-17": "21c0942324598b759e957bca50ab7cd6dc1fca72f7e2bb627c3605fcda79f057",
+      "FR-18": "513a3626db7c3737ee600e6e31731999afa2343f783c765a8ed553800da01f4d",
+      "FR-19": "cf2258c812a99125403af54be6cd6c6fe1c807cdbc3a91128885b9ca114883b6",
       "FR-2": "21c521d1941ebd10d4988a731e78d7c8a92dcb95409e783193bab6c8995ba9b2",
+      "FR-20": "02fc54a9edc78a2880a142741feb7a6cb3fdc96b59450d59fe8f8ddb073be90c",
       "FR-3": "3d17e80456d3f69222d7169a7c4ec9ce2d4a46f47cbc111314070a9aa06d74d3",
       "FR-4": "c3fa0ada765d0b1b4df73f7a0b5713adf89b1ebe9295037ced4ec359b0def217",
       "FR-5": "e96d369a56a85af82bd1c1cded65f19882ef14ac46b961ad196d133b16e4861b",
@@ -164,7 +253,7 @@
       "FR-8": "fbe280747c17fa189e29bd08b42d6ae2417f40c215e181fe700d92ee3e734dc4",
       "FR-9": "5b0433746ab29fd83c04af62dfa6376c1faea677d279d9d7fa87a1dc7e9dcf57"
     },
-    "high_water": 12,
+    "high_water": 20,
     "requirements": {
       "a-configuration-section-occupies-the-content-region": "FR-3",
       "a-configuration-section-states-what-it-governs": "FR-1",
@@ -177,6 +266,14 @@
       "settings-leaves-the-token-budget-to-budgets": "FR-11",
       "settings-may-be-changed-one-at-a-time": "FR-7",
       "settings-rows-are-grouped-collaboration-first": "FR-10",
+      "the-hubs-background-jobs-are-configure-migration-keeps-behaviour": "FR-19",
+      "the-hubs-background-jobs-are-configured-on-a-man-activity-listed": "FR-16",
+      "the-hubs-background-jobs-are-configured-on-a-man-firing-recorded": "FR-15",
+      "the-hubs-background-jobs-are-configured-on-a-man-manager-section": "FR-20",
+      "the-hubs-background-jobs-are-configured-on-a-mana-job-configured": "FR-14",
+      "the-hubs-background-jobs-are-configured-on-a-manage-not-an-agent": "FR-17",
+      "the-hubs-background-jobs-are-configured-on-a-manager-jobs-listed": "FR-13",
+      "the-hubs-background-jobs-are-configured-on-a-settings-compatible": "FR-18",
       "the-operator-can-choose-the-branch-approval-merges-into": "FR-6"
     },
     "retired": {}
@@ -283,6 +380,62 @@
       "party": null,
       "rationale": "The Hub checks it only in request_agent (api/v1/agents.py:2556); the current label promises a limit that does not exist (F557).",
       "statement": "Wherever agent budget is labelled (Settings and Overview), the text MUST say it caps how many agents the project may hold when an agent staffs a new one, and MUST NOT say it limits agents running at the same time."
+    },
+    {
+      "key": "the-hubs-background-jobs-are-configured-on-a-manager-jobs-listed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The page and agents read one list; a job that has never been configured is still a job the operator can turn on.",
+      "statement": "GET /api/v1/projects/{id}/manager/jobs MUST answer 200 with {\"jobs\": [...]}, one entry per registered job in registry order, each with key, title, description, trigger, enabled, runner_id and model; a job with no stored row MUST be listed with enabled false and runner_id and model null."
+    },
+    {
+      "key": "the-hubs-background-jobs-are-configured-on-a-mana-job-configured",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Same validation as the project settings route applies to conversation_title_runner_id today (projects.py:516-528).",
+      "statement": "PATCH /api/v1/projects/{id}/manager/jobs/{key} with any of enabled, runner_id and model MUST store them and answer the job as listed; an unknown key MUST answer 404, and a runner_id that is not one of this project's runners MUST answer 400 and change nothing."
+    },
+    {
+      "key": "the-hubs-background-jobs-are-configured-on-a-man-firing-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Most title calls end before a spawn (already titled from this excerpt, F422); recording those would bury the firings that cost something.",
+      "statement": "Every manager spawn MUST record one manager_job_fired event holding job, trigger, subject (for titles, the conversation id), runner_id, cli, model, outcome (written, empty or failed), detail (for titles, the title written), duration_ms and usage (null when the runner reports none). An exit before any spawn MUST record nothing."
+    },
+    {
+      "key": "the-hubs-background-jobs-are-configured-on-a-man-activity-listed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A background agent whose work cannot be inspected is the hardest kind to trust (R5).",
+      "statement": "GET /api/v1/projects/{id}/manager/activity MUST answer {\"firings\": [...]}, newest first, at most limit entries (default 50, at most 200), optionally filtered by job."
+    },
+    {
+      "key": "the-hubs-background-jobs-are-configured-on-a-manage-not-an-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "turn_scheduler.schedule_agent and trigger_agent_directly gate on a running Run under the agent's name (conversation_titles.py:7-13).",
+      "statement": "A manager firing MUST NOT create a Run row or hold an agent name, so it never makes an agent look busy or delays that agent's queue."
+    },
+    {
+      "key": "the-hubs-background-jobs-are-configured-on-a-settings-compatible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The settings body forbids unknown fields (projects.py:84), so an app window still running the old bundle would otherwise fail to save any project setting until reloaded; existing clients and tests keep their contract.",
+      "statement": "GET and PUT /api/v1/projects/{id}/settings MUST keep conversation_title_mode and conversation_title_runner_id: reading reports generate when the conversation-titles job is enabled and its runner_id, and writing sets the job's enabled flag and runner_id."
+    },
+    {
+      "key": "the-hubs-background-jobs-are-configure-migration-keeps-behaviour",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "It runs on :8000's real database at its next restart; titles must keep behaving as configured, and rolling back must lose nothing that existed before.",
+      "statement": "The migration MUST create manager_jobs and give every project whose conversation_title_mode is generate or whose conversation_title_runner_id is set a conversation-titles row (enabled exactly when the mode is generate, runner_id copied, model null); its downgrade MUST write each row's enabled flag and runner_id back to the project columns and drop the table."
+    },
+    {
+      "key": "the-hubs-background-jobs-are-configured-on-a-man-manager-section",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A committed bundle reaches :8000's app on its next reload, possibly before its server restarts.",
+      "statement": "The app's Environment MUST have a Manager section listing each job with an on/off control, a runner select and a model select, and below them the activity list; the Settings section MUST no longer show the conversation title controls. Where the Hub answers 404 for the manager routes, the section MUST say this Hub has no manager yet instead of failing."
     }
   ],
   "schema_version": 1,
