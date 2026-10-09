@@ -32,6 +32,7 @@ from hub.db.models import (
     InboundQueueEntry,
     JobRun,
     Loop,
+    ManagerJob,
     Message,
     PermissionRequest,
     Project,
@@ -103,6 +104,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "project_sessions",
     "project_instructions",
     "permission_requests",
+    "manager_jobs",
     "event_logs",
     "conversations",
     "checkpoint_notes",
@@ -251,6 +253,7 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
         )
     )
     session.add(EventLog(id=f"event-{tag}", project_id=project_id, event_type="test_event"))
+    session.add(ManagerJob(project_id=project_id, job=f"job-{tag}", enabled=True))
     session.add(AgentHeartbeat(id=f"heartbeat-{tag}", project_id=project_id, agent=f"agent-{tag}"))
     session.add(
         AgentOutput(id=f"output-{tag}", project_id=project_id, agent=f"agent-{tag}", content="hi")
