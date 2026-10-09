@@ -114,7 +114,12 @@ own state does not survive a close and reopen.
 ## R5 — A manager agent the Hub runs behind the scenes
 **Asked:** 2026-09-19
 **Theme:** Agents & runners
-**Ready:** thinking
+**Ready:** proposed
+
+**Explored 2026-10-09 with R6, and the operator chose to build both.** It's the roadmap
+`spec/changes/the-knowledge-vault-and-its-manager-roadmap/` (trial Hub `spdoc-7c75066d6403`,
+exploring). Its first slice, `manager-framework`, is this request: a Manager page of jobs, each with
+its own runner and model, and conversation titling as the first job.
 
 "Just as we have the adhoc run of an agent to change the name of a thread we could have an agent
 that is executed adhoc making all sorts of decisions for the project behind the scene. It has
@@ -159,7 +164,18 @@ reasoning is invisible is the hardest kind to trust.
 ## R6 — A knowledge vault: everything known about a project, indexed, and fetched rather than read
 **Asked:** 2026-09-20
 **Theme:** Spec & requirements
-**Ready:** thinking
+**Ready:** proposed
+
+**Explored 2026-10-09, and the operator chose to build it.** It's the roadmap
+`spec/changes/the-knowledge-vault-and-its-manager-roadmap/` (trial Hub `spdoc-7c75066d6403`,
+exploring), in eight slices. These questions below are now decided in its design:
+- **Storage:** tracked under `knowledge/` by default; any entry can be private, at a location the
+  operator chooses outside the repo.
+- **Distillation:** it runs continuously, as manager jobs.
+- **When sources disagree:** both are shown, the newer is presumed, and the entry is marked disputed.
+- **The map:** agents read it freely.
+- **Who writes:** only the manager. Working agents file reports to it.
+Cloud backends split off as R12.
 
 "Create a new session for the project where agentweave acts called knowledge vault. That is going to
 be all the documents with knowledge about the project. Transcripts from meetings, pdfs, excel files,
@@ -290,3 +306,19 @@ build 1.0.90 verbatim, which confirms `claude-sonnet-5.5` (printed last, after `
 `claude-opus-5.5`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-6-luna` and `grok-4.6`;
 `scripts/check_model_catalog.py --provider copilot` agrees. What stays open, hence `thinking`: whether the
 catalog should be read from the CLI at probe time instead of copied by hand.
+
+## R12 — AgentWeave connected to cloud infrastructure: specs, database, vault and agents stored remotely
+**Asked:** 2026-10-09
+**Theme:** Hub plumbing
+**Ready:** thinking
+
+This came up while exploring the knowledge vault (R6). The operator wants to choose where the vault
+lives, and that opened a larger idea: connect AgentWeave to cloud infrastructure, so specs, the
+database, the vault and agents can be saved somewhere other than this machine. The operator said:
+"this is an idea that you should annotate but not for now."
+
+The only concession made today: the vault's storage goes behind one interface from its first slice,
+with a local backend only (D9 in `spec/changes/the-knowledge-vault-and-its-manager-roadmap/`). A
+cloud backend would then be another implementation of that interface, not a rewrite. Nothing else is
+designed. Keep in mind that the product's direction so far is local-only, with federation deferred
+far out.

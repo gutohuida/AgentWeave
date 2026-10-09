@@ -478,7 +478,7 @@
       "path": "spec/changes/a-change-is-reconciled-with-its-code-before-it-is-folded/spec.json",
       "title": "A change is reconciled with its code before it is folded, and each defect names the step that caught it",
       "kind": "change-spec",
-      "status": "approved",
+      "status": "archived",
       "parent": null,
       "order": 780
     },
@@ -534,7 +534,7 @@
       "path": "spec/changes/a-project-orders-its-own-spec-steps/spec.json",
       "title": "A project orders its own spec steps, adds its own and appends instructions",
       "kind": "change-spec",
-      "status": "approved",
+      "status": "archived",
       "parent": null,
       "order": 790
     },
@@ -566,7 +566,7 @@
       "path": "spec/changes/a-spec-document-is-stored-as-its-payload/spec.json",
       "title": "A spec document is stored as its payload",
       "kind": "change-spec",
-      "status": "approved",
+      "status": "archived",
       "parent": null,
       "order": 800
     },
@@ -590,7 +590,7 @@
       "path": "spec/changes/a-tester-drives-the-built-product-and-keeps-the-spec-true/spec.json",
       "title": "A tester drives the built product and keeps the spec true",
       "kind": "change-spec",
-      "status": "approved",
+      "status": "archived",
       "parent": null,
       "order": 810
     },
@@ -598,7 +598,7 @@
       "path": "spec/changes/approve-lists-what-is-missing-and-can-approve-anyway/spec.json",
       "title": "Approve lists what is missing and lets the operator approve anyway",
       "kind": "change-spec",
-      "status": "approved",
+      "status": "archived",
       "parent": null,
       "order": 820
     },
@@ -641,6 +641,14 @@
       "status": "archived",
       "parent": null,
       "order": 580
+    },
+    {
+      "path": "spec/changes/the-knowledge-vault-and-its-manager-roadmap/spec.json",
+      "title": "The knowledge vault and the manager that keeps it",
+      "kind": "roadmap",
+      "status": "exploring",
+      "parent": null,
+      "order": 830
     },
     {
       "path": "spec/changes/the-operator-can-delete-a-document-a-task-or-an-archived-agent/spec.json",

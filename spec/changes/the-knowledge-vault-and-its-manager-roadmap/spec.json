@@ -1,0 +1,149 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "D1 One record, two renderings. A vault entry is stored once; the wiki renders it for people, vault_read returns it to agents as a compact card (claim, citations, related requirements, freshness, disputed flag). Same pattern as spec.json, rendered to HTML on read (decided 2026-10-08). Two authored versions would drift.\n\nD2 Files are the record, the database is an index. A colleague who pulls knowledge/ has none of this Hub's rows, so the Hub rebuilds the vault index from files, as the spec reindex does. One file per source, fact and contradiction keeps merges clean; the map is generated and is regenerated rather than merged.\n\nD3 Tracked by default, private per entry (operator, 2026-10-09). Business knowledge must reach colleagues on the same project, and most company repositories are closed. The project default sets where new entries go; any entry can be made private, stored at the operator's chosen location outside the repository. The map lists a private entry as a stub naming whose machine holds it. A tracked fact may not cite a private source: the manager keeps such a fact private or asks the operator to share the source. This repository is public, so its own project default is private.\n\nD4 Sources are authoritative, contradictions are first-class (operator, 2026-10-09). A meeting transcript is authoritative even when another contradicts it. The manager records a contradiction citing both sides; both are shown, the newer is presumed, and the entry is marked disputed so an agent reading it is told it is disputed rather than handed a guess. The operator's resolution is itself a decision record with a source.\n\nD5 The manager is a Hub function, not an agent. Precedent: hub/hub/conversation_titles.py, a Hub-invoked one-shot spawn that records no Run row (a Run under an agent's name makes that agent look busy and stalls its queue) and whose deterministic result is the floor the model only upgrades. The manager inherits both: a source is in the map the moment it is uploaded, by name, type and opening lines, before any model runs. It holds no agent name, because the reserved-name set must not gain a word an existing agent could hold (CLAUDE.md), and its mailbox is not send_message.\n\nD6 Only the manager writes (operator, 2026-10-09). Working agents read the map and fetch by id; when something is wrong they file a report to the manager. Its writes land visible but unreviewed, per approvals are scarce: the operator is warned, never gated.\n\nD7 Per-job runner and model (operator, 2026-10-09). Project.conversation_title_runner_id (conversation_titles.py:200-216) is today's one hard-wired job setting; it moves into a per-job table, so each manager job names its runner and model and a new job is a new row.\n\nD8 The map is read freely (operator, 2026-10-09): an agent reads the map to know which entry to request, without a request of its own. Whether it is also rendered into every turn's context, and how much of it, is decided in the vault slice against its per-turn cost.\n\nD9 Storage is behind one interface from the start, so a cloud backend is a later implementation of it, not a rewrite (operator, 2026-10-09: 'annotate but not for now').",
+  "evidence": {
+    "checked": [
+      "hub/hub/conversation_titles.py:1-14: the titler records no Run row, deliberately; truncation is the floor",
+      "hub/hub/conversation_titles.py:200-216: _resolve_runner prefers Project.conversation_title_runner_id, else the agent's own runner",
+      "hub/hub/mcp_server.py:701: recall, the existing fetch-by-id tool for checkpoint observations, the shape vault_read follows",
+      "hub/hub/spec_payload.py:300-310: open_questions and slices on a roadmap; a roadmap carries no requirements or tasks",
+      "scripts/drive/FINDINGS.md:29284: F354 (an agent's tool server ran from the development tree) is fixed by 06e0cec, so a new vault tool no longer reaches :8000's agents mid-edit",
+      "spec-queue/REQUESTS.md:114-215: R5 and R6 as asked, with the 2026-09-20 code checks"
+    ],
+    "limits": [
+      "No file upload exists in the Hub as of 2026-09-20 (no multipart route, no blob model); not re-checked today",
+      "Whether each runner's harness can read PDFs and images natively, which would let S6 avoid parser libraries, is not verified for any runner",
+      "Nothing here has been driven"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "A roadmap: each slice is specified later in its own change document, one at a time; this document is updated as slices close.",
+  "open_questions": [
+    {
+      "question": "S1: is the map rendered into every turn's context, and if so how much (one line per area plus 'fetch for more'), or only read on demand?",
+      "resolved": false
+    },
+    {
+      "question": "S1: if the operator points the private location inside the repository, is that refused, warned about, or allowed?",
+      "resolved": false
+    },
+    {
+      "question": "S6: can each runner's harness read PDFs and images itself, or does the Hub need extractors?",
+      "resolved": false
+    }
+  ],
+  "problem": "Specs record how the system is built; nothing in AgentWeave records why the business wants it. Business knowledge reaches agents today only by being pasted into a conversation, or by agents keeping their own notes where the operator cannot see them: on LoopEngine four agents kept 18 notes in the harness's memory directory, and one was simply wrong about the guard, unreadable by anyone who could correct it (openspec/explorations/2026-09-14-project-notes-inside-the-product.md). A transcript or rule given once is lost to the next conversation, to another harness, and to a colleague on the same project. Agents that must find knowledge by reading the repository spend tokens on it: the flow already spends 58% of its turns on coordination (openspec/explorations/2026-09-16-the-flow-costs-more-than-the-work.md). And nothing checks a requirement against what the business actually decided, so a spec can contradict a meeting and nobody is told. Asked by the operator as R5 (manager, 2026-09-19) and R6 (vault, 2026-09-20) in spec-queue/REQUESTS.md, parked until 2026-10-09, when the operator chose to explore and build both.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A manager: Hub-invoked background jobs, never started by a user, each enabled or disabled and bound to its own runner and model on a project Manager page, with an activity log of what each firing did, with which model, and what it cost; the existing conversation-title job becomes its first job",
+      "A per-project vault with a tracked part inside the repository (knowledge/) and a private part at a location the operator chooses outside it, behind one storage interface whose only backend for now is the local filesystem",
+      "A project default for where new entries go, overridable on each entry (tracked or private)",
+      "Sources (raw and never edited), facts (distilled, each citing sources), contradictions (citing the facts or sources that disagree) and a generated map, each stored one file per record so two people's managers never edit the same file",
+      "Upload of sources: text first, then images and PDFs",
+      "A map agents read freely, then read-only tools to fetch an entry by id; working agents never write to the vault",
+      "A report tool: a working agent that finds something wrong or strange leaves the manager a message, and a manager job looks into it",
+      "Contradictions between sources raised by the manager: both shown, the newer presumed, the entry marked disputed until the operator resolves it",
+      "A wiki view of the vault in the app: browse, search, read sources inline, edit, resolve contradictions",
+      "Specs linked to the vault: a requirement cites the facts it rests on, and a contradiction with a fact is a warning on the spec, never a gate",
+      "Access tuning: what agents fetch is counted and the map is reshaped around it"
+    ],
+    "non_goals": [
+      "Cloud storage backends for the vault, specs, the database or agents: noted as a later idea (spec-queue/REQUESTS.md), not built here; the storage interface is the only concession to it",
+      "Working agents writing distilled knowledge themselves: only the manager writes",
+      "Two authored versions of an entry, one for people and one for agents: one record, rendered two ways",
+      "Enforcing that working agents cannot read tracked vault files directly: they sit inside the workspace; the map is the cheaper path and the instructions say to use it",
+      "A graph database: the graph is the citations between files",
+      "Deciding how a company manages git, large binaries or Git LFS: their configuration governs what is tracked",
+      "The manager deciding what the operator sees first (R5's message-ordering example): a later job, once the framework exists"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "On a scratch Hub, choosing a different model for the title job on the Manager page makes the next new conversation's title come from that model, and the firing appears in the activity log; disabling the job leaves the truncated title.",
+      "intent": "A project's Manager page lists the Hub's background jobs. Each can be enabled or disabled and bound to a runner and model, and an activity log shows every firing: job, trigger, model, outcome, cost. Conversation titling is the first job: its existing runner setting moves into the job table by migration, with a downgrade that restores it. Tier 2 (migration).",
+      "key": "manager-framework",
+      "title": "A manager with configurable jobs, starting with titles"
+    },
+    {
+      "builds_after": [],
+      "done": "On a scratch Hub, a transcript uploaded as tracked appears under knowledge/ and in the wiki; one uploaded as private appears outside the repository and as a stub in the map; a Haiku agent asked a question it answers reads the map, fetches the transcript by id, and answers from it.",
+      "intent": "The operator chooses the vault's private location and the project default (tracked or private), uploads text sources, and sees them in a wiki view. Each source enters the map at once with its name, type and opening lines (the deterministic floor). Working agents read the map and fetch an entry by id through read-only tools. Storage sits behind one interface with a local backend. Tier 2 (new storage, first upload route).",
+      "key": "vault-text-sources",
+      "title": "A vault the operator fills with text, and agents can read"
+    },
+    {
+      "builds_after": [
+        "manager-framework",
+        "vault-text-sources"
+      ],
+      "done": "Uploading a transcript that states two business rules produces two facts in the wiki, each linking to the right place in the transcript, and the map lists them.",
+      "intent": "On a new source, a manager job writes facts, each citing the source and the place in it, and regenerates the map. Facts show in the wiki beside their sources; a tracked fact never cites a private source.",
+      "key": "distillation",
+      "title": "The manager distils sources into cited facts"
+    },
+    {
+      "builds_after": [
+        "distillation"
+      ],
+      "done": "Two transcripts uploaded in turn with different refund limits produce one open contradiction; an agent fetching the fact is told the newer limit and that it is disputed; resolving it clears the mark and records the decision.",
+      "intent": "When a new fact contradicts an existing one, the manager records a contradiction citing both. Both are shown, the newer is presumed, and the fact is marked disputed in the wiki, the map and vault_read, until the operator resolves it with a recorded decision.",
+      "key": "contradictions",
+      "title": "Sources that disagree are pointed out"
+    },
+    {
+      "builds_after": [
+        "distillation"
+      ],
+      "done": "A Haiku agent told that a fact is wrong files a report; the manager's firing either changes the fact or records why not, and both are visible in the activity log.",
+      "intent": "A report tool lets a working agent leave the manager a message naming an entry and what is wrong. A manager job looks into it and corrects, disputes or answers; the report and its outcome are in the activity log.",
+      "key": "agent-reports",
+      "title": "A working agent can tell the manager something is wrong"
+    },
+    {
+      "builds_after": [
+        "contradictions"
+      ],
+      "done": "A requirement citing a fact that a newer transcript contradicts shows a warning naming both sources on its spec page; approving the document lists the warning and still allows approve anyway.",
+      "intent": "A requirement can cite the facts it rests on. A manager job checks requirements against facts and contradictions, and a requirement that contradicts a fact carries a warning on its spec page. Warnings, never gates.",
+      "key": "specs-against-the-vault",
+      "title": "Specs are checked against what was recorded"
+    },
+    {
+      "builds_after": [
+        "distillation"
+      ],
+      "done": "An uploaded PDF and a screenshot each produce cited facts, and the wiki shows both inline.",
+      "intent": "Images and PDFs can be uploaded, are shown in the wiki, and are distilled like text: by the manager's runner reading them natively where its harness can, by an extractor otherwise.",
+      "key": "images-and-pdfs",
+      "title": "Images, PDFs and other files are sources too"
+    },
+    {
+      "builds_after": [
+        "distillation"
+      ],
+      "done": "After a run of agent fetches, the most-fetched entries lead their area in the map and the counts are visible in the wiki.",
+      "intent": "Every fetch is counted per entry; a manager job reshapes the map (ordering, grouping, short summaries) around what is actually requested, and the operator can see the counts.",
+      "key": "access-tuning",
+      "title": "The map is shaped by what agents ask for"
+    }
+  ],
+  "summary": "A project gets a knowledge vault for business knowledge (meeting transcripts, example files, documents, business rules) beside its specs, which stay technical. A background manager, a Hub function configured per job with its own runner and model, is the only writer: it distils sources into cited facts, flags where sources contradict each other, keeps a map of everything, and checks specs against what was recorded. Working agents read the map freely and request entries by id; the operator reads and edits the vault as a wiki. Entries are tracked in the repository by default so colleagues share them, and any entry can be made private to one machine.",
+  "tasks": [],
+  "title": "The knowledge vault and the manager that keeps it"
+}
