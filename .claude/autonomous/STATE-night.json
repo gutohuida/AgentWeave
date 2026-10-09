@@ -173,9 +173,9 @@
         },
         {
             "id": "reconcile-and-measure-t1-impl",
-            "status": "open",
+            "status": "done",
             "title": "reconcile drive-first: scripts/drive/d1014_reconcile.py on :8103, recorded FAILING",
-            "detail": ""
+            "detail": "done 2026-10-09 morning: scripts/drive/d1014_reconcile.py recorded failing at check 1 (405); artefacts testbed/drive1014-reconcile/093656."
         },
         {
             "id": "reconcile-and-measure-t2-impl",
