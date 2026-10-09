@@ -643,10 +643,18 @@
       "order": 580
     },
     {
+      "path": "spec/changes/the-hubs-background-jobs-are-configured-on-a-manager-page/spec.json",
+      "title": "The Hub's background jobs are configured on a Manager page, starting with conversation titles",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 840
+    },
+    {
       "path": "spec/changes/the-knowledge-vault-and-its-manager-roadmap/spec.json",
       "title": "The knowledge vault and the manager that keeps it",
       "kind": "roadmap",
-      "status": "exploring",
+      "status": "proposed",
       "parent": null,
       "order": 830
     },

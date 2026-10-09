@@ -35272,3 +35272,11 @@ Since F36 a hand-made task can carry dependencies, but only `POST` on the task-d
 **Status:** open 2026-10-09. Found by the spec overhaul (decision `overhaul-thinking-ui`, operator 2026-10-09).
 
 Specified earlier and never built (the specs now say so): a live thinking section that is open while the agent reasons and collapses when its answer arrives, and a control that hides diagnostic lines in the conversation. **Decided:** build both, as one small UI change in `AgentTimeline` (not the deleted `SharedStreamRenderer`). Tier 1.
+
+## F573 (C) -- a roadmap cannot leave a question for a later slice: every open question blocks proposing it
+
+**Status:** open 2026-10-09. Found while authoring `spec/changes/the-knowledge-vault-and-its-manager-roadmap/` (trial Hub `spdoc-7c75066d6403`), interactive.
+
+A roadmap's slices are specified later, one at a time, in their own change documents (`spec_payload.py` `_check_kind_shape`). So a question that only that slice's spec can answer is a normal thing for a roadmap to carry. One example is "is the map rendered into every turn?", which belongs to the vault slice. `spec_completeness.py:264-272` blocks proposing any document with an unresolved question, roadmaps included. The author then has two bad choices: answer early, as a guess, or hide the question in a slice's `intent` prose, where nothing tracks it. That second choice is the workaround used here.
+
+**Fix shape (not decided):** let an open question name the slice it belongs to (`slice: <key>`). On a roadmap, only questions with no slice block proposing it. The question should then show up when that slice's change document is written. Tier 1.

@@ -7,7 +7,7 @@
     "requirements": {},
     "retired": {}
   },
-  "design": "D1 One record, two renderings. A vault entry is stored once; the wiki renders it for people, vault_read returns it to agents as a compact card (claim, citations, related requirements, freshness, disputed flag). Same pattern as spec.json, rendered to HTML on read (decided 2026-10-08). Two authored versions would drift.\n\nD2 Files are the record, the database is an index. A colleague who pulls knowledge/ has none of this Hub's rows, so the Hub rebuilds the vault index from files, as the spec reindex does. One file per source, fact and contradiction keeps merges clean; the map is generated and is regenerated rather than merged.\n\nD3 Tracked by default, private per entry (operator, 2026-10-09). Business knowledge must reach colleagues on the same project, and most company repositories are closed. The project default sets where new entries go; any entry can be made private, stored at the operator's chosen location outside the repository. The map lists a private entry as a stub naming whose machine holds it. A tracked fact may not cite a private source: the manager keeps such a fact private or asks the operator to share the source. This repository is public, so its own project default is private.\n\nD4 Sources are authoritative, contradictions are first-class (operator, 2026-10-09). A meeting transcript is authoritative even when another contradicts it. The manager records a contradiction citing both sides; both are shown, the newer is presumed, and the entry is marked disputed so an agent reading it is told it is disputed rather than handed a guess. The operator's resolution is itself a decision record with a source.\n\nD5 The manager is a Hub function, not an agent. Precedent: hub/hub/conversation_titles.py, a Hub-invoked one-shot spawn that records no Run row (a Run under an agent's name makes that agent look busy and stalls its queue) and whose deterministic result is the floor the model only upgrades. The manager inherits both: a source is in the map the moment it is uploaded, by name, type and opening lines, before any model runs. It holds no agent name, because the reserved-name set must not gain a word an existing agent could hold (CLAUDE.md), and its mailbox is not send_message.\n\nD6 Only the manager writes (operator, 2026-10-09). Working agents read the map and fetch by id; when something is wrong they file a report to the manager. Its writes land visible but unreviewed, per approvals are scarce: the operator is warned, never gated.\n\nD7 Per-job runner and model (operator, 2026-10-09). Project.conversation_title_runner_id (conversation_titles.py:200-216) is today's one hard-wired job setting; it moves into a per-job table, so each manager job names its runner and model and a new job is a new row.\n\nD8 The map is read freely (operator, 2026-10-09): an agent reads the map to know which entry to request, without a request of its own. Whether it is also rendered into every turn's context, and how much of it, is decided in the vault slice against its per-turn cost.\n\nD9 Storage is behind one interface from the start, so a cloud backend is a later implementation of it, not a rewrite (operator, 2026-10-09: 'annotate but not for now').",
+  "design": "D1 One record, two renderings. A vault entry is stored once; the wiki renders it for people, vault_read returns it to agents as a compact card (claim, citations, related requirements, freshness, disputed flag). Same pattern as spec.json, rendered to HTML on read (decided 2026-10-08). Two authored versions would drift.\n\nD2 Files are the record, the database is an index. A colleague who pulls knowledge/ has none of this Hub's rows, so the Hub rebuilds the vault index from files, as the spec reindex does. One file per source, fact and contradiction keeps merges clean; the map is generated and is regenerated rather than merged.\n\nD3 Tracked by default, private per entry (operator, 2026-10-09). Business knowledge must reach colleagues on the same project, and most company repositories are closed. The project default sets where new entries go; any entry can be made private, stored at the operator's chosen location outside the repository. The map lists a private entry as a stub naming whose machine holds it. A tracked fact may not cite a private source: the manager keeps such a fact private or asks the operator to share the source. This repository is public, so its own project default is private.\n\nD4 Sources are authoritative, contradictions are first-class (operator, 2026-10-09). A meeting transcript is authoritative even when another contradicts it. The manager records a contradiction citing both sides; both are shown, the newer is presumed, and the entry is marked disputed so an agent reading it is told it is disputed rather than handed a guess. The operator's resolution is itself a decision record with a source.\n\nD5 The manager is a Hub function, not an agent. Precedent: hub/hub/conversation_titles.py, a Hub-invoked one-shot spawn that records no Run row (a Run under an agent's name makes that agent look busy and stalls its queue) and whose deterministic result is the floor the model only upgrades. The manager inherits both: a source is in the map the moment it is uploaded, by name, type and opening lines, before any model runs. It holds no agent name, because the reserved-name set must not gain a word an existing agent could hold (CLAUDE.md), and its mailbox is not send_message.\n\nD6 Only the manager writes (operator, 2026-10-09). Working agents read the map and fetch by id; when something is wrong they file a report to the manager. Its writes land visible but unreviewed, per approvals are scarce: the operator is warned, never gated.\n\nD7 Per-job runner and model (operator, 2026-10-09). Project.conversation_title_runner_id (conversation_titles.py:200-216) is today's one hard-wired job setting; it moves into a per-job table, so each manager job names its runner and model and a new job is a new row.\n\nD8 The map is read freely (operator, 2026-10-09): an agent reads the map to know which entry to request, without a request of its own. Whether it is also rendered into every turn's context, and how much of it, is decided in the vault-text-sources slice against its per-turn cost.\n\nD9 Storage is behind one interface from the start, so a cloud backend is a later implementation of it, not a rewrite (operator, 2026-10-09: 'annotate but not for now').",
   "evidence": {
     "checked": [
       "hub/hub/conversation_titles.py:1-14: the titler records no Run row, deliberately; truncation is the floor",
@@ -24,27 +24,14 @@
     ]
   },
   "hub": {
-    "phase": "exploring",
+    "phase": "proposed",
     "rigor": "sketch",
     "size": null,
     "step": null
   },
   "kind": "roadmap",
   "lifecycle": "A roadmap: each slice is specified later in its own change document, one at a time; this document is updated as slices close.",
-  "open_questions": [
-    {
-      "question": "S1: is the map rendered into every turn's context, and if so how much (one line per area plus 'fetch for more'), or only read on demand?",
-      "resolved": false
-    },
-    {
-      "question": "S1: if the operator points the private location inside the repository, is that refused, warned about, or allowed?",
-      "resolved": false
-    },
-    {
-      "question": "S6: can each runner's harness read PDFs and images itself, or does the Hub need extractors?",
-      "resolved": false
-    }
-  ],
+  "open_questions": [],
   "problem": "Specs record how the system is built; nothing in AgentWeave records why the business wants it. Business knowledge reaches agents today only by being pasted into a conversation, or by agents keeping their own notes where the operator cannot see them: on LoopEngine four agents kept 18 notes in the harness's memory directory, and one was simply wrong about the guard, unreadable by anyone who could correct it (openspec/explorations/2026-09-14-project-notes-inside-the-product.md). A transcript or rule given once is lost to the next conversation, to another harness, and to a colleague on the same project. Agents that must find knowledge by reading the repository spend tokens on it: the flow already spends 58% of its turns on coordination (openspec/explorations/2026-09-16-the-flow-costs-more-than-the-work.md). And nothing checks a requirement against what the business actually decided, so a spec can contradict a meeting and nobody is told. Asked by the operator as R5 (manager, 2026-09-19) and R6 (vault, 2026-09-20) in spec-queue/REQUESTS.md, parked until 2026-10-09, when the operator chose to explore and build both.",
   "requirements": [],
   "schema_version": 1,
@@ -83,7 +70,7 @@
     {
       "builds_after": [],
       "done": "On a scratch Hub, a transcript uploaded as tracked appears under knowledge/ and in the wiki; one uploaded as private appears outside the repository and as a stub in the map; a Haiku agent asked a question it answers reads the map, fetches the transcript by id, and answers from it.",
-      "intent": "The operator chooses the vault's private location and the project default (tracked or private), uploads text sources, and sees them in a wiki view. Each source enters the map at once with its name, type and opening lines (the deterministic floor). Working agents read the map and fetch an entry by id through read-only tools. Storage sits behind one interface with a local backend. Tier 2 (new storage, first upload route).",
+      "intent": "The operator chooses the vault's private location and the project default (tracked or private), uploads text sources, and sees them in a wiki view. Each source enters the map at once with its name, type and opening lines (the deterministic floor). Working agents read the map and fetch an entry by id through read-only tools. Storage sits behind one interface with a local backend. Tier 2 (new storage, first upload route). Decided in this slice (F573: a roadmap cannot defer a question): whether the map is rendered into every turn and how much of it; and whether a private location inside the repository is refused, warned about, or allowed.",
       "key": "vault-text-sources",
       "title": "A vault the operator fills with text, and agents can read"
     },
@@ -129,7 +116,7 @@
         "distillation"
       ],
       "done": "An uploaded PDF and a screenshot each produce cited facts, and the wiki shows both inline.",
-      "intent": "Images and PDFs can be uploaded, are shown in the wiki, and are distilled like text: by the manager's runner reading them natively where its harness can, by an extractor otherwise.",
+      "intent": "Images and PDFs can be uploaded, are shown in the wiki, and are distilled like text: by the manager's runner reading them natively where its harness can, by an extractor otherwise. Decided in this slice (F573): whether each runner can read PDFs and images itself or the Hub needs extractors.",
       "key": "images-and-pdfs",
       "title": "Images, PDFs and other files are sources too"
     },
