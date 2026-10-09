@@ -5,6 +5,7 @@ const LABELS: Record<ProjectTab, string> = {
   overview: 'Overview',
   tasks: 'Tasks',
   spec: 'Spec',
+  vault: 'Vault',
   jobs: 'Jobs',
   activity: 'Activity',
 }

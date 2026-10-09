@@ -20,7 +20,7 @@ import { AgentTree } from './AgentTree'
 import { RecencyView } from './RecencyView'
 
 export type SidebarPage =
-  | 'tasks' | 'questions' | 'activity' | 'logs' | 'jobs' | 'quality' | 'instructions' | 'spec'
+  | 'tasks' | 'questions' | 'activity' | 'logs' | 'jobs' | 'quality' | 'instructions' | 'spec' | 'vault'
   | 'runners' | 'charters' | 'manager' | 'worktrees' | 'diagnostics' | 'budgets' | 'settings'
 
 interface SidebarProps {

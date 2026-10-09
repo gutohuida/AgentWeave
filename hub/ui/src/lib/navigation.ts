@@ -23,7 +23,7 @@ export interface RailProject {
  *  is still how that is done. This is the other thing: a place to go when the specification is what
  *  you are working on rather than what you are working *beside* — the document and its navigation,
  *  no conversation (operator, 2026-08-10: "just to focus on spec"). */
-export const PROJECT_TABS = ['overview', 'tasks', 'spec', 'jobs', 'activity'] as const
+export const PROJECT_TABS = ['overview', 'tasks', 'spec', 'vault', 'jobs', 'activity'] as const
 export type ProjectTab = (typeof PROJECT_TABS)[number]
 
 export const ENVIRONMENT_SECTIONS = [

@@ -9,6 +9,7 @@ import { ActivityLog } from '@/components/activity/ActivityLog'
 import { ChartersPage } from '@/components/charters/ChartersPage'
 import { InstructionsPage } from '@/components/instructions/InstructionsPage'
 import { JobsPage } from '@/components/jobs/JobsPage'
+import { VaultPage } from '@/components/vault/VaultPage'
 import { LogsView } from '@/components/logs/LogsView'
 import { DiagnosticsPanel } from '@/components/environment/DiagnosticsPanel'
 import { ManagerPanel } from '@/components/environment/ManagerPanel'
@@ -464,6 +465,8 @@ export default function App() {
           }}
         />
       )
+    } else if (destination.tab === 'vault') {
+      projectContent = <VaultPage />
     } else if (destination.tab === 'jobs') {
       projectContent = (
         <JobsPage
