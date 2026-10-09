@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 14,
+    "iteration": 15,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "approval-warnings-t1-impl",
-    "next_action": "approval-warnings-t1-impl: write scripts/drive/d1012_approval_warnings.py (scratch Hub :8101, fresh db, no agent turn, Chromium for the phase bar) per the 'drive' criterion of spec/changes/approve-lists-what-is-missing-and-can-approve-anyway (spdoc-9a9d313a4894, read its payload with hub.spec_payload.extract_payload); record it FAILING at the first check (propose answers blocking requirement_without_criterion). Hub tasks of approval-warnings stay open.",
+    "current": "approval-warnings-t2-impl",
+    "next_action": "approval-warnings-t2-impl: in spec_completeness + spec_service (phase_blockers, spec_service.py:1213-1266), classify findings as gap vs refusal per spec/changes/approve-lists-what-is-missing-and-can-approve-anyway (spdoc-9a9d313a4894; read its payload with hub.spec_payload.extract_payload or testbed/night-1009/approval-warnings.json): requirement_without_criterion only for MUST/SHALL; new criterion_without_check, no_acceptance_drive, steps_skipped (from spec_journey.missing). Write failing Hub tests first (criteria should-not-gap, criterion-check, drive-first, skipped). FR-2, FR-3. Do not yet change propose/approve routes (t3). Hub tasks of approval-warnings stay open.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -93,9 +93,9 @@
         },
         {
             "id": "approval-warnings-t1-impl",
-            "status": "open",
+            "status": "done",
             "title": "approval-warnings task drive-first: write scripts/drive/d1012_approval_warnings.py, record it FAILING",
-            "detail": "Scratch Hub :8101, fresh db, no agent turn; Chromium for the phase bar. Must fail at the first check (propose refuses requirement_without_criterion)."
+            "detail": "done 2026-10-09 iteration 15: scripts/drive/d1012_approval_warnings.py recorded failing at check 1 (propose answers blocking requirement_without_criterion). Wire contract in the iteration 15 log entry."
         },
         {
             "id": "approval-warnings-t2-impl",
