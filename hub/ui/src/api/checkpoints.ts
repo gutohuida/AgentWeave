@@ -21,6 +21,8 @@ export interface Checkpoint {
   citations?: Array<{ id: string; preview: string }> | null
   body?: string | null
   generation_error?: string | null
+  /** Set once this checkpoint has been cut over; the predecessor is archived and the checkpoint is spent. */
+  cut_over_to_conversation_id?: string | null
   created_at?: string | null
 }
 

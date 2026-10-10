@@ -300,6 +300,45 @@ describe('agent conversation handoff', () => {
     expect(screen.queryByTestId('banner-action-checkpoint-offered')).not.toBeInTheDocument()
   })
 
+  it('does not offer a checkpoint that was already cut over (F542)', () => {
+    // The route lists a spent checkpoint as `ready` with its successor recorded; the predecessor
+    // is archived, and pressing the offer could only earn the Hub's 409.
+    offeredCheckpoints = [{
+      id: 'ckpt-spent',
+      conversation_id: 'conv-old',
+      agent: 'claude',
+      trigger: 'context_pressure',
+      status: 'ready',
+      lineage_id: 'ckpt-spent',
+      cut_over_to_conversation_id: 'conv-successor',
+    }]
+    render(
+      <ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />,
+    )
+    expect(screen.queryByTestId('banner-action-checkpoint-offered')).not.toBeInTheDocument()
+  })
+
+  it("shows the Hub's own sentence when a cut-over is refused", async () => {
+    const refusal = 'Checkpoint ckpt-auto was already cut over to conv-other; that conversation carries on.'
+    offeredCheckpoints = [{
+      id: 'ckpt-auto',
+      conversation_id: 'conv-old',
+      agent: 'claude',
+      trigger: 'context_pressure',
+      status: 'ready',
+      lineage_id: 'ckpt-auto',
+    }]
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ detail: refusal }), { status: 409 })),
+    )
+    const user = userEvent.setup()
+    render(
+      <ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />,
+    )
+    await user.click(screen.getByTestId('banner-action-checkpoint-offered'))
+    expect(await screen.findByText(refusal)).toBeInTheDocument()
+  })
+
   it('says an automatic checkpoint failed, with the reason, and offers a retry', async () => {
     // F540: the Hub recorded the failure and the conversation said nothing. The list is newest
     // first, as the route returns it, so the failed attempt leads and an older ready one trails.

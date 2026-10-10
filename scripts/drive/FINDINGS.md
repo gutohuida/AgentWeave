@@ -35039,7 +35039,7 @@ not the window of the agents it applies to; an agent-level token threshold is no
 
 ## F542 (C) -- a spent checkpoint is still offered for cutover on the archived predecessor
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** fixed 2026-10-10 (Tier 0, branch autonomous/2026-10-10-daily). `AgentOutputPanel` no longer offers a checkpoint whose `cut_over_to_conversation_id` is set, and a 409 shows the Hub's own sentence (`readableRefusal`, the old generic text kept as the fallback for a body that is not a refusal). Both tests in `agentHandoff.test.tsx` failed before. Vitest only, no browser drive; the route returning the field is covered by `test_checkpoint_handover.py:223`. Filed 2026-10-08 (spec overhaul audit, reading code).
 
 The offer banner ignores `cut_over_to_conversation_id` (`AgentOutputPanel.tsx:613-615`), so the predecessor still
 offers a checkpoint already used; pressing it earns the Hub's 409, which the UI replaces with a generic "finish or stop

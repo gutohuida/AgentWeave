@@ -608,11 +608,16 @@ export function AgentOutputPanel({
    * surfaces is the exact defect this capability was built to remove.
    *
    * Only `ready` counts. `unwritten` has nothing to read and `failed` disagreed with the
-   * database, and neither is something to offer a successor.
+   * database, and neither is something to offer a successor. A checkpoint already cut over is
+   * spent: the Hub keeps it `ready` and records the successor, and pressing it again earns a 409
+   * (F542).
    */
   const { data: checkpoints = [] } = useCheckpoints(currentConversationId ?? null)
   const offeredCheckpoint = checkpoints.find(
-    (checkpoint) => checkpoint.status === 'ready' && checkpoint.trigger === 'context_pressure',
+    (checkpoint) =>
+      checkpoint.status === 'ready'
+      && checkpoint.trigger === 'context_pressure'
+      && !checkpoint.cut_over_to_conversation_id,
   )
 
   /**
@@ -652,7 +657,10 @@ export function AgentOutputPanel({
       console.error('Failed to cut over:', err)
       setSessionNotice(
         err instanceof ApiError && err.status === 409
-          ? 'Cannot cut over yet — finish or stop the run, and let queued messages deliver'
+          ? readableRefusal(
+              err,
+              'Cannot cut over yet — finish or stop the run, and let queued messages deliver',
+            )
           : 'Could not cut over',
       )
     } finally {
