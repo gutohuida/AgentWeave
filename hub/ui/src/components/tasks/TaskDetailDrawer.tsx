@@ -237,7 +237,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const { data: specDocuments } = useSpecDocuments()
   const addDependency = useAddTaskDependency()
   const removeDependency = useRemoveTaskDependency()
-  const { data: taskPage } = useTasks()
+  // A failed read must not look like a project with no other tasks to choose (F577).
+  const { data: taskPage, error: taskPageError } = useTasks()
   // The "Depends on" picker's choice, and the Hub's sentence when it declined an add.
   const [pickedPrerequisite, setPickedPrerequisite] = useState('')
   const [dependencyRefusal, setDependencyRefusal] = useState<string | null>(null)
@@ -857,6 +858,16 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
               Add
             </button>
           </div>
+          {taskPageError && (
+            <p
+              role="alert"
+              className="text-[11px] mt-1"
+              style={{ color: 'var(--red)' }}
+              data-testid={`task-dependency-picker-error-${task.id}`}
+            >
+              {readableApiError(taskPageError, "The project's tasks could not be read, so none can be offered.")}
+            </p>
+          )}
           {dependencyRefusal && (
             <p
               role="alert"

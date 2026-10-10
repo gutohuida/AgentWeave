@@ -21,6 +21,7 @@ import { TaskCardHost } from './testUtils/TaskCardHost'
 const addDependency = vi.fn()
 const removeDependency = vi.fn()
 let allTasks: Task[] = []
+let tasksError: Error | null = null
 
 vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
@@ -28,7 +29,10 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     ...actual,
     useAllowedTransitions: () => ({ data: { actor_kind: 'operator', transitions: {} } }),
     useUpdateTask: () => ({ mutate: vi.fn() }),
-    useTasks: () => ({ data: { tasks: allTasks, total: allTasks.length, has_more: false } }),
+    useTasks: () =>
+      tasksError
+        ? { data: undefined, error: tasksError }
+        : { data: { tasks: allTasks, total: allTasks.length, has_more: false }, error: null },
     useAddTaskDependency: () => ({ mutate: addDependency }),
     useRemoveTaskDependency: () => ({ mutate: removeDependency }),
   }
@@ -67,6 +71,7 @@ beforeEach(() => {
   addDependency.mockReset()
   removeDependency.mockReset()
   allTasks = []
+  tasksError = null
 })
 
 afterEach(cleanup)
@@ -162,6 +167,17 @@ describe('the picker', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('task-dependency-refusal-task-a')).toHaveTextContent(sentence),
+    )
+  })
+
+  it('says the task list could not be read, rather than offering an empty picker', async () => {
+    // F577: the picker's own task list failing looked exactly like a project with no other tasks.
+    tasksError = new ApiError(500, JSON.stringify({ detail: 'database is locked' }))
+    const task = makeTask('task-b')
+    await renderOpen(task)
+
+    expect(screen.getByTestId('task-dependency-picker-error-task-b')).toHaveTextContent(
+      'database is locked',
     )
   })
 })

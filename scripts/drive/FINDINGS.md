@@ -35309,3 +35309,9 @@ Tier 0.
 `hub/tests/test_spec_task_files.py:94-102` asserts `git diff --name-only master -- hub/hub/migrations/versions` is empty. That pins one slice's "no migration" promise to the whole branch's distance from `master`, so it went red the moment `6789c14` (F564, migration `0125_run_divergence_task_nullable.py`) landed on the cycle branch, and it stays red on this branch until `master` takes it. Any later migration on a branch breaks it the same way. The test cannot tell what it claims (this slice added none) from what it measures (the branch has none).
 
 **Fix shape (not decided):** compare against the slice's own commit range or the migration head the slice was built on, or drop the test now the slice has shipped. Tier 0.
+
+## F577 (C) -- the task drawer's prerequisite picker read a failed task list as "no other tasks"
+
+**Status:** fixed 2026-10-10 (night iteration 29). Found by CI: run 38019656990 on `80d45bd`, `hub-test`, `test_surface_ceilings.py` (3 tests) named `TaskDetailDrawer.tsx` `useTasks #1` as an unclassified call site that ignores its error.
+
+The "Depends on" picker added for F571 (`97ef44f`) called `useTasks()` binding only `data`. When the read failed, the picker offered nothing but "Choose a task…", which looks like a project with no other tasks. The ratchet caught it before any operator did. Fix: the drawer binds `error` and shows the Hub's sentence under the picker (`task-dependency-picker-error-<task>`). Test: `taskDependsOn.test.tsx`, "says the task list could not be read", failed before the fix and passes after. The same run's fourth failure, `test_copilot_context_split.py::test_context_for_a_claude_run_is_unchanged`, was the context snapshot not updated for `create_task`'s new `depends_on` parameter (`94e0ff7`); the snapshot was regenerated, and its diff is that one line. Tier 0.
