@@ -311,6 +311,83 @@ async def test_seeding_a_loop_that_runs_another_agent_is_refused_before_anything
 
 
 @pytest.mark.asyncio
+async def test_an_agent_cannot_create_a_loop_that_cannot_stop_by_posting_to_the_route(
+    app, auth_headers
+):
+    """F543: `create_loop`/`create_flow` refused a loop with no stop condition in the MCP adapter
+    only, so the same body posted straight to `/agent-actions/jobs` made a loop that never ends.
+    The plane's equal-capability rule: the route refuses what the tool refuses, with nothing
+    written. The operator's own route keeps its spec (a stop condition is optional there)."""
+    headers = await _actor(run_id="run-loop-no-stop")
+    await _allow_agent_jobs(app, auth_headers)
+    body = {
+        "name": "forever",
+        "agent": "lead",
+        "message": "work the queue",
+        "cron": "0 2 * * *",
+        "purpose": "never stop",
+    }
+
+    refused = await app.post("/api/v1/agent-actions/jobs", headers=headers, json=body)
+
+    assert refused.status_code == 400, refused.text
+    assert "stop_at" in refused.json()["detail"]
+    assert "stop_when_queue_empties" in refused.json()["detail"]
+    async with async_session_factory() as session:
+        for model in (AIJob, Loop):
+            count = await session.scalar(select(func.count()).select_from(model))
+            assert count == 0, f"a refused loop left {count} {model.__name__} row(s)"
+
+    # stop_when_queue_empties=False is no stop condition either; a stop_at is one.
+    body["stop_when_queue_empties"] = False
+    again = await app.post("/api/v1/agent-actions/jobs", headers=headers, json=body)
+    assert again.status_code == 400, again.text
+    body["stop_at"] = "2099-01-01T00:00:00Z"
+    created = await app.post("/api/v1/agent-actions/jobs", headers=headers, json=body)
+    assert created.status_code == 201, created.text
+
+    # The operator's route is unchanged: a loop with a purpose and no stop condition is allowed.
+    operator_body = {k: v for k, v in body.items() if k != "stop_at"}
+    operator_body["name"] = "operator forever"
+    by_operator = await app.post(
+        "/api/v1/projects/proj-test/jobs", headers=auth_headers, json=operator_body
+    )
+    assert by_operator.status_code == 201, by_operator.text
+
+
+@pytest.mark.asyncio
+async def test_a_flow_refuses_the_evidence_declaration_on_the_route_as_the_tool_does(
+    app, auth_headers
+):
+    """F543: `create_flow` refused `work_needs_evidence` client-side only. A flow's requirements are
+    its evidence chain, so the route refuses the declaration beside a document, whoever asks."""
+    headers = await _actor(run_id="run-flow-evidence")
+    await _allow_agent_jobs(app, auth_headers)
+    body = {
+        "name": "a flow",
+        "agent": "lead",
+        "message": "work the queue",
+        "cron": "0 2 * * *",
+        "stop_when_queue_empties": True,
+        "spec_document_id": "spdoc-does-not-matter",
+        "work_needs_evidence": False,
+    }
+
+    refused = await app.post("/api/v1/agent-actions/jobs", headers=headers, json=body)
+    assert refused.status_code == 400, refused.text
+    assert "evidence" in refused.json()["detail"]
+    assert "create_loop" in refused.json()["detail"]
+
+    by_operator = await app.post("/api/v1/projects/proj-test/jobs", headers=auth_headers, json=body)
+    assert by_operator.status_code == 400, by_operator.text
+    assert "evidence" in by_operator.json()["detail"]
+    async with async_session_factory() as session:
+        for model in (AIJob, Loop):
+            count = await session.scalar(select(func.count()).select_from(model))
+            assert count == 0, f"a refused flow left {count} {model.__name__} row(s)"
+
+
+@pytest.mark.asyncio
 async def test_archive_job_via_agent_actions_refuses_when_the_job_has_a_loop(app, auth_headers):
     """B3.3: a loop is archived by the operator only (mirrors B2.2's operator-only loop rule) —
     an agent's own governed archive route must not be a back door around that, even though the

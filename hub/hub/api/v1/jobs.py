@@ -838,6 +838,39 @@ async def create_job(
             ),
         )
 
+    # F543: the rules `create_loop` and `create_flow` applied in the MCP adapter alone, so the
+    # same body posted to `/agent-actions/jobs` got none of them. Both before any row exists.
+    #
+    # A flow's requirements are its evidence chain, so the declaration is refused beside a
+    # document for every caller. A stop condition is required of an *agent* creating a loop (the
+    # operator may leave one off: a loop's spec allows none), because an agent's loop that cannot
+    # stop is one nobody is watching. The third adapter rule, a document making the call a flow,
+    # needs nothing here: a document on this route already makes it one.
+    if body.spec_document_id is not None and body.work_needs_evidence is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "a flow's work is always governed by evidence: its document's requirements are the "
+                "chain, and approving one of its tasks merges the commit a reviewer accepted. Only "
+                "a loop with no document declares work_needs_evidence; leave spec_document_id off "
+                "(create_loop) if that is what you want"
+            ),
+        )
+    if (
+        agent_identity
+        and run_identity
+        and _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties)
+        and body.stop_at is None
+        and not body.stop_when_queue_empties
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "a loop needs a stop condition: supply stop_at or stop_when_queue_empties=True. "
+                "Nothing was created"
+            ),
+        )
+
     # Design D2's "definition window": `initial_tasks` is validated up front, before any row is
     # created, so one malformed entry cannot leave a job (and its loop) half-created behind a 422.
     initial_task_bodies: List[TaskCreate] = []

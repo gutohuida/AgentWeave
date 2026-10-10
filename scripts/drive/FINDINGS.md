@@ -35044,7 +35044,7 @@ the run" instead of the Hub's sentence naming the successor (`:626-630`).
 
 ## F543 (C) -- an agent's loop and flow rules exist only in the MCP adapter
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** fixed 2026-10-10 (Tier 0, branch autonomous/2026-10-09-daily). `create_job` (`api/v1/jobs.py`) now refuses, before any row, a flow-evidence declaration beside a document (every caller) and a loop with no stop condition when an agent run asks (the operator keeps the spec's optional stop; agent-loops ac39). The third rule, a document making the call a flow, needed nothing: a document on the route already does. Tests `test_an_agent_cannot_create_a_loop_that_cannot_stop_by_posting_to_the_route` and `test_a_flow_refuses_the_evidence_declaration_on_the_route_as_the_tool_does` failed before. ASGI only, no live-Hub drive. Filed 2026-10-08 (spec overhaul audit, reading code).
 
 `create_loop`/`create_flow` refuse a loop without a stop condition, make a loop naming a document a flow, and refuse
 `work_needs_evidence` on a flow only in `mcp_server.py:822-940`. `POST /agent-actions/jobs` passes straight to

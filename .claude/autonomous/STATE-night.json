@@ -8,18 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f543-impl",
-    "next_action": "Do queue item f543-impl: read F543 in scripts/drive/FINDINGS.md and its DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status.",
+    "current": "f556-impl",
+    "next_action": "Do queue item f556-impl: read F556 in scripts/drive/FINDINGS.md and its DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status",
     "queue": [
-        {
-            "id": "f543-impl",
-            "status": "open",
-            "title": "Tier 0 fix F543: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
-        },
         {
             "id": "f556-impl",
             "status": "open",
