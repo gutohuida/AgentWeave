@@ -1,195 +1,40 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-09-daily",
-    "parent_branch": "master",
-    "parent_sha": "ceca911",
-    "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 44,
-    "log_file": ".claude/autonomous/2026-10-09-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "header-rules-spec",
-            "status": "done",
-            "title": "header-rules-spec: folded into hub-workspace-shell (spdoc-5f2f8771807d), F554 closed"
-        },
-        {
-            "id": "codex-label-spec",
-            "status": "done",
-            "title": "codex-label-spec: 17 Codex requirements labelled via spdoc-9f712f26fd57, folded into 8 capabilities"
-        },
-        {
-            "id": "loop-history-spec",
-            "status": "done",
-            "title": "loop-history-spec: spdoc-ae4ba4e73d46 approved on :8010 (tasks drive-first task-9fda3479201d, record task-4f0e10725b8c, detail task-347dc2c25ed8, page task-634fe4f66a4b)"
-        },
-        {
-            "id": "loop-history-impl",
-            "status": "done",
-            "title": "loop-history-impl: drive-first written, failing at check 1 (scripts/drive/d1018_loop_history.py); rest split into record, detail+page"
-        },
-        {
-            "id": "loop-history-record-impl",
-            "status": "done",
-            "title": "loop-history-record-impl: task-4f0e10725b8c - loop_created and loop_tasks_added writers at jobs.py, tasks.py, spec.py, spec_tasks.py; Hub tests first; drive checks 1-5 pass -- DONE iteration 20, drive checks 1-5 pass"
-        },
-        {
-            "id": "loop-history-page-impl",
-            "status": "done",
-            "title": "loop-history-page-impl: tasks task-347dc2c25ed8 + task-634fe4f66a4b - detail keeps the creation entry beside the ten newest; LoopTab History section (testids loop-tab-events, loop-tab-event); vitest; bundle refresh; drive check 6 -- DONE iteration 21, drive checks 1-6 pass"
-        },
-        {
-            "id": "loop-history-drive",
-            "status": "done",
-            "title": "loop-history-drive"
-        },
-        {
-            "id": "task-depends-on-spec",
-            "status": "done",
-            "title": "task-depends-on-spec: spdoc-e28ec0fff9f3 approved on :8010 (tasks drive-first task-3963fd836a8f, create task-9e94fcb108e2, drawer task-6d7169b0539c)"
-        },
-        {
-            "id": "task-depends-on-impl",
-            "status": "done",
-            "title": "task-depends-on-impl: spdoc-e28ec0fff9f3 - drive-first (scripts/drive/d1019_task_depends_on.py on :8105, record failing at check 1), then create (depends_on on TaskCreate/AgentTaskCreate/MCP/_operations), then drawer (Depends on section, vitest, bundle); split into task-depends-on-t<n>-impl if needed -- drive-first DONE iteration 24 (d1019 fails at check 1); remaining split below"
-        },
-        {
-            "id": "task-depends-on-create-impl",
-            "status": "done",
-            "title": "task-depends-on-create-impl: task-9e94fcb108e2 - depends_on on TaskCreate/AgentTaskCreate/MCP/_operations; Hub tests first; d1019 checks 1-3 -- DONE iteration 25, d1019 checks 1-3 pass"
-        },
-        {
-            "id": "task-depends-on-drawer-impl",
-            "status": "done",
-            "title": "task-depends-on-drawer-impl: task-6d7169b0539c - Depends on section in TaskDetailDrawer, api/tasks.ts calls, vitest, bundle refresh; d1019 checks 4-6 -- DONE iteration 26, d1019 6/6 pass"
-        },
-        {
-            "id": "task-depends-on-drive",
-            "status": "done",
-            "title": "task-depends-on-drive -- DONE iteration 27, d1019 6/6 on committed tree, F571 fixed, metrics row"
-        },
-        {
-            "id": "exploring-prose-spec",
-            "status": "done",
-            "title": "exploring-prose-spec: spdoc-a56fa9bf6cdd approved on :8010 (tasks drive-first task-7ef6d440c930, context task-35d85518f3a0, tool-text task-7aadcbb91c32)"
-        },
-        {
-            "id": "exploring-prose-impl",
-            "status": "done",
-            "title": "exploring-prose-impl: spdoc-a56fa9bf6cdd - drive-first (d1020 on :8106, failing at check 1), then context (agents.py, spec_journey.py), then tool-text (mcp_server.py ask_user, charters/spec.md) -- drive-first DONE iteration 30 (d1020 fails at check 1); rest split below",
-            "model": "opus"
-        },
-        {
-            "id": "exploring-prose-context-impl",
-            "status": "done",
-            "title": "exploring-prose-context-impl: task-35d85518f3a0 - agents.py exploring context + spec_journey.py step duties; Hub tests first; d1020 check 1 -- DONE iteration 31, d1020 4/4",
-            "model": "opus"
-        },
-        {
-            "id": "exploring-prose-tooltext-impl",
-            "status": "done",
-            "title": "exploring-prose-tooltext-impl: task-7aadcbb91c32 - mcp_server.py ask_user description drops the specification clause (both renderings equal), data/charters/spec.md says exploring questions go in the reply; d1020 checks 1-4 -- DONE iteration 32, d1020 4/4"
-        },
-        {
-            "id": "exploring-prose-drive",
-            "status": "done",
-            "title": "exploring-prose-drive: final d1020 on committed tree, retire or amend d1009_step_journey.py check 3b (asserts one question per ask_user, superseded), F545 status, metrics row -- DONE iteration 33, d1020 4/4, d1009 amended (1-5 pass), F545 fixed, metrics row"
-        },
-        {
-            "id": "route-shadow-names-spec",
-            "status": "done",
-            "title": "route-shadow-names-spec: spdoc-4e1fa307cd4e approved on :8010 (tasks drive-first task-182303d0d3d6, refuse task-78a794e5bc71); openspec copy archived"
-        },
-        {
-            "id": "route-shadow-names-impl",
-            "status": "done",
-            "title": "route-shadow-names-impl: drive-first task-182303d0d3d6 - d1021 on :8107, failing at check 1 -- DONE iteration 35, d1021 fails at check 1"
-        },
-        {
-            "id": "route-shadow-names-refuse-impl",
-            "status": "done",
-            "title": "route-shadow-names-refuse-impl: task-78a794e5bc71 - hub/hub/route_words.py, the three agent-create doors, TaskCreate+AgentTaskCreate shared check, test_a_chosen_name_is_not_a_route.py first; d1021 passes -- DONE iteration 36, d1021 3/3 pass"
-        },
-        {
-            "id": "route-shadow-names-drive",
-            "status": "done",
-            "title": "route-shadow-names-drive -- DONE iteration 37, d1021 3/3 on committed tree, F248 fixed, CLAUDE.md line updated, metrics row"
-        },
-        {
-            "id": "thinking-ui-spec",
-            "status": "done",
-            "title": "thinking-ui-spec: spdoc-a56fbfe278d0 approved on :8010 (tasks drive-first task-ad01ff501be9, timeline task-ff57ca1f568c)"
-        },
-        {
-            "id": "thinking-ui-impl",
-            "status": "done",
-            "title": "thinking-ui-impl: drive-first task-ad01ff501be9 -- DONE iteration 39, d1022 fails at check 1 (live run, closed 'Work - 2 steps' block)"
-        },
-        {
-            "id": "thinking-ui-timeline-impl",
-            "status": "done",
-            "title": "thinking-ui-timeline-impl: task-ff57ca1f568c - vitest first, AgentTimeline live block (D2/D3), diagnostics filter (D4), ConversationControls toggle (D5), bundle refresh; d1022 passes -- DONE iteration 40, vitest 10 new, d1022 3/3 on working tree, bundle refreshed"
-        },
-        {
-            "id": "thinking-ui-drive",
-            "status": "done",
-            "title": "thinking-ui-drive -- DONE iteration 41, d1022 3/3 on committed tree, F572 fixed, metrics row"
-        },
-        {
-            "id": "run-cap-spec",
-            "status": "done",
-            "title": "run-cap-spec: spdoc-4cd731c8dba3 approved on :8010 (Tier 2; tasks drive-first task-76ccae4775de, cap task-89806cc2657f, settings task-fe6b5a5f0cbe)",
-            "model": "opus"
-        },
-        {
-            "id": "run-cap-drive-first",
-            "status": "done",
-            "title": "run-cap-drive-first: task-76ccae4775de - d1023_run_cap.py on :8109, recorded failing at check 1 -- DONE iteration 43, d1023 fails at check 1 (both running 9/9 samples)"
-        },
-        {
-            "id": "run-cap-impl",
-            "status": "open",
-            "title": "run-cap-impl: task-89806cc2657f (migration 0126 + downgrade, scheduler cap under a per-project lock, request_agent count removed, Optional field; Hub tests first) then task-fe6b5a5f0cbe (Concurrent runs in Settings/Overview, vitest, bundle); split as run-cap-cap-impl / run-cap-settings-impl if one firing cannot finish -- carried to the next window (not started: 20 min left at iteration 44)",
-            "model": "opus"
-        },
-        {
-            "id": "run-cap-drive",
-            "status": "open",
-            "title": "run-cap-drive"
-        }
-    ],
-    "decisions_for_user": [
-        "F556-outstanding-message-direction",
-        "night-1010-1",
-        "night-1010-2",
-        "night-1010-3",
-        "night-1010-4",
-        "night-1010-5",
-        "night-1010-6",
-        "night-1010-7",
-        "night-1010-8",
-        "night-1010-9",
-        "night-1010-10",
-        "night-1010-11",
-        "night-1010-12"
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-10-10-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "9eb5de9",
+    "stop_at":  "2026-10-11T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-10-10-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
