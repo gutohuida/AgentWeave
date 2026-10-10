@@ -2,6 +2,7 @@ import { Icon } from '@/components/common/Icon'
 import type { AgentConversation } from '@/api/agentChat'
 import { Button } from '@/components/ui/button'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
+import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
 
 /** `ready` is gone. It used to mean "the run that was asked to write a handoff has ended",
  *  which is the inference this capability removed — readiness is now a property of a checkpoint
@@ -65,6 +66,7 @@ export function ConversationControls({
   onHandoff,
   onFoldAll,
 }: ConversationControlsProps) {
+  const [diagnosticsHidden, setDiagnosticsHidden] = useDiagnosticsHidden()
   const reason = handoffReason(handoffUnavailable, currentConversationId, interactionLocked, handoffState)
   const handoffDisabled = reason !== null
 
@@ -107,6 +109,16 @@ export function ConversationControls({
       >
         <Icon name="move_up" size={14} />
         {handoffLabel}
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="xs"
+        className="shrink-0"
+        title="Diagnostics are the runner's own notices; errors and failed calls always stay"
+        onClick={() => setDiagnosticsHidden(!diagnosticsHidden)}
+      >
+        {diagnosticsHidden ? 'Show diagnostics' : 'Hide diagnostics'}
       </Button>
 
       <Button variant="ghost" size="xs" className="shrink-0" onClick={onFoldAll}>Fold all turns</Button>

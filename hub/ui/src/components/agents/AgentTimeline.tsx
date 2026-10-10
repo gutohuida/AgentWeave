@@ -12,6 +12,7 @@ import type { TurnUsage } from '@/api/accounting'
 import { formatAiCredits } from '@/components/accounting/accountingDisplay'
 import { agentColorVars } from '@/lib/agentColors'
 import { hubDate } from '@/lib/hubTime'
+import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
 import {
   entryCategory,
   findPairedResult,
@@ -208,6 +209,7 @@ export function AgentTimeline({
     runVisiblyActive && lastTurn?.entries.length ? lastTurn.entries[0].timestamp : null
   const liveElapsed = useElapsedSeconds(runVisiblyActive, activeRunStartedAt)
   const [foldOverride, setFoldOverride] = useState<Record<string, boolean>>({})
+  const [diagnosticsHidden] = useDiagnosticsHidden()
 
   // The caller always passes a defined counter (never undefined) that starts
   // at 0, so the effect must only react the SECOND time it sees a given
@@ -321,6 +323,8 @@ export function AgentTimeline({
               colorByName={colorByName}
               durationSeconds={turn.runId ? runDurationSeconds(runs[turn.runId]) : undefined}
               usage={turn.runId ? usageByRun[turn.runId] : undefined}
+              live={runVisiblyActive && turn === lastTurn}
+              hideDiagnostics={diagnosticsHidden}
             />
             {terminalLabel && (
               <div
@@ -442,6 +446,8 @@ function TurnBody({
   colorByName,
   durationSeconds,
   usage,
+  live,
+  hideDiagnostics,
 }: {
   turn: TimelineTurn
   turnKey: string
@@ -451,6 +457,12 @@ function TurnBody({
   durationSeconds?: number
   /** What this turn measured, from the accounting API; undefined if unmeasured. */
   usage?: TurnUsageFigure
+  /** This turn is the newest run's and the run is visibly underway (`runVisiblyActive`, the live
+   *  working indicator's own signal), so nothing restates when a run counts as settled. */
+  live: boolean
+  /** The operator's "Hide diagnostics" choice: `diagnostic` result cards are not drawn. Errors
+   *  are messages and failed tool results live inside work blocks, so neither is affected. */
+  hideDiagnostics: boolean
 }) {
   // Walked in execution order — a block is never hoisted ahead of the text that
   // preceded it (2026-08-04-hub-charcoal-visual-refresh).
@@ -467,7 +479,7 @@ function TurnBody({
 
   return (
     <>
-      {blocks.map((block) => {
+      {blocks.map((block, blockIndex) => {
         const blockId = block.kind === 'work' ? block.id : block.entry.id
         // Operator, 2026-08-18: "After answering it could just look like worked for Xs and then
         // the response underneath." Unlike the "Completed" message this replaces, it says
@@ -498,7 +510,16 @@ function TurnBody({
           return (
             <Fragment key={block.id}>
               {durationLine}
-              <WorkBlockDisclosure entries={block.entries} />
+              <WorkBlockDisclosure
+                entries={block.entries}
+                // Open exactly while the reasoning is the latest thing in a turn that is still
+                // going; a text entry or the run's end after it closes it again.
+                autoOpen={
+                  live &&
+                  blockIndex === blocks.length - 1 &&
+                  block.entries.some((e) => e.output_kind === 'thinking')
+                }
+              />
             </Fragment>
           )
         }
@@ -514,6 +535,9 @@ function TurnBody({
         // `firstAgentBlockId`, so this adds nothing to a turn that had text of its own.
         if (isSuccessCompletionEntry(entry)) return <Fragment key={entry.id}>{durationLine}</Fragment>
         if (entryCategory(entry) === 'result') {
+          if (hideDiagnostics && entry.output_kind === 'diagnostic') {
+            return <Fragment key={entry.id}>{durationLine}</Fragment>
+          }
           return (
             <Fragment key={entry.id}>
               {durationLine}
@@ -532,10 +556,13 @@ function TurnBody({
   )
 }
 
-function WorkBlockDisclosure({ entries }: { entries: TimelineEntry[] }) {
+function WorkBlockDisclosure({ entries, autoOpen }: { entries: TimelineEntry[]; autoOpen: boolean }) {
   // Disclosure state is local to this block: a turn with several work groups
-  // tracks each one independently rather than toggling as one.
-  const [open, setOpen] = useState(false)
+  // tracks each one independently rather than toggling as one. The automatic state is derived
+  // on every render and never stored; only a click is, and once the operator has clicked, their
+  // choice wins over the rule — the text arriving must not shut what they opened to read.
+  const [operatorChoice, setOperatorChoice] = useState<boolean | null>(null)
+  const open = operatorChoice ?? autoOpen
   // A tool_result is rendered inline with its tool_use, never as its own row — pairing is
   // computed within this block, not across the whole turn, so it can never reach across a
   // block boundary into a different run of work.
@@ -581,7 +608,7 @@ function WorkBlockDisclosure({ entries }: { entries: TimelineEntry[] }) {
       <summary
         onClick={(e) => {
           e.preventDefault()
-          setOpen((v) => !v)
+          setOperatorChoice(!open)
         }}
         className="flex items-center gap-1.5 py-[3px] text-[11.5px] cursor-pointer list-none"
         style={{ color: 'var(--text-3)' }}
@@ -626,7 +653,12 @@ function WorkBlockDisclosure({ entries }: { entries: TimelineEntry[] }) {
       {open && (
         <div className="pl-[3px] py-1 text-[12px]" style={{ color: 'var(--text-2)' }}>
           {workRows.map((entry) => (
-            <WorkRow key={entry.id} entry={entry} paired={findPairedResult(entries, entry)} />
+            <WorkRow
+              key={entry.id}
+              entry={entry}
+              paired={findPairedResult(entries, entry)}
+              startExpanded={autoOpen && entry.output_kind === 'thinking'}
+            />
           ))}
         </div>
       )}
@@ -735,8 +767,17 @@ function callDetail(payload: unknown): string {
   return JSON.stringify(parsed, null, 2)
 }
 
-function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEntry }) {
-  const [expanded, setExpanded] = useState(false)
+function WorkRow({
+  entry,
+  paired,
+  startExpanded = false,
+}: {
+  entry: TimelineEntry
+  paired?: TimelineEntry
+  /** Only the first render reads this: a thought in a block that opened itself shows its text. */
+  startExpanded?: boolean
+}) {
+  const [expanded, setExpanded] = useState(startExpanded)
   // design.md D2 — declines (returns null) for anything not shaped like a single-pair edit;
   // WorkRow falls back to the raw text rendering it already had for every other tool.
   const editDiff = entry.output_kind === 'tool_use' ? ToolEditDiff({ payload: entry.payload }) : null
@@ -750,7 +791,8 @@ function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEnt
   const visual = toolVisual(toolName)
   const iconName = visual.icon
   const displayLabel = visual.label ?? label
-  const detail = callDetail(entry.payload)
+  // A thought carries its text in `content`, not in a payload: it is what the row exists to show.
+  const detail = entry.output_kind === 'thinking' ? entry.content : callDetail(entry.payload)
   // The size of the change, before opening it. "+12 −3" is the difference between a rename
   // and a rewrite, and that is the decision the collapsed row exists to support.
   const stat = entry.output_kind === 'tool_use' ? editDiffStat(entry.payload) : null
