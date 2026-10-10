@@ -35021,7 +35021,7 @@ window nobody measured.
 
 ## F540 (C) -- a failed automatic checkpoint is invisible to the operator
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** fixed 2026-10-10 (Tier 0, branch autonomous/2026-10-09-daily, DECISIONS `overhaul-failed-checkpoint`). The conversation now shows a `checkpoint-failed` problem banner when its newest checkpoint is an automatic one that is `unwritten` or `failed`, naming the reason (the worker invocation's `generation_error`, else the failed probe dimensions) with a `Retry checkpoint` action (the operator checkpoint-and-cut-over path). A newer checkpoint of any kind clears it. Tests: three in `agentHandoff.test.tsx` failed before (no banner); `test_the_list_leads_with_a_failed_automatic_checkpoint_and_says_why` pins the route's newest-first order and `generation_error`. UI bundle rebuilt and refreshed. **Not verified:** no live-Hub drive of a real failed generation (needs a checkpoint runner that fails); full Hub suite not run. Filed 2026-10-08 (spec overhaul audit, reading code).
 
 `checkpoint_trigger.py:403` records the failure, but the conversation's banner renders only a `ready` checkpoint
 (`AgentOutputPanel.tsx:613-616`); nothing in the conversation says the automatic checkpoint was attempted and failed.

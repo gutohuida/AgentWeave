@@ -300,6 +300,56 @@ describe('agent conversation handoff', () => {
     expect(screen.queryByTestId('banner-action-checkpoint-offered')).not.toBeInTheDocument()
   })
 
+  it('says an automatic checkpoint failed, with the reason, and offers a retry', async () => {
+    // F540: the Hub recorded the failure and the conversation said nothing. The list is newest
+    // first, as the route returns it, so the failed attempt leads and an older ready one trails.
+    offeredCheckpoints = [
+      {
+        id: 'ckpt-new', conversation_id: 'conv-old', agent: 'claude', trigger: 'context_pressure',
+        status: 'unwritten', lineage_id: 'ckpt-new', generation_error: 'checkpoint runner timed out',
+      },
+    ]
+    const user = userEvent.setup()
+    render(
+      <ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />,
+    )
+
+    const banner = screen.getByTestId('conversation-banner')
+    expect(banner).toHaveAttribute('data-banner-id', 'checkpoint-failed')
+    expect(banner).toHaveAttribute('data-banner-tone', 'problem')
+    expect(banner).toHaveTextContent('checkpoint runner timed out')
+
+    await user.click(screen.getByTestId('banner-action-checkpoint-failed'))
+    await waitFor(() => expect(calledUrl(0)).toMatch(/\/conversations\/conv-old\/checkpoint$/))
+  })
+
+  it('names the failed probe when the checkpoint was written but did not pass', () => {
+    offeredCheckpoints = [
+      {
+        id: 'ckpt-bad', conversation_id: 'conv-old', agent: 'claude', trigger: 'context_pressure',
+        status: 'failed', lineage_id: 'ckpt-bad', probe_status: 'failed',
+        probe_findings: [{ dimension: 'decisions', missing: ['use sqlite'], invented: [] }],
+      },
+    ]
+    render(
+      <ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />,
+    )
+    const banner = screen.getByTestId('conversation-banner')
+    expect(banner).toHaveAttribute('data-banner-id', 'checkpoint-failed')
+    expect(banner).toHaveTextContent('decisions')
+  })
+
+  it('does not report a failure once a newer checkpoint has been written', () => {
+    offeredCheckpoints = [
+      { id: 'ckpt-ok', conversation_id: 'conv-old', agent: 'claude', trigger: 'operator', status: 'ready', lineage_id: 'ckpt-ok' },
+      { id: 'ckpt-old', conversation_id: 'conv-old', agent: 'claude', trigger: 'context_pressure', status: 'unwritten', lineage_id: 'ckpt-old', generation_error: 'boom' },
+    ]
+    render(
+      <ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />,
+    )
+    expect(screen.queryByTestId('banner-action-checkpoint-failed')).not.toBeInTheDocument()
+  })
+
   it('warns at the threshold without spending, and the warning can be waved away', async () => {
     // The operator's point: "if I want to extend a little longer I can". Generating first billed
     // a model call whether or not they wanted one, and at a low threshold billed it again every

@@ -615,6 +615,32 @@ export function AgentOutputPanel({
     (checkpoint) => checkpoint.status === 'ready' && checkpoint.trigger === 'context_pressure',
   )
 
+  /**
+   * The newest automatic checkpoint, when it did not produce something to hand over (F540).
+   *
+   * The Hub recorded these failures and broadcast `checkpoint_ready`, but only `ready` was ever
+   * rendered, so the operator could not tell an attempt had been made. Only the newest checkpoint
+   * counts: once a later one exists (a retry, or an operator-made one) the failure is history.
+   * The list is newest first, as the route returns it.
+   */
+  const latestCheckpoint = checkpoints[0]
+  const failedAutomaticCheckpoint =
+    latestCheckpoint
+    && latestCheckpoint.trigger === 'context_pressure'
+    && (latestCheckpoint.status === 'unwritten' || latestCheckpoint.status === 'failed')
+      ? latestCheckpoint
+      : null
+  const failedCheckpointReason = failedAutomaticCheckpoint
+    ? failedAutomaticCheckpoint.generation_error
+      ?? (failedAutomaticCheckpoint.probe_findings?.length
+        ? `it did not pass its checks (${failedAutomaticCheckpoint.probe_findings
+            .map((finding) => finding.dimension)
+            .join(', ')})`
+        : failedAutomaticCheckpoint.status === 'failed'
+          ? 'it did not pass its checks'
+          : 'no reason was recorded')
+    : null
+
   const handleCutOver = async () => {
     if (!projectId || !offeredCheckpoint || isSending) return
     setIsSending(true)
@@ -739,6 +765,20 @@ export function AgentOutputPanel({
             pending: isSending,
           },
           // No secondary action, deliberately. Dismissal was already spent to get here.
+        }
+      : null,
+    failedAutomaticCheckpoint
+      ? {
+          id: 'checkpoint-failed',
+          tone: 'problem' as const,
+          message:
+            `The automatic checkpoint for this conversation failed: ${failedCheckpointReason}. `
+            + 'Nothing was handed over — try again, or keep working.',
+          action: {
+            label: 'Retry checkpoint',
+            onClick: () => void handleCheckpoint(),
+            pending: isSending,
+          },
         }
       : null,
     offeredCheckpoint

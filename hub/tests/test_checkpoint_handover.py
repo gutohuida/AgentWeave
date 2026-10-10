@@ -11,10 +11,10 @@ import pytest
 from sqlalchemy import select
 
 from hub.checkpoint_cutover import CutoverRefusedError, cut_over
-from hub.checkpoints import get_checkpoint_by_id
+from hub.checkpoints import compute_envelope, create_checkpoint, get_checkpoint_by_id
 from hub.conversations import get_conversation_by_id, unarchive
 from hub.db.engine import async_session_factory
-from hub.db.models import Conversation, InboundQueueEntry, Run
+from hub.db.models import Conversation, InboundQueueEntry, Run, WorkerInvocation
 from hub.inbound_queue import deliver_entries_with_run
 
 from .test_checkpoint_cutover import AGENT, PROJECT, _conversation, _ready_checkpoint
@@ -263,3 +263,44 @@ async def test_simultaneous_presses_serialise_under_sqlites_default_journal(
             assert len(await _checkpoint_entries(db)) == 1
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_the_list_leads_with_a_failed_automatic_checkpoint_and_says_why(app, auth_headers):
+    """F540: the conversation can only tell the operator a checkpoint failed if the route that
+    feeds it carries the failure and puts it first (newest first, as the banner reads it)."""
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        ready = await _ready_checkpoint(db, conversation)
+        ready_id = ready.id
+        db.add(
+            WorkerInvocation(
+                id="worker-f540",
+                project_id=PROJECT,
+                kind="checkpoint",
+                prompt_version="v1",
+                cli="claude",
+                outcome="timeout",
+                error="checkpoint runner timed out",
+            )
+        )
+        await db.commit()
+        failed = await create_checkpoint(
+            db,
+            conversation,
+            trigger="context_pressure",
+            envelope=await compute_envelope(db, conversation),
+            body=None,
+            worker_invocation_id="worker-f540",
+        )
+        failed_id = failed.id
+
+    listed = await app.get(
+        f"/api/v1/projects/{PROJECT}/conversations/conv-1/checkpoints", headers=auth_headers
+    )
+    assert listed.status_code == 200, listed.text
+    rows = listed.json()
+    assert [r["id"] for r in rows][:2] == [failed_id, ready_id]
+    assert rows[0]["status"] == "unwritten"
+    assert rows[0]["trigger"] == "context_pressure"
+    assert rows[0]["generation_error"] == "checkpoint runner timed out"
