@@ -204,3 +204,40 @@ async def test_a_move_out_of_an_archived_loop_is_adopted_not_added(
     assert len(await _events(app, auth_headers, new_id, "loop_tasks_added")) == 0
     # The old loop's one addition is its own flow-build, from before it was archived.
     assert len(await _events(app, auth_headers, old["id"], "loop_tasks_added")) == 1
+
+
+@pytest.mark.asyncio
+async def test_the_detail_keeps_the_creation_entry_beside_the_ten_newest(app, auth_headers):
+    job = (await app.post(JOBS, json=_loop_body(), headers=auth_headers)).json()
+    loop_id = job["loop"]["id"]
+    for n in range(12):
+        task = await app.post(
+            f"{BASE}/tasks",
+            json={"title": f"Extra {n}", "assignee": "kimi", "loop_id": loop_id},
+            headers=auth_headers,
+        )
+        assert task.status_code == 201, task.text
+
+    events = await _events(app, auth_headers, loop_id)
+
+    # 13 additions plus the creation: the ten newest are all additions, so the creation rides along.
+    assert len(events) == 11
+    assert [e["event_type"] for e in events[:-1]] == ["loop_tasks_added"] * 10
+    assert events[-1]["event_type"] == "loop_created"
+    assert [e["data"]["tasks"][0]["title"] for e in events[:3]] == [
+        "Extra 11",
+        "Extra 10",
+        "Extra 9",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_the_detail_lists_the_creation_entry_once_when_it_is_among_the_newest(
+    app, auth_headers
+):
+    job = (await app.post(JOBS, json=_loop_body(), headers=auth_headers)).json()
+
+    events = await _events(app, auth_headers, job["loop"]["id"])
+
+    assert [e["event_type"] for e in events].count("loop_created") == 1
+    assert len(events) == 2

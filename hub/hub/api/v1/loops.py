@@ -81,7 +81,19 @@ async def _get_loop_detail(session: AsyncSession, project_id: str, loop_id: str)
         .order_by(EventLog.timestamp.desc())
         .limit(10)
     )
-    events = events_result.scalars().all()
+    events = list(events_result.scalars().all())
+
+    # The creation entry is the one a long-lived loop pushes out of the newest ten, and the one the
+    # operator most wants ("who made this?"), so it rides along beside them, last as the oldest.
+    if not any(event.event_type == "loop_created" for event in events):
+        created = await session.scalar(
+            select(EventLog)
+            .where(EventLog.loop_id == loop.id, EventLog.event_type == "loop_created")
+            .order_by(EventLog.timestamp)
+            .limit(1)
+        )
+        if created is not None:
+            events.append(created)
 
     return LoopDetail(
         **summary.model_dump(),

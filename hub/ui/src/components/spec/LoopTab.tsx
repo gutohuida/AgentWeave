@@ -7,6 +7,7 @@ import { useLoop, useStopLoop, useArchiveLoop, useSetLoopControl, type LoopSumma
 import { useAgents } from '@/api/agents'
 import { readableApiError } from '@/api/client'
 import { hubDate } from '@/lib/hubTime'
+import { loopEventSentence } from '@/lib/loopHistory'
 import { endingBucket } from './loopCounts'
 import { LoopSettings } from './LoopSettings'
 
@@ -477,6 +478,32 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="mt-4">
+        <p className="mb-1.5" style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)' }}>
+          History
+        </p>
+        <div className="space-y-1.5" data-testid="loop-tab-events">
+          {loop.events.map((event) => (
+            <div
+              key={event.id}
+              data-testid="loop-tab-event"
+              className="rounded-[var(--radius-sm)] px-2 py-1.5"
+              style={{ background: 'var(--surface-2)', fontSize: 11, color: 'var(--text)' }}
+            >
+              {loopEventSentence(event)}{' '}
+              <span style={{ color: 'var(--text-3)' }}>
+                {formatDistanceToNow(hubDate(event.timestamp), { addSuffix: true })}
+              </span>
+            </div>
+          ))}
+          {!loop.events.some((event) => event.event_type === 'loop_created') && (
+            <p data-testid="loop-tab-creation-unrecorded" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+              This loop's creation was not recorded.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   )
