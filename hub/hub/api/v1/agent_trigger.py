@@ -128,7 +128,7 @@ from ...runner_adapters import ADAPTERS, build_command, get_adapter, resolve_acc
 from ...runner_adapters.base import RpcCallbacks as TransportRpcCallbacks
 from ...runner_adapters.base import RpcTransport, RpcTurnRequest, RunnerAdapter, StreamTransport
 from ...runner_commands import OPERATOR_POSTURE, UnsupportedRunnerError
-from ...runner_events import AccountingSample, status_event
+from ...runner_events import AccountingSample, diagnostic_event, status_event
 from ...runner_provider import has_provider, provider_override_problem, runner_probe_config
 from ...scheduler import (
     REVIEWABLE_LOOP_TASK_STATUSES,
@@ -1454,6 +1454,24 @@ async def _trigger_agent_directly(
     # no worktree at all (`isolated_workspace is None`) has nothing this notice would help with.
     if isolated_workspace is not None and review_context is None:
         notices.append(auto_snapshot_notice())
+    # F567: a shared dependency directory that could not be linked into this checkout is told to
+    # the agent here and recorded on the run below (`setup_events`), with the reason and the
+    # remedy, rather than found by the agent as a build that fails for no reason it can see.
+    setup_events: List[Any] = []
+    if isolated_workspace is not None:
+        link_failures = worktrees.shared_dependency_link_failures(repo_root, isolated_workspace)
+        if link_failures:
+            link_sentence = worktrees.dependency_link_failure_sentence(link_failures)
+            notices.append(f"[AgentWeave] {link_sentence}")
+            setup_events.append(
+                diagnostic_event(
+                    stream="workspace",
+                    severity="warning",
+                    summary=link_sentence,
+                    code="workspace.dependency_link_failed",
+                    facts={"failed": [{"name": f.name, "reason": f.reason} for f in link_failures]},
+                )
+            )
     # A specification turn says so beside the operator's message, not only in the system context.
     # Three live runs had the phase block, the precedence statement and the tool list all correctly
     # delivered, and reached for a different workflow anyway: what an agent weighs against the
@@ -1723,6 +1741,7 @@ async def _trigger_agent_directly(
             # the tests had touched.
             worktree=None if review_context is not None else isolated_workspace,
             copilot_turn=copilot_turn,
+            setup_events=setup_events,
             adapter=adapter,
             transport=run_transport,
             # A run told the MCP form by declaration keeps being told it; D12's event says so.
@@ -2644,6 +2663,7 @@ async def _execute_run(
     declared_mcp: bool = False,
     told_access_path: Optional[str] = None,
     restrict_spec_writes: bool = False,
+    setup_events: Sequence[Any] = (),
 ) -> None:
     """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE.
 
@@ -2666,6 +2686,10 @@ async def _execute_run(
     (design D9); a Copilot turn hands *transport* to `_execute_copilot_run`. On the stream
     path, *transport* supplies `spawn_kind`, `map_events` and `usage_from`, so this function reads
     no runner literal to pick between Claude and Codex's `exec` transport.
+
+    *setup_events* are notices the trigger decided about how this run's workspace was set up (a
+    shared dependency directory that could not be linked in, F567). Every execution path records
+    them first, in the run's own timeline, before anything the runner emits.
 
     *repo_root* is the project's own root directory, `ProjectWorkspace`'s answer as the trigger
     body already computed it. It arrives by parameter for the same reason as everything above and
@@ -2694,6 +2718,7 @@ async def _execute_run(
             worktree=worktree,
             permission_mode=permission_mode,
             turn=copilot_turn,
+            setup_events=setup_events,
         )
         return
 
@@ -2720,6 +2745,7 @@ async def _execute_run(
             config_overrides=config_overrides,
             told_access_path=told_access_path,
             restrict_spec_writes=restrict_spec_writes,
+            pre_turn_events=setup_events,
         )
         return
 
@@ -2846,6 +2872,33 @@ async def _execute_run(
         buffer = ""
         plane_event_stored = False
 
+        async def _record_events(events: Sequence[Any]) -> None:
+            nonlocal sequence
+            for event in events:
+                sequence += 1
+                # F488: joined across the run's text, beside `sequence` and outside the retried
+                # write, so the carried text follows the timeline's order and takes each event once.
+                recorded = run_secrets.scrub_stream(run_id, event)
+                await _record_observation(
+                    lambda db, event=recorded, sequence=sequence: record_agent_output(
+                        db,
+                        project_id,
+                        agent,
+                        content=event.content,
+                        session_id=session_id,
+                        conversation_id=conversation_id,
+                        kind=event.kind,
+                        payload=event.payload,
+                        run_id=run_id,
+                        sequence=sequence,
+                    ),
+                    run_id=run_id,
+                    what=f"output {sequence}",
+                )
+                # Task 4.3a. After the output row, not before: the timeline entry is what the
+                # operator is shown, and this is observational bookkeeping about it.
+                await outside_writes.note(event)
+
         async def _flush_line(raw_line: str) -> None:
             nonlocal accounting_sample, binding_conflict, plane_event_stored, session_id, sequence
             # ConPTY output is control-sequence-laden, not plain text (live-verified — see
@@ -2928,30 +2981,7 @@ async def _execute_run(
                             ),
                         )
                     )
-            for event in events:
-                sequence += 1
-                # F488: joined across the run's text, beside `sequence` and outside the retried
-                # write, so the carried text follows the timeline's order and takes each event once.
-                recorded = run_secrets.scrub_stream(run_id, event)
-                await _record_observation(
-                    lambda db, event=recorded, sequence=sequence: record_agent_output(
-                        db,
-                        project_id,
-                        agent,
-                        content=event.content,
-                        session_id=session_id,
-                        conversation_id=conversation_id,
-                        kind=event.kind,
-                        payload=event.payload,
-                        run_id=run_id,
-                        sequence=sequence,
-                    ),
-                    run_id=run_id,
-                    what=f"output {sequence}",
-                )
-                # Task 4.3a. After the output row, not before: the timeline entry is what the
-                # operator is shown, and this is observational bookkeeping about it.
-                await outside_writes.note(event)
+            await _record_events(events)
             if parsed.usage is not None:
                 usage_payload = parsed.usage.to_payload(agent)
                 await _record_observation(
@@ -2965,6 +2995,9 @@ async def _execute_run(
                     if accounting_sample is None
                     else accounting_sample.merged(parsed.accounting)
                 )
+
+        # F567: how the workspace was set up comes before anything the runner says.
+        await _record_events(setup_events)
 
         while True:
             chunk = await loop.run_in_executor(None, pty.read)
@@ -3580,6 +3613,7 @@ async def _execute_copilot_run(
     turn: _CopilotTurn,
     repo_root: Optional[str] = None,
     permission_mode: Optional[str] = None,
+    setup_events: Sequence[Any] = (),
 ) -> None:
     """A Copilot turn over ACP, through *transport* (`CopilotAdapter`'s, so
     `copilot_acp.run_turn`) and the executor it shares with Codex. Only how the turn is started
@@ -3670,7 +3704,7 @@ async def _execute_copilot_run(
         env=env,
         worktree=worktree,
         repo_root=repo_root,
-        pre_turn_events=turn.pre_turn_events,
+        pre_turn_events=[*setup_events, *turn.pre_turn_events],
     )
 
 

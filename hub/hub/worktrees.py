@@ -235,7 +235,70 @@ def is_writing_agent(config: Dict[str, Any]) -> bool:
     return not bool(config.get("read_only"))
 
 
-def _symlink_shared_dependencies(repo_root: Path, worktree: Path) -> None:
+@dataclass(frozen=True)
+class DependencyLinkFailure:
+    """One shared dependency directory that could not be linked into a checkout (F567)."""
+
+    name: str
+    reason: str
+
+
+# The failures of the newest link attempt for each checkout, by path. Provisioning returns a path,
+# not a report, and the paths that provision are many; the trigger asks for the outcome once the
+# checkout it is about to run in exists. Replaced on every attempt, so a link that now succeeds
+# clears its entry.
+_link_failures: Dict[str, List[DependencyLinkFailure]] = {}
+
+
+def shared_dependency_link_failures(
+    repo_root: Path, workspace: Path
+) -> List[DependencyLinkFailure]:
+    """The shared directories the project has and *workspace* lacks, with why when the Hub knows.
+
+    Read from the disk rather than from the attempt alone: an existing checkout is never re-linked,
+    so the attempt that failed may have been in an earlier turn, or before a Hub restart. A
+    directory the operator has since installed into the checkout is no longer missing.
+    """
+    if workspace == repo_root:
+        return []
+    remembered = {f.name: f.reason for f in _link_failures.get(str(workspace), ())}
+    failures: List[DependencyLinkFailure] = []
+    for name in SHARED_DEPENDENCY_DIRS:
+        source = repo_root / name
+        if not source.is_dir() or source.is_symlink():
+            continue
+        target = workspace / name
+        if target.exists() or target.is_symlink():
+            continue
+        failures.append(
+            DependencyLinkFailure(
+                name=name, reason=remembered.get(name, "the link was never created")
+            )
+        )
+    return failures
+
+
+def dependency_link_failure_sentence(failures: Sequence[DependencyLinkFailure]) -> str:
+    """What the operator and the agent are told for a failed link: what, why, and what to do (F567)."""
+    names = ", ".join(f"`{f.name}`" for f in failures)
+    reasons = "; ".join(f"{f.name}: {f.reason}" for f in failures)
+    return (
+        f"The shared dependency directory {names} could not be linked into this checkout "
+        f"({reasons}), so it is missing here and builds or tests that need it will fail for that "
+        "reason, not because of the work. To fix it: let this account create symbolic links "
+        "(on Windows, turn on Developer Mode or run the Hub with administrator rights), or "
+        "install the dependencies inside this checkout (for example `npm install`)."
+    )
+
+
+def _symlink_shared_dependencies(repo_root: Path, worktree: Path) -> List[DependencyLinkFailure]:
+    """Link the project's expensive dependency directories into *worktree*.
+
+    A failed link does not fail provisioning (a Windows account without Developer Mode or
+    administrator rights cannot create symlinks, and refusing every turn there was a total outage),
+    but it is returned, so the run and the agent can be told (F567).
+    """
+    failures: List[DependencyLinkFailure] = []
     for name in SHARED_DEPENDENCY_DIRS:
         source = repo_root / name
         if not source.is_dir() or source.is_symlink():
@@ -245,17 +308,19 @@ def _symlink_shared_dependencies(repo_root: Path, worktree: Path) -> None:
             continue
         try:
             target.symlink_to(source, target_is_directory=True)
-        except OSError:
-            # Windows without Developer Mode / admin rights can't create symlinks —
-            # degrade to "no shared deps" rather than fail worktree provisioning;
-            # the agent's own first turn can still install locally if it needs to.
+        except OSError as exc:
             logger.info(
-                "Could not symlink %s into %s's worktree (no privilege?) — "
-                "the agent will need to install its own copy if it needs it.",
+                "Could not symlink %s into %s's worktree: %s",
                 name,
                 worktree,
+                exc,
             )
-            continue
+            failures.append(DependencyLinkFailure(name=name, reason=str(exc)))
+    if failures:
+        _link_failures[str(worktree)] = failures
+    else:
+        _link_failures.pop(str(worktree), None)
+    return failures
 
 
 def _registered_worktree_record(repo_root: Path, path: Path) -> Optional[Dict[str, str]]:
