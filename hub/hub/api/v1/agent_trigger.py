@@ -4230,17 +4230,25 @@ async def _execute_rpc_run(
             # (`parse_codex_line`'s only `status_event` is "plan", `runner_parsing.py:574`; the
             # app-server's only one is "plan", `codex_appserver.py:544`), so before this a Codex
             # run had no settled signal for *any* outcome, a clean completion included.
-            await record_agent_output(
-                db,
-                project_id,
-                agent,
-                content=f"Run {final_status} (exit {exit_code}).",
-                session_id=session_id,
-                conversation_id=conversation_id,
-                kind="status",
-                payload={"phase": "completed", "exit_code": exit_code},
+            #
+            # Through `_record_observation`, as `_execute_run`'s identical row is (F359, F555):
+            # the terminal status is already committed, so a lock here must not throw the title
+            # and the redrain after it onto the failure path.
+            await _record_observation(
+                lambda status_db: record_agent_output(
+                    status_db,
+                    project_id,
+                    agent,
+                    content=f"Run {final_status} (exit {exit_code}).",
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    kind="status",
+                    payload={"phase": "completed", "exit_code": exit_code},
+                    run_id=run_id,
+                    sequence=sequence + 1,
+                ),
                 run_id=run_id,
-                sequence=sequence + 1,
+                what="the run's closing status row",
             )
 
         await maybe_generate_title(project_id=project_id, conversation_id=conversation_id)

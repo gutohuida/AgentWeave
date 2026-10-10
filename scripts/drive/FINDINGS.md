@@ -35146,7 +35146,7 @@ The tests asserting "no rule" scan only TSX. Operator question in DECISIONS.md (
 
 ## F555 (C) -- the app-server path writes a run's closing status row outside `_record_observation`, untested
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** fixed 2026-10-10 (Tier 0, night iteration 3): the closing row in `_execute_rpc_run` now goes through `_record_observation`; `test_an_app_server_status_line_that_meets_a_lock_is_retried_then_dropped` failed before (the lock reached the catch-all, `Unhandled error in app-server run`). Drive limit: app-server is Codex, whose plan is cancelled, so the seam is driven with the fake runtime only. Was: open. Filed 2026-10-08 (spec overhaul audit, reading code).
 
 `agent_trigger.py:4201` writes the terminal status row directly; the process path goes through `_record_observation`
 (locked-database retry, F359) and is the only one tested (`test_a_turn_says_how_it_ended.py:729,776`).

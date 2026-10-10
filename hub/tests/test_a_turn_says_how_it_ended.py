@@ -815,3 +815,49 @@ async def test_a_status_line_write_that_raises_a_non_lock_error_also_leaves_the_
     timeline_resp = await app.get(f"{BASE}/agents/{agent}/timeline", headers=auth_headers)
     assert timeline_resp.status_code == 200, timeline_resp.text
     assert timeline_resp.json()["runs"][run_id]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_an_app_server_status_line_that_meets_a_lock_is_retried_then_dropped(
+    app, auth_headers, caplog
+):
+    """F555: the app-server finalize block writes its closing status row through
+    `_record_observation` too, so a lock is retried and then dropped with a warning naming the
+    run -- and the run's already-committed outcome, and the work after the write (the redrain),
+    are not thrown onto the failure path."""
+    agent = "f555-appserver-lock"
+    await app.post(
+        f"{BASE}/session/sync",
+        json={"data": {"agents": {agent: {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    await _bind_codex_app_server_runner(app, auth_headers)(agent)
+
+    attempts = []
+
+    async def locked_closing_row(db, project_id, agent_name, *, kind=None, payload=None, **kwargs):
+        if kind == "status" and isinstance(payload, dict) and "exit_code" in payload:
+            attempts.append(1)
+            raise OperationalError("stmt", {}, Exception("database is locked"))
+        return await _real_record_agent_output(
+            db, project_id, agent_name, kind=kind, payload=payload, **kwargs
+        )
+
+    fake_run_turn = _fake_run_turn(thread_id="thread-f555", status="completed")
+    with patch("hub.codex_appserver.run_turn", fake_run_turn):  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
+            with patch("hub.api.v1.agent_trigger.record_agent_output", locked_closing_row):
+                with caplog.at_level("WARNING"):
+                    trigger = await app.post(
+                        f"{BASE}/agent/trigger",
+                        json={"agent": agent, "message": "hi", "session_mode": "new"},
+                        headers=auth_headers,
+                    )
+                    run_id = trigger.json()["run_id"]
+                    await _await_background_run()
+
+    assert len(attempts) == 3, "retried through every delay, not attempted once"
+    assert (await _run_row(run_id)).status == "completed"
+    assert any(
+        "Dropped" in record.message and run_id in record.message for record in caplog.records
+    ), "a warning names the run"
