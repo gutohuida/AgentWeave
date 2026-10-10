@@ -9,7 +9,7 @@
     "parent_sha": "7fbee9a",
     "armed_at": "2026-10-10T10:48:00+01:00",
     "stop_at": "2026-10-10T15:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-10-vault-log.md",
     "driver_log": ".claude/autonomous/driver-vault.log",
     "findings_file": "scripts/drive/FINDINGS.md",
@@ -18,8 +18,8 @@
         "model": "sonnet",
         "skill": ".claude/skills/night-briefing/SKILL.md"
     },
-    "current": "contradictions-drive",
-    "next_action": "Do queue item contradictions-drive: run py -3.11 scripts/drive/d1017_contradictions.py on a scratch Hub (8110+, Haiku) against the committed tree (the UI bundle with the contradictions section is committed); check 7 is the Chromium resolve. Then the full Hub suite in chunks (-n 8 --dist loadfile); set FINDINGS status for anything it closes; append the METRICS row in spec-queue/METRICS.md. Fix what the drive finds in the tab or backend (tests first).",
+    "current": "contradictions-close",
+    "next_action": "Do queue item contradictions-close: on :8010 (start from hub/ from source if down, per .claude/reference/hubs.md) add an fcontra entry to scripts/drive/close_change.py (pattern: fdistil), run it, fold into spec/capabilities/knowledge-vault/spec.json, reindex (POST /projects/{P}/project/spec/reindex {}), mark slice 4 done in the roadmap document through the Hub; commit.",
     "queue": [
         {
             "id": "contradictions-backend-impl",
@@ -34,7 +34,7 @@
         },
         {
             "id": "contradictions-drive",
-            "status": "open",
+            "status": "done",
             "title": "d1017 7/7 on the committed tree (scratch Hub 8110+, Haiku); full Hub suite in chunks + full vitest; FINDINGS status for anything it closes; METRICS row"
         },
         {
