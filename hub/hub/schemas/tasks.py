@@ -6,6 +6,7 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from ..route_words import task_route_word
 from .common import RequestModel
 
 # Matches generated ids of the form "{prefix}-{hex}", where the prefix is a short word (e.g.
@@ -15,6 +16,21 @@ from .common import RequestModel
 # ones and reject anything that could be used for path traversal or to impersonate other entity
 # types.
 _TASK_ID_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
+
+
+def check_task_id(value: str) -> str:
+    """The one id check both task doors call (F248): shape, then a word a task route answers for.
+
+    Raising from a validator makes it a 422 naming `id` at the operator door, and at the agent door
+    too, where `create_shared_task` re-validates through `TaskCreate` inside its handler.
+    """
+    if not _TASK_ID_RE.match(value):
+        raise ValueError("id must be a safe task identifier")
+    refusal = task_route_word(value)
+    if refusal is not None:
+        raise ValueError(refusal)
+    return value
+
 
 _TASK_STATUSES = [
     "pending",
@@ -85,7 +101,7 @@ class TaskCreate(RequestModel):
                 "id must start with a letter and contain only letters, "
                 "digits, underscores, or hyphens (max 64 chars)"
             )
-        return v
+        return check_task_id(v)
 
     @model_validator(mode="before")
     @classmethod

@@ -43,11 +43,11 @@ from ...schemas.questions import QuestionCreate, QuestionOption, QuestionRespons
 from ...schemas.spec import SpecDocumentCreate
 from ...schemas.tasks import (
     _PRIORITIES,
-    _TASK_ID_RE,
     TaskCreate,
     TaskListResponse,
     TaskResponse,
     TaskUpdate,
+    check_task_id,
 )
 from ...sse import sse_manager
 from ...task_transitions import ENTRY_STATUSES, run_actor
@@ -136,9 +136,7 @@ class AgentTaskCreate(RequestModel):
     @field_validator("id")
     @classmethod
     def validate_id(cls, value: Optional[str]) -> Optional[str]:
-        if value is not None and not _TASK_ID_RE.match(value):
-            raise ValueError("id must be a safe task identifier")
-        return value
+        return None if value is None else check_task_id(value)
 
     @field_validator("priority")
     @classmethod

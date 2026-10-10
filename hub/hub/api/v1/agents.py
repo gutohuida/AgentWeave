@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import (
     bound_address,
     project_workspace,
+    route_words,
     spec_documents,
     spec_journey,
     spec_lifecycle,
@@ -694,6 +695,10 @@ async def create_operator_agent(
         worktrees.validate_agent_name(body.name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # F248: refused here and at the other doors that add an agent row, never at a use site.
+    route_refusal = route_words.agent_route_word(body.name)
+    if route_refusal is not None:
+        raise HTTPException(status_code=400, detail=route_refusal)
     try:
         await project_workspace.resolve_project_workspace(session, project_id)
     except project_workspace.ProjectWorkspaceError as exc:
@@ -2661,6 +2666,10 @@ async def request_agent(
         worktrees.validate_agent_name(body.template)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # F248: the new name only; the template is an existing agent, which may already hold a word.
+    route_refusal = route_words.agent_route_word(body.name)
+    if route_refusal is not None:
+        raise HTTPException(status_code=400, detail=route_refusal)
 
     source_run = await session.get(Run, body.run_id)
     if (

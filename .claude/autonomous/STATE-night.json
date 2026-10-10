@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 35,
+    "iteration": 36,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "route-shadow-names-refuse-impl",
-    "next_action": "route-shadow-names-refuse-impl: task-78a794e5bc71 of spdoc-4e1fa307cd4e - write hub/tests/test_a_chosen_name_is_not_a_route.py first (route walk, three agent doors, TaskCreate+AgentTaskCreate+loop initial task, controls), failing; then hub/hub/route_words.py and the checks at agents.py create_operator_agent/request_agent, session_sync new-row branch, TaskCreate/AgentTaskCreate; d1021 passes (checks 2-3 never yet run, fix their request shapes if wrong). Split if too big. Also d1009 check 6 reads spec.json at a path absent on the last run; checks 6-7 unverified",
+    "current": "route-shadow-names-drive",
+    "next_action": "route-shadow-names-drive: final d1021 on the committed tree; set F248 status in scripts/drive/FINDINGS.md; update CLAUDE.md Critical rules (F248 is built now: route_words.py, no longer 'decided but not built'); append the spec-queue/METRICS.md row; d1009 check 6 (spec.json path) and 7 still unverified",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -114,8 +114,8 @@
         },
         {
             "id": "route-shadow-names-refuse-impl",
-            "status": "open",
-            "title": "route-shadow-names-refuse-impl: task-78a794e5bc71 - hub/hub/route_words.py, the three agent-create doors, TaskCreate+AgentTaskCreate shared check, test_a_chosen_name_is_not_a_route.py first; d1021 passes"
+            "status": "done",
+            "title": "route-shadow-names-refuse-impl: task-78a794e5bc71 - hub/hub/route_words.py, the three agent-create doors, TaskCreate+AgentTaskCreate shared check, test_a_chosen_name_is_not_a_route.py first; d1021 passes -- DONE iteration 36, d1021 3/3 pass"
         },
         {
             "id": "route-shadow-names-drive",

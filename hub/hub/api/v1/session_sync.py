@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import project_workspace, worktrees
+from ... import project_workspace, route_words, worktrees
 from ...agent_colors import next_color_index
 from ...auth import get_project
 from ...db.engine import get_session
@@ -116,6 +116,13 @@ async def sync_session(
     current_agent_names = set(agents_data.keys())
     all_agents_result = await session.execute(select(Agent).where(Agent.project_id == project_id))
     existing_agents = {row.name: row for row in all_agents_result.scalars().all()}
+    # F248: a route word is refused for a row this sync would add; a name already in the project
+    # syncs as before, since the word is refused at creation only.
+    for agent_name in agents_data:
+        if agent_name not in existing_agents:
+            route_refusal = route_words.agent_route_word(agent_name)
+            if route_refusal is not None:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, route_refusal)
 
     # Computed once and incremented locally (not re-queried per agent): several new
     # agents can be added in the same sync, and none of them are flushed yet, so a
