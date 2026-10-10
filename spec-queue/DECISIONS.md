@@ -20,21 +20,21 @@ DECIDED. Absence is not consent.
 
 ## Open
 
-### vault-1010-1: a check with nothing to compare is not spawned -- 2026-10-10 vault loop
+### vault-1010-1: a check with nothing to compare is not spawned -- 2026-10-10 vault loop, DECIDED 2026-10-10
 
 From `spec/changes/sources-that-disagree-are-pointed-out` (`spdoc-bcbc9be56864`, FR-2 check-after-distil), built in `hub/hub/distillation.py` `_check`.
 
-- OPEN      vault-1010-1  Taken by the loop: when a distillation stores facts but no other source has a fact whose claim is on this machine (the vault's first source, or only private stubs from colleagues), the contradiction check makes no spawn and records no firing. FR-2 reads "MUST make one more spawn" whenever facts are stored. Rejected: spawning a model call with an empty comparison list (a paid call that can only answer none), and recording an `empty` firing with no spawn (a firing that claims a model was asked). Confirm or reverse.
+- DECIDED   vault-1010-1  Confirmed by the operator 2026-10-10 (vault briefing). Was: when a distillation stores facts but no other source has a fact whose claim is on this machine (the vault's first source, or only private stubs from colleagues), the contradiction check makes no spawn and records no firing. FR-2 reads "MUST make one more spawn" whenever facts are stored. Rejected: spawning a model call with an empty comparison list (a paid call that can only answer none), and recording an `empty` firing with no spawn (a firing that claims a model was asked). Confirm or reverse.
 
-### vault-1010-2 .. vault-1010-6: agent reports -- 2026-10-10 vault loop
+### vault-1010-2 .. vault-1010-6: agent reports -- 2026-10-10 vault loop, DECIDED 2026-10-10
 
 From `spec/changes/a-working-agent-tells-the-manager-an-entry-is-wrong` (`spdoc-33dfedd63c89`, design D2-D5 and FR-2), approved by the loop, not built yet.
 
-- OPEN      vault-1010-2  Taken by the loop: a report is a file (`knowledge/reports/<rpt-id>.json`, or the private location when its entry is private), because a corrected report is what makes the old fact read superseded, so it must travel to a colleague with the facts. Rejected: a database table (a migration on `:8000`, invisible to a colleague). Confirm or reverse.
-- OPEN      vault-1010-3  Taken by the loop: reports are reviewed by a new manager job `vault-reports` with its own runner and model; while it is off, reports stay `pending` and listed. Rejected: a step of `vault-distillation` (its runner and model were chosen for reading transcripts). Confirm or reverse.
-- OPEN      vault-1010-4  Taken by the loop: a correction stores a new fact and the old one stays, reading superseded by it (as a contradiction's loser does). Rejected: deleting the old fact as a re-distillation does (an agent holding its id would get a 404). Confirm or reverse.
-- OPEN      vault-1010-5  Taken by the loop: a report the manager cannot settle (`referred`) marks the fact disputed until the operator closes the report with a note. Rejected: referring it to the operator with no mark on the fact. Confirm or reverse.
-- OPEN      vault-1010-6  Taken by the loop: one open (pending or referred) report per entry; a second answers 409 naming the first. No other rate limit. Rejected: a per-run report cap (a second number to tune, while the duplicate is what costs a spawn). Confirm or reverse.
+- DECIDED   vault-1010-2  Confirmed by the operator 2026-10-10 (vault briefing). Was: a report is a file (`knowledge/reports/<rpt-id>.json`, or the private location when its entry is private), because a corrected report is what makes the old fact read superseded, so it must travel to a colleague with the facts. Rejected: a database table (a migration on `:8000`, invisible to a colleague). Confirm or reverse.
+- DECIDED   vault-1010-3  Confirmed by the operator 2026-10-10 (vault briefing). Was: reports are reviewed by a new manager job `vault-reports` with its own runner and model; while it is off, reports stay `pending` and listed. Rejected: a step of `vault-distillation` (its runner and model were chosen for reading transcripts). Confirm or reverse.
+- DECIDED   vault-1010-4  Confirmed by the operator 2026-10-10 (vault briefing). Was: a correction stores a new fact and the old one stays, reading superseded by it (as a contradiction's loser does). Rejected: deleting the old fact as a re-distillation does (an agent holding its id would get a 404). Confirm or reverse.
+- DECIDED   vault-1010-5  Confirmed by the operator 2026-10-10 (vault briefing). Was: a report the manager cannot settle (`referred`) marks the fact disputed until the operator closes the report with a note. Rejected: referring it to the operator with no mark on the fact. Confirm or reverse.
+- DECIDED   vault-1010-6  Confirmed by the operator 2026-10-10 (vault briefing). Was: one open (pending or referred) report per entry; a second answers 409 naming the first. No other rate limit. Rejected: a per-run report cap (a second number to tune, while the duplicate is what costs a spawn). Confirm or reverse.
 
 ### night-1010-11, night-1010-12: the agent budget as a run cap (F557) -- 2026-10-10 night, DECIDED 2026-10-10
 
