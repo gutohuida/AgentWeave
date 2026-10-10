@@ -54,14 +54,14 @@ From `spec/changes/a-tasks-prerequisites-can-be-declared-at-creation-and-in-its-
 
 - OPEN      night-1010-4  Taken by the night: the picker offers every other task of the project that is not already a prerequisite, including ones that would close a cycle, and shows the route's 409 sentence when one does; rejected hiding cycle-forming candidates (the drawer would need the transitive graph and would restate the shared writer's cycle rule in the UI). Confirm or reverse.
 
-### F556: the decided wording makes the outstanding-message check a self-message check -- 2026-10-10 night, OPEN
+### F556: the decided wording makes the outstanding-message check a self-message check -- 2026-10-10 night, DECIDED 2026-10-10 (a)
 
 `overhaul-loop-creator` (DECIDED 2026-10-09) says creator means the agent the job names, and the outstanding-message
 check uses it. That check (`scheduler.py` `_pending_loop_request`) looks for mail with `sender == job.agent` and
 `recipient == creator`. With creator = `job.agent` both are the same agent, so the check could only ever match an agent's
 mail to itself, and an operator-created loop would "get the check" without it ever firing. Nothing was built.
 
-- OPEN      F556-outstanding-message-direction  Which mail should an emptied loop name as outstanding, now that the creator is the job's agent? (a) Mail addressed TO the job's agent from anyone else, still queued or in a turn that has not ended -- the loop stopped with inbound it has not dealt with; (b) keep the old direction (job agent -> creating run's agent) and fall back to nothing for operator loops, since an operator's unanswered ask is already a Question; (c) both. Recommendation: (a). It is the only reading in which an operator-created loop can report anything. The `agent-loops` ac41/ac42 wording ("from the loop's agent to its creator") would need amending to match, and `test_scheduler.py`'s mail tests (executor and creator as two agents) rewritten.
+- DECIDED   F556-outstanding-message-direction  (a), operator 2026-10-10 (morning briefing): an emptied loop names as outstanding the mail addressed TO the job's agent from anyone else, still queued or in a turn that has not ended. Amend `agent-loops` ac41/ac42 ("from the loop's agent to its creator") to match and rewrite `test_scheduler.py`'s mail tests. Was: Which mail should an emptied loop name as outstanding, now that the creator is the job's agent? (a) Mail addressed TO the job's agent from anyone else, still queued or in a turn that has not ended -- the loop stopped with inbound it has not dealt with; (b) keep the old direction (job agent -> creating run's agent) and fall back to nothing for operator loops, since an operator's unanswered ask is already a Question; (c) both. Recommendation: (a). It is the only reading in which an operator-created loop can report anything. The `agent-loops` ac41/ac42 wording ("from the loop's agent to its creator") would need amending to match, and `test_scheduler.py`'s mail tests (executor and creator as two agents) rewritten.
 
 ### night-1010-2, night-1010-3: the shape of a loop's history entries (F570) -- 2026-10-10 night, OPEN
 
