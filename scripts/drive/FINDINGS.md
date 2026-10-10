@@ -35061,7 +35061,7 @@ default falls back to `acceptEdits` in that case; the explicit choice does not.
 
 ## F545 (C) -- an exploring spec turn is told two contradictory ways to ask its questions
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** fixed 2026-10-10 (exploring-prose, `spdoc-a56fa9bf6cdd`, night iterations 29-33): an exploring turn is told to ask in its reply, step duties and the ask_user text no longer say otherwise; `scripts/drive/d1020_exploring_prose.py` 4/4 on the committed tree, `d1009` checks 1-5 pass with check 3 amended. Filed 2026-10-08 (spec overhaul audit, reading code).
 
 The turn notice says "Interview in THIS REPLY, in prose … Then stop" (`launchability.py:380`); the turn context
 says ending a turn without submitting or calling `ask_user` "is not a way to finish. Questions written as ordinary

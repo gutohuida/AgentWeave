@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 32,
+    "iteration": 33,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "exploring-prose-drive",
-    "next_action": "exploring-prose-drive: final d1020 on the committed tree (py -3.11 scripts/drive/d1020_exploring_prose.py), retire or amend scripts/drive/d1009_step_journey.py check 3b (asserts one question per ask_user call, superseded by the prose change), set F545 Status in scripts/drive/FINDINGS.md, append a spec-queue/METRICS.md row",
+    "current": "route-shadow-names-spec",
+    "next_action": "route-shadow-names-spec: author it on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section). Also: d1009 check 6 reads spec.json at a path absent on the last run; checks 6-7 unverified",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -99,8 +99,8 @@
         },
         {
             "id": "exploring-prose-drive",
-            "status": "open",
-            "title": "exploring-prose-drive: final d1020 on committed tree, retire or amend d1009_step_journey.py check 3b (asserts one question per ask_user, superseded), F545 status, metrics row"
+            "status": "done",
+            "title": "exploring-prose-drive: final d1020 on committed tree, retire or amend d1009_step_journey.py check 3b (asserts one question per ask_user, superseded), F545 status, metrics row -- DONE iteration 33, d1020 4/4, d1009 amended (1-5 pass), F545 fixed, metrics row"
         },
         {
             "id": "route-shadow-names-spec",

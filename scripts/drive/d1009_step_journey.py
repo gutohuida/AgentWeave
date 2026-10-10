@@ -7,8 +7,8 @@ new change document, and checks, in order:
   1. the document starts at step intake with no size;
   2. GET /agents/agent-context?spec_document= holds intake's duty marker and the journey line, and no
      other step's duty (acceptance's in particular);
-  3. a real turn asked for a /ping route asks one question per ask_user; the drive answers "small"
-     to sizing and "continue in a fresh conversation" to the step question;
+  3. a real turn asked for a /ping route asks in its reply (no ask_user rows, exploring-prose); a
+     second turn carries the answers "small" and "continue to the next step";
   4. after that turn the document records size small and step requirements-and-acceptance;
   5. the preview now holds that step's duty and not intake's;
   6. a turn in a new conversation writes requirements, each MUST with a criterion;
@@ -50,7 +50,7 @@ TMP = REPO / "testbed" / "drive1009-journey" / STAMP
 DB = TMP / "hub.db"
 SHOT = TMP / "shot"
 HAIKU = "claude-haiku-4-5-20251001"
-DOC = "spec/changes/ping-route/spec.html"
+DOC = "spec/changes/ping-route/spec.json"
 AGENT = "scribe"
 STEPS = ("intake", "requirements", "acceptance", "approach", "tasks", "delivery",
          "requirements-and-acceptance")
@@ -250,9 +250,11 @@ def drive():
 
     # 3-4: a real turn interviews, sizes, and asks to advance.
     asked = run_turn(base, "Add a /ping route to this project.")
-    check("3a the turn asked through ask_user", len(asked) >= 2, f"{len(asked)} questions")
-    check("3b one question per ask_user call", all(q.get("batch_size", 1) == 1 for q in asked),
-          str([q.get("batch_size") for q in asked]))
+    check("3a the exploring turn asks in its reply, not through ask_user (exploring-prose, F545)",
+          not asked, f"{len(asked)} question rows")
+    run_turn(base, "Add a /ping route to this project. My answers: it is a small change, "
+                   "and yes, continue to requirements-and-acceptance in a fresh conversation. "
+                   "Record the size and the step now.")
     row = document(base)
     check("4 the document records size small and step requirements-and-acceptance",
           row.get("size") == "small" and row.get("step") == "requirements-and-acceptance",
@@ -264,10 +266,7 @@ def drive():
     check("5 the briefing is now requirements-and-acceptance's, not intake's",
           markers(text) == ["requirements-and-acceptance"], f"markers={markers(text)}")
     run_turn(base, "Carry on with this document.")
-    sys.path.insert(0, str(REPO / "hub"))
-    from hub.spec_payload import extract_payload  # noqa: PLC0415
-
-    stored = extract_payload((root / DOC).read_text(encoding="utf-8"))
+    stored = json.loads((root / DOC).read_text(encoding="utf-8"))
     musts = [r["key"] for r in stored.get("requirements") or [] if r.get("modal") == "MUST"]
     covered = {c.get("requirement") for c in stored.get("acceptance_criteria") or []}
     check("6 the fresh conversation wrote requirements, each MUST with a criterion",
