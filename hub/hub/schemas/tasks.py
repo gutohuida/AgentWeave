@@ -61,6 +61,10 @@ class TaskCreate(RequestModel):
     # queue`). Gated in `create_task_for_actor`: only the loop's own `AIJob.agent`, or the
     # operator, may supply this — never trusted from the field alone.
     loop_id: Optional[str] = Field(default=None, max_length=64)
+    # The tasks this one waits on, by id (`a-tasks-prerequisites-can-be-declared-at-creation-and-
+    # in-its-drawer`). Checked in `check_task_create`: an id that is not a task in this project, or
+    # this task's own, is refused naming it. The edges are written by `task_dependency_writer`.
+    depends_on: Optional[List[str]] = None
     acceptance_criteria: Optional[List[Any]] = None
     deliverables: Optional[List[Any]] = None
     notes: Optional[Any] = None

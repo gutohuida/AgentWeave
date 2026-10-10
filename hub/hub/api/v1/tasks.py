@@ -718,6 +718,38 @@ async def _authorize_loop_task_creation(
         )
 
 
+async def _check_prerequisites(session: AsyncSession, project_id: str, body: TaskCreate) -> None:
+    """Refuse a `depends_on` naming this task's own id or a task this project does not have.
+
+    Asked before the task exists, with the same two refusals the dependencies route makes, so a
+    create that names a bad prerequisite leaves no task behind. A new task has no dependents, so
+    no cycle is possible here; the cycle check stays in `task_dependency_writer` for edges added to
+    tasks that already exist.
+    """
+    wanted = list(dict.fromkeys(body.depends_on or []))
+    if not wanted:
+        return
+    if body.id and body.id in wanted:
+        raise HTTPException(
+            status_code=422, detail=f"A task cannot depend on itself ('{body.id}')."
+        )
+    known = set(
+        (
+            await session.execute(
+                select(Task.id).where(Task.project_id == project_id, Task.id.in_(wanted))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    unknown = [task_id for task_id in wanted if task_id not in known]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"depends_on names no task in this project: {', '.join(unknown)}.",
+        )
+
+
 async def check_task_create(
     session: AsyncSession, project_id: str, body: TaskCreate
 ) -> List[SpecRequirement]:
@@ -747,6 +779,7 @@ async def check_task_create(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Task id '{body.id}' already exists",
         )
+    await _check_prerequisites(session, project_id, body)
     # A read-only agent holds no task's work (F425). The dispatch refuses its turn regardless; this
     # says so where the task is being made, rather than at a turn nobody here started.
     if body.assignee and await is_read_only_agent(project_id, body.assignee, session):
@@ -809,6 +842,16 @@ async def create_task_for_actor(
         loop_id=body.loop_id,
     )
     session.add(task)
+    if body.depends_on:
+        # Written in the task's own commit, so a refusal cannot leave the task without its edges.
+        # `check_task_create` already refused an unknown or own id, and a new task has no
+        # dependents, so `add_dependency` can only answer ADDED or DUPLICATE here.
+        await session.flush()
+        known_edges: set = set()
+        for prerequisite in body.depends_on:
+            await task_dependency_writer.add_dependency(
+                session, project_id, task_id, prerequisite, known_edges=known_edges
+            )
     if body.loop_id is not None and record_addition:
         # The entry rides the task's own commit (`a-loops-history-records-its-creation-and-queue-
         # additions` D4). `initial_tasks` passes `record_addition=False` and writes one entry for
@@ -868,6 +911,7 @@ async def create_task_for_actor(
         [_task_response(task, heartbeats.get(task.assignee) if task.assignee else None)],
         project_id=project_id,
     )
+    responses = await _attach_dependencies(session, responses, project_id=project_id)
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
     responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
     responses = await _attach_assignee_liveness(session, responses, project_id=project_id)

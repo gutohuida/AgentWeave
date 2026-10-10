@@ -329,6 +329,7 @@ def create_task(
     spec_document: Optional[str] = None,
     acceptance_criteria: Optional[List[str]] = None,
     loop_id: Optional[str] = None,
+    depends_on: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Create a task attributed to the bound agent.
 
@@ -347,6 +348,8 @@ def create_task(
         acceptance_criteria: Optional list of acceptance criteria.
         loop_id: Add this task directly to a loop's queue. Only the loop's own agent, before it
             has fired, may do this — send_message to the loop's agent otherwise.
+        depends_on: Ids of the tasks this one waits on, like ["task-1a2b3c4d"]. Each must be a
+            task in this project; an unknown id is refused, naming it, and no task is created.
     """
     return _hub_request(
         "POST",
@@ -361,6 +364,7 @@ def create_task(
             "spec_document": spec_document,
             "acceptance_criteria": acceptance_criteria or [],
             "loop_id": loop_id,
+            "depends_on": depends_on or [],
         },
     )
 

@@ -119,6 +119,8 @@ class AgentTaskCreate(RequestModel):
     # Adds this task directly to a loop's queue — gated in `create_task_for_actor` against the
     # loop's own `AIJob.agent`, or the operator (design D1/D7).
     loop_id: Optional[str] = Field(default=None, max_length=64)
+    # The tasks this one waits on, by id. Checked in `check_task_create`, same as `TaskCreate`.
+    depends_on: Optional[List[str]] = None
 
     @field_validator("status")
     @classmethod

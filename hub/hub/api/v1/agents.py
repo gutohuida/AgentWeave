@@ -1090,7 +1090,7 @@ def _operations() -> List[_Operation]:
             tool="create_task",
             args=(
                 "title, description, assignee, priority=medium, requirements, acceptance_criteria, "
-                "requirement_ids=None, spec_document=None, loop_id=None"
+                "requirement_ids=None, spec_document=None, loop_id=None, depends_on=None"
             ),
             method="POST",
             path="/tasks",
@@ -1104,9 +1104,13 @@ def _operations() -> List[_Operation]:
                 "spec_document",
                 "acceptance_criteria",
                 "loop_id",
+                "depends_on",
             ),
             required=("title",),
-            text=f"priority is one of {values(TaskPriority)}.",
+            text=(
+                f"priority is one of {values(TaskPriority)}. depends_on is a list of task ids this "
+                "one waits on; an id the project does not have is refused, naming it."
+            ),
         ),
         _Operation(
             tool="list_tasks",
