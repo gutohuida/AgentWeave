@@ -95,5 +95,6 @@
         "Tests under py -3.11, never bare python. black needs --target-version py311.",
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    ],
+    "briefing_url": "https://claude.ai/code/artifact/288831bb-993f-49d8-8b2b-ef6119364c17"
 }
