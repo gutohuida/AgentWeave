@@ -1,0 +1,80 @@
+{
+    "purpose": "VAULT. Build slice 4 of the knowledge vault roadmap (contradictions, spdoc-bcbc9be56864) to a green d1017 and close it, then spec, drive-first and build slice 5 (reports). Playbook: .claude/autonomous/2026-10-10-vault-playbook.md",
+    "playbook": ".claude/autonomous/2026-10-10-vault-playbook.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-10-10-vault",
+    "parent_branch": "master",
+    "parent_sha": "7fbee9a",
+    "armed_at": "2026-10-10T10:48:00+01:00",
+    "stop_at": "2026-10-10T15:00:00+01:00",
+    "iteration": 0,
+    "log_file": ".claude/autonomous/2026-10-10-vault-log.md",
+    "driver_log": ".claude/autonomous/driver-vault.log",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "closeout": {
+        "briefing": "claude-doc",
+        "model": "sonnet",
+        "skill": ".claude/skills/night-briefing/SKILL.md"
+    },
+    "current": "contradictions-backend-impl",
+    "next_action": "Read .claude/autonomous/2026-10-10-vault-playbook.md in full, then do queue item contradictions-backend-impl: build task-7c1da4f4e71a tests first, as the playbook and handoff 0190 'Next steps' 2 describe.",
+    "queue": [
+        {
+            "id": "contradictions-backend-impl",
+            "status": "open",
+            "model": "opus",
+            "title": "task-7c1da4f4e71a (spdoc-bcbc9be56864): tests first in hub/tests/test_vault_contradictions.py (dated-upload, check-firing, cap, ids-checked, private-stub, derived-flags, resolve-route, redistil; fake _Worker pattern from test_vault_distillation.py, two answers per distillation), then vault.py, distillation.py, api/v1/vault.py per handoff 0190 Next steps 2. d1017 checks that need no UI should pass. Split as -backend-a/-b if one firing cannot finish."
+        },
+        {
+            "id": "contradictions-tab-impl",
+            "status": "open",
+            "title": "task-112636985de8: Vault tab contradictions section, resolve form, data-disputed mark, vault-upload-dated input (testids in handoff 0190); vitest first, component, build, refresh_ui_bundle.py, commit src+bundle together"
+        },
+        {
+            "id": "contradictions-drive",
+            "status": "open",
+            "title": "d1017 7/7 on the committed tree (scratch Hub 8110+, Haiku); full Hub suite in chunks + full vitest; FINDINGS status for anything it closes; METRICS row"
+        },
+        {
+            "id": "contradictions-close",
+            "status": "open",
+            "title": "Close on :8010: add an fcontra entry to scripts/drive/close_change.py (pattern: fdistil), run it, fold into spec/capabilities/knowledge-vault/spec.json, reindex (POST /projects/{P}/project/spec/reindex {}), mark slice 4 done in the roadmap document through the Hub; commit"
+        },
+        {
+            "id": "reports-spec",
+            "status": "open",
+            "model": "opus",
+            "title": "Author slice 5 'reports' (roadmap key reports: a working agent leaves the manager a message naming an entry and what is wrong; a manager job corrects, disputes or answers; visible in the activity log) as a change document on :8010 via author_change.py: tier, requirements+scenarios, acceptance drive named, design decisions; design questions -> recommended option + OPEN vault-1010-<n> rows; approve; queue its tasks below as reports-<task>-impl items"
+        },
+        {
+            "id": "reports-drive-first",
+            "status": "open",
+            "title": "Write scripts/drive/d1024_reports.py from the reports document's acceptance drive and record it failing on the tree before the build"
+        },
+        {
+            "id": "reports-impl",
+            "status": "open",
+            "title": "Build reports per its document's tasks, tests first; split into reports-<task>-impl items in this queue when composing after reports-spec"
+        },
+        {
+            "id": "reports-drive",
+            "status": "open",
+            "title": "d1024 green on the committed tree; FINDINGS/METRICS; close and fold on :8010 if time allows, else leave closing to the operator and say so in the log"
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on autonomous/2026-10-10-vault. No merge, rebase or commit onto master by this loop: the operator merges after reading the close-out briefing.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
+}
