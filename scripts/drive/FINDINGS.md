@@ -35272,7 +35272,7 @@ Since F36 a hand-made task can carry dependencies, but only `POST` on the task-d
 
 ## F572 (C) -- the conversation has no collapsing thinking section and no way to hide diagnostics
 
-**Status:** open 2026-10-09. Found by the spec overhaul (decision `overhaul-thinking-ui`, operator 2026-10-09); successor `spec/changes/live-thinking-stays-open-and-diagnostics-can-be-hidden` (`spdoc-a56fbfe278d0`) approved on :8010 2026-10-10 night iteration 38, not built yet.
+**Status:** fixed 2026-10-10 (night iterations 38-41; d1022 3/3 on the committed tree, scratch :8108). Found by the spec overhaul (decision `overhaul-thinking-ui`, operator 2026-10-09); successor `spec/changes/live-thinking-stays-open-and-diagnostics-can-be-hidden` (`spdoc-a56fbfe278d0`) approved on :8010 2026-10-10 night iteration 38, built. Only a runner that streams reasoning shows the section (F578).
 
 Specified earlier and never built (the specs now say so): a live thinking section that is open while the agent reasons and collapses when its answer arrives, and a control that hides diagnostic lines in the conversation. **Decided:** build both, as one small UI change in `AgentTimeline` (not the deleted `SharedStreamRenderer`). Tier 1.
 
