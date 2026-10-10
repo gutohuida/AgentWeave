@@ -44,6 +44,8 @@ VAULT_TESTS = "hub/tests/test_vault.py"
 VAULT_DRIVE = "scripts/drive/d1015_vault_text_sources.py"
 DISTIL_TESTS = "hub/tests/test_vault_distillation.py"
 DISTIL_DRIVE = "scripts/drive/d1016_distillation.py"
+CONTRA_TESTS = "hub/tests/test_vault_contradictions.py"
+CONTRA_DRIVE = "scripts/drive/d1017_contradictions.py"
 
 JOURNEY_TESTS = "hub/tests/test_spec_journey.py"
 BRIEFING_TESTS = "hub/tests/test_spec_journey_briefing.py"
@@ -903,6 +905,51 @@ CHANGES = {
              "(404, no vault-distillation job); after the build it passed 9/9."),
         ],
     },
+    "fcontra": {
+        "document": "spec/changes/sources-that-disagree-are-pointed-out/spec.json",
+        "commit": "eb9190f",
+        "tasks": ["task-df31c5b231e6", "task-7c1da4f4e71a", "task-112636985de8"],
+        "evidence": [
+            ("FR-1", "task-7c1da4f4e71a", "test_result", CONTRA_TESTS,
+             "test_a_source_carries_its_date_and_a_bad_one_is_refused (metadata, stub and map carry "
+             "dated; 400 for a bad format and an impossible day), "
+             "test_a_private_sources_stub_carries_its_date. Drive d1017 check 1."),
+            ("FR-2", "task-7c1da4f4e71a", "test_result", CONTRA_TESTS,
+             "test_each_storing_distillation_is_followed_by_one_check (one more spawn, one "
+             "facts_written firing with subject source), test_a_decision_source_is_not_distilled. "
+             "Drive d1017 check 5: a written facts_written firing on claude-haiku-4-5."),
+            ("FR-3", "task-7c1da4f4e71a", "test_result", CONTRA_TESTS,
+             "test_the_compared_claims_are_capped_latest_dated_first (50,000-char cap, latest dated "
+             "first, 'N left out' in the firing's detail)."),
+            ("FR-4", "task-7c1da4f4e71a", "test_result", CONTRA_TESTS,
+             "test_only_a_pair_of_one_new_and_one_sent_fact_is_kept_once, "
+             "test_without_dates_the_later_upload_is_presumed. Drive d1017 check 3 with real Haiku: "
+             "an open contradiction pairs the 437 fact with the 300 fact, the 300 one presumed "
+             "although uploaded first (dated later)."),
+            ("FR-4", "task-df31c5b231e6", "manual_observation", CONTRA_DRIVE,
+             "Acceptance drive d1017 was committed before the build and failed at check 1; on the "
+             "committed tree (831683d) it passed 9/9 on a scratch Hub with real Haiku "
+             "(testbed/drive1017-contradictions/111419)."),
+            ("FR-5", "task-7c1da4f4e71a", "test_result", CONTRA_TESTS,
+             "test_a_contradiction_with_a_private_fact_is_private: the record at the private "
+             "location, a stub in knowledge/contradictions holding no claim and no explanation."),
+            ("FR-6", "task-7c1da4f4e71a", "test_result", CONTRA_TESTS,
+             "test_disputed_facts_are_marked_in_the_map_the_cards_and_the_list (disputed, presumed, "
+             "the card says DISPUTED and names the other fact). Drive d1017 checks 4 and 6c: a Haiku "
+             "agent read the vault, answered 300 euros and said it was disputed."),
+            ("FR-7", "task-7c1da4f4e71a", "test_result", CONTRA_TESTS,
+             "test_resolving_writes_a_decision_and_supersedes_the_other_fact (decision source, record "
+             "resolved, 404/409/400), test_resolving_for_neither_supersedes_both."),
+            ("FR-8", "task-7c1da4f4e71a", "test_result", CONTRA_TESTS,
+             "test_redistilling_drops_open_contradictions_and_keeps_resolved_ones."),
+            ("FR-9", "task-112636985de8", "test_result", "hub/ui/src/__tests__/vaultTab.test.tsx",
+             "Seven cases: lists an open contradiction with both claims, dates and the presumed side; "
+             "resolves for one fact with a note; null for neither and the Hub's refusal shown; no "
+             "form for one held elsewhere; a 404 is no section; disputed and superseded marks; the "
+             "upload date. Drive d1017 check 7 in Chromium: resolved in the tab, a decision source "
+             "written, the 437 fact superseded, nothing disputed."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -914,6 +961,7 @@ CHANGE_FOLDS = {
     "freconcile": 'spec-document-authority',
     "fvault": 'knowledge-vault',
     "fdistil": 'knowledge-vault',
+    "fcontra": 'knowledge-vault',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
