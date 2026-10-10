@@ -9,6 +9,10 @@ is answered, when the job is on, and the distil route runs that again for one so
 
 `sources-that-disagree-are-pointed-out`: an upload may say when it was said (`dated`), the
 contradictions the distillation's check recorded are listed, and the operator resolves one.
+
+`a-working-agent-tells-the-manager-an-entry-is-wrong`: the reports agents filed (through
+`agent_actions.py`, the one agent route that writes to the vault) are listed, and the operator
+closes one the manager referred.
 """
 
 import asyncio
@@ -46,6 +50,12 @@ class SourceUpload(BaseModel):
 
 class Resolution(BaseModel):
     stands: Optional[str] = Field(max_length=64)  # required; null means neither fact stands
+    note: str = Field(max_length=4000)
+
+    model_config = {"extra": "forbid"}
+
+
+class ReportClose(BaseModel):
     note: str = Field(max_length=4000)
 
     model_config = {"extra": "forbid"}
@@ -224,5 +234,31 @@ async def resolve_vault_contradiction(
             stands=body.stands,
             note=body.note,
         )
+    except vault.VaultError as exc:
+        raise _refused(exc) from exc
+
+
+@router.get("/reports")
+async def get_vault_reports(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Every report on this machine, pending and referred first, then newest first."""
+    root, private = await roots(session, project[0])
+    return {"reports": await asyncio.to_thread(vault.list_reports, root, private)}
+
+
+@router.post("/reports/{report_id}/close")
+async def close_vault_report(
+    report_id: str,
+    body: ReportClose,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The operator closes a referred report: 404 for an unknown report, 409 for one that is not
+    referred, 400 for an empty note."""
+    root, private = await roots(session, project[0])
+    try:
+        return await asyncio.to_thread(vault.close_report, root, private, report_id, body.note)
     except vault.VaultError as exc:
         raise _refused(exc) from exc

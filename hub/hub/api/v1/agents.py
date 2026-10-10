@@ -1507,6 +1507,20 @@ def _operations() -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="vault_report",
+            args="entry_id, message",
+            method="POST",
+            path="/vault/reports",
+            fields=("entry_id", "message"),
+            required=("entry_id", "message"),
+            text=(
+                "tell the manager a vault entry looks wrong: its id, and what is wrong in up to "
+                "4,000 characters. The manager checks it against the entry's source and corrects "
+                "it, explains why it stands, or refers it to the operator; read the entry again "
+                "later to see which. One open report per entry."
+            ),
+        ),
+        _Operation(
             tool="request_agent",
             args="name, template, task",
             method="POST",

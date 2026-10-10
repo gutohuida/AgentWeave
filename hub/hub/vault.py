@@ -25,6 +25,13 @@ under `knowledge/contradictions`. Whether a fact is disputed, presumed or supers
 from these files on every read; a fact's own file is never rewritten. Resolving writes a source of
 type `decision` naming both facts, the one that stands and the operator's note.
 
+**Reports** (`a-working-agent-tells-the-manager-an-entry-is-wrong`) are one file each,
+`reports/<id>.json`: a working agent's message that an entry is wrong, filed through the agent
+route, and what the manager's vault-reports job (`vault_reports.py`) or the operator made of it.
+A report quotes its entry, so it is private when the entry is, and then written only at the private
+location, with no stub. A corrected report supersedes its fact by the new one; a referred one marks
+it disputed until the operator closes it. Both are derived on read, like contradictions.
+
 **One storage interface** (D9). Every read and write goes through `storage`, whose only
 implementation is the local filesystem. A root is an opaque string, so a later cloud backend is a
 second implementation, not a rewrite.
@@ -65,10 +72,12 @@ TRACKED_DIRECTORY = "knowledge"
 SOURCES = "sources"
 FACTS = "facts"
 CONTRADICTIONS = "contradictions"
+REPORTS = "reports"
 
 _ID_RE = re.compile(r"^src-[0-9a-f]{12}$")
 _FACT_ID_RE = re.compile(r"^fct-[0-9a-f]{12}$")
 _CTR_ID_RE = re.compile(r"^ctr-[0-9a-f]{12}$")
+_RPT_ID_RE = re.compile(r"^rpt-[0-9a-f]{12}$")
 _DATED_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # What a private fact's stub under knowledge/facts holds: never the claim, which is the knowledge.
 _FACT_STUB_KEYS = ("id", "kind", "visibility", "holder", "created_at", "sources")
@@ -455,7 +464,7 @@ def build_map(project_root: Path, private_root: Path) -> List[Dict[str, Any]]:
     sources = _newest_first(
         [record.listed(record.text()) for record in _records(project_root, private_root).values()]
     )
-    flags = _flags(_contradictions(project_root, private_root))
+    flags = _all_flags(project_root, private_root)
     facts = _newest_first(
         [
             fact.listed(flags.get(fact_id))
@@ -531,12 +540,15 @@ def _read_fact(project_root: Path, private_root: Path, fact_id: str) -> Optional
     if fact is None:
         return None
     contradictions = _contradictions(project_root, private_root)
-    entry = fact.listed(_flags(contradictions).get(fact_id))
+    reports = _reports(project_root, private_root)
+    flags = _all_flags(project_root, private_root, contradictions, reports)
+    entry = fact.listed(flags.get(fact_id))
     if fact.claim is None:
         entry.update(content=None, next_offset=None, note=_held_elsewhere(entry["holder"]))
         return entry
     content = _card(fact.meta)
     disputes = _dispute_lines(fact_id, contradictions, facts)
+    disputes += _report_lines(fact_id, reports, facts)
     if disputes:
         content += "\n" + "\n".join(disputes) + "\n"
     entry.update(
@@ -960,6 +972,251 @@ def resolve_contradiction(
     root = tracked_root(project_root) if record["visibility"] == "tracked" else str(private_root)
     storage.write(root, f"{CONTRADICTIONS}/{ctr_id}.json", _encode(resolved))
     return _listed_contradiction(resolved, facts, _records(project_root, private_root))
+
+
+# ---------------------------------------------------------------------------
+# Reports
+# ---------------------------------------------------------------------------
+
+MAX_REPORT_CHARS = 4000
+OPEN_REPORTS = ("pending", "referred")
+REPORT_STATUSES = ("pending", "corrected", "answered", "referred", "closed")
+SETTLED = ("corrected", "answered", "referred")
+
+
+def _report_meta(raw: Optional[bytes], rpt_id: str) -> Optional[Dict[str, Any]]:
+    meta = _load(raw, rpt_id)
+    if meta is None or meta.get("status") not in REPORT_STATUSES:
+        return None
+    if not all(isinstance(meta.get(key), str) for key in ("entry", "message")):
+        return None
+    if not isinstance(meta.get("reporter"), dict):
+        return None
+    return meta
+
+
+def _reports(project_root: Path, private_root: Path) -> Dict[str, Dict[str, Any]]:
+    """Every report on this machine: private ones at the private location, tracked ones under
+    knowledge/. There are no stubs, and a private report found in the repository is ignored."""
+    found: Dict[str, Dict[str, Any]] = {}
+    for root, visibility in (
+        (str(private_root), "private"),
+        (tracked_root(project_root), "tracked"),
+    ):
+        for rpt_id in _ids(root, REPORTS, _RPT_ID_RE):
+            if rpt_id in found:
+                continue
+            meta = _report_meta(storage.read(root, f"{REPORTS}/{rpt_id}.json"), rpt_id)
+            if meta is not None and meta["visibility"] == visibility:
+                found[rpt_id] = meta
+    return found
+
+
+def _report_flags(reports: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """A fact named by a corrected report is superseded by its replacement; one named by a
+    referred report is disputed. Pending, answered and closed reports mark nothing."""
+    flags: Dict[str, Dict[str, Any]] = {}
+    for record in sorted(reports.values(), key=lambda r: (r["created_at"], r["id"])):
+        if record["status"] == "corrected" and record.get("replaced_by"):
+            mark = flags.setdefault(record["entry"], dict(_UNDISPUTED))
+            mark["superseded_by"] = record["replaced_by"]
+        elif record["status"] == "referred":
+            flags.setdefault(record["entry"], dict(_UNDISPUTED))["disputed"] = True
+    return flags
+
+
+def _all_flags(
+    project_root: Path,
+    private_root: Path,
+    contradictions: Optional[Dict[str, Dict[str, Any]]] = None,
+    reports: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Each fact's derived marks, from its contradictions and then its reports. A report's
+    superseded_by (the new fact) wins over a decision's; disputed holds if either disputes."""
+    if contradictions is None:
+        contradictions = _contradictions(project_root, private_root)
+    if reports is None:
+        reports = _reports(project_root, private_root)
+    flags = _flags(contradictions)
+    for fact_id, mark in _report_flags(reports).items():
+        merged = flags.setdefault(fact_id, dict(_UNDISPUTED))
+        if mark["superseded_by"]:
+            merged["superseded_by"] = mark["superseded_by"]
+        if mark["disputed"]:
+            merged["disputed"] = True
+    return flags
+
+
+def _report_lines(
+    fact_id: str, reports: Dict[str, Dict[str, Any]], facts: Dict[str, _Fact]
+) -> List[str]:
+    """What a fact's card says about the corrected and referred reports naming it."""
+    lines: List[str] = []
+    for record in _newest_first([r for r in reports.values() if r["entry"] == fact_id]):
+        reporter = record["reporter"].get("agent") or "an agent"
+        if record["status"] == "corrected" and record.get("replaced_by"):
+            lines.append(
+                f"SUPERSEDED by fact {_said(record['replaced_by'], facts)}: {reporter} reported "
+                "this fact wrong and the manager corrected it from its source. "
+                f"(Report {record['id']}.) The manager's answer: {record.get('answer')}"
+            )
+        elif record["status"] == "referred":
+            lines.append(
+                f'DISPUTED by report {record["id"]}: {reporter} said: "{record["message"]}" '
+                f"The manager's answer: {record.get('answer')} Until the operator closes the "
+                "report, do not treat this fact as settled."
+            )
+    return lines
+
+
+def report_target(
+    project_root: Path, private_root: Path, entry_id: str
+) -> Optional[Dict[str, Any]]:
+    """The entry a report may name: a source whose text, or a fact whose claim, is on this
+    machine, as `{kind, visibility}`; None for anything else."""
+    if _FACT_ID_RE.match(entry_id):
+        fact = _facts(project_root, private_root).get(entry_id)
+        if fact is None or fact.claim is None:
+            return None
+        return {"kind": "fact", "visibility": fact.meta["visibility"]}
+    if _ID_RE.match(entry_id):
+        record = _records(project_root, private_root).get(entry_id)
+        if record is None or record.text_root is None:
+            return None
+        return {"kind": "source", "visibility": record.meta["visibility"]}
+    return None
+
+
+def add_report(
+    project_root: Path,
+    private_root: Path,
+    *,
+    entry_id: str,
+    message: str,
+    reporter: Dict[str, Any],
+) -> Dict[str, Any]:
+    """File one pending report and answer its record.
+
+    `VaultError` 404 for an entry that is not here, 400 for an empty or over-long message, 409
+    naming the report already open on the entry."""
+    target = report_target(project_root, private_root, entry_id)
+    if target is None:
+        raise VaultError(f"No entry '{entry_id}' on this machine to report.", status=404)
+    message = (message or "").strip()
+    if not message:
+        raise VaultError("A report needs a message saying what is wrong.")
+    if len(message) > MAX_REPORT_CHARS:
+        raise VaultError(f"A report's message is at most {MAX_REPORT_CHARS} characters.")
+    for record in _reports(project_root, private_root).values():
+        if record["entry"] == entry_id and record["status"] in OPEN_REPORTS:
+            raise VaultError(
+                f"Entry {entry_id} already has report {record['id']} ({record['status']}); "
+                "it is being looked into.",
+                status=409,
+            )
+    visibility = target["visibility"]
+    if visibility == "private":
+        # The stored location was checked when it was set; the project may have moved since.
+        check_private_location(str(private_root), project_root)
+    meta = {
+        "id": f"rpt-{secrets.token_hex(6)}",
+        "kind": "report",
+        "entry": entry_id,
+        "entry_kind": target["kind"],
+        "message": message,
+        "reporter": {"agent": reporter.get("agent"), "run_id": reporter.get("run_id")},
+        "status": "pending",
+        "visibility": visibility,
+        "created_at": _now(),
+        "answer": None,
+        "replaced_by": None,
+        "reviewed_by": None,
+        "close": None,
+    }
+    _write_report(project_root, private_root, meta)
+    return meta
+
+
+def _write_report(project_root: Path, private_root: Path, meta: Dict[str, Any]) -> None:
+    root = tracked_root(project_root) if meta["visibility"] == "tracked" else str(private_root)
+    storage.write(root, f"{REPORTS}/{meta['id']}.json", _encode(meta))
+
+
+def get_report(project_root: Path, private_root: Path, rpt_id: str) -> Optional[Dict[str, Any]]:
+    if not _RPT_ID_RE.match(rpt_id):
+        return None
+    return _reports(project_root, private_root).get(rpt_id)
+
+
+def settle_report(
+    project_root: Path,
+    private_root: Path,
+    rpt_id: str,
+    *,
+    status: str,
+    answer: str,
+    reviewed_by: Dict[str, Any],
+    replaced_by: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Record the manager's outcome on a pending report: corrected, answered or referred."""
+    if status not in SETTLED:
+        raise VaultError(f"A report is settled as {', '.join(SETTLED)}, not {status!r}.")
+    record = get_report(project_root, private_root, rpt_id)
+    if record is None:
+        raise VaultError(f"No report '{rpt_id}'", status=404)
+    if record["status"] != "pending":
+        raise VaultError(f"Report {rpt_id} is {record['status']}, not pending.", status=409)
+    settled = dict(record, status=status, answer=(answer or "").strip(), reviewed_by=reviewed_by)
+    settled["replaced_by"] = replaced_by
+    _write_report(project_root, private_root, settled)
+    return settled
+
+
+def _listed_report(
+    record: Dict[str, Any], facts: Dict[str, _Fact], records: Dict[str, _Record]
+) -> Dict[str, Any]:
+    """A report as the list answers it: the record, with its entry's and replacement's names."""
+    entry = record["entry"]
+    if entry in facts:
+        name = facts[entry].claim
+    else:
+        name = records[entry].meta["name"] if entry in records else None
+    replaced = facts.get(record.get("replaced_by") or "")
+    return {
+        **record,
+        "entry_name": name,
+        "replaced_by_claim": replaced.claim if replaced is not None else None,
+    }
+
+
+def list_reports(project_root: Path, private_root: Path) -> List[Dict[str, Any]]:
+    """Every report on this machine: pending and referred first, then newest first."""
+    facts, records = _facts(project_root, private_root), _records(project_root, private_root)
+    newest = _newest_first(list(_reports(project_root, private_root).values()))
+    ordered = sorted(newest, key=lambda r: 0 if r["status"] in OPEN_REPORTS else 1)
+    return [_listed_report(record, facts, records) for record in ordered]
+
+
+def close_report(project_root: Path, private_root: Path, rpt_id: str, note: str) -> Dict[str, Any]:
+    """The operator closes a referred report with a note, answered as the list answers it.
+
+    `VaultError` 404 for an unknown report, 409 for one that is not referred, 400 for an empty
+    note."""
+    record = get_report(project_root, private_root, rpt_id)
+    if record is None:
+        raise VaultError(f"No report '{rpt_id}'", status=404)
+    if record["status"] != "referred":
+        raise VaultError(
+            f"Report {rpt_id} is {record['status']}; only a referred report is closed.",
+            status=409,
+        )
+    note = (note or "").strip()
+    if not note:
+        raise VaultError("Closing a report needs a note saying what was decided.")
+    closed = dict(record, status="closed", close={"note": note, "closed_at": _now()})
+    _write_report(project_root, private_root, closed)
+    facts, records = _facts(project_root, private_root), _records(project_root, private_root)
+    return _listed_report(closed, facts, records)
 
 
 def _encode(meta: Dict[str, Any]) -> bytes:

@@ -389,18 +389,21 @@ async def test_an_agent_reads_the_map_and_an_entry_with_its_run_credential(
 
 @pytest.mark.asyncio
 async def test_no_agent_route_writes_to_the_vault(app) -> None:
-    """Only the operator (and later the manager) writes: every agent-actions vault route is a GET."""
+    """Only the operator and the manager write knowledge: every agent-actions vault route is a GET,
+    except filing a report (`a-working-agent-tells-the-manager-an-entry-is-wrong`), which writes
+    only the report."""
     from hub.main import app as fastapi_app
 
     from ._routing import iter_api_routes
 
     methods = {
-        method
+        (path, method)
         for path, route in iter_api_routes(fastapi_app)
         if "/agent-actions/vault" in path
         for method in route.methods
     }
-    assert methods and methods <= {"GET", "HEAD"}
+    writes = {(path, method) for path, method in methods if method not in ("GET", "HEAD")}
+    assert methods and writes == {("/api/v1/agent-actions/vault/reports", "POST")}
 
 
 def test_the_two_tools_are_on_every_runners_surface() -> None:

@@ -32,6 +32,7 @@ OUTCOMES = ("written", "empty", "failed")
 
 TITLES = "conversation-titles"
 DISTILLATION = "vault-distillation"
+REPORTS = "vault-reports"
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,16 @@ JOBS = (
             "it rests on. Needs a runner. Off: sources stay in the vault without facts."
         ),
         trigger="source_uploaded",
+    ),
+    JobSpec(
+        key=REPORTS,
+        title="Vault reports",
+        description=(
+            "Looks into each report a working agent files on a vault entry: corrects the fact "
+            "from its source, answers why it stands, or refers it to you. Needs a runner. Off: "
+            "reports stay pending."
+        ),
+        trigger="report_filed",
     ),
 )
 

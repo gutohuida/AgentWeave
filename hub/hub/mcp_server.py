@@ -734,10 +734,22 @@ def vault_read(entry_id: str, offset: int = 0) -> Dict[str, Any]:
     """One vault entry by its id (`src-…`), with up to 50,000 characters of its text.
 
     `content` is the text from `offset`. When `next_offset` is not null there is more: call again
-    with `offset=next_offset`. The vault is read-only to agents; if an entry looks wrong, say so
-    to the operator rather than working around it.
+    with `offset=next_offset`. You cannot edit the vault: if an entry looks wrong or contradicts
+    what you know, report it with `vault_report(entry_id, message)` rather than working around it.
     """
     return _hub_request("GET", f"/vault/entries/{entry_id}", params={"offset": offset or None})
+
+
+@_tool()
+def vault_report(entry_id: str, message: str) -> Dict[str, Any]:
+    """Tell the manager a vault entry (`src-…` or `fct-…`) looks wrong, and what is wrong.
+
+    `message` (up to 4,000 characters) says what is wrong and why you think so. The manager checks
+    it against the entry's source and corrects the fact, answers why it stands, or refers it to the
+    operator; read the entry again later to see which. An entry has one open report at a time: a
+    second answers 409 naming the first.
+    """
+    return _hub_request("POST", "/vault/reports", {"entry_id": entry_id, "message": message})
 
 
 @_tool()

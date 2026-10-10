@@ -11,7 +11,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import AliasChoices, BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy import select
@@ -470,8 +470,10 @@ async def read_vault_map(
 ):
     """The project's knowledge vault map, as the operator's `GET /vault/map` answers it.
 
-    Read-only, like every vault route in this namespace: only the operator, and later the manager,
-    writes to the vault (`a-vault-the-operator-fills-with-text-and-agents-can-read`).
+    Read-only. The one vault route here that writes is `POST /vault/reports`, and it writes only a
+    report: what an agent says is wrong, for the manager to look into
+    (`a-working-agent-tells-the-manager-an-entry-is-wrong`). Knowledge itself is written by the
+    operator and the manager.
     """
     from . import vault as vault_routes
 
@@ -489,6 +491,52 @@ async def read_vault_entry(
     from . import vault as vault_routes
 
     return await vault_routes.read_one(session, actor.project_id, entry_id, offset)
+
+
+class VaultReportCreate(RequestModel):
+    entry_id: str = Field(max_length=64)
+    # Bounded loosely here so that an over-long message answers the vault's 400 naming the limit.
+    message: str = Field(max_length=100_000)
+
+
+@router.post("/vault/reports", status_code=status.HTTP_201_CREATED)
+async def file_vault_report(
+    body: VaultReportCreate,
+    background: BackgroundTasks,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """File a report that a vault entry is wrong, for the manager's vault-reports job.
+
+    The reporter is the run's agent and run, from its credential; the body cannot name one (D1).
+    404 for an entry whose record is not on this machine, 400 for an empty or over-long message,
+    409 naming the report already open on the entry. The review runs after the answer is sent, and
+    not at all while the job is off: the report then waits, pending.
+    """
+    from ... import vault, vault_reports
+    from . import vault as vault_routes
+
+    root, private = await vault_routes.roots(session, actor.project_id)
+    try:
+        report = await asyncio.to_thread(
+            vault.add_report,
+            root,
+            private,
+            entry_id=body.entry_id,
+            message=body.message,
+            reporter={"agent": actor.agent, "run_id": actor.run_id},
+        )
+    except vault.VaultError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    await persist_event(
+        session,
+        actor.project_id,
+        "vault_report_filed",
+        {"subject": {"report": report["id"], "entry": report["entry"]}, "run_id": actor.run_id},
+        agent=actor.agent,
+    )
+    background.add_task(vault_reports.review_in_background, actor.project_id, report["id"])
+    return report
 
 
 @router.post("/mcp-adapter-online", status_code=status.HTTP_204_NO_CONTENT)

@@ -244,6 +244,7 @@ HUB_MCP_TOOLS = frozenset(
         "update_task",
         "vault_map",
         "vault_read",
+        "vault_report",
     }
 )
 
