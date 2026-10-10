@@ -35257,7 +35257,7 @@ Expensive shared dependency directories (`node_modules`, a venv) are linked into
 
 ## F570 (C) -- a loop's history does not record its creation or what was added to its queue
 
-**Status:** open 2026-10-09. Found by the spec overhaul (decision `overhaul-loop-history`, operator 2026-10-09).
+**Status:** fixed 2026-10-10 (commits 9c51904, ba1027e; drive `scripts/drive/d1018_loop_history.py` 6/6 on a scratch Hub, real Haiku turn). Found by the spec overhaul (decision `overhaul-loop-history`, operator 2026-10-09).
 
 A loop's own history records edits, control changes, stops, archiving, adoption and stalls, but not its creation (who made it, when) nor queue additions (who added which task). **Decided:** record both; ordinary firings stay in the job's run history only. Tier 1 (a short change: what each entry carries, where it shows).
 

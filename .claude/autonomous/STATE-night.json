@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 21,
+    "iteration": 22,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "loop-history-drive",
-    "next_action": "Do queue item loop-history-drive: close-out of spdoc-ae4ba4e73d46 (change a-loops-history-records-its-creation-and-queue-additions). Re-run scripts/drive/d1018_loop_history.py once more from a clean tree (all 6 checks passed in iteration 21), then record evidence on the trial Hub :8010 per the fence in .claude/loops/night-window.md (do not close code-carrying Hub tasks if the fence says so), set the F570 finding Status in scripts/drive/FINDINGS.md, append a spec-queue/METRICS.md row (Tier 1). Then move to task-depends-on-spec.",
+    "current": "task-depends-on-spec",
+    "next_action": "Author task-depends-on-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -47,7 +47,7 @@
         },
         {
             "id": "loop-history-drive",
-            "status": "open",
+            "status": "done",
             "title": "loop-history-drive"
         },
         {
