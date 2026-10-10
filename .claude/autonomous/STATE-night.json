@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 17,
+    "iteration": 18,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "loop-history-spec",
-    "next_action": "Do queue item loop-history-spec: Author loop-history-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)",
+    "current": "loop-history-impl",
+    "next_action": "Do queue item loop-history-impl: build spdoc-ae4ba4e73d46 (spec/changes/a-loops-history-records-its-creation-and-queue-additions/spec.json), task drive-first first, recorded failing",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -27,13 +27,13 @@
         },
         {
             "id": "loop-history-spec",
-            "status": "open",
-            "title": "Author loop-history-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)"
+            "status": "done",
+            "title": "loop-history-spec: spdoc-ae4ba4e73d46 approved on :8010 (tasks drive-first task-9fda3479201d, record task-4f0e10725b8c, detail task-347dc2c25ed8, page task-634fe4f66a4b)"
         },
         {
             "id": "loop-history-impl",
             "status": "open",
-            "title": "loop-history-impl"
+            "title": "loop-history-impl: build spec/changes/a-loops-history-records-its-creation-and-queue-additions (spdoc-ae4ba4e73d46) - drive-first (scripts/drive/d1018_loop_history.py on :8104, recorded failing at check 1), then record, detail, page; split by task if one firing cannot finish"
         },
         {
             "id": "loop-history-drive",
@@ -126,7 +126,9 @@
     ],
     "decisions_for_user": [
         "F556-outstanding-message-direction",
-        "night-1010-1"
+        "night-1010-1",
+        "night-1010-2",
+        "night-1010-3"
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",

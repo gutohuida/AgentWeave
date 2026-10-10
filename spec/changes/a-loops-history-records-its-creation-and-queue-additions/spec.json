@@ -1,0 +1,266 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8104 with a fresh database, a project with agent alice bound to a Claude runner on claude-haiku-4-5 (scripts/drive/d1018_loop_history.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1018_loop_history.py",
+      "key": "drive",
+      "requirement": "history-shows",
+      "then": "the first loop's events read loop_created (operator, POST /jobs) and three loop_tasks_added entries (operator initial tasks, operator create, alice with her run id); the flow's loop reads loop_created (operator, approval, the document) and one loop_tasks_added with the document's tasks; the firing adds a job run and no loop event; the tab's History section shows each as a sentence. Fails on today's Hub at the first check (no loop_created).",
+      "when": "the operator creates a loop for alice with two initial tasks, adds a third with the loop's id, a real Haiku turn of alice is asked to create_task with the loop's id, the operator approves a change document whose delivery starts a flow for alice, the first loop is fired once by hand, and in Chromium the first loop's tab is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with agent a",
+      "how_to_check": "Hub route test",
+      "key": "created-by-route",
+      "requirement": "creation-entry",
+      "then": "each loop has one loop_created event naming its creator (operator; a with the run id), door jobs, agent, purpose and document",
+      "when": "the operator creates a loop for a through POST /jobs, and a run of a creates one through the agent route"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change document with tasks and a delivery that starts a flow",
+      "how_to_check": "Hub route test",
+      "key": "created-by-approval",
+      "requirement": "creation-entry",
+      "then": "the flow's loop has a loop_created event with creator operator, door approval and the document's path, and a loop_tasks_added event listing the document's tasks; an approval whose flow is not created leaves neither",
+      "when": "the operator approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a POST /jobs whose second initial task names an unknown requirement",
+      "how_to_check": "Hub route test",
+      "key": "refused-leaves-none",
+      "requirement": "creation-entry",
+      "then": "no loop_created or loop_tasks_added event exists",
+      "when": "it is refused"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loop over an approved document",
+      "how_to_check": "Hub route test",
+      "key": "added-each-way",
+      "requirement": "addition-entry",
+      "then": "there is one loop_tasks_added per call, each with the task ids and titles, the actor and the source; the run's entry names its run id",
+      "when": "tasks join it through initial_tasks, POST /tasks with its loop_id, a run of its agent calling create_task with the loop_id, and an add_task amendment of its document"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an archived loop holding an unfinished task of a document, and that document's new flow",
+      "how_to_check": "Hub route test",
+      "key": "adopted-not-added",
+      "requirement": "addition-entry",
+      "then": "both loops carry loop_tasks_adopted and neither carries loop_tasks_added for that task",
+      "when": "the new loop is created and takes the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loop with a queued task",
+      "how_to_check": "Hub route test",
+      "key": "firing-not-recorded",
+      "requirement": "history-records",
+      "then": "the job's run history gains a run and the loop's events gain nothing",
+      "when": "its job fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loop with twelve events after its creation",
+      "how_to_check": "Hub route test",
+      "key": "creation-kept",
+      "requirement": "history-shows",
+      "then": "events holds the ten newest and the loop_created entry",
+      "when": "GET /loops/{id} is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loop detail with loop_created, loop_tasks_added from an agent and loop_stopped, and one with no loop_created",
+      "how_to_check": "vitest",
+      "key": "tab",
+      "requirement": "history-shows",
+      "then": "the first lists three sentences newest first, the addition naming the agent and the task titles; the second also says its creation was not recorded",
+      "when": "the loop's tab renders each"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a loop on the operator's own project after a few firings",
+      "how_to_check": "operator reads the loop's tab",
+      "key": "reads-well",
+      "requirement": "history-shows",
+      "then": "they can tell who made it and who put each task in its queue",
+      "when": "they open its tab"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "74619f3ed647eb373092b00e5c7af5bbc037734c9dcaeaacd070019a6d0853da",
+      "FR-2": "a3cad06f6e4eee8bf0c3e2a93c864d6878543a7f27928c1d4d2ab79d2f07e7df",
+      "FR-3": "7a7c66cbde83eee647acffb5e0b1a02e0a6cd227551ba61e9016b0231b8d9542",
+      "FR-4": "12700cedddda2beec907999dd1df5be70d6a8439cd3e18c6a210440cb7c4ec55"
+    },
+    "high_water": 4,
+    "requirements": {
+      "addition-entry": "FR-3",
+      "creation-entry": "FR-2",
+      "history-records": "FR-1",
+      "history-shows": "FR-4"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1: two event writers at existing seams, one widened read and one UI section. No migration (EventLog.loop_id and ix_event_logs_loop_ts exist, hub/hub/db/models.py:1070-1081); no Hub-restart hazard beyond any code change. At fold, history-records replaces agent-loops' a-loop-s-history-is-answerable-for-that-loop-alone (key kept).\n\nD1. One loop_tasks_added per adding call, listing its tasks, not one per task. Rejected: one per task (a flow materialising twelve tasks writes twelve entries and pushes the creation and every edit out of the ten newest). (night-1010-2)\nD2. The detail always returns the creation entry beside the ten newest, rather than raising the limit or paging: who made the loop is asked of every loop at every age, and a limit only moves the cliff. Rejected: paging the events (a route parameter and a control for one question). (night-1010-3)\nD3. Actor shape: data.by = {kind: operator|agent, agent, run_id}; persist_event's agent column holds the agent for agent actors only. Door and source are short words: created via jobs or approval; added via initial_tasks, create_task, document, flow_built.\nD4. Each writer sits in the transaction that adds the rows (build_flow_rows never commits; create_task_for_actor commits the task, so its event is written before that commit), so a rollback leaves no entry.\nD5. Loops made before this change keep no creation entry; the tab says it was not recorded instead of guessing from job_created.",
+  "evidence": {
+    "checked": [
+      "hub/hub/api/v1/loops.py:61-108: detail returns history (JobRun) and events (EventLog by loop_id, newest ten)",
+      "hub/hub/api/v1/jobs.py:669-700: build_flow_rows, shared by POST /jobs and approval, never commits",
+      "hub/hub/api/v1/jobs.py:935-967: initial_tasks seeded after the commit; job_created has no loop_id",
+      "hub/hub/api/v1/jobs.py:290-349: adoption; only moves out of archived loops are recorded",
+      "hub/hub/api/v1/spec.py:2750-2786: approval's flow, job_created inside the savepoint",
+      "hub/hub/api/v1/tasks.py:774-830: the single Task( construction site with body.loop_id",
+      "hub/hub/spec_tasks.py:405-420: materialise stamps the owning loop",
+      "hub/hub/mcp_server.py:331-363: create_task carries loop_id",
+      "hub/ui/src/components/spec/LoopTab.tsx:440-460: Firing history only; events never rendered"
+    ],
+    "limits": [
+      "Whether a Haiku turn calls create_task with the loop id when asked is model-dependent; the drive asks for it plainly and names the id"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "A loop's history is the EventLog rows carrying its loop_id (hub/hub/db/models.py:1070-1075), returned ten newest first by GET /loops/{id} (hub/hub/api/v1/loops.py:79-84). Writers exist for edits, control changes, stops, archiving, moves out of an archived loop (loop_tasks_adopted, hub/hub/api/v1/jobs.py:338-349) and stalls, but nothing records the loop's creation: POST /jobs writes a project-level job_created with no loop_id (jobs.py:961-967), and approval's flow writes the same (api/v1/spec.py:2779-2786). No queue addition is recorded: initial_tasks (jobs.py:941-950), a task created with a loop_id (api/v1/tasks.py:774-807), the document's tasks materialised with an owning loop (spec_tasks.py:418) and unowned document tasks taken when a flow is built (jobs.py:335) all write the task and nothing against the loop. So 'who made this loop and who put this task in its queue' cannot be answered. The loop's tab (hub/ui/src/components/spec/LoopTab.tsx:446-460) shows the firing history and never renders loop.events at all.",
+  "requirements": [
+    {
+      "key": "history-records",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Replaces agent-loops' a-loop-s-history-is-answerable-for-that-loop-alone at fold (same key kept): its list gains the creation and the queue additions (overhaul-loop-history, F570).",
+      "statement": "The Hub SHALL record against a loop, each with its actor and time, its creation, every addition to its queue, every staged and applied edit, change of control, stop, archiving, task adoption and stalled firing, and SHALL return those events scoped to that loop alone; an ordinary firing SHALL NOT be recorded there, and the loop's firings SHALL be retrievable from its job's run history."
+    },
+    {
+      "key": "creation-entry",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Who made a loop is the first question asked of one found running; a project-level job_created carries no loop id and is not in the loop's history.",
+      "statement": "When a loop is created the Hub MUST record a loop_created event against it in the same transaction, carrying who created it (the operator, or the agent and its run), the door it came through (a job created by POST /jobs or create_job, or the operator's approval of a document whose delivery starts a flow, naming that document), and the loop's agent, purpose and document; a creation that is refused or rolled back MUST leave no such event."
+    },
+    {
+      "key": "addition-entry",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One entry per adding call keeps a materialised flow's tasks from pushing every other entry out of the ten-event window (D1).",
+      "statement": "Each call that adds tasks to a loop's queue MUST record one loop_tasks_added event against that loop in the same transaction, carrying the added tasks' ids and titles, who added them (the operator, or the agent and its run) and through what: the loop's initial tasks, a task created with the loop's id, the loop's document's tasks materialised at approval or by an amendment, or the document's unowned tasks taken when its flow was built. A move out of an archived loop MUST stay a loop_tasks_adopted event and MUST NOT also be recorded as an addition."
+    },
+    {
+      "key": "history-shows",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The history was returned but never shown (LoopTab.tsx renders history, not events).",
+      "statement": "The loop detail MUST return the loop's creation entry with its ten newest events even when the creation is older than all ten, and the loop's tab MUST show a History section listing the loop's events newest first, each as a sentence naming who did what and when; a loop with no creation entry MUST say its creation was not recorded."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A loop_created event against the loop, in the transaction that creates it, from both doors (POST /jobs and create_job; approval's flow)",
+      "A loop_tasks_added event against the loop for each call that adds tasks to its queue",
+      "The loop detail always carries the creation entry with the ten newest events",
+      "A History section in the loop's tab listing the loop's events as sentences"
+    ],
+    "non_goals": [
+      "Recording ordinary firings in the loop's history: they stay in the job's run history (overhaul-loop-history)",
+      "Back-filling a creation entry for loops made before this change: their history says nothing about it, and the tab says so",
+      "A migration: EventLog.loop_id and its index already exist",
+      "Changing loop_tasks_adopted, the event for a move out of an archived loop"
+    ]
+  },
+  "summary": "A loop's own history gains two entries it never had: its creation (who made it, how, when) and each addition to its queue (who added which tasks, through what). Ordinary firings stay in the job's run history only. The loop's tab shows the history, which it does not show today. F570.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1018_loop_history.py: scratch Hub on :8104, fresh database, one Haiku turn for alice's create_task, Chromium for the loop tab. The 'drive' criterion. Must fail at the first check before any build task.",
+      "files": [
+        "scripts/drive/d1018_loop_history.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "history-shows"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "loop_created in build_flow_rows' callers (POST /jobs, approval) with the door; loop_tasks_added from initial_tasks, create_task_for_actor with a loop_id, spec_tasks.materialise with an owning loop, and adoption of unowned tasks. Failing Hub tests first.",
+      "files": [
+        "hub/hub/api/v1/jobs.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/spec_tasks.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "record",
+      "requirements": [
+        "history-records",
+        "creation-entry",
+        "addition-entry"
+      ],
+      "reviewer": null,
+      "title": "Record the creation and each queue addition"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "GET /loops/{id} returns the ten newest events plus loop_created when older. Failing Hub test first.",
+      "files": [
+        "hub/hub/api/v1/loops.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "detail",
+      "requirements": [
+        "history-shows"
+      ],
+      "reviewer": null,
+      "title": "The loop detail keeps the creation entry"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "LoopTab renders loop.events as sentences, newest first, with the not-recorded line; vitest; bundle refreshed with the source.",
+      "files": [
+        "hub/ui/src/components/spec/LoopTab.tsx",
+        "hub/ui/src/api/loops.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "page",
+      "requirements": [
+        "history-shows"
+      ],
+      "reviewer": null,
+      "title": "The loop tab's History section"
+    }
+  ],
+  "title": "A loop's history records its creation and what was added to its queue"
+}
