@@ -1,0 +1,291 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub with a fresh database, a scratch git repository, a Haiku runner with vault-reports enabled, a tracked source stating the refund limit without approval is 300 euros, and two fact files written beside it citing that line: one claiming 3,000 euros, one claiming 300 euros (scripts/drive/d1024_reports.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1024_reports.py",
+      "key": "drive",
+      "requirement": "report-outcomes",
+      "then": "The 3,000 fact's report is corrected: a new fact citing the source says 300, the 3,000 fact is superseded by it in the map and its card says so. The 300 fact's report is answered or referred, and the 300 fact is not superseded. Each run called vault_report; there are two vault_report_filed events naming the agent and two vault-reports firings with trigger report_filed, one written. The Vault tab shows both reports with their answers. The drive fails on today's Hub at its first check (no vault-reports job).",
+      "when": "a Haiku agent is told the 3,000 fact is wrong and to report it, and in a second turn is told a colleague claims the 300 fact should say 500 and to report it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub test client with an agent run credential",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_reports.py",
+      "key": "filed",
+      "requirement": "report-filed",
+      "then": "201 with the reporter from the credential (a reporter in the body ignored), the event persisted; 404 for an unknown id and a private stub held elsewhere; 400 for empty and 4,001 characters; 409 naming the first report on a second filing",
+      "when": "a test files a report, then files with an unknown id, a stub, an empty and an over-long message, and again on the same entry"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a private fact with a canary in its claim",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_reports.py",
+      "key": "private",
+      "requirement": "report-record",
+      "then": "the record is at the private location and no project file holds the canary or the message",
+      "when": "a report naming it is filed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake worker, the job enabled; then disabled",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_reports.py",
+      "key": "firing",
+      "requirement": "report-firing",
+      "then": "one firing each, outcomes written, empty, written, failed, subject naming report and entry; the prompt holds the message and the cited source's text; disabled: no spawn, the report pending",
+      "when": "reports are filed with the worker answering corrected, answered, disputed, and failing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake worker answering corrected with a quote that is in the source, with one that is not, and corrected on a source entry",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_reports.py",
+      "key": "outcomes",
+      "requirement": "report-outcomes",
+      "then": "the first stores a new fact made_by the report and the report replaced_by it, the old fact file byte-identical; the other two are referred and store nothing",
+      "when": "the reports are filed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one corrected, one referred and one closed report",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_reports.py",
+      "key": "flags",
+      "requirement": "report-flags",
+      "then": "superseded_by on the first fact and its card names the new claim; disputed on the second and its card holds the message and the answer; the third fact carries neither",
+      "when": "a test reads the map and the cards through the operator and agent-actions routes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a pending, a referred and an answered report",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_reports.py",
+      "key": "close",
+      "requirement": "reports-listed-and-closed",
+      "then": "the list puts pending and referred first; close answers 400, 404, 409 on the answered one, 200 on the referred one, then 409",
+      "when": "a test lists them and closes with an empty note, an unknown id, the answered one, the referred one, and it again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Vault tab against a reports list holding a corrected and a referred report, and a close route answering 409",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/vaultTab.test.tsx",
+      "key": "tab",
+      "requirement": "reports-in-tab",
+      "then": "both reports show with message, reporter, status and answer, the corrected one links its new fact, only the referred one has the form, the body carries the note, and the 409 reason shows",
+      "when": "a vitest renders it and closes the referred one"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub test client",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_reports.py",
+      "key": "job-listed",
+      "requirement": "reports-job",
+      "then": "vault-reports is listed with trigger report_filed, disabled, no runner",
+      "when": "GET /manager/jobs on a fresh project"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the drive's screenshots",
+      "how_to_check": "open testbed/drive1024-reports/<stamp>/shot_*.png",
+      "key": "tab-look",
+      "requirement": "reports-in-tab",
+      "then": "who reported what, what the manager did about it, and which fact replaced which are clear at a glance",
+      "when": "the operator looks at them"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "7ad107848b94a37e5607dad30800a8e1cc3d71b2f00b2cb75c093be033a7a8f1",
+      "FR-2": "73518e0780c64fbf46105857d4a937ef11c1f9984b50eceb4f5251326ff9a55b",
+      "FR-3": "64e1f7d2a964c5d6dfa432efadd2377a13197046811c23a0bf3460cf374d80e6",
+      "FR-4": "b3571ca8739ec65755bf93e9d1d6f19f62c26be667db66b84eaaac52e8e12128",
+      "FR-5": "eb2f92d1ee6b66f2575b836bc6ad6df3cdba2d352bde0f765187dbc799202067",
+      "FR-6": "6235edc6020367361b43821c6ff5d22bc799431fce9b17d1fe922c129a8ac821",
+      "FR-7": "0a9a83ee086dd2052413aea0b4dfa7fe124f4aaa4b137f0b1befa9bad2b880e5",
+      "FR-8": "289d04a8a80d6ef0bf1352e75937ca9be231b19f7ac57ec1fa0d1c26f2cb90b0"
+    },
+    "high_water": 8,
+    "requirements": {
+      "report-filed": "FR-2",
+      "report-firing": "FR-4",
+      "report-flags": "FR-6",
+      "report-outcomes": "FR-5",
+      "report-record": "FR-3",
+      "reports-in-tab": "FR-8",
+      "reports-job": "FR-1",
+      "reports-listed-and-closed": "FR-7"
+    },
+    "retired": {}
+  },
+  "design": "D1 Hazard and rollback (Tier 2). This is the first route through which an agent run writes into the vault, and it puts agent-written text in front of a model whose answer becomes a fact. The defences: the reporter comes from the run's credential; a correction is stored only when every quote is found verbatim in the fact's own cited source, so a report can make the manager restate a source, never assert something no source says; the new fact is visible as made by vault-reports with the report's id; one open report per entry. No migration: reports are files and the job is a registry entry whose row is the existing manager_jobs table. Rollback is a revert: report files left under knowledge/reports are never read by the previous Hub. The bundle reaches :8000's app on its next reload; until its Hub restarts the reports route answers 404 and the section is empty.\n\nD2 Files, not a table. A corrected report is what makes the old fact read superseded, so it must travel with the facts to a colleague who pulls knowledge/ (roadmap D2). Rejected: a database table, a migration on :8000 that a colleague never sees.\n\nD3 Its own job. vault-reports names its own runner and model (roadmap D7) and can be off while distillation is on; off is visible as pending reports. Rejected: a step of vault-distillation, whose runner and model were chosen for reading transcripts.\n\nD4 Supersede, never delete. The old fact stays and reads superseded by the new one, as a contradiction's loser does; deleting it would leave an agent holding its id with a 404. Rejected: deleting it as a re-distillation does.\n\nD5 A dispute is visible. A report the manager cannot settle marks the fact disputed until the operator closes it, so the next agent is told rather than handed it as settled. Rejected: referring it without a mark.\n\nD6 The model chooses, the Hub checks. The answer is {outcome, answer, claim, quotes}; a correction that cannot be anchored in the source is downgraded to referred, never stored and never dropped silently.",
+  "evidence": {
+    "checked": [
+      "hub/hub/manager.py: JOBS registry, record_firing, list_firings",
+      "hub/hub/distillation.py: prepare, run_worker with a Pydantic answer, _cited quote check, the firing per spawn",
+      "hub/hub/vault.py: _facts, _flags derived from contradiction files, _read_fact card lines, add_fact",
+      "hub/hub/api/v1/agent_actions.py:466-491: the agent's read-only vault routes, actor from get_agent_actor",
+      "hub/hub/mcp_server.py:721-741: vault_map, vault_read and its 'say so to the operator' line"
+    ],
+    "limits": [
+      "Nothing driven yet",
+      "Only Claude (Haiku) will be driven",
+      "Whether Haiku as the manager answers rather than corrects a correct fact is a model judgement: the drive accepts answered or referred for it"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "When closed, this change folds into the knowledge-vault capability, and the roadmap's agent-reports slice is then done.",
+  "open_questions": [],
+  "problem": "Working agents read the vault but never write to it (roadmap D6). Today, when an agent sees a fact that misstates its source, vault_read's description tells it to 'say so to the operator', which buries the remark in one conversation; nothing reaches the vault, and the next agent reads the same wrong fact. The roadmap's agent-reports slice: 'A report tool lets a working agent leave the manager a message naming an entry and what is wrong. A manager job looks into it and corrects, disputes or answers; the report and its outcome are in the activity log.' Done means: 'A Haiku agent told that a fact is wrong files a report; the manager's firing either changes the fact or records why not, and both are visible in the activity log.'",
+  "requirements": [
+    {
+      "key": "reports-job",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D7: each manager job names its runner and model; a new job is a new row.",
+      "statement": "The manager's job registry MUST include vault-reports (trigger report_filed), listed by GET /manager/jobs and disabled with nothing chosen until the operator enables it with a runner."
+    },
+    {
+      "key": "report-filed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D6: working agents never write knowledge; they leave the manager a message. Identity is never accepted from a request body (CLAUDE.md).",
+      "statement": "Working agents MUST have a vault_report(entry_id, message) tool calling POST /agent-actions/vault/reports, which MUST answer 201 with the report, its reporter being the run's agent and run from the run's credential. It MUST answer 404 when the entry is not a source or fact whose record is on this machine, 400 when the message is empty or longer than 4,000 characters, and 409 naming the existing report when the entry already has one pending or referred. Filing MUST persist a vault_report_filed event with the agent and subject {report, entry}. vault_read's description MUST tell the agent to report an entry that looks wrong with vault_report."
+    },
+    {
+      "key": "report-record",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D2: one file per record, so a correction's supersession travels with the facts to a colleague. Roadmap D3: a report quotes its entry, so it is private when the entry is.",
+      "statement": "Each report MUST be stored as reports/<id>.json (id rpt- followed by 12 hex characters) holding id, entry, message, reporter (agent and run_id), status pending, visibility and created_at, under knowledge/ when the entry is tracked and only at the effective private location when it is private, with no stub in the project."
+    },
+    {
+      "key": "report-firing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Manager D4: every spawn is one firing. A disabled job is visible as pending reports, not a silent loss.",
+      "statement": "When a report is filed and vault-reports is enabled with a runner, the Hub MUST, in the background, make one spawn with the message, the entry and, for a fact, the text of its first cited source up to 50,000 characters, and record it as one manager_job_fired event with job vault-reports, trigger report_filed, subject {report, entry}, outcome written when the report was corrected or referred, empty when answered, failed when the spawn failed or its answer did not parse, and a detail naming the outcome. The filing's answer MUST NOT wait for the spawn. A failed firing, or a disabled job, leaves the report pending."
+    },
+    {
+      "key": "report-outcomes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap: the manager corrects, disputes or answers. D5 of contradictions: a fact record is never edited. A correction must quote the source, so the model can only write what a source says, whatever the report's text asked for.",
+      "statement": "The model's answer MUST be an outcome (corrected, answered or disputed), an answer, and for corrected a claim and quotes. corrected on a fact, when every quote is found in its cited source, MUST store a new fact with that claim, citing those lines, with the old fact's visibility and made_by {job, model, report}, and set the report corrected with the answer and replaced_by the new fact. answered MUST set it answered with the answer. disputed, or a corrected that cannot be applied (a source entry, or a quote not found), MUST set it referred with the answer. No fact record is edited or deleted."
+    },
+    {
+      "key": "report-flags",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent reading a corrected or disputed fact is told so, as contradictions tell it (knowledge-vault disputed-shown). Derived on read, like contradictions.",
+      "statement": "A fact named by a corrected report MUST be listed in the map with superseded_by the new fact, and its vault_read content MUST say it was superseded and by which fact and claim. A fact named by a referred report MUST be listed with disputed true, and its vault_read content MUST say it is disputed by a report, with the report's message and the manager's answer. A closed report MUST change neither."
+    },
+    {
+      "key": "reports-listed-and-closed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator decides what the manager could not; their note is the record of it.",
+      "statement": "GET /vault/reports MUST list every report on this machine, pending and referred first, then newest first. POST /vault/reports/{id}/close with a note MUST mark a referred report closed with the note and the time and answer it; it MUST answer 404 for an unknown id, 400 for an empty note, and 409 when the report is not referred."
+    },
+    {
+      "key": "reports-in-tab",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator reads reports where they read the vault; the activity log alone does not show the message.",
+      "statement": "The Vault tab MUST show a Reports section listing each report with its entry, reporter, message, status, the manager's answer and, when corrected, a link to the new fact, and a form to close a referred report with a note; a refusal shows the Hub's reason. A superseded fact MUST carry the superseded mark and a fact disputed by a report the disputed mark."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/the-knowledge-vault-and-its-manager-roadmap/spec.json",
+    "slice": "agent-reports"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A vault_report(entry_id, message) agent tool and its agent-actions route; the reporter is the run's agent, from its credential",
+      "Report records: one file each under reports/, private when the entry is",
+      "A vault-reports manager job (trigger report_filed) with its own runner and model, one spawn per report, recorded as a firing",
+      "Three outcomes: corrected (a new fact quoting the source; the old one superseded), answered (the entry stands, with why), referred (the fact disputed until the operator closes the report)",
+      "Superseded and disputed derived from reports on read, in the map and the fact card",
+      "GET /vault/reports and an operator close route for referred reports",
+      "A Reports section in the Vault tab"
+    ],
+    "non_goals": [
+      "Telling the reporting agent the outcome: it reads the entry again (its card says superseded or disputed)",
+      "Reviewing reports filed while the job was disabled: they stay pending and listed; a review route is a later slice",
+      "Correcting a source: sources are raw and never edited; a report on a source can be answered or referred",
+      "Operators filing reports: they upload a source or resolve a contradiction",
+      "Rate limits beyond one open report per entry",
+      "Reports in the map: they are not knowledge"
+    ]
+  },
+  "summary": "A working agent that finds a vault entry wrong or strange calls vault_report with the entry's id and what is wrong. The Hub stores the report as a file beside the entry and, when the new vault-reports manager job is enabled, spawns its model once with the report, the entry and the source it cites. The model corrects the fact (a new fact, quoting the source verbatim, which the old one then reads as superseded by), answers why the entry stands, or refers the report to the operator, which marks the fact disputed until the operator closes it. Every report and its outcome are in the activity log and in a Reports section of the Vault tab. Tier 2: the first route through which an agent writes into the vault, and untrusted agent text put in front of a model that can write facts.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1024_reports.py, copied from d1017: a scratch Hub, Haiku runner and agent, two fact files written beside the source, Chromium for the tab. Recorded failing at its first check before any build task.",
+      "files": [
+        "scripts/drive/d1024_reports.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "report-outcomes"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "manager.py: the vault-reports job. vault.py: report records, the derived superseded and disputed flags, card lines, list and close. vault_reports.py: the spawn, outcomes and firing. api/v1/vault.py: GET /vault/reports, POST /vault/reports/{id}/close. agent_actions.py: POST /vault/reports. mcp_server.py: vault_report and vault_read's description (read .claude/rules for mcp_server first). Failing tests first in test_vault_reports.py.",
+      "files": [
+        "hub/hub/manager.py",
+        "hub/hub/vault.py",
+        "hub/hub/vault_reports.py",
+        "hub/hub/api/v1/vault.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/mcp_server.py",
+        "hub/tests/test_vault_reports.py"
+      ],
+      "from": null,
+      "key": "reports-backend",
+      "requirements": [
+        "reports-job",
+        "report-filed",
+        "report-record",
+        "report-firing",
+        "report-outcomes",
+        "report-flags",
+        "reports-listed-and-closed"
+      ],
+      "reviewer": null,
+      "title": "The report tool, records, the vault-reports job, flags, list and close"
+    },
+    {
+      "depends_on": [
+        "reports-backend"
+      ],
+      "description": "A Reports section (vault-report-<id>, vault-report-<id>-note, -close), the superseded mark from reports, and the fact link on a corrected report. The vitest comes first; the bundle is committed with the source.",
+      "files": [
+        "hub/ui/src/components/vault/VaultPage.tsx",
+        "hub/ui/src/api/vault.ts",
+        "hub/ui/src/__tests__/vaultTab.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "reports-tab",
+      "requirements": [
+        "reports-in-tab"
+      ],
+      "reviewer": null,
+      "title": "Reports in the Vault tab"
+    }
+  ],
+  "title": "A working agent can tell the manager a vault entry is wrong"
+}
