@@ -20,39 +20,39 @@ DECIDED. Absence is not consent.
 
 ## Open
 
-### night-1010-11, night-1010-12: the agent budget as a run cap (F557) -- 2026-10-10 night, OPEN
+### night-1010-11, night-1010-12: the agent budget as a run cap (F557) -- 2026-10-10 night, DECIDED 2026-10-10
 
 From `spec/changes/the-agent-budget-caps-concurrent-runs` (`spdoc-4cd731c8dba3`, design D5 and D7).
 
-- OPEN      night-1010-11  Taken by the night: the column and API field keep the name `agent_budget`; only the Settings label changes ("Concurrent runs", with Off). Rejected: renaming it to `run_cap` (a second schema change inside the hazardous migration and an API field rename). Confirm or reverse.
-- OPEN      night-1010-12  Taken by the night: the cap is enforced in `schedule_agent`'s attempt (a transient wait, no delivery attempt counted); a run started by a direct `trigger_agent_directly` caller counts toward the cap but is not refused by it. Rejected: checking inside `trigger_agent_directly`, whose refusals the scheduler counts as delivery attempts (F114), so a waiting entry would spend its allowance. Confirm or reverse.
+- DECIDED   night-1010-11  Confirmed by the operator 2026-10-10 (morning briefing). Was: the column and API field keep the name `agent_budget`; only the Settings label changes ("Concurrent runs", with Off). Rejected: renaming it to `run_cap` (a second schema change inside the hazardous migration and an API field rename). Confirm or reverse.
+- DECIDED   night-1010-12  Confirmed by the operator 2026-10-10 (morning briefing). Was: the cap is enforced in `schedule_agent`'s attempt (a transient wait, no delivery attempt counted); a run started by a direct `trigger_agent_directly` caller counts toward the cap but is not refused by it. Rejected: checking inside `trigger_agent_directly`, whose refusals the scheduler counts as delivery attempts (F114), so a waiting entry would spend its allowance. Confirm or reverse.
 
 ### night-1010-9, night-1010-10: live thinking and the diagnostics switch (F572) -- 2026-10-10 night, OPEN
 
 From `spec/changes/live-thinking-stays-open-and-diagnostics-can-be-hidden` (`spdoc-a56fbfe278d0`, design D3 and D5).
 
 - OPEN      night-1010-9  Taken by the night: a work block the operator has opened or closed themselves keeps that state; the automatic rule (open while it holds thinking and is the live turn's last block, closed once text or the run's end follows) applies only to blocks the operator has not touched. Rejected: collapsing on the answer even a block the operator opened (the answer arriving would shut what they were reading). Confirm or reverse.
-- OPEN      night-1010-10  Taken by the night: the diagnostics switch is one browser-wide localStorage value (`aw.conversation.diagnostics.v1`), default shown, beside Fold all turns. Rejected: a per-agent or per-conversation switch (flipped again in every conversation) and a Hub-stored preference (a route and a column for a display choice). Confirm or reverse.
+- DECIDED   night-1010-10  Confirmed by the operator 2026-10-10 (morning briefing). Was: the diagnostics switch is one browser-wide localStorage value (`aw.conversation.diagnostics.v1`), default shown, beside Fold all turns. Rejected: a per-agent or per-conversation switch (flipped again in every conversation) and a Hub-stored preference (a route and a column for a display choice). Confirm or reverse.
 
-### night-1010-8: are route words refused case-insensitively (F248) -- 2026-10-10 night, OPEN
+### night-1010-8: are route words refused case-insensitively (F248) -- 2026-10-10 night, DECIDED 2026-10-10
 
 From `spec/changes/a-name-a-caller-chooses-reaches-its-own-resource` (`spdoc-4e1fa307cd4e`, design D4).
 
-- OPEN      night-1010-8  Taken by the night: the route words (agent names conflicts, settings, sessions; task ids board, boards) are refused at creation case-insensitively, as the reserved names user/operator are (worktrees.py:153), although the route match itself is exact, so Settings is refused too. Rejected: refusing only the exact lowercase word (Settings would be accepted beside a refused settings, two rules for one list). Confirm or reverse.
+- DECIDED   night-1010-8  Confirmed by the operator 2026-10-10 (morning briefing). Was: the route words (agent names conflicts, settings, sessions; task ids board, boards) are refused at creation case-insensitively, as the reserved names user/operator are (worktrees.py:153), although the route match itself is exact, so Settings is refused too. Rejected: refusing only the exact lowercase word (Settings would be accepted beside a refused settings, two rules for one list). Confirm or reverse.
 
-### night-1010-5, -6, -7: how an exploring turn asks in prose (F545) -- 2026-10-10 night, OPEN
+### night-1010-5, -6, -7: how an exploring turn asks in prose (F545) -- 2026-10-10 night, DECIDED 2026-10-10
 
 From `spec/changes/an-exploring-turn-asks-its-questions-in-its-reply` (`spdoc-a56fa9bf6cdd`, design D2-D4).
 
-- OPEN      night-1010-5  Taken by the night: no exploring instruction names ask_user at all, including the genuine-fork allowance, the intake size confirmation and the journey's ask-to-advance choice (continue here / fresh conversation / stop); they are asked in the reply and acted on at the operator's next message. Rejected: keeping ask_user for those fixed-choice questions as genuine forks (two channels again, the contradiction F545 names). Confirm or reverse.
-- OPEN      night-1010-6  Taken by the night: the journey's "one question per ask_user call" becomes "ask this step's questions in your reply, the most important first, offering choices where you can". Rejected: one question per reply (the per-call limit served the question card's stepping; in prose it costs a turn per question). Confirm or reverse.
-- OPEN      night-1010-7  Taken by the night: static text the Hub does not compose per turn (charter rows already seeded into projects, send_message's description) is overridden by a precedence line in the exploring context; the bundled spec charter is reworded for new projects only. Rejected: a data migration rewriting seeded charter rows (operator-editable content, live data on :8000). Confirm or reverse.
+- DECIDED   night-1010-5  Confirmed by the operator 2026-10-10 (morning briefing). Was: no exploring instruction names ask_user at all, including the genuine-fork allowance, the intake size confirmation and the journey's ask-to-advance choice (continue here / fresh conversation / stop); they are asked in the reply and acted on at the operator's next message. Rejected: keeping ask_user for those fixed-choice questions as genuine forks (two channels again, the contradiction F545 names). Confirm or reverse.
+- DECIDED   night-1010-6  Confirmed by the operator 2026-10-10 (morning briefing). Was: the journey's "one question per ask_user call" becomes "ask this step's questions in your reply, the most important first, offering choices where you can". Rejected: one question per reply (the per-call limit served the question card's stepping; in prose it costs a turn per question). Confirm or reverse.
+- DECIDED   night-1010-7  Confirmed by the operator 2026-10-10 (morning briefing). Was: static text the Hub does not compose per turn (charter rows already seeded into projects, send_message's description) is overridden by a precedence line in the exploring context; the bundled spec charter is reworded for new projects only. Rejected: a data migration rewriting seeded charter rows (operator-editable content, live data on :8000). Confirm or reverse.
 
-### night-1010-4: what the task drawer's "Depends on" picker offers (F571) -- 2026-10-10 night, OPEN
+### night-1010-4: what the task drawer's "Depends on" picker offers (F571) -- 2026-10-10 night, DECIDED 2026-10-10
 
 From `spec/changes/a-tasks-prerequisites-can-be-declared-at-creation-and-in-its-drawer` (`spdoc-e28ec0fff9f3`, design D4).
 
-- OPEN      night-1010-4  Taken by the night: the picker offers every other task of the project that is not already a prerequisite, including ones that would close a cycle, and shows the route's 409 sentence when one does; rejected hiding cycle-forming candidates (the drawer would need the transitive graph and would restate the shared writer's cycle rule in the UI). Confirm or reverse.
+- DECIDED   night-1010-4  Confirmed by the operator 2026-10-10 (morning briefing). Was: the picker offers every other task of the project that is not already a prerequisite, including ones that would close a cycle, and shows the route's 409 sentence when one does; rejected hiding cycle-forming candidates (the drawer would need the transitive graph and would restate the shared writer's cycle rule in the UI). Confirm or reverse.
 
 ### F556: the decided wording makes the outstanding-message check a self-message check -- 2026-10-10 night, DECIDED 2026-10-10 (a)
 
@@ -63,16 +63,16 @@ mail to itself, and an operator-created loop would "get the check" without it ev
 
 - DECIDED   F556-outstanding-message-direction  (a), operator 2026-10-10 (morning briefing): an emptied loop names as outstanding the mail addressed TO the job's agent from anyone else, still queued or in a turn that has not ended. Amend `agent-loops` ac41/ac42 ("from the loop's agent to its creator") to match and rewrite `test_scheduler.py`'s mail tests. Was: Which mail should an emptied loop name as outstanding, now that the creator is the job's agent? (a) Mail addressed TO the job's agent from anyone else, still queued or in a turn that has not ended -- the loop stopped with inbound it has not dealt with; (b) keep the old direction (job agent -> creating run's agent) and fall back to nothing for operator loops, since an operator's unanswered ask is already a Question; (c) both. Recommendation: (a). It is the only reading in which an operator-created loop can report anything. The `agent-loops` ac41/ac42 wording ("from the loop's agent to its creator") would need amending to match, and `test_scheduler.py`'s mail tests (executor and creator as two agents) rewritten.
 
-### night-1010-2, night-1010-3: the shape of a loop's history entries (F570) -- 2026-10-10 night, OPEN
+### night-1010-2, night-1010-3: the shape of a loop's history entries (F570) -- 2026-10-10 night, DECIDED 2026-10-10
 
 From `spec/changes/a-loops-history-records-its-creation-and-queue-additions` (`spdoc-ae4ba4e73d46`, design D1, D2).
 
-- OPEN      night-1010-2  Taken by the night: one `loop_tasks_added` entry per call that adds tasks to a loop's queue, listing all its tasks; rejected one entry per task (a flow materialising twelve tasks would push the creation and every edit out of the ten newest events the loop detail returns). Confirm or reverse.
-- OPEN      night-1010-3  Taken by the night: the loop detail always returns the `loop_created` entry beside the ten newest events, however old it is; rejected raising the limit or paging the events (a limit only moves the cliff; paging adds a parameter and a control for one question). Confirm or reverse.
+- DECIDED   night-1010-2  Confirmed by the operator 2026-10-10 (morning briefing). Was: one `loop_tasks_added` entry per call that adds tasks to a loop's queue, listing all its tasks; rejected one entry per task (a flow materialising twelve tasks would push the creation and every edit out of the ten newest events the loop detail returns). Confirm or reverse.
+- DECIDED   night-1010-3  Confirmed by the operator 2026-10-10 (morning briefing). Was: the loop detail always returns the `loop_created` entry beside the ten newest events, however old it is; rejected raising the limit or paging the events (a limit only moves the cliff; paging adds a parameter and a control for one question). Confirm or reverse.
 
-### night-1010-1: which requirements carry the Codex label -- 2026-10-10 night, OPEN
+### night-1010-1: which requirements carry the Codex label -- 2026-10-10 night, DECIDED 2026-10-10
 
-- OPEN      night-1010-1  Taken by the night: the 'not driven since 2026-08-29 (Codex plan cancelled)' label (overhaul-codex-spec) went on all 17 capability requirements whose statement or rationale states a Codex-specific behaviour, in 8 capabilities (folded from `spec/changes/codex-requirements-say-they-are-not-driven`, spdoc-9f712f26fd57); mixed requirements read 'Its Codex part: not driven since ...'. Two that name `codex` only as a CLI value checked without a run (runner-registry runners-are-project-scoped-hub-records, a-copilot-runner-may-reach-its-model-with-the-operator-s-own) were left unlabelled. Rejected: label only the three Codex-only requirements (agent-context-usage codex-context-mapping, agent-run-sandboxing n2, model-catalog's CLI-cache requirement) plus the seeded runner. Confirm or reverse.
+- DECIDED   night-1010-1  Confirmed by the operator 2026-10-10 (morning briefing). Was: the 'not driven since 2026-08-29 (Codex plan cancelled)' label (overhaul-codex-spec) went on all 17 capability requirements whose statement or rationale states a Codex-specific behaviour, in 8 capabilities (folded from `spec/changes/codex-requirements-say-they-are-not-driven`, spdoc-9f712f26fd57); mixed requirements read 'Its Codex part: not driven since ...'. Two that name `codex` only as a CLI value checked without a run (runner-registry runners-are-project-scoped-hub-records, a-copilot-runner-may-reach-its-model-with-the-operator-s-own) were left unlabelled. Rejected: label only the three Codex-only requirements (agent-context-usage codex-context-mapping, agent-run-sandboxing n2, model-catalog's CLI-cache requirement) plus the seeded runner. Confirm or reverse.
 
 ### Spec overhaul 2026-10-08: product questions the audit could not settle from the code -- interactive, DECIDED 2026-10-09
 
