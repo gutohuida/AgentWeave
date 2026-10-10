@@ -19071,11 +19071,11 @@ it answered the invented workspace. Seven older tests asked about agents they ne
 
 ## F248 (C) — an agent legally named `conflicts` can never have its workspace read
 
-**Status:** open. Verified 2026-09-09: `GET /worktrees/conflicts`
+**Status:** fixed 2026-10-10 (new names only; `hub/hub/route_words.py`, d1021 3/3 on the committed tree, night iteration 37). Existing rows keep working. Earlier: verified 2026-09-09: `GET /worktrees/conflicts`
 (`hub/hub/api/v1/worktrees.py:142`) is still declared before `GET /worktrees/{agent}` (`:231`), and
 `AGENT_NAME_RE` still accepts `conflicts`, so an agent legally named that still cannot have its
 workspace read. The repair is a namespace, not a reordering. [classified 2026-09-09, D-3]
-2026-10-10: specified (not built) as `spec/changes/a-name-a-caller-chooses-reaches-its-own-resource`
+2026-10-10: specified and built as `spec/changes/a-name-a-caller-chooses-reaches-its-own-resource`
 (`spdoc-4e1fa307cd4e`, approved on `:8010`); the openspec copy is archived. Five words collide today
 (`conflicts`, `settings`, `sessions`, `board`, `boards`), refused at creation only.
 

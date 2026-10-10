@@ -171,8 +171,8 @@ pytest hub/tests/ -v      # Hub
   `_RESERVED_AGENT_NAMES` (`hub/hub/worktrees.py`); change them together. That set is checked at
   every use site, so never add a word to it that an existing agent could already hold. Words that
   only shadow a Hub route (`conflicts`, `settings`, `sessions`, and the task ids `board`, `boards`)
-  are to be refused at creation only, by a Hub-only check that is decided but **not built yet**
-  (F248; openspec `a-name-a-caller-chooses-reaches-its-own-resource`). They are not part of the
+  are to be refused at creation only, by a Hub-only check built 2026-10-10
+  (F248; `hub/hub/route_words.py`, spec `a-name-a-caller-chooses-reaches-its-own-resource`). They are not part of the
   shared set. `VALID_MODES = ["hierarchical", "peer", "review"]`.
 - **Stage paths explicitly; `git add -A` sweeps in scratch.** NEVER commit `kimichanges.md`,
   `kimiwork.md`.
