@@ -1,0 +1,211 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8106 with a fresh database, a project with agent alice bound to a Claude runner on claude-haiku-4-5, and a change-spec document created by starting an exploration, at step intake (scripts/drive/d1020_exploring_prose.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1020_exploring_prose.py",
+      "key": "drive",
+      "requirement": "exploring-asks-in-prose",
+      "then": "the composed context the run was given contains the prose-interview rule and no 'reach nobody' or 'not a way to finish' sentence, and its step duty names no ask_user; the run completed; the project has no question row asked by that run; and the run's reply contains at least one question. Fails on today's Hub at the first check (the context carries 'reach nobody').",
+      "when": "the operator sends alice, in that document's conversation, a deliberately underspecified request ('make the board easier to scan') and the run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an exploring change-spec at each built-in step, one whose step the project removed, and an exploring document with no step",
+      "how_to_check": "Hub test",
+      "key": "context-exploring",
+      "requirement": "exploring-asks-in-prose",
+      "then": "each carries the prose rule and the precedence line, none carries 'reach nobody' or 'not a way to finish', and the composed phase duty and step duty contain no ask_user",
+      "when": "the canonical context and the turn notice are composed for each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the step duties of every built-in step",
+      "how_to_check": "Hub test",
+      "key": "steps",
+      "requirement": "steps-ask-in-prose",
+      "then": "intake names fix, small and large and set_spec_size; every step but delivery names the three continue/stop choices and advance_spec_step; none names ask_user; delivery has no ask-to-advance",
+      "when": "each is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change-spec document in phase proposed and one in approved",
+      "how_to_check": "Hub test",
+      "key": "other-phases",
+      "requirement": "other-phases-unchanged",
+      "then": "each still carries the 'is not a way to finish' and 'reach nobody' sentences unchanged",
+      "when": "the canonical context is composed for a turn with each open"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the MCP ask_user tool, the HTTP tool-surface rendering and data/charters/spec.md",
+      "how_to_check": "Hub test",
+      "key": "tool-text",
+      "requirement": "tool-text-neutral",
+      "then": "ask_user's description does not mention a specification, test_tool_surface_matches_server.py still passes, and the charter says exploring questions are asked in the reply",
+      "when": "the tests read them"
+    },
+    {
+      "checked_by": "operator",
+      "given": "their own project with a spec agent",
+      "how_to_check": "operator explores a change in the app",
+      "key": "reads-well",
+      "requirement": "steps-ask-in-prose",
+      "then": "the agent's questions arrive in its reply rather than a question card, and the document moves to the next step on their answer",
+      "when": "they start an exploration, answer the agent's questions in the composer, and reply 'continue here' when it asks"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "c4ee8904ac86b953283869d97a2b8dc5efc8cf427f0fdead34857bc260827618",
+      "FR-2": "24a36c8de69a1da7c2e934287c660e6f105a20270d005b8d34cb89a929ac67fc",
+      "FR-3": "a3aa11051294910b5e91277872155aae12cefb0834330498de4ca6aba61e58da",
+      "FR-4": "7cc0223737f2fce12540115c108c661e118d53c68176e265c555a3bd632081f8"
+    },
+    "high_water": 4,
+    "requirements": {
+      "exploring-asks-in-prose": "FR-1",
+      "other-phases-unchanged": "FR-3",
+      "steps-ask-in-prose": "FR-2",
+      "tool-text-neutral": "FR-4"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1: instruction text in four files, no schema, no migration, no Hub-restart hazard beyond any code change.\n\nD1. The 'not a way to finish' rule (agents.py:2404-2409) is kept outside exploring and replaced inside it, not deleted: F38 measured the failure it prevents. (overhaul-exploring-interview)\nD2. No exploring instruction names ask_user, including the genuine-fork allowance (agents.py:1843), the size confirmation and the ask-to-advance choice; they are asked in the reply and acted on at the operator's next message. Rejected: keeping ask_user for fixed-choice questions as genuine forks (two channels again, the contradiction F545 names). (night-1010-5)\nD3. _ONE_QUESTION ('one question per ask_user call') becomes 'ask this step's questions in your reply, the most important first, offering choices where you can'. Rejected: one question per reply (the per-call limit existed for the question card's stepping; in prose it would cost a turn per question). (night-1010-6)\nD4. Static text the Hub cannot compose per turn (seeded charter rows, send_message's description) is covered by a precedence line in the exploring context: this overrides any charter or tool description telling you to call ask_user. The bundled spec charter is reworded for new projects; seeded rows are not rewritten. Rejected: a data migration over charters rows (operator-edited content, live-data hazard on :8000). (night-1010-7)\nD5. ask_user stays on the exploring tool surface; its description drops the specification clause, and both renderings stay equal.",
+  "evidence": {
+    "checked": [
+      "hub/hub/launchability.py:378-391: exploring notice says interview in THIS REPLY, then stop",
+      "hub/hub/api/v1/agents.py:2404-2409: 'not a way to finish ... reach nobody', appended for every phase with a document open",
+      "hub/hub/api/v1/agents.py:2360-2371: on_journey turns get spec_journey.duty or removed instead of _phase_duty",
+      "hub/hub/api/v1/agents.py:1832-1850: exploring phase duty, 'Use ask_user only for a genuine fork'",
+      "hub/hub/spec_journey.py:383-507: ASK_TO_ADVANCE, _ONE_QUESTION, INTAKE size via ask_user, removed()",
+      "hub/hub/spec_lifecycle.py:243: a new exploring change-spec starts at step intake",
+      "hub/hub/mcp_server.py:458-461: ask_user's 'writing a specification step by step' clause",
+      "hub/hub/db/engine.py:279-301: charters are seeded once per project from data/charters"
+    ],
+    "limits": [
+      "Whether a Haiku turn asks in prose is model-dependent; the drive's first check is the composed context, which is deterministic"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Both instructions reach the same turn. The spec turn notice (hub/hub/launchability.py:378-391) tells an exploring turn to interview in prose and stop. The canonical turn context for any document open in any phase appends 'Ending this turn without either submitting the document or calling ask_user is not a way to finish. Questions written as ordinary reply text reach nobody' (hub/hub/api/v1/agents.py:2404-2409). A change-spec at a journey step (every new one: spec_lifecycle.py:243 sets step intake) is briefed with a step duty that asks through ask_user: _ONE_QUESTION ('one question per ask_user call'), INTAKE's size confirmation, ASK_TO_ADVANCE's three-option question, and the removed-step briefing (spec_journey.py:383-507). The non-journey exploring duty also offers ask_user for a genuine fork (agents.py:1843). Static text points the same way: the ask_user tool description names 'writing a specification step by step' (mcp_server.py:458-461), send_message says to call ask_user for an answer (mcp_server.py:277-279, agents.py:1081), and the bundled spec charter sends ambiguity and scope disputes to ask_user (data/charters/spec.md:134,137,154,157). A turn obeying either half disobeys the other.",
+  "requirements": [
+    {
+      "key": "exploring-asks-in-prose",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "overhaul-exploring-interview (F545): prose wins. A step duty is not the only instruction an agent reads, so the precedence line covers static text the Hub does not compose per turn.",
+      "statement": "The context and turn notice of a turn with an exploring-phase document open MUST tell the agent to ask its questions in its reply and then end its turn, and MUST say that this overrides any charter or tool description telling it to call ask_user; no instruction composed for that turn (the phase duty, a journey step duty, the ask-to-advance protocol or the removed-step briefing) MUST tell it to ask through ask_user or say that questions in its reply reach nobody."
+    },
+    {
+      "key": "steps-ask-in-prose",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The protocol keeps its three choices and its never-advance-without-asking rule; only the channel moves from ask_user to the reply (night-1010-5).",
+      "statement": "A journey step's duty MUST ask the size confirmation (fix, small, large) and the ask-to-advance choice (continue here, continue in a fresh conversation, stop here) in the reply and end the turn; on the operator's next message the agent MUST, on either continue, call advance_spec_step(path) before anything else (and on a fresh conversation end its turn after it), record a size answer with set_spec_size, and on stop end its turn without advancing."
+    },
+    {
+      "key": "other-phases-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F38's exit condition was measured on a turn that ended with chat-text questions; the decision moves exploring only.",
+      "statement": "The context of a turn with a document open in any phase other than exploring MUST keep the rule that ending the turn without submitting or calling ask_user is not a way to finish, word for word."
+    },
+    {
+      "key": "tool-text-neutral",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Static text reaches every turn; the clause in ask_user's description pointed exploring turns at the tool (DEAD-ENDS 2026-10-08).",
+      "statement": "The ask_user tool description MUST NOT name writing a specification as a reason to call it, and the bundled spec charter MUST say that while a document is being explored its questions are asked in the reply."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The canonical turn context for an exploring-phase document: the 'not a way to finish / reach nobody' rule replaced by a prose-interview rule, and a precedence line saying it overrides any charter or tool description that says to call ask_user",
+      "The non-journey exploring duty: the genuine-fork ask_user allowance removed",
+      "Every journey step duty and the removed-step briefing: questions, the size confirmation and the ask-to-advance choice asked in the reply, acted on at the operator's next message",
+      "The ask_user tool description: the clause naming specification writing removed",
+      "The bundled spec charter (data/charters/spec.md): asking while exploring a document is in the reply"
+    ],
+    "non_goals": [
+      "Any phase but exploring: proposed and approved turns keep the 'not a way to finish' rule word for word",
+      "Removing ask_user from an exploring turn's tool surface: it stays callable, nothing tells the turn to use it",
+      "Rewriting charter rows already seeded into projects (seed_charters copies the file once, db/engine.py:279-301): the context's precedence line covers them",
+      "An app control that advances a journey step",
+      "A migration"
+    ]
+  },
+  "summary": "An exploring specification turn is told two opposite ways to ask: the turn notice says interview in this reply and stop (launchability.py:380), while the turn context says ending without submitting or calling ask_user is not a way to finish and that questions in the reply reach nobody (api/v1/agents.py:2404-2409), and every journey step duty asks through ask_user (spec_journey.py). The operator decided prose wins (overhaul-exploring-interview, F545): an exploring turn interviews in its reply and stops. This change removes the opposite instruction at every source that reaches an exploring turn; outside exploring nothing changes.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1020_exploring_prose.py: scratch Hub on :8106, fresh database, one real Haiku exploring turn at step intake. The 'drive' criterion. Must fail at the first check before any build task.",
+      "files": [
+        "scripts/drive/d1020_exploring_prose.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "exploring-asks-in-prose"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "agents.py: the reach-nobody rule outside exploring only, the prose rule and precedence line inside, the genuine-fork line dropped; spec_journey.py: _ONE_QUESTION, INTAKE, ASK_TO_ADVANCE and removed() in prose. Failing Hub tests first; update test_spec_journey_briefing.py.",
+      "files": [
+        "hub/hub/api/v1/agents.py",
+        "hub/hub/spec_journey.py",
+        "hub/tests/test_spec_journey_briefing.py"
+      ],
+      "from": null,
+      "key": "context",
+      "requirements": [
+        "exploring-asks-in-prose",
+        "steps-ask-in-prose",
+        "other-phases-unchanged"
+      ],
+      "reviewer": null,
+      "title": "Exploring context and step duties ask in prose"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "mcp_server.py: drop the specification clause from ask_user; data/charters/spec.md: exploring questions in the reply. Hub test first; the tool-surface test stays green.",
+      "files": [
+        "hub/hub/mcp_server.py",
+        "hub/hub/data/charters/spec.md"
+      ],
+      "from": null,
+      "key": "tool-text",
+      "requirements": [
+        "tool-text-neutral"
+      ],
+      "reviewer": null,
+      "title": "ask_user description and the spec charter"
+    }
+  ],
+  "title": "An exploring turn asks its questions in its reply"
+}

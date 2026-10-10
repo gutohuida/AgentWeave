@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 27,
+    "iteration": 28,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "exploring-prose-spec",
-    "next_action": "exploring-prose-spec: author the change on trial Hub :8010 per spec-queue/APPROVALS.md authorisations 1-3 (night 2026-10-09 section); read that section and the playbook first",
+    "current": "exploring-prose-impl",
+    "next_action": "exploring-prose-impl: spdoc-a56fa9bf6cdd - drive-first task-7ef6d440c930 (scripts/drive/d1020_exploring_prose.py on scratch :8106, real Haiku exploring turn at step intake, record it failing at check 1: the composed context carries 'reach nobody'), then context task-35d85518f3a0 and tool-text task-7aadcbb91c32; split into exploring-prose-t<n>-impl if one firing cannot finish",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -77,13 +77,13 @@
         },
         {
             "id": "exploring-prose-spec",
-            "status": "open",
-            "title": "Author exploring-prose-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)"
+            "status": "done",
+            "title": "exploring-prose-spec: spdoc-a56fa9bf6cdd approved on :8010 (tasks drive-first task-7ef6d440c930, context task-35d85518f3a0, tool-text task-7aadcbb91c32)"
         },
         {
             "id": "exploring-prose-impl",
             "status": "open",
-            "title": "exploring-prose-impl",
+            "title": "exploring-prose-impl: spdoc-a56fa9bf6cdd - drive-first (d1020 on :8106, failing at check 1), then context (agents.py, spec_journey.py), then tool-text (mcp_server.py ask_user, charters/spec.md)",
             "model": "opus"
         },
         {
@@ -149,7 +149,10 @@
         "night-1010-1",
         "night-1010-2",
         "night-1010-3",
-        "night-1010-4"
+        "night-1010-4",
+        "night-1010-5",
+        "night-1010-6",
+        "night-1010-7"
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",

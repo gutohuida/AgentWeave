@@ -20,6 +20,14 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### night-1010-5, -6, -7: how an exploring turn asks in prose (F545) -- 2026-10-10 night, OPEN
+
+From `spec/changes/an-exploring-turn-asks-its-questions-in-its-reply` (`spdoc-a56fa9bf6cdd`, design D2-D4).
+
+- OPEN      night-1010-5  Taken by the night: no exploring instruction names ask_user at all, including the genuine-fork allowance, the intake size confirmation and the journey's ask-to-advance choice (continue here / fresh conversation / stop); they are asked in the reply and acted on at the operator's next message. Rejected: keeping ask_user for those fixed-choice questions as genuine forks (two channels again, the contradiction F545 names). Confirm or reverse.
+- OPEN      night-1010-6  Taken by the night: the journey's "one question per ask_user call" becomes "ask this step's questions in your reply, the most important first, offering choices where you can". Rejected: one question per reply (the per-call limit served the question card's stepping; in prose it costs a turn per question). Confirm or reverse.
+- OPEN      night-1010-7  Taken by the night: static text the Hub does not compose per turn (charter rows already seeded into projects, send_message's description) is overridden by a precedence line in the exploring context; the bundled spec charter is reworded for new projects only. Rejected: a data migration rewriting seeded charter rows (operator-editable content, live data on :8000). Confirm or reverse.
+
 ### night-1010-4: what the task drawer's "Depends on" picker offers (F571) -- 2026-10-10 night, OPEN
 
 From `spec/changes/a-tasks-prerequisites-can-be-declared-at-creation-and-in-its-drawer` (`spdoc-e28ec0fff9f3`, design D4).
