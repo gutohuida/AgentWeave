@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 42,
+    "iteration": 43,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "run-cap-drive-first",
-    "next_action": "run-cap-drive-first: task-76ccae4775de of spdoc-4cd731c8dba3 - write scripts/drive/d1023_run_cap.py (scratch :8109, d1011 harness, Haiku alice+bob, agent budget 1, both sent a ~15 s command at once) and record it failing at check 1 (both run at once); then run-cap-impl",
+    "current": "run-cap-impl",
+    "next_action": "run-cap-impl: task-89806cc2657f of spdoc-4cd731c8dba3 - Hub tests first (hub/tests/test_agent_budget_caps_runs.py, test_migrations.py -k agent_budget), migration 0126_agent_budget_caps_runs + downgrade, cap in turn_scheduler._attempt_turn under a per-project lock when set, queue status names the cap, request_agent count refusal removed, Optional agent_budget field; d1023 checks 1-3 (fails today at check 1: both run at once); split off task-fe6b5a5f0cbe as run-cap-settings-impl if one firing cannot finish",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -150,8 +150,8 @@
         },
         {
             "id": "run-cap-drive-first",
-            "status": "open",
-            "title": "run-cap-drive-first: task-76ccae4775de - d1023_run_cap.py on :8109, recorded failing at check 1"
+            "status": "done",
+            "title": "run-cap-drive-first: task-76ccae4775de - d1023_run_cap.py on :8109, recorded failing at check 1 -- DONE iteration 43, d1023 fails at check 1 (both running 9/9 samples)"
         },
         {
             "id": "run-cap-impl",
