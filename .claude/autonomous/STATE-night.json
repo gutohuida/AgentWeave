@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9eb5de9",
     "stop_at": "2026-10-11T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-10-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ledger-close",
-    "next_action": "Do queue item ledger-close: run py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-10 into the final log entry, refresh BACKLOG via scripts/backlog_page.py, then set next_action to null. Keep current equal to the id.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "f507-impl",
@@ -41,7 +41,7 @@
         },
         {
             "id": "ledger-close",
-            "status": "open",
+            "status": "done",
             "title": "Close-out: usage report and log",
             "detail": "Run py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-10 in the final log entry; refresh BACKLOG via scripts/backlog_page.py."
         }
