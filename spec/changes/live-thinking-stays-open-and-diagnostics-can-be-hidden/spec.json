@@ -1,0 +1,158 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8108 with a fresh database and one project with a Claude runner and a Haiku agent alice (scripts/drive/d1022_thinking_ui.py); no real Claude turn emits thinking text (non_goals), so the drive posts one thinking event on alice's live run through POST /agents/alice/output, the route a runner's output reaches",
+      "how_to_check": "py -3.11 scripts/drive/d1022_thinking_ui.py",
+      "key": "drive",
+      "requirement": "live-thinking-opens-then-collapses",
+      "then": "1) within five seconds the turn's last work block is open and shows the thinking text; 2) once done is shown, that block is closed and the thinking text is not visible; 3) both the diagnostic and the error are shown, Hide diagnostics removes the diagnostic and leaves the error, the reload keeps it hidden, and Show diagnostics brings it back. Fails on today's Hub at check 1 (the block is closed).",
+      "when": "in Chromium the operator sends alice a message asking her to run a command that takes about twenty seconds and then reply with the single word done, and while her run is started the drive posts a thinking event with that run's id; then, after her reply, the drive posts a diagnostic and an error event on the same run and the operator clicks Hide diagnostics, reloads, and clicks Show diagnostics"
+    },
+    {
+      "checked_by": "agent",
+      "given": "AgentTimeline rendered with a live run whose turn ends in a work block holding a thinking event",
+      "how_to_check": "vitest (hub/ui)",
+      "key": "live",
+      "requirement": "live-thinking-opens-then-collapses",
+      "then": "the block is open; it is closed after the text; it is closed after the completed status; the history block is closed; the operator's toggles are kept over the automatic rule each time",
+      "when": "it renders, then a text entry is appended, then (separately) the run's completed status entry is appended instead, then a history turn of an ended run is rendered, then the operator closes the live block before text arrives and opens it again after"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation whose turn holds a diagnostic entry, an error entry and a work block with a failed tool result",
+      "how_to_check": "vitest (hub/ui)",
+      "key": "hide",
+      "requirement": "diagnostics-can-be-hidden",
+      "then": "the diagnostic card is gone while the error message and the failed-call count stay; the remount keeps it hidden; the unreadable value shows diagnostics",
+      "when": "the operator clicks Hide diagnostics, the component is mounted again, the stored value is replaced with an unreadable one and the component is mounted again"
+    },
+    {
+      "checked_by": "operator",
+      "given": "an agent on a runner that streams thinking text (a Copilot agent today)",
+      "how_to_check": "operator, in the app",
+      "key": "watch",
+      "requirement": "live-thinking-opens-then-collapses",
+      "then": "the reasoning is readable as it arrives and folds away when the answer starts",
+      "when": "they send it a question that makes it reason before answering and watch the turn"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "df534297a0fb34f6d12c9275b64490a509f5ae372599516eafe25f701ee4cce9",
+      "FR-2": "393fb87b5f650943531c1fe7817d911df68db577ce812e89d49ee7c397bd7715"
+    },
+    "high_water": 2,
+    "requirements": {
+      "diagnostics-can-be-hidden": "FR-2",
+      "live-thinking-opens-then-collapses": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1: one UI component change, no Hub code, no schema, no migration, no Hub-restart hazard; the bundle refresh reaches :8000 only when the operator merges.\n\nD1. Both behaviours live in AgentTimeline and ConversationControls, not in a new renderer: SharedStreamRenderer is deleted (overhaul-dead-renderers) and AgentTimeline is the one conversation renderer.\nD2. 'Live' is the timeline's existing `runVisiblyActive` (AgentTimeline.tsx:203), the same signal the live working indicator uses, so the block is open exactly while the indicator shows and nothing restates the run-settled rules. The live block is the last block of the newest run's turn.\nD3. The automatic state is derived on each render, not stored; a block keeps an operator override only after the operator has clicked it, stored per block in the component as its open state is today. Rejected: auto-collapsing even a block the operator opened (the text arriving would shut what they were reading, the complaint a-turn-s-folded-state-is-set-by-the-operator answers for turns). (night-1010-9)\nD4. Hidden diagnostics are filtered when the turn's blocks are drawn: a `diagnostic` entry's ResultCard is not rendered; `error` entries are messages and failed tool results are inside work blocks, so both are untouched by construction. Status entries are not diagnostics and stay.\nD5. The preference is one browser-wide localStorage value (`aw.conversation.diagnostics.v1`, 'shown' | 'hidden'), read like specPreferences.ts: anything unreadable means shown. Rejected: a per-agent or per-conversation preference (a debugging switch the operator would have to flip in every conversation), and a Hub-stored preference (a route and a column for a display choice). (night-1010-10)\nD6. Folding: at the fold, `live-thinking-opens-then-collapses` replaces agent-stream-events `thinking-presentation` (and retires its criterion ac116, whose 'collapsed work block' is now only half the rule); `diagnostics-can-be-hidden` is an addition.\nD7. The drive posts the thinking event through POST /agents/{name}/output on a real live Haiku run, because no Claude turn on this machine emits thinking text (non_goals); the route, SSE and rendering it exercises are the ones a Copilot thought chunk takes.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/components/agents/AgentTimeline.tsx:535-538: WorkBlockDisclosure starts closed",
+      "hub/ui/src/components/agents/AgentTimeline.tsx:203: runVisiblyActive, the live indicator's signal",
+      "hub/ui/src/components/agents/AgentTimeline.tsx:831-863: ResultCard draws status and diagnostic entries",
+      "hub/ui/src/lib/agentTimelineModel.ts:8-17: thinking is work, diagnostic is result, error is message",
+      "hub/ui/src/components/agents/ConversationControls.tsx:112: the Fold all turns control",
+      "hub/hub/api/v1/agents.py:3421 and hub/hub/output_recording.py: POST /agents/{name}/output records and broadcasts an event, its conversation taken from the run row",
+      "hub/hub/api/v1/agent_chat.py:661-671: chat history reads outputs by conversation, so an event needs a real run",
+      "claude 2.1.291 -p --model claude-haiku-4-5 with MAX_THINKING_TOKENS=4096: the thinking block's `thinking` field is empty, signature only",
+      "0 thinking rows in the trial Hub's agent_outputs and in 98 scratch drive databases under testbed/"
+    ],
+    "limits": [
+      "The drive's thinking event is posted, not produced by the model; the operator criterion 'watch' covers a runner that streams its own"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "agent-stream-events specified both behaviours and neither was ever built (F572). Today, AgentTimeline.tsx's WorkBlockDisclosure starts every block closed (`useState(false)`, line 538), live or not, so a thinking event never shows while the agent is reasoning. ResultCard (line 831) draws every `diagnostic` entry (entryCategory 'result', agentTimelineModel.ts:9) with no control to hide it; ConversationControls has only 'Fold all turns' (ConversationControls.tsx:112). The earlier presentation lived in SharedStreamRenderer, deleted by f553 (overhaul-dead-renderers), so the capability's current `thinking-presentation` statement describes only the collapsed block, not the live one.",
+  "requirements": [
+    {
+      "key": "live-thinking-opens-then-collapses",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "overhaul-thinking-ui (F572): the reasoning is worth reading while the agent is still working and is noise once the answer is there; a block that is always closed hides it exactly when it matters.",
+      "statement": "Thinking events SHALL be presented as work, not as conversational text. A work block that holds a thinking event SHALL be shown open while it is the last block of the turn whose run is live, and SHALL collapse when a text entry or the run's end follows it; a work block in a turn whose run has ended SHALL render collapsed. Once the operator opens or closes a block themselves, that choice MUST be kept over both rules."
+    },
+    {
+      "key": "diagnostics-can-be-hidden",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "overhaul-thinking-ui (F572): diagnostics are for the operator who is debugging a runner, not for one reading the conversation; errors and failed calls are what the reader must never lose.",
+      "statement": "The conversation SHALL offer a control that hides diagnostic entries and shows them again. While diagnostics are hidden, error entries and failed tool results MUST remain visible. The choice SHALL persist across reloads in the same browser and default to shown; a stored value that cannot be read SHALL mean shown."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "AgentTimeline: a work block that holds a thinking event is open while it is the last block of the live turn, and collapses when text or the run's end follows it; an operator's own toggle of that block is kept",
+      "ConversationControls: a 'Hide diagnostics' / 'Show diagnostics' control beside 'Fold all turns', kept in localStorage for this browser, default shown; hidden diagnostics leave error entries and failed tool results visible",
+      "Vitest for both, and the UI bundle refresh"
+    ],
+    "non_goals": [
+      "Making the Claude CLI emit thinking text: Claude Code 2.1.291 sends thinking blocks with an empty `thinking` field (signature only, measured 2026-10-10 with MAX_THINKING_TOKENS set), and runner_parsing.py:282-285 drops empty thinking; a Claude conversation therefore shows no thinking whatever this change does",
+      "Any Hub route, schema, event kind or migration",
+      "Hiding status entries, errors or tool activity",
+      "A per-agent or per-conversation diagnostics preference"
+    ]
+  },
+  "summary": "The conversation shows an agent's reasoning only after the fact: a work block holding thinking starts collapsed, so the operator watching a live turn sees a closed 'Work' line while the agent reasons, and diagnostic cards (model substitutions, adapter notes) sit in every turn with no way to put them away. The operator decided (overhaul-thinking-ui, F572) to build both, as one small UI change in AgentTimeline: the work block the agent is reasoning in stays open while the run is live and collapses when its answer arrives, and a conversation control hides diagnostics while errors and failed calls stay visible.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1022_thinking_ui.py on scratch :8108, fresh database, reusing the d1011 harness: the 'drive' criterion. Testid contract fixed here (work blocks carry data-open; the control is conversation-diagnostics-toggle). Record it failing at check 1 before any build task.",
+      "files": [
+        "scripts/drive/d1022_thinking_ui.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "live-thinking-opens-then-collapses",
+        "diagnostics-can-be-hidden"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "Vitest first (the 'live' and 'hide' criteria), failing before the build. AgentTimeline: WorkBlockDisclosure takes a live flag (D2) and an override (D3); TurnBody skips diagnostic ResultCards when hidden (D4). ConversationControls: the toggle beside Fold all turns, reading and writing the preference (D5). Refresh the UI bundle and run test_surface_ceilings and test_ui_build_stamp. d1022 passes.",
+      "files": [
+        "hub/ui/src/components/agents/AgentTimeline.tsx",
+        "hub/ui/src/components/agents/ConversationControls.tsx",
+        "hub/ui/src/components/agents/AgentOutputPanel.tsx",
+        "hub/ui/src/__tests__/liveThinkingAndDiagnostics.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "timeline",
+      "requirements": [
+        "live-thinking-opens-then-collapses",
+        "diagnostics-can-be-hidden"
+      ],
+      "reviewer": null,
+      "title": "Live thinking block and the diagnostics control"
+    }
+  ],
+  "title": "Live thinking stays open and diagnostics can be hidden"
+}

@@ -20,6 +20,13 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### night-1010-9, night-1010-10: live thinking and the diagnostics switch (F572) -- 2026-10-10 night, OPEN
+
+From `spec/changes/live-thinking-stays-open-and-diagnostics-can-be-hidden` (`spdoc-a56fbfe278d0`, design D3 and D5).
+
+- OPEN      night-1010-9  Taken by the night: a work block the operator has opened or closed themselves keeps that state; the automatic rule (open while it holds thinking and is the live turn's last block, closed once text or the run's end follows) applies only to blocks the operator has not touched. Rejected: collapsing on the answer even a block the operator opened (the answer arriving would shut what they were reading). Confirm or reverse.
+- OPEN      night-1010-10  Taken by the night: the diagnostics switch is one browser-wide localStorage value (`aw.conversation.diagnostics.v1`), default shown, beside Fold all turns. Rejected: a per-agent or per-conversation switch (flipped again in every conversation) and a Hub-stored preference (a route and a column for a display choice). Confirm or reverse.
+
 ### night-1010-8: are route words refused case-insensitively (F248) -- 2026-10-10 night, OPEN
 
 From `spec/changes/a-name-a-caller-chooses-reaches-its-own-resource` (`spdoc-4e1fa307cd4e`, design D4).

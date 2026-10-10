@@ -35272,7 +35272,7 @@ Since F36 a hand-made task can carry dependencies, but only `POST` on the task-d
 
 ## F572 (C) -- the conversation has no collapsing thinking section and no way to hide diagnostics
 
-**Status:** open 2026-10-09. Found by the spec overhaul (decision `overhaul-thinking-ui`, operator 2026-10-09).
+**Status:** open 2026-10-09. Found by the spec overhaul (decision `overhaul-thinking-ui`, operator 2026-10-09); successor `spec/changes/live-thinking-stays-open-and-diagnostics-can-be-hidden` (`spdoc-a56fbfe278d0`) approved on :8010 2026-10-10 night iteration 38, not built yet.
 
 Specified earlier and never built (the specs now say so): a live thinking section that is open while the agent reasons and collapses when its answer arrives, and a control that hides diagnostic lines in the conversation. **Decided:** build both, as one small UI change in `AgentTimeline` (not the deleted `SharedStreamRenderer`). Tier 1.
 
@@ -35320,3 +35320,11 @@ A sibling with the same body fails the same way: `hub/tests/test_spec_undeclared
 **Status:** fixed 2026-10-10 (night iteration 29). Found by CI: run 38019656990 on `80d45bd`, `hub-test`, `test_surface_ceilings.py` (3 tests) named `TaskDetailDrawer.tsx` `useTasks #1` as an unclassified call site that ignores its error.
 
 The "Depends on" picker added for F571 (`97ef44f`) called `useTasks()` binding only `data`. When the read failed, the picker offered nothing but "Choose a task…", which looks like a project with no other tasks. The ratchet caught it before any operator did. Fix: the drawer binds `error` and shows the Hub's sentence under the picker (`task-dependency-picker-error-<task>`). Test: `taskDependsOn.test.tsx`, "says the task list could not be read", failed before the fix and passes after. The same run's fourth failure, `test_copilot_context_split.py::test_context_for_a_claude_run_is_unchanged`, was the context snapshot not updated for `create_task`'s new `depends_on` parameter (`94e0ff7`); the snapshot was regenerated, and its diff is that one line. Tier 0.
+
+## F578 (C) -- a Claude conversation never shows thinking: the CLI sends thinking blocks with empty text
+
+**Status:** open 2026-10-10. Found while authoring the F572 successor (night iteration 38).
+
+`claude 2.1.291 -p --model claude-haiku-4-5 --output-format stream-json --verbose` with `MAX_THINKING_TOKENS=4096` sends `{"type": "thinking", "thinking": "", "signature": "..."}`: the block is there, its text is not. `runner_parsing.py:282-285` drops a thinking block whose text is empty, so no Claude run records a `thinking` event; the trial Hub's `agent_outputs` and 98 scratch drive databases under `testbed/` hold none. The live thinking section F572's change builds can therefore only show for a runner that streams its reasoning (Copilot's thought chunks). Not measured: whether another model, a CLI setting, or a newer CLI returns the text.
+
+**Fix shape (not decided):** find out whether the CLI can be asked for thinking text; if not, consider a work row that says the agent reasoned (empty block present) without its text. Tier 1.

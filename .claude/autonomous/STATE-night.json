@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 37,
+    "iteration": 38,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "thinking-ui-spec",
-    "next_action": "thinking-ui-spec: author on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section); start :8010 from hub/ per .claude/reference/hubs.md. d1009 checks 6-7 still unverified (optional)",
+    "current": "thinking-ui-impl",
+    "next_action": "thinking-ui-impl: drive-first task-ad01ff501be9 of spdoc-a56fbfe278d0 - scripts/drive/d1022_thinking_ui.py on scratch :8108 (d1011 harness, Haiku alice, slow command, thinking event posted on her live run via POST /agents/alice/output), record it failing at check 1",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -124,13 +124,18 @@
         },
         {
             "id": "thinking-ui-spec",
-            "status": "open",
-            "title": "Author thinking-ui-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)"
+            "status": "done",
+            "title": "thinking-ui-spec: spdoc-a56fbfe278d0 approved on :8010 (tasks drive-first task-ad01ff501be9, timeline task-ff57ca1f568c)"
         },
         {
             "id": "thinking-ui-impl",
             "status": "open",
-            "title": "thinking-ui-impl"
+            "title": "thinking-ui-impl: drive-first task-ad01ff501be9 - d1022_thinking_ui.py on :8108, failing at check 1"
+        },
+        {
+            "id": "thinking-ui-timeline-impl",
+            "status": "open",
+            "title": "thinking-ui-timeline-impl: task-ff57ca1f568c - vitest first, AgentTimeline live block (D2/D3), diagnostics filter (D4), ConversationControls toggle (D5), bundle refresh; d1022 passes"
         },
         {
             "id": "thinking-ui-drive",
@@ -169,7 +174,9 @@
         "night-1010-5",
         "night-1010-6",
         "night-1010-7",
-        "night-1010-8"
+        "night-1010-8",
+        "night-1010-9",
+        "night-1010-10"
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
