@@ -9,7 +9,7 @@
     "parent_sha": "7fbee9a",
     "armed_at": "2026-10-10T10:48:00+01:00",
     "stop_at": "2026-10-10T15:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-10-vault-log.md",
     "driver_log": ".claude/autonomous/driver-vault.log",
     "findings_file": "scripts/drive/FINDINGS.md",
@@ -18,8 +18,8 @@
         "model": "sonnet",
         "skill": ".claude/skills/night-briefing/SKILL.md"
     },
-    "current": "reports-drive-first",
-    "next_action": "Do queue item reports-drive-first: write scripts/drive/d1024_reports.py from the acceptance drive of spec/changes/a-working-agent-tells-the-manager-an-entry-is-wrong/spec.json (key 'drive'; copy d1017_contradictions.py's harness: scratch Hub on a free port, Haiku runner and agent, vault-reports job enabled, a tracked source with the 300-euro line and two fact files written beside it citing it, one claiming 3,000 and one 300; two agent turns; Chromium screenshot of the Reports section), run it on the current tree and record it failing at check 1 (no vault-reports job); commit.",
+    "current": "reports-backend-impl",
+    "next_action": "Do queue item reports-backend-impl: task-1ce508bb4520 (spdoc-33dfedd63c89). Tests first in hub/tests/test_vault_reports.py covering the acceptance criteria job-listed, filed, private, firing, outcomes, flags, close (fake _Worker pattern from test_vault_distillation.py / test_vault_contradictions.py), recorded failing; then manager.py (vault-reports job, trigger report_filed), vault.py (report records under reports/, derived superseded/disputed from reports, card lines, list, close), new vault_reports.py (spawn, outcomes, firing; pattern distillation.py), api/v1/vault.py (GET /vault/reports, POST /vault/reports/{id}/close), agent_actions.py (POST /vault/reports, reporter from the credential), mcp_server.py (vault_report tool; vault_read description; read .claude/rules first). d1024 reads knowledge/reports/rpt-*.json with fields entry, status, answer, replaced_by. If one firing cannot finish, split into -a (job, records, route, tests filed/private/job-listed) and -b (firing, outcomes, flags, close) and commit -a green.",
     "queue": [
         {
             "id": "contradictions-backend-impl",
@@ -52,8 +52,9 @@
         },
         {
             "id": "reports-drive-first",
-            "status": "open",
-            "title": "Write scripts/drive/d1024_reports.py from the reports document's acceptance drive and record it failing on the tree before the build"
+            "status": "done",
+            "title": "Write scripts/drive/d1024_reports.py from the reports document's acceptance drive and record it failing on the tree before the build",
+            "note": "d1024 recorded failing at check 1 (no vault-reports job: PATCH 404) on 93c677b, run 114940"
         },
         {
             "id": "reports-backend-impl",
