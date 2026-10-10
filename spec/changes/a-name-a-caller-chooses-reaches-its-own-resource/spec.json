@@ -1,0 +1,176 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8107 with a fresh database and one project with a Claude runner (scripts/drive/d1021_route_shadow_names.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1021_route_shadow_names.py",
+      "key": "drive",
+      "requirement": "agent-route-words-refused",
+      "then": "settings and Sessions answer 400 with a detail naming /queue/settings and /agent/sessions/{agent} respectively; board answers 422 naming id; conflict and boardroom are created, and GET /queue/conflict and GET /tasks/boardroom answer for them. Fails on today's Hub at the first check (settings is created, 201).",
+      "when": "the operator creates agents named settings, Sessions and conflict, and tasks with ids board and boardroom, through the routes the app calls"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a test project",
+      "how_to_check": "Hub test",
+      "key": "doors",
+      "requirement": "agent-route-words-refused",
+      "then": "each creation is refused naming the route; the existing settings row syncs, triggers and resolves through validate_agent_name unchanged; user and operator keep their existing reasons",
+      "when": "POST /agents, POST /agents/request and a session sync each try to create an agent named conflicts, and the sync is repeated for an agent row named settings that already exists"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a test project with a bound run credential",
+      "how_to_check": "Hub test",
+      "key": "task-doors",
+      "requirement": "task-route-words-refused",
+      "then": "each answers 422 naming id; none answers 500",
+      "when": "POST /tasks with id board, POST /agent/tasks with id Boards, and a loop created with an initial task id boards"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the built app",
+      "how_to_check": "Hub test",
+      "key": "walk",
+      "requirement": "route-table-checked",
+      "then": "it passes on the change's tree and fails on the second naming /queue/peek and peek; on today's tree it fails naming conflicts, settings, sessions, board and boards",
+      "when": "the route-walk test runs, and again with a literal GET /queue/peek route registered before GET /queue/{agent} in the test"
+    },
+    {
+      "checked_by": "operator",
+      "given": "their project",
+      "how_to_check": "operator, in the app",
+      "key": "dialog",
+      "requirement": "agent-route-words-refused",
+      "then": "the dialog shows the refusal naming the queue route, and another name is accepted",
+      "when": "they type settings in the Add-agent dialog and submit"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "79674be58ca8470d8314cbd2dda336250323891491287a95dfa2cfbe81ca2f02",
+      "FR-2": "491e46ef7639c9418b40b2961e10cf895c54e83a9af70307a9d35d8717bf0c7b",
+      "FR-3": "4bcd28481003061adab49bf445248d76408ee557c8262a0f88e239000bcf1d48"
+    },
+    "high_water": 3,
+    "requirements": {
+      "agent-route-words-refused": "FR-1",
+      "route-table-checked": "FR-3",
+      "task-route-words-refused": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1: validators at create doors and a test, no schema, no migration, no route move, no UI bundle.\n\nD1. The words live in a Hub-only module (hub/hub/route_words.py), each with the route it loses to, and are checked only where an agent row or a task is created. Not in _RESERVED_AGENT_NAMES or the CLI's RESERVED_AGENT_NAMES: those are checked at every use site, so an agent already named settings would stop running (CLAUDE.md; overhaul-route-shadow-names).\nD2. A session sync refuses a route word only for an agent row it would add; a name already in the project syncs as before. Follows from D1.\nD3. One task-id check beside _TASK_ID_RE, called by TaskCreate and AgentTaskCreate, so the agent door answers 422 and not a 500 from re-validation inside its handler (agent_actions.py:245); jobs.py:917's initial tasks already answer 422 on a TaskCreate error.\nD4. Words are compared case-insensitively, as the reserved names are (worktrees.py:153), although the route match itself is exact. Rejected: refusing only the exact lowercase word (Settings would be accepted beside a refused settings, two rules for one list). (night-1010-8)\nD5. The route walk matches whole paths (shared method, equal depth, every segment equal or literal-vs-parameter) and keys on the match, not on parameter names; Hub-minted parameters (runner_id; full_path, the UI catch-all) are an explicit allowlist in the test.\nD6. Routes answer: POST /agents and /agents/request 400 with the sentence (the Add-agent dialog renders detail as text, agents.py:690-692); session sync 400; task doors 422 naming id.",
+  "evidence": {
+    "checked": [
+      "app.routes walked on today's tree: exactly conflicts, settings, sessions (agent), board, boards (task), plus runner_id and full_path pairs",
+      "hub/hub/worktrees.py:73-79,146-155: reserved set and validate_agent_name",
+      "src/agentweave/constants.py:77-83: the CLI's copy",
+      "hub/hub/api/v1/agents.py:694,763 and 2660,2736: the two agent-create routes",
+      "hub/hub/api/v1/session_sync.py:113-133: sync adds Agent rows for new names",
+      "hub/hub/schemas/tasks.py:17,80-88 and hub/hub/api/v1/agent_actions.py:138-141,245: task-id validators",
+      "hub/hub/api/v1/jobs.py:917: loop initial tasks build TaskCreate"
+    ],
+    "limits": [
+      "Whether any install already holds one of the words was not measured; D1 leaves such a resource as it is"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Re-walked on today's tree from the built app's app.routes (whole-path match, shared method, equal depth): GET /worktrees/conflicts is registered before GET /worktrees/{agent}; GET /queue/settings before GET /queue/{agent}; GET /agent/sessions/{agent} before GET /agent/{agent}/chat and /agent/{agent}/conversations (a path /agent/sessions/chat matches both, the earlier wins); GET /tasks/board and /tasks/boards before GET /tasks/{task_id}. The UI reads every victim route (api/queue.ts, api/workspace.ts, api/agentChat.ts, the task drawer). AGENT_NAME_RE accepts all three agent words and _TASK_ID_RE (schemas/tasks.py:17) both task words, so an operator or an agent can create a resource whose own panel shows some other resource's answer. F248 measured the first row (GET /worktrees/conflicts answers 200 [] for an agent named conflicts). The shared reserved set (worktrees.py:73-79, constants.py:79) cannot take these words: validate_agent_name is checked at every use site (agent_roster.py:36, agent_trigger.py:886, worktrees.py:163-227), so an agent that already holds one would stop running.",
+  "requirements": [
+    {
+      "key": "agent-route-words-refused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "overhaul-route-shadow-names (F248): refuse at creation only, Hub-only, so an existing agent that holds the word is not stopped by a check at every use site.",
+      "statement": "Every Hub door that creates an agent row MUST refuse a name that a route registered before the agent's own routes would answer for (today conflicts, settings and sessions, compared case-insensitively), with a sentence naming that route; no check outside agent creation MUST refuse such a name."
+    },
+    {
+      "key": "task-route-words-refused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "AgentTaskCreate re-validates through TaskCreate inside the handler (agent_actions.py:245); a TaskCreate-only check would answer 500 at the agent door.",
+      "statement": "Creating a task through the operator door, the agent door or a loop's initial tasks MUST refuse an id that a route registered before GET /tasks/{task_id} would answer for (today board and boards, case-insensitively) with a 422 naming id, never a 500."
+    },
+    {
+      "key": "route-table-checked",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The queue and sessions collisions existed when F248 was filed and nobody saw them; a list is only durable if the route table checks it.",
+      "statement": "The Hub's tests MUST fail, naming the route and the word, when a route with a fixed segment is registered before a route whose caller-named parameter at that segment it matches over the whole path, unless the word is refused for that parameter's resource or the parameter is Hub-minted (runner_id, the UI catch-all full_path)."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A Hub-only list of route words, each with the route it loses to, refused when an agent row is created: POST /agents (agents.py:694), POST /agents/request (agents.py:2660), and a session sync that adds a new agent row (session_sync.py:113-133)",
+      "Task ids board and boards refused by one shared check called from TaskCreate (schemas/tasks.py:80) and AgentTaskCreate (agent_actions.py:138), so both doors and a loop's initial tasks answer 422 naming id",
+      "A Hub test that walks app.routes and fails when a literal route shadows a caller-named parameter whose word is not refused"
+    ],
+    "non_goals": [
+      "The shared RESERVED_AGENT_NAMES / _RESERVED_AGENT_NAMES sets and the CLI's is_valid_agent_name: unchanged",
+      "Moving or reordering routes; no UI bundle",
+      "Renaming or refusing an agent or task that already holds one of the words: it keeps running, still unreadable at the shadowed route",
+      "A migration"
+    ]
+  },
+  "summary": "FastAPI matches routes in declaration order, so a fixed word declared before a caller-named parameter at the same place in the address claims that word: a resource created under it exists, is listed, and can never be read at its own address. Five words collide today: agent names conflicts, settings and sessions, and task ids board and boards. The operator decided (overhaul-route-shadow-names, F248) to refuse those words when an agent or task is created, at the Hub only, not by widening the shared reserved-name set, and to let a route-table test catch the next collision. Re-authored from openspec change a-name-a-caller-chooses-reaches-its-own-resource.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1021_route_shadow_names.py on scratch :8107, fresh database: the 'drive' criterion. Record it failing at check 1 before any build task.",
+      "files": [
+        "scripts/drive/d1021_route_shadow_names.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "agent-route-words-refused",
+        "task-route-words-refused"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "hub/hub/route_words.py: the two word lists with reasons and the two checks; called from create_operator_agent, request_agent, session_sync's new-row branch, TaskCreate and AgentTaskCreate. hub/tests/test_a_chosen_name_is_not_a_route.py first (walk, doors, task doors, controls), failing before the build.",
+      "files": [
+        "hub/hub/route_words.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/hub/api/v1/session_sync.py",
+        "hub/hub/schemas/tasks.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/tests/test_a_chosen_name_is_not_a_route.py"
+      ],
+      "from": null,
+      "key": "refuse",
+      "requirements": [
+        "agent-route-words-refused",
+        "task-route-words-refused",
+        "route-table-checked"
+      ],
+      "reviewer": null,
+      "title": "Route words refused at agent and task creation, and the route walk"
+    }
+  ],
+  "title": "A name a caller chooses reaches its own resource"
+}

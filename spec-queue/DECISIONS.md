@@ -20,6 +20,12 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### night-1010-8: are route words refused case-insensitively (F248) -- 2026-10-10 night, OPEN
+
+From `spec/changes/a-name-a-caller-chooses-reaches-its-own-resource` (`spdoc-4e1fa307cd4e`, design D4).
+
+- OPEN      night-1010-8  Taken by the night: the route words (agent names conflicts, settings, sessions; task ids board, boards) are refused at creation case-insensitively, as the reserved names user/operator are (worktrees.py:153), although the route match itself is exact, so Settings is refused too. Rejected: refusing only the exact lowercase word (Settings would be accepted beside a refused settings, two rules for one list). Confirm or reverse.
+
 ### night-1010-5, -6, -7: how an exploring turn asks in prose (F545) -- 2026-10-10 night, OPEN
 
 From `spec/changes/an-exploring-turn-asks-its-questions-in-its-reply` (`spdoc-a56fa9bf6cdd`, design D2-D4).

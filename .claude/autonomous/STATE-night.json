@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 33,
+    "iteration": 34,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "route-shadow-names-spec",
-    "next_action": "route-shadow-names-spec: author it on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section). Also: d1009 check 6 reads spec.json at a path absent on the last run; checks 6-7 unverified",
+    "current": "route-shadow-names-impl",
+    "next_action": "route-shadow-names-impl: drive-first task-182303d0d3d6 of spdoc-4e1fa307cd4e - write scripts/drive/d1021_route_shadow_names.py on scratch :8107 (fresh db), record it failing at check 1 (agent 'settings' created 201). Also: d1009 check 6 reads spec.json at a path absent on the last run; checks 6-7 unverified",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -104,13 +104,18 @@
         },
         {
             "id": "route-shadow-names-spec",
-            "status": "open",
-            "title": "Author route-shadow-names-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)"
+            "status": "done",
+            "title": "route-shadow-names-spec: spdoc-4e1fa307cd4e approved on :8010 (tasks drive-first task-182303d0d3d6, refuse task-78a794e5bc71); openspec copy archived"
         },
         {
             "id": "route-shadow-names-impl",
             "status": "open",
-            "title": "route-shadow-names-impl"
+            "title": "route-shadow-names-impl: drive-first task-182303d0d3d6 - d1021 on :8107, failing at check 1"
+        },
+        {
+            "id": "route-shadow-names-refuse-impl",
+            "status": "open",
+            "title": "route-shadow-names-refuse-impl: task-78a794e5bc71 - hub/hub/route_words.py, the three agent-create doors, TaskCreate+AgentTaskCreate shared check, test_a_chosen_name_is_not_a_route.py first; d1021 passes"
         },
         {
             "id": "route-shadow-names-drive",
@@ -163,7 +168,8 @@
         "night-1010-4",
         "night-1010-5",
         "night-1010-6",
-        "night-1010-7"
+        "night-1010-7",
+        "night-1010-8"
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",

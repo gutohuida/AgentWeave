@@ -1,3 +1,8 @@
+> **Moved to the app 2026-10-10, archived unbuilt.** Successor: `spec/changes/a-name-a-caller-chooses-reaches-its-own-resource/spec.json`
+> (`spdoc-4e1fa307cd4e`, approved on the trial Hub). It keeps the five words and the route-walk test (D2 below) but refuses
+> them **at creation only, Hub-only** (decision overhaul-route-shadow-names), not by adding them to the shared
+> `RESERVED_AGENT_NAMES`, which is checked at every use site and would stop an agent that already holds one. D1 below is superseded.
+
 # Proposal — a name a caller chooses reaches its own resource
 
 **Round 1, 2026-09-24** (bundle B11, `spec-queue/tracks/B11.md`). Finding: **F248 (C)**. Re-verified

@@ -19075,6 +19075,9 @@ it answered the invented workspace. Seven older tests asked about agents they ne
 (`hub/hub/api/v1/worktrees.py:142`) is still declared before `GET /worktrees/{agent}` (`:231`), and
 `AGENT_NAME_RE` still accepts `conflicts`, so an agent legally named that still cannot have its
 workspace read. The repair is a namespace, not a reordering. [classified 2026-09-09, D-3]
+2026-10-10: specified (not built) as `spec/changes/a-name-a-caller-chooses-reaches-its-own-resource`
+(`spdoc-4e1fa307cd4e`, approved on `:8010`); the openspec copy is archived. Five words collide today
+(`conflicts`, `settings`, `sessions`, `board`, `boards`), refused at creation only.
 
 `AGENT_NAME_RE` accepts `conflicts`; `POST /projects/{p}/agents {"name": "conflicts"}` creates it,
 201, and it appears on the roster like any other. `api/v1/worktrees.py` declares
