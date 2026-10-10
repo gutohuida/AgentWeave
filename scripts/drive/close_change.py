@@ -46,6 +46,8 @@ DISTIL_TESTS = "hub/tests/test_vault_distillation.py"
 DISTIL_DRIVE = "scripts/drive/d1016_distillation.py"
 CONTRA_TESTS = "hub/tests/test_vault_contradictions.py"
 CONTRA_DRIVE = "scripts/drive/d1017_contradictions.py"
+REPORTS_TESTS = "hub/tests/test_vault_reports.py"
+REPORTS_DRIVE = "scripts/drive/d1024_reports.py"
 
 JOURNEY_TESTS = "hub/tests/test_spec_journey.py"
 BRIEFING_TESTS = "hub/tests/test_spec_journey_briefing.py"
@@ -950,6 +952,41 @@ CHANGES = {
              "written, the 437 fact superseded, nothing disputed."),
         ],
     },
+    "freports": {
+        "document": "spec/changes/a-working-agent-tells-the-manager-an-entry-is-wrong/spec.json",
+        "commit": "eafb767",
+        "tasks": ["task-c47364686c9b", "task-1ce508bb4520", "task-036f05924ff6"],
+        "evidence": [
+            ("FR-1", "task-1ce508bb4520", "test_result", REPORTS_TESTS,
+             "test_the_job_is_listed_disabled_with_nothing_chosen. Drive d1024 check 1."),
+            ("FR-2", "task-1ce508bb4520", "test_result", REPORTS_TESTS,
+             "test_a_report_is_filed_by_the_runs_agent and test_a_report_is_refused_for_what_is_not_here_or_not_a_message: filed 201 with the reporter from the credential, a reporter in the body refused 422 "
+             "(RequestModel, F116: the criterion said ignored; the Hub refuses, nothing is written), "
+             "one open report per entry, the tool on every surface. Drive d1024 checks 3c and 5c."),
+            ("FR-3", "task-1ce508bb4520", "test_result", REPORTS_TESTS,
+             "test_a_report_on_a_private_fact_stays_at_the_private_location: a private one only at the private location with no stub."),
+            ("FR-4", "task-1ce508bb4520", "test_result", REPORTS_TESTS,
+             "test_each_report_is_one_firing_and_a_disabled_job_spawns_nothing: one spawn per report, one manager_job_fired firing. Drive d1024 check 7: two "
+             "report_filed firings, one written, naming helper."),
+            ("FR-5", "task-1ce508bb4520", "test_result", REPORTS_TESTS,
+             "test_a_correction_is_stored_only_when_its_quotes_are_in_the_source: a correction stored only when every quote is located in "
+             "the cited source, else referred; an unchanged claim referred (found by the drive)."),
+            ("FR-5", "task-c47364686c9b", "manual_observation", REPORTS_DRIVE,
+             "d1024 was committed before the build and failed at check 1 (no vault-reports job); on "
+             "the committed tree (eafb767) it passed 13/13 with real Haiku "
+             "(testbed/drive1024-reports/123525). The 3,000 fact was corrected to a new 300 fact "
+             "citing line 4; a colleague's 500 was answered, not applied."),
+            ("FR-6", "task-1ce508bb4520", "test_result", REPORTS_TESTS,
+             "test_corrected_and_referred_reports_mark_their_facts: corrected supersedes by the new fact, referred disputes, in the map, the "
+             "card and the list. Drive d1024 check 4: superseded_by the new fact and the card says so."),
+            ("FR-7", "task-1ce508bb4520", "test_result", REPORTS_TESTS,
+             "test_reports_are_listed_open_first_and_only_a_referred_one_closes: open first, close with a note, 409 once closed."),
+            ("FR-8", "task-036f05924ff6", "test_result", "hub/ui/src/__tests__/vaultTab.test.tsx",
+             "Four cases: the list with message, reporter, status and answer and a form only on a "
+             "referred one; close sends the note and shows the 409 reason; a 404 is no section; a "
+             "fact superseded by a corrected fact says so. Drive d1024 check 8 in Chromium."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -962,6 +999,7 @@ CHANGE_FOLDS = {
     "fvault": 'knowledge-vault',
     "fdistil": 'knowledge-vault',
     "fcontra": 'knowledge-vault',
+    "freports": 'knowledge-vault',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
