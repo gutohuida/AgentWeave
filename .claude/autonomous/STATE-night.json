@@ -8,18 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f565-impl",
-    "next_action": "Do queue item f565-impl: read F565 in scripts/drive/FINDINGS.md (route tests for POST /projects/create name refusals: '..' final segment, missing parent, nested a/b; each refused with the parent unchanged; change code only if one is not refused) and its DECISIONS.md row overhaul-create-name-check. Test first, lint, set Status.",
+    "current": "f566-impl",
+    "next_action": "Do queue item f566-impl: read F566 in scripts/drive/FINDINGS.md (test that builds the review-reassignment refusal at max task id 64 / agent name 32 and checks every surface that records it holds the remedy whole) and its DECISIONS.md row overhaul-refusal-length. Test first, lint, set Status.",
     "queue": [
-        {
-            "id": "f565-impl",
-            "status": "open",
-            "title": "Tier 0 fix F565: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
-        },
         {
             "id": "f566-impl",
             "status": "open",

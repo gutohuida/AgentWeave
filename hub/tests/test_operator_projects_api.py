@@ -291,6 +291,34 @@ async def test_create_project_returns_agents_state_path_and_budgets(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "relative",
+    [
+        pytest.param("workspace/..", id="traversal-final-segment"),
+        pytest.param("missing-parent/child", id="missing-parent"),
+        pytest.param("a/b", id="nested-name-under-missing-parent"),
+    ],
+)
+async def test_create_project_refuses_a_name_that_is_not_one_new_directory(
+    app, auth_headers, tmp_path, relative
+) -> None:
+    # The dialog refuses these early (`projectNameProblem`); the route is the other half of the
+    # same rule (F565): whatever joined path arrives, it creates at most one new directory and
+    # leaves the parent exactly as it was.
+    (tmp_path / "workspace").mkdir()
+    before = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*"))
+
+    refused = await app.post(
+        "/api/v1/projects/create",
+        json={"path": str(tmp_path / relative), "name": "Nope"},
+        headers=auth_headers,
+    )
+
+    assert 400 <= refused.status_code < 500, refused.text
+    assert sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*")) == before
+
+
+@pytest.mark.asyncio
 async def test_project_settings_update_is_validated_and_atomic(app, auth_headers) -> None:
     updated = await app.put(
         "/api/v1/projects/proj-test/settings",
