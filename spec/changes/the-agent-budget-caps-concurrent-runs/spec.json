@@ -1,0 +1,210 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8109 with a fresh database, one project with a Claude runner and two Haiku agents alice and bob, and the project's agent budget set to 1 through PUT settings (scripts/drive/d1023_run_cap.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1023_run_cap.py",
+      "key": "drive",
+      "requirement": "the-agent-budget-caps-concurrent-runs",
+      "then": "1) while alice's run is running bob has no running run, and his entry is queued with a waiting reason naming the cap; 2) bob's run starts after alice's ends, with no other action; 3) both replies say done. Fails on today's Hub at check 1 (both run at once).",
+      "when": "the drive sends alice and bob each a message at once asking them to run a command that takes about fifteen seconds and then reply done"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with agent budget 1, one agent's run running and another agent with an entry queued; and the same with agent budget null",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_agent_budget_caps_runs.py",
+      "key": "cap",
+      "requirement": "the-agent-budget-caps-concurrent-runs",
+      "then": "the second waits with 'project run cap reached (1/1)' and its delivery_attempts unchanged, then starts after the re-drain; with null both start",
+      "when": "schedule_agent is called for the second agent, the first run ends and the project is re-drained; and in the null case, both are scheduled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with agent budget 1 that already holds one agent",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_agent_budget_caps_runs.py",
+      "key": "agents",
+      "requirement": "the-agent-budget-does-not-limit-agents",
+      "then": "the agent is created; no 'agent budget exhausted' refusal",
+      "when": "an agent calls request_agent for a second agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a database at 0125 holding projects with agent_budget 8 and 2",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_migrations.py -k agent_budget",
+      "key": "migration",
+      "requirement": "the-agent-budget-is-off-for-existing-projects-and-three-for-new",
+      "then": "after the upgrade both existing projects read null and the new one 3; after the downgrade the nulls read 8, the new project keeps 3, and the column is NOT NULL",
+      "when": "it is upgraded to head, a project is created, and it is downgraded to 0125"
+    },
+    {
+      "checked_by": "agent",
+      "given": "ProjectSettingsPanel with agent_budget null, then 3",
+      "how_to_check": "vitest (hub/ui)",
+      "key": "settings",
+      "requirement": "the-agent-budget-is-off-for-existing-projects-and-three-for-new",
+      "then": "the row is labelled Concurrent runs and shows Off, then 3; the saves send 2 and null",
+      "when": "it renders, the operator sets 2 and saves, then chooses Off and saves"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator's Hub after their next restart on the merged code",
+      "how_to_check": "operator, in the app",
+      "key": "restart",
+      "requirement": "the-agent-budget-is-off-for-existing-projects-and-three-for-new",
+      "then": "Concurrent runs shows Off and the agents run together as before",
+      "when": "they open a project's Settings and start several agents at once"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "de6cf59e70391bce0162bce60dda5e2d8ebfa6898c33d2e4d728a79d36cf69ef",
+      "FR-2": "b8cc7410275d9c3f45808b084bdc0331b33479431b0ea1ce39bc3c6279100316",
+      "FR-3": "e378b867c19ca70129126ba206d995698f6d987cede757b8e2e80191af3a68d7"
+    },
+    "high_water": 3,
+    "requirements": {
+      "the-agent-budget-caps-concurrent-runs": "FR-1",
+      "the-agent-budget-does-not-limit-agents": "FR-2",
+      "the-agent-budget-is-off-for-existing-projects-and-three-for-new": "FR-3"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2. Hazard: a migration that the operator's :8000 Hub runs on its real data at its next restart, and a scheduler rule that holds turns the operator's projects start today.\n\nMigration 0126 (`0126_agent_budget_caps_runs`): in a batch_alter_table on `projects`, `agent_budget` becomes nullable with server_default '3'; then `UPDATE projects SET agent_budget = NULL`, so every existing project has the cap off and its behaviour does not change at restart. Guarded for a missing `projects` table like 0033/0034. Rollback (downgrade): `UPDATE projects SET agent_budget = 8 WHERE agent_budget IS NULL`, then the column back to NOT NULL with server_default '8'. Head assertions bump in test_migrations.py and test_project_persistence.py (.claude/rules/db-migrations.md).\n\nD1. The cap is checked in `_attempt_turn`, beside the per-agent running check (turn_scheduler.py:311), so every turn that `schedule_agent` starts (operator messages, agent messages, jobs, loops, re-drains: 19 callers) is under it. It counts the project's runs with `Run.status == 'running'`, the predicate the per-agent check already uses. At the cap it returns a transient waiting reason (`terminal_failure=False`, no delivery attempt counted): 'project run cap reached (N/N)'.\nD2. Two agents are scheduled under two different per-agent locks, so a count-then-start is a race. When the project's cap is set, the check and the start run under one per-project asyncio lock (taken inside the agent's lock, always in that order); when it is off, no project lock is taken and nothing changes.\nD3. Waiting turns start when a run ends through the existing project re-drain: every run end already calls `redrain_queued_agents(project_id)` (agent_trigger.py:3271-3292, F90), which schedules every agent with a queued entry. No new tick.\nD4. The request_agent agent-count refusal (agents.py:2726-2733) is deleted with its tests; agent count is no longer limited by anything.\nD5. The column and API field keep the name `agent_budget`; the Settings label becomes 'Concurrent runs' with an Off choice, and the Overview stops saying 'of N agents'. Rejected: renaming the column to `run_cap` (a second schema change in the hazardous migration and an API field rename, for a name the operator's decision itself uses). (night-1010-11)\nD6. Off is null, not 0: the settings route takes `agent_budget: Optional[int] = Field(ge=1, le=1000)`. New projects get 3 from the model default and the server default.\nD7. Runs started outside `schedule_agent` (any direct `trigger_agent_directly` caller) still count toward the cap but are not refused by it; the build greps for such callers and names them in the commit. Rejected: putting the check inside `trigger_agent_directly` (it raises refusals the scheduler classifies as delivery attempts, F114, so a cap there would spend an entry's allowance while it waits). (night-1010-12)",
+  "evidence": {
+    "checked": [
+      "hub/hub/db/models.py:78-80: agent_budget NOT NULL default 8",
+      "hub/hub/api/v1/agents.py:2726-2733: the only refusal that reads agent_budget",
+      "hub/hub/turn_scheduler.py:66-67: locks are per (project, agent)",
+      "hub/hub/turn_scheduler.py:311-319: the per-agent running check, the only concurrency rule",
+      "hub/hub/api/v1/agent_trigger.py:3271-3292: a run's end re-drains every queued agent in the project",
+      "hub/hub/api/v1/projects.py:99: settings take agent_budget int ge=1",
+      "hub/ui/src/components/environment/ProjectSettingsPanel.tsx:170 and overview/CollaborationSummary.tsx:112: the label and the 'of N agents' summary",
+      "hub/hub/migrations/versions: head is 0125_run_divergence_task_nullable"
+    ],
+    "limits": [
+      "Whether a run parked on ask_user keeps status 'running' (and so holds a cap slot) is not measured; the drive's agents never ask"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "`projects.agent_budget` (db/models.py:78, NOT NULL default 8) is read by one refusal, `request_agent`'s agent count (api/v1/agents.py:2726-2733); operator agent creation does not check it and nothing limits concurrent runs by it. `schedule_agent` (turn_scheduler.py:259) starts a turn for one agent under a per-agent lock (`_lock_for`, turn_scheduler.py:66) and refuses only when that agent already has a running run (turn_scheduler.py:311-319), so any number of agents in a project run at once. The Settings row (ProjectSettingsPanel.tsx:170) now describes the request_agent rule, and the Overview says 'N of 8 agents' (CollaborationSummary.tsx:112).",
+  "requirements": [
+    {
+      "key": "the-agent-budget-caps-concurrent-runs",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F557-agent-budget: the setting was labelled a concurrency limit and capped nothing that runs; the operator wants it to bound how many runs a project spends at once.",
+      "statement": "When a project's agent budget is set to N, the Hub SHALL start a turn in that project only while fewer than N of its runs are running; a turn that would exceed it SHALL stay queued with a waiting reason that names the cap, without counting a delivery attempt, and SHALL start when a running run ends. When the agent budget is off, the number of concurrent runs MUST NOT be limited by it."
+    },
+    {
+      "key": "the-agent-budget-does-not-limit-agents",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F557-agent-budget: one setting, one meaning; the request_agent count was the only place it applied and contradicted the label.",
+      "statement": "Creating an agent, by the operator or through request_agent, MUST NOT be refused because of the project's agent budget."
+    },
+    {
+      "key": "the-agent-budget-is-off-for-existing-projects-and-three-for-new",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F557-agent-budget: existing projects keep their behaviour at the upgrade; new projects start bounded.",
+      "statement": "A project that existed before this change SHALL have its agent budget off after the upgrade, and a project created after it SHALL start with an agent budget of 3. The project settings SHALL show the agent budget as the number of concurrent runs, and SHALL let the operator turn it off."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Migration 0126: agent_budget nullable, existing rows NULL, server default 3; downgrade restores NOT NULL default 8",
+      "turn_scheduler: the per-project cap check and lock in _attempt_turn",
+      "agents.py: request_agent's agent-count refusal removed",
+      "projects.py, inbound_queue.py: agent_budget Optional on the settings request and responses",
+      "ProjectSettingsPanel: 'Concurrent runs' with Off; CollaborationSummary drops 'of N agents'; vitest; UI bundle refresh",
+      "Hub tests: cap, queueing, start on run end, off means unlimited, migration up and down"
+    ],
+    "non_goals": [
+      "Renaming the column or the API field (D5)",
+      "A cap per agent, per runner or per provider",
+      "Any limit on how many agents a project holds",
+      "Changing the hop budget, the turn delivery cap or the token budget"
+    ]
+  },
+  "summary": "A project's agent budget is labelled as a concurrency limit but caps nothing that runs: the Hub reads it only in request_agent, which refuses an agent staffing a new agent once the project holds that many agents (F557). The operator decided (F557-agent-budget) that the budget caps concurrent runs: the scheduler starts at most N runs at once in a project and further turns wait in the queue, starting as runs end; the request_agent agent-count check is dropped so the setting has one meaning. It is off for existing projects and 3 for new ones, which takes a migration.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1023_run_cap.py on scratch :8109, fresh database, reusing the d1011 harness: the 'drive' criterion. Record it failing at check 1 before any build task.",
+      "files": [
+        "scripts/drive/d1023_run_cap.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "the-agent-budget-caps-concurrent-runs"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "Hub tests first (cap, agents, migration criteria), failing before the build. Migration 0126 with its downgrade (design), head assertions bumped; model default 3 nullable; _attempt_turn cap check under a per-project lock when set (D1, D2); request_agent count removed (D4); agent_budget Optional on settings and responses (D6). Full Hub suite with -n auto.",
+      "files": [
+        "hub/hub/migrations/versions/0126_agent_budget_caps_runs.py",
+        "hub/hub/db/models.py",
+        "hub/hub/turn_scheduler.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/hub/api/v1/inbound_queue.py",
+        "hub/tests/test_agent_budget_caps_runs.py",
+        "hub/tests/test_migrations.py",
+        "hub/tests/test_project_persistence.py"
+      ],
+      "from": null,
+      "key": "cap",
+      "requirements": [
+        "the-agent-budget-caps-concurrent-runs",
+        "the-agent-budget-does-not-limit-agents",
+        "the-agent-budget-is-off-for-existing-projects-and-three-for-new"
+      ],
+      "reviewer": null,
+      "title": "Migration, scheduler cap and request_agent"
+    },
+    {
+      "depends_on": [
+        "cap"
+      ],
+      "description": "Vitest first (settings criterion). ProjectSettingsPanel row 'Concurrent runs' with Off (D5); api/projects.ts agent_budget number | null; CollaborationSummary drops 'of N agents'. Refresh the UI bundle; run test_surface_ceilings and test_ui_build_stamp. d1023 passes.",
+      "files": [
+        "hub/ui/src/components/environment/ProjectSettingsPanel.tsx",
+        "hub/ui/src/components/overview/CollaborationSummary.tsx",
+        "hub/ui/src/api/projects.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "settings",
+      "requirements": [
+        "the-agent-budget-is-off-for-existing-projects-and-three-for-new"
+      ],
+      "reviewer": null,
+      "title": "Concurrent runs in Settings and the Overview"
+    }
+  ],
+  "title": "The agent budget caps how many runs a project has at once"
+}

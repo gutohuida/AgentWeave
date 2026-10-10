@@ -20,6 +20,13 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### night-1010-11, night-1010-12: the agent budget as a run cap (F557) -- 2026-10-10 night, OPEN
+
+From `spec/changes/the-agent-budget-caps-concurrent-runs` (`spdoc-4cd731c8dba3`, design D5 and D7).
+
+- OPEN      night-1010-11  Taken by the night: the column and API field keep the name `agent_budget`; only the Settings label changes ("Concurrent runs", with Off). Rejected: renaming it to `run_cap` (a second schema change inside the hazardous migration and an API field rename). Confirm or reverse.
+- OPEN      night-1010-12  Taken by the night: the cap is enforced in `schedule_agent`'s attempt (a transient wait, no delivery attempt counted); a run started by a direct `trigger_agent_directly` caller counts toward the cap but is not refused by it. Rejected: checking inside `trigger_agent_directly`, whose refusals the scheduler counts as delivery attempts (F114), so a waiting entry would spend its allowance. Confirm or reverse.
+
 ### night-1010-9, night-1010-10: live thinking and the diagnostics switch (F572) -- 2026-10-10 night, OPEN
 
 From `spec/changes/live-thinking-stays-open-and-diagnostics-can-be-hidden` (`spdoc-a56fbfe278d0`, design D3 and D5).
