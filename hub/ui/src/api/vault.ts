@@ -36,7 +36,8 @@ export interface VaultEntry {
   disputed?: boolean
   /** A fact's: the later-dated side of an open contradiction, which the Hub presumes holds. */
   presumed?: boolean
-  /** A fact's: the `decision` source of a resolved contradiction that set it aside. */
+  /** A fact's: the `decision` source of a resolved contradiction that set it aside, or the
+   *  corrected fact (`fct-`) a report replaced it with. */
   superseded_by?: string | null
 }
 
@@ -211,6 +212,52 @@ export function useResolveContradiction() {
     onSuccess: () => {
       // The decision is a new source, and the facts' marks follow from the resolution.
       void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault', 'contradictions'] })
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault', 'map'] })
+    },
+  })
+}
+
+/** One report as `GET /vault/reports` lists it, open ones first: a working agent's message that an
+ *  entry is wrong, and what the manager did with it (`a-working-agent-tells-the-manager-an-entry-is-wrong`). */
+export interface VaultReport {
+  id: string
+  entry: string
+  entry_kind: 'source' | 'fact'
+  entry_name: string
+  message: string
+  reporter: { agent: string; run_id: string | null }
+  /** `referred` is the one waiting for the operator. */
+  status: 'pending' | 'corrected' | 'answered' | 'referred' | 'closed'
+  answer: string | null
+  /** The corrected fact a `corrected` report wrote, with its claim. */
+  replaced_by: string | null
+  replaced_by_claim: string | null
+  close: { note: string; closed_at: string } | null
+}
+
+/** The reports agents filed. A 404 is a Hub that predates them, which the tab reads as no section.
+ *  `refetchMs` polls while a manager job may still be answering one. */
+export function useVaultReports(refetchMs: number | false = false) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<VaultReport[]>({
+    queryKey: ['project', projectId, 'vault', 'reports'],
+    queryFn: async () =>
+      (await getJson<{ reports: VaultReport[] }>(`/api/v1/projects/${projectId}/vault/reports`)).reports,
+    enabled: isConfigured && !!projectId,
+    retry: (count, error) => !isNoVault(error) && count < 2,
+    refetchInterval: refetchMs,
+  })
+}
+
+export function useCloseVaultReport() {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      postJson<VaultReport>(`/api/v1/projects/${projectId}/vault/reports/${id}/close`, { note }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault', 'reports'] })
+      // A closed report no longer marks its entry disputed.
       void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault', 'map'] })
     },
   })

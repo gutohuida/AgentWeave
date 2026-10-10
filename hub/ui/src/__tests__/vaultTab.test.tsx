@@ -350,6 +350,86 @@ describe('the Vault tab', () => {
     expect(plain).toHaveTextContent('superseded')
   })
 
+  // `a-working-agent-tells-the-manager-an-entry-is-wrong`, task reports-tab. The list is open
+  // first, as `GET /vault/reports` returns it.
+  const REPORTER = { agent: 'helper', run_id: 'run-1' }
+  const CORRECTED_RPT = {
+    id: 'rpt-aaaaaaaaaaaa', entry: 'fct-111111111111', entry_kind: 'fact', entry_name: 'Refunds up to 437 euros need no approval.',
+    message: 'The call says 300, not 437.', reporter: REPORTER, status: 'corrected',
+    answer: 'The source says 300; a corrected fact was written.', replaced_by: 'fct-333333333333',
+    replaced_by_claim: 'Refunds up to 300 euros need no approval.', close: null,
+  }
+  const REFERRED_RPT = {
+    ...CORRECTED_RPT, id: 'rpt-bbbbbbbbbbbb', entry: 'fct-222222222222', entry_name: 'Goods may be returned within 30 days.',
+    message: 'I think it is 14 days.', status: 'referred', answer: 'Cannot tell from the source; the operator should look.',
+    replaced_by: null, replaced_by_claim: null,
+  }
+  function withReports(list: unknown[], extra?: Route): Route {
+    return (url, init) => {
+      const answered = extra?.(url, init)
+      if (answered) return answered
+      if (url.endsWith('/vault/reports')) return { status: 200, body: { reports: list } }
+      return withFacts()(url, init)
+    }
+  }
+
+  it('lists reports with message, reporter, status and answer; only a referred one has the form', async () => {
+    vault = withReports([REFERRED_RPT, CORRECTED_RPT])
+    render(<VaultPage />, { wrapper })
+    const referred = await screen.findByTestId('vault-report-rpt-bbbbbbbbbbbb')
+    expect(referred).toHaveTextContent('I think it is 14 days.')
+    expect(referred).toHaveTextContent('helper')
+    expect(referred).toHaveTextContent('referred')
+    expect(referred).toHaveTextContent('Cannot tell from the source')
+    expect(within(referred).getByTestId('vault-report-rpt-bbbbbbbbbbbb-close')).toBeInTheDocument()
+    const corrected = screen.getByTestId('vault-report-rpt-aaaaaaaaaaaa')
+    expect(corrected).toHaveTextContent('The call says 300, not 437.')
+    expect(corrected).toHaveTextContent('corrected')
+    expect(corrected).toHaveTextContent('Refunds up to 300 euros need no approval.')
+    expect(within(corrected).getByTestId('vault-report-link-rpt-aaaaaaaaaaaa')).toBeInTheDocument()
+    expect(screen.queryByTestId('vault-report-rpt-aaaaaaaaaaaa-close')).toBeNull()
+    expect(screen.queryByTestId('vault-report-rpt-aaaaaaaaaaaa-note')).toBeNull()
+  })
+
+  it('closes a referred report with a note and shows the reason when the Hub refuses', async () => {
+    vault = withReports([REFERRED_RPT], (url, init) =>
+      url.endsWith('/vault/reports/rpt-bbbbbbbbbbbb/close') && init?.method === 'POST'
+        ? { status: 409, body: { detail: 'Report rpt-bbbbbbbbbbbb is already closed.' } }
+        : undefined,
+    )
+    render(<VaultPage />, { wrapper })
+    // A close without a note is not sent.
+    expect(await screen.findByTestId('vault-report-rpt-bbbbbbbbbbbb-close')).toBeDisabled()
+    fireEvent.change(screen.getByTestId('vault-report-rpt-bbbbbbbbbbbb-note'), { target: { value: 'Checked: it is 30.' } })
+    fireEvent.click(screen.getByTestId('vault-report-rpt-bbbbbbbbbbbb-close'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('already closed')
+    expect(sent[0]).toEqual({
+      url: 'http://hub/api/v1/projects/proj-a/vault/reports/rpt-bbbbbbbbbbbb/close',
+      method: 'POST',
+      body: { note: 'Checked: it is 30.' },
+    })
+  })
+
+  it('reads a 404 from the reports route as no section', async () => {
+    vault = withReports([], (url) => (url.endsWith('/vault/reports') ? { status: 404, body: { detail: 'Not Found' } } : undefined))
+    render(<VaultPage />, { wrapper })
+    await screen.findByTestId('vault-entry-src-aaaaaaaaaaaa')
+    expect(screen.queryByTestId('vault-reports')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('says a fact was superseded by a corrected fact when a report set it aside', async () => {
+    const setAside = { ...REFUND, superseded_by: 'fct-333333333333' }
+    vault = withReports([], (url) =>
+      url.endsWith('/vault/map') ? { status: 200, body: { entries: [SOURCE, setAside, RETURNS] } } : undefined,
+    )
+    render(<VaultPage />, { wrapper })
+    fireEvent.click(await screen.findByTestId('vault-entry-src-aaaaaaaaaaaa'))
+    const mark = await screen.findByTestId('vault-fact-fct-111111111111')
+    expect(mark).toHaveAttribute('data-superseded', 'true')
+    expect(mark).toHaveTextContent('superseded by a corrected fact')
+  })
+
   it('sends the day a source was said when one is given', async () => {
     const routed = vault
     vault = (url, init) =>

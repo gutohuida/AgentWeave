@@ -5,15 +5,18 @@ import {
   isFact,
   isNoVault,
   useDistilVaultSource,
+  useCloseVaultReport,
   useResolveContradiction,
   useUpdateVaultSettings,
   useUploadVaultSource,
   useVaultContradictions,
   useVaultEntry,
   useVaultMap,
+  useVaultReports,
   useVaultSettings,
   type VaultContradiction,
   type VaultEntry,
+  type VaultReport,
   type VaultSettings,
   type VaultType,
   type VaultVisibility,
@@ -41,6 +44,10 @@ import { hubDate } from '@/lib/hubTime'
  * Contradictions (`sources-that-disagree-are-pointed-out`) are listed above the entries, open
  * first, each with a form that records the operator's decision. A Hub that predates them answers
  * 404, which reads as no section; the facts they dispute carry a mark where they are listed.
+ *
+ * Reports (`a-working-agent-tells-the-manager-an-entry-is-wrong`) follow, each with what the
+ * manager did; one it referred carries a form to close it. A fact a report corrected is marked
+ * superseded and the report links to the fact that replaced it.
  */
 const WATCH_MS = 3 * 60 * 1000
 const WATCH_EVERY_MS = 3000
@@ -53,6 +60,7 @@ export function VaultPage() {
   const settings = useVaultSettings()
   // The check runs after a distillation, so the list is re-read while facts may still be arriving.
   const contradictions = useVaultContradictions(watching ? WATCH_EVERY_MS : false)
+  const reports = useVaultReports(watching ? WATCH_EVERY_MS : false)
   const [selected, setSelected] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   // Each watch restarts the clock: a later Distil gets its own few minutes.
@@ -103,6 +111,15 @@ export function VaultPage() {
       </header>
 
       <ContradictionSection contradictions={contradictions.data ?? []} error={contradictions.error} />
+
+      <ReportSection
+        reports={reports.data ?? []}
+        error={reports.error}
+        onOpen={(id) => {
+          setSelected(id)
+          setAdding(false)
+        }}
+      />
 
       <div className="grid min-h-[320px] grid-cols-[minmax(220px,320px)_1fr] gap-6">
         <section aria-label="Vault entries" className="flex flex-col gap-1">
@@ -333,7 +350,9 @@ function FactList({
               {fact.superseded_by && (
                 <>
                   {' '}
-                  <Badge variant="default">superseded by a decision</Badge>
+                  <Badge variant="default">
+                    {fact.superseded_by.startsWith('fct-') ? 'superseded by a corrected fact' : 'superseded by a decision'}
+                  </Badge>
                 </>
               )}
             </span>
@@ -692,6 +711,110 @@ function ResolveForm({ contradiction }: { contradiction: VaultContradiction }) {
       {resolve.error && (
         <p className="w-full text-xs" style={{ color: 'var(--amber)' }} role="alert">
           {readableApiError(resolve.error, 'Could not record that decision.')}
+        </p>
+      )}
+    </form>
+  )
+}
+
+function ReportSection({
+  reports,
+  error,
+  onOpen,
+}: {
+  reports: VaultReport[]
+  error: unknown
+  onOpen: (id: string) => void
+}) {
+  // An old Hub has no route: no section, not an error.
+  if (isNoVault(error)) return null
+  if (error) {
+    return (
+      <p className="text-xs" style={{ color: 'var(--amber)' }} role="alert">
+        {readableApiError(error, "Could not read this project's reports.")}
+      </p>
+    )
+  }
+  if (reports.length === 0) return null
+  const waiting = reports.filter((item) => item.status === 'referred').length
+  return (
+    <section aria-label="Reports" data-testid="vault-reports" className="flex flex-col gap-2">
+      <h3 className="settings-group-heading">Reports{waiting > 0 ? ` (${waiting} for you)` : ''}</h3>
+      <p className="max-w-2xl text-xs" style={{ color: 'var(--text-3)' }}>
+        Agents tell the manager when an entry looks wrong. It corrects the entry when the source
+        shows the error, and refers the rest to you.
+      </p>
+      {reports.map((item) => <ReportCard key={item.id} report={item} onOpen={onOpen} />)}
+    </section>
+  )
+}
+
+function ReportCard({ report, onOpen }: { report: VaultReport; onOpen: (id: string) => void }) {
+  return (
+    <article
+      data-testid={`vault-report-${report.id}`}
+      data-status={report.status}
+      className="flex flex-col gap-2 rounded-md px-3 py-3 text-sm"
+      style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+    >
+      <p>
+        <span style={{ color: 'var(--text-3)' }}>{report.reporter.agent} on </span>
+        {report.entry_name}{' '}
+        <Badge variant={report.status === 'referred' ? 'warning' : 'default'}>{report.status}</Badge>
+      </p>
+      <p className="text-xs">{report.message}</p>
+      {report.answer && (
+        <p className="text-xs" style={{ color: 'var(--text-2)' }}>
+          {report.answer}
+        </p>
+      )}
+      {report.replaced_by && (
+        <p className="text-xs">
+          {report.replaced_by_claim ?? report.replaced_by}{' '}
+          <button
+            type="button"
+            data-testid={`vault-report-link-${report.id}`}
+            className="underline"
+            style={{ color: 'var(--blue)' }}
+            onClick={() => onOpen(report.replaced_by as string)}
+          >
+            Open the corrected fact
+          </button>
+        </p>
+      )}
+      {report.close && (
+        <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+          Closed: {report.close.note}
+        </p>
+      )}
+      {report.status === 'referred' && <CloseReportForm report={report} />}
+    </article>
+  )
+}
+
+function CloseReportForm({ report }: { report: VaultReport }) {
+  const { id } = report
+  const close = useCloseVaultReport()
+  const [note, setNote] = useState('')
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2"
+      aria-label="Close this report"
+      onSubmit={(event) => {
+        event.preventDefault()
+        close.mutate({ id, note: note.trim() })
+      }}
+    >
+      <label className="flex min-w-[260px] flex-1 flex-col gap-1 text-xs">
+        What you decided
+        <Input data-testid={`vault-report-${id}-note`} value={note} onChange={(e) => setNote(e.target.value)} />
+      </label>
+      <Button type="submit" size="sm" data-testid={`vault-report-${id}-close`} disabled={close.isPending || !note.trim()}>
+        Close
+      </Button>
+      {close.error && (
+        <p className="w-full text-xs" style={{ color: 'var(--amber)' }} role="alert">
+          {readableApiError(close.error, 'Could not close that report.')}
         </p>
       )}
     </form>
