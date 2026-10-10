@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 38,
+    "iteration": 39,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "thinking-ui-impl",
-    "next_action": "thinking-ui-impl: drive-first task-ad01ff501be9 of spdoc-a56fbfe278d0 - scripts/drive/d1022_thinking_ui.py on scratch :8108 (d1011 harness, Haiku alice, slow command, thinking event posted on her live run via POST /agents/alice/output), record it failing at check 1",
+    "current": "thinking-ui-timeline-impl",
+    "next_action": "thinking-ui-timeline-impl: task-ff57ca1f568c of spdoc-a56fbfe278d0 - hub/ui vitest first (live block open then closed after text/end, history closed, operator toggle wins; Hide diagnostics filters diagnostic ResultCards only, localStorage aw.conversation.diagnostics.v1, unreadable = shown), then AgentTimeline WorkBlockDisclosure (runVisiblyActive, last block of newest run's turn), ConversationControls button beside Fold all turns, bundle refresh (make ui / scripts/refresh_ui_bundle.py, commit hub/ui/src and hub/hub/static/ui together; read .claude/rules for hub/ui first); then d1022 3/3 on scratch :8108",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -129,8 +129,8 @@
         },
         {
             "id": "thinking-ui-impl",
-            "status": "open",
-            "title": "thinking-ui-impl: drive-first task-ad01ff501be9 - d1022_thinking_ui.py on :8108, failing at check 1"
+            "status": "done",
+            "title": "thinking-ui-impl: drive-first task-ad01ff501be9 -- DONE iteration 39, d1022 fails at check 1 (live run, closed 'Work - 2 steps' block)"
         },
         {
             "id": "thinking-ui-timeline-impl",
