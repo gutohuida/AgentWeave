@@ -8,18 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 11,
+    "iteration": 12,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f556-impl",
-    "next_action": "Do queue item f556-impl: read F556 in scripts/drive/FINDINGS.md and its DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status",
+    "current": "f541-impl",
+    "next_action": "Do queue item f541-impl: read F541 in scripts/drive/FINDINGS.md and its DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status",
     "queue": [
-        {
-            "id": "f556-impl",
-            "status": "open",
-            "title": "Tier 0 fix F556: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
-        },
         {
             "id": "f541-impl",
             "status": "open",
@@ -144,7 +139,9 @@
             "title": "run-cap-drive"
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": [
+        "F556-outstanding-message-direction"
+    ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

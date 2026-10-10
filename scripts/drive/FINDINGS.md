@@ -35150,7 +35150,7 @@ The tests asserting "no rule" scan only TSX. Operator question in DECISIONS.md (
 
 ## F556 (C) -- "creator" names two different agents, so an operator-created loop never reports an outstanding message
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code). Night 2026-10-10: not built; applying the decision `overhaul-loop-creator` literally leaves the check matching only an agent's mail to itself. Asked as OPEN row `F556-outstanding-message-direction` in DECISIONS.md.
 
 When a loop's queue empties, the outstanding-request check treats the creator as the agent whose run created the loop
 (`scheduler.py:487-493`); everywhere else the creator is the agent the job names (`api/v1/tasks.py:683-692`). A loop
