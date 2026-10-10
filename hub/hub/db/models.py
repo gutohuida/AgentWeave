@@ -883,7 +883,8 @@ class RunDivergence(Base):
     Mutable in exactly one respect — `resolved_at` is stamped when a later actor transition lands on
     the task, because a divergence is an open condition rather than a verdict, and long work
     spanning several turns opens one that closes as soon as the work reaches the ledger. Nothing
-    else is updated and nothing is deleted; the row survives its own resolution.
+    else is updated and nothing is deleted; the row survives its own resolution, and the deletion of
+    its task (which clears `task_id`).
     """
 
     __tablename__ = "run_divergences"
@@ -898,8 +899,10 @@ class RunDivergence(Base):
     # Denormalised for the same reason `TaskTransition.actor_agent` is: this must answer "who
     # dropped this" without depending on a run row that may later be pruned.
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    task_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("tasks.id"), nullable=False, index=True
+    # Cleared, not deleted, when the task is deleted (`hub/hub/deletion.py`, as `Run.task_id` is):
+    # the record outlives the work it was about.
+    task_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("tasks.id"), nullable=True, index=True
     )
     # Where the task stood when the run ended, and how the run ended. The exit status is what makes
     # a crash distinguishable from a run that completed and forgot — both are divergent, and they

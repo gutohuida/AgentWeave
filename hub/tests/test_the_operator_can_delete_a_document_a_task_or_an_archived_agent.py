@@ -24,6 +24,7 @@ from hub.db.models import (
     Loop,
     RequirementEvidence,
     Run,
+    RunDivergence,
     SpecDocument,
     SpecRequirement,
     Task,
@@ -100,6 +101,19 @@ async def _seed_history(task_id: str, requirement_id: str, *, run_status="comple
                 task_id=task_id,
                 status=run_status,
                 turn_depth=0,
+            )
+        )
+        session.add(
+            RunDivergence(
+                id="div-del",
+                project_id="proj-test",
+                run_id="run-del",
+                agent="alice",
+                task_id=task_id,
+                task_status_at_end="in_progress",
+                run_exit_status="completed",
+                policy_applied="surface",
+                outcome="surfaced",
             )
         )
         session.add(
@@ -319,6 +333,12 @@ async def test_deleting_a_task_takes_its_links_and_clears_history(app, auth_head
         delivered = await _entry(session, "q-done")
         assert delivered is not None and delivered.task_id is None
         assert (await session.get(Run, "run-del")).task_id is None
+        # A divergence is a record that nothing deletes (`RunDivergence`'s docstring): it stays,
+        # with the task pointer cleared, and still says which agent dropped its work.
+        kept = (
+            await session.execute(select(RunDivergence).where(RunDivergence.id == "div-del"))
+        ).scalar_one()
+        assert kept.task_id is None and kept.agent == "alice"
 
 
 @pytest.mark.asyncio

@@ -60,7 +60,7 @@ TASK_REFERENCES: List[Reference] = [
     ("task_transitions", "task_id", DELETE),
     ("task_check_runs", "task_id", DELETE),
     ("task_requirement_links", "task_id", DELETE),
-    ("run_divergences", "task_id", DELETE),
+    ("run_divergences", "task_id", CLEAR),
     ("requirement_evidence", "task_id", DELETE),
     ("inbound_queue_entries", "task_id", QUEUED),
     ("inbound_queue_entries", "review_task_id", QUEUED),

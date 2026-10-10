@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0124"
+HEAD_REVISION = "0125"
 
 
 # ---------------------------------------------------------------------------
@@ -5097,3 +5097,72 @@ def test_migration_vault_settings_creates_the_table_and_its_downgrade_drops_it(t
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert conn.execute("SELECT id FROM projects").fetchall() == [("p",)]
     assert "vault_settings" not in tables
+
+
+# ---------------------------------------------------------------------------------------------
+# 0125 -- run_divergences.task_id becomes nullable (F564): a divergence outlives its task. The
+# table is recreated; rows, indexes and the two CHECK constraints must come through.
+# ---------------------------------------------------------------------------------------------
+
+
+_DIVERGENCE_INSERT = (
+    "INSERT INTO run_divergences (id, project_id, run_id, agent, task_id, task_status_at_end, "
+    "run_exit_status, policy_applied, outcome, created_at) "
+    "VALUES (?, 'p', 'r', 'alice', ?, 'in_progress', 'completed', 'surface', 'surfaced', "
+    "'2026-01-01T00:00:00Z')"
+)
+
+
+def test_migration_run_divergence_task_nullable_keeps_rows_and_downgrade_drops_orphans(
+    tmp_path,
+) -> None:
+    db_file = tmp_path / "divergence.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        # The models say nullable; put the table back as 0124 left it (NOT NULL) and stamp 0124.
+        ddl = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='run_divergences'"
+        ).fetchone()[0]
+        assert "task_id VARCHAR(64)," in ddl
+        index_ddl = [
+            r[0]
+            for r in conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='run_divergences' "
+                "AND sql IS NOT NULL"
+            )
+        ]
+        conn.execute("DROP TABLE run_divergences")
+        conn.execute(ddl.replace("task_id VARCHAR(64),", "task_id VARCHAR(64) NOT NULL,"))
+        for statement in index_ddl:
+            conn.execute(statement)
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0124')")
+        task_id = {r[1]: r for r in conn.execute("PRAGMA table_info(run_divergences)")}["task_id"]
+        assert task_id[3] == 1  # NOT NULL before
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p', 'p', '2026-01-01T00:00:00Z')"
+        )
+        conn.execute(_DIVERGENCE_INSERT, ("d1", "t1"))
+        conn.commit()
+
+    _upgrade_to(db_url, "0125")
+
+    with sqlite3.connect(db_file) as conn:
+        info = {r[1]: r for r in conn.execute("PRAGMA table_info(run_divergences)")}
+        assert info["task_id"][3] == 0  # NULL allowed now
+        assert conn.execute("SELECT id, task_id FROM run_divergences").fetchall() == [("d1", "t1")]
+        indexes = {r[1] for r in conn.execute("PRAGMA index_list(run_divergences)")}
+        assert {"ix_run_divergences_task_id", "ix_run_divergences_project_task"} <= indexes
+        conn.execute(_DIVERGENCE_INSERT, ("d2", None))
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(_DIVERGENCE_INSERT.replace("'surface'", "'bogus'"), ("d3", "t1"))
+        conn.commit()
+
+    _downgrade_to(db_url, "0124")
+
+    with sqlite3.connect(db_file) as conn:
+        assert {r[1]: r for r in conn.execute("PRAGMA table_info(run_divergences)")}["task_id"][
+            3
+        ] == 1
+        assert conn.execute("SELECT id FROM run_divergences").fetchall() == [("d1",)]

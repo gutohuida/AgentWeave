@@ -35221,7 +35221,7 @@ A Haiku test turn in a flow (tess, reviewing task `usage`) tried `update_task` t
 
 ## F564 (C) -- deleting a task deletes its divergence records, which the model says are never deleted
 
-**Status:** open 2026-10-09. Found by reading code (overhaul decision `overhaul-task-delete-divergence`, operator 2026-10-09).
+**Status:** fixed 2026-10-10 (Tier 0 in intent, but it carries migration `0125`: `run_divergences.task_id` was NOT NULL, so clearing it needed the column nullable). Found by reading code (overhaul decision `overhaul-task-delete-divergence`, operator 2026-10-09). `deletion.py` now CLEARs the pointer; the task-delete test seeds a divergence and asserts it survives with `task_id` None (failed before). `0125` recreates the table (batch), keeping rows, indexes and both CHECK constraints (migration test: upgrade, insert NULL, CHECK still enforced, downgrade drops the orphaned rows only). Head assertions bumped to 0125. **Left, not done:** the UI type `RunDivergence.task_id: string` in `hub/ui/src/api/tasks.ts` is now wrong (`string | null`) but `useDivergences` has no consumer, and a src-only edit needs a bundle refresh, so I did not touch the UI; no live-Hub drive and the migration was not run on a copy of a real database.
 
 `hub/hub/deletion.py:63` cascades `("run_divergences", "task_id", DELETE)`, while `RunDivergence`'s own docstring (`hub/hub/db/models.py:878-890`) says nothing is deleted, so "how often does this agent drop its work?" can still be asked. Runs survive a task delete with the pointer cleared. **Decided:** keep divergence rows on task delete with `task_id` cleared, as runs are; the deletion guard test's column list changes with it.
 
