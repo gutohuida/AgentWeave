@@ -92,13 +92,6 @@
       "when": "the header renders"
     },
     {
-      "given": "the project view tabs above content",
-      "key": "ac18",
-      "requirement": "the-project-view-switcher-is-separated-by-its-plane-alone",
-      "then": "the strip has no fill of its own and no rule is drawn beneath it",
-      "when": "they are displayed in either mode"
-    },
-    {
       "given": "the operator left the rail expanded",
       "key": "ac20",
       "requirement": "navigation-collapses-only-when-the-operator-asks-and-stays-n",
@@ -209,13 +202,6 @@
       "requirement": "the-active-navigation-row-is-marked-without-a-resting-fill",
       "then": "no row carries a leading accent bar",
       "when": "the rail renders"
-    },
-    {
-      "given": "a project is open",
-      "key": "ac37",
-      "requirement": "the-project-header-is-not-a-box",
-      "then": "it has no fill distinct from the ground and no rule beneath it",
-      "when": "the header renders"
     },
     {
       "given": "two registered projects",
@@ -412,6 +398,24 @@
       "requirement": "the-overview-settings-follow-changes-live",
       "then": "the settings query is invalidated and refetched (unit: useSSE invalidates ['project', pid, 'settings'])",
       "when": "a project_settings_updated event arrives"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project is open",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/hubVisualLanguage.test.ts",
+      "key": "the-project-header-and-tabs-keep-a-faint-rule-header-rule",
+      "requirement": "the-project-header-is-not-a-box",
+      "then": "the stylesheet's `.project-header` rule draws `border-bottom: 1px solid var(--border-region)`, no background and no other border, and ProjectHeader.tsx paints no border of its own; the check fails if the rule uses `--border` or gains a fill",
+      "when": "the header renders, in either mode"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project view tabs above content",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/hubVisualLanguage.test.ts",
+      "key": "the-project-header-and-tabs-keep-a-faint-rule-tabs-rule",
+      "requirement": "the-project-view-switcher-is-separated-by-its-plane-alone",
+      "then": "the stylesheet's `.project-tabs` rule draws `border-bottom: 1px solid var(--border-region)`, no background and no other border, and ProjectTabs.tsx paints no fill or border of its own; the check fails if the strip gains a background",
+      "when": "they are displayed in either mode"
     }
   ],
   "algorithms": [],
@@ -421,7 +425,7 @@
       "FR-10": "a9db2afc22fa06c67f75251e6bd39f0f11722aed740e9f78763fffbb124ef630",
       "FR-11": "6c93f080e89715c94ef97f453eb4fd4c824dbc832fe3c9d9543760a4becf7e82",
       "FR-12": "aee0fbb06bed176433306b3c1bec2cdc142f0f6bf4b22bfde6cf6c80873c491a",
-      "FR-13": "4de12e65ecaa9eb06e1f7372909f4e9bc9b000080b6662c3fd4ee8b0ef21c32b",
+      "FR-13": "03d0de8aea93eb13176356ed2a499fbfe890c584081c11c6c364fd4b1b383634",
       "FR-14": "99787c3d4d5d2ecfb434662e4fa74b72d3f54b3b8ed6e1d9fb8f4b6ab09c3906",
       "FR-15": "f011509d92e7cf34327c683b1e5d6be7f1c7918931401fa8c6f715ab07f726d6",
       "FR-16": "d455f82dc1f4b1a9439bf05e3cf04da12922ef675f396573f41c1c568ff7bfc6",
@@ -444,7 +448,7 @@
       "FR-4": "c20307737b2be63a36d8a6be55c4bf8df041e0d2a068c209107c4469aa4d9b7c",
       "FR-5": "1bb948151f8ae106e732cd9258426d4f948132b741efac608c594cda44d4d766",
       "FR-6": "7c824bd6168c0ada0e9207b7461fb154ddc2b1d3f888f1a8af3414f2a8a2b09b",
-      "FR-7": "6ed0388bcf6b36a3947e7bfc996030bd93ccdc5a980f95098cdc26cd0edc3048",
+      "FR-7": "bc516b6f71b61028b4e1eb98bd6606059c3860c9e4bb319f0c006c6df353e430",
       "FR-8": "826b87911a01569820cd47246928d2b19509a960b7faffc86cbfb5ecf6afc2bd",
       "FR-9": "a2ef8f77a1b1581d7d9c091ece09a0659a68025ee84e1186e36cfc0d10fcaf4b"
     },
@@ -555,8 +559,8 @@
       "key": "the-project-view-switcher-is-separated-by-its-plane-alone",
       "modal": "MUST",
       "party": null,
-      "rationale": "The operator read a filled strip as a band laid over the screen; the active tab's own treatment marks position.",
-      "statement": "The project view tabs SHALL sit on the ground plane with no fill of their own, and the boundary below them MUST NOT be drawn as a dividing rule."
+      "rationale": "The operator read a filled strip as a band laid over the screen; the faint rule, kept by the operator (overhaul-header-rules, F554), marks where content begins, and the active tab's own treatment marks position.",
+      "statement": "The project view tabs SHALL sit on the ground plane with no fill of their own, and the boundary below them MUST be marked by one 1px rule in the region-border colour (`--border-region`) and by nothing else."
     },
     {
       "key": "navigation-collapses-only-when-the-operator-asks-and-stays-n",
@@ -604,8 +608,8 @@
       "key": "the-project-header-is-not-a-box",
       "modal": "MUST",
       "party": null,
-      "rationale": "A filled, ruled header reads as a box stacked on the page rather than part of it.",
-      "statement": "The project header SHALL sit on the ground plane with no fill distinct from it and MUST NOT be closed by a dividing rule."
+      "rationale": "A filled, ruled header read as a box stacked on the page. The operator kept the faint rule beneath it (overhaul-header-rules, F554): it marks where the header ends without making it a box.",
+      "statement": "The project header SHALL sit on the ground plane with no fill distinct from it, and the only line closing it MUST be one 1px rule beneath it in the region-border colour (`--border-region`), which is lighter than any control outline."
     },
     {
       "key": "n2-the-project-header-carries-project-switching-and-appearance",

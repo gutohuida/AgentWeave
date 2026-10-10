@@ -152,6 +152,21 @@ describe('Hub UI mock alignment contracts', () => {
     expect(projectHeaderSource).toMatch(/title=\{pathDisplay/)
   })
 
+  // F554: the rule under the header and the tabs lives in index.css, which the TSX checks above
+  // never read. The operator kept it (overhaul-header-rules), so hub-workspace-shell now asks for
+  // a faint rule in the region-border colour, and this reads the stylesheet that draws it.
+  it.each([['project-header'], ['project-tabs']])(
+    'the %s is closed by one faint rule in the region-border colour and paints no fill',
+    (selector) => {
+      const declarations = [...cssSource.matchAll(new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`, 'g'))]
+        .map((m) => m[1])
+        .join(';')
+      expect(declarations).toMatch(/border-bottom:\s*1px solid var\(--border-region\)/)
+      expect(declarations).not.toMatch(/background/)
+      expect(declarations).not.toMatch(/border-(top|left|right)\b/)
+    },
+  )
+
   it('writes no data-theme attribute to the application document (2026-08-04-hub-charcoal-visual-refresh)', () => {
     // SpecFrame.tsx writes data-theme into an *embedded spec document*, which has its own
     // :root[data-theme] CSS layer — that write is untouched and correctly out of scope here.
@@ -167,7 +182,7 @@ describe('Hub UI mock alignment contracts', () => {
     expect(composerSource).toContain("from '@/components/ui/button'")
   })
 
-  it('the tab strip carries neither a dividing line nor a plane change at its boundary (§6)', () => {
+  it('the tab strip paints no line or plane change of its own in its markup (§6; the faint rule is CSS, F554)', () => {
     // §6 removed the line and kept a plane change. The operator then read the remaining plane
     // as a band laid over the screen — "it pops up in a bad way… make it the same color" — so
     // the strip now paints nothing at all and sits on `--bg` with everything else.

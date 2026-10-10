@@ -35135,7 +35135,7 @@ production caller, so dangling file and document tabs are never dropped on load;
 
 ## F554 (C) -- the project header draws the rules two requirements say it must not, and the tests cannot see it
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** fixed 2026-10-10 (night iteration 16, decision `overhaul-header-rules`): the rule stays; change document `spec/changes/the-project-header-and-tabs-keep-a-faint-rule` (`spdoc-5f2f8771807d`) was approved and folded into `hub-workspace-shell` on the trial Hub, replacing both requirements under their keys with the faint `--border-region` rule and retiring ac18 and ac37. `hubVisualLanguage.test.ts` now reads `index.css` for both selectors (mutations to `--border` and to a tab background each fail it). Was: open. Filed 2026-10-08 (spec overhaul audit, reading code).
 
 `index.css:812` and `:831` draw a `--border-region` rule under `.project-header` and `.project-tabs` (b92d7de), against
 `hub-workspace-shell`'s `the-project-header-is-not-a-box` and `the-project-view-switcher-is-separated-by-its-plane-alone`.

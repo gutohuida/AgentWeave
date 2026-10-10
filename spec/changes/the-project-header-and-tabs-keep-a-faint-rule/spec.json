@@ -1,0 +1,96 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project is open",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/hubVisualLanguage.test.ts",
+      "key": "header-rule",
+      "requirement": "header-faint-rule",
+      "then": "the stylesheet's `.project-header` rule draws `border-bottom: 1px solid var(--border-region)`, no background and no other border, and ProjectHeader.tsx paints no border of its own; the check fails if the rule uses `--border` or gains a fill",
+      "when": "the header renders, in either mode"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project view tabs above content",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/hubVisualLanguage.test.ts",
+      "key": "tabs-rule",
+      "requirement": "tabs-faint-rule",
+      "then": "the stylesheet's `.project-tabs` rule draws `border-bottom: 1px solid var(--border-region)`, no background and no other border, and ProjectTabs.tsx paints no fill or border of its own; the check fails if the strip gains a background",
+      "when": "they are displayed in either mode"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "03d0de8aea93eb13176356ed2a499fbfe890c584081c11c6c364fd4b1b383634",
+      "FR-2": "bc516b6f71b61028b4e1eb98bd6606059c3860c9e4bb319f0c006c6df353e430"
+    },
+    "high_water": 2,
+    "requirements": {
+      "header-faint-rule": "FR-1",
+      "tabs-faint-rule": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 0 in substance (a spec amendment to match shipped CSS the operator kept), carried as a small change document because a capability is written only through a fold. No code change, no migration, no Hub-restart hazard.\n\nD1. The requirements name the colour token (`--border-region`), not a literal: the token is defined as lighter than any control outline (index.css:31), which is what 'faint' means here, and a literal would drift from the ramp.\nD2. The fold replaces the two requirements under their existing keys (`replaces`) and retires their old criteria ac18 and ac37, whose 'no rule beneath it' now contradicts the statement.\nD3. No task. The acceptance check (the vitest that reads index.css) is committed with this document; the CSS it checks was already shipped. A task would have to be closed before the fold, and nothing is left to build.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/index.css:812 `.project-header { border-bottom: 1px solid var(--border-region); }`",
+      "hub/ui/src/index.css:831 `.project-tabs { border-bottom: 1px solid var(--border-region); }`",
+      "hub/ui/src/index.css:32 and :112 `--border-region` is rgba 0.05 dark / 0.06 light, lighter than `--border` (0.07 / 0.09)",
+      "hub/ui/src/components/layout/ProjectHeader.tsx:38 and ProjectTabs.tsx:20 paint no border and no background of their own besides the header's `var(--bg)`",
+      "hub/ui/src/__tests__/hubVisualLanguage.test.ts: the two existing 'no rule' checks read only the TSX sources"
+    ],
+    "limits": [
+      "No browser drive: the check reads the stylesheet's declarations, not computed style in Chromium"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "hub/ui/src/index.css:812 and :831 draw `border-bottom: 1px solid var(--border-region)` under `.project-header` and `.project-tabs` (b92d7de), while hub-workspace-shell's the-project-header-is-not-a-box and the-project-view-switcher-is-separated-by-its-plane-alone say no dividing rule. The tests asserting 'no rule' (hub/ui/src/__tests__/hubVisualLanguage.test.ts:148-153, :185-193) read only ProjectHeader.tsx and ProjectTabs.tsx, so they could not see the rule. The operator decided to keep the rule and amend the requirements (spec-queue/DECISIONS.md, overhaul-header-rules).",
+  "requirements": [
+    {
+      "key": "header-faint-rule",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A filled, ruled header read as a box stacked on the page. The operator kept the faint rule beneath it (overhaul-header-rules, F554): it marks where the header ends without making it a box.",
+      "statement": "The project header SHALL sit on the ground plane with no fill distinct from it, and the only line closing it MUST be one 1px rule beneath it in the region-border colour (`--border-region`), which is lighter than any control outline."
+    },
+    {
+      "key": "tabs-faint-rule",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator read a filled strip as a band laid over the screen; the faint rule, kept by the operator (overhaul-header-rules, F554), marks where content begins, and the active tab's own treatment marks position.",
+      "statement": "The project view tabs SHALL sit on the ground plane with no fill of their own, and the boundary below them MUST be marked by one 1px rule in the region-border colour (`--border-region`) and by nothing else."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Replace the two hub-workspace-shell requirements with statements of the faint rule, and their criteria ac18 and ac37",
+      "A vitest that reads index.css for the header's and the tabs' declarations"
+    ],
+    "non_goals": [
+      "Any change to the CSS or the components",
+      "The other shell-plane requirements"
+    ]
+  },
+  "summary": "Amend hub-workspace-shell's two header requirements to describe what the Hub draws and the operator kept: the project header and the project view tabs sit on the ground plane with no fill, each closed by one faint 1px rule in the region-border colour. Spec-only; the CSS stays. A vitest now reads index.css, which the old checks never did (F554).",
+  "tasks": [],
+  "title": "The project header and view tabs are closed by one faint rule"
+}
