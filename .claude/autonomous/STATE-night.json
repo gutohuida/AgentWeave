@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 31,
+    "iteration": 32,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "exploring-prose-tooltext-impl",
-    "next_action": "exploring-prose-tooltext-impl: task-7aadcbb91c32 of spdoc-a56fa9bf6cdd - mcp_server.py ask_user description drops 'writing a specification step by step' and the 'one question per call' exception (mcp_server.py:458-461), HTTP tool-surface rendering kept equal (test_tool_surface_matches_server.py), context_split_claude_snapshot.md regenerated (AW_UPDATE_CONTEXT_SNAPSHOT=1); data/charters/spec.md (:134-157) says exploring questions are asked in the reply; Hub test for tool-text criterion first; then d1020 4/4",
+    "current": "exploring-prose-drive",
+    "next_action": "exploring-prose-drive: final d1020 on the committed tree (py -3.11 scripts/drive/d1020_exploring_prose.py), retire or amend scripts/drive/d1009_step_journey.py check 3b (asserts one question per ask_user call, superseded by the prose change), set F545 Status in scripts/drive/FINDINGS.md, append a spec-queue/METRICS.md row",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -94,8 +94,8 @@
         },
         {
             "id": "exploring-prose-tooltext-impl",
-            "status": "open",
-            "title": "exploring-prose-tooltext-impl: task-7aadcbb91c32 - mcp_server.py ask_user description drops the specification clause (both renderings equal), data/charters/spec.md says exploring questions go in the reply; d1020 checks 1-4"
+            "status": "done",
+            "title": "exploring-prose-tooltext-impl: task-7aadcbb91c32 - mcp_server.py ask_user description drops the specification clause (both renderings equal), data/charters/spec.md says exploring questions go in the reply; d1020 checks 1-4 -- DONE iteration 32, d1020 4/4"
         },
         {
             "id": "exploring-prose-drive",

@@ -457,8 +457,7 @@ def ask_user(
 
     Ask everything you need in a single call. The operator steps through them in one sitting,
     which is one interruption instead of several, and your turn waits once instead of once per
-    question. **Except when your turn's instructions say one question per call** (writing a
-    specification step by step does): then pass exactly one question each time.
+    question. Where your turn's instructions say how many questions to ask per call, follow them.
 
     Args:
         questions: Between 1 and 4 questions, each a dict with:

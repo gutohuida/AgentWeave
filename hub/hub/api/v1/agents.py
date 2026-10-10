@@ -1182,9 +1182,8 @@ def _operations() -> List[_Operation]:
             detail=(
                 "`questions` is a list of 1 to 4. Ask everything you need in one call: the "
                 "operator steps through them in a single sitting, which interrupts them once "
-                "instead of once per question — **except when your turn's instructions say one "
-                "question per call** (writing a specification step by step does), and then pass "
-                "exactly one. Each entry needs `question`, `header`, `options` "
+                "instead of once per question. Where your turn's instructions say how many "
+                "questions to ask per call, follow them. Each entry needs `question`, `header`, `options` "
                 "and `multi_select`, all required. `header` is two or three words naming the "
                 'decision. `options` is 2 to 8 entries of `{"label", "description"}` — the label '
                 "comes back to you, and the description is what lets the operator choose without "
