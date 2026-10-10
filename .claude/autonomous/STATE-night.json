@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 34,
+    "iteration": 35,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "route-shadow-names-impl",
-    "next_action": "route-shadow-names-impl: drive-first task-182303d0d3d6 of spdoc-4e1fa307cd4e - write scripts/drive/d1021_route_shadow_names.py on scratch :8107 (fresh db), record it failing at check 1 (agent 'settings' created 201). Also: d1009 check 6 reads spec.json at a path absent on the last run; checks 6-7 unverified",
+    "current": "route-shadow-names-refuse-impl",
+    "next_action": "route-shadow-names-refuse-impl: task-78a794e5bc71 of spdoc-4e1fa307cd4e - write hub/tests/test_a_chosen_name_is_not_a_route.py first (route walk, three agent doors, TaskCreate+AgentTaskCreate+loop initial task, controls), failing; then hub/hub/route_words.py and the checks at agents.py create_operator_agent/request_agent, session_sync new-row branch, TaskCreate/AgentTaskCreate; d1021 passes (checks 2-3 never yet run, fix their request shapes if wrong). Split if too big. Also d1009 check 6 reads spec.json at a path absent on the last run; checks 6-7 unverified",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -109,8 +109,8 @@
         },
         {
             "id": "route-shadow-names-impl",
-            "status": "open",
-            "title": "route-shadow-names-impl: drive-first task-182303d0d3d6 - d1021 on :8107, failing at check 1"
+            "status": "done",
+            "title": "route-shadow-names-impl: drive-first task-182303d0d3d6 - d1021 on :8107, failing at check 1 -- DONE iteration 35, d1021 fails at check 1"
         },
         {
             "id": "route-shadow-names-refuse-impl",
