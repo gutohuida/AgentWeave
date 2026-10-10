@@ -35016,7 +35016,7 @@ window nobody measured.
 
 ## F539 (C) -- the checkpoint a successor receives drops the wait-ended mark on open questions
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** fixed 2026-10-10 (Tier 0, branch autonomous/2026-10-10-daily). `render_checkpoint` now ends an open question's line with "(wait ended: the asker stopped waiting for an answer)" when the stored `wait_ended` is set; a question still waited on renders as before. `test_the_render_tells_a_question_whose_wait_ended_from_one_still_waited_on` failed before. The cut-over delivery (`checkpoint_cutover.py:111`), the probe prompt and the checkpoint routes all render through this one function. Hub subset (checkpoint/probe/cutover/handover/question) 492 passed. **Not verified:** no live-Hub drive of a real cut-over with a timed-out `ask_user` (needs a checkpoint worker run). Filed 2026-10-08 (spec overhaul audit, reading code).
 
 `checkpoints.py:355` sets the flag that a question's wait ended, but `render_checkpoint`
 (`checkpoint_generation.py:323`) does not render it, and the rendered text is what the successor is given

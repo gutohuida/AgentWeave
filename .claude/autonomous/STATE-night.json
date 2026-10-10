@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9eb5de9",
     "stop_at": "2026-10-11T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-10-10-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f539-impl",
-    "next_action": "Do queue item f539-impl: Tier 0 fix per its detail in the queue. Keep current equal to the id.",
+    "current": "ledger-close",
+    "next_action": "Do queue item ledger-close: run py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-10 into the final log entry, refresh BACKLOG via scripts/backlog_page.py, then set next_action to null. Keep current equal to the id.",
     "queue": [
         {
             "id": "f507-impl",
@@ -35,7 +35,7 @@
         },
         {
             "id": "f539-impl",
-            "status": "open",
+            "status": "done",
             "title": "Tier 0: successor checkpoint drops wait-ended mark (F539)",
             "detail": "Read F539; test at its seam, fix, drive, set Status."
         },

@@ -320,7 +320,15 @@ def render_checkpoint(checkpoint: Checkpoint) -> str:
     lines.append("## Open questions")
     lines.append("")
     if checkpoint.open_questions:
-        lines.extend(f"- {q.get('id')} — {q.get('question')}" for q in checkpoint.open_questions)
+        lines.extend(
+            f"- {q.get('id')} — {q.get('question')}"
+            + (
+                " (wait ended: the asker stopped waiting for an answer)"
+                if q.get("wait_ended")
+                else ""
+            )
+            for q in checkpoint.open_questions
+        )
     else:
         lines.append("_None outstanding._")
     lines.append("")

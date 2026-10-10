@@ -10,6 +10,7 @@ settled deterministically.
 
 import json
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -254,6 +255,42 @@ async def test_the_render_carries_the_computed_half_a_successor_needs(app):
     # The task-scope caveat travels with the artifact, not just the row.
     assert "not specific to this one" in rendered
     assert "Run pytest hub/tests/." in rendered
+
+
+@pytest.mark.asyncio
+async def test_the_render_tells_a_question_whose_wait_ended_from_one_still_waited_on(app):
+    """F539: `wait_ended` is stored on each open question but the rendered text, which is all a
+    successor is given, omitted it, so a question whose asker gave up read like a live one."""
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        for question_id, text, ended in (
+            ("q-live", "Which database?", None),
+            ("q-ended", "Which cache?", datetime.now(timezone.utc)),
+        ):
+            db.add(
+                Question(
+                    id=question_id,
+                    project_id=PROJECT,
+                    from_agent=AGENT,
+                    question=text,
+                    answered=False,
+                    conversation_id="conv-1",
+                    wait_ended_at=ended,
+                )
+            )
+        await db.commit()
+        checkpoint = await create_checkpoint(
+            db,
+            conversation,
+            trigger="operator",
+            envelope=await compute_envelope(db, conversation),
+            body=render_body(CheckpointBody(**GOOD_BODY), notes_incorporated=False),
+        )
+        rendered = render_checkpoint(checkpoint)
+
+    lines = {line.split(" — ")[0]: line for line in rendered.splitlines() if " — " in line}
+    assert "wait ended" in lines["- q-ended"]
+    assert "wait ended" not in lines["- q-live"]
 
 
 @pytest.mark.asyncio
