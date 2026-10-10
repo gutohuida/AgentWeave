@@ -8,12 +8,15 @@ import {
   DIVERGENCE_POLICY_LABELS,
   DivergencePolicy,
   Task,
+  useAddTaskDependency,
   useAllowedTransitions,
   useDeleteTask,
   useLandTask,
+  useRemoveTaskDependency,
   useRenameTask,
   useSetDivergenceHandling,
   useTaskIntegrationPreview,
+  useTasks,
   useUpdateTask,
 } from '@/api/tasks'
 import { useAgents } from '@/api/agents'
@@ -232,6 +235,12 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const setHandling = useSetDivergenceHandling()
   const { data: agents } = useAgents()
   const { data: specDocuments } = useSpecDocuments()
+  const addDependency = useAddTaskDependency()
+  const removeDependency = useRemoveTaskDependency()
+  const { data: taskPage } = useTasks()
+  // The "Depends on" picker's choice, and the Hub's sentence when it declined an add.
+  const [pickedPrerequisite, setPickedPrerequisite] = useState('')
+  const [dependencyRefusal, setDependencyRefusal] = useState<string | null>(null)
 
   const agentNames = (agents ?? []).map((a) => a.name)
   // Resolves every link in `requirement_links` — not just the ones `requirement_ids` names — so
@@ -249,6 +258,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
     setApprovalReport([])
     setTitleDraft(null)
     setTitleError(null)
+    setPickedPrerequisite('')
+    setDependencyRefusal(null)
   }, [task?.id])
 
   // Same reasoning as the blocking-reason field just below: focus is applied here, once, rather
@@ -746,6 +757,117 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             </p>
           </div>
         )}
+
+        {/* What this task waits on. The Hub has always been able to record "B needs A"
+            (`POST /tasks/{id}/dependencies`); this is the only place on screen that reaches it.
+            The picker offers every other task that is not already a prerequisite — the ones that
+            would form a cycle included, because the Hub is what knows and its refusal sentence is
+            shown below the control (`design.md` D5, decision night-1010-4), not a guess made here
+            that hides a candidate without saying why. */}
+        <div data-testid={`task-dependencies-${task.id}`}>
+          <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Depends on</p>
+          {(task.prerequisites ?? []).length === 0 ? (
+            <p
+              className="text-[12.5px]"
+              style={{ color: 'var(--text-3)' }}
+              data-testid={`task-dependencies-empty-${task.id}`}
+            >
+              This task depends on nothing.
+            </p>
+          ) : (
+            <ul className="text-[12.5px] space-y-1" style={{ color: 'var(--text)' }}>
+              {(task.prerequisites ?? []).map((prerequisite) => (
+                <li
+                  key={prerequisite.id}
+                  className="flex items-center gap-2"
+                  data-testid={`task-dependency-${task.id}-${prerequisite.id}`}
+                >
+                  <span className="flex-1 min-w-0 truncate">{prerequisite.title}</span>
+                  <code className="text-[11px]" style={{ color: 'var(--text-3)' }}>{prerequisite.id}</code>
+                  <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                    {prerequisite.status.replace(/_/g, ' ')}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove prerequisite ${prerequisite.title}`}
+                    data-testid={`task-dependency-remove-${task.id}-${prerequisite.id}`}
+                    disabled={removeDependency.isPending}
+                    onClick={() => {
+                      setDependencyRefusal(null)
+                      removeDependency.mutate(
+                        { id: task.id, dependsOn: prerequisite.id },
+                        {
+                          onError: (error) =>
+                            setDependencyRefusal(
+                              readableApiError(error, 'The Hub could not remove that prerequisite.'),
+                            ),
+                        },
+                      )
+                    }}
+                    style={{ color: 'var(--text-3)' }}
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-2 flex items-center gap-2">
+            <select
+              aria-label="Add a prerequisite"
+              data-testid={`task-dependency-picker-${task.id}`}
+              value={pickedPrerequisite}
+              onChange={(event) => setPickedPrerequisite(event.target.value)}
+              className="text-[12.5px] min-w-0 flex-1"
+              style={{ background: 'var(--surface-2)', color: 'var(--text)', borderRadius: 6, padding: '4px 6px' }}
+            >
+              <option value="">Choose a task…</option>
+              {(taskPage?.tasks ?? [])
+                .filter(
+                  (candidate) =>
+                    candidate.id !== task.id &&
+                    !(task.prerequisites ?? []).some((p) => p.id === candidate.id),
+                )
+                .map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.title} ({candidate.id})
+                  </option>
+                ))}
+            </select>
+            <button
+              type="button"
+              data-testid={`task-dependency-add-${task.id}`}
+              disabled={!pickedPrerequisite || addDependency.isPending}
+              onClick={() => {
+                setDependencyRefusal(null)
+                addDependency.mutate(
+                  { id: task.id, dependsOn: pickedPrerequisite },
+                  {
+                    onSuccess: () => setPickedPrerequisite(''),
+                    onError: (error) =>
+                      setDependencyRefusal(
+                        readableApiError(error, 'The Hub refused that prerequisite.'),
+                      ),
+                  },
+                )
+              }}
+              className="text-[12.5px] font-medium"
+              style={{ color: 'var(--accent)' }}
+            >
+              Add
+            </button>
+          </div>
+          {dependencyRefusal && (
+            <p
+              role="alert"
+              className="text-[11px] mt-1"
+              style={{ color: 'var(--red)' }}
+              data-testid={`task-dependency-refusal-${task.id}`}
+            >
+              {dependencyRefusal}
+            </p>
+          )}
+        </div>
 
         {/* What this task is checked against. `requirements` below is the caller's prose and
             can say things no identifier can; these are the links the approval gate enforces —

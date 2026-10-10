@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 24,
+    "iteration": 26,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "task-depends-on-create-impl",
-    "next_action": "task-depends-on-create-impl: task create (task-9e94fcb108e2) of spdoc-e28ec0fff9f3 - depends_on on TaskCreate/AgentTaskCreate/MCP create_task/_operations through create_task_for_actor (edges via task_dependency_writer.add_dependency before the task's commit, unknown or own id refuses 422), Hub tests first, then d1019 checks 1-3 pass; drawer after",
+    "current": "task-depends-on-drive",
+    "next_action": "task-depends-on-drive: close the change - re-run scripts/drive/d1019_task_depends_on.py once more against the committed tree and read all six PASS lines, record evidence on spdoc-e28ec0fff9f3's tasks on :8010 only as the fence allows (else a one-line pointer in the log), set F571 **Status:** to fixed in scripts/drive/FINDINGS.md, append the spec-queue/METRICS.md row (tier 1; spec/build/drive time; which stage caught each defect: the drive caught the script's own task_rows bug, vitest caught the missing hook stubs in taskDetailDrawer.test.tsx)",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -62,13 +62,13 @@
         },
         {
             "id": "task-depends-on-create-impl",
-            "status": "open",
-            "title": "task-depends-on-create-impl: task-9e94fcb108e2 - depends_on on TaskCreate/AgentTaskCreate/MCP/_operations; Hub tests first; d1019 checks 1-3"
+            "status": "done",
+            "title": "task-depends-on-create-impl: task-9e94fcb108e2 - depends_on on TaskCreate/AgentTaskCreate/MCP/_operations; Hub tests first; d1019 checks 1-3 -- DONE iteration 25, d1019 checks 1-3 pass"
         },
         {
             "id": "task-depends-on-drawer-impl",
-            "status": "open",
-            "title": "task-depends-on-drawer-impl: task-6d7169b0539c - Depends on section in TaskDetailDrawer, api/tasks.ts calls, vitest, bundle refresh; d1019 checks 4-6"
+            "status": "done",
+            "title": "task-depends-on-drawer-impl: task-6d7169b0539c - Depends on section in TaskDetailDrawer, api/tasks.ts calls, vitest, bundle refresh; d1019 checks 4-6 -- DONE iteration 26, d1019 6/6 pass"
         },
         {
             "id": "task-depends-on-drive",

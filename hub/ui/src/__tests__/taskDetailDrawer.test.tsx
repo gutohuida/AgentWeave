@@ -64,6 +64,11 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     // click-outside test renders without a provider on purpose. What the section *shows* is
     // `taskTransitionHistory.test.tsx`.
     useTaskTransitions: () => ({ data: { transitions: [] }, isLoading: false, isError: false }),
+    // The "Depends on" section (F571), stubbed for the same reason: three more real hooks that
+    // need a provider. Its behaviour belongs to `taskDependsOn.test.tsx`.
+    useTasks: () => ({ data: { tasks: [], total: 0, has_more: false } }),
+    useAddTaskDependency: () => ({ mutate: vi.fn(), isPending: false }),
+    useRemoveTaskDependency: () => ({ mutate: vi.fn(), isPending: false }),
   }
 })
 

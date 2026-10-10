@@ -511,6 +511,36 @@ export function useDeleteTask() {
   })
 }
 
+/** Declare that `id` depends on `dependsOn` (`POST /tasks/{id}/dependencies`). A refusal — the
+ *  Hub's cycle, missing-task or self sentence — arrives as an `ApiError` the drawer reads with
+ *  `readableApiError`; a repeated declaration is a 201 `duplicate`, not an error. */
+export function useAddTaskDependency() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ id, dependsOn }: { id: string; dependsOn: string }) =>
+      postJson<{ task_id: string; depends_on: string; outcome: string }>(
+        `/api/v1/projects/${projectId}/tasks/${id}/dependencies`,
+        { depends_on: dependsOn },
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] }),
+  })
+}
+
+/** Withdraw a declared dependency (`DELETE /tasks/{id}/dependencies/{dependsOn}`, 204). */
+export function useRemoveTaskDependency() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: async ({ id, dependsOn }: { id: string; dependsOn: string }) => {
+      await fetchWithAuth(`/api/v1/projects/${projectId}/tasks/${id}/dependencies/${dependsOn}`, {
+        method: 'DELETE',
+      })
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] }),
+  })
+}
+
 /**
  * How this task's neglect should be answered.
  *
