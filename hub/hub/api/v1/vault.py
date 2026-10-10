@@ -6,6 +6,9 @@ same map and entries through `agent_actions.py`, and nothing an agent can call w
 
 `the-manager-distils-vault-sources-into-cited-facts`: an upload is distilled into facts after it
 is answered, when the job is on, and the distil route runs that again for one source.
+
+`sources-that-disagree-are-pointed-out`: an upload may say when it was said (`dated`), the
+contradictions the distillation's check recorded are listed, and the operator resolves one.
 """
 
 import asyncio
@@ -35,6 +38,15 @@ class SourceUpload(BaseModel):
     type: str = Field(max_length=64)
     content: str
     visibility: Optional[str] = Field(default=None, max_length=16)
+    # YYYY-MM-DD, checked by the vault so a wrong format answers 400 with the reason.
+    dated: Optional[str] = Field(default=None, max_length=64)
+
+    model_config = {"extra": "forbid"}
+
+
+class Resolution(BaseModel):
+    stands: Optional[str] = Field(max_length=64)  # required; null means neither fact stands
+    note: str = Field(max_length=4000)
 
     model_config = {"extra": "forbid"}
 
@@ -128,10 +140,12 @@ async def upload_vault_source(
             type=body.type,
             content=body.content,
             visibility=visibility,
+            dated=body.dated,
         )
     except vault.VaultError as exc:
         raise _refused(exc) from exc
-    # After the answer is sent; a no-op when the job is off or has no runner.
+    # After the answer is sent; a no-op when the job is off, has no runner, or the source is a
+    # decision.
     background.add_task(
         distillation.distil_in_background,
         project_id,
@@ -180,3 +194,35 @@ async def get_vault_entry(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     return await read_one(session, project[0], entry_id, offset)
+
+
+@router.get("/contradictions")
+async def get_vault_contradictions(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    root, private = await roots(session, project[0])
+    return {"contradictions": await asyncio.to_thread(vault.list_contradictions, root, private)}
+
+
+@router.post("/contradictions/{contradiction_id}/resolve")
+async def resolve_vault_contradiction(
+    contradiction_id: str,
+    body: Resolution,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The operator's decision: 404 for an unknown contradiction, 409 for one already resolved,
+    400 for a fact that is not one of its two or an empty note."""
+    root, private = await roots(session, project[0])
+    try:
+        return await asyncio.to_thread(
+            vault.resolve_contradiction,
+            root,
+            private,
+            contradiction_id,
+            stands=body.stands,
+            note=body.note,
+        )
+    except vault.VaultError as exc:
+        raise _refused(exc) from exc

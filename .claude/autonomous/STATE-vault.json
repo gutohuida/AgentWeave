@@ -9,7 +9,7 @@
     "parent_sha": "7fbee9a",
     "armed_at": "2026-10-10T10:48:00+01:00",
     "stop_at": "2026-10-10T15:00:00+01:00",
-    "iteration": 0,
+    "iteration": 1,
     "log_file": ".claude/autonomous/2026-10-10-vault-log.md",
     "driver_log": ".claude/autonomous/driver-vault.log",
     "findings_file": "scripts/drive/FINDINGS.md",
@@ -18,12 +18,12 @@
         "model": "sonnet",
         "skill": ".claude/skills/night-briefing/SKILL.md"
     },
-    "current": "contradictions-backend-impl",
-    "next_action": "Read .claude/autonomous/2026-10-10-vault-playbook.md in full, then do queue item contradictions-backend-impl: build task-7c1da4f4e71a tests first, as the playbook and handoff 0190 'Next steps' 2 describe.",
+    "current": "contradictions-tab-impl",
+    "next_action": "Do queue item contradictions-tab-impl: task-112636985de8, the Vault tab's Contradictions section, resolve form, data-disputed/superseded marks and vault-upload-dated input (testids in handoff 0190 and d1017 check 7). Backend is built: GET /vault/contradictions answers {contradictions:[{id,facts,presumed,explanation,status,resolution,sides:[{id,claim,source,date,presumed}]}]}; map facts carry disputed/presumed/superseded_by; sources carry dated. Vitest first, then component, npm run build, py -3.11 scripts/refresh_ui_bundle.py, commit src+bundle together.",
     "queue": [
         {
             "id": "contradictions-backend-impl",
-            "status": "open",
+            "status": "done",
             "model": "opus",
             "title": "task-7c1da4f4e71a (spdoc-bcbc9be56864): tests first in hub/tests/test_vault_contradictions.py (dated-upload, check-firing, cap, ids-checked, private-stub, derived-flags, resolve-route, redistil; fake _Worker pattern from test_vault_distillation.py, two answers per distillation), then vault.py, distillation.py, api/v1/vault.py per handoff 0190 Next steps 2. d1017 checks that need no UI should pass. Split as -backend-a/-b if one firing cannot finish."
         },
@@ -64,7 +64,9 @@
             "title": "d1024 green on the committed tree; FINDINGS/METRICS; close and fold on :8010 if time allows, else leave closing to the operator and say so in the log"
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": [
+        "vault-1010-1"
+    ],
     "limits": [
         "Stay on autonomous/2026-10-10-vault. No merge, rebase or commit onto master by this loop: the operator merges after reading the close-out briefing.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

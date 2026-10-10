@@ -14,7 +14,8 @@ distils and a Haiku agent, and checks, in order:
   4. the map marks both disputed, the 300 one presumed, and the 437 fact's card says it is disputed
      and names the 300 fact;
   5. the activity log has a written facts_written firing;
-  6. the agent, asked the refund limit, calls vault_read and answers 300;
+  6. the agent, asked the refund limit, reads the vault (vault_map or vault_read; the map carries
+     the flags, so either tells it) and answers 300, saying it is disputed;
   7. in Chromium, the contradiction is resolved choosing the 300 fact with a note; it is then
      resolved, a decision source exists, the 437 fact is superseded by it and nothing is disputed.
 
@@ -263,10 +264,13 @@ def drive():
     outputs = ro("select kind, content, payload from agent_outputs where run_id=? "
                  "order by sequence, timestamp", (run_id,))
     (TMP / "outputs.json").write_text(json.dumps(outputs, indent=2, default=str), encoding="utf-8")
-    called = any("vault_read" in f"{content}{payload}" for _kind, content, payload in outputs)
+    # vault_map carries disputed and presumed, so an agent that stops at the map has been told;
+    # what is checked is what it answers (first run, 110016: map only, answered 300 and disputed).
+    called = any(tool in f"{content}{payload}" for _kind, content, payload in outputs
+                 for tool in ("vault_read", "vault_map"))
     replies = [c or "" for kind, c, _p in outputs if kind not in ("tool_use", "tool_result")]
-    said = any("300" in reply for reply in replies)
-    check("6c the run calls vault_read and answers 300", called and said,
+    said = any("300" in reply and "disputed" in reply.lower() for reply in replies)
+    check("6c the run reads the vault and answers 300, saying it is disputed", called and said,
           f"called={called} said={said} reply={' '.join(replies)[-300:]!r}")
 
     # 7: the operator resolves it in the Vault tab.

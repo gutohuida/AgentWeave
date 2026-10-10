@@ -20,6 +20,12 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### vault-1010-1: a check with nothing to compare is not spawned -- 2026-10-10 vault loop
+
+From `spec/changes/sources-that-disagree-are-pointed-out` (`spdoc-bcbc9be56864`, FR-2 check-after-distil), built in `hub/hub/distillation.py` `_check`.
+
+- OPEN      vault-1010-1  Taken by the loop: when a distillation stores facts but no other source has a fact whose claim is on this machine (the vault's first source, or only private stubs from colleagues), the contradiction check makes no spawn and records no firing. FR-2 reads "MUST make one more spawn" whenever facts are stored. Rejected: spawning a model call with an empty comparison list (a paid call that can only answer none), and recording an `empty` firing with no spawn (a firing that claims a model was asked). Confirm or reverse.
+
 ### night-1010-11, night-1010-12: the agent budget as a run cap (F557) -- 2026-10-10 night, DECIDED 2026-10-10
 
 From `spec/changes/the-agent-budget-caps-concurrent-runs` (`spdoc-4cd731c8dba3`, design D5 and D7).
