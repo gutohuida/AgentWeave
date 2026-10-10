@@ -379,20 +379,24 @@ def marker(step: str) -> str:
 
 
 #: Appended to every step's duty but delivery's: the agent proposes advancing, the operator decides
-#: (FR-4).
+#: (FR-4). Asked in the reply and acted on at the operator's next message, like every question an
+#: exploring turn asks (F545, `night-1010-5`).
 ASK_TO_ADVANCE = (
-    "- **When this step's output is written into the document, ask before moving on.** Call "
-    "`ask_user` with one question and three options: **Continue here**, **Continue in a fresh "
-    "conversation**, **Stop here**. On **either** continue, call `advance_spec_step(path)` before "
-    "anything else: it records the move, tells you what this step left empty, and returns the next "
-    "step's instructions. A fresh conversation needs the move too, or it starts at this step again. "
-    "Then, on continue here, follow those instructions in this turn; on a fresh conversation, end "
-    "your turn. On stop, end your turn without advancing. Never advance without asking."
+    "- **When this step's output is written into the document, ask before moving on.** Ask it "
+    "in your reply, as one question offering three choices: **Continue here**, **Continue in a "
+    "fresh conversation**, **Stop here**, and end your turn. When the operator "
+    "answers, on **either** continue, call `advance_spec_step(path)` before anything else: it "
+    "records the move, tells you what this step left empty, and returns the next step's "
+    "instructions. A fresh conversation needs the move too, or it starts at this step again. Then, "
+    "on continue here, follow those instructions in that turn; on a fresh conversation, end your "
+    "turn. On stop, end your turn without advancing. Never advance without asking."
 )
 
-_ONE_QUESTION = (
-    "Ask the operator **one question per `ask_user` call**, offering choices where you can; never "
-    "put several questions in one call, though the tool accepts up to four. Write only this step's "
+#: All of a step's questions in one reply rather than one per turn: the one-per-call limit existed
+#: for the question card's stepping, and in prose it would cost a turn per question (`night-1010-6`).
+_ASK_IN_REPLY = (
+    "Ask this step's questions in your reply, the most important first, offering choices where "
+    "you can, then end your turn; the operator answers in the composer. Write only this step's "
     "part of the document; later steps write the rest."
 )
 
@@ -416,7 +420,7 @@ STEP_DUTIES: Dict[str, str] = {
         f"{marker(INTAKE)} **Intake: understand the request and size the work.** Do not implement "
         "anything.\n"
         "- Read the code the request touches before asking anything you could look up. "
-        + _ONE_QUESTION
+        + _ASK_IN_REPLY
         + "\n"
         "- Settle the problem, who it affects, and what is out of scope. Write them as `problem` "
         "and `scope` (`in_scope`, `non_goals`) with `submit_spec_document`.\n"
@@ -424,20 +428,20 @@ STEP_DUTIES: Dict[str, str] = {
         "**small** (one demonstrable outcome, a few requirements), or **large** (several outcomes, "
         "a migration, security, or a contract other parts rely on). Larger than one demonstrable "
         "outcome is a `roadmap` plus the first slice's change document instead.\n"
-        "- Ask the operator to confirm the size with `ask_user`: one question, the options `fix`, "
-        "`small` and `large`, your recommendation first with its reason in the description. Record "
-        "their answer with `set_spec_size(path, size, reason)`."
+        "- Ask the operator to confirm the size in your reply: the options `fix`, `small` and "
+        "`large`, your recommendation first with its reason. When they answer, record it with "
+        "`set_spec_size(path, size, reason)`."
     ),
     REQUIREMENTS: (
         f"{marker(REQUIREMENTS)} **Requirements: say what must be true.** Do not implement "
-        "anything.\n" + _REQUIREMENTS + "\n- " + _ONE_QUESTION
+        "anything.\n" + _REQUIREMENTS + "\n- " + _ASK_IN_REPLY
     ),
     ACCEPTANCE: (
         f"{marker(ACCEPTANCE)} **Acceptance: agree how each requirement is shown to hold.** This is "
         "the step that most decides whether the work can be trusted; take care with it.\n"
         + _ACCEPTANCE
         + "\n- "
-        + _ONE_QUESTION
+        + _ASK_IN_REPLY
     ),
     REQUIREMENTS_AND_ACCEPTANCE: (
         f"{marker(REQUIREMENTS_AND_ACCEPTANCE)} **Requirements and acceptance: what must be true, "
@@ -446,7 +450,7 @@ STEP_DUTIES: Dict[str, str] = {
         + "\n"
         + _ACCEPTANCE
         + "\n- "
-        + _ONE_QUESTION
+        + _ASK_IN_REPLY
     ),
     APPROACH: (
         f"{marker(APPROACH)} **Approach: decide how it will be built.** Write short decision records "
@@ -502,8 +506,8 @@ def removed(step: str, size: Optional[str], steps: Optional[ProjectSteps] = None
     """The briefing for a document whose step the project removed (FR-8)."""
     return (
         f"{marker(step)} **The step {step!r} was removed from this project's journey.** Do not "
-        "continue it. Call `ask_user` with one question: which step to resume at, offering this "
-        f"journey's steps ({', '.join(journey(size, steps))}). Then call "
+        "continue it. Ask in your reply which step to resume at, offering this journey's steps "
+        f"({', '.join(journey(size, steps))}), and end your turn. When the operator answers, call "
         "`advance_spec_step(path, to=<their choice>)` and follow the instructions it returns."
     )
 

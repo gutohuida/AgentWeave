@@ -238,7 +238,7 @@ async def test_a_removed_step_is_briefed_as_removed_and_bare_advance_is_refused(
         f"{ACTIONS}/advance", json={"path": PATH, "to": "acceptance"}, headers=run_headers
     )
 
-    assert "was removed" in text and "ask_user" in text
+    assert "was removed" in text and "in your reply" in text
     assert bare.status_code == 422, bare.text
     assert bare.json()["detail"]["code"] == "step_not_in_journey"
     assert "approach" in bare.json()["detail"]["message"], "the refusal names the journey"

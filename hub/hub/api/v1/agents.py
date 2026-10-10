@@ -49,6 +49,7 @@ from ...db.models import (
 )
 from ...inbound_queue import new_entry
 from ...launchability import (
+    EXPLORING_ASKS_IN_REPLY,
     agent_config,
     get_agent_config,
     isolation_change_refusal,
@@ -1840,9 +1841,6 @@ SPEC_PHASE_DUTIES = {
         "composer. That is where they volunteer the constraint nobody asked about, which is most "
         "of what an exploration is for — a list of questions with fixed answers can only collect "
         "what you already thought to ask.\n"
-        "- Use `ask_user` only for a genuine fork: real alternatives, and you cannot sensibly "
-        "continue until you know. It blocks your turn, so spend it on a decision rather than on "
-        "a question you could have asked in a sentence.\n"
         "- Sketch when it makes something easier to see than a paragraph — a workflow, a boundary, "
         "a before and after. A few lines of plain text beat a wall of prose.\n"
         "- **Size it as a slice.** A request larger than one demonstrable outcome is written as a "
@@ -2400,13 +2398,20 @@ async def _render_hub_agent_context(
                 # the specification never written. Its charter already named `ask_user` six times,
                 # so the instruction existed and the tool worked; what was missing was anything
                 # saying that ending the turn was not one of the ways to finish.
-                lines.append(
-                    "- **Ending this turn without either submitting the document or calling "
-                    "`ask_user` is not a way to finish.** Questions written as ordinary reply text "
-                    "reach nobody: the turn ends, nothing is recorded, and the operator is not "
-                    "waiting for you. If you need an answer before you can write, ask for it with "
-                    "the tool."
-                )
+                #
+                # Not while exploring (F545, `overhaul-exploring-interview`): an exploring turn
+                # interviews in its reply and stops, as its turn notice says, and a turn told both
+                # obeys one by disobeying the other. Proposed and approved keep it word for word.
+                if phase == "exploring":
+                    lines.append(f"- {EXPLORING_ASKS_IN_REPLY}")
+                else:
+                    lines.append(
+                        "- **Ending this turn without either submitting the document or calling "
+                        "`ask_user` is not a way to finish.** Questions written as ordinary reply "
+                        "text reach nobody: the turn ends, nothing is recorded, and the operator "
+                        "is not waiting for you. If you need an answer before you can write, ask "
+                        "for it with the tool."
+                    )
                 # Precedence, not just procedure. Saying *how* to author a document does not settle
                 # *which authority governs it*, and until this was stated an agent read the block,
                 # understood it, and still opened with "I'm going to use the OpenSpec proposal

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 30,
+    "iteration": 31,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "exploring-prose-context-impl",
-    "next_action": "exploring-prose-context-impl: task-35d85518f3a0 of spdoc-a56fa9bf6cdd - exploring context in agents.py (replace the 'not a way to finish / reach nobody' line for exploring only, add 'ask your questions in your reply' and the precedence line 'overrides any charter or tool description', drop the genuine-fork ask_user at :1843) and spec_journey.py (_ONE_QUESTION, INTAKE size, ASK_TO_ADVANCE, removed() asked in the reply); Hub tests first (context-exploring, steps, other-phases criteria); then d1020 check 1 must pass",
+    "current": "exploring-prose-tooltext-impl",
+    "next_action": "exploring-prose-tooltext-impl: task-7aadcbb91c32 of spdoc-a56fa9bf6cdd - mcp_server.py ask_user description drops 'writing a specification step by step' and the 'one question per call' exception (mcp_server.py:458-461), HTTP tool-surface rendering kept equal (test_tool_surface_matches_server.py), context_split_claude_snapshot.md regenerated (AW_UPDATE_CONTEXT_SNAPSHOT=1); data/charters/spec.md (:134-157) says exploring questions are asked in the reply; Hub test for tool-text criterion first; then d1020 4/4",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -88,8 +88,8 @@
         },
         {
             "id": "exploring-prose-context-impl",
-            "status": "open",
-            "title": "exploring-prose-context-impl: task-35d85518f3a0 - agents.py exploring context + spec_journey.py step duties; Hub tests first; d1020 check 1",
+            "status": "done",
+            "title": "exploring-prose-context-impl: task-35d85518f3a0 - agents.py exploring context + spec_journey.py step duties; Hub tests first; d1020 check 1 -- DONE iteration 31, d1020 4/4",
             "model": "opus"
         },
         {
@@ -100,7 +100,7 @@
         {
             "id": "exploring-prose-drive",
             "status": "open",
-            "title": "exploring-prose-drive"
+            "title": "exploring-prose-drive: final d1020 on committed tree, retire or amend d1009_step_journey.py check 3b (asserts one question per ask_user, superseded), F545 status, metrics row"
         },
         {
             "id": "route-shadow-names-spec",

@@ -331,6 +331,17 @@ def described_access_path(
     return "mcp" if latest == "connected" else "shim"
 
 
+#: The exploring turn's one way to ask (F545, `overhaul-exploring-interview`): in the reply, then
+#: stop. Carried by the turn notice and the canonical context alike. The second sentence covers text
+#: the Hub does not compose per turn (a charter row seeded before this was decided, a tool
+#: description), which would otherwise still point the turn at `ask_user` (D4).
+EXPLORING_ASKS_IN_REPLY = (
+    "**Ask your questions in your reply, then end your turn**: the operator answers in the "
+    "composer, and the answer arrives as your next turn. This overrides any charter or tool "
+    "description telling you to call `ask_user` while a document is being explored."
+)
+
+
 def spec_turn_notice(
     phase: Optional[str],
     *,
@@ -380,6 +391,7 @@ def spec_turn_notice(
             "Interview in THIS REPLY, in prose: what you need to know, the plausible directions "
             "with what each makes easier and harder, what reading the code established, and a "
             "short sketch where it helps. Then stop and let the operator answer.",
+            EXPLORING_ASKS_IN_REPLY,
             "Do not answer your own questions. If you asked and nothing came back, say what is "
             "still open and stop — a guessed requirement is built on before anyone notices it was "
             "a guess.",

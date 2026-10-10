@@ -68,11 +68,11 @@ def test_the_floor_asks_for_the_interview_in_the_reply():
     assert "composer" in exploring
 
 
-def test_the_floor_reserves_the_blocking_tool_for_a_fork():
+def test_the_floor_names_no_blocking_tool():
+    """The genuine-fork allowance went with F545 (`night-1010-5`): an exploring turn asks in its
+    reply and nothing tells it to use `ask_user` (`test_exploring_asks_in_prose.py`)."""
     exploring = SPEC_PHASE_DUTIES["exploring"]
-    assert "only for a genuine fork" in exploring
-    # The cost is stated where the choice is made, not only in the tool's own description.
-    assert "blocks your turn" in exploring
+    assert "ask_user" not in exploring
 
 
 def test_the_floor_invites_a_sketch():
@@ -115,7 +115,7 @@ async def test_a_charterless_exploring_turn_gets_all_of_it(app, auth_headers, tm
     assert "No charter is assigned to this agent." in context
     assert "Interview in your reply" in context
     assert "Sketch when it makes something easier to see" in context
-    assert "only for a genuine fork" in context
+    assert "ask your questions in your reply" in context.lower()
 
 
 # ---------------------------------------------------------------------------

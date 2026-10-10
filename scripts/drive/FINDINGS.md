@@ -35310,6 +35310,8 @@ Tier 0.
 
 **Fix shape (not decided):** compare against the slice's own commit range or the migration head the slice was built on, or drop the test now the slice has shipped. Tier 0.
 
+A sibling with the same body fails the same way: `hub/tests/test_spec_undeclared_files_warning.py:130` `test_the_change_adds_no_migration` (night iteration 31; both fail with that iteration's changes stashed). Fix them together. Both skip where `master` is not resolvable, which is presumably why CI stays green on them (not verified).
+
 ## F577 (C) -- the task drawer's prerequisite picker read a failed task list as "no other tasks"
 
 **Status:** fixed 2026-10-10 (night iteration 29). Found by CI: run 38019656990 on `80d45bd`, `hub-test`, `test_surface_ceilings.py` (3 tests) named `TaskDetailDrawer.tsx` `useTasks #1` as an unclassified call site that ignores its error.

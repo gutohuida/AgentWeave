@@ -115,19 +115,19 @@ async def test_a_proposed_document_is_briefed_by_its_phase_not_its_step(
 def test_every_step_says_what_it_writes_and_asks_to_advance(step):
     text = spec_journey.duty(step)
 
-    assert "`ask_user`" in text
+    assert "ask_user" not in text, "asked in the reply (F545)"
     for choice in ("Continue here", "Continue in a fresh conversation", "Stop here"):
         assert choice in text
     assert "advance_spec_step" in text
     assert "submit_spec_document" in text or "`design`" in text
 
 
-def test_intake_asks_one_question_at_a_time_and_records_the_size_before_advancing():
+def test_intake_asks_in_the_reply_and_records_the_size_before_advancing():
     text = spec_journey.duty("intake")
 
-    assert "one question per `ask_user` call" in text
+    assert "questions in your reply" in text
     assert text.index("set_spec_size") < text.index("advance_spec_step")
-    assert "confirm the size with `ask_user`" in text
+    assert "confirm the size in your reply" in text
 
 
 def test_acceptance_asks_how_and_who_per_must_and_tasks_starts_with_the_failing_drive():
