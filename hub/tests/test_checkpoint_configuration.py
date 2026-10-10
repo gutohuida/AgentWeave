@@ -83,10 +83,22 @@ async def test_half_a_threshold_is_refused(app, auth_headers):
         assert "together" in response.text
 
 
+async def _bound_agent(name, runner_id, model, *, own_threshold=None):
+    async with async_session_factory() as db:
+        db.add(Runner(id=runner_id, project_id=PROJECT, name=runner_id, cli="claude", model=model))
+        agent = Agent(id=f"agent-{name}", project_id=PROJECT, name=name, runner_id=runner_id)
+        if own_threshold:
+            agent.checkpoint_threshold_mode = "tokens"
+            agent.checkpoint_threshold_value = own_threshold
+        db.add(agent)
+        await db.commit()
+
+
 @pytest.mark.asyncio
-async def test_a_token_threshold_above_the_chosen_models_window_is_refused(app, auth_headers):
-    """Task 8.7. Haiku 4.5's window is 200k; a 250k threshold would never fire, so accepting it
-    means accepting a setting that does nothing."""
+async def test_the_checkpoint_workers_window_does_not_judge_a_project_threshold(app, auth_headers):
+    """F541. A project threshold applies to the project's agents; the model that writes the
+    checkpoint has its own window, which says nothing about when one is due. 250k against a
+    worker on Haiku (200k) with no agent that it could miss is accepted, with nothing to warn of."""
     response = await app.put(
         f"/api/v1/projects/{PROJECT}/settings",
         json=_settings(
@@ -96,8 +108,78 @@ async def test_a_token_threshold_above_the_chosen_models_window_is_refused(app, 
         ),
         headers=auth_headers,
     )
-    assert response.status_code == 422
+    assert response.status_code == 200, response.text
+    assert response.json()["warnings"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_project_threshold_that_cannot_fire_for_an_agent_is_saved_with_a_warning(
+    app, auth_headers
+):
+    """F541, decided `overhaul-token-threshold-window`: warn, not refuse. The Haiku agent can
+    never reach 250k; the Opus agent can, and an agent with its own threshold is not governed by
+    the project's."""
+    await _bound_agent("small", "runner-small", "claude-haiku-4-5-20251001")
+    await _bound_agent("big", "runner-big", "claude-opus-5-5")
+    await _bound_agent("own", "runner-own", "claude-haiku-4-5-20251001", own_threshold=100_000)
+    response = await app.put(
+        f"/api/v1/projects/{PROJECT}/settings",
+        json=_settings(checkpoint_threshold_mode="tokens", checkpoint_threshold_value=250_000),
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["checkpoint_threshold_value"] == 250_000
+    assert len(body["warnings"]) == 1
+    assert "small" in body["warnings"][0] and "never fire" in body["warnings"][0]
+    assert "big" not in body["warnings"][0] and "own" not in body["warnings"][0]
+
+
+@pytest.mark.asyncio
+async def test_a_token_threshold_above_the_agents_own_window_is_refused(app, auth_headers):
+    """F541. Haiku 4.5's window is 200k; an agent on it with a 250k threshold would never
+    checkpoint. The agent route used to check nothing against any window."""
+    await _bound_agent("small", "runner-small", "claude-haiku-4-5-20251001")
+    response = await app.patch(
+        f"/api/v1/projects/{PROJECT}/agents/small",
+        json={"checkpoint_threshold_mode": "tokens", "checkpoint_threshold_value": 250_000},
+        headers=auth_headers,
+    )
+    assert response.status_code == 400, response.text
     assert "never fire" in response.text
+    async with async_session_factory() as db:
+        row = (await db.execute(select(Agent).where(Agent.name == "small"))).scalars().one()
+    assert row.checkpoint_threshold_value is None
+
+
+@pytest.mark.asyncio
+async def test_the_agent_window_is_the_one_the_same_patch_binds(app, auth_headers):
+    """A body that rebinds the runner and sets the threshold is judged against the new model."""
+    await _bound_agent("mover", "runner-small", "claude-haiku-4-5-20251001")
+    async with async_session_factory() as db:
+        db.add(Runner(id="runner-big", project_id=PROJECT, name="big", cli="claude", model="opus"))
+        await db.commit()
+    response = await app.patch(
+        f"/api/v1/projects/{PROJECT}/agents/mover",
+        json={
+            "runner_id": "runner-big",
+            "checkpoint_threshold_mode": "tokens",
+            "checkpoint_threshold_value": 250_000,
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.asyncio
+async def test_an_agent_threshold_is_accepted_where_its_window_is_unknown(app, auth_headers):
+    name = await _agent(app, auth_headers)
+    response = await app.patch(
+        f"/api/v1/projects/{PROJECT}/agents/{name}",
+        json={"checkpoint_threshold_mode": "tokens", "checkpoint_threshold_value": 250_000},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
 
 
 @pytest.mark.asyncio

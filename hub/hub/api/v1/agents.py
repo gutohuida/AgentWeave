@@ -28,7 +28,7 @@ from ...agent_lifecycle import archive as archive_agent_row
 from ...agent_lifecycle import unarchive as unarchive_agent_row
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
-from ...checkpoint_policy import CHECKPOINT_MODES, threshold_error
+from ...checkpoint_policy import CHECKPOINT_MODES, agent_window, threshold_error
 from ...context_readings import usable_context_reading as _usable_context_reading
 from ...conversations import new_conversation
 from ...db.engine import get_session
@@ -2826,13 +2826,18 @@ CHECKPOINT_OVERRIDE_FIELDS = (
 )
 
 
-def _apply_checkpoint_override(agent_row: Agent, body: Dict[str, Any]) -> None:
+def _apply_checkpoint_override(
+    agent_row: Agent, body: Dict[str, Any], *, context_window: Optional[int] = None
+) -> None:
     """Apply an agent's checkpoint override, as a whole threshold or not at all.
 
     An override replaces mode and value **together**. Accepting one without the other lets an
     agent inherit `percent` from its project and supply `150`, producing a threshold of 150% that
     can never fire — and the agent would look configured while behaving as though it were not.
     Clearing is symmetrical: both go back to NULL, and the project's threshold applies again.
+
+    `context_window` is the window of the model this agent runs on, when the catalog knows it: a
+    token count at or above it would never be reached (F541).
     """
     touches_threshold = any(
         field in body for field in ("checkpoint_threshold_mode", "checkpoint_threshold_value")
@@ -2853,7 +2858,7 @@ def _apply_checkpoint_override(agent_row: Agent, body: Dict[str, Any]) -> None:
                         "together; half a threshold is not a partial setting"
                     ),
                 )
-            error = threshold_error(mode, value)
+            error = threshold_error(mode, value, context_window=context_window)
             if error:
                 raise HTTPException(status_code=400, detail=error)
             agent_row.checkpoint_threshold_mode = mode
@@ -3144,7 +3149,12 @@ async def patch_agent(
     if "default_permission_mode" in body:
         _apply_default_permission_mode(agent_row, body["default_permission_mode"])
 
-    _apply_checkpoint_override(agent_row, body)
+    bound_runner = (
+        await session.get(Runner, agent_row.runner_id) if agent_row.runner_id is not None else None
+    )
+    _apply_checkpoint_override(
+        agent_row, body, context_window=agent_window(agent_row, bound_runner)
+    )
 
     for grant in GRANT_FIELDS:
         if grant in body:

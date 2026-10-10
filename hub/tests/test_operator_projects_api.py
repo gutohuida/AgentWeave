@@ -333,7 +333,11 @@ async def test_project_settings_update_is_validated_and_atomic(app, auth_headers
         headers=auth_headers,
     )
     assert updated.status_code == 200, updated.text
-    assert updated.json() == {
+    # `warnings` is the save's answer (F541), not a setting: nothing to warn of here, and the
+    # GET below is the settings themselves.
+    saved = updated.json()
+    assert saved.pop("warnings") == []
+    assert saved == {
         "name": "Renamed",
         "hop_budget": 9,
         "turn_delivery_cap": 4,

@@ -35028,7 +35028,7 @@ window nobody measured.
 
 ## F541 (C) -- checkpoint token thresholds are checked against the wrong window, or not at all
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** fixed 2026-10-10 (Tier 0, branch autonomous/2026-10-09-daily, DECISIONS `overhaul-token-threshold-window`). `PATCH /agents/{name}` now refuses a token threshold at or above the window of the agent's own model (bound runner's, else `config.model`; unknown window accepts), judged against the runner the same body binds. `PUT /projects/{id}/settings` no longer judges the threshold against the checkpoint worker's `checkpoint_model`; it saves and answers `warnings` naming each open agent that inherits the threshold and cannot reach it. Tests `test_a_token_threshold_above_the_agents_own_window_is_refused` and `test_a_project_threshold_that_cannot_fire_for_an_agent_is_saved_with_a_warning` (and the worker-window one) failed before. ASGI only, no live-Hub drive. **Not done:** the app does not yet show `warnings` (a `hub/ui/src` edit plus a bundle refresh); an agent that later rebinds to a smaller-window runner is not re-judged. Filed 2026-10-08 (spec overhaul audit, reading code).
 
 A project's token threshold is validated against the checkpoint worker model's window (`api/v1/projects.py:171`),
 not the window of the agents it applies to; an agent-level token threshold is not validated at all

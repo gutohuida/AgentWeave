@@ -299,3 +299,18 @@ def needs_final_warning(policy: CheckpointPolicy, *, percent: Optional[float]) -
 def window_for(model: Optional[str]) -> Optional[int]:
     """The catalog's window for *model*, or None. Thin wrapper so callers need one import."""
     return context_window_for_model(model) if model else None
+
+
+def agent_window(agent: Any, runner: Any) -> Optional[int]:
+    """The window of the model *agent* runs on, or None where nothing declares it.
+
+    A threshold applies to the agent's own conversations, so it is judged against the agent's
+    model: the bound runner's, else the agent's own `config["model"]` (the order the roster uses).
+    The checkpoint worker's model is a different thing — it writes the checkpoint and has no
+    bearing on when one is due (F541).
+    """
+    model = getattr(runner, "model", None)
+    if not model:
+        config = getattr(agent, "config", None)
+        model = config.get("model") if isinstance(config, dict) else None
+    return window_for(model if isinstance(model, str) else None)

@@ -19,7 +19,7 @@ from ... import manager
 from ...agent_activity import latest_activity_by_agent
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_operator, get_operator_project
-from ...checkpoint_policy import threshold_error, window_for
+from ...checkpoint_policy import agent_window, threshold_error
 from ...db.engine import get_session
 from ...db.models import Agent, AgentHeartbeat, OperatorCredential, Project, Run, Runner
 from ...project_lifecycle import ProjectLifecycleService
@@ -166,11 +166,10 @@ class ProjectSettings(BaseModel):
                 "checkpoint_threshold_mode and checkpoint_threshold_value must be set together"
             )
         if self.checkpoint_threshold_mode is not None:
-            error = threshold_error(
-                self.checkpoint_threshold_mode,
-                self.checkpoint_threshold_value,
-                context_window=window_for(self.checkpoint_model),
-            )
+            # No window here. A threshold is judged against the model of each agent it governs,
+            # which a settings body cannot see; the handler warns per agent (F541). The
+            # checkpoint worker's `checkpoint_model` is not that window.
+            error = threshold_error(self.checkpoint_threshold_mode, self.checkpoint_threshold_value)
             if error:
                 raise ValueError(error)
         if self.checkpoint_notes_value is not None:
@@ -495,12 +494,50 @@ async def suggest_main_branch(
     }
 
 
-@router.put("/{project_id}/settings", response_model=ProjectSettings)
+class ProjectSettingsSaved(ProjectSettings):
+    """What a settings save answers: the stored settings, and what the operator should know.
+
+    `warnings` is an answer only. It is never accepted (`ProjectSettingsUpdate` is derived from
+    `ProjectSettings`, not from this) and never stored.
+    """
+
+    warnings: List[str] = []
+
+
+async def _threshold_warnings(
+    session: AsyncSession, project_id: str, merged: ProjectSettings
+) -> List[str]:
+    """Agents the project's token threshold cannot fire for (F541, decided: warn, not refuse).
+
+    Only agents that inherit it: one with a threshold of its own is judged when that is set.
+    """
+    if merged.checkpoint_threshold_mode != "tokens" or merged.checkpoint_threshold_value is None:
+        return []
+    rows = (
+        await session.execute(
+            select(Agent, Runner)
+            .outerjoin(Runner, Runner.id == Agent.runner_id)
+            .where(Agent.project_id == project_id, Agent.lifecycle == "open")
+            .order_by(Agent.name)
+        )
+    ).all()
+    warnings = []
+    for agent, runner in rows:
+        if agent.checkpoint_threshold_mode is not None:
+            continue
+        window = agent_window(agent, runner)
+        error = threshold_error("tokens", merged.checkpoint_threshold_value, context_window=window)
+        if error:
+            warnings.append(f"{agent.name}: {error}")
+    return warnings
+
+
+@router.put("/{project_id}/settings", response_model=ProjectSettingsSaved)
 async def update_project_settings(
     body: ProjectSettingsUpdate,  # type: ignore[valid-type]
     project_identity: Tuple[str, str] = Depends(get_operator_project),
     session: AsyncSession = Depends(get_session),
-) -> ProjectSettings:
+) -> ProjectSettingsSaved:
     resolved_project_id = project_identity[0]
     project = await _operator_project_row(resolved_project_id, session)
 
@@ -625,7 +662,10 @@ async def update_project_settings(
             {"changed": changed, "settings": settings_now},
         )
     await sse_manager.broadcast(resolved_project_id, "project_settings_updated", settings_now)
-    return merged
+    return ProjectSettingsSaved(
+        **merged.model_dump(),
+        warnings=await _threshold_warnings(session, resolved_project_id, merged),
+    )
 
 
 async def _integrate_what_was_waiting_for_a_branch(session: AsyncSession, project_id: str) -> None:
