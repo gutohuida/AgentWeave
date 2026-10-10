@@ -75,9 +75,60 @@ function Write-Log([string] $Message) {
   Write-Output $line
 }
 
+# --- close-out briefing -------------------------------------------------------------------------
+# Opt-in through STATE's `closeout` object (operator, 2026-10-10: "when the loop is going to close,
+# generate [a briefing] and make it available for me"). Runs once, at whichever end comes first --
+# the clock or an empty queue -- just before the task unregisters. A separate invocation because
+# every iteration runs with --strict-mcp-config, which hides the claude.ai Docs connector the
+# briefing is published through; and a headless process has no Artifact tool (measured 2026-10-10).
+# A marker keyed by the stop instant makes it once-only: written BEFORE the invocation, so a
+# briefing that fails is logged, not retried into every later firing.
+function Invoke-Closeout($closeState, [string] $reason) {
+  if (-not ($closeState -and $closeState.closeout)) { return }
+  $leaf = [System.IO.Path]::GetFileNameWithoutExtension($StateFile)
+  $suffix = if ($leaf -match '^STATE-(.+)$') { "-" + $Matches[1] } else { "" }
+  $marker = Join-Path (Split-Path (Join-Path $Repo $StateFile)) (".closeout" + $suffix)
+  if ((Test-Path $marker) -and ((Get-Content $marker -Raw).Trim() -eq $StopAt)) {
+    Write-Log "Close-out briefing already ran for this window - skipping."
+    return
+  }
+  [System.IO.File]::WriteAllText($marker, $StopAt, $script:LogEncoding)
+  $closeModel = if ($closeState.closeout.model) { [string]$closeState.closeout.model } else { "sonnet" }
+  $closeSkill = if ($closeState.closeout.skill) { [string]$closeState.closeout.skill } else { ".claude/skills/night-briefing/SKILL.md" }
+  $stateRel = $StateFile -replace '\\', '/'
+  $closePrompt = "The autonomous loop driven by $stateRel has ended ($reason). Write its close-out briefing: " +
+    "read $closeSkill and follow its 'Close-out mode' section exactly, with $stateRel as the state file. " +
+    "The operator is away; nobody can answer a question, and you must not merge, fix or re-run anything."
+  Write-Log "--- close-out briefing start (model=$closeModel, $reason) ---"
+  $prevPref = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $out = New-Object System.Collections.Generic.List[string]
+  try {
+    $env:AW_AUTONOMOUS = "1"
+    try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
+    Set-Location $Repo
+    & $AgentExecutable -p $closePrompt --model $closeModel --output-format json --permission-mode bypassPermissions --max-budget-usd 10 2>&1 | ForEach-Object {
+      if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Log ([string]$_) } else { $out.Add([string]$_) }
+    }
+    $closeCode = $LASTEXITCODE
+  } finally { $ErrorActionPreference = $prevPref }
+  $parsedClose = $null
+  try { $parsedClose = ($out -join "`n") | ConvertFrom-Json -ErrorAction Stop } catch {}
+  if ($parsedClose) {
+    foreach ($line in ([string]$parsedClose.result -split "`r?`n")) { Write-Log $line }
+    Write-Log ('--- close-out briefing end (exit {0}, ${1:N2} list) ---' -f $closeCode, [double]$parsedClose.total_cost_usd)
+  } else {
+    foreach ($line in $out) { Write-Log $line }
+    Write-Log "--- close-out briefing end (exit $closeCode, no result JSON) ---"
+  }
+}
+
 # --- stop condition -----------------------------------------------------------------------------
 $stopAtInstant = [datetime]::Parse($StopAt, [System.Globalization.CultureInfo]::InvariantCulture)
 if ((Get-Date) -ge $stopAtInstant) {
+  $closeState = $null
+  try { $closeState = Get-Content (Join-Path $Repo $StateFile) -Raw | ConvertFrom-Json } catch {}
+  Invoke-Closeout $closeState "the clock ran out at $StopAt"
   Write-Log "Past $stopAtInstant - unregistering '$TaskName' and stopping."
   try { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop } catch {}
   exit 0
@@ -137,6 +188,7 @@ if ($state.branch -and $currentBranch -ne [string]$state.branch) {
 # atomic transition to next_action=null; MultipleInstances=IgnoreNew guarantees we cannot observe
 # its half-written state while it is still running.
 if (-not $state.next_action) {
+  Invoke-Closeout $state "the queue finished"
   Write-Log "STATE.json has no next_action - queue complete. Unregistering '$TaskName'."
   try { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop } catch {}
   exit 0

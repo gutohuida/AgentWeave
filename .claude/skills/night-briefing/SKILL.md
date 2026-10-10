@@ -201,3 +201,29 @@ if the branch touches `hub/hub/static/ui` or `hub/hub/migrations`.
 
 After merging, interactive work continues on `master` (the night window checks out its own branch at
 22:55).
+
+## Close-out mode: the loop briefs itself as it ends
+
+`run-iteration.ps1` runs this once, as a separate headless process, when a loop whose STATE file
+carries a `closeout` object ends (the clock ran out or the queue emptied). Nobody is present. The
+same Steps 1–6 apply, with these differences:
+
+- **Any loop, not just the night.** Read the STATE file the prompt names instead of
+  `STATE-night.json`. Take the start instant from its `armed_at` field when present, otherwise from
+  the `Armed` line of its `log_file`, and the driver log from its `driver_log` field (default
+  `.claude/autonomous/driver-<suffix>.log`). Filter the usage ledger on that instant and on the
+  ledger's `state_file` equal to this STATE file, not on `window == 'night'`.
+- **The ending is known:** the prompt states it. A firing may still have been running when the clock
+  ran out; the driver only starts the close-out after it exits, so the branch facts are final.
+- **Publish as a Claude Doc** (operator, 2026-10-10). Before anything else in Step 6, call the Docs
+  `guide` with `["topic.instructions"]`, follow it, and create the doc titled
+  `<loop name> briefing — <date>`. Its sections are Step 6's template (lead with the one-line
+  verdict, then the Window and Merge lines, then the sections in order). Then call
+  `PushNotification` with a short message: the verdict line and the doc's link.
+- **Writes, all on the loop's own branch and nowhere else:** append a `## Close-out briefing` entry
+  to the loop's `log_file` with the doc's link and the verdict line, set `briefing_url` in the STATE
+  file, then commit those two paths explicitly and push. Never merge, never run Step 7, never fix,
+  rerun CI, edit findings or decisions, or start a Hub.
+- **If the Docs connector fails**, write the briefing to `.claude/autonomous/briefings/<branch
+  leaf>.md` instead, commit it with the log entry, and say so in the push notification.
+- End your reply with the doc link on its own line; the driver copies your reply into its log.
