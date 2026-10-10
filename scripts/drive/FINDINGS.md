@@ -35263,7 +35263,7 @@ A loop's own history records edits, control changes, stops, archiving, adoption 
 
 ## F571 (C) -- a hand-made task's dependencies can be declared only through a REST route
 
-**Status:** open 2026-10-09. Found by the spec overhaul (decision `overhaul-dependency-ui`, operator 2026-10-09; the hint half is F552).
+**Status:** fixed 2026-10-10 (Tier 1, night iterations 24-27; `d1019_task_depends_on.py` 6/6). `depends_on` on `create_task` (REST, agent route, MCP) and a Depends on section with picker in the task drawer. Found by the spec overhaul (decision `overhaul-dependency-ui`, operator 2026-10-09; the hint half is F552).
 
 Since F36 a hand-made task can carry dependencies, but only `POST` on the task-dependency route sets them: no control in the app and no MCP tool field. **Decided:** a "depends on" picker in the task drawer, and a `depends_on` field on `create_task` (both agent renderings). Tier 1.
 
