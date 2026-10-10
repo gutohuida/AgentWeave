@@ -48,6 +48,17 @@ class TestCatalogCoverage:
         assert model_context_window("claude", "claude-sonnet-5") == 1_000_000
         assert model_context_window("claude", "claude-haiku-4-5-20251001") == 200_000
 
+    def test_sonnet_5_5_is_offered_and_owns_the_sonnet_alias_and_the_default(self):
+        """F507/F575. Live-verified 2026-10-10 (CLI 2.1.291): `--model claude-sonnet-5-5` and
+        `--model sonnet` both answered with `modelUsage["claude-sonnet-5-5"]`, window 1,000,000.
+        `claude-sonnet-5` stays declared, as the previous generation runner records name."""
+        claude = get_provider("claude")
+        assert claude.model("claude-sonnet-5-5").label == "Sonnet 5.5"
+        assert claude.model("sonnet").id == "claude-sonnet-5-5"
+        assert [m.id for m in claude.models if m.default] == ["claude-sonnet-5-5"]
+        assert model_context_window("claude", "claude-sonnet-5-5") == 1_000_000
+        assert claude.model("claude-sonnet-5").id == "claude-sonnet-5"
+
 
 class TestValidateOverrides:
     def test_a_value_valid_for_one_provider_is_refused_for_the_other(self):

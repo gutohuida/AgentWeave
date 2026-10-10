@@ -193,6 +193,19 @@ async def test_a_recognised_model_is_not_flagged(app, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_a_claude_runner_can_bind_the_current_sonnet_by_its_full_id(app, auth_headers):
+    """F507/F575: `claude-sonnet-5-5` was refused with a list that did not contain it."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/runners",
+        json={"name": "Current Sonnet", "cli": "claude", "model": "claude-sonnet-5-5"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    assert resp.json()["model"] == "claude-sonnet-5-5"
+    assert resp.json()["model_unrecognised"] is False
+
+
+@pytest.mark.asyncio
 async def test_launchability_by_provider_probes_every_catalog_provider_with_no_runner_needed(
     app, auth_headers
 ):

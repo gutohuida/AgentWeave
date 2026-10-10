@@ -241,9 +241,11 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                 aliases=("opus",),
                 context_window=1_000_000,
             ),
+            # Verified 2026-10-10 (CLI 2.1.291): `--model sonnet` and `--model claude-sonnet-5-5`
+            # both ran as `claude-sonnet-5-5` with `modelUsage.contextWindow` 1,000,000 (F507/F575).
             ModelDescriptor(
-                id="claude-sonnet-5",
-                label="Sonnet 5",
+                id="claude-sonnet-5-5",
+                label="Sonnet 5.5",
                 aliases=("sonnet",),
                 context_window=1_000_000,
                 default=True,
@@ -262,6 +264,7 @@ CATALOG: Dict[str, ProviderDescriptor] = {
             ),
             # The previous generation, kept because the CLI still resolves both (verified
             # 2026-09-23) and runner records name `claude-opus-5`; the aliases moved on with it.
+            ModelDescriptor(id="claude-sonnet-5", label="Sonnet 5", context_window=1_000_000),
             ModelDescriptor(id="claude-opus-5", label="Opus 5", context_window=1_000_000),
             ModelDescriptor(id="claude-fable-5", label="Fable 5", context_window=1_000_000),
         ),

@@ -34543,7 +34543,7 @@ with "I cannot directly invoke the AgentWeave tool"; the Hub restaffed the revie
 
 ## F507 (C) — the Claude model catalog does not know Sonnet 5.5; a runner on `claude-sonnet-5-5` is refused
 
-**Status:** open
+**Status:** fixed 2026-10-10 (Tier 0, night iteration 2, with F575). `claude-sonnet-5-5` ("Sonnet 5.5", window 1,000,000) is now the Claude catalog's Sonnet, default, and owner of the `sonnet` alias; `claude-sonnet-5` stays declared as the previous generation. Verified on CLI 2.1.291: `--model claude-sonnet-5-5` and `--model sonnet` both answered with `modelUsage["claude-sonnet-5-5"].contextWindow` 1000000. Tests (failed before): `test_model_catalog.py::test_sonnet_5_5_is_offered_and_owns_the_sonnet_alias_and_the_default`, `test_runners_api.py::test_a_claude_runner_can_bind_the_current_sonnet_by_its_full_id`. Driven on a scratch Hub `:8013` (fresh database): POST /runners with `claude-sonnet-5-5` -> 201, `sonnet` -> 201, `claude-sonnet-9` -> 400 whose list now names `claude-sonnet-5-5 (or sonnet)`.
 Found 2026-10-06 setting up the first real slice-flow run on the trial Hub `:8010` (interactive). Driven,
 not read. Area: **Runners & models**.
 
@@ -35294,7 +35294,7 @@ The operator wrote that change document in one PUT. It had every section filled:
 
 ## F575 (C) -- the Claude runner's model catalog does not offer Sonnet 5.5
 
-**Status:** open 2026-10-09. Noticed in sessions 0186 and 0187 while choosing a model for the manager's title job; filed at the operator's request.
+**Status:** fixed 2026-10-10 with F507 (same change, see its entry; the verified id, window and alias behaviour are recorded there). Opened 2026-10-09. Noticed in sessions 0186 and 0187 while choosing a model for the manager's title job; filed at the operator's request.
 
 The Claude provider in `hub/hub/model_catalog.py:234-267` offers Opus 5.5, Sonnet 5, Haiku 4.5, Fable 5.1, Opus 5 and Fable 5. It does not offer `claude-sonnet-5-5`. Copilot's list in the same file has `claude-sonnet-5.5` (line 218). So a Claude runner, a Manager job or a composer turn cannot select the current Sonnet. The only way to reach it is the `sonnet` alias, and only if the CLI has moved that alias to Sonnet 5.5, which is unverified. This catalog's rule is that each id and window is live-verified (docstring, lines 10-18), so the fix first checks `claude --help` and a real `modelUsage.contextWindow`.
 

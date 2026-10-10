@@ -8,16 +8,16 @@
     "parent_branch": "master",
     "parent_sha": "9eb5de9",
     "stop_at": "2026-10-11T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-10-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f507-impl",
-    "next_action": "Do queue item f507-impl: Tier 0 fix per its detail in the queue. Keep current equal to the id.",
+    "current": "f555-impl",
+    "next_action": "Do queue item f555-impl: Tier 0 fix per its detail in the queue. Keep current equal to the id.",
     "queue": [
         {
             "id": "f507-impl",
-            "status": "open",
+            "status": "done",
             "title": "Tier 0: Claude model catalog lacks Sonnet 5.5 (F507, duplicate F575)",
             "detail": "Add claude-sonnet-5-5 to the Claude runner model catalog. Test failing at the catalog/validation seam first, fix, CI lint set, drive a runner bind, set Status on F507 and F575 in scripts/drive/FINDINGS.md. Read the findings first; if it needs a spec, stop and note it."
         },
