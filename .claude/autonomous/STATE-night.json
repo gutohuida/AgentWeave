@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 18,
+    "iteration": 19,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "loop-history-impl",
-    "next_action": "Do queue item loop-history-impl: build spdoc-ae4ba4e73d46 (spec/changes/a-loops-history-records-its-creation-and-queue-additions/spec.json), task drive-first first, recorded failing",
+    "current": "loop-history-record-impl",
+    "next_action": "Do queue item loop-history-record-impl: build task record of spdoc-ae4ba4e73d46 (loop_created + loop_tasks_added writers per the contract in scripts/drive/d1018_loop_history.py docstring); Hub tests first, then drive checks 1-5 on :8104 must pass",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -32,8 +32,18 @@
         },
         {
             "id": "loop-history-impl",
+            "status": "done",
+            "title": "loop-history-impl: drive-first written, failing at check 1 (scripts/drive/d1018_loop_history.py); rest split into record, detail+page"
+        },
+        {
+            "id": "loop-history-record-impl",
             "status": "open",
-            "title": "loop-history-impl: build spec/changes/a-loops-history-records-its-creation-and-queue-additions (spdoc-ae4ba4e73d46) - drive-first (scripts/drive/d1018_loop_history.py on :8104, recorded failing at check 1), then record, detail, page; split by task if one firing cannot finish"
+            "title": "loop-history-record-impl: task-4f0e10725b8c - loop_created and loop_tasks_added writers at jobs.py, tasks.py, spec.py, spec_tasks.py; Hub tests first; drive checks 1-5 pass"
+        },
+        {
+            "id": "loop-history-page-impl",
+            "status": "open",
+            "title": "loop-history-page-impl: tasks task-347dc2c25ed8 + task-634fe4f66a4b - detail keeps the creation entry beside the ten newest; LoopTab History section (testids loop-tab-events, loop-tab-event); vitest; bundle refresh; drive check 6"
         },
         {
             "id": "loop-history-drive",
