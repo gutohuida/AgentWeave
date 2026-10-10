@@ -916,7 +916,7 @@
       "key": "supported-runner-normalization",
       "modal": "SHALL",
       "party": null,
-      "rationale": "These are the only transports the runner adapters offer; each must produce the same timeline shape.",
+      "rationale": "These are the only transports the runner adapters offer; each must produce the same timeline shape. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "The Hub SHALL normalize into the canonical event contract the output of each runner it can start: Claude Code's `stream-json` lines, Codex's `exec` JSON lines and its app-server items, and Copilot's ACP session updates."
     },
     {

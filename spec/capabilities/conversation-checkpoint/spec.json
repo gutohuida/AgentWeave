@@ -838,7 +838,7 @@
       "key": "the-threshold-the-notes-point-and-the-final-warning-are-plac",
       "modal": "SHALL",
       "party": null,
-      "rationale": "Each threshold exists to act before the runner compacts on its own, so it must move with the runner: Claude and Codex compact near 95% (80/70/92), Copilot near 80% (65/55/77). Lowering rather than refusing is required because one project threshold serves agents on runners that compact at different points.",
+      "rationale": "Each threshold exists to act before the runner compacts on its own, so it must move with the runner: Claude and Codex compact near 95% (80/70/92), Copilot near 80% (65/55/77). Lowering rather than refusing is required because one project threshold serves agents on runners that compact at different points. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "The Hub SHALL derive the built-in threshold, notes point and final warning from the compaction point C of the runner the agent is bound to, as C-15, C-25 and C-3 percent (C defaults to 95), and SHALL lower any configured percent threshold above C-3 to C-3 for that agent, stating the lowering in the agent's and project's settings."
     },
     {
@@ -887,7 +887,7 @@
       "key": "n6",
       "modal": "SHALL",
       "party": null,
-      "rationale": "The worker reads transcript text the Hub did not write; anything it can act with is a tool a prompt injection could use.",
+      "rationale": "The worker reads transcript text the Hub did not write; anything it can act with is a tool a prompt injection could use. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "A worker invocation SHALL run in a temporary directory outside the project, with no project tool server, and offered no tools its runner can withhold: Claude with an empty tool set and strict MCP config, Codex in a read-only sandbox."
     }
   ],

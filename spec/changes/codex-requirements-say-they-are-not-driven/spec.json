@@ -1,0 +1,201 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "ee9af367b57d747022c1919bdcafa702779f2f77197375c0d43a160992110829",
+      "FR-10": "ba794b6ef57b68cfdd344c82943d33f688cef65406c44d46791907a1e29487ce",
+      "FR-11": "068e183c38a09fef09700c6e50c59791c9cc35aaff33135b29b4b0d8f580d359",
+      "FR-12": "ce8bd2f28a4562ac1559f6ac02c6e5ac3fdefa747e06b7bfb6ba4087172901e4",
+      "FR-13": "9f08eb1ebff347ec7cf1c1b5082b230bafc53b79a17845bad38d9ae2121b0e7c",
+      "FR-14": "8574734ee7c0567aa2f442c3e28fbb186c76bfd979bd49dac20fef75bc83fa0d",
+      "FR-15": "0be5240e932273802a95c04eced0115e3d909ee4e6cb63c5c18954939745bcf0",
+      "FR-16": "cfcae1ce03eec54a7245c57334ebe096df83ae940579fe4fe72f9e266fb28453",
+      "FR-17": "f37a8bd1f757d8d7c9825e97605f123bf5ce581bb561505a0354b57f5606abd6",
+      "FR-2": "9f6f451615642e61d25a2923aaddb36df5d8d5915f87c47d6f7b14054a0283d9",
+      "FR-3": "be03a0961eb952435f0ee6fe542e9c07c1df7b147c744bf25c9890c17d7d2912",
+      "FR-4": "7bedc152edf6d5c053dd4529b81efff8f539441e89a0ee02ddc45a9b09b2bdea",
+      "FR-5": "36c2d9635d4d06ddddda5503f54ddfb6b56d29364834c34b407778660b67d684",
+      "FR-6": "9b9a2abd4ea959ac7f65aae7f1e6ed2ce41aedceee74001feff4c478e9a23847",
+      "FR-7": "7492f72a05ac496e8912a22c1b0e80d8ecbf8098fafc8a7d4e936d7bc656f955",
+      "FR-8": "306d03635aec123afc70cf9ae1581a8ab7c356d91462e9f712c57c045010edb8",
+      "FR-9": "2c6bc562340ed11603593fd070cfb378a28112de5473f606e95174291e18e10e"
+    },
+    "high_water": 17,
+    "requirements": {
+      "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-": "FR-6",
+      "a-provider-that-publishes-its-own-catalog-is-described-from-": "FR-14",
+      "a-runner-s-flags-may-select-a-transport-and-unset-means-the-": "FR-16",
+      "an-operator-asked-to-decide-a-call-is-shown-what-the-workspa": "FR-5",
+      "built-in-runners-are-seeded-on-first-use": "FR-15",
+      "cache-breakdowns-are-counted-according-to-provider-semantics": "FR-2",
+      "canonical-per-agent-runtime-context": "FR-1",
+      "codex-context-mapping": "FR-3",
+      "control-values-are-per-provider": "FR-13",
+      "n2": "FR-8",
+      "n6": "FR-11",
+      "supported-runner-normalization": "FR-9",
+      "supported-runner-telemetry-normalizes-to-one-accounting-shap": "FR-17",
+      "the-built-in-posture-a-run-receives-is-the-posture-shown-for": "FR-4",
+      "the-hub-declares-a-model-catalog-for-every-supported-provide": "FR-12",
+      "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too": "FR-7",
+      "the-threshold-the-notes-point-and-the-final-warning-are-plac": "FR-10"
+    },
+    "retired": {}
+  },
+  "design": "Spec-only (Tier 0 in substance), carried as a change document because a capability is written only through a fold. No code, no migration, no Hub-restart hazard.\n\nD1. Which requirements (night-1010-1, taken by the night): every requirement whose statement or rationale states a Codex-specific behaviour, 17 in nine capabilities, not only the three Codex-only ones. A mixed requirement's Codex clause is exactly as undriven as a Codex-only requirement, and the label exists to say what is unverified. Two that name `codex` only as a CLI value the Hub checks without starting a run are left unlabelled. Rejected: label only the Codex-only requirements (codex-context-mapping, n2, the CLI-cache catalog) plus the seeded runner, which leaves a reader of the posture, advice and checkpoint-worker requirements unwarned.\nD2. Two wordings: a Codex-only requirement ends its rationale 'Not driven since 2026-08-29 (Codex plan cancelled).'; a mixed one 'Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).' (the seeded-runner one: 'Its Codex default runner: ...'). Both carry the operator's phrase verbatim so one grep finds them. 'Driven' means a real Codex run; unit tests over recorded lines and fixture CLI caches still run in CI.\nD3. The label goes in the rationale, not the statement: the statement is what the Hub shall do and has not changed, so each requirement keeps its statement, its key, its digest and its criteria.\nD4. No task and no criterion: nothing is built and nothing new is asserted. The check is a read of the folded capabilities (every listed key carries the phrase, statements byte-identical).",
+  "evidence": {
+    "checked": [
+      "spec/capabilities/*/spec.json: 19 requirements mention Codex; 17 state Codex behaviour (listed in this change); 2 name it only as a checked CLI value"
+    ],
+    "limits": [
+      "No drive: nothing executable changes"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "The Codex plan was cancelled on 2026-08-29 and no Codex run has been driven since, yet 17 requirements across nine capabilities state Codex behaviour (sandbox postures and approvals, the model catalog and its CLI cache, the seeded default runner, context and usage mapping, stream normalisation, checkpoint workers) with nothing telling a reader that part is unverified end to end. The operator decided to keep it all and label it (spec-queue/DECISIONS.md, overhaul-codex-spec).",
+  "requirements": [
+    {
+      "key": "canonical-per-agent-runtime-context",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A change to an agent, runner, charter, instructions or quality settings must reach the next run without any regeneration step. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "The Hub SHALL render an agent's context from its current Hub records before every run and deliver it through the runner's mechanism: written to `<run workdir>/.agentweave/context/<agent>.md` and passed to the CLI for Claude and Codex, and for Copilot split into a stable part (written into the agent's Copilot custom agent) and per-turn and tool-surface parts sent with each prompt."
+    },
+    {
+      "key": "cache-breakdowns-are-counted-according-to-provider-semantics",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Adding an inclusive cache figure double-counts it. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "Cache token fields SHALL be added to context tokens only where the provider reports them as exclusive of input (Claude), and SHALL be kept as breakdown only where the provider's input already includes them (Codex, Copilot)."
+    },
+    {
+      "key": "codex-context-mapping",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "App-server reports the per-request figure and its window itself; exec reports figures that can be cumulative across a resumed session, so they are labelled estimated rather than presented as a measurement. Not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "For Codex over its app-server transport, each `thread/tokenUsage/updated` SHALL yield a sample of `last.inputTokens + last.outputTokens` against `modelContextWindow`, measured with basis `provider_context`, or unavailable when no window is reported; over the exec transport, `turn.completed.usage` SHALL yield an estimated `cumulative_delta` sample against the catalog's window, or unavailable when the catalog declares none."
+    },
+    {
+      "key": "the-built-in-posture-a-run-receives-is-the-posture-shown-for",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A pill that says one thing while the run does another is the worst failure (F283). Approver flags are emitted only for a posture that uses them and only when the approver is present. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "The posture a run receives when neither its conversation nor its agent states one SHALL be decided in one place per provider (`posture_at_rest`), and every surface that shows a posture at rest SHALL show it: Workspace only for a Claude run the Hub can answer and for Copilot, Edit files for a Claude run with no approver and for Codex, Full access under yolo."
+    },
+    {
+      "key": "an-operator-asked-to-decide-a-call-is-shown-what-the-workspa",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator decides in seconds under a timeout, and the boundary is the input they most need. An allow for a shell command says the text was read, not that the command was sandboxed; Codex's advice says it checked the working directory only. Advice that cannot be computed is omitted, and a Hub that rejects the field is asked again without it. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "A permission request shown to the operator SHALL carry, as advice, the decision Workspace only would reach for the same call with its reason, from the same check that answers under Workspace only for that provider, and the advice SHALL NOT answer the request."
+    },
+    {
+      "key": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Detection happens where tool calls are observed for the transcript, so it runs in every posture, including ones that check nothing and calls the operator approved. The Hub's own `.agentweave/` subtree is its own kind because it is hidden from `git status`, unlike the tracked tree. The record (`Run.outside_workspace_writes`) is written on first sight, bounded at 20 destinations plus an overflow entry, and is not a refusal. `NULL` means not observed (workspace unresolvable) and `[]` observed and clean. It covers only declared file-tool paths: a shell redirect and a link inside the workspace pointing out are not seen, and a run whose workspace is the project directory records nothing because everything is inside it. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "The Hub SHALL record against the run every file-writing tool call (Claude `Write`/`Edit`/`MultiEdit`/`NotebookEdit`, Codex `apply_patch`, Copilot edit/delete/move) whose path resolves outside the run's recorded workspace, in every posture, naming the destination as a kind (`agent`, `task`, `review`, `hub`, `project` or `outside`) and a name, and SHALL notify the operator once per destination per run."
+    },
+    {
+      "key": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The call command reaches the same operations as the Hub's MCP tools under the same run credential, so it has their standing. The forms are matched against allow-lists of characters and parameters, never against a list of refused syntax, which fails open (a parenthesised path did). The calls directory counts only if neither it nor `.agentweave` is a link or junction, and the Hub makes it a real directory each turn. Only the PowerShell write can allow what the workspace judge would refuse, because the judge reads the literal as paths and PowerShell writes it verbatim. Accepted residual: in a persistent shell an earlier command could redefine `aw-tool` or `Set-Content`; that command was itself decided under the posture. Codex's ordinary command approvals are not read this way. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "Wherever the Hub answers a Claude or Copilot permission request, and on a Codex specification turn, it SHALL allow without asking, in every posture: exactly one `aw-tool` invocation in the harness's Bash or PowerShell tool, exactly one PowerShell `Set-Content` of an arguments file from one single-quoted literal, and a write tool naming only `.json` files inside the run's own `.agentweave/calls` directory; every other request SHALL be decided exactly as without this rule."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Codex's thread policy decides what it asks: Ask me starts `read-only`/`untrusted` so every effectful action is asked, Full access `danger-full-access`/`never`, the rest `workspace-write`/`on-request`. Workspace only for Codex reads the working directory only, never the command, and says so. A specification turn starts `read-only` in every posture and accepts only the Hub's own call. Not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "The Hub SHALL answer every approval a Codex app-server run raises: accepting an MCP elicitation only when it is a tool call on the Hub's own registered server, deciding sandbox approvals by posture (Workspace only by whether the request's working directory is inside the workspace, Ask me by the operator, Full access and yolo by accepting, otherwise declining), and declining anything unrecognised."
+    },
+    {
+      "key": "supported-runner-normalization",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "These are the only transports the runner adapters offer; each must produce the same timeline shape. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "The Hub SHALL normalize into the canonical event contract the output of each runner it can start: Claude Code's `stream-json` lines, Codex's `exec` JSON lines and its app-server items, and Copilot's ACP session updates."
+    },
+    {
+      "key": "the-threshold-the-notes-point-and-the-final-warning-are-plac",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Each threshold exists to act before the runner compacts on its own, so it must move with the runner: Claude and Codex compact near 95% (80/70/92), Copilot near 80% (65/55/77). Lowering rather than refusing is required because one project threshold serves agents on runners that compact at different points. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "The Hub SHALL derive the built-in threshold, notes point and final warning from the compaction point C of the runner the agent is bound to, as C-15, C-25 and C-3 percent (C defaults to 95), and SHALL lower any configured percent threshold above C-3 to C-3 for that agent, stating the lowering in the agent's and project's settings."
+    },
+    {
+      "key": "n6",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The worker reads transcript text the Hub did not write; anything it can act with is a tool a prompt injection could use. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "A worker invocation SHALL run in a temporary directory outside the project, with no project tool server, and offered no tools its runner can withhold: Claude with an empty tool set and strict MCP config, Codex in a read-only sandbox."
+    },
+    {
+      "key": "the-hub-declares-a-model-catalog-for-every-supported-provide",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A provider listed but not spawnable would offer a choice that can never run, and a substituted window would show a usage percentage that is not true. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "The Hub SHALL declare a catalog entry for exactly the providers it can spawn (`claude`, `codex`, `copilot`), each listing its models with the identifier passed to the provider, a label, any aliases the provider accepts, and the model's context window, declared as unknown rather than substituted when the Hub does not know it."
+    },
+    {
+      "key": "control-values-are-per-provider",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Providers support different effort levels; Codex's effort values are the intersection of what every listed Codex model supports, so the Hub never accepts a value a specific model would reject or silently discard. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "A control's permitted values SHALL be declared on that provider's control, and a value permitted for one provider SHALL be refused for a provider that does not declare it."
+    },
+    {
+      "key": "a-provider-that-publishes-its-own-catalog-is-described-from-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The provider's server sends each client version its own list, so the list the installed client wrote is the one it will accept; a built-in list can only be a fallback. Not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "For Codex, whose installed CLI keeps a model cache (`$CODEX_HOME/models_cache.json`, else `~/.codex/models_cache.json`), the Hub SHALL offer the cache's listed models in the cache's priority order with the first as default, and SHALL fall back to its built-in list only when the cache is absent, unreadable, malformed or lists no model, without failing any request."
+    },
+    {
+      "key": "built-in-runners-are-seeded-on-first-use",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A new project can bind an agent immediately, and an operator who deleted defaults in favour of their own runners does not get them back. Its Codex default runner: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "The Hub SHALL create one default runner per supported CLI, named \"<Cli> (default)\" with no model, when a project is registered and, at startup, for any project that has no runner, and SHALL create none for a project that already has one."
+    },
+    {
+      "key": "a-runner-s-flags-may-select-a-transport-and-unset-means-the-",
+      "modal": "MAY",
+      "party": null,
+      "rationale": "Codex runs over its app-server by default; its exec transport is degraded and must be opted into explicitly. Sentinels are the union of every adapter's declared set. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "A runner's flags MAY carry a transport sentinel declared by its CLI's adapter, which SHALL select how the Hub starts the run and SHALL NOT be passed to the CLI; a runner with no sentinel SHALL get its CLI's default transport, the one whose tool surface the agent can call."
+    },
+    {
+      "key": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One shape makes per-agent and per-project totals comparable across runners. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
+      "statement": "The Hub SHALL normalise Claude result usage, Codex completed-turn usage and Copilot usage into one accounting shape without double-counting cache or reasoning subsets, and malformed telemetry SHALL yield an `unavailable` outcome rather than failing the run."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Append the label to the rationale of each requirement whose statement or rationale states a Codex-specific behaviour, replacing it under its existing key"
+    ],
+    "non_goals": [
+      "Any code change",
+      "Any change to a statement, modal or acceptance criterion",
+      "Removing Codex support or its default runner",
+      "Requirements that name `codex` only as an accepted CLI value checked without a run (runner-registry runners-are-project-scoped-hub-records, a-copilot-runner-may-reach-its-model-with-the-operator-s-own)"
+    ]
+  },
+  "summary": "Label every capability requirement that states Codex behaviour 'not driven since 2026-08-29 (Codex plan cancelled)' in its rationale. The Codex code, its requirements and its default-runner seeding stay (decision overhaul-codex-spec). Spec-only; statements, modals and criteria are unchanged.",
+  "tasks": [],
+  "title": "Codex requirements say they have not been driven since the plan was cancelled"
+}

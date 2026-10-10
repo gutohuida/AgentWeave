@@ -213,7 +213,7 @@
       "key": "the-hub-declares-a-model-catalog-for-every-supported-provide",
       "modal": "SHALL",
       "party": null,
-      "rationale": "A provider listed but not spawnable would offer a choice that can never run, and a substituted window would show a usage percentage that is not true.",
+      "rationale": "A provider listed but not spawnable would offer a choice that can never run, and a substituted window would show a usage percentage that is not true. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "The Hub SHALL declare a catalog entry for exactly the providers it can spawn (`claude`, `codex`, `copilot`), each listing its models with the identifier passed to the provider, a label, any aliases the provider accepts, and the model's context window, declared as unknown rather than substituted when the Hub does not know it."
     },
     {
@@ -227,7 +227,7 @@
       "key": "control-values-are-per-provider",
       "modal": "SHALL",
       "party": null,
-      "rationale": "Providers support different effort levels; Codex's effort values are the intersection of what every listed Codex model supports, so the Hub never accepts a value a specific model would reject or silently discard.",
+      "rationale": "Providers support different effort levels; Codex's effort values are the intersection of what every listed Codex model supports, so the Hub never accepts a value a specific model would reject or silently discard. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "A control's permitted values SHALL be declared on that provider's control, and a value permitted for one provider SHALL be refused for a provider that does not declare it."
     },
     {
@@ -255,7 +255,7 @@
       "key": "a-provider-that-publishes-its-own-catalog-is-described-from-",
       "modal": "SHALL",
       "party": null,
-      "rationale": "The provider's server sends each client version its own list, so the list the installed client wrote is the one it will accept; a built-in list can only be a fallback.",
+      "rationale": "The provider's server sends each client version its own list, so the list the installed client wrote is the one it will accept; a built-in list can only be a fallback. Not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "For Codex, whose installed CLI keeps a model cache (`$CODEX_HOME/models_cache.json`, else `~/.codex/models_cache.json`), the Hub SHALL offer the cache's listed models in the cache's priority order with the first as default, and SHALL fall back to its built-in list only when the cache is absent, unreadable, malformed or lists no model, without failing any request."
     },
     {

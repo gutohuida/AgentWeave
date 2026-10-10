@@ -477,7 +477,7 @@
       "key": "built-in-runners-are-seeded-on-first-use",
       "modal": "SHALL",
       "party": null,
-      "rationale": "A new project can bind an agent immediately, and an operator who deleted defaults in favour of their own runners does not get them back.",
+      "rationale": "A new project can bind an agent immediately, and an operator who deleted defaults in favour of their own runners does not get them back. Its Codex default runner: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "The Hub SHALL create one default runner per supported CLI, named \"<Cli> (default)\" with no model, when a project is registered and, at startup, for any project that has no runner, and SHALL create none for a project that already has one."
     },
     {
@@ -533,7 +533,7 @@
       "key": "a-runner-s-flags-may-select-a-transport-and-unset-means-the-",
       "modal": "MAY",
       "party": null,
-      "rationale": "Codex runs over its app-server by default; its exec transport is degraded and must be opted into explicitly. Sentinels are the union of every adapter's declared set.",
+      "rationale": "Codex runs over its app-server by default; its exec transport is degraded and must be opted into explicitly. Sentinels are the union of every adapter's declared set. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "A runner's flags MAY carry a transport sentinel declared by its CLI's adapter, which SHALL select how the Hub starts the run and SHALL NOT be passed to the CLI; a runner with no sentinel SHALL get its CLI's default transport, the one whose tool surface the agent can call."
     },
     {

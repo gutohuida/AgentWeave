@@ -304,7 +304,7 @@
       "key": "cache-breakdowns-are-counted-according-to-provider-semantics",
       "modal": "SHALL",
       "party": null,
-      "rationale": "Adding an inclusive cache figure double-counts it.",
+      "rationale": "Adding an inclusive cache figure double-counts it. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "Cache token fields SHALL be added to context tokens only where the provider reports them as exclusive of input (Claude), and SHALL be kept as breakdown only where the provider's input already includes them (Codex, Copilot)."
     },
     {
@@ -318,7 +318,7 @@
       "key": "codex-context-mapping",
       "modal": "SHALL",
       "party": null,
-      "rationale": "App-server reports the per-request figure and its window itself; exec reports figures that can be cumulative across a resumed session, so they are labelled estimated rather than presented as a measurement.",
+      "rationale": "App-server reports the per-request figure and its window itself; exec reports figures that can be cumulative across a resumed session, so they are labelled estimated rather than presented as a measurement. Not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "For Codex over its app-server transport, each `thread/tokenUsage/updated` SHALL yield a sample of `last.inputTokens + last.outputTokens` against `modelContextWindow`, measured with basis `provider_context`, or unavailable when no window is reported; over the exec transport, `turn.completed.usage` SHALL yield an estimated `cumulative_delta` sample against the catalog's window, or unavailable when the catalog declares none."
     },
     {

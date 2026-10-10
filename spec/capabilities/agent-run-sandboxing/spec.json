@@ -1245,7 +1245,7 @@
       "key": "the-built-in-posture-a-run-receives-is-the-posture-shown-for",
       "modal": "SHALL",
       "party": null,
-      "rationale": "A pill that says one thing while the run does another is the worst failure (F283). Approver flags are emitted only for a posture that uses them and only when the approver is present.",
+      "rationale": "A pill that says one thing while the run does another is the worst failure (F283). Approver flags are emitted only for a posture that uses them and only when the approver is present. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "The posture a run receives when neither its conversation nor its agent states one SHALL be decided in one place per provider (`posture_at_rest`), and every surface that shows a posture at rest SHALL show it: Workspace only for a Claude run the Hub can answer and for Copilot, Edit files for a Claude run with no approver and for Codex, Full access under yolo."
     },
     {
@@ -1357,14 +1357,14 @@
       "key": "an-operator-asked-to-decide-a-call-is-shown-what-the-workspa",
       "modal": "SHALL",
       "party": null,
-      "rationale": "The operator decides in seconds under a timeout, and the boundary is the input they most need. An allow for a shell command says the text was read, not that the command was sandboxed; Codex's advice says it checked the working directory only. Advice that cannot be computed is omitted, and a Hub that rejects the field is asked again without it.",
+      "rationale": "The operator decides in seconds under a timeout, and the boundary is the input they most need. An allow for a shell command says the text was read, not that the command was sandboxed; Codex's advice says it checked the working directory only. Advice that cannot be computed is omitted, and a Hub that rejects the field is asked again without it. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "A permission request shown to the operator SHALL carry, as advice, the decision Workspace only would reach for the same call with its reason, from the same check that answers under Workspace only for that provider, and the advice SHALL NOT answer the request."
     },
     {
       "key": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
       "modal": "SHALL",
       "party": null,
-      "rationale": "Detection happens where tool calls are observed for the transcript, so it runs in every posture, including ones that check nothing and calls the operator approved. The Hub's own `.agentweave/` subtree is its own kind because it is hidden from `git status`, unlike the tracked tree. The record (`Run.outside_workspace_writes`) is written on first sight, bounded at 20 destinations plus an overflow entry, and is not a refusal. `NULL` means not observed (workspace unresolvable) and `[]` observed and clean. It covers only declared file-tool paths: a shell redirect and a link inside the workspace pointing out are not seen, and a run whose workspace is the project directory records nothing because everything is inside it.",
+      "rationale": "Detection happens where tool calls are observed for the transcript, so it runs in every posture, including ones that check nothing and calls the operator approved. The Hub's own `.agentweave/` subtree is its own kind because it is hidden from `git status`, unlike the tracked tree. The record (`Run.outside_workspace_writes`) is written on first sight, bounded at 20 destinations plus an overflow entry, and is not a refusal. `NULL` means not observed (workspace unresolvable) and `[]` observed and clean. It covers only declared file-tool paths: a shell redirect and a link inside the workspace pointing out are not seen, and a run whose workspace is the project directory records nothing because everything is inside it. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "The Hub SHALL record against the run every file-writing tool call (Claude `Write`/`Edit`/`MultiEdit`/`NotebookEdit`, Codex `apply_patch`, Copilot edit/delete/move) whose path resolves outside the run's recorded workspace, in every posture, naming the destination as a kind (`agent`, `task`, `review`, `hub`, `project` or `outside`) and a name, and SHALL notify the operator once per destination per run."
     },
     {
@@ -1378,7 +1378,7 @@
       "key": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
       "modal": "SHALL",
       "party": null,
-      "rationale": "The call command reaches the same operations as the Hub's MCP tools under the same run credential, so it has their standing. The forms are matched against allow-lists of characters and parameters, never against a list of refused syntax, which fails open (a parenthesised path did). The calls directory counts only if neither it nor `.agentweave` is a link or junction, and the Hub makes it a real directory each turn. Only the PowerShell write can allow what the workspace judge would refuse, because the judge reads the literal as paths and PowerShell writes it verbatim. Accepted residual: in a persistent shell an earlier command could redefine `aw-tool` or `Set-Content`; that command was itself decided under the posture. Codex's ordinary command approvals are not read this way.",
+      "rationale": "The call command reaches the same operations as the Hub's MCP tools under the same run credential, so it has their standing. The forms are matched against allow-lists of characters and parameters, never against a list of refused syntax, which fails open (a parenthesised path did). The calls directory counts only if neither it nor `.agentweave` is a link or junction, and the Hub makes it a real directory each turn. Only the PowerShell write can allow what the workspace judge would refuse, because the judge reads the literal as paths and PowerShell writes it verbatim. Accepted residual: in a persistent shell an earlier command could redefine `aw-tool` or `Set-Content`; that command was itself decided under the posture. Codex's ordinary command approvals are not read this way. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "Wherever the Hub answers a Claude or Copilot permission request, and on a Codex specification turn, it SHALL allow without asking, in every posture: exactly one `aw-tool` invocation in the harness's Bash or PowerShell tool, exactly one PowerShell `Set-Content` of an arguments file from one single-quoted literal, and a write tool naming only `.json` files inside the run's own `.agentweave/calls` directory; every other request SHALL be decided exactly as without this rule."
     },
     {
@@ -1406,7 +1406,7 @@
       "key": "n2",
       "modal": "SHALL",
       "party": null,
-      "rationale": "Codex's thread policy decides what it asks: Ask me starts `read-only`/`untrusted` so every effectful action is asked, Full access `danger-full-access`/`never`, the rest `workspace-write`/`on-request`. Workspace only for Codex reads the working directory only, never the command, and says so. A specification turn starts `read-only` in every posture and accepts only the Hub's own call.",
+      "rationale": "Codex's thread policy decides what it asks: Ask me starts `read-only`/`untrusted` so every effectful action is asked, Full access `danger-full-access`/`never`, the rest `workspace-write`/`on-request`. Workspace only for Codex reads the working directory only, never the command, and says so. A specification turn starts `read-only` in every posture and accepts only the Hub's own call. Not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "The Hub SHALL answer every approval a Codex app-server run raises: accepting an MCP elicitation only when it is a tool call on the Hub's own registered server, deciding sandbox approvals by posture (Workspace only by whether the request's working directory is inside the workspace, Ask me by the operator, Full access and yolo by accepting, otherwise declining), and declining anything unrecognised."
     },
     {

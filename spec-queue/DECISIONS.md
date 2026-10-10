@@ -29,6 +29,10 @@ mail to itself, and an operator-created loop would "get the check" without it ev
 
 - OPEN      F556-outstanding-message-direction  Which mail should an emptied loop name as outstanding, now that the creator is the job's agent? (a) Mail addressed TO the job's agent from anyone else, still queued or in a turn that has not ended -- the loop stopped with inbound it has not dealt with; (b) keep the old direction (job agent -> creating run's agent) and fall back to nothing for operator loops, since an operator's unanswered ask is already a Question; (c) both. Recommendation: (a). It is the only reading in which an operator-created loop can report anything. The `agent-loops` ac41/ac42 wording ("from the loop's agent to its creator") would need amending to match, and `test_scheduler.py`'s mail tests (executor and creator as two agents) rewritten.
 
+### night-1010-1: which requirements carry the Codex label -- 2026-10-10 night, OPEN
+
+- OPEN      night-1010-1  Taken by the night: the 'not driven since 2026-08-29 (Codex plan cancelled)' label (overhaul-codex-spec) went on all 17 capability requirements whose statement or rationale states a Codex-specific behaviour, in 8 capabilities (folded from `spec/changes/codex-requirements-say-they-are-not-driven`, spdoc-9f712f26fd57); mixed requirements read 'Its Codex part: not driven since ...'. Two that name `codex` only as a CLI value checked without a run (runner-registry runners-are-project-scoped-hub-records, a-copilot-runner-may-reach-its-model-with-the-operator-s-own) were left unlabelled. Rejected: label only the three Codex-only requirements (agent-context-usage codex-context-mapping, agent-run-sandboxing n2, model-catalog's CLI-cache requirement) plus the seeded runner. Confirm or reverse.
+
 ### Spec overhaul 2026-10-08: product questions the audit could not settle from the code -- interactive, DECIDED 2026-10-09
 
 The specs now describe what the code does; each row asks whether that is what is wanted. Filed, not

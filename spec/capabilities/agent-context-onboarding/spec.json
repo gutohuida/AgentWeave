@@ -232,7 +232,7 @@
       "key": "canonical-per-agent-runtime-context",
       "modal": "SHALL",
       "party": null,
-      "rationale": "A change to an agent, runner, charter, instructions or quality settings must reach the next run without any regeneration step.",
+      "rationale": "A change to an agent, runner, charter, instructions or quality settings must reach the next run without any regeneration step. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "The Hub SHALL render an agent's context from its current Hub records before every run and deliver it through the runner's mechanism: written to `<run workdir>/.agentweave/context/<agent>.md` and passed to the CLI for Claude and Codex, and for Copilot split into a stable part (written into the agent's Copilot custom agent) and per-turn and tool-surface parts sent with each prompt."
     },
     {

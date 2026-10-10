@@ -301,7 +301,7 @@
       "key": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
       "modal": "SHALL",
       "party": null,
-      "rationale": "One shape makes per-agent and per-project totals comparable across runners.",
+      "rationale": "One shape makes per-agent and per-project totals comparable across runners. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "The Hub SHALL normalise Claude result usage, Codex completed-turn usage and Copilot usage into one accounting shape without double-counting cache or reasoning subsets, and malformed telemetry SHALL yield an `unavailable` outcome rather than failing the run."
     },
     {
