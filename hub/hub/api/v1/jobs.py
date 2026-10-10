@@ -10,7 +10,7 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import refused_capability, task_attribution
+from ... import loop_history, refused_capability, task_attribution
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
@@ -350,6 +350,39 @@ async def _adopt_document_tasks(session: AsyncSession, project_id: str, loop: Lo
     return result.rowcount or 0
 
 
+async def _adopt_and_record(
+    session: AsyncSession, project_id: str, loop: Loop, by: Dict[str, Any]
+) -> int:
+    """`_adopt_document_tasks`, plus the one `loop_tasks_added` entry for the tasks nobody owned.
+
+    A move out of an archived loop stays the `loop_tasks_adopted` pair `_adopt_document_tasks`
+    writes and is not also an addition, so only tasks with a null `loop_id` are listed here.
+    """
+    unowned = []
+    if loop.spec_document_id is not None:
+        unowned = (
+            await session.execute(
+                select(Task.id, Task.title)
+                .where(
+                    Task.project_id == project_id,
+                    Task.spec_document_id == loop.spec_document_id,
+                    Task.loop_id.is_(None),
+                )
+                .order_by(Task.id)
+            )
+        ).all()
+    adopted = await _adopt_document_tasks(session, project_id, loop)
+    await loop_history.record_tasks_added(
+        session,
+        project_id,
+        loop.id,
+        [(row[0], row[1]) for row in unowned],
+        by=by,
+        source=loop_history.SOURCE_FLOW_BUILT,
+    )
+    return adopted
+
+
 async def _batch_loop_summaries(
     session: AsyncSession, job_ids: List[str]
 ) -> Dict[str, LoopSummary]:
@@ -672,6 +705,8 @@ async def build_flow_rows(
     body: JobCreate,
     *,
     created_by_run_id: Optional[str],
+    by: Dict[str, Any],
+    door: str,
 ) -> Tuple[AIJob, Optional[Loop]]:
     """Add a job and, when the request opts in, its loop, and adopt the document's tasks.
 
@@ -784,9 +819,12 @@ async def build_flow_rows(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"document '{body.spec_document_id}' is already claimed by another loop",
         ) from e
+    # The creation entry rides this transaction (`a-loops-history-records-its-creation-and-queue-
+    # additions` D4): a refusal after this point rolls the loop back and the entry with it.
+    await loop_history.record_created(session, project_id, loop, by=by, door=door, agent=job.agent)
     # A flow and the queue it just adopted land together — a loop that exists while its tasks
     # still read `loop_id = NULL` is the F28 state itself.
-    await _adopt_document_tasks(session, project_id, loop)
+    await _adopt_and_record(session, project_id, loop, by)
     return job, loop
 
 
@@ -912,7 +950,15 @@ async def create_job(
 
     # The agent, the cron expression and the document claim are asked by `build_flow_rows`, which
     # approval (`set_phase`) shares, so both doors refuse the same things with the same answers.
-    job, loop = await build_flow_rows(session, project_id, body, created_by_run_id=run_identity)
+    by = loop_history.by_headers(agent_identity, run_identity)
+    job, loop = await build_flow_rows(
+        session,
+        project_id,
+        body,
+        created_by_run_id=run_identity,
+        by=by,
+        door=loop_history.DOOR_JOBS,
+    )
     # One commit for the job, its loop and the tasks the loop adopted. The job used to be committed
     # first, so a loop insert refused afterwards left an enabled job with no loop (F54's shape).
     await session.commit()
@@ -938,16 +984,30 @@ async def create_job(
             if agent_identity and run_identity
             else operator()
         )
+        seeded = []
         for task_body in initial_task_bodies:
             task_body.loop_id = loop.id
-            await create_task_for_actor(
+            created_task = await create_task_for_actor(
                 task_body,
                 project_id=project_id,
                 assigner=agent_identity,
                 created_by_run_id=run_identity,
                 actor=actor,
                 session=session,
+                record_addition=False,
             )
+            seeded.append((created_task.id, created_task.title))
+        # One entry for the seeding call, not one per task (D1). The tasks were committed one at a
+        # time above (F414 already refuses what it can before the first), so the entry follows them.
+        await loop_history.record_tasks_added(
+            session,
+            project_id,
+            loop.id,
+            seeded,
+            by=by,
+            source=loop_history.SOURCE_INITIAL_TASKS,
+        )
+        await session.commit()
 
         # Computed, never hand-assembled — and computed *after* `initial_tasks`, which is the
         # whole point. This response used to carry a literal `queue={}, current_tasks=[]`, built
@@ -1217,7 +1277,9 @@ async def update_job(
             # applied on the spot rather than staged: the document binding is not part of the
             # definition a firing under way was briefed with, and leaving the queue empty until the
             # next firing would preserve exactly the bug.
-            await _adopt_document_tasks(session, project_id, loop)
+            await _adopt_and_record(
+                session, project_id, loop, loop_history.by_headers(agent_identity, run_identity)
+            )
 
         # Design D11 (task A2.1/A2.2): once a loop already exists, purpose/stop_at/
         # stop_when_queue_empties are its *definition*, and an edit to it is always accepted but

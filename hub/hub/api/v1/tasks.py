@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import (
     deletion,
     dependency_gate,
+    loop_history,
     project_workspace,
     spec_lifecycle,
     spec_reading,
@@ -761,6 +762,7 @@ async def create_task_for_actor(
     created_by_run_id: Optional[str],
     actor: Actor,
     session: AsyncSession,
+    record_addition: bool = True,
 ) -> TaskResponse:
     # Honor a client-supplied id when present so the MCP `create_task` tool
     # can return the same id the Hub stored. Falls back to a fresh short id
@@ -807,6 +809,22 @@ async def create_task_for_actor(
         loop_id=body.loop_id,
     )
     session.add(task)
+    if body.loop_id is not None and record_addition:
+        # The entry rides the task's own commit (`a-loops-history-records-its-creation-and-queue-
+        # additions` D4). `initial_tasks` passes `record_addition=False` and writes one entry for
+        # all of its tasks (D1).
+        await loop_history.record_tasks_added(
+            session,
+            project_id,
+            body.loop_id,
+            [(task_id, body.title)],
+            by=(
+                loop_history.by_agent(actor.agent or "", actor.run_id)
+                if not actor.is_operator
+                else loop_history.by_operator()
+            ),
+            source=loop_history.SOURCE_CREATE_TASK,
+        )
     try:
         await session.commit()
     except IntegrityError as e:

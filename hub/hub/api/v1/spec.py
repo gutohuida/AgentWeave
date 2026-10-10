@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
     deletion,
+    loop_history,
     project_workspace,
     requirement_coverage,
     requirement_evidence,
@@ -2763,7 +2764,14 @@ async def _approval_flow(
                 stop_when_queue_empties=delivery.stop_when_queue_empties,
                 spec_document_id=document.id,
             )
-            job, loop = await build_flow_rows(session, project_id, request, created_by_run_id=None)
+            job, loop = await build_flow_rows(
+                session,
+                project_id,
+                request,
+                created_by_run_id=None,
+                by=loop_history.by_operator(),
+                door=loop_history.DOOR_APPROVAL,
+            )
             if loop is None:  # `purpose=""` opts in, so this cannot happen
                 raise RuntimeError("the flow's loop was not created")
             # A loop whose queue was never filled fires a turn on every tick and never stops

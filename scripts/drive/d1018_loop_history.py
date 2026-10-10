@@ -12,17 +12,18 @@ Steps, in the order the criterion's `when` gives:
      loop_tasks_added whose actor is agent alice with her run id;
   4. the operator approves a change document whose delivery starts a flow for alice; the flow's loop
      reads loop_created (operator, door approval, the document's path) and one loop_tasks_added
-     (source document) listing the document's tasks;
+     (source flow_built: approval materialises first, then the flow takes the unowned tasks) listing
+     the document's tasks;
   5. the first loop is fired once by hand (POST /jobs/{id}/run): its job gains a run, its events
      gain nothing;
   6. in Chromium, the first loop's tab has a History section (testid loop-tab-events) with one
      sentence row (testid loop-tab-event) per event, newest first, the addition naming alice.
 
 Event contract the build fixes (D3): `GET /loops/{id}` events carry `event_type`, `agent` (set for
-agent actors only) and `data`. loop_created.data = {by, door, agent, purpose, document};
+agent actors only) and `data`. loop_created.data = {by, door, agent, purpose, document, document_path};
 loop_tasks_added.data = {by, source, tasks: [{id, title}]}; by = {kind: "operator"|"agent", agent,
 run_id}; door is "jobs" or "approval"; source is "initial_tasks", "create_task", "document" or
-"flow_built".
+"flow_built" (a loop already holding the document gets "document" at approval).
 
 Fails on today's Hub at check 1 (no loop_created). Stops at the first failure. One Haiku turn from
 check 3 (and one to open the page at check 6).
@@ -127,7 +128,7 @@ def drive():
 
     # 2: the operator adds a task with the loop's id.
     code, out = d.api("POST", f"{base}/tasks", {"title": "Third by operator", "description": "Three.",
-                                               "assignee": "alice", "loop_id": job_id})
+                                               "assignee": "alice", "loop_id": loop_id})
     assert code in (200, 201), (code, out)
     added = events_of(base, loop_id, "loop_tasks_added")
     sources = sorted((e.get("data") or {}).get("source") for e in added)
@@ -136,7 +137,7 @@ def drive():
 
     # 3: a real Haiku turn of alice creates a task with the loop's id.
     message = (f"Call the create_task tool once with title 'Fourth by alice', description 'Four.' and "
-               f"loop_id '{job_id}'. Do nothing else, then reply done.")
+               f"loop_id '{loop_id}'. Do nothing else, then reply done.")
     code, run = d.api("POST", f"{base}/agent/trigger", {"agent": "alice", "message": message})
     assert code in (200, 202), (code, run)
     run_id = run["run_id"]
@@ -172,18 +173,23 @@ def drive():
     added = events_of(base, flow_id, "loop_tasks_added") if flow_id else []
     c1 = (created[0].get("data") or {}) if created else {}
     a1 = (added[0].get("data") or {}) if added else {}
-    d.check("4 the flow's loop has loop_created (operator, approval, the document) and one loop_tasks_added (document)",
+    d.check("4 the flow's loop has loop_created (operator, approval, the document) and one loop_tasks_added (flow_built)",
             len(created) == 1 and (c1.get("by") or {}).get("kind") == "operator" and c1.get("door") == "approval"
-            and DOC in str(c1.get("document")) and len(added) == 1 and a1.get("source") == "document"
+            and c1.get("document_path") == DOC and len(added) == 1 and a1.get("source") == "flow_built"
             and len(a1.get("tasks") or []) == 2, f"flow={flow_id} created={created} added={added}")
 
     # 5: a firing by hand adds a run and no loop event.
     before = len(events_of(base, loop_id))
     runs_before = len(d.api("GET", f"{base}/jobs/{job_id}/history")[1] or [])
+    # Created disabled so it cannot fire on its own (its cron is yearly as well); enabled only to
+    # allow the one hand firing, and disabled again straight after.
+    code, out = d.api("PATCH", f"{base}/jobs/{job_id}", {"enabled": True})
+    assert code == 200, (code, out)
     code, out = d.api("POST", f"{base}/jobs/{job_id}/run")
     assert code in (200, 202), (code, out)
     wait_idle(pid)
     time.sleep(2)
+    d.api("PATCH", f"{base}/jobs/{job_id}", {"enabled": False})
     runs_after = len(d.api("GET", f"{base}/jobs/{job_id}/history")[1] or [])
     after = len(events_of(base, loop_id))
     d.check("5 a firing adds a run to the job's history and nothing to the loop's events",

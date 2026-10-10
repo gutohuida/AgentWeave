@@ -38,7 +38,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import requirement_links, spec_identity, spec_reading, task_dependency_writer
+from . import (
+    loop_history,
+    requirement_links,
+    spec_identity,
+    spec_reading,
+    task_dependency_writer,
+)
 from .db.models import (
     Loop,
     SpecDocument,
@@ -435,6 +441,22 @@ async def materialise(
         created.append(task)
 
     await _materialise_edges(session, document, declared, local_tasks)
+
+    if owning_loop is not None:
+        # One entry for the call (`a-loops-history-records-its-creation-and-queue-additions` D1).
+        # With no live loop the tasks are unowned and the flow that later takes them records them.
+        await loop_history.record_tasks_added(
+            session,
+            document.project_id,
+            owning_loop.id,
+            [(task.id, task.title) for task in created],
+            by=(
+                loop_history.by_agent(actor.name, actor.run_id)
+                if actor.kind == "agent"
+                else {"kind": actor.kind, "agent": None, "run_id": None}
+            ),
+            source=loop_history.SOURCE_DOCUMENT,
+        )
 
     if board is not None:
         await _report_unrefreshed(session, document, existing_task_rows, seen, board)
