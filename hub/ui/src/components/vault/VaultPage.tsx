@@ -5,11 +5,14 @@ import {
   isFact,
   isNoVault,
   useDistilVaultSource,
+  useResolveContradiction,
   useUpdateVaultSettings,
   useUploadVaultSource,
+  useVaultContradictions,
   useVaultEntry,
   useVaultMap,
   useVaultSettings,
+  type VaultContradiction,
   type VaultEntry,
   type VaultSettings,
   type VaultType,
@@ -34,6 +37,10 @@ import { hubDate } from '@/lib/hubTime'
  * cite, not as rows of their own; a fact whose source is not in the map is listed as a row. After
  * an upload or a Distil, the map is re-read for a few minutes, because the manager writes facts in
  * the background.
+ *
+ * Contradictions (`sources-that-disagree-are-pointed-out`) are listed above the entries, open
+ * first, each with a form that records the operator's decision. A Hub that predates them answers
+ * 404, which reads as no section; the facts they dispute carry a mark where they are listed.
  */
 const WATCH_MS = 3 * 60 * 1000
 const WATCH_EVERY_MS = 3000
@@ -44,6 +51,8 @@ export function VaultPage() {
   const [watching, setWatching] = useState(0)
   const map = useVaultMap(watching ? WATCH_EVERY_MS : false)
   const settings = useVaultSettings()
+  // The check runs after a distillation, so the list is re-read while facts may still be arriving.
+  const contradictions = useVaultContradictions(watching ? WATCH_EVERY_MS : false)
   const [selected, setSelected] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   // Each watch restarts the clock: a later Distil gets its own few minutes.
@@ -92,6 +101,8 @@ export function VaultPage() {
           Add a source
         </Button>
       </header>
+
+      <ContradictionSection contradictions={contradictions.data ?? []} error={contradictions.error} />
 
       <div className="grid min-h-[320px] grid-cols-[minmax(220px,320px)_1fr] gap-6">
         <section aria-label="Vault entries" className="flex flex-col gap-1">
@@ -212,6 +223,7 @@ function EntryView({
           <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
             {entry.type} · {entry.visibility === 'private' ? `private, held on ${entry.holder ?? 'another machine'}` : 'tracked in the repository'}
             {' · '}
+            {entry.dated ? `said ${entry.dated} · ` : ''}
             {hubDate(entry.created_at).toLocaleString()} · <code>{entry.id}</code>
           </p>
         </div>
@@ -296,6 +308,8 @@ function FactList({
           <li
             key={fact.id}
             data-testid={`vault-fact-${fact.id}`}
+            data-disputed={fact.disputed ? 'true' : 'false'}
+            data-superseded={fact.superseded_by ? 'true' : 'false'}
             className="flex items-start justify-between gap-3 rounded-md px-3 py-2 text-sm"
             style={{
               background: fact.id === citing ? CITED : 'var(--surface-2)',
@@ -308,6 +322,18 @@ function FactList({
                 <>
                   {' '}
                   <Badge variant="warning">private</Badge>
+                </>
+              )}
+              {fact.disputed && (
+                <>
+                  {' '}
+                  <Badge variant="warning">{fact.presumed ? 'disputed, presumed to hold' : 'disputed'}</Badge>
+                </>
+              )}
+              {fact.superseded_by && (
+                <>
+                  {' '}
+                  <Badge variant="default">superseded by a decision</Badge>
                 </>
               )}
             </span>
@@ -383,6 +409,7 @@ function UploadForm({
   const [type, setType] = useState<VaultType>('transcript')
   const [visibility, setVisibility] = useState<VaultVisibility>(settings?.default_visibility ?? 'tracked')
   const [content, setContent] = useState('')
+  const [dated, setDated] = useState('')
   const [fileError, setFileError] = useState<string | null>(null)
 
   const readFile = async (file: File | undefined) => {
@@ -402,7 +429,10 @@ function UploadForm({
       aria-label="Add a source"
       onSubmit={(event) => {
         event.preventDefault()
-        upload.mutate({ name, type, content, visibility }, { onSuccess: (entry) => onDone(entry.id) })
+        upload.mutate(
+          { name, type, content, visibility, ...(dated ? { dated } : {}) },
+          { onSuccess: (entry) => onDone(entry.id) },
+        )
       }}
     >
       <h3 className="text-sm font-semibold">Add a source</h3>
@@ -437,6 +467,16 @@ function UploadForm({
           </Select>
         </label>
       </div>
+      <label className="flex w-40 flex-col gap-1 text-xs">
+        When it was said (optional)
+        <Input
+          type="date"
+          data-testid="vault-upload-dated"
+          value={dated}
+          onChange={(e) => setDated(e.target.value)}
+          title="If two sources disagree, the later one is presumed to hold"
+        />
+      </label>
       {visibility === 'private' && (
         <p className="text-xs" style={{ color: 'var(--text-3)' }}>
           The text stays on this machine. Its name, type and this machine's name are still listed
@@ -540,5 +580,120 @@ function SettingsForm({ settings, error }: { settings: VaultSettings | undefined
         </>
       )}
     </section>
+  )
+}
+
+function ContradictionSection({ contradictions, error }: { contradictions: VaultContradiction[]; error: unknown }) {
+  // An old Hub has no route: no section, not an error.
+  if (isNoVault(error)) return null
+  if (error) {
+    return (
+      <p className="text-xs" style={{ color: 'var(--amber)' }} role="alert">
+        {readableApiError(error, "Could not read this project's contradictions.")}
+      </p>
+    )
+  }
+  if (contradictions.length === 0) return null
+  const open = contradictions.filter((item) => item.status !== 'resolved').length
+  return (
+    <section aria-label="Contradictions" data-testid="vault-contradictions" className="flex flex-col gap-2">
+      <h3 className="settings-group-heading">
+        Contradictions{open > 0 ? ` (${open} open)` : ''}
+      </h3>
+      <p className="max-w-2xl text-xs" style={{ color: 'var(--text-3)' }}>
+        Two sources state different things. Until you decide, agents are told both are disputed and
+        that the later-dated one is presumed to hold.
+      </p>
+      {contradictions.map((item) => <ContradictionCard key={item.id} contradiction={item} />)}
+    </section>
+  )
+}
+
+function ContradictionCard({ contradiction }: { contradiction: VaultContradiction }) {
+  const { id, sides, status } = contradiction
+  return (
+    <article
+      data-testid={`vault-contradiction-${id}`}
+      data-status={status ?? 'elsewhere'}
+      className="flex flex-col gap-2 rounded-md px-3 py-3 text-sm"
+      style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+    >
+      {contradiction.explanation && <p>{contradiction.explanation}</p>}
+      <ul className="flex flex-col gap-1">
+        {sides.map((side) => (
+          <li key={side.id} data-testid={`vault-contradiction-side-${side.id}`} className="text-xs">
+            {side.claim ?? `A private fact, held on ${contradiction.holder ?? 'another machine'}`}
+            {side.date && <span style={{ color: 'var(--text-3)' }}> · {side.date}</span>}
+            {side.presumed && (
+              <>
+                {' '}
+                <Badge variant="default">presumed</Badge>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+      {status === 'resolved' ? (
+        <p className="text-xs" style={{ color: 'var(--text-2)' }}>
+          Resolved:{' '}
+          {contradiction.resolution?.stands
+            ? `${sides.find((side) => side.id === contradiction.resolution?.stands)?.claim ?? 'one fact'} stands`
+            : 'neither fact stands'}
+          . {contradiction.resolution?.note}
+        </p>
+      ) : status === 'open' ? (
+        <ResolveForm contradiction={contradiction} />
+      ) : (
+        <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+          Held on {contradiction.holder ?? 'another machine'}; it can be resolved there.
+        </p>
+      )}
+    </article>
+  )
+}
+
+function ResolveForm({ contradiction }: { contradiction: VaultContradiction }) {
+  const { id, sides } = contradiction
+  const resolve = useResolveContradiction()
+  const [stands, setStands] = useState(contradiction.presumed ?? sides[0]?.id ?? '')
+  const [note, setNote] = useState('')
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2"
+      aria-label="Resolve this contradiction"
+      onSubmit={(event) => {
+        event.preventDefault()
+        resolve.mutate({ id, stands: stands || null, note: note.trim() })
+      }}
+    >
+      <label className="flex min-w-[220px] flex-col gap-1 text-xs">
+        What holds
+        <Select
+          data-testid={`vault-resolve-${id}-stands`}
+          value={stands}
+          onChange={(e) => setStands(e.target.value)}
+          className="px-2 py-1.5 text-xs"
+        >
+          {sides.map((side) => (
+            <option key={side.id} value={side.id}>
+              {(side.claim ?? side.id).slice(0, 80)}
+            </option>
+          ))}
+          <option value="">Neither stands</option>
+        </Select>
+      </label>
+      <label className="flex min-w-[260px] flex-1 flex-col gap-1 text-xs">
+        Why
+        <Input data-testid={`vault-resolve-${id}-note`} value={note} onChange={(e) => setNote(e.target.value)} />
+      </label>
+      <Button type="submit" size="sm" data-testid={`vault-resolve-${id}-submit`} disabled={resolve.isPending || !note.trim()}>
+        Resolve
+      </Button>
+      {resolve.error && (
+        <p className="w-full text-xs" style={{ color: 'var(--amber)' }} role="alert">
+          {readableApiError(resolve.error, 'Could not record that decision.')}
+        </p>
+      )}
+    </form>
   )
 }
