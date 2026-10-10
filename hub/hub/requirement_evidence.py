@@ -40,7 +40,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import run_liveness, worktrees
 from .db.models import (
-    EVIDENCE_RETENTION_POLICIES,
     Agent,
     EvidenceFootprint,
     EvidenceReview,
@@ -1250,15 +1249,6 @@ async def for_requirement(session: AsyncSession, requirement_id: str) -> List[Re
         .order_by(RequirementEvidence.produced_at, RequirementEvidence.id)
     )
     return list(result.scalars().all())
-
-
-# ---------------------------------------------------------------------------
-# Retention
-# ---------------------------------------------------------------------------
-
-
-def retention_is_valid(policy: str) -> bool:
-    return policy in EVIDENCE_RETENTION_POLICIES
 
 
 # DEAD (2026-09-20): mark_artifact_removed and artifact_exists (below) have no production caller,

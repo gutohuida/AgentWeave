@@ -54,7 +54,6 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
     DRIFT_STATES,
-    EVIDENCE_RETENTION_POLICIES,
     Agent,
     AIJob,
     EvidenceFootprint,
@@ -629,10 +628,6 @@ class EvidenceDecision(RequestModel):
 
 class DriftResolution(RequestModel):
     resolution: str = Field(max_length=32)
-
-
-class RetentionSetting(RequestModel):
-    policy: str = Field(max_length=16)
 
 
 class ReindexRequest(RequestModel):
@@ -1692,27 +1687,6 @@ async def resolve_drift(
     await session.commit()
     await sse_manager.broadcast(project_id, "spec_updated", {"path": None, "drift": True})
     return {"id": candidate.id, "state": candidate.state, "resolution": candidate.resolution}
-
-
-@router.put("/spec/evidence-retention")
-async def set_retention(
-    body: RetentionSetting,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """How long artifacts are kept. `never` is a first-class choice, not a loophole."""
-    project_id, _ = project
-    if not requirement_evidence.retention_is_valid(body.policy):
-        raise HTTPException(
-            status_code=422,
-            detail=f"policy must be one of {list(EVIDENCE_RETENTION_POLICIES)}",
-        )
-    row = await session.get(Project, project_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    row.evidence_retention = body.policy
-    await session.commit()
-    return {"policy": row.evidence_retention}
 
 
 def _evidence_view(evidence, footprint=None, latest_review=None) -> dict:

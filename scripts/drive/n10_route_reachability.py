@@ -384,7 +384,6 @@ def main():
         "/rigor-history",
         "/spec/drift",
         "/spec/evidence",
-        "/evidence-retention",
         "/spec/requirements",
         "/spec/reindex",
         "/documents/adopt",

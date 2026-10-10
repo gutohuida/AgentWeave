@@ -114,13 +114,10 @@ class Project(Base):
     # suggestion offered at setup, and takes effect only once someone accepts it.
     main_branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
-    # --- Evidence retention ---
-    # How long an evidence artifact is kept: "on_acceptance", "daily", "monthly", "manual", or
-    # "never". `never` means never delete, and it is a first-class choice rather than a loophole —
-    # an operator who wants to manage the tree themselves should not have to fight a cleaner.
-    #
-    # Whatever the policy, removing an artifact never removes its evidence record: that something
-    # was verified, by whom, and against which digest is the record; the artifact is its attachment.
+    # --- Evidence retention (UNUSED) ---
+    # Nothing reads or writes this column. It held a retention policy that no cleaner ever applied;
+    # the setting and its route were removed (F558, `overhaul-evidence-retention`). The column stays
+    # because dropping it is a migration. Build a cleaner and reuse it only if disk use ever matters.
     evidence_retention: Mapped[str] = mapped_column(
         String(16), default="never", server_default="never", nullable=False
     )
@@ -2536,9 +2533,6 @@ EVIDENCE_KINDS = (
 
 EVIDENCE_REVIEW_STATES = ("awaiting", "accepted", "rejected")
 EVIDENCE_DECISIONS = ("accepted", "rejected")
-
-# How long an artifact is kept. `never` means never delete it.
-EVIDENCE_RETENTION_POLICIES = ("on_acceptance", "daily", "monthly", "manual", "never")
 
 # `superseded`: the requirement was reworded or retired while the candidate was open
 # (`spec_index._supersede_drift`, F435).

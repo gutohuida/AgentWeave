@@ -430,17 +430,17 @@ async def test_a_removed_artifact_leaves_its_record(app, auth_headers, builder, 
 
 
 @pytest.mark.asyncio
-async def test_retention_policy_is_the_projects_and_never_is_a_choice(app, auth_headers, tmp_path):
+async def test_evidence_retention_is_retired(app, auth_headers):
+    """F558: the policy was stored and applied by nothing, so the route and its constant are gone."""
+    from hub import requirement_evidence
+    from hub.db import models
+
     response = await app.put(
         f"{BASE}/spec/evidence-retention", json={"policy": "never"}, headers=auth_headers
     )
-    assert response.status_code == 200
-    assert response.json()["policy"] == "never"
-
-    refused = await app.put(
-        f"{BASE}/spec/evidence-retention", json={"policy": "whenever"}, headers=auth_headers
-    )
-    assert refused.status_code == 422
+    assert response.status_code in (404, 405)
+    assert not hasattr(models, "EVIDENCE_RETENTION_POLICIES")
+    assert not hasattr(requirement_evidence, "retention_is_valid")
 
 
 @pytest.mark.asyncio

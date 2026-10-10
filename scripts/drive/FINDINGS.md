@@ -35170,7 +35170,7 @@ an operator question, left open.
 
 ## F558 (C) -- evidence retention is a stored policy nothing applies
 
-**Status:** open. Filed 2026-10-08 (interactive, reading code for R2/F379).
+**Status:** fixed 2026-10-10 (Tier 0, night iteration 7, decision `overhaul-evidence-retention`): removed `PUT /spec/evidence-retention`, `RetentionSetting`, `retention_is_valid` and `EVIDENCE_RETENTION_POLICIES`; the `projects.evidence_retention` column stays, commented unused, because dropping it is a migration. `test_evidence_retention_is_retired` failed before (route answered 200). The two old drive scripts lose their retention legs. Was: open. Filed 2026-10-08 (interactive, reading code for R2/F379).
 
 `projects.evidence_retention` (`db/models.py:124`, default `never`) is written only by `PUT
 /project/spec/evidence-retention` (`api/v1/spec.py:1468-1486`) and read by nothing: no sweeper deletes an artifact under

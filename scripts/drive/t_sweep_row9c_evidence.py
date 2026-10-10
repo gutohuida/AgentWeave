@@ -719,14 +719,7 @@ ok(
     f"{c} {str(b)[:250]}",
 )
 
-# =============================================================================================
-leg(6, "Evidence retention")
-
-c, b = api("PUT", f"{A}/spec/evidence-retention", {"policy": "never"})
-ok("`never` is a first-class retention policy", c == 200 and b.get("policy") == "never", f"{c} {str(b)[:250]}")
-c, b = api("PUT", f"{A}/spec/evidence-retention", {"policy": "forever_and_ever"})
-ok("an unknown policy is 422 naming the permitted ones", c == 422 and "policy must be one of" in str(b), f"{c} {str(b)[:300]}")
-note("permitted policies", str(b)[:200])
+# Leg 6 (evidence retention) retired with the route, F558.
 
 # =============================================================================================
 leg(7, "The bodyless probe over every 9c route (F204/F210's shape, asked once more)")
@@ -736,7 +729,6 @@ PROBES = [
     ("POST", f"{A}/spec/evidence/{EV}/decision", "decision is genuinely required"),
     ("POST", f"{A}/spec/drift/detect", "takes no body at all"),
     ("POST", f"{A}/spec/drift/{cand.get('id')}/resolve", "resolution is genuinely required"),
-    ("PUT", f"{A}/spec/evidence-retention", "policy is genuinely required"),
     ("POST", f"{A}/spec/reindex", "every field defaults"),
 ]
 for method, path, why in PROBES:
@@ -756,7 +748,6 @@ EMPTY = [
     ("POST", f"{A}/spec/evidence", "identifier"),
     ("POST", f"{A}/spec/evidence/{EV}/decision", "decision"),
     ("POST", f"{A}/spec/drift/{cand.get('id')}/resolve", "resolution"),
-    ("PUT", f"{A}/spec/evidence-retention", "policy"),
 ]
 for method, path, field in EMPTY:
     c, b = api(method, path, {})
@@ -807,7 +798,6 @@ def hits(root, needle):
 
 FRAGMENTS = [
     "spec/evidence",
-    "evidence-retention",
     "spec/drift",
     "drift/detect",
     "spec/reindex",
