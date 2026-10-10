@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ceca911",
     "stop_at": "2026-10-10T07:00:00+01:00",
-    "iteration": 29,
+    "iteration": 30,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "exploring-prose-impl",
-    "next_action": "exploring-prose-impl: spdoc-a56fa9bf6cdd - drive-first task-7ef6d440c930 (scripts/drive/d1020_exploring_prose.py on scratch :8106, real Haiku exploring turn at step intake, record it failing at check 1: the composed context carries 'reach nobody'), then context task-35d85518f3a0 and tool-text task-7aadcbb91c32; split into exploring-prose-t<n>-impl if one firing cannot finish",
+    "current": "exploring-prose-context-impl",
+    "next_action": "exploring-prose-context-impl: task-35d85518f3a0 of spdoc-a56fa9bf6cdd - exploring context in agents.py (replace the 'not a way to finish / reach nobody' line for exploring only, add 'ask your questions in your reply' and the precedence line 'overrides any charter or tool description', drop the genuine-fork ask_user at :1843) and spec_journey.py (_ONE_QUESTION, INTAKE size, ASK_TO_ADVANCE, removed() asked in the reply); Hub tests first (context-exploring, steps, other-phases criteria); then d1020 check 1 must pass",
     "queue": [
         {
             "id": "header-rules-spec",
@@ -82,9 +82,20 @@
         },
         {
             "id": "exploring-prose-impl",
-            "status": "open",
-            "title": "exploring-prose-impl: spdoc-a56fa9bf6cdd - drive-first (d1020 on :8106, failing at check 1), then context (agents.py, spec_journey.py), then tool-text (mcp_server.py ask_user, charters/spec.md)",
+            "status": "done",
+            "title": "exploring-prose-impl: spdoc-a56fa9bf6cdd - drive-first (d1020 on :8106, failing at check 1), then context (agents.py, spec_journey.py), then tool-text (mcp_server.py ask_user, charters/spec.md) -- drive-first DONE iteration 30 (d1020 fails at check 1); rest split below",
             "model": "opus"
+        },
+        {
+            "id": "exploring-prose-context-impl",
+            "status": "open",
+            "title": "exploring-prose-context-impl: task-35d85518f3a0 - agents.py exploring context + spec_journey.py step duties; Hub tests first; d1020 check 1",
+            "model": "opus"
+        },
+        {
+            "id": "exploring-prose-tooltext-impl",
+            "status": "open",
+            "title": "exploring-prose-tooltext-impl: task-7aadcbb91c32 - mcp_server.py ask_user description drops the specification clause (both renderings equal), data/charters/spec.md says exploring questions go in the reply; d1020 checks 1-4"
         },
         {
             "id": "exploring-prose-drive",
