@@ -1,0 +1,212 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8105 with a fresh database, a project with agent alice bound to a Claude runner on claude-haiku-4-5, and operator tasks A and B (scripts/drive/d1019_task_depends_on.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1019_task_depends_on.py",
+      "key": "drive",
+      "requirement": "declare-paths",
+      "then": "D and C each list A in prerequisites (C created by alice's run); B's drawer lists A after the add and says it depends on nothing after the remove, matching GET /tasks/{B}; A's drawer shows the cycle refusal sentence and A's prerequisites stay empty. Fails on today's Hub at the first check (POST /tasks refuses depends_on as an extra field).",
+      "when": "the operator creates task D with depends_on [A] through POST /tasks; a real Haiku turn of alice is asked to create_task C with depends_on naming A's id; in Chromium the operator opens B's drawer, picks A in Depends on and adds it, removes it, then opens A's drawer and tries to add C"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with tasks A and B",
+      "how_to_check": "Hub route test",
+      "key": "operator-create",
+      "requirement": "create-declares",
+      "then": "the new task's prerequisites are A and B, and GET /tasks/{A} lists it among A's dependents",
+      "when": "the operator POSTs /tasks with depends_on [A, B]"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with task A and a run of agent a",
+      "how_to_check": "Hub route test",
+      "key": "agent-create",
+      "requirement": "create-declares",
+      "then": "the task is created by a's run with prerequisite A",
+      "when": "the run POSTs /agent-actions/tasks with depends_on [A]"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with task A",
+      "how_to_check": "Hub route test",
+      "key": "unknown-refused",
+      "requirement": "create-declares",
+      "then": "each is refused 422 with the offending id in the detail, and the project has no new task and no new edge",
+      "when": "a creation names depends_on [A, task-nope], and another names its own id in depends_on"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the MCP create_task tool and the HTTP tool-surface rendering",
+      "how_to_check": "Hub test",
+      "key": "renderings",
+      "requirement": "create-declares",
+      "then": "both describe depends_on, and the MCP call forwards it to POST /tasks",
+      "when": "test_tool_surface_matches_server.py runs, and the MCP tool is called with depends_on"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with one prerequisite, a project with two other tasks, and a stubbed dependency route that refuses with 409",
+      "how_to_check": "vitest",
+      "key": "drawer",
+      "requirement": "drawer-picker",
+      "then": "the section lists the prerequisite with its status, the picker offers only tasks that are not the task or its prerequisites, add and remove call the routes, and the refusal's sentence is shown",
+      "when": "the drawer renders, the operator picks a task and adds it, removes the prerequisite, and adds the one the route refuses"
+    },
+    {
+      "checked_by": "operator",
+      "given": "two hand-made tasks on the operator's own project",
+      "how_to_check": "operator uses the drawer",
+      "key": "reads-well",
+      "requirement": "drawer-picker",
+      "then": "they find the control without being told where it is, and the card shows the gate",
+      "when": "they open one's drawer and make it depend on the other"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "a864eb3c374d1bef0483a4e9f38de31bba40635affde038177171a4f5d0e168a",
+      "FR-2": "ffeafbff6095468db5c7b86cbe3a563cc45d9cc583f60bd0a12b1030acef83e6",
+      "FR-3": "92796fbdd7b43980a8ffd9ef150fbccd5418c8e40be45c7d89b9d77337311d6f"
+    },
+    "high_water": 3,
+    "requirements": {
+      "create-declares": "FR-2",
+      "declare-paths": "FR-1",
+      "drawer-picker": "FR-3"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1: one field on the shared create path, two tool descriptions, one drawer section. No migration; no Hub-restart hazard beyond any code change. At fold, declare-paths replaces task-dependencies' the-operator-can-declare-a-dependency-between-existing-tasks (key kept).\n\nD1. Agents declare prerequisites at creation only. An agent tool that edits edges on existing tasks is not added: the decision (overhaul-dependency-ui) names a field on create_task, and edits stay the operator's, in the drawer.\nD2. An unknown id refuses the whole creation (422 naming it), as an unknown requirement id already does (check_task_create, tasks.py:721-753). Rejected: create the task and drop the edge with a warning (the ordering is lost silently in every caller that ignores warnings).\nD3. Edges go through task_dependency_writer.add_dependency with known_edges, after session.add(task) and before the task's commit, so a refusal rolls both back. A new task has no dependents, so it cannot close a cycle; the writer's cycle check still runs.\nD4. The picker offers every other task of the project that is not already a prerequisite, including ones that would close a cycle, and shows the route's 409 sentence when one does. Rejected: hiding cycle-forming candidates (the drawer would need the transitive graph and would restate the writer's rule in the UI). (night-1010-4)\nD5. Options are labelled by title and id in a native select; the section lives in the drawer body beside 'Serves'.",
+  "evidence": {
+    "checked": [
+      "hub/hub/task_dependency_writer.py:82-133: add_dependency stages one edge, returns added/duplicate/self/missing/cycle, never commits",
+      "hub/hub/api/v1/tasks.py:2009-2058: POST /tasks/{id}/dependencies, 400 self, 404 missing, 409 cycle",
+      "hub/hub/api/v1/tasks.py:757-850: create_task_for_actor, the single Task( construction site, commits after session.add",
+      "hub/hub/api/v1/agent_actions.py:102-121: AgentTaskCreate, no depends_on",
+      "hub/hub/mcp_server.py:321-365: create_task, no depends_on",
+      "hub/hub/api/v1/agents.py:1089-1100: the HTTP rendering of create_task",
+      "hub/ui/src/components/tasks/TaskDetailDrawer.tsx: no prerequisites shown; hub/ui/src/api/tasks.ts: no dependency call"
+    ],
+    "limits": [
+      "Whether a Haiku turn passes depends_on when asked is model-dependent; the drive names the field and the id plainly"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Dependency rows are written by one shared writer (hub/hub/task_dependency_writer.py:82-133) from two callers: document approval (spec_tasks) and the operator route POST /tasks/{id}/dependencies (hub/hub/api/v1/tasks.py:2009-2058). Neither is reachable from the app: hub/ui/src/api/tasks.ts has no call to the route, and TaskDetailDrawer.tsx shows no prerequisites at all (the card only names blocking ones in a badge title, TaskCard.tsx:153-159). Task creation cannot carry one either: TaskCreate (hub/hub/schemas/tasks.py:45) and AgentTaskCreate (hub/hub/api/v1/agent_actions.py:102-121) have no depends_on, the MCP create_task tool (hub/hub/mcp_server.py:321-365) takes none, and the HTTP rendering of the tool surface (hub/hub/api/v1/agents.py:1089-1100) names none. So an agent that decomposes its own work cannot say 'B after A', and an operator has to know a REST route to say it.",
+  "requirements": [
+    {
+      "key": "declare-paths",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Replaces task-dependencies' the-operator-can-declare-a-dependency-between-existing-tasks at fold (key kept): the route was the only path and nothing in the app or the tool surface reached it (overhaul-dependency-ui, F571).",
+      "statement": "The operator SHALL be able to add and remove a dependency between any two tasks of the project, including tasks that belong to no document, through POST /tasks/{id}/dependencies and DELETE /tasks/{id}/dependencies/{depends_on} and from the task's drawer; whoever creates a task, the operator or an agent, SHALL be able to declare its prerequisites when creating it; every path, and document approval, SHALL write edges through one shared writer that refuses self-dependencies, missing tasks and cycles."
+    },
+    {
+      "key": "create-declares",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One field on the shared create path keeps the operator and agent surfaces equal (agent-capability-plane). Refusing the whole creation rather than dropping the edge: an ordering silently lost is how the gate went unexercised before F36 (D2).",
+      "statement": "Task creation through POST /tasks, POST /agent-actions/tasks and the create_task tool MUST accept depends_on, a list of task ids of the same project, and MUST write one edge per id through the shared writer in the transaction that creates the task; an id that names no task of the project, or the new task's own id, MUST refuse the creation with 422 naming that id and MUST leave neither the task nor any edge. Both renderings of create_task (the MCP tool and the HTTP operation description) MUST describe the field."
+    },
+    {
+      "key": "drawer-picker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator declares an ordering while looking at a task; a REST route is not a control (F571).",
+      "statement": "The task drawer MUST show a Depends on section listing the task's prerequisites, each with its title and status and a control that removes it, and a picker offering the project's other tasks that are not already its prerequisites; adding or removing MUST go through the dependency routes, and a refusal MUST be shown in the drawer as the route's sentence with the prerequisites left as they were. A task with no prerequisites MUST say it depends on nothing."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A depends_on list of task ids on task creation: the operator's POST /tasks, the agent's POST /agent-actions/tasks, and the create_task tool in both renderings (MCP and HTTP)",
+      "Edges written through task_dependency_writer in the task's own transaction; an unknown id refuses the creation and leaves no task",
+      "A 'Depends on' section in the task drawer: the task's prerequisites with their status, a remove control on each, and a picker that adds one through the existing route",
+      "The route's refusal sentence (self, missing, cycle) shown in the drawer"
+    ],
+    "non_goals": [
+      "An agent tool that adds or removes an edge on an existing task: agents declare prerequisites at creation only",
+      "A depends_on control on the operator's new-task form: the drawer covers a task once it exists",
+      "Changing the shared writer's rules, the dependency gate or the Dependencies board",
+      "A migration: task_dependencies exists"
+    ]
+  },
+  "summary": "Since F36 a hand-made task can depend on another, but only the operator's POST /tasks/{id}/dependencies route sets it: no control in the app and no field on create_task. This change adds a depends_on field to task creation (operator route, agent route, and both renderings of the create_task tool) and a 'Depends on' section in the task drawer that lists, adds and removes prerequisites. F571, decision overhaul-dependency-ui.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1019_task_depends_on.py: scratch Hub on :8105, fresh database, one Haiku turn for alice's create_task, Chromium for the drawer. The 'drive' criterion. Must fail at the first check before any build task.",
+      "files": [
+        "scripts/drive/d1019_task_depends_on.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "drawer-picker"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "TaskCreate and AgentTaskCreate gain depends_on; create_task_for_actor writes the edges before the task's commit and refuses unknown or own ids with 422; MCP create_task and the HTTP operation describe it. Failing Hub tests first.",
+      "files": [
+        "hub/hub/schemas/tasks.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/mcp_server.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "create",
+      "requirements": [
+        "declare-paths",
+        "create-declares"
+      ],
+      "reviewer": null,
+      "title": "depends_on on task creation and in both tool renderings"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "api/tasks.ts gains add and remove calls; TaskDetailDrawer lists prerequisites with remove controls and a picker, showing a refusal's sentence; vitest; bundle refreshed with the source.",
+      "files": [
+        "hub/ui/src/api/tasks.ts",
+        "hub/ui/src/components/tasks/TaskDetailDrawer.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "drawer",
+      "requirements": [
+        "declare-paths",
+        "drawer-picker"
+      ],
+      "reviewer": null,
+      "title": "The drawer's Depends on section"
+    }
+  ],
+  "title": "A task's prerequisites can be declared when it is created and from its drawer"
+}

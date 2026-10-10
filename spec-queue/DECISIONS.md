@@ -20,6 +20,12 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### night-1010-4: what the task drawer's "Depends on" picker offers (F571) -- 2026-10-10 night, OPEN
+
+From `spec/changes/a-tasks-prerequisites-can-be-declared-at-creation-and-in-its-drawer` (`spdoc-e28ec0fff9f3`, design D4).
+
+- OPEN      night-1010-4  Taken by the night: the picker offers every other task of the project that is not already a prerequisite, including ones that would close a cycle, and shows the route's 409 sentence when one does; rejected hiding cycle-forming candidates (the drawer would need the transitive graph and would restate the shared writer's cycle rule in the UI). Confirm or reverse.
+
 ### F556: the decided wording makes the outstanding-message check a self-message check -- 2026-10-10 night, OPEN
 
 `overhaul-loop-creator` (DECIDED 2026-10-09) says creator means the agent the job names, and the outstanding-message
