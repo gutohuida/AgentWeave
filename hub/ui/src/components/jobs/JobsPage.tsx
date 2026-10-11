@@ -15,11 +15,13 @@ import {
   JobCreate,
 } from '@/api/jobs'
 
-function errorDetail(error: unknown): string {
-  if (!(error instanceof Error)) return 'Could not archive job'
+/** The Hub's own sentence for a refused request: its `detail` when the body carries one, else the
+ *  raw message. `fallback` covers a rejection that is not an Error at all. */
+function errorDetail(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback
   try {
-    const parsed = JSON.parse(error.message) as { detail?: string }
-    return parsed.detail ?? error.message
+    const parsed = JSON.parse(error.message) as { detail?: unknown }
+    return typeof parsed.detail === 'string' ? parsed.detail : error.message
   } catch {
     return error.message
   }
@@ -34,7 +36,7 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
   const { data: jobs, isLoading } = useJobs()
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState<'all' | 'active' | 'paused'>('all')
-  const [archiveError, setArchiveError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const runJob = useRunJob()
   const pauseJob = usePauseJob()
@@ -45,9 +47,18 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
   const isPending = runJob.isPending || pauseJob.isPending || resumeJob.isPending || archiveJob.isPending || createJob.isPending
 
   const handleArchive = (id: string) => {
-    setArchiveError(null)
+    setActionError(null)
     archiveJob.mutate(id, {
-      onError: (error: unknown) => setArchiveError(errorDetail(error)),
+      onError: (error: unknown) => setActionError(errorDetail(error, 'Could not archive job')),
+    })
+  }
+
+  // F411: the Hub declines a Run with a sentence that names why (busy agent, empty queue, no runner
+  // bound); the button used to drop it, so the operator pressed Run and saw nothing.
+  const handleRun = (id: string) => {
+    setActionError(null)
+    runJob.mutate(id, {
+      onError: (error: unknown) => setActionError(errorDetail(error, 'Could not run job')),
     })
   }
 
@@ -98,13 +109,13 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
         </Button>
       </div>
 
-      {archiveError && (
+      {actionError && (
         <div
           role="alert"
           className="mx-4 mt-3 rounded-md px-3 py-2 text-xs"
           style={{ background: tint('var(--red)'), color: 'var(--red)' }}
         >
-          {archiveError}
+          {actionError}
         </div>
       )}
 
@@ -154,7 +165,7 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
               <JobCard
                 key={job.id}
                 job={job}
-                onRun={runJob.mutate}
+                onRun={handleRun}
                 onPause={pauseJob.mutate}
                 onResume={resumeJob.mutate}
                 onArchive={handleArchive}
