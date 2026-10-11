@@ -566,3 +566,27 @@ async def test_a_task_declaring_no_title_gets_a_readable_one(app, auth_headers, 
     assert title.endswith("…")
     # And the word it stops on is whole.
     assert "Implement the fixed Sunday exclusion".startswith(title[:36])
+
+
+@pytest.mark.asyncio
+async def test_a_long_declared_title_is_clipped_at_a_word_boundary(app, auth_headers, author):
+    """F546: the payload allows a 200-character title; a cut at 80 split the last word."""
+    words = [f"stage{n:02d}" for n in range(1, 26)]
+    long_title = " ".join(words)
+    assert 80 < len(long_title) <= 200
+    declared = [
+        {
+            "key": "long-title",
+            "title": long_title,
+            "description": "Build the export.",
+            "requirements": ["alpha"],
+        },
+    ]
+    await make_document(app, auth_headers, author, tasks=declared, requirements=(ALPHA,))
+    await approve(app, auth_headers)
+
+    title = (await board(app, auth_headers))[0]["title"]
+    assert title.endswith("…"), title
+    body = title[:-1]
+    assert long_title.startswith(body)
+    assert long_title[len(body)] == " ", f"the last kept word was cut in half: {title!r}"

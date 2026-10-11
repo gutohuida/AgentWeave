@@ -97,7 +97,12 @@ def test_a_blank_declared_title_falls_back():
 
 def test_a_declared_title_is_still_bounded():
     entry = {"title": "y" * (MAX_TITLE * 2), "description": "Build the export."}
-    assert len(_title_for(entry)) <= MAX_TITLE
+    assert len(_title_for(entry)) <= MAX_TITLE + len(ELLIPSIS)
+
+
+def test_a_long_declared_title_is_clipped_like_a_derived_one():
+    declared = " ".join(f"stage{n:02d}" for n in range(1, 30))
+    assert _title_for({"title": declared}) == _title_from(declared)
 
 
 def test_a_task_declaring_no_title_at_all_still_gets_one():

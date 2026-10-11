@@ -174,14 +174,18 @@ def _title_from(description: str) -> str:
     candidate = (head if separator else text).strip()
     if len(candidate) <= MAX_TITLE:
         return candidate.rstrip().rstrip(".") or "Untitled task"
+    return _clip_to_title(candidate)
 
+
+def _clip_to_title(text: str) -> str:
+    """Shorten text longer than `MAX_TITLE` to a whole-word prefix plus the ellipsis."""
     # Cut at the last whitespace that fits, so the title ends on a whole word.
-    clipped = candidate[:MAX_TITLE].rsplit(" ", 1)[0].rstrip()
+    clipped = text[:MAX_TITLE].rsplit(" ", 1)[0].rstrip()
     clipped = clipped.rstrip(",;:.-—([{").rstrip()
     if not clipped:
         # A single word longer than the limit. There is no boundary to find, so this is the one
         # place a hard cut is the only honest answer.
-        clipped = candidate[:MAX_TITLE].rstrip()
+        clipped = text[:MAX_TITLE].rstrip()
     return f"{clipped}{ELLIPSIS}"
 
 
@@ -189,7 +193,8 @@ def _title_for(entry: Dict[str, Any]) -> str:
     """The title the board shows: what the document declared, or what we can derive."""
     declared = entry.get("title")
     if isinstance(declared, str) and declared.strip():
-        return declared.strip()[:MAX_TITLE].rstrip()
+        declared = declared.strip()
+        return declared if len(declared) <= MAX_TITLE else _clip_to_title(declared)
     return _title_from(entry.get("description") or "")
 
 
