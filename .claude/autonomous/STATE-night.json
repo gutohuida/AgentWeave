@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "f411-impl",
-    "next_action": "Build F411 (Jobs Run button drops the Hub's refusal; UI): scripts/drive/FINDINGS.md section F411; hub/ui/src/api/jobs.ts useRunJob and JobsPage.tsx, surface errorDetail the way Archive does. Read .claude/rules for hub/ui first. Failing test first if the UI has a test seam, fix, npm run lint, rebuild the bundle with scripts/refresh_ui_bundle.py (commit hub/ui/src and hub/hub/static/ui together), drive in a browser against a fresh drive Hub (pick a free port; not 8000/8010; F412 used 8103, F580 8102) with a job whose Run is refused (e.g. an agent with no runner bound, which now answers 500), set **Status:** fixed <sha>. If the browser drive cannot run, leave the item open and say so.",
+    "next_action": "Refill (queue item refill-1-compose): read spec-queue/BACKLOG.html's open list (one command, do not cat FINDINGS.md), pick the next ready Tier-0 finding by severity (skip F579/F581 which are Tier 1, skip F413 unless its section says Tier 0 and it is clear, skip anything the build-window log holds or an openspec change in openspec/changes/ covers), and write ONE queue item for it, setting current/next_action to build it. If no ready Tier-0 finding remains, set next_action to null.",
     "queue": [
         {
             "id": "compose",
@@ -35,9 +35,9 @@
         },
         {
             "id": "f411-impl",
-            "status": "open",
+            "status": "done",
             "title": "F411 (B): Jobs Run button drops the Hub's refusal (UI)",
-            "detail": "hub/ui/src/api/jobs.ts useRunJob, JobsPage.tsx; surface errorDetail like Archive. UI: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed 8937006: JobsPage handleRun shows the Hub detail in the shared alert; 3 vitest + browser drive 7/7; bundle rebuilt."
         },
         {
             "id": "refill-1-compose",

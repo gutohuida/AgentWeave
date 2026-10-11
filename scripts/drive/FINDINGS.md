@@ -32798,7 +32798,7 @@ was not touched. Not a spec-track change — no `openspec/specs/` promise descri
 
 ## F411 (B) -- the Jobs page's Run button discards the Hub's answer, so a declined Run shows the operator nothing
 
-**Status:** open
+**Status:** fixed 8937006 (2026-10-11 night, Tier 0). `JobsPage` routes Run through `handleRun`, which sets the same alert Archive uses (`actionError`, `errorDetail` with a per-action fallback and a string-only `detail`); bundle rebuilt and committed with the source. Test `hub/ui/src/__tests__/jobRunRefusal.test.tsx` (3, failed before the fix); browser drive `scripts/drive/d1011_f411_run_refusal_ui.py` 7/7: an agent with no runner bound, Run answers 500 and the page shows "No runner is bound to this agent...".
 **Source:** review
 **Theme:** Operator surfaces
 **Related:** F400, F373, F127, F48. Found by D-2b's R1 on 2026-09-23 (day window), while reading
