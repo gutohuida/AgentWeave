@@ -16009,7 +16009,7 @@ only, which is why it is B and not higher.
 
 ## F197 (B) — the settings page has no error state, so a failing settings query renders a loading skeleton forever
 
-**Status:** open, and sized. `spec-queue/DECISIONS.md:296` supersedes the original estimate
+**Status:** fixed f061e8b (2026-10-11 night, Tier 0). `ProjectSettingsPanel.tsx` reads the settings query's error and renders a role=alert with the Hub's reason and a Retry, keeping the form hidden. Test `projectSettingsPanel.test.tsx` (failed before); drive `scripts/drive/d1011_f197_settings_error.py` 8/8 in a real browser with the route answering 500. `test_surface_ceilings.py` lowered 97 -> 95 and 53 -> 50. Was: open, and sized. `spec-queue/DECISIONS.md:296` supersedes the original estimate
 with a count taken by the night window on 2026-09-02 (N-11): 51 reachable MISREPORT sites of 107
 call sites. `713544d` established it is F271 with a skeleton in front of it. Sized, not fixed. [classified 2026-09-09, D-2]
 

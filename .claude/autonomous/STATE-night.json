@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f197-impl",
-    "next_action": "Run queue item f197-impl: Tier 0. Write a vitest (hub/ui/src/__tests__/projectSettingsPanel.test.tsx or a new file) where useProjectSettings fails and assert an alert naming the failure with a Retry, not the 'Loading project settings' skeleton; watch it fail. Fix ProjectSettingsPanel.tsx to read the query's error (F271's unread-editor pattern). Run scripts/drive/n11_query_error_surface.py and lower the ceilings in hub/tests/test_surface_ceilings.py to the new counts; run that test under py -3.11. npm run lint, full vitest, rebuild the bundle (npm run build then scripts/refresh_ui_bundle.py) and commit src and static together. Drive in a real browser on a fresh source Hub on a free port (not 8000/8010) with the settings route made to fail; set F197's Status line.",
+    "current": "refill-3-compose",
+    "next_action": "Run queue item refill-3-compose: refill the queue from the backlog (read BACKLOG.html's embedded open list; skip Codex-only F461/F325/F322, F139, F273, F378 and anything already built or held). Pick one ready A/B finding that is still present in code, not held by the build log, and not named by an unarchived openspec change; queue its impl item plus refill-4-compose. If none qualifies, set next_action to null.",
     "queue": [
         {
             "id": "compose",
@@ -59,9 +59,9 @@
         },
         {
             "id": "f197-impl",
-            "status": "open",
+            "status": "done",
             "title": "F197 (B): Settings page has no error state; a failed settings query shows a skeleton forever",
-            "detail": "ProjectSettingsPanel (hub/ui/src/components/environment/ProjectSettingsPanel.tsx) renders the useProjectSettings query's failure as a role=alert with Retry instead of the skeleton (F271's pattern). Vitest first, failing (projectSettingsPanel.test.tsx exists). Then lower UNHANDLED_SITE_CEILING / MISREPORT_CEILING in hub/tests/test_surface_ceilings.py by what scripts/drive/n11_query_error_surface.py now counts. Lint, vitest, bundle refresh, browser drive with the settings route failing."
+            "detail": "Fixed f061e8b: panel renders the query error as an alert with Retry; vitest failed before; browser drive 8/8; ceilings 97->95, 53->50; bundle rebuilt."
         },
         {
             "id": "refill-3-compose",
