@@ -33070,7 +33070,7 @@ the loop tab (newest first, from the field already fetched), or stop fetching it
 
 ## F419 (B) — the Overview tab's activity strip shows every project's events, and its warning dot never fires for the Hub's warnings
 
-**Status:** fixed (this commit, 2026-10-11 night, Tier 0). `OverviewPage.tsx` filters the buffer by `data.project_id === selectedProjectId` as `ActivityLog.tsx` does, and tests `severity === 'warn'`. Tests `overviewActivityStrip.test.tsx` (3; all failed before); drive `scripts/drive/d1011_f419_overview_strip.py` 12/12 in a real browser with two projects. Not fixed, observed: the strip re-reads the buffer only when the agents/tasks/questions queries move (the page's own comment says so), so an event alone does not repaint it. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B9 rounds
+**Status:** fixed 61f9bc1 (2026-10-11 night, Tier 0). `OverviewPage.tsx` filters the buffer by `data.project_id === selectedProjectId` as `ActivityLog.tsx` does, and tests `severity === 'warn'`. Tests `overviewActivityStrip.test.tsx` (3; all failed before); drive `scripts/drive/d1011_f419_overview_strip.py` 12/12 in a real browser with two projects. Not fixed, observed: the strip re-reads the buffer only when the agents/tasks/questions queries move (the page's own comment says so), so an event alone does not repaint it. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B9 rounds
 (`spec-queue/tracks/B9.md` Final) and re-checked in session. `components/overview/OverviewPage.tsx:101`
 renders `getBufferedEvents().slice(-10)`, the instance-wide buffer the operator stream fills
 (`useSSE.ts`), with no `project_id` filter, on a single project's Overview tab. It is the only live
