@@ -8,16 +8,16 @@
     "parent_branch": "master",
     "parent_sha": "072092d",
     "stop_at": "2026-10-11T21:30:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-11-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "merge-gate",
-    "next_action": "Do queue item merge-gate exactly as build-window.md 'The merge gate' says (CI for the branch tip must be success; poll up to 25 min). Then mark it done and set current to the next open item.",
+    "current": "contradictions-close",
+    "next_action": "Do queue item contradictions-close: commands in spec spec-queue/../.claude/.. 2026-10-10-vault-log.md iteration 4 (close_change.py fcontra, then --fold-change fcontra, spec reindex, mark slice done in roadmap doc). Commit spec/ output. Master now == 4ccbec6, so the commits are on master.",
     "queue": [
         {
             "id": "merge-gate",
-            "status": "open",
+            "status": "done",
             "title": "Merge gate",
             "detail": "Per build-window.md 'The merge gate': measure the four conditions, fast-forward master to this branch only if all hold, log values and sha. Gate shut: log which failed and continue."
         },
