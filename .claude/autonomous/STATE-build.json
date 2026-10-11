@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "072092d",
     "stop_at": "2026-10-11T21:30:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-10-11-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ledger-close",
-    "next_action": "Do queue item ledger-close: run py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-11, append the final log entry with the usage report (no other work), commit and push. Then set next_action to null.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "merge-gate",
@@ -66,7 +66,7 @@
         },
         {
             "id": "ledger-close",
-            "status": "open",
+            "status": "done",
             "title": "Final log entry with usage report",
             "detail": "py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-11"
         }
