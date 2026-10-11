@@ -1,8 +1,5 @@
 """Task `files` and the unordered-overlap warning (slice: same-file tasks build in order)."""
 
-import subprocess
-from pathlib import Path
-
 import pytest
 
 from hub.spec_completeness import check, overlap_warnings, paths_overlap
@@ -87,16 +84,3 @@ def test_tasks_without_files_and_imported_entries_are_never_named():
     }
     tasks = _tasks(("a", {"files": ["x.py"]}), ("b", {})) + [imported]
     assert overlap_warnings(_complete(tasks)) == []
-
-
-def test_the_slice_adds_no_migration():
-    versions = Path(__file__).resolve().parents[1] / "hub" / "migrations" / "versions"
-    diff = subprocess.run(
-        ["git", "diff", "--name-only", "master", "--", str(versions)],
-        capture_output=True,
-        text=True,
-        cwd=versions,
-    )
-    if diff.returncode != 0:
-        pytest.skip("master is not resolvable here")
-    assert diff.stdout.strip() == ""

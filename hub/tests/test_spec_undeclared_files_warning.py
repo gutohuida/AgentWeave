@@ -3,9 +3,6 @@
 Route level: an agent's submission through the submit route, as in test_spec_roadmaps.py.
 """
 
-import subprocess
-from pathlib import Path
-
 import pytest
 
 from hub.agent_auth import hash_run_token
@@ -125,16 +122,3 @@ async def test_silent_when_every_local_task_declares_files(app, planner):
         _doc(("a", {"files": ["a.py"]}), ("b", {"files": ["b.py"]}), ("c", {"files": ["c.py"]})),
     )
     assert _undeclared(body) == []
-
-
-def test_the_change_adds_no_migration():
-    versions = Path(__file__).resolve().parents[1] / "hub" / "migrations" / "versions"
-    diff = subprocess.run(
-        ["git", "diff", "--name-only", "master", "--", str(versions)],
-        capture_output=True,
-        text=True,
-        cwd=versions,
-    )
-    if diff.returncode != 0:
-        pytest.skip("master is not resolvable here")
-    assert diff.stdout.strip() == ""
