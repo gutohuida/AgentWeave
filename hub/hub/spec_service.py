@@ -8,6 +8,7 @@ so nothing touches disk until everything that can be refused has been.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -39,6 +40,8 @@ from .spec_payload import (
 )
 from .spec_render import SliceOf, render_document
 from .utils import short_id
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -1313,6 +1316,29 @@ async def _amendments_unreviewed(
     ]
 
 
+async def _vault_warnings(
+    session: AsyncSession, workspace: ProjectWorkspace, document: SpecDocument
+) -> List[spec_completeness.Finding]:
+    """Each warning the vault has on the document's requirements, as a `vault_warning` gap
+    (`a-requirement-is-checked-against-what-the-vault-recorded` FR-5): never a refusal, and a
+    vault that cannot be read reports nothing rather than stopping a phase move."""
+    from . import vault_spec_check
+
+    try:
+        warnings = await vault_spec_check.warnings_for(
+            session, workspace, document.project_id, document.path
+        )
+    except Exception:  # noqa: BLE001 -- warnings, never gates
+        logger.warning("vault warnings could not be read for %s", document.path, exc_info=True)
+        return []
+    return [
+        spec_completeness.Finding(
+            "vault_warning", f"requirements[{warning['index']}]", warning["message"]
+        )
+        for warning in warnings
+    ]
+
+
 async def phase_findings(
     session: AsyncSession,
     workspace: ProjectWorkspace,
@@ -1332,6 +1358,7 @@ async def phase_findings(
         *spec_completeness.approval_gaps(payload),
         *_steps_skipped(workspace, document),
         *await _amendments_unreviewed(session, document),
+        *await _vault_warnings(session, workspace, document),
     ]
     refusals, gaps = spec_completeness.split(findings)
     return PhaseFindings([f.to_dict() for f in refusals], [f.to_dict() for f in gaps])

@@ -1069,6 +1069,125 @@ def _report_lines(
     return lines
 
 
+# ---------------------------------------------------------------------------
+# What a spec requirement citing a fact is warned of
+# ---------------------------------------------------------------------------
+
+
+def _source_named(source_id: str, records: Dict[str, _Record]) -> str:
+    record = records.get(source_id)
+    if record is None:
+        return f"source {source_id}, not on this machine"
+    if record.text_root is None:
+        return f"a private source held on {record.meta.get('holder') or 'another machine'}"
+    return f'"{record.meta["name"]}" ({source_id})'
+
+
+def _fact_named(fact_id: str, facts: Dict[str, _Fact], records: Dict[str, _Record]) -> str:
+    """A fact as a warning names it: its id, its claim, and the sources it was said in."""
+    fact = facts.get(fact_id)
+    if fact is None:
+        return f"{fact_id}, which is not in the vault on this machine"
+    said = f'"{fact.claim}"' if fact.claim else "(a private fact whose claim is held elsewhere)"
+    origin = ", ".join(_source_named(s, records) for s in fact.meta["sources"]) or "no source"
+    return f"{fact_id}: {said}, from {origin}"
+
+
+def name_facts(project_root: Path, private_root: Path, fact_ids: List[str]) -> Dict[str, str]:
+    """Each of *fact_ids* named as a warning names it."""
+    facts, records = _facts(project_root, private_root), _records(project_root, private_root)
+    return {fact_id: _fact_named(fact_id, facts, records) for fact_id in fact_ids}
+
+
+def fact_warnings(
+    project_root: Path, private_root: Path, fact_ids: List[str]
+) -> Dict[str, List[Dict[str, str]]]:
+    """For each of *fact_ids*, what a requirement citing it is warned of, derived from the vault
+    as it stands (`a-requirement-is-checked-against-what-the-vault-recorded` FR-2): `disputed` by
+    an open contradiction, `superseded` by a decision it did not stand in or by a correction,
+    `reported` while a referred report names it, `missing` when no such fact is here. Each is a
+    `kind` and a `message` naming both sides' sources. A fact with nothing against it maps to []."""
+    facts, records = _facts(project_root, private_root), _records(project_root, private_root)
+    contradictions = _contradictions(project_root, private_root)
+    reports = _reports(project_root, private_root)
+    found: Dict[str, List[Dict[str, str]]] = {}
+    for fact_id in dict.fromkeys(fact_ids):
+        warnings: List[Dict[str, str]] = []
+        found[fact_id] = warnings
+        if fact_id not in facts:
+            warnings.append(
+                {
+                    "kind": "missing",
+                    "message": f"It cites {fact_id}, which is not in the vault on this machine.",
+                }
+            )
+            continue
+        cited = _fact_named(fact_id, facts, records)
+        for record in _open_first(list(contradictions.values())):
+            if fact_id not in record["facts"] or "status" not in record:
+                continue
+            other = next(f for f in record["facts"] if f != fact_id)
+            if record["status"] == "open":
+                presumed = "the cited fact" if record["presumed"] == fact_id else "the other"
+                warnings.append(
+                    {
+                        "kind": "disputed",
+                        "message": (
+                            f"It cites {cited}. An open contradiction ({record['id']}) disputes "
+                            f"it: {_fact_named(other, facts, records)}. Until the operator "
+                            f"decides, {presumed} is presumed, its source being the later said."
+                        ),
+                    }
+                )
+                continue
+            resolution = record["resolution"]
+            stands = resolution.get("stands")
+            if stands == fact_id:
+                continue
+            replaced = (
+                f"the fact that stands is {_fact_named(stands, facts, records)}"
+                if stands
+                else "neither fact stands"
+            )
+            warnings.append(
+                {
+                    "kind": "superseded",
+                    "message": (
+                        f"It cites {cited}, superseded by the operator's decision "
+                        f"{resolution.get('decision')} on contradiction {record['id']}: "
+                        f"{replaced}."
+                    ),
+                }
+            )
+        for record in _newest_first([r for r in reports.values() if r["entry"] == fact_id]):
+            reporter = record["reporter"].get("agent") or "an agent"
+            if record["status"] == "corrected" and record.get("replaced_by"):
+                warnings.append(
+                    {
+                        "kind": "superseded",
+                        "message": (
+                            f"It cites {cited}, superseded by "
+                            f"{_fact_named(record['replaced_by'], facts, records)}: {reporter} "
+                            "reported it wrong and the manager corrected it from its source "
+                            f"(report {record['id']})."
+                        ),
+                    }
+                )
+            elif record["status"] == "referred":
+                warnings.append(
+                    {
+                        "kind": "reported",
+                        "message": (
+                            f'It cites {cited}, which {reporter} reported wrong: "'
+                            f'{record["message"]}" The manager referred it to the operator '
+                            f"(report {record['id']}); until the report is closed the fact is "
+                            "not settled."
+                        ),
+                    }
+                )
+    return found
+
+
 def report_target(
     project_root: Path, private_root: Path, entry_id: str
 ) -> Optional[Dict[str, Any]]:

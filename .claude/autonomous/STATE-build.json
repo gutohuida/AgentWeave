@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "072092d",
     "stop_at": "2026-10-11T21:30:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-11-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "specs-against-vault-backend-impl",
-    "next_action": "Do queue item specs-against-vault-backend-impl (task-bbdb6b3ed737): failing tests first in hub/tests/test_vault_spec_check.py from criteria cites-kept, derived, job, reworded, gaps of spec/changes/a-requirement-is-checked-against-what-the-vault-recorded/spec.json, then spec_payload.py Requirement.facts, vault.py cited-fact warnings, vault_spec_check.py, manager.py job, api/v1/vault.py GET /vault/warnings + POST /vault/warnings/check, spec_service.py vault_warning gaps + background check on propose. No migration. If it will not fit in one turn, split -a/-b and commit a green half; never leave dirty. d1025_specs_against_vault.py must then pass check 1 (run it only once the whole backend is in; it spends Haiku calls).",
+    "current": "specs-against-vault-tab-impl",
+    "next_action": "Do queue item specs-against-vault-tab-impl (task-1bd2eb7dabae): vitest first in hub/ui/src/__tests__/specVaultWarnings.test.tsx for a SpecVaultWarnings panel in SpecDocumentPanel reading GET /projects/{id}/vault/warnings?path= (warnings: key, identifier, index, statement, kind, fact, message; 404 renders nothing, empty renders nothing), testid spec-vault-warning-<key> as d1025 check 9 expects (read the drive for selectors), plus a check-now button on POST /vault/warnings/check. npm run lint + build, scripts/refresh_ui_bundle.py, commit hub/ui/src and hub/hub/static/ui together, name the bundle in the log. Wait for every background command before ending the turn.",
     "queue": [
         {
             "id": "merge-gate",
@@ -47,8 +47,8 @@
         },
         {
             "id": "specs-against-vault-backend-impl",
-            "status": "open",
-            "title": "Backend (task-bbdb6b3ed737): Requirement.facts, derived warnings, spec-vault-check job, /vault/warnings routes, vault_warning gaps",
+            "status": "done",
+            "title": "Backend (task-bbdb6b3ed737): Requirement.facts, derived warnings, spec-vault-check job, /vault/warnings routes, vault_warning gaps -- done; d1025 checks 1-8 green, 9 waits on the panel",
             "detail": "Files and order in the task description (spdoc-e4f531e0b926). Tests first in hub/tests/test_vault_spec_check.py. No migration. Opus if hard. Split -a/-b rather than leave dirty.",
             "model": "opus"
         },

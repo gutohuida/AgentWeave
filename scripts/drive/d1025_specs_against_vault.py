@@ -199,7 +199,7 @@ def upload(base, name, dated, content):
 
 def payload(fact_id):
     return {
-        "title": "Refund limits",
+        "schema_version": 1, "kind": "change-spec", "title": "Refund limits",
         "summary": "Refunds below a limit go through without a manager's approval.",
         "problem": "Every refund waits for a manager today, however small.",
         "scope": {"in_scope": ["The approval rule for refunds"], "non_goals": ["Partial refunds"]},

@@ -13,6 +13,9 @@ contradictions the distillation's check recorded are listed, and the operator re
 `a-working-agent-tells-the-manager-an-entry-is-wrong`: the reports agents filed (through
 `agent_actions.py`, the one agent route that writes to the vault) are listed, and the operator
 closes one the manager referred.
+
+`a-requirement-is-checked-against-what-the-vault-recorded`: a spec document's warnings from the
+vault (`vault_spec_check.py`), and checking a document again now.
 """
 
 import asyncio
@@ -23,9 +26,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import distillation, project_workspace, vault
+from ... import distillation, project_workspace, spec_lifecycle, vault, vault_spec_check
 from ...auth import get_project
 from ...db.engine import get_session
+from ...spec_manifest import SpecPathError, validate_spec_path
 
 router = APIRouter(prefix="/vault", tags=["vault"])
 
@@ -262,3 +266,45 @@ async def close_vault_report(
         return await asyncio.to_thread(vault.close_report, root, private, report_id, body.note)
     except vault.VaultError as exc:
         raise _refused(exc) from exc
+
+
+@router.get("/warnings")
+async def get_vault_warnings(
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """A spec document's warnings from the vault: its cited facts' first, then the conflicts of
+    its newest spec-vault-check firing. 404 for an unknown document."""
+    project_id = project[0]
+    try:
+        safe = validate_spec_path(path)
+    except SpecPathError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if await spec_lifecycle.get_document(session, project_id, safe) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+    workspace = await project_workspace.resolve_project_workspace(session, project_id)
+    return {"warnings": await vault_spec_check.warnings_for(session, workspace, project_id, safe)}
+
+
+@router.post("/warnings/check", status_code=status.HTTP_202_ACCEPTED)
+async def check_vault_warnings(
+    background: BackgroundTasks,
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+) -> dict:
+    """Check a document against the vault again, in the background: 404 for an unknown document,
+    409 naming what to do while the job is off or has no runner."""
+    try:
+        plan = await vault_spec_check.prepare(project[0], path)
+    except vault_spec_check.CannotCheckError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.reason) from exc
+    background.add_task(_check_quietly, plan)
+    return {"document": plan.path, "queued": True}
+
+
+async def _check_quietly(plan: vault_spec_check.Plan) -> None:
+    try:
+        await vault_spec_check.check(plan, trigger=vault_spec_check.REQUESTED)
+    except Exception:  # noqa: BLE001 -- the answer has been sent; nothing can raise into it
+        vault_spec_check.logger.warning("spec vault check failed", exc_info=True)

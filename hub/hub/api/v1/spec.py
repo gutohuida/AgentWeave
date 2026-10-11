@@ -21,7 +21,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import Field
 from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,6 +47,7 @@ from ... import (
     spec_tasks,
     task_integration,
     task_transitions,
+    vault_spec_check,
 )
 from ... import (
     spec_payload as spec_payload_module,
@@ -2349,6 +2350,7 @@ async def close_exploration(
 
 @router.post("/documents/propose")
 async def propose_document(
+    background: BackgroundTasks,
     path: str = Query(...),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
@@ -2388,6 +2390,13 @@ async def propose_document(
         }
     await sse_manager.broadcast(
         project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    # After the answer is sent; a no-op while the spec-vault-check job is off (`vault_spec_check`).
+    background.add_task(
+        vault_spec_check.check_in_background,
+        project_id,
+        document.path,
+        trigger=vault_spec_check.TRIGGER,
     )
     return {
         **await _project_document_view(session, project_id, document),

@@ -47,6 +47,9 @@ from pydantic import (
 SCHEMA_VERSION = 1
 
 KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+# A vault fact id, as `vault.py` mints one. Restated, not imported: this module imports no Hub
+# state, and the two must change together.
+FACT_ID_RE = re.compile(r"^fct-[0-9a-f]{12}$")
 _ABSOLUTE_PATH_RE = re.compile(r"^([/\\]|[A-Za-z]:)")
 MODALS = ("MUST", "SHOULD", "MAY", "SHALL")
 KINDS = ("baseline", "system-map", "roadmap", "change-spec", "capability")
@@ -94,6 +97,10 @@ class Requirement(_Part):
     party: Optional[str] = Field(
         default=None,
         description="'producer' for what a sender may emit, 'consumer' for what a receiver must do with it. Collapsing the two hides which side of a boundary a defect is on.",
+    )
+    facts: Optional[List[str]] = Field(
+        default=None,
+        description="The vault facts this requirement rests on, by id (fct- followed by 12 hex characters): cite only ids you read with vault_map or vault_read. Cite the fact rather than quoting it, so that when a newer source contradicts it, or it is corrected, this requirement carries a warning on its spec page. Leave it out when nothing in the vault backs the requirement.",
     )
 
 
@@ -518,6 +525,14 @@ def validate_payload(raw: Any) -> SpecPayload:
             raise PayloadError(f"modal must be one of {', '.join(MODALS)}", field=f"{where}.modal")
         if requirement.party is not None and requirement.party not in ("producer", "consumer"):
             raise PayloadError("party must be 'producer' or 'consumer'", field=f"{where}.party")
+        if requirement.facts is not None:
+            wrong = [fact for fact in requirement.facts if not FACT_ID_RE.match(fact)]
+            if wrong:
+                raise PayloadError(
+                    "facts must list vault fact ids, fct- followed by 12 hex characters, read "
+                    f"with vault_map or vault_read; not {wrong[0]!r}",
+                    field=f"{where}.facts",
+                )
 
     requirement_keys = [r.key for r in payload.requirements]
     duplicate = _duplicate(requirement_keys)
@@ -626,6 +641,10 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
     for task in data.get("tasks") or []:
         if not task.get("files"):
             task.pop("files", None)
+    # An uncited requirement stores as before, with no facts key.
+    for requirement in data.get("requirements") or []:
+        if requirement.get("facts") is None:
+            requirement.pop("facts", None)
     # And the criterion check fields: optional (FR-9), so a criterion without them stores as before.
     for criterion in data.get("acceptance_criteria") or []:
         for key in ("how_to_check", "checked_by"):

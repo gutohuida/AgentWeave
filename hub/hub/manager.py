@@ -33,6 +33,7 @@ OUTCOMES = ("written", "empty", "failed")
 TITLES = "conversation-titles"
 DISTILLATION = "vault-distillation"
 REPORTS = "vault-reports"
+SPEC_VAULT_CHECK = "spec-vault-check"
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,16 @@ JOBS = (
             "reports stay pending."
         ),
         trigger="report_filed",
+    ),
+    JobSpec(
+        key=SPEC_VAULT_CHECK,
+        title="Spec vault check",
+        description=(
+            "Reads each proposed spec document's requirements against the vault's facts and "
+            "warns on the spec page of a requirement that contradicts one. Needs a runner. Off: "
+            "only the facts a requirement cites are checked."
+        ),
+        trigger="document_proposed",
     ),
 )
 
@@ -150,14 +161,19 @@ async def record_firing(
     detail: Optional[str],
     duration_ms: int,
     usage: Optional[Dict[str, Any]],
+    extra: Optional[Dict[str, Any]] = None,
     commit: bool = True,
 ) -> None:
-    """One manager spawn. Deliberately no `agent`, in the payload or the event's column."""
+    """One manager spawn. Deliberately no `agent`, in the payload or the event's column.
+
+    *extra* is what a job keeps on its firing beside the standard fields (spec-vault-check: its
+    conflicts); it never overrides one of them."""
     await persist_event(
         db,
         project_id,
         FIRED_EVENT,
         {
+            **(extra or {}),
             "job": job,
             "trigger": trigger,
             "subject": subject,

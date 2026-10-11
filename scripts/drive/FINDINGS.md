@@ -35344,3 +35344,11 @@ The build playbook's close step ends "mark the slice done in the roadmap documen
 `POST /projects/{id}/project/documents/phase?path=...&to=approved&approve_anyway=true` answers the same 409 `approval_warnings` as without it: `path` and `to` are query parameters (`hub/hub/api/v1/spec.py`, `set_phase`) but `approve_anyway` is a field of the `PhaseRequest` body (`spec.py:411-428`), and FastAPI drops an unknown query parameter without a word. The 409's message ("fix them, or approve anyway", `hub/hub/spec_lifecycle.py:409-412`) does not name the field or where it goes, so a caller following the message repeats the same request. The body `{"approve_anyway": true}` approves (200).
 
 **Fix shape (not decided):** name the body field in the `approval_warnings` message, or refuse unknown query parameters on the phase route with a 400 naming them. Tier 0.
+
+## F581 (C) -- a worker's model answer is not kept, so a wrong judgement cannot be read after the fact
+
+**Status:** open 2026-10-11. Measured 2026-10-11 (build window iteration 7, d1025 run `testbed/drive1025-specs-vault/095027/`).
+
+The spec-vault-check firing recorded `outcome empty`, `0 conflicts kept, 0 dropped` and 1,373 output tokens, but neither `worker_invocations` (`hub/hub/worker.py`, `_record`; columns are usage and outcome only) nor the `manager_job_fired` event keeps what the model answered, so *why* it found nothing was unreadable. It took re-sending the same prompt by hand (`claude -p`) to see Haiku's reasoning (it read "300 euros or less need no approval" as silent beyond 300). The same holds for every vault job (distillation, contradictions, reports): an operator who doubts a judgement has only the count.
+
+**Fix shape (not decided):** keep the parsed answer (or its first N characters) on the invocation row or the firing event, private-vault redaction rules applying. Likely Tier 1 (a column means a migration, so Tier 2 if stored on the row).
