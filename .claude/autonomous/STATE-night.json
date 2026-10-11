@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "refill-2-compose",
-    "next_action": "Run queue item refill-2-compose: read the BACKLOG.html embedded open list (or spec-queue/BACKLOG.html) and pick the next ready Tier-0 finding by severity (B before C). Candidates left unexamined from refill-1: F461, F325 (B, ready); F454, F563, F523 are Tier-1-sized. Skip F579/F581/F413, Codex-only findings (Codex is undrivable), anything the build log holds or an openspec change covers, and F417/F444 (shape is a change's, not a Tier 0 diff). Verify the finding is still present in code before queueing it as f-NNN-impl plus a refill-3-compose item; if no ready Tier-0 finding exists, set next_action to null. Compose only, nothing built.",
+    "current": "f197-impl",
+    "next_action": "Run queue item f197-impl: Tier 0. Write a vitest (hub/ui/src/__tests__/projectSettingsPanel.test.tsx or a new file) where useProjectSettings fails and assert an alert naming the failure with a Retry, not the 'Loading project settings' skeleton; watch it fail. Fix ProjectSettingsPanel.tsx to read the query's error (F271's unread-editor pattern). Run scripts/drive/n11_query_error_surface.py and lower the ceilings in hub/tests/test_surface_ceilings.py to the new counts; run that test under py -3.11. npm run lint, full vitest, rebuild the bundle (npm run build then scripts/refresh_ui_bundle.py) and commit src and static together. Drive in a real browser on a fresh source Hub on a free port (not 8000/8010) with the settings route made to fail; set F197's Status line.",
     "queue": [
         {
             "id": "compose",
@@ -53,9 +53,21 @@
         },
         {
             "id": "refill-2-compose",
+            "status": "done",
+            "title": "Refill the queue from the backlog if it empties before 05:00",
+            "detail": "Picked F197 (B, Tier 0, UI). F461/F325/F322 skipped as Codex-only; F139 non-deterministic agent behaviour; F273 read-not-run, needs a fault-injection design; F378 shape not a one-sentence diff. F197 still present at ProjectSettingsPanel.tsx:88 (error reads only the two mutations); R-1 (DECIDED, ratchet) permits instance repair; only archived openspec changes cite it."
+        },
+        {
+            "id": "f197-impl",
+            "status": "open",
+            "title": "F197 (B): Settings page has no error state; a failed settings query shows a skeleton forever",
+            "detail": "ProjectSettingsPanel (hub/ui/src/components/environment/ProjectSettingsPanel.tsx) renders the useProjectSettings query's failure as a role=alert with Retry instead of the skeleton (F271's pattern). Vitest first, failing (projectSettingsPanel.test.tsx exists). Then lower UNHANDLED_SITE_CEILING / MISREPORT_CEILING in hub/tests/test_surface_ceilings.py by what scripts/drive/n11_query_error_surface.py now counts. Lint, vitest, bundle refresh, browser drive with the settings route failing."
+        },
+        {
+            "id": "refill-3-compose",
             "status": "open",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Same rule as refill-1: next ready Tier-0 finding by severity; skip F579/F581/F413, Codex-only findings (Codex is undrivable), anything the build log holds or an openspec change covers. Null next_action if none."
+            "detail": "Same rule as refill-2. Null next_action if none."
         }
     ],
     "decisions_for_user": [],
