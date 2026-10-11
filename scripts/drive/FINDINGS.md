@@ -32831,7 +32831,7 @@ two same-day proposals sharing a file. That change's Open Question 1 offers fold
 
 ## F412 (B) -- pressing Run answers `200 {"success": true}` when no turn began
 
-**Status:** open
+**Status:** fixed 5f46cb6 (2026-10-11 night, Tier 0). `_do_fire_job` now returns `False` when `schedule_agent` reports a terminal failure, after still emitting its events and starting extra selections; the route's existing failed-row branch answers 500 with the row's reason. Which reasons are terminal was not decided: the row already called them failed, and the answer now agrees with it. F108's dishonest defaults stay open as their own item. Line numbers above are stale. Test `test_a_press_whose_turn_cannot_begin_is_not_answered_success` (fails with the return reverted); drive `scripts/drive/d1011_f412_run_answer.py` 7/7 (an agent with no runner bound: was 200).
 **Source:** drive
 **Theme:** Operator surfaces
 **Related:** F108 (the class: a permanently refused request answering 200), F411, F400, F373. Found by
