@@ -1,0 +1,253 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub with a fresh database, a scratch git repository, a Haiku runner with vault-distillation and spec-vault-check enabled, and a transcript dated 2026-01-10 saying refunds up to 300 euros need no approval, distilled into a fact (scripts/drive/d1025_specs_against_vault.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1025_specs_against_vault.py",
+      "key": "drive",
+      "requirement": "cited-fact-warnings",
+      "then": "spec-vault-check is listed and fires once with trigger document_proposed, keeping a conflict on R2; after the second upload an open contradiction cites both facts and GET /vault/warnings has a disputed warning on R1 whose message names both transcripts' names; approval without approve anyway answers 409 approval_warnings with a vault_warning gap on requirements[0]; with it, 200 and warnings_overridden holds it; the spec page in Chromium shows the R1 warning naming both transcripts. The drive fails on today's Hub at its first check (no spec-vault-check job).",
+      "when": "a change is authored whose requirement R1 cites that fact and says refunds up to 300 euros need no approval, and whose requirement R2 cites nothing and says refunds up to 3,000 euros need no approval; it is proposed; then a transcript dated 2026-03-01 saying the limit is now 500 euros is uploaded and distilled; then the document is approved without and with approve anyway"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub test client",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_spec_check.py",
+      "key": "cites-kept",
+      "requirement": "requirement-cites-facts",
+      "then": "the first is read back with the same facts list; the second is refused naming the requirement",
+      "when": "a document is saved with a requirement citing a fact id, then with facts holding 'refunds' and a number"
+    },
+    {
+      "checked_by": "agent",
+      "given": "four requirements citing a fact under an open contradiction, a superseded fact, a fact with a referred report, and an unknown id; and one citing a fact whose contradiction is then resolved in its favour",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_spec_check.py",
+      "key": "derived",
+      "requirement": "cited-fact-warnings",
+      "then": "kinds disputed, superseded, reported, missing with both sources named; the resolved one and the closed report's carry none afterwards",
+      "when": "a test reads GET /vault/warnings before and after the resolution and after closing the report"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake worker answering one valid conflict, one naming an unknown requirement, one naming an unknown fact; then failing; then the job disabled",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_spec_check.py",
+      "key": "job",
+      "requirement": "check-job",
+      "then": "one firing per spawn, written with only the valid conflict and its judged statement, then failed; the proposal's answer did not wait; disabled: 409 and no spawn; the job is listed disabled on a fresh project",
+      "when": "the document is proposed, checked again through the route, and checked while disabled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a firing holding a conflict on R2",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_spec_check.py",
+      "key": "reworded",
+      "requirement": "warnings-route",
+      "then": "the conflict is gone; 404 for an unknown path",
+      "when": "R2's statement is changed and the warnings read again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a proposed document with one vault warning",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_spec_check.py",
+      "key": "gaps",
+      "requirement": "approval-lists-warnings",
+      "then": "409 approval_warnings with a vault_warning gap at requirements[0]; then 200 with it in warnings_overridden",
+      "when": "it is approved without and with approve_anyway"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the spec panel against a warnings route answering two warnings, then one answering 404",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/specVaultWarnings.test.tsx",
+      "key": "panel",
+      "requirement": "warnings-on-spec-page",
+      "then": "both rows show the identifier, statement and message; on 404 nothing renders",
+      "when": "a vitest renders it"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the drive's screenshot",
+      "how_to_check": "open testbed/drive1025-specs-vault/<stamp>/shot_warnings.png",
+      "key": "panel-look",
+      "requirement": "warnings-on-spec-page",
+      "then": "which requirement the vault disagrees with, and which two sources say what, are clear at a glance",
+      "when": "the operator looks at it"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "0aae45fca0c24db3fbb05c04a505acf2a72edba039464e8f46640ce0c94857cf",
+      "FR-2": "35cc60c774d27d14792a804cfe03237039804e6728f43f4b26fc6e06769432fc",
+      "FR-3": "f016876d3d60ace43a97ce8dce5bc1fd5f2648ea6ea85ab90acce012a5230967",
+      "FR-4": "f6e84505fa2b95b462f4d5d983e8fefa643cb603080d382099527790acc1ae41",
+      "FR-5": "1897f132a21061d6f9dd18d6345cdecaace6a83033b411a2379d5745c524319a",
+      "FR-6": "2733b4dd41ec87749bfc78e29e22257fe89d77d2ce435c3b5066c6dbc424bee0"
+    },
+    "high_water": 6,
+    "requirements": {
+      "approval-lists-warnings": "FR-5",
+      "check-job": "FR-3",
+      "cited-fact-warnings": "FR-2",
+      "requirement-cites-facts": "FR-1",
+      "warnings-on-spec-page": "FR-6",
+      "warnings-route": "FR-4"
+    },
+    "retired": {}
+  },
+  "design": "D1 Tier 1, no hazard. No migration: the job is a registry entry over the existing manager_jobs table; its conflicts live on its manager_job_fired event; cited-fact warnings are derived on read from the vault's files. Rollback is a revert: a facts list left on a requirement is kept as an unknown extra by the previous Hub. The bundle reaches :8000's app on its next reload; until its Hub restarts the warnings route answers 404 and the panel renders nothing.\n\nD2 Cited-fact warnings are derived, not judged. Whether a cited fact is disputed, superseded or reported is already a fact of the vault; no model is needed, and deriving on read means the warning appears the moment a contradiction is recorded. This half alone is the roadmap's done sentence. Rejected: having the job write them (stale between firings).\n\nD3 The job's findings live on its firing. The newest firing for a document is its current judgement; a conflict whose requirement has since been reworded is not shown. Rejected: a warnings table (a migration on :8000) or files under knowledge/ (warnings about a spec are not knowledge).\n\nD4 The job fires on proposal, and on request. Proposal is when the operator next reads the document. Rejected: on every save (a spawn per keystroke-sized edit) and on every new fact across every document (cost scales with the corpus; the cited half is live anyway).\n\nD5 The model names ids; the Hub checks them. A conflict naming a requirement key or fact id that does not exist is dropped, so a warning always points at something real.\n\nD6 A panel, not the document HTML. The spec HTML is rendered from the payload alone; putting vault state in it would couple spec_render to the vault. The panel sits with the drift and amendments panels in SpecDocumentPanel.",
+  "evidence": {
+    "checked": [
+      "hub/hub/spec_payload.py:80-97: Requirement keeps unknown extras (extra=allow); fields carry schema descriptions",
+      "hub/hub/spec_service.py:1316-1337: phase_findings joins approval gaps; spec_completeness.split makes any code outside REFUSAL_CODES a gap",
+      "hub/hub/spec_lifecycle.py:392-434: approval stops on gaps unless approve_anyway; warnings_overridden recorded",
+      "hub/ui/src/components/spec/SpecPhaseBar.tsx:68-128: the approve listing renders any gap code generically",
+      "hub/hub/manager.py:46-77: the JOBS registry; vault.py:798-815, 1015-1047: disputed, presumed, superseded flags derived on read",
+      "hub/ui/src/components/spec/SpecDocumentPanel.tsx:253-269: where the document's panels mount"
+    ],
+    "limits": [
+      "Nothing driven yet",
+      "Only Claude (Haiku) will be driven",
+      "Whether Haiku flags the 3,000-euro requirement against the 300-euro fact is a model judgement; the drive requires it because the contradiction is stated in plain numbers"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "When closed, this change folds into the knowledge-vault capability, and the roadmap's specs-against-the-vault slice is then done.",
+  "open_questions": [],
+  "problem": "Specs and the vault do not meet. A requirement written from a meeting transcript carries no link to the facts distilled from it, so when a newer transcript contradicts that fact (the contradictions slice records it), nothing on the spec says so, and the operator approves a requirement the business has since changed. The roadmap's specs-against-the-vault slice: 'A requirement can cite the facts it rests on. A manager job checks requirements against facts and contradictions, and a requirement that contradicts a fact carries a warning on its spec page. Warnings, never gates.' Done means: 'A requirement citing a fact that a newer transcript contradicts shows a warning naming both sources on its spec page; approving the document lists the warning and still allows approve anyway.'",
+  "requirements": [
+    {
+      "key": "requirement-cites-facts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap: a requirement can cite the facts it rests on. An id, not a quote, so the citation follows the fact's marks as they change.",
+      "statement": "A requirement in a spec document MUST accept an optional facts list of vault fact ids (fct- followed by 12 hex characters), kept unchanged through save, read and fold, and the requirement field's schema description MUST tell an author to cite ids it read with vault_map or vault_read. A list holding anything other than such ids MUST be refused on save naming the requirement."
+    },
+    {
+      "key": "cited-fact-warnings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Derived on read, as the vault's own marks are, so the warning appears the moment the contradiction is recorded and never goes stale.",
+      "statement": "For each fact a requirement cites, the Hub MUST derive on read a warning when the fact is disputed by an open contradiction (naming the cited fact's claim and source and the other fact's claim and source, and which one is presumed), when it is superseded (naming the fact that replaced it and its source), when it is disputed by a referred report (naming the report's message), or when no fact with that id is in the vault on this machine. A source held privately on another machine is named as held elsewhere. Resolving the contradiction in the cited fact's favour, or closing the report, MUST clear the warning."
+    },
+    {
+      "key": "check-job",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D7: each manager job names its own runner and model. A requirement nobody cited can still contradict a fact; only a model can see it.",
+      "statement": "The manager's registry MUST include spec-vault-check (trigger document_proposed), disabled with nothing chosen until the operator enables it with a runner. When a document with requirements is proposed, the job is enabled and the vault holds a fact, the Hub MUST, in the background and without delaying the proposal's answer, make one spawn with each requirement's key and statement and each fact's id and claim, and keep from the answer only the conflicts naming a requirement key in the document and a fact id in the vault. It MUST record one manager_job_fired event with job spec-vault-check, trigger document_proposed, subject {document}, outcome written when a conflict was kept, empty when none, failed when the spawn failed or its answer did not parse, and the kept conflicts with the statement each was judged against. POST /vault/warnings/check?path= MUST run the same check with trigger requested, answering 202, 404 for an unknown document and 409 while the job is disabled."
+    },
+    {
+      "key": "warnings-route",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One answer for the spec page and the approval gaps, so the two never disagree. A conflict judged against an earlier wording is not shown as if it were about the new one.",
+      "statement": "GET /vault/warnings?path= MUST answer the document's warnings: every cited-fact warning, then each conflict of the newest spec-vault-check firing for that document whose requirement still has the statement it was judged against. Each warning MUST carry the requirement's key and identifier, its kind (disputed, superseded, reported, missing or conflict), the fact id and a message naming the sources. It MUST answer 404 for an unknown document and an empty list for a document with no warnings."
+    },
+    {
+      "key": "approval-lists-warnings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-08 (approvals are scarce): warn, never gate; approve shows what is missing and approves anyway.",
+      "statement": "Proposal and approval MUST report each warning of GET /vault/warnings as a gap with code vault_warning, where requirements[<index>] and the warning's message. Approval MUST then answer approval_warnings unless approve_anyway is sent, and an approval made anyway MUST record them in warnings_overridden. A vault_warning MUST never be a refusal."
+    },
+    {
+      "key": "warnings-on-spec-page",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roadmap's done sentence names the spec page. A 404 is an un-restarted Hub serving a newer bundle (the :8000 skew).",
+      "statement": "The spec page MUST show a Vault warnings panel listing each warning with the requirement's identifier and statement and the warning's message, and MUST show nothing when there are none or the warnings route answers 404."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/the-knowledge-vault-and-its-manager-roadmap/spec.json",
+    "slice": "specs-against-the-vault"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "An optional facts list on a requirement: the ids of the vault facts it rests on, kept on save and described in the document schema agents read",
+      "Cited-fact warnings derived on read: disputed by an open contradiction, superseded, disputed by a referred report, or not in the vault",
+      "A spec-vault-check manager job (trigger document_proposed) with its own runner and model: one spawn per proposal, and a check-now route",
+      "GET /vault/warnings?path= answering a document's warnings",
+      "Each warning reported as a vault_warning gap at proposal and approval",
+      "A Vault warnings panel on the spec page"
+    ],
+    "non_goals": [
+      "Gating: no warning ever refuses a phase move",
+      "Re-running the job when new facts arrive after proposal: cited-fact warnings are live; the job's conflicts are as of its last firing, and the check-now route re-runs it",
+      "The job suggesting citations or editing the document",
+      "Warnings inside the rendered document HTML",
+      "Capability documents: they are never proposed, so only their cited-fact warnings apply"
+    ]
+  },
+  "summary": "A requirement can name the vault facts it rests on. When a cited fact is disputed by a newer source, superseded, disputed by a report, or not in the vault, the Hub derives a warning on read that names the fact, its source and the other side's source. A new manager job, spec-vault-check, reads a proposed document's requirements against the facts in the vault and records which requirements contradict which facts, cited or not. Both kinds of warning show on the document's spec page and in the gaps an approval lists, where Approve anyway still approves. Warnings, never gates. Tier 1: no migration and no new storage (the job is a registry entry over the existing manager_jobs table, its findings live on its firing event, and cited-fact warnings are derived on read).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1025_specs_against_vault.py, copied from d1017: a scratch Hub, Haiku runner, distillation and spec-vault-check enabled, two dated transcripts, a change document with R1 citing the first fact and R2 citing nothing, approve without and with approve anyway, Chromium for the panel. Recorded failing at its first check before any build task.",
+      "files": [
+        "scripts/drive/d1025_specs_against_vault.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "cited-fact-warnings"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "spec_payload.py: Requirement.facts and its check. vault.py: warnings for a document's cited facts. vault_spec_check.py: the spawn, the id checks, the firing. manager.py: the job. api/v1/vault.py: GET /vault/warnings and POST /vault/warnings/check. spec_service.py: vault_warning gaps in phase_findings and the background check on propose. Failing tests first in test_vault_spec_check.py.",
+      "files": [
+        "hub/hub/spec_payload.py",
+        "hub/hub/vault.py",
+        "hub/hub/vault_spec_check.py",
+        "hub/hub/manager.py",
+        "hub/hub/api/v1/vault.py",
+        "hub/hub/spec_service.py",
+        "hub/tests/test_vault_spec_check.py"
+      ],
+      "from": null,
+      "key": "specs-vault-backend",
+      "requirements": [
+        "requirement-cites-facts",
+        "cited-fact-warnings",
+        "check-job",
+        "warnings-route",
+        "approval-lists-warnings"
+      ],
+      "reviewer": null,
+      "title": "Requirement citations, derived warnings, the spec-vault-check job, the route and the gaps"
+    },
+    {
+      "depends_on": [
+        "specs-vault-backend"
+      ],
+      "description": "SpecVaultWarnings.tsx (spec-vault-warnings, spec-vault-warning-<key>) mounted in SpecDocumentPanel, its hook in api/vault.ts. The vitest comes first; the bundle is committed with the source.",
+      "files": [
+        "hub/ui/src/components/spec/SpecVaultWarnings.tsx",
+        "hub/ui/src/components/spec/SpecDocumentPanel.tsx",
+        "hub/ui/src/api/vault.ts",
+        "hub/ui/src/__tests__/specVaultWarnings.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "specs-vault-panel",
+      "requirements": [
+        "warnings-on-spec-page"
+      ],
+      "reviewer": null,
+      "title": "The Vault warnings panel on the spec page"
+    }
+  ],
+  "title": "A requirement is checked against what the vault recorded"
+}

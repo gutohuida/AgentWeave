@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "072092d",
     "stop_at": "2026-10-11T21:30:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-10-11-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "specs-against-vault-spec",
-    "next_action": "Do queue item specs-against-vault-spec: author the 'specs-against-the-vault' roadmap slice's change with scripts/drive/author_change.py on :8010 (proj-d85a82bf4216); pick the tier; write the acceptance drive from the slice's 'done' sentence in the roadmap (spdoc-7c75066d6403); approve via the Hub; put the Hub task ids in the titles of the later specs-against-vault-* queue items. Design questions: take the recommended option, add an OPEN row in DECISIONS.md.",
+    "current": "specs-against-vault-drive-first",
+    "next_action": "Do queue item specs-against-vault-drive-first: write scripts/drive/d1025_specs_against_vault.py from the 'drive' criterion of spec/changes/a-requirement-is-checked-against-what-the-vault-recorded/spec.json (spdoc-e4f531e0b926), on d1017/d1024's harness (own Hub on a free port 8110+, fresh database, Haiku only, jobs disabled in finally), and record it failing on the current tree at its first check (no spec-vault-check job) without spending a model call.",
     "queue": [
         {
             "id": "merge-gate",
@@ -35,34 +35,34 @@
         },
         {
             "id": "specs-against-vault-spec",
-            "status": "open",
-            "title": "Author the specs-against-the-vault change (Opus)",
+            "status": "done",
+            "title": "Author the specs-against-the-vault change (Opus): spdoc-e4f531e0b926, approved",
             "detail": "Roadmap slice 'specs-against-the-vault'. Use scripts/drive/author_change.py; pick tier; acceptance drive from the slice 'done' sentence; approve via Hub; put Hub task ids in later item titles. Design questions: take recommended option, add OPEN row in DECISIONS.md."
         },
         {
             "id": "specs-against-vault-drive-first",
             "status": "open",
-            "title": "Write d1011_specs_against_vault.py and record it failing",
-            "detail": "Pattern: d1017_contradictions.py, d1024_reports.py."
+            "title": "Write d1025_specs_against_vault.py and record it failing (task-d714d40492de)",
+            "detail": "Doc spec/changes/a-requirement-is-checked-against-what-the-vault-recorded/spec.json, criterion 'drive'. Pattern: d1017_contradictions.py, d1024_reports.py. Own Hub on a free port 8110+, fresh DB; Haiku runner; vault-distillation + spec-vault-check enabled (disabled in finally). Expected first failure: no spec-vault-check job."
         },
         {
             "id": "specs-against-vault-backend-impl",
             "status": "open",
-            "title": "Backend: requirement fact citations + checker job + warnings",
-            "detail": "Tests first at the seam. Opus if hard. Read .claude/rules for mcp_server/migrations if touched. Split -a/-b rather than leave dirty.",
+            "title": "Backend (task-bbdb6b3ed737): Requirement.facts, derived warnings, spec-vault-check job, /vault/warnings routes, vault_warning gaps",
+            "detail": "Files and order in the task description (spdoc-e4f531e0b926). Tests first in hub/tests/test_vault_spec_check.py. No migration. Opus if hard. Split -a/-b rather than leave dirty.",
             "model": "opus"
         },
         {
             "id": "specs-against-vault-tab-impl",
             "status": "open",
-            "title": "UI: warning on spec page and in approve listing",
-            "detail": "vitest first, npm run build, refresh_ui_bundle.py; commit src and static together; name the bundle in the log (reaches :8000 on reload)."
+            "title": "UI (task-1bd2eb7dabae): SpecVaultWarnings panel in SpecDocumentPanel",
+            "detail": "vitest first (src/__tests__/specVaultWarnings.test.tsx), npm run build, refresh_ui_bundle.py; commit src and static together; name the bundle in the log (reaches :8000 on reload). 404 renders nothing."
         },
         {
             "id": "specs-against-vault-drive",
             "status": "open",
             "title": "Acceptance drive green on committed tree, scratch Hub 8110+",
-            "detail": "Haiku only; full Hub suite chunks and vitest; record evidence on :8010 without landing; METRICS row."
+            "detail": "d1025 green on committed tree, scratch Hub 8110+; Haiku only; full Hub suite chunks and vitest; record evidence on :8010 (close_change.py entry, pattern freports) without landing; METRICS row."
         },
         {
             "id": "ledger-close",
@@ -71,7 +71,11 @@
             "detail": "py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-11"
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": [
+        "build-1011-1",
+        "build-1011-2",
+        "build-1011-3"
+    ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window's merge-gate item (build-window.md, 'The merge gate'), which may fast-forward master to this branch with 'git fetch . <branch>:master' and 'git push origin master' when all four gate conditions hold -- operator, 2026-10-11 (DECISIONS.md away-1011). Never a merge commit, never a conflict resolved.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

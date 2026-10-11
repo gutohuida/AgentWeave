@@ -35336,3 +35336,11 @@ The "Depends on" picker added for F571 (`97ef44f`) called `useTasks()` binding o
 The build playbook's close step ends "mark the slice done in the roadmap document through the Hub" (`.claude/loops/build-window.md:101`). There is nothing to mark: a slice carries `key`, `title`, `intent`, `done`, `builds_after` and no state (`hub/hub/spec_payload.py`, `_check_kind_shape`), and `spec_render._slices` (`hub/hub/spec_render.py:444-460`) renders only those fields. A slice is closed when the change document naming it (`roadmap.slice`) is archived, but nothing joins the two for a reader: the roadmap page reads the same after `sources-that-disagree-are-pointed-out` was folded and archived (200) as before. Each loop composes by listing `spec/changes/` and `spec/changes/archive/` and matching slice keys by hand (`build-window.md:27-30`).
 
 **Fix shape (not decided):** derive each slice's state on read from the change document that names it (none / exploring / proposed / approved / archived), as `roadmap_states` already does in the other direction (`hub/hub/spec_service.py:1197`), and show it beside the slice on the roadmap page. Tier 1.
+
+## F580 (C) -- `approve_anyway` sent as a query parameter is silently ignored
+
+**Status:** open 2026-10-11. Measured 2026-10-10 (vault loop iteration 5, `2026-10-10-vault-log.md`); not re-measured today (the 2026-10-11 approval of `spdoc-e4f531e0b926` sent the body field and got 200). Unfiled until now.
+
+`POST /projects/{id}/project/documents/phase?path=...&to=approved&approve_anyway=true` answers the same 409 `approval_warnings` as without it: `path` and `to` are query parameters (`hub/hub/api/v1/spec.py`, `set_phase`) but `approve_anyway` is a field of the `PhaseRequest` body (`spec.py:411-428`), and FastAPI drops an unknown query parameter without a word. The 409's message ("fix them, or approve anyway", `hub/hub/spec_lifecycle.py:409-412`) does not name the field or where it goes, so a caller following the message repeats the same request. The body `{"approve_anyway": true}` approves (200).
+
+**Fix shape (not decided):** name the body field in the `approval_warnings` message, or refuse unknown query parameters on the phase route with a 400 naming them. Tier 0.
