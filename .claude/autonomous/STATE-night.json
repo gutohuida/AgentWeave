@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "refill-3-compose",
-    "next_action": "Run queue item refill-3-compose: refill the queue from the backlog (read BACKLOG.html's embedded open list; skip Codex-only F461/F325/F322, F139, F273, F378 and anything already built or held). Pick one ready A/B finding that is still present in code, not held by the build log, and not named by an unarchived openspec change; queue its impl item plus refill-4-compose. If none qualifies, set next_action to null.",
+    "current": "f546-impl",
+    "next_action": "Run queue item f546-impl: Tier 0 fix for F546. In hub/hub/spec_tasks.py, _title_for cuts a declared title with declared.strip()[:MAX_TITLE] (mid-word); make it clip at the last word boundary with the ellipsis, the same clip _title_from uses (factor it out, keep the single-long-word hard cut). Write the failing test first at the materialisation seam, fix, run the spec-task tests under py -3.11, drive on a fresh source Hub on a free port (declare a 200-char task title in a document, materialise, read the task title back), set F546's Status line in scripts/drive/FINDINGS.md, append METRICS row.",
     "queue": [
         {
             "id": "compose",
@@ -65,9 +65,21 @@
         },
         {
             "id": "refill-3-compose",
+            "status": "done",
+            "title": "Refill the queue from the backlog if it empties before 05:00",
+            "detail": "No ready A/B finding qualified (F413 re-read: needs a prune-window design call). Widened to ready C per night-window.md 'Tier-0 findings by severity' (iteration 1 queued C F580). Picked F546: spec_tasks.py _title_for cuts a declared title at 80 chars mid-word; _title_from beside it already clips at a word boundary."
+        },
+        {
+            "id": "f546-impl",
+            "status": "open",
+            "title": "F546 (C, Tier 0): a declared task title is cut to 80 characters mid-word",
+            "detail": "hub/hub/spec_tasks.py _title_for: declared.strip()[:MAX_TITLE] -> clip at the last word boundary with the ellipsis, as _title_from does (share the clip). Test first at the materialisation seam (a 200-char declared title becomes a whole-word title ending in the ellipsis); drive on a fresh source Hub: declare the title in a document, materialise, read the task back."
+        },
+        {
+            "id": "refill-4-compose",
             "status": "open",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Same rule as refill-2. Null next_action if none."
+            "detail": "Same rule as refill-3 (A/B first, then ready C Tier 0 by the playbook). Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
         }
     ],
     "decisions_for_user": [],
