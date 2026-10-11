@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f419-impl",
-    "next_action": "Build queue item f419-impl (Tier 0, UI): OverviewPage.tsx's activity strip (:109) reads the instance-wide getBufferedEvents() with no project filter, and its amber dot (:218) tests severity === 'warning' while the Hub writes 'warn'. Test first in hub/ui/src/__tests__/ (a foreign project's event must not reach the strip; a severity 'warn' event shows amber) -- both must fail before the fix; filter by data.project_id === selectedProjectId as ActivityLog.tsx:65 does, test 'warn'; npm run lint, full vitest, refresh the bundle (scripts/refresh_ui_bundle.py), commit hub/ui/src and hub/hub/static/ui together; drive it in a browser against a fresh source Hub on a free port with two projects; set F419's Status line.",
+    "current": "refill-2-compose",
+    "next_action": "Run queue item refill-2-compose: read the BACKLOG.html embedded open list (or spec-queue/BACKLOG.html) and pick the next ready Tier-0 finding by severity (B before C). Candidates left unexamined from refill-1: F461, F325 (B, ready); F454, F563, F523 are Tier-1-sized. Skip F579/F581/F413, Codex-only findings (Codex is undrivable), anything the build log holds or an openspec change covers, and F417/F444 (shape is a change's, not a Tier 0 diff). Verify the finding is still present in code before queueing it as f-NNN-impl plus a refill-3-compose item; if no ready Tier-0 finding exists, set next_action to null. Compose only, nothing built.",
     "queue": [
         {
             "id": "compose",
@@ -47,9 +47,9 @@
         },
         {
             "id": "f419-impl",
-            "status": "open",
+            "status": "done",
             "title": "F419 (B): Overview activity strip shows every project's events; its warning dot never fires",
-            "detail": "Filter by project id as ActivityLog does; test severity 'warn'. Test first, bundle refresh, browser drive with two projects."
+            "detail": "Fixed 61f9bc1: OverviewPage filters the buffer by project id and tests 'warn'; 3 vitest (failed before) + browser drive 12/12 with two projects; bundle rebuilt."
         },
         {
             "id": "refill-2-compose",
