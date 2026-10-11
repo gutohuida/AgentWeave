@@ -35080,7 +35080,7 @@ The payload allows a declared task `title` of 200 characters (`spec_payload.py:1
 
 ## F547 (C) -- the fold draft is served for a change that is not approved
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code). Minor: the fold itself refuses.
+**Status:** fixed a530484. Filed 2026-10-08 (spec overhaul audit, reading code). Minor: the fold itself refuses. Fixed 2026-10-12 (night iteration 13): `spec_service._require_approved_change` is shared by `fold_draft` and `fold`; route test and drive `d1012_f547_fold_draft_phase.py` (11/11, 1 fail pre-fix).
 
 `GET …/fold-draft` has no phase check (`spec_service.py:877-900`), so the app can show a draft for an exploring change.
 

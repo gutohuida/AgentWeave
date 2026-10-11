@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f547-impl",
-    "next_action": "Run queue item f547-impl: F547 (C, Tier 0). Write a route test that GET /project/documents/{change}/fold-draft?into={cap} for a change that is not approved (exploring and proposed) answers 409 with code fold_change_not_approved; confirm it fails before the fix. Move fold()'s approved-change-spec refusal (spec_service.py ~1013) into fold_draft (~869) so both share it; keep existing fold tests green (hub/tests/test_a_finished_change_is_folded_into_its_capability.py and the fold/retire tests). Drive the route on a fresh source Hub on a free port with a testbed DB. Set F547's Status line, append METRICS row, then next_action -> refill-5-compose.",
+    "current": "refill-5-compose",
+    "next_action": "Run queue item refill-5-compose: refill from the backlog (BACKLOG.html, scripts/drive/FINDINGS.md). If the time is at or after 05:00 or no ready finding fits a Tier 0 slice (candidates already passed over: F560, F445/F446, F455, F492, F449, F413, Codex-only F461/F325/F322), set next_action to null and write the closing entry per night-window.md 'Ending the window'. Otherwise queue one finding as f<id>-impl plus refill-6-compose.",
     "queue": [
         {
             "id": "compose",
@@ -83,9 +83,9 @@
         },
         {
             "id": "f547-impl",
-            "status": "open",
+            "status": "done",
             "title": "F547 (C, Tier 0): the fold draft is served for a change that is not approved",
-            "detail": "Test first at the route: fold-draft for an exploring/proposed change answers 409 fold_change_not_approved (fails before). Fix: the approved-change-spec refusal lives in spec_service.fold_draft (fold() keeps it via the call). Drive the route on a fresh source Hub (not 8000/8010)."
+            "detail": "Fixed a530484: _require_approved_change shared by fold_draft and fold; route test failed before; drive 11/11."
         },
         {
             "id": "refill-5-compose",
