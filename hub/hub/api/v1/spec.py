@@ -21,7 +21,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import Field
 from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -2430,6 +2430,7 @@ async def _refresh_index_entry(
 
 @router.post("/documents/phase")
 async def set_phase(
+    request: Request,
     body: Optional[PhaseRequest] = None,
     path: str = Query(...),
     to: str = Query(...),
@@ -2445,6 +2446,20 @@ async def set_phase(
     # F204/F210: every field of the body is optional, so a call with no body at all is a complete
     # request; without the default FastAPI refused it as malformed before the route could run.
     body = body or PhaseRequest()
+
+    # F580: only `path` and `to` are query parameters. FastAPI drops any other one without a word,
+    # so a body field sent in the query string (`approve_anyway`) was ignored and the caller got the
+    # same 409 back. Name what was misplaced rather than ignore it.
+    misplaced = sorted(set(request.query_params) - {"path", "to"})
+    if misplaced:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"{', '.join(misplaced)} sent as a query parameter; only path and to go in the "
+                "query string, the rest go in the JSON request body"
+            ),
+        )
+
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     document = await _require_document(session, project_id, path)

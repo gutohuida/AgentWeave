@@ -408,7 +408,8 @@ async def transition(
             raise PhaseError(
                 "this document has gaps: "
                 + ", ".join(dict.fromkeys(g["code"] for g in found.gaps))
-                + "; fix them, or approve anyway",
+                + "; fix them, or approve anyway by sending approve_anyway: true in the "
+                "request body (not as a query parameter)",
                 code="approval_warnings",
                 warnings=found.gaps,
             )

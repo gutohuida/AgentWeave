@@ -144,6 +144,39 @@ async def test_approve_lists_the_gaps_and_stays_proposed_until_approve_anyway(
 
 
 @pytest.mark.asyncio
+async def test_approve_anyway_sent_as_a_query_parameter_is_refused_not_ignored(
+    app, auth_headers, run_headers, tmp_path  # noqa: F811
+):
+    """F580: `approve_anyway` is a body field; as a query parameter FastAPI dropped it and the
+    caller got the same 409 back, with a message that never said where the field goes."""
+    await _proposed_with_a_gap(app, auth_headers, run_headers)
+
+    misplaced = await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PATH, "to": "approved", "approve_anyway": "true"},
+        json={"reason": ""},
+        headers=auth_headers,
+    )
+
+    assert misplaced.status_code == 400, misplaced.text
+    assert "approve_anyway" in misplaced.json()["detail"]
+    assert "body" in misplaced.json()["detail"]
+    assert await _phase_of() == "proposed"
+
+
+@pytest.mark.asyncio
+async def test_the_approval_warnings_message_says_where_approve_anyway_goes(
+    app, auth_headers, run_headers, tmp_path  # noqa: F811
+):
+    await _proposed_with_a_gap(app, auth_headers, run_headers)
+
+    refused = await _phase(app, auth_headers, "approved")
+
+    message = refused.json()["detail"]["message"]
+    assert "approve_anyway" in message and "body" in message
+
+
+@pytest.mark.asyncio
 async def test_a_clean_approval_records_that_it_overrode_nothing_and_a_reopen_forgets(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
 ):
