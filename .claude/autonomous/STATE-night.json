@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ci-fix-done",
-    "next_action": "Refill (queue item refill-1-compose): read spec-queue/BACKLOG.html's open list (one command, do not cat FINDINGS.md), pick the next ready Tier-0 finding by severity (skip F579/F581 which are Tier 1, skip F413 unless its section says Tier 0 and it is clear, skip anything the build-window log holds or an openspec change in openspec/changes/ covers), and write ONE queue item for it, setting current/next_action to build it. If no ready Tier-0 finding remains, set next_action to null.",
+    "current": "f419-impl",
+    "next_action": "Build queue item f419-impl (Tier 0, UI): OverviewPage.tsx's activity strip (:109) reads the instance-wide getBufferedEvents() with no project filter, and its amber dot (:218) tests severity === 'warning' while the Hub writes 'warn'. Test first in hub/ui/src/__tests__/ (a foreign project's event must not reach the strip; a severity 'warn' event shows amber) -- both must fail before the fix; filter by data.project_id === selectedProjectId as ActivityLog.tsx:65 does, test 'warn'; npm run lint, full vitest, refresh the bundle (scripts/refresh_ui_bundle.py), commit hub/ui/src and hub/hub/static/ui together; drive it in a browser against a fresh source Hub on a free port with two projects; set F419's Status line.",
     "queue": [
         {
             "id": "compose",
@@ -41,9 +41,21 @@
         },
         {
             "id": "refill-1-compose",
+            "status": "done",
+            "title": "Refill the queue from the backlog if it empties before 05:00",
+            "detail": "Picked F419 (B, Tier 0, UI): ready, still present in code at OverviewPage.tsx:109/:218, not held by the build log, no openspec change names it."
+        },
+        {
+            "id": "f419-impl",
+            "status": "open",
+            "title": "F419 (B): Overview activity strip shows every project's events; its warning dot never fires",
+            "detail": "Filter by project id as ActivityLog does; test severity 'warn'. Test first, bundle refresh, browser drive with two projects."
+        },
+        {
+            "id": "refill-2-compose",
             "status": "open",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "away-1011 rule: pick ready Tier-0 findings by severity, skip F579/F581 (Tier 1), skip anything build-window logs hold."
+            "detail": "Same rule as refill-1: next ready Tier-0 finding by severity; skip F579/F581/F413, Codex-only findings (Codex is undrivable), anything the build log holds or an openspec change covers. Null next_action if none."
         }
     ],
     "decisions_for_user": [],
