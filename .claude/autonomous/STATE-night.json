@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f580-impl",
-    "next_action": "Build F580 as Tier 0 (scripts/drive/FINDINGS.md section F580): a test failing at the seam (phase route, approve_anyway sent as a query parameter), the fix (name the body field in the approval_warnings message, or 400 on the unknown query parameter), CI's lint set, a mutation check, a drive against a fresh drive Hub (see night-window.md 'Driving'), then set **Status:** fixed <sha>. Run tests/ and the relevant hub/tests.",
+    "current": "f412-impl",
+    "next_action": "Build F412 as Tier 0 if it fits (scripts/drive/FINDINGS.md section F412; hub/hub/scheduler.py ~3399-3440, hub/hub/api/v1/jobs.py ~1372): first read which firing-end reasons are truly terminal (F108); if deciding that needs a spec, stop, record it in the log and mark the item skipped for the day window. Otherwise: failing test at the Run route seam, fix, CI lint set, mutation check, drive on a fresh drive Hub (night-window.md 'Driving'), set **Status:** fixed <sha>. Run tests/ and the relevant hub/tests.",
     "queue": [
         {
             "id": "compose",
@@ -23,9 +23,9 @@
         },
         {
             "id": "f580-impl",
-            "status": "open",
+            "status": "done",
             "title": "F580 (C, Tier 0): approve_anyway as query param silently ignored",
-            "detail": "hub/hub/api/v1/spec.py set_phase / PhaseRequest (~411-428). Failing test at the route first."
+            "detail": "Fixed fc7e37d; route refuses misplaced query params, message names the body field; drive 4/4."
         },
         {
             "id": "f412-impl",

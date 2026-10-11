@@ -35339,7 +35339,7 @@ The build playbook's close step ends "mark the slice done in the roadmap documen
 
 ## F580 (C) -- `approve_anyway` sent as a query parameter is silently ignored
 
-**Status:** open 2026-10-11. Measured 2026-10-10 (vault loop iteration 5, `2026-10-10-vault-log.md`); not re-measured today (the 2026-10-11 approval of `spdoc-e4f531e0b926` sent the body field and got 200). Unfiled until now.
+**Status:** fixed fc7e37d (2026-10-11, Tier 0): the phase route answers 400 naming any query parameter other than `path`/`to` (`set_phase`, `hub/hub/api/v1/spec.py`), and the `approval_warnings` message says `approve_anyway: true` goes in the request body (`spec_lifecycle.py`). Tests `test_approve_anyway_sent_as_a_query_parameter_is_refused_not_ignored` and `test_the_approval_warnings_message_says_where_approve_anyway_goes`, each mutation-checked; drive `scripts/drive/d1011_f580_phase_query.py` 4/4 on a fresh Hub. Originally open 2026-10-11. Measured 2026-10-10 (vault loop iteration 5, `2026-10-10-vault-log.md`); not re-measured today (the 2026-10-11 approval of `spdoc-e4f531e0b926` sent the body field and got 200). Unfiled until now.
 
 `POST /projects/{id}/project/documents/phase?path=...&to=approved&approve_anyway=true` answers the same 409 `approval_warnings` as without it: `path` and `to` are query parameters (`hub/hub/api/v1/spec.py`, `set_phase`) but `approve_anyway` is a field of the `PhaseRequest` body (`spec.py:411-428`), and FastAPI drops an unknown query parameter without a word. The 409's message ("fix them, or approve anyway", `hub/hub/spec_lifecycle.py:409-412`) does not name the field or where it goes, so a caller following the message repeats the same request. The body `{"approve_anyway": true}` approves (200).
 
