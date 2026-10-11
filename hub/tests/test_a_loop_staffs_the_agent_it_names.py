@@ -306,7 +306,9 @@ async def test_a_busy_flow_still_staffs_the_free_sibling(app, auth_headers, bind
     scheduler = JobScheduler()
     async with async_session_factory() as db:
         fresh_job = await db.get(AIJob, job.id)
-        assert await scheduler._fire_job_internal(fresh_job, "scheduled", session=db) is True
+        # Not asserted: whether alpha's turn then begins depends on `claude` being on PATH (CI has
+        # none), and since F412 a turn that cannot begin answers False. Staffing is what this checks.
+        await scheduler._fire_job_internal(fresh_job, "scheduled", session=db)
 
     async with async_session_factory() as db:
         fresh_task = await _fresh_task(db, task.id)

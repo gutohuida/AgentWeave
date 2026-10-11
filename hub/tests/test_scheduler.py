@@ -214,7 +214,8 @@ async def test_job_that_cannot_start_records_the_queue_reason_as_failed():
             fresh_job = await db.get(AIJob, job.id)
             success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
 
-    assert success is True
+    # F412: the answer agrees with the failed row, so a press is told no turn began.
+    assert success is False
     async with async_session_factory() as db:
         run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
         assert run.status == "failed"
@@ -251,7 +252,8 @@ async def test_a_request_level_refusal_still_fails_the_job_run():
             fresh_job = await db.get(AIJob, job.id)
             success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
 
-    assert success is True
+    # F412: the answer agrees with the failed row, so a press is told no turn began.
+    assert success is False
     async with async_session_factory() as db:
         run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
         assert run.status == "failed"
