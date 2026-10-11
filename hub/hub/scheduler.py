@@ -3939,7 +3939,8 @@ class JobScheduler:
             )
             await sse_manager.broadcast(job.project_id, "queue_entry_queued", queue_payload)
             schedule_result = await schedule_agent(job.project_id, acting_agent)
-            if schedule_result.waiting_reason and schedule_result.terminal_failure:
+            turn_began = not (schedule_result.waiting_reason and schedule_result.terminal_failure)
+            if not turn_began:
                 # This is the same terminal outcome startup reconciliation would eventually
                 # record, reached honestly at the moment the Hub knows no turn began. Reusing
                 # `failed` also keeps JobCard's existing error-summary presentation.
@@ -3979,7 +3980,10 @@ class JobScheduler:
             await self._start_additional_turns(job.project_id, staged_extras)
 
             logger.info(f"Job {job.id} fired (trigger: {trigger})")
-            return True
+            # The row above already says `failed`; the answer agrees with it (F412), so a press
+            # is told no turn began instead of `200 {"success": true}`. The firing's events and
+            # extra selections above are still owed, which is why this is the last line.
+            return turn_began
 
         except Exception as e:
             error_summary = _safe_error_summary(e)

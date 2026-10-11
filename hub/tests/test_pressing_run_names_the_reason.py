@@ -384,3 +384,44 @@ async def test_a_concurrent_ticks_row_is_not_read_as_a_failure(app, auth_headers
     detail = res.json()["detail"]
     assert "is already running a turn" in detail
     assert SCOPE in detail
+
+
+async def test_a_press_whose_turn_cannot_begin_is_not_answered_success(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """F412. `schedule_agent` reports no turn began (`terminal_failure`); the firing marks its row
+    `failed`, and the press must say so rather than answer `200 {"success": true}`."""
+    from unittest.mock import AsyncMock
+
+    from hub.turn_scheduler import ScheduleResult
+
+    await _roster(app, auth_headers, bind_runner, "press-owner15")
+    async with async_session_factory() as db:
+        job, _loop, _task = await _make_loop_job(db, suffix="press-15", agent="press-owner15")
+    refused = ScheduleResult(waiting_reason="press 15: runner refused", terminal_failure=True)
+    with patch("hub.turn_scheduler.schedule_agent", AsyncMock(return_value=refused)):
+        res = await _run(app, auth_headers, job)
+    assert res.status_code == 500, res.text
+    assert "press 15: runner refused" in res.json()["detail"]
+    rows = await _rows(job.id)
+    assert [(r.status, r.error_summary) for r in rows] == [("failed", "press 15: runner refused")]
+
+
+async def test_a_press_whose_turn_is_merely_waiting_is_still_success(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """F412's control: a waiting reason that is not terminal leaves the row `in_progress` and the
+    answer `200`, so the fix cannot be a blanket reading of `waiting_reason`."""
+    from unittest.mock import AsyncMock
+
+    from hub.turn_scheduler import ScheduleResult
+
+    await _roster(app, auth_headers, bind_runner, "press-owner16")
+    async with async_session_factory() as db:
+        job, _loop, _task = await _make_loop_job(db, suffix="press-16", agent="press-owner16")
+    waiting = ScheduleResult(waiting_reason="agent is already running", terminal_failure=False)
+    with patch("hub.turn_scheduler.schedule_agent", AsyncMock(return_value=waiting)):
+        res = await _run(app, auth_headers, job)
+    assert res.status_code == 200, res.text
+    assert res.json()["success"] is True
+    assert [r.status for r in await _rows(job.id)] == ["in_progress"]
