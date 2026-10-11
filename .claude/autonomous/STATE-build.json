@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "072092d",
     "stop_at": "2026-10-11T21:30:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-11-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "specs-against-vault-drive-first",
-    "next_action": "Do queue item specs-against-vault-drive-first: write scripts/drive/d1025_specs_against_vault.py from the 'drive' criterion of spec/changes/a-requirement-is-checked-against-what-the-vault-recorded/spec.json (spdoc-e4f531e0b926), on d1017/d1024's harness (own Hub on a free port 8110+, fresh database, Haiku only, jobs disabled in finally), and record it failing on the current tree at its first check (no spec-vault-check job) without spending a model call.",
+    "current": "specs-against-vault-backend-impl",
+    "next_action": "Do queue item specs-against-vault-backend-impl (task-bbdb6b3ed737): failing tests first in hub/tests/test_vault_spec_check.py from criteria cites-kept, derived, job, reworded, gaps of spec/changes/a-requirement-is-checked-against-what-the-vault-recorded/spec.json, then spec_payload.py Requirement.facts, vault.py cited-fact warnings, vault_spec_check.py, manager.py job, api/v1/vault.py GET /vault/warnings + POST /vault/warnings/check, spec_service.py vault_warning gaps + background check on propose. No migration. If it will not fit in one turn, split -a/-b and commit a green half; never leave dirty. d1025_specs_against_vault.py must then pass check 1 (run it only once the whole backend is in; it spends Haiku calls).",
     "queue": [
         {
             "id": "merge-gate",
@@ -41,7 +41,7 @@
         },
         {
             "id": "specs-against-vault-drive-first",
-            "status": "open",
+            "status": "done",
             "title": "Write d1025_specs_against_vault.py and record it failing (task-d714d40492de)",
             "detail": "Doc spec/changes/a-requirement-is-checked-against-what-the-vault-recorded/spec.json, criterion 'drive'. Pattern: d1017_contradictions.py, d1024_reports.py. Own Hub on a free port 8110+, fresh DB; Haiku runner; vault-distillation + spec-vault-check enabled (disabled in finally). Expected first failure: no spec-vault-check job."
         },
