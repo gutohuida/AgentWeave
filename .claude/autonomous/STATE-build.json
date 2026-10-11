@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "072092d",
     "stop_at": "2026-10-11T21:30:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-11-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "specs-against-vault-tab-impl",
-    "next_action": "Do queue item specs-against-vault-tab-impl (task-1bd2eb7dabae): vitest first in hub/ui/src/__tests__/specVaultWarnings.test.tsx for a SpecVaultWarnings panel in SpecDocumentPanel reading GET /projects/{id}/vault/warnings?path= (warnings: key, identifier, index, statement, kind, fact, message; 404 renders nothing, empty renders nothing), testid spec-vault-warning-<key> as d1025 check 9 expects (read the drive for selectors), plus a check-now button on POST /vault/warnings/check. npm run lint + build, scripts/refresh_ui_bundle.py, commit hub/ui/src and hub/hub/static/ui together, name the bundle in the log. Wait for every background command before ending the turn.",
+    "current": "specs-against-vault-drive",
+    "next_action": "Do queue item specs-against-vault-drive: run scripts/drive/d1025_specs_against_vault.py on the committed tree (own Hub on port 8110+, Haiku only, run it in the FOREGROUND or wait for it; never end the turn with it running) and expect all 9 checks green (check 9 reads the panel from the committed bundle in hub/hub/static/ui). Then full Hub suite in chunks (a background run dies when the turn ends, so wait), vitest, ruff/black; record evidence on :8010 (close_change.py entry, pattern freports) without landing; append a spec-queue/METRICS.md row; log; commit and push.",
     "queue": [
         {
             "id": "merge-gate",
@@ -54,8 +54,8 @@
         },
         {
             "id": "specs-against-vault-tab-impl",
-            "status": "open",
-            "title": "UI (task-1bd2eb7dabae): SpecVaultWarnings panel in SpecDocumentPanel",
+            "status": "done",
+            "title": "UI (task-1bd2eb7dabae): SpecVaultWarnings panel in SpecDocumentPanel -- done; bundle index-DP8wZ2YV.js",
             "detail": "vitest first (src/__tests__/specVaultWarnings.test.tsx), npm run build, refresh_ui_bundle.py; commit src and static together; name the bundle in the log (reaches :8000 on reload). 404 renders nothing."
         },
         {

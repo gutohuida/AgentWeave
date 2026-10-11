@@ -262,3 +262,47 @@ export function useCloseVaultReport() {
     },
   })
 }
+
+/** One warning on a spec requirement, as `GET /vault/warnings?path=` lists it
+ *  (`a-requirement-is-checked-against-what-the-vault-recorded`). `kind` is a cited fact's state
+ *  (`disputed`, `superseded`, `reported`, `missing`) or `conflict`, the spec-vault-check job's. */
+export interface VaultWarning {
+  key: string
+  identifier: string
+  index: number
+  statement: string
+  kind: string
+  fact: string | null
+  message: string
+}
+
+/** A document's warnings from the vault. A 404 is a Hub that predates them, or a document it does
+ *  not know, which the panel reads as no warnings. */
+export function useVaultWarnings(path: string) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<VaultWarning[]>({
+    queryKey: ['project', projectId, 'vault', 'warnings', path],
+    queryFn: async () =>
+      (
+        await getJson<{ warnings: VaultWarning[] }>(
+          `/api/v1/projects/${projectId}/vault/warnings?path=${encodeURIComponent(path)}`,
+        )
+      ).warnings,
+    enabled: isConfigured && !!projectId && !!path,
+    retry: (count, error) => !isNoVault(error) && count < 2,
+  })
+}
+
+/** Check a document against the vault again. 202: the job runs in the background and its conflicts
+ *  reach the warnings when it finishes. 409 carries the reason it cannot run (the job is off or
+ *  has no runner). */
+export function useCheckVaultWarnings() {
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: (path: string) =>
+      postJson<{ document: string; queued: boolean }>(
+        `/api/v1/projects/${projectId}/vault/warnings/check?path=${encodeURIComponent(path)}`,
+        {},
+      ),
+  })
+}

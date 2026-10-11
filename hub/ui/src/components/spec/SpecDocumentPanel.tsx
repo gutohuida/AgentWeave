@@ -5,6 +5,7 @@ import { SpecApprovalReport } from './SpecApprovalReport'
 import { SpecAmendmentsPanel } from './SpecAmendmentsPanel'
 import { SpecCoverageBar } from './SpecCoverageBar'
 import { SpecDriftPanel } from './SpecDriftPanel'
+import { SpecVaultWarnings } from './SpecVaultWarnings'
 import { SpecRetiredRequirements } from './SpecRetiredRequirements'
 import { SpecProposalsPanel } from './SpecProposalsPanel'
 import { SpecDocumentTasksLink } from './SpecDocumentTasksLink'
@@ -252,6 +253,7 @@ export function SpecDocumentPanel({
           bar, beside its own Start a flow…/Flow control — never a second one. */}
       <SpecApprovalReport path={path} />
       <SpecAmendmentsPanel path={path} />
+      <SpecVaultWarnings path={path} />
 
       {/* Which requirements this document has work for, and which of that work is actually in the
           product. Under the phase bar because it is about what the document *says*, not about
