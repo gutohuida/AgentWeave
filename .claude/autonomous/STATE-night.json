@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 11,
+    "iteration": 12,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "refill-4-compose",
-    "next_action": "Run queue item refill-4-compose: refill from the backlog if before 05:00 (A/B ready findings first, then ready C Tier 0 per night-window.md 'Tier-0 findings by severity'; passed over so far: F461/F325/F322 Codex-only, F139, F273, F378, F413, F417, F444, F454, F563, F523, F492, F449). If one qualifies, add its impl item plus a refill-5-compose and set next_action to it. If none, or at/after 05:00, write the closing entry per night-window.md 'Ending the window' and set next_action to null.",
+    "current": "f547-impl",
+    "next_action": "Run queue item f547-impl: F547 (C, Tier 0). Write a route test that GET /project/documents/{change}/fold-draft?into={cap} for a change that is not approved (exploring and proposed) answers 409 with code fold_change_not_approved; confirm it fails before the fix. Move fold()'s approved-change-spec refusal (spec_service.py ~1013) into fold_draft (~869) so both share it; keep existing fold tests green (hub/tests/test_a_finished_change_is_folded_into_its_capability.py and the fold/retire tests). Drive the route on a fresh source Hub on a free port with a testbed DB. Set F547's Status line, append METRICS row, then next_action -> refill-5-compose.",
     "queue": [
         {
             "id": "compose",
@@ -77,9 +77,21 @@
         },
         {
             "id": "refill-4-compose",
+            "status": "done",
+            "title": "Refill the queue from the backlog if it empties before 05:00",
+            "detail": "Picked F547 (C, Tier 0, audit): GET .../fold-draft (api/v1/spec.py:3002 -> spec_service.fold_draft:869) has no change-phase check, while fold() refuses anything but an approved change-spec. One sentence: move that refusal into fold_draft so both paths share it. FoldIntoCapabilityDialog already renders draft.isError. Passed over: F560 (~70 test files, mechanical sweep, not Tier 0-sized), F445/F446 (posture/path-rule hazard), F455 (CLI, needs a design for which DB backs a port)."
+        },
+        {
+            "id": "f547-impl",
+            "status": "open",
+            "title": "F547 (C, Tier 0): the fold draft is served for a change that is not approved",
+            "detail": "Test first at the route: fold-draft for an exploring/proposed change answers 409 fold_change_not_approved (fails before). Fix: the approved-change-spec refusal lives in spec_service.fold_draft (fold() keeps it via the call). Drive the route on a fresh source Hub (not 8000/8010)."
+        },
+        {
+            "id": "refill-5-compose",
             "status": "open",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Same rule as refill-3 (A/B first, then ready C Tier 0 by the playbook). Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
+            "detail": "Same rule as refill-4. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
         }
     ],
     "decisions_for_user": [],
