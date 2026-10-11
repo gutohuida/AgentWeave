@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 13,
+    "iteration": 14,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "refill-5-compose",
-    "next_action": "Run queue item refill-5-compose: refill from the backlog (BACKLOG.html, scripts/drive/FINDINGS.md). If the time is at or after 05:00 or no ready finding fits a Tier 0 slice (candidates already passed over: F560, F445/F446, F455, F492, F449, F413, Codex-only F461/F325/F322), set next_action to null and write the closing entry per night-window.md 'Ending the window'. Otherwise queue one finding as f<id>-impl plus refill-6-compose.",
+    "current": "f576-impl",
+    "next_action": "Run queue item f576-impl: reproduce F576 in a throwaway worktree (commit a dummy file under hub/hub/migrations/versions, run the two tests, see them fail), then remove both 'adds no migration' tests and any imports they alone used, run the two test files under py -3.11 plus ruff/black, set F576's Status to fixed <sha>, append a METRICS row, log, state, commit and push.",
     "queue": [
         {
             "id": "compose",
@@ -89,9 +89,21 @@
         },
         {
             "id": "refill-5-compose",
+            "status": "done",
+            "title": "Refill the queue from the backlog if it empties before 05:00",
+            "detail": "Picked F576 (C, Tier 0, test hazard): the two 'adds no migration' tests diff the whole branch against master, so any cycle branch carrying a migration turns them red; both slices shipped. Passed over: F366 (maybe already closed by B3, check the ledger), F465/F443 (operator policy questions), plus the earlier passes."
+        },
+        {
+            "id": "f576-impl",
+            "status": "open",
+            "title": "F576 (C, Tier 0): the 'adds no migration' tests fail on any branch that carries a migration",
+            "detail": "Remove test_spec_task_files.py::test_the_slice_adds_no_migration and test_spec_undeclared_files_warning.py::test_the_change_adds_no_migration (both slices shipped; the check measured branch distance from master, not the slice). Repro first: a throwaway worktree with a dummy migration committed makes both red. Then drop unused imports, run both files, set the F576 Status line, add a METRICS row."
+        },
+        {
+            "id": "refill-6-compose",
             "status": "open",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Same rule as refill-4. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
+            "detail": "Same rule as refill-5. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
         }
     ],
     "decisions_for_user": [],
