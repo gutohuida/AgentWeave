@@ -48,6 +48,9 @@ CONTRA_TESTS = "hub/tests/test_vault_contradictions.py"
 CONTRA_DRIVE = "scripts/drive/d1017_contradictions.py"
 REPORTS_TESTS = "hub/tests/test_vault_reports.py"
 REPORTS_DRIVE = "scripts/drive/d1024_reports.py"
+SPECVAULT_TESTS = "hub/tests/test_vault_spec_check.py"
+SPECVAULT_UI = "hub/ui/src/__tests__/specVaultWarnings.test.tsx"
+SPECVAULT_DRIVE = "scripts/drive/d1025_specs_against_vault.py"
 
 JOURNEY_TESTS = "hub/tests/test_spec_journey.py"
 BRIEFING_TESTS = "hub/tests/test_spec_journey_briefing.py"
@@ -987,6 +990,28 @@ CHANGES = {
              "fact superseded by a corrected fact says so. Drive d1024 check 8 in Chromium."),
         ],
     },
+    "fspecvault": {
+        "document": "spec/changes/a-requirement-is-checked-against-what-the-vault-recorded/spec.json",
+        "commit": "255f98b",
+        "tasks": ["task-d714d40492de", "task-bbdb6b3ed737", "task-1bd2eb7dabae"],
+        "evidence": [
+            ("FR-1", "task-bbdb6b3ed737", "test_result", SPECVAULT_TESTS,
+             "test_a_requirement_keeps_the_facts_it_cites_and_refuses_anything_else and test_the_schema_tells_an_author_to_cite_fact_ids. Drive d1025 check 3: R1's facts read back unchanged."),
+            ("FR-2", "task-bbdb6b3ed737", "test_result", SPECVAULT_TESTS,
+             "test_cited_facts_carry_warnings_derived_from_the_vault: disputed, superseded, reported, missing derived on read. Drive d1025 check 6: a disputed warning naming both transcripts."),
+            ("FR-3", "task-bbdb6b3ed737", "test_result", SPECVAULT_TESTS,
+             "test_the_job_is_listed_disabled_with_nothing_chosen, test_proposal_fires_one_check_keeping_only_conflicts_that_name_real_ids and test_a_disabled_job_spawns_nothing_on_proposal. "
+             "Drive d1025 check 4 (real Haiku): one document_proposed firing, written, a conflict kept on R2. The drive also caught a prompt defect no fake-model test could (PROMPT_VERSION spec-vault-check-2)."),
+            ("FR-4", "task-bbdb6b3ed737", "test_result", SPECVAULT_TESTS,
+             "test_the_warnings_route_answers_404_for_an_unknown_document_and_empty_for_none and test_a_conflict_judged_against_an_earlier_wording_is_not_shown. Drive d1025 check 6."),
+            ("FR-5", "task-bbdb6b3ed737", "test_result", SPECVAULT_TESTS,
+             "test_each_warning_is_a_vault_warning_gap_and_approve_anyway_still_approves. Drive d1025 checks 7 and 8: 409 approval_warnings with a vault_warning at requirements[0], then approve_anyway 200 holding it."),
+            ("FR-6", "task-1bd2eb7dabae", "test_result", SPECVAULT_UI,
+             "Three cases: rows in the route's order, 404 and empty render nothing, Check now posts the path. Drive d1025 check 9 in Chromium on the committed bundle (index-DP8wZ2YV.js)."),
+            ("FR-6", "task-d714d40492de", "manual_observation", SPECVAULT_DRIVE,
+             "d1025 was committed failing at check 1 before the build; on the committed tree (255f98b) it passed 11/11 with real Haiku (testbed/drive1025-specs-vault/101908)."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1000,6 +1025,7 @@ CHANGE_FOLDS = {
     "fdistil": 'knowledge-vault',
     "fcontra": 'knowledge-vault',
     "freports": 'knowledge-vault',
+    "fspecvault": 'knowledge-vault',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [

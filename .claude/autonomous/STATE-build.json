@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "072092d",
     "stop_at": "2026-10-11T21:30:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-10-11-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "specs-against-vault-drive",
-    "next_action": "Do queue item specs-against-vault-drive: run scripts/drive/d1025_specs_against_vault.py on the committed tree (own Hub on port 8110+, Haiku only, run it in the FOREGROUND or wait for it; never end the turn with it running) and expect all 9 checks green (check 9 reads the panel from the committed bundle in hub/hub/static/ui). Then full Hub suite in chunks (a background run dies when the turn ends, so wait), vitest, ruff/black; record evidence on :8010 (close_change.py entry, pattern freports) without landing; append a spec-queue/METRICS.md row; log; commit and push.",
+    "current": "ledger-close",
+    "next_action": "Do queue item ledger-close: run py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-11, append the final log entry with the usage report (no other work), commit and push. Then set next_action to null.",
     "queue": [
         {
             "id": "merge-gate",
@@ -60,7 +60,7 @@
         },
         {
             "id": "specs-against-vault-drive",
-            "status": "open",
+            "status": "done",
             "title": "Acceptance drive green on committed tree, scratch Hub 8110+",
             "detail": "d1025 green on committed tree, scratch Hub 8110+; Haiku only; full Hub suite chunks and vitest; record evidence on :8010 (close_change.py entry, pattern freports) without landing; METRICS row."
         },

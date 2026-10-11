@@ -184,6 +184,7 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/spec/SpecPhaseBar.tsx', 'useSpecDocuments', 1, 'SUPPRESSED', '', '`if (!document) return null` (:33) removes the phase controls and the rigor refusal with it'),
     ('components/spec/SpecProposalsPanel.tsx', 'useSpecProposals', 1, 'SUPPRESSED', '', '`if (proposals.length === 0) return null` (:30) — pending edit proposals waiting on the operator do not render'),
     ('components/spec/SpecRailNav.tsx', 'useSpecList', 1, 'MISREPORT', '', "`buildInventory(specList)` (:31) leaves the rail's document list empty"),
+    ('components/spec/SpecVaultWarnings.tsx', 'useVaultWarnings', 1, 'SUPPRESSED', '', '`if (warnings.length === 0) return null` (:18) — warnings against a requirement, which the operator would read before approving, do not render'),
     ('components/tasks/DependencyBoard.tsx', 'useTaskBoard', 1, 'MISREPORT', '', "'No tasks on this board' (:327)"),
     ('components/tasks/DependencyBoard.tsx', 'useAgents', 1, 'BLANK', '', 'agent colour map (:209)'),
     ('components/tasks/DependencyBoard.tsx', 'useTaskBoards', 1, 'BLANK', '', 'document-title lookup (:203)'),
