@@ -143,7 +143,6 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/charters/ChartersPage.tsx', 'useCharters', 1, 'MISREPORT', '', "`charters.length === 0` renders EmptyState 'No charters yet' (:90-93)"),
     ('components/environment/DiagnosticsPanel.tsx', 'useStatus', 1, 'MISREPORT', '', '`JSON.stringify(data ?? {}, null, 2)` (:10) renders `{}` as the diagnostics'),
     ('components/environment/ProjectSettingsPanel.tsx', 'useProjects', 1, 'BLANK', '', '`projects.find` only names the project (:50)'),
-    ('components/environment/ProjectSettingsPanel.tsx', 'useProjectSettings', 1, 'MISREPORT', '', '`if (!settings) return` (:67) leaves `form` unset, so the skeleton at :78 is terminal — this site *is* F197'),
     ('components/environment/ProjectSettingsPanel.tsx', 'useMainBranchSuggestion', 1, 'BLANK', '', "placeholder 'Not chosen' (:191); the suggestion button simply does not appear"),
     ('components/environment/ProjectSettingsPanel.tsx', 'useRunners', 1, 'MISREPORT', 'PICKER', 'runner selects (:170, :278)'),
     ('components/environment/ProjectSettingsPanel.tsx', 'useModelCatalog', 1, 'BLANK', '', '`catalog?.providers` optional at both uses (:91, :292)'),

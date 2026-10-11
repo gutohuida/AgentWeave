@@ -4,6 +4,7 @@ import { ProjectSettingsPanel } from '@/components/environment/ProjectSettingsPa
 import { describeThreshold } from '@/components/environment/describeThreshold'
 import { useConfigStore } from '@/store/configStore'
 import type { AgentSummary } from '@/api/agents'
+import { ApiError } from '@/api/client'
 
 const update = vi.fn()
 const relocate = vi.fn()
@@ -49,6 +50,8 @@ function makeSettings(): {
 }
 
 let settings = makeSettings()
+let settingsError: Error | null = null
+const refetchSettings = vi.fn()
 
 let suggestion: { suggestion: string | null; chosen: string | null; is_repository: boolean } = {
   suggestion: 'master',
@@ -71,7 +74,9 @@ vi.mock('@/api/agents', async (importOriginal) => ({
 
 vi.mock('@/api/projects', () => ({
   useProjects: () => ({ data: [project] }),
-  useProjectSettings: () => ({ data: settings }),
+  useProjectSettings: () => ({
+    data: settingsError ? undefined : settings, error: settingsError, isError: settingsError !== null, refetch: refetchSettings,
+  }),
   useMainBranchSuggestion: () => ({ data: suggestion }),
   useUpdateProjectSettings: () => ({ mutate: update, isPending: false, error: null }),
   useRelocateProject: () => ({ mutate: relocate, isPending: false, error: null }),
@@ -110,6 +115,8 @@ describe('phase 5 project settings and locate repair', () => {
     relocate.mockReset()
     suggestion = { suggestion: 'master', chosen: null, is_repository: true }
     settings = makeSettings()
+    settingsError = null
+    refetchSettings.mockReset()
     projectAgents = []
     useConfigStore.setState({ selectedProjectId: 'proj-a' })
   })
@@ -361,5 +368,23 @@ describe('project-level checkpoint-ceiling notice (task 1.18(b), design D10)', (
     ]
     render(<ProjectSettingsPanel />)
     expect(screen.queryByText(/Lowered to/)).not.toBeInTheDocument()
+  })
+})
+
+describe('F197 a failed settings query', () => {
+  beforeEach(() => {
+    settingsError = new ApiError(500, JSON.stringify({ detail: 'settings route is down' }))
+    refetchSettings.mockReset()
+    useConfigStore.setState({ selectedProjectId: 'proj-a' })
+  })
+
+  it('names the failure with a Retry instead of a skeleton that never ends', () => {
+    render(<ProjectSettingsPanel />)
+    expect(screen.getByRole('alert')).toHaveTextContent(/settings could not be loaded/i)
+    expect(screen.getByRole('alert')).toHaveTextContent('settings route is down')
+    expect(screen.queryByLabelText('Loading project settings')).not.toBeInTheDocument()
+    expect(screen.queryByText('Save settings')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(refetchSettings).toHaveBeenCalledTimes(1)
   })
 })

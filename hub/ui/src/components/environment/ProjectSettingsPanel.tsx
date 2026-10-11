@@ -62,7 +62,11 @@ export function ProjectSettingsPanel({ onNavigate }: { onNavigate?: (page: strin
   const project = projects.find((item) => item.id === projectId)
   // The stored settings, not `ProjectSummary` — which omits every field added since it was
   // written, and so cannot round-trip them.
-  const { data: settings } = useProjectSettings(projectId ?? null)
+  const {
+    data: settings,
+    error: settingsError,
+    refetch: refetchSettings,
+  } = useProjectSettings(projectId ?? null)
   const { data: mainBranch } = useMainBranchSuggestion(projectId ?? null)
   const { data: runners = [] } = useRunners()
   const { data: projectAgents = [], isError: projectAgentsFailed } = useAgents()
@@ -85,6 +89,24 @@ export function ProjectSettingsPanel({ onNavigate }: { onNavigate?: (page: strin
     setNotesEntry(toEntryUnits(settings.checkpoint_threshold_mode, settings.checkpoint_notes_value))
   }, [settings])
 
+  if (!form && settingsError) {
+    // A failed read is not a slow one: the skeleton below would stand forever. The form stays
+    // hidden rather than blank, so Save cannot write defaults over settings it never read.
+    return (
+      <SettingsSection title="Settings" description="Identity, collaboration limits, checkpointing, and where this project lives on disk.">
+        <div role="alert" className="py-4 text-xs" style={{ color: 'var(--red)' }}>
+          <strong>This project&apos;s settings could not be loaded.</strong>
+          <p className="mt-1">{readableApiError(settingsError, 'The Hub did not return a reason.')}</p>
+          <p className="mt-1" style={{ color: 'var(--text-3)' }}>
+            Nothing stored has been changed.
+          </p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => { void refetchSettings() }}>
+            Retry
+          </Button>
+        </div>
+      </SettingsSection>
+    )
+  }
   if (!project || !form) {
     return (
       <SettingsSection title="Settings" description="Identity, collaboration limits, checkpointing, and where this project lives on disk.">
