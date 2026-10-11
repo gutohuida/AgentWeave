@@ -5,6 +5,7 @@ import { useQuestions } from '@/api/questions'
 import { useTasks } from '@/api/tasks'
 import { useStatus } from '@/api/status'
 import { getBufferedEvents } from '@/hooks/useSSE'
+import { useConfigStore } from '@/store/configStore'
 import { QuestionInterruptCard } from '@/components/questions/QuestionInterruptCard'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 import { OverviewBudgetSummary } from './OverviewBudgetSummary'
@@ -88,6 +89,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
   const { data: questions = [] } = useQuestions(false)
   const { data: taskPage } = useTasks()
   const { data: status } = useStatus()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
 
   // Memoised because the `?? []` would otherwise mint a new array on every render and re-run the
   // `useMemo`s below it (the board's own lint rule catches this).
@@ -105,8 +107,16 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
 
   // getBufferedEvents reads a module-level buffer. Query changes are the available signal that
   // the same SSE event moved that buffer, so these dependencies are deliberate.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const recentEvents = useMemo(() => getBufferedEvents().slice(-10).reverse(), [agents, tasks, questions])
+  // The buffer is instance-wide; only this project's events belong on its Overview (F419).
+  const recentEvents = useMemo(
+    () =>
+      getBufferedEvents()
+        .filter((e) => (e.data as { project_id?: string } | null)?.project_id === projectId)
+        .slice(-10)
+        .reverse(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [agents, tasks, questions, projectId],
+  )
 
   if (agentsLoading) {
     return (
@@ -215,7 +225,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
             <div className="overview-activity">
               <div className="flex h-7 items-center gap-2 overflow-x-auto px-1">
                 {recentEvents.map((event, index) => {
-                  const isWarning = event.severity === 'warning' || event.type === 'context_warning'
+                  const isWarning = event.severity === 'warn' || event.type === 'context_warning'
                   const agentName = (event.data as Record<string, unknown>)?.agent ?? ''
                   return (
                     <div
