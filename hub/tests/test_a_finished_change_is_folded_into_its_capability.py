@@ -354,6 +354,35 @@ async def test_a_change_that_is_not_approved_is_not_folded(app, auth_headers, tm
     assert response.json()["detail"]["code"] == "fold_change_not_approved"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["exploring", "proposed"])
+async def test_the_draft_is_not_served_for_a_change_that_is_not_approved(
+    app, auth_headers, tmp_path, phase
+):
+    await _create_capability(app, auth_headers)
+    await app.post(f"{BASE}/documents", json={"path": CHANGE, "title": "W"}, headers=auth_headers)
+    await app.put(
+        f"{BASE}/documents/{CHANGE}/content", json={"document": _change()}, headers=auth_headers
+    )
+    if phase == "proposed":
+        moved = await app.post(
+            f"{BASE}/documents/phase",
+            params={"path": CHANGE, "to": "proposed"},
+            json={},
+            headers=auth_headers,
+        )
+        assert moved.status_code == 200, moved.text
+    before = await _digest()
+
+    response = await app.get(
+        f"{BASE}/documents/{CHANGE}/fold-draft", params={"into": CAP}, headers=auth_headers
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "fold_change_not_approved"
+    assert await _digest() == before
+
+
 async def _archive(app, auth_headers, body=None):
     return await app.post(
         f"{BASE}/documents/phase",

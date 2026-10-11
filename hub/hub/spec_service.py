@@ -866,6 +866,15 @@ def _read(workspace: ProjectWorkspace, document: SpecDocument) -> Dict[str, Any]
     return payload
 
 
+def _require_approved_change(change: SpecDocument) -> None:
+    """The draft and the fold both refuse a change that is not an approved change-spec (F547)."""
+    if change.kind != "change-spec" or change.phase != spec_lifecycle.APPROVED:
+        raise FoldRefusedError(
+            f"{change.path} is {change.phase!r}; only an approved change is folded",
+            code="fold_change_not_approved",
+        )
+
+
 def fold_draft(
     workspace: ProjectWorkspace,
     change: SpecDocument,
@@ -886,6 +895,7 @@ def fold_draft(
     and folding the new. Both name what the capability holds today, and a requirement cannot be
     replaced and retired in one fold.
     """
+    _require_approved_change(change)
     if capability.kind != "capability":
         raise FoldRefusedError(
             f"{capability.path} is not a capability document", code="fold_target_not_capability"
@@ -1016,11 +1026,7 @@ async def fold(
     whether the change was archived: at `contract`/`gate` rigor the merge only proposes, nothing
     was folded yet, and the change stays approved for the archive guard to keep honest.
     """
-    if change.kind != "change-spec" or change.phase != spec_lifecycle.APPROVED:
-        raise FoldRefusedError(
-            f"{change.path} is {change.phase!r}; only an approved change is folded",
-            code="fold_change_not_approved",
-        )
+    _require_approved_change(change)
     open_tasks = await spec_lifecycle.open_task_ids(session, change)
     if open_tasks:
         raise FoldRefusedError(
