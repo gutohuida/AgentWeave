@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 15,
+    "iteration": 16,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "refill-6-compose",
-    "next_action": "Run queue item refill-6-compose: if before 05:00, pick the next ready Tier-0 finding from the backlog (F366 first: check whether B3's update-field gate already closed it, then it is a ledger fix; F465/F443 are operator policy questions, F560/F445/F446/F455/F492/F449 passed over), queue its impl item and a refill-7-compose. If none qualifies or it is at/after 05:00, write the closing entry per night-window.md 'Ending the window' and set next_action to null.",
+    "current": "f551-impl",
+    "next_action": "Run queue item f551-impl: Tier 0. Test first (a route test that a rejection with a blank reason answers 422 on the operator plane, and the agent plane if reachable), then make requirement_evidence.decide refuse it; check the app's reject control (grep hub/ui/src for the evidence decision call) sends a reason, fixing it with a vitest and bundle rebuild if not. Drive on a fresh source Hub (free port, never 8000). Set F551's status to note part 1 fixed, the provisional and sort parts still open. METRICS row. Then refill-7-compose.",
     "queue": [
         {
             "id": "compose",
@@ -101,9 +101,21 @@
         },
         {
             "id": "refill-6-compose",
+            "status": "done",
+            "title": "Refill the queue from the backlog if it empties before 05:00",
+            "detail": "Ledger-closed F366 (52e156b), F125 (44938da), F418 (ba1027e), F550 (superseded by b1a4559), each with its test run. Picked F551's blank-reason part: requirement_evidence.decide records a rejection with reason ''. Passed over F538/F548 (design calls), F537 (fix only if converter re-run), F574/F578/F579/F492 (undecided)."
+        },
+        {
+            "id": "f551-impl",
+            "status": "open",
+            "title": "F551 part 1 (C, Tier 0): a rejection of evidence is recorded with a blank reason",
+            "detail": "requirement_evidence.decide (:1053) refuses decision=rejected with a blank reason (422, named code); both EvidenceDecision models (api/v1/spec.py:626, agent_actions.py:1257) reach it. Check the app's reject control sends a reason. Test first at the route; drive on a fresh source Hub. F551's provisional and sort parts stay open."
+        },
+        {
+            "id": "refill-7-compose",
             "status": "open",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Same rule as refill-5. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
+            "detail": "Same rule as refill-6. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
         }
     ],
     "decisions_for_user": [],

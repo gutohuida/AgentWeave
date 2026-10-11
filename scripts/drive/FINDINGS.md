@@ -9605,7 +9605,7 @@ this note, because deleting it would delete the measurement.)*
 
 ## F125 (C) — a task's title cannot be changed by anybody, and F116's fix is what made that visible
 
-**Status:** open, filed not fixed. Small.
+**Status:** fixed `44938da` (2026-09-29, ORDER 3/23 `the-operator-can-rename-a-task`, driven live then). Ledger closed 2026-10-12 night: `TaskUpdate.title` exists and refuses a blank title (`hub/hub/schemas/tasks.py:180,210`), agents are refused it (`tasks.py:1531`), and `TaskDetailDrawer.tsx` carries the rename; `hub/tests/test_the_operator_can_rename_a_task.py` 6 passed under py -3.11. Was: open, filed not fixed. Small.
 
 Found by accident: the quiet harness tried to rename an orphaned task and got
 
@@ -29946,7 +29946,7 @@ task, so it passes against this code.
 
 ## F366 (C) — an agent can set any task's assignee over HTTP, a field its MCP tool does not carry
 
-**Status:** open. Filed 2026-09-14 by the day window's `f352-r1`. **Code read, not driven.**
+**Status:** fixed `52e156b` (2026-09-29, ORDER 5/23 `an-agent-updates-a-task-with-what-its-tool-carries`, driven live then). Ledger closed 2026-10-12 night: `update_task_for_actor` refuses `assignee`, `priority` and `description` from any non-operator actor before any write (`hub/hub/api/v1/tasks.py:1541-1551`, 403); `hub/tests/test_an_agent_updates_a_task_with_what_its_tool_carries.py` 10 passed under py -3.11 through the agent route. Was: open. Filed 2026-09-14 by the day window's `f352-r1`. **Code read, not driven.**
 
 `PATCH /api/v1/agent-actions/tasks/{id}` (`hub/hub/api/v1/agent_actions.py:276-289`) takes the
 operator's `TaskUpdate`, and `assignee` is on it (`hub/hub/schemas/tasks.py:129`).
@@ -33062,7 +33062,7 @@ events; mind `every-event-the-hub-sends-reaches-the-app` and
 
 ## F418 (C) — the loop tab fetches the loop's event history and shows none of it
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B10 rounds.
+**Status:** fixed `ba1027e` (2026-10-10, Tier 1 loop-history page, F570). Ledger closed 2026-10-12 night: `LoopTab.tsx:487` renders `loop.events` as a History section (`data-testid="loop-tab-events"`); `hub/ui/src/__tests__/loopHistory.test.tsx` 3 passed. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B10 rounds.
 `LoopTab` reads `LoopDetail.events`, the loop's audit trail, and renders none of it. Once B10's
 `a-loop-is-stopped-archived-and-delegated-from-its-own-tab` writes `loop_stopped` / `loop_archived`
 against the loop, those rows are readable only through the API. Repair shape: a short history list in
@@ -35102,7 +35102,7 @@ model intact". Related: F439, F349.
 
 ## F550 (C) -- an ordinary save strips corpus navigation and the map from a document's file
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** superseded by `b1a4559` (2026-10-09, documents stored as `spec.json`, rendered on open). Ledger closed 2026-10-12 night, by reading: a save now writes only the payload and the hub block (`spec_documents.serialize`, `spec_service.rerender_phase`), and corpus navigation and the map are added at read time by `render_page` (`spec_service.py:~1440`), so there is nothing in the file for a save to strip. Not driven. Was: open. Filed 2026-10-08 (spec overhaul audit, reading code).
 
 `spec_service.py:256` and `:1340` re-render without the corpus navigation and map that `rerender_corpus` adds, so a
 document saved after placement loses them until the next corpus re-render.
