@@ -638,7 +638,7 @@
       "path": "spec/changes/a-working-agent-tells-the-manager-an-entry-is-wrong/spec.json",
       "title": "A working agent can tell the manager a vault entry is wrong",
       "kind": "change-spec",
-      "status": "approved",
+      "status": "archived",
       "parent": null,
       "order": 920
     },

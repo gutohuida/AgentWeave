@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "072092d",
     "stop_at": "2026-10-11T21:30:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-10-11-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "reports-close",
-    "next_action": "Do queue item reports-close: AW_HUB=http://127.0.0.1:8010 AW_KEY=$(cat ~/.agentweave/hub/profiles/trial/bootstrap-key.txt) AW_PROJECT=proj-d85a82bf4216 MSYS_NO_PATHCONV=1 py -3.11 scripts/drive/close_change.py freports (evidence 409s harmless; tasks land), then --fold-change freports, then POST /api/v1/projects/proj-d85a82bf4216/project/spec/reindex {}. First confirm freports' commit is an ancestor of master. There is no slice state to mark in the roadmap (F579): archiving the change is the close. Commit spec/ output.",
+    "current": "specs-against-vault-spec",
+    "next_action": "Do queue item specs-against-vault-spec: author the 'specs-against-the-vault' roadmap slice's change with scripts/drive/author_change.py on :8010 (proj-d85a82bf4216); pick the tier; write the acceptance drive from the slice's 'done' sentence in the roadmap (spdoc-7c75066d6403); approve via the Hub; put the Hub task ids in the titles of the later specs-against-vault-* queue items. Design questions: take the recommended option, add an OPEN row in DECISIONS.md.",
     "queue": [
         {
             "id": "merge-gate",
@@ -29,7 +29,7 @@
         },
         {
             "id": "reports-close",
-            "status": "open",
+            "status": "done",
             "title": "Close the agent-reports slice (freports) on :8010",
             "detail": "Blocked until the gate lands the commits on master. Commands: 2026-10-10-vault-log.md iteration 8 (close_change.py freports, --fold-change freports, reindex, mark slice done). Commit spec/ output."
         },
