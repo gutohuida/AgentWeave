@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "072092d",
     "stop_at": "2026-10-11T21:30:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-11-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "contradictions-close",
-    "next_action": "Do queue item contradictions-close: commands in spec spec-queue/../.claude/.. 2026-10-10-vault-log.md iteration 4 (close_change.py fcontra, then --fold-change fcontra, spec reindex, mark slice done in roadmap doc). Commit spec/ output. Master now == 4ccbec6, so the commits are on master.",
+    "current": "reports-close",
+    "next_action": "Do queue item reports-close: AW_HUB=http://127.0.0.1:8010 AW_KEY=$(cat ~/.agentweave/hub/profiles/trial/bootstrap-key.txt) AW_PROJECT=proj-d85a82bf4216 MSYS_NO_PATHCONV=1 py -3.11 scripts/drive/close_change.py freports (evidence 409s harmless; tasks land), then --fold-change freports, then POST /api/v1/projects/proj-d85a82bf4216/project/spec/reindex {}. First confirm freports' commit is an ancestor of master. There is no slice state to mark in the roadmap (F579): archiving the change is the close. Commit spec/ output.",
     "queue": [
         {
             "id": "merge-gate",
@@ -23,7 +23,7 @@
         },
         {
             "id": "contradictions-close",
-            "status": "open",
+            "status": "done",
             "title": "Close the contradictions slice (fcontra) on :8010",
             "detail": "Blocked until the gate lands the commits on master. Commands in 2026-10-11 vault log: 2026-10-10-vault-log.md iteration 4 (close_change.py fcontra, then --fold-change fcontra, then spec reindex, mark slice done in roadmap doc). Commit spec/ output."
         },

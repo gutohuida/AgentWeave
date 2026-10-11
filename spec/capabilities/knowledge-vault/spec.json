@@ -206,6 +206,105 @@
       "requirement": "the-manager-distils-vault-sources-into-cited-facts-facts-in-wiki",
       "then": "a source's facts read clearly beside it, and the highlighted lines are easy to find",
       "when": "the operator looks at them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8099 with a fresh database, a scratch git repository, a Haiku runner with vault-distillation enabled, and a Haiku agent (scripts/drive/d1017_contradictions.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1017_contradictions.py",
+      "key": "sources-that-disagree-are-pointed-out-drive",
+      "requirement": "sources-that-disagree-are-pointed-out-contradiction-recorded",
+      "then": "One open contradiction cites the two refund facts with the 300-euro fact presumed, although it was uploaded first. Both facts are disputed in the map, and the 437 fact's card says it is disputed and that the 300 one is presumed. A facts_written firing is written. The agent's run calls vault_read and its reply says 300. After resolving: the contradiction is resolved, a decision source exists, the 437 fact is superseded by it, and neither fact is disputed. The drive fails on today's Hub at its first check (no dated field).",
+      "when": "the drive uploads first a transcript dated 2026-10-01 setting the refund limit without approval to 300 euros, then one dated 2026-09-01 setting it to 437 euros, asks the agent what the refund limit is, and then resolves the contradiction in the Vault tab choosing the 300-euro fact"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub test client",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "sources-that-disagree-are-pointed-out-dated-upload",
+      "requirement": "sources-that-disagree-are-pointed-out-source-dated",
+      "then": "the first lists dated 2026-09-01, the second dated null, the last two answer 400 and write nothing",
+      "when": "a test uploads with dated 2026-09-01, without dated, and with dated '01/09/2026' and '2026-13-01'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake worker answering the distillation and then the check, an existing fact from another source",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "sources-that-disagree-are-pointed-out-check-firing",
+      "requirement": "sources-that-disagree-are-pointed-out-check-after-distil",
+      "then": "firings facts_written written, empty, failed; the distillation that stored nothing makes no check",
+      "when": "a source is distilled, once with the check naming a contradiction, once naming none, once failing, and once with a distillation that stores nothing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "3,000 existing facts of other sources",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "sources-that-disagree-are-pointed-out-cap",
+      "requirement": "sources-that-disagree-are-pointed-out-compared-set",
+      "then": "the claims sent total at most 50,000 characters, latest-dated first, none from the source itself, and the detail names the number left out",
+      "when": "a source is distilled and the check's prompt is captured"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake check answering a valid pair, a pair with an unknown id, a pair of two new facts, and the valid pair reversed",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "sources-that-disagree-are-pointed-out-ids-checked",
+      "requirement": "sources-that-disagree-are-pointed-out-contradiction-recorded",
+      "then": "exactly one contradiction file, presumed the later-dated fact even though its source was uploaded first",
+      "when": "a source is distilled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a private source contradicting a tracked one, with a canary in the private claim",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "sources-that-disagree-are-pointed-out-private-stub",
+      "requirement": "sources-that-disagree-are-pointed-out-private-contradictions",
+      "then": "the record is at the private location, a claimless stub is in the project, and no project file holds the canary",
+      "when": "the private source is distilled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one open contradiction",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "sources-that-disagree-are-pointed-out-derived-flags",
+      "requirement": "sources-that-disagree-are-pointed-out-disputed-shown",
+      "then": "both disputed, one presumed; each card names the other and the presumed one; the list holds it",
+      "when": "a test reads the map, both cards through the operator and the agent-actions routes, and the contradictions list"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open contradiction",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "sources-that-disagree-are-pointed-out-resolve-route",
+      "requirement": "sources-that-disagree-are-pointed-out-resolve",
+      "then": "400, 400, 404, 200 with a decision source written and the loser superseded and nothing disputed, then 409; the decision source spawns no distillation",
+      "when": "a test resolves it with a fact not in it, an empty note, an unknown id, then validly, then again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one open and one resolved contradiction on a source's facts",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "sources-that-disagree-are-pointed-out-redistil",
+      "requirement": "sources-that-disagree-are-pointed-out-replaced-facts",
+      "then": "the open one is gone and the resolved one remains",
+      "when": "the source is distilled again and stores new facts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Vault tab against a map with two disputed facts, a contradictions list, and a resolve route answering 409",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/vaultTab.test.tsx",
+      "key": "sources-that-disagree-are-pointed-out-tab",
+      "requirement": "sources-that-disagree-are-pointed-out-contradictions-in-tab",
+      "then": "the section lists the contradiction with both claims and the presumed one; disputed marks show; the request carries stands and note; the 409 reason shows; the upload body carries dated",
+      "when": "a vitest renders it, resolves choosing a fact with a note, and uploads with a date"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the drive's screenshots",
+      "how_to_check": "open testbed/drive1017-contradictions/<stamp>/shot_*.png",
+      "key": "sources-that-disagree-are-pointed-out-tab-look",
+      "requirement": "sources-that-disagree-are-pointed-out-contradictions-in-tab",
+      "then": "the contradiction, which side is presumed, and how to resolve it are clear at a glance",
+      "when": "the operator looks at them"
     }
   ],
   "algorithms": [],
@@ -220,7 +319,16 @@
       "FR-15": "8273a111fc932d78ac862b477e5b3c5f3006c985c238b90a65e04d87f90bcbda",
       "FR-16": "b0e68d2de4b66f7944126534bd7bf80229c8de7d030e455bdc6a2c49505c07cc",
       "FR-17": "c73b406f93319daba165899b256344d480c037ea6adb5d6c2035a7ba7e5169f4",
+      "FR-18": "f50ee95a1eb83638fc3e12a5a190bfc97f3e9a10a534fce3e3aa904afc635305",
+      "FR-19": "180e00d7c74d647d71ca3aa8082437dd4fbcc4e78ad76d71cb51cb068b168fe3",
       "FR-2": "5f32f495c5fedaa3a114574a4d1d226c274061b0ffacbfa2139eedfa57d5b348",
+      "FR-20": "20df626c78fca139b4a87adc88079a8f444fda34347f32f3cef7577ff5043298",
+      "FR-21": "f53782049392b93410c0f7130a8bab54f5c72ebbcb62cf591381558b032b6d65",
+      "FR-22": "c97c6c7e6a2115ca27aa0d97e15b11bd7760d7f356725a147a99207f59136673",
+      "FR-23": "39745bdef1e4077f2146f58df49492849cda291acbbe14ec58288be7a29d1d90",
+      "FR-24": "cbfa6cb1302ab84dd2924525092756cc67519c1b6befa5307599369a4e6c77bc",
+      "FR-25": "fe48bf3838f922f665c45d0f3361c67cc98805d22549e1a8949c14cf8de4a903",
+      "FR-26": "cfcf09444f461822a1eacd33a0f67cb3b534f1884c2b4d242d0ce18b37062342",
       "FR-3": "e0274a6966c4036d541882b9c664729d8370d1d94cbe147947251de1b927b184",
       "FR-4": "6a4e8d01ffa6b483dc15e52f42bb16db7376dd3dc1c08ea01f5f3f3599cae3d6",
       "FR-5": "ec6d4b7d25f5a9aeb6223834ed5877ac76e75de49077f636eac5b022f5324a39",
@@ -229,7 +337,7 @@
       "FR-8": "c8aab6cb4927a911090490cc9d2c8c268539b152640846216c4adafd492f317b",
       "FR-9": "dcd141a4a6ed7104aad675231554a940069eb75a84c77422a6b3212cffd4d26e"
     },
-    "high_water": 17,
+    "high_water": 26,
     "requirements": {
       "a-vault-the-operator-fills-with-text-and-a-one-storage-interface": "FR-7",
       "a-vault-the-operator-fills-with-text-and-agen-settings-migration": "FR-8",
@@ -240,6 +348,15 @@
       "a-vault-the-operator-fills-with-text-and-agents-can-r-map-listed": "FR-3",
       "a-vault-the-operator-fills-with-text-and-agents-can-r-vault-view": "FR-9",
       "a-vault-the-operator-fills-with-text-and-agents-source-uploaded": "FR-2",
+      "sources-that-disagree-are-pointed-out-check-after-distil": "FR-19",
+      "sources-that-disagree-are-pointed-out-compared-set": "FR-20",
+      "sources-that-disagree-are-pointed-out-contradiction-recorded": "FR-21",
+      "sources-that-disagree-are-pointed-out-contradictions-in-tab": "FR-26",
+      "sources-that-disagree-are-pointed-out-disputed-shown": "FR-23",
+      "sources-that-disagree-are-pointed-out-private-contradictions": "FR-22",
+      "sources-that-disagree-are-pointed-out-replaced-facts": "FR-25",
+      "sources-that-disagree-are-pointed-out-resolve": "FR-24",
+      "sources-that-disagree-are-pointed-out-source-dated": "FR-18",
       "the-manager-distils-vault-sources-into-cited-fa-distil-on-upload": "FR-11",
       "the-manager-distils-vault-sources-into-cited-fa-distillation-job": "FR-10",
       "the-manager-distils-vault-sources-into-cited-facts-distil-route": "FR-12",
@@ -385,6 +502,69 @@
       "party": null,
       "rationale": "The slice's done criterion: facts show in the wiki beside their sources, each linking to the right place in the transcript.",
       "statement": "The Vault tab MUST show, on a source, the facts distilled from it, each with its claim and a link to its citation; following the link MUST show the source's text with the cited lines highlighted. A source MUST offer a Distil button, which calls the distil route and shows its refusal reason when it answers 409."
+    },
+    {
+      "key": "sources-that-disagree-are-pointed-out-source-dated",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-09: newer means when it was said. A backlog of old transcripts uploaded today must not override a newer decision.",
+      "statement": "POST /vault/sources MUST accept an optional dated (YYYY-MM-DD), store it in the source's metadata and stub, and list it in the map; it MUST answer 400 for any other format. A source's date is dated when present, else the date of its created_at."
+    },
+    {
+      "key": "sources-that-disagree-are-pointed-out-check-after-distil",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-09: inside distillation, so nothing extra to enable. Manager D4: every spawn is one firing.",
+      "statement": "When a distillation stores at least one fact, the vault-distillation job MUST make one more spawn comparing the newly stored facts with the existing facts of other sources, and record it as one manager_job_fired event with trigger facts_written, subject {\"source\": <id>}, and outcome written when it recorded at least one contradiction, empty when none, failed when the spawn failed or its answer did not parse."
+    },
+    {
+      "key": "sources-that-disagree-are-pointed-out-compared-set",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-09: all facts, capped. About 25 tokens a claim; the cap is about 2,000 facts.",
+      "statement": "The check MUST send every existing fact of other sources whose claim is on this machine, as its id and claim, latest-dated first, up to 50,000 characters of claims. Facts beyond the cap MUST be left out, and the firing's detail MUST say how many were."
+    },
+    {
+      "key": "sources-that-disagree-are-pointed-out-contradiction-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D2 and D4: one file per contradiction, citing both facts; the newer is presumed. The model names ids; the Hub checks them, so a contradiction can only cite facts that exist.",
+      "statement": "Each contradiction the model names MUST be stored as contradictions/<id>.json (id ctr- followed by 12 hex characters) holding id, kind, facts (the two fact ids), presumed, explanation, status open, visibility, created_at and found_by (job and model), but only when one fact is among the new ones, the other among those sent, and no contradiction between the same two facts exists already. presumed MUST be the fact whose source's date is later, the later created_at breaking a tie."
+    },
+    {
+      "key": "sources-that-disagree-are-pointed-out-private-contradictions",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D3: a contradiction reveals both claims, so it is private whenever either fact is.",
+      "statement": "A contradiction involving a private fact MUST be private: its record written at the effective private location, and only a stub (id, kind, visibility, holder, created_at, facts) written as knowledge/contradictions/<id>.json, holding no claim and no explanation."
+    },
+    {
+      "key": "sources-that-disagree-are-pointed-out-disputed-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D4: an agent reading a disputed fact is told it is disputed rather than handed a guess. Derived on read, so fact files are never rewritten.",
+      "statement": "A fact in an open contradiction MUST be listed in the map with disputed true and presumed true or false, and a fact that lost a resolved one with superseded_by naming the decision source. vault_read of such a fact MUST say, in its content, that it is disputed, the other fact's id and claim, and which one is presumed, or that it was superseded and by which decision. GET /vault/contradictions MUST list every contradiction, open first."
+    },
+    {
+      "key": "sources-that-disagree-are-pointed-out-resolve",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-09: pick one plus a note. Roadmap D4: the resolution is a decision record with a source.",
+      "statement": "POST /vault/contradictions/{id}/resolve with stands (one of its two fact ids, or null for neither) and note MUST write a source of type decision, whose text names both facts, which stands and the note, with the contradiction's visibility; MUST mark the contradiction resolved with stands, note, the decision's id and the time; and MUST answer the contradiction. It MUST answer 404 for an unknown id, 400 when stands is neither fact nor null or the note is empty, and 409 when it is already resolved. A decision source MUST NOT be distilled."
+    },
+    {
+      "key": "sources-that-disagree-are-pointed-out-replaced-facts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Distillation replaces a source's facts on success; an open contradiction on a fact that no longer exists would point at nothing.",
+      "statement": "When a distillation deletes a source's earlier facts, every open contradiction citing one of them MUST be deleted; a resolved one MUST be kept."
+    },
+    {
+      "key": "sources-that-disagree-are-pointed-out-contradictions-in-tab",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator resolves contradictions where they read the vault.",
+      "statement": "The Vault tab MUST show a Contradictions section listing the open ones, each with both claims, their sources' dates and which is presumed, and a form to choose the fact that stands or neither, write a note and resolve; a refusal shows the Hub's reason. A disputed fact MUST carry a disputed mark and a superseded one a superseded mark wherever facts are listed. The upload form MUST offer the date."
     }
   ],
   "schema_version": 1,

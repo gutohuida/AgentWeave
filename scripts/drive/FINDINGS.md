@@ -35328,3 +35328,11 @@ The "Depends on" picker added for F571 (`97ef44f`) called `useTasks()` binding o
 `claude 2.1.291 -p --model claude-haiku-4-5 --output-format stream-json --verbose` with `MAX_THINKING_TOKENS=4096` sends `{"type": "thinking", "thinking": "", "signature": "..."}`: the block is there, its text is not. `runner_parsing.py:282-285` drops a thinking block whose text is empty, so no Claude run records a `thinking` event; the trial Hub's `agent_outputs` and 98 scratch drive databases under `testbed/` hold none. The live thinking section F572's change builds can therefore only show for a runner that streams its reasoning (Copilot's thought chunks). Not measured: whether another model, a CLI setting, or a newer CLI returns the text.
 
 **Fix shape (not decided):** find out whether the CLI can be asked for thinking text; if not, consider a work row that says the agent reasoned (empty block present) without its text. Tier 1.
+
+## F579 (C) -- a roadmap cannot show which of its slices are closed
+
+**Status:** open 2026-10-11. Found closing the `contradictions` slice (build window iteration 3).
+
+The build playbook's close step ends "mark the slice done in the roadmap document through the Hub" (`.claude/loops/build-window.md:101`). There is nothing to mark: a slice carries `key`, `title`, `intent`, `done`, `builds_after` and no state (`hub/hub/spec_payload.py`, `_check_kind_shape`), and `spec_render._slices` (`hub/hub/spec_render.py:444-460`) renders only those fields. A slice is closed when the change document naming it (`roadmap.slice`) is archived, but nothing joins the two for a reader: the roadmap page reads the same after `sources-that-disagree-are-pointed-out` was folded and archived (200) as before. Each loop composes by listing `spec/changes/` and `spec/changes/archive/` and matching slice keys by hand (`build-window.md:27-30`).
+
+**Fix shape (not decided):** derive each slice's state on read from the change document that names it (none / exploring / proposed / approved / archived), as `roadmap_states` already does in the other direction (`hub/hub/spec_service.py:1197`), and show it beside the slice on the roadmap page. Tier 1.

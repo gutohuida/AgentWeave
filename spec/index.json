@@ -539,6 +539,22 @@
       "order": 630
     },
     {
+      "path": "spec/changes/a-loops-history-records-its-creation-and-queue-additions/spec.json",
+      "title": "A loop's history records its creation and what was added to its queue",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 890
+    },
+    {
+      "path": "spec/changes/a-name-a-caller-chooses-reaches-its-own-resource/spec.json",
+      "title": "A name a caller chooses reaches its own resource",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 900
+    },
+    {
       "path": "spec/changes/a-project-orders-its-own-spec-steps/spec.json",
       "title": "A project orders its own spec steps, adds its own and appends instructions",
       "kind": "change-spec",
@@ -595,6 +611,14 @@
       "order": 770
     },
     {
+      "path": "spec/changes/a-tasks-prerequisites-can-be-declared-at-creation-and-in-its-drawer/spec.json",
+      "title": "A task's prerequisites can be declared when it is created and from its drawer",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 910
+    },
+    {
       "path": "spec/changes/a-tester-drives-the-built-product-and-keeps-the-spec-true/spec.json",
       "title": "A tester drives the built product and keeps the spec true",
       "kind": "change-spec",
@@ -611,6 +635,22 @@
       "order": 860
     },
     {
+      "path": "spec/changes/a-working-agent-tells-the-manager-an-entry-is-wrong/spec.json",
+      "title": "A working agent can tell the manager a vault entry is wrong",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 920
+    },
+    {
+      "path": "spec/changes/an-exploring-turn-asks-its-questions-in-its-reply/spec.json",
+      "title": "An exploring turn asks its questions in its reply",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 930
+    },
+    {
       "path": "spec/changes/approve-lists-what-is-missing-and-can-approve-anyway/spec.json",
       "title": "Approve lists what is missing and lets the operator approve anyway",
       "kind": "change-spec",
@@ -619,12 +659,28 @@
       "order": 820
     },
     {
+      "path": "spec/changes/codex-requirements-say-they-are-not-driven/spec.json",
+      "title": "Codex requirements say they have not been driven since the plan was cancelled",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 940
+    },
+    {
       "path": "spec/changes/every-agent-turn-names-the-vault-in-one-line/spec.json",
       "title": "Every agent turn names the vault in one line, not an index of its entries",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 870
+    },
+    {
+      "path": "spec/changes/live-thinking-stays-open-and-diagnostics-can-be-hidden/spec.json",
+      "title": "Live thinking stays open and diagnostics can be hidden",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 950
     },
     {
       "path": "spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks/spec.json",
@@ -659,12 +715,28 @@
       "order": 570
     },
     {
+      "path": "spec/changes/sources-that-disagree-are-pointed-out/spec.json",
+      "title": "Sources that disagree are pointed out, and the operator decides",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 960
+    },
+    {
       "path": "spec/changes/submission-warns-when-a-multi-task-planner-declares-no-files/spec.json",
       "title": "Submission warns when a multi-task planner declares no files",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 580
+    },
+    {
+      "path": "spec/changes/the-agent-budget-caps-concurrent-runs/spec.json",
+      "title": "The agent budget caps how many runs a project has at once",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 970
     },
     {
       "path": "spec/changes/the-hubs-background-jobs-are-configured-on-a-manager-page/spec.json",
@@ -697,6 +769,14 @@
       "status": "archived",
       "parent": null,
       "order": 690
+    },
+    {
+      "path": "spec/changes/the-project-header-and-tabs-keep-a-faint-rule/spec.json",
+      "title": "The project header and view tabs are closed by one faint rule",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 980
     },
     {
       "path": "spec/changes/the-settings-that-gate-collaboration-are-on-the-project-page/spec.json",
