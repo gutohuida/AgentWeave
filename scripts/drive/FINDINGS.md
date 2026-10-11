@@ -35307,7 +35307,7 @@ Tier 0.
 
 ## F576 (C) -- `test_the_slice_adds_no_migration` fails on any branch that carries a migration
 
-**Status:** open 2026-10-10. Found running the Hub task tests on `autonomous/2026-10-09-daily` (iteration 26); failed identically with the iteration's changes stashed.
+**Status:** fixed e7d2763 (night iteration 15, 2026-10-12): both tests removed, with the `subprocess`/`Path` imports only they used. Reproduced first in a throwaway worktree with a dummy migration committed: both failed. Was: open 2026-10-10. Found running the Hub task tests on `autonomous/2026-10-09-daily` (iteration 26); failed identically with the iteration's changes stashed.
 
 `hub/tests/test_spec_task_files.py:94-102` asserts `git diff --name-only master -- hub/hub/migrations/versions` is empty. That pins one slice's "no migration" promise to the whole branch's distance from `master`, so it went red the moment `6789c14` (F564, migration `0125_run_divergence_task_nullable.py`) landed on the cycle branch, and it stays red on this branch until `master` takes it. Any later migration on a branch breaks it the same way. The test cannot tell what it claims (this slice added none) from what it measures (the branch has none).
 

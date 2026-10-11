@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 14,
+    "iteration": 15,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f576-impl",
-    "next_action": "Run queue item f576-impl: reproduce F576 in a throwaway worktree (commit a dummy file under hub/hub/migrations/versions, run the two tests, see them fail), then remove both 'adds no migration' tests and any imports they alone used, run the two test files under py -3.11 plus ruff/black, set F576's Status to fixed <sha>, append a METRICS row, log, state, commit and push.",
+    "current": "refill-6-compose",
+    "next_action": "Run queue item refill-6-compose: if before 05:00, pick the next ready Tier-0 finding from the backlog (F366 first: check whether B3's update-field gate already closed it, then it is a ledger fix; F465/F443 are operator policy questions, F560/F445/F446/F455/F492/F449 passed over), queue its impl item and a refill-7-compose. If none qualifies or it is at/after 05:00, write the closing entry per night-window.md 'Ending the window' and set next_action to null.",
     "queue": [
         {
             "id": "compose",
@@ -95,9 +95,9 @@
         },
         {
             "id": "f576-impl",
-            "status": "open",
+            "status": "done",
             "title": "F576 (C, Tier 0): the 'adds no migration' tests fail on any branch that carries a migration",
-            "detail": "Remove test_spec_task_files.py::test_the_slice_adds_no_migration and test_spec_undeclared_files_warning.py::test_the_change_adds_no_migration (both slices shipped; the check measured branch distance from master, not the slice). Repro first: a throwaway worktree with a dummy migration committed makes both red. Then drop unused imports, run both files, set the F576 Status line, add a METRICS row."
+            "detail": "Fixed e7d2763: both tests and their sole-use imports removed; repro in a throwaway worktree (both red) first; 18 pass in the two files."
         },
         {
             "id": "refill-6-compose",
