@@ -4317,7 +4317,8 @@ def decide_evidence(
     Args:
         evidence_id: From `list_evidence`.
         decision: `accepted` or `rejected`.
-        reason: Why. This is the durable record of the judgement, so say what you checked.
+        reason: Why. This is the durable record of the judgement, so say what you checked. Required
+            for a rejection (the Hub refuses a blank one, 422): it is what the author reads to fix it.
 
     Returns the evidence `id` and its new `review_state`.
     """

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 16,
+    "iteration": 17,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f551-impl",
-    "next_action": "Run queue item f551-impl: Tier 0. Test first (a route test that a rejection with a blank reason answers 422 on the operator plane, and the agent plane if reachable), then make requirement_evidence.decide refuse it; check the app's reject control (grep hub/ui/src for the evidence decision call) sends a reason, fixing it with a vitest and bundle rebuild if not. Drive on a fresh source Hub (free port, never 8000). Set F551's status to note part 1 fixed, the provisional and sort parts still open. METRICS row. Then refill-7-compose.",
+    "current": "refill-7-compose",
+    "next_action": "Run queue item refill-7-compose: refill the queue from the backlog (BACKLOG.html / FINDINGS.md) if before 05:00 -- pick one ready Tier 0 finding (check it is still present in code, not held by an openspec change or the build log), queue its impl item plus refill-8-compose. Passed over so far: F538/F548 (design calls), F537, F574/F578/F579/F492 (undecided), F560 (sweep), F445/F446, F455, F465/F443, F556 (OPEN decision). At/after 05:00, or if nothing qualifies, set next_action to null and write the closing entry per night-window.md 'Ending the window'.",
     "queue": [
         {
             "id": "compose",
@@ -107,9 +107,9 @@
         },
         {
             "id": "f551-impl",
-            "status": "open",
+            "status": "done",
             "title": "F551 part 1 (C, Tier 0): a rejection of evidence is recorded with a blank reason",
-            "detail": "requirement_evidence.decide (:1053) refuses decision=rejected with a blank reason (422, named code); both EvidenceDecision models (api/v1/spec.py:626, agent_actions.py:1257) reach it. Check the app's reject control sends a reason. Test first at the route; drive on a fresh source Hub. F551's provisional and sort parts stay open."
+            "detail": "Fixed: decide refuses a blank rejection reason (422 rejection_needs_reason) on both planes; test failed before (3); drive d1012_f551 10/10; UI already required a reason. F551 provisional and sort parts stay open."
         },
         {
             "id": "refill-7-compose",

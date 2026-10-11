@@ -35109,7 +35109,7 @@ document saved after placement loses them until the next corpus re-render.
 
 ## F551 (C) -- three small requirement-traceability defects
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code; see the audit report for
+**Status:** partly fixed 2026-10-12 (Tier 0, night iteration 17): part 1, the blank rejection reason, is closed -- `requirement_evidence.decide` refuses a rejection with a blank reason (422 `rejection_needs_reason`) on both planes; test `test_a_rejection_of_evidence_carries_its_reason.py` failed first; drive `d1012_f551_rejection_reason.py` 10/10; the app's reject control already disables Reject on a blank reason. Still open: the `provisional` flag never cleared, and identifier sort order. Filed 2026-10-08 (spec overhaul audit, reading code; see the audit report for
 `requirement-traceability`). The Hub accepts an empty reason when rejecting evidence; the `provisional` flag on evidence
 is never cleared; requirement identifiers sort as text (`FR-10` before `FR-2`).
 

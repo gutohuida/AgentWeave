@@ -529,7 +529,7 @@ async def test_rejected_evidence_merges_nothing(app, auth_headers, builder, tmp_
     assert recorded.status_code == 201, recorded.text
     rejected = await app.post(
         f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
-        json={"decision": "rejected"},
+        json={"decision": "rejected", "reason": "not good enough"},
         headers=auth_headers,
     )
     assert rejected.status_code == 200, rejected.text

@@ -1096,8 +1096,19 @@ async def decide(
             code="self_acceptance",
         )
 
+    if decision == REJECTED and not reason.strip():
+        # A rejection is the author's only signal of what to fix (it reads it back through
+        # `list_evidence`); recorded blank it leaves a retry loop. After the capability refusals,
+        # so a caller without the grant is told that first. Acceptance may stay silent.
+        raise EvidenceRefusedError(
+            "a rejection needs a reason: say what is wrong with this evidence, so its author "
+            "can fix it (set `reason`)",
+            code="rejection_needs_reason",
+            http_status=422,
+        )
+
     if evidence.run_id and run_liveness.run_is_live(evidence.run_id):
-        # After the three refusals above: an ungranted or self-deciding agent is told the refusal
+        # After the refusals above: an ungranted or self-deciding agent is told the refusal
         # that does not clear with time first. Noted in the same synchronous stretch as the check,
         # so the pop that clears the run cannot fall between them (D7).
         if actor.kind == "agent" and actor.name and actor.run_id:
