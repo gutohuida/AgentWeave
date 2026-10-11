@@ -17,6 +17,12 @@ Contract for the files the windows exchange: `spec-queue/README.md`.
 | `AgentWeaveDayLoop` | 09:00-17:00 | *transient* | `bypassPermissions` | `day-window.md` |
 | `AgentWeaveArmNight` | 22:55 daily | **persistent** | — | registers the next row |
 | `AgentWeaveNightLoop` | 23:00-07:00 | *transient* | `bypassPermissions` | `night-window.md` |
+| `AgentWeaveArmBuild` | 08:55 daily, ends 2026-10-15 | temporary (`away-1011`) | — | registers the next row |
+| `AgentWeaveBuildLoop` | 09:00-21:30 | *transient* | `bypassPermissions` | `build-window.md` |
+
+The build pair stands in for the day window while the operator is away (`ArmDay` stays disabled):
+it opens with a gated fast-forward of master and builds the knowledge-vault roadmap on the same
+cycle branch the night uses. Registered by hand, not by `install-tasks.ps1`.
 
 **The two working windows are transient on purpose.** The iteration driver unregisters itself at its
 stop time, which is what stops a dead loop from firing forever — and it is also why the loop needs

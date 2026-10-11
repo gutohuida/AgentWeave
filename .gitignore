@@ -163,6 +163,8 @@ hub/agentweave.db
 .claude/autonomous/usage-ledger.jsonl
 .claude/autonomous/.last-result*
 .claude/autonomous/.limit-hit*
+# The close-out briefing's once-only marker (run-iteration.ps1, Invoke-Closeout), one per window.
+.claude/autonomous/.closeout*
 
 # Working files for the autonomous loop's own API-driving (request/response bodies), not
 # durable output - the findings/log files next to it are.

@@ -40,7 +40,7 @@
 
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet("day", "night")]
+  [ValidateSet("day", "night", "build")]
   [string] $Window,
   [string] $Repo = "",
   [string] $Model = "opus",
@@ -80,6 +80,21 @@ $windows = @{
     LogFile   = ".claude\autonomous\driver-night.log"
     Playbook  = ".claude/loops/night-window.md"
     Purpose   = "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals."
+    Closeout  = $true
+  }
+  # Operator, 2026-10-11 (DECISIONS.md away-1011): away until Wednesday; the day builds the
+  # knowledge-vault roadmap end to end and opens with the gated fast-forward of master. Shares the
+  # cycle branch with the night, so the two windows never diverge.
+  build = @{
+    StartAt   = "09:00"
+    Until     = "21:30"
+    TaskName  = "AgentWeaveBuildLoop"
+    StateFile = ".claude\autonomous\STATE-build.json"
+    LogFile   = ".claude\autonomous\driver-build.log"
+    Playbook  = ".claude/loops/build-window.md"
+    Purpose   = "BUILD. Open with the merge gate (gated ff of master), close any roadmap slice whose commits are now on master, then spec, drive-first, build and drive the next knowledge-vault roadmap slice. Design questions: take the recommended option and record an OPEN row. Playbook: .claude/loops/build-window.md"
+    Closeout  = $true
+    MergeGate = $true
   }
 }
 $w = $windows[$Window]
@@ -253,7 +268,11 @@ $state = [ordered]@{
   # DECISIONS.md and dropping -- with a logged line -- any id that is not OPEN there.
   decisions_for_user = @()
   limits            = @(
-    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+    $(if ($w.MergeGate) {
+      "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window's merge-gate item (build-window.md, 'The merge gate'), which may fast-forward master to this branch with 'git fetch . <branch>:master' and 'git push origin master' when all four gate conditions hold -- operator, 2026-10-11 (DECISIONS.md away-1011). Never a merge commit, never a conflict resolved."
+    } else {
+      "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master."
+    }),
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
     "Nothing destructive: no deleting projects, databases, or kept reproductions.",
     "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
@@ -264,6 +283,13 @@ $state = [ordered]@{
     "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
     "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
   )
+}
+# The driver writes a close-out briefing (a Claude Doc plus a push notification) when the window
+# ends, so an operator who is away reads one page per window (run-iteration.ps1, Invoke-Closeout).
+if ($w.Closeout) {
+  $state.closeout = [ordered]@{ briefing = "claude-doc"; model = "sonnet"; skill = ".claude/skills/night-briefing/SKILL.md" }
+  $state.armed_at = (Get-Date -Format "yyyy-MM-ddTHH:mm:sszzz")
+  $state.driver_log = ($w.LogFile -replace '\\', '/')
 }
 
 $statePath = Join-Path $Repo $w.StateFile
