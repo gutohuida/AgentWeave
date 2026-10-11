@@ -35073,7 +35073,7 @@ reply text reach nobody" (`api/v1/agents.py:2254`). Both reach the same turn. Op
 
 ## F546 (C) -- a declared task title is cut to 80 characters mid-word
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** fixed ea32608 (2026-10-12; `_title_for` clips through the same word-boundary clip as `_title_from`; drive d1012 7/7). Filed 2026-10-08 (spec overhaul audit, reading code).
 
 The payload allows a declared task `title` of 200 characters (`spec_payload.py:116-120`); materialisation cuts it to
 80 with no word boundary (`spec_tasks.py:186`), the failure the derived-title rule exists to prevent.

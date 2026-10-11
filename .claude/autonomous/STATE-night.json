@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f546-impl",
-    "next_action": "Run queue item f546-impl: Tier 0 fix for F546. In hub/hub/spec_tasks.py, _title_for cuts a declared title with declared.strip()[:MAX_TITLE] (mid-word); make it clip at the last word boundary with the ellipsis, the same clip _title_from uses (factor it out, keep the single-long-word hard cut). Write the failing test first at the materialisation seam, fix, run the spec-task tests under py -3.11, drive on a fresh source Hub on a free port (declare a 200-char task title in a document, materialise, read the task title back), set F546's Status line in scripts/drive/FINDINGS.md, append METRICS row.",
+    "current": "refill-4-compose",
+    "next_action": "Run queue item refill-4-compose: refill from the backlog if before 05:00 (A/B ready findings first, then ready C Tier 0 per night-window.md 'Tier-0 findings by severity'; passed over so far: F461/F325/F322 Codex-only, F139, F273, F378, F413, F417, F444, F454, F563, F523, F492, F449). If one qualifies, add its impl item plus a refill-5-compose and set next_action to it. If none, or at/after 05:00, write the closing entry per night-window.md 'Ending the window' and set next_action to null.",
     "queue": [
         {
             "id": "compose",
@@ -71,9 +71,9 @@
         },
         {
             "id": "f546-impl",
-            "status": "open",
+            "status": "done",
             "title": "F546 (C, Tier 0): a declared task title is cut to 80 characters mid-word",
-            "detail": "hub/hub/spec_tasks.py _title_for: declared.strip()[:MAX_TITLE] -> clip at the last word boundary with the ellipsis, as _title_from does (share the clip). Test first at the materialisation seam (a 200-char declared title becomes a whole-word title ending in the ellipsis); drive on a fresh source Hub: declare the title in a document, materialise, read the task back."
+            "detail": "Fixed ea32608: _title_for clips a long declared title through the shared word-boundary clip; test failed before; drive d1012 7/7."
         },
         {
             "id": "refill-4-compose",
