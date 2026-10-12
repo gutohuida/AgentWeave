@@ -51,6 +51,10 @@ REPORTS_DRIVE = "scripts/drive/d1024_reports.py"
 SPECVAULT_TESTS = "hub/tests/test_vault_spec_check.py"
 SPECVAULT_UI = "hub/ui/src/__tests__/specVaultWarnings.test.tsx"
 SPECVAULT_DRIVE = "scripts/drive/d1025_specs_against_vault.py"
+FILES_TESTS = "hub/tests/test_vault_files.py"
+READING_TESTS = "hub/tests/test_vault_file_reading.py"
+FILES_UI = "hub/ui/src/__tests__/vaultFiles.test.tsx"
+FILES_DRIVE = "scripts/drive/d1026_images_pdfs.py"
 
 JOURNEY_TESTS = "hub/tests/test_spec_journey.py"
 BRIEFING_TESTS = "hub/tests/test_spec_journey_briefing.py"
@@ -1012,6 +1016,29 @@ CHANGES = {
              "d1025 was committed failing at check 1 before the build; on the committed tree (255f98b) it passed 11/11 with real Haiku (testbed/drive1025-specs-vault/101908)."),
         ],
     },
+    "fimages": {
+        "document": "spec/changes/images-and-pdfs-are-vault-sources-too/spec.json",
+        "commit": "9f2d941",
+        "tasks": ["task-edc80dd92218", "task-c87dfb6d31ea", "task-4bbc7517b786"],
+        "evidence": [
+            ("FR-1", "task-c87dfb6d31ea", "test_result", FILES_TESTS,
+             "test_a_file_is_stored_byte_for_byte_before_its_metadata, test_a_file_over_ten_mebibytes_is_refused_and_writes_nothing, test_other_types_and_mismatched_bytes_are_refused_and_write_nothing and test_a_private_file_leaves_only_a_stub_in_the_project."),
+            ("FR-2", "task-c87dfb6d31ea", "test_result", FILES_TESTS,
+             "test_the_file_route_answers_the_bytes_with_their_type and test_the_file_route_refuses_unknown_text_and_foreign_sources. Drive d1026 check 2."),
+            ("FR-3", "task-c87dfb6d31ea", "test_result", READING_TESTS,
+             "test_a_pdf_is_read_alone_then_distilled_from_its_transcription and test_a_failed_reading_stores_nothing_and_fails_its_firing. Drive d1026 checks 3-6 (real Haiku)."),
+            ("FR-4", "task-c87dfb6d31ea", "test_result", READING_TESTS,
+             "test_the_reading_command_holds_read_alone_and_no_widening_flag and test_the_reading_prompt_asks_for_every_line_and_treats_the_file_as_data."),
+            ("FR-5", "task-c87dfb6d31ea", "test_result", READING_TESTS,
+             "test_only_claude_reads_files and test_a_codex_runner_cannot_read_and_spawns_nothing: 409, no spawn."),
+            ("FR-6", "task-c87dfb6d31ea", "test_result", FILES_TESTS,
+             "test_a_transcribed_file_reads_as_its_transcription_in_pages and test_an_agent_reads_a_transcribed_file_through_its_run_credential."),
+            ("FR-7", "task-4bbc7517b786", "test_result", FILES_UI,
+             "Nine cases: PDF/image marks, blob: viewers fetched with the key, 404 tolerant, upload as the raw File body, 413 reason shown. Drive d1026 checks 7-8 in Chromium (PDF pixels unverified: headless Chromium has no PDF viewer)."),
+            ("FR-7", "task-edc80dd92218", "manual_observation", FILES_DRIVE,
+             "d1026 was committed failing at check 1 (404) before the build; on the committed tree (9f2d941) it passed 8/8 with real Haiku (testbed/drive1026-images-pdfs/101435)."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1026,6 +1053,7 @@ CHANGE_FOLDS = {
     "fcontra": 'knowledge-vault',
     "freports": 'knowledge-vault',
     "fspecvault": 'knowledge-vault',
+    "fimages": 'knowledge-vault',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
