@@ -36,8 +36,10 @@ type Route = (url: string, init?: RequestInit) => Routed | undefined
 let vault: Route
 const calls: Array<{ url: string; method: string; init?: RequestInit }> = []
 
+// A file answers its bytes with their type. Not a jsdom Blob: it has no stream(), and Node 20's
+// Response refuses one (CI ui-test, run 38228757844) where Node 24 stringifies it.
 function respond({ status, body, type }: Routed) {
-  if (body instanceof Blob) return Promise.resolve(new Response(body, { status, headers: { 'Content-Type': type ?? body.type } }))
+  if (type) return Promise.resolve(new Response(body as string, { status, headers: { 'Content-Type': type } }))
   return Promise.resolve(new Response(JSON.stringify(body), { status }))
 }
 
@@ -60,10 +62,10 @@ beforeEach(() => {
     if (url.includes('/vault/entries/src-imgimgimgimg')) return page(IMAGE, 'Free shipping threshold: 75 euros\n')
     if (url.includes('/vault/entries/src-txttxttxttx')) return page(TEXT, 'Kickoff meeting with Acme Retail.\n')
     if (url.endsWith('/vault/sources/src-pdfpdfpdfpdf/file')) {
-      return { status: 200, body: new Blob(['%PDF-1.4'], { type: 'application/pdf' }) }
+      return { status: 200, body: '%PDF-1.4', type: 'application/pdf' }
     }
     if (url.endsWith('/vault/sources/src-imgimgimgimg/file')) {
-      return { status: 200, body: new Blob(['\x89PNG'], { type: 'image/png' }) }
+      return { status: 200, body: '\x89PNG', type: 'image/png' }
     }
     return undefined
   }

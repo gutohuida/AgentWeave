@@ -2385,3 +2385,7 @@ disappears is indistinguishable from one that was forgotten.
 - **Vitest runs in a worktree through a junction to the main checkout's `node_modules`:** `cmd //c mklink //J "<worktree>\hub\ui\node_modules" "<main>\hub\ui\node_modules"`. `npm run build`, `tsc`, lint and `scripts/refresh_ui_bundle.py` all work from the worktree too. Hub tests from `<worktree>/hub` import the worktree's `hub` (check `hub.__file__`). (2026-10-09)
 - **`scripts/drive/author_change.py` needs `"schema_version": 1` in the payload.** Without it the content write answers 422 `payload_invalid` after the create has already made the (empty) document; rerunning with the field fixed it (409 on create is expected then). (2026-10-09)
 - **`ruff` and `black` are not on PATH in PowerShell;** use `py -3.11 -m ruff` / `py -3.11 -m black`. (2026-10-09)
+
+## 2026-10-12 (build window, CI)
+
+- **Local Node is 24, CI's ui-test runs Node 20, and vitest can differ between them.** jsdom's `Blob` has no `stream()`: Node 20's `new Response(jsdomBlob)` throws `TypeError: object.stream is not a function`, while Node 24 silently stringifies it to `"[object Blob]"`. A fetch stub that answers a Blob body therefore passes locally and fails in CI. Build file responses from a string or bytes with a `Content-Type` header. Reproduce CI's Node with `cd hub/ui && npx -y node@20 node_modules/vitest/vitest.mjs run <file>`. vitest swallows `console.log` from a test here; write probe output to a file. (Confirmed 2026-10-12, run 38228757844.)
