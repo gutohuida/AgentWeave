@@ -801,6 +801,14 @@
       "status": "archived",
       "parent": null,
       "order": 750
+    },
+    {
+      "path": "spec/changes/the-vault-map-is-shaped-by-what-agents-ask-for/spec.json",
+      "title": "The vault map is shaped by what agents ask for",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1010
     }
   ]
 }

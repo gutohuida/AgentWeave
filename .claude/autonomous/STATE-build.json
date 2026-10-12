@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-12-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "access-tuning-spec",
-    "next_action": "Do queue item access-tuning-spec: author the access-tuning change (Tier 2, Opus) per the knowledge-vault roadmap spdoc-7c75066d6403 and scripts/drive/author_change.py, only if it can be committed before stop_at; otherwise skip it and mark it done with a log note. images-and-pdfs is closed (folded into knowledge-vault, tasks approved). Run long things in the foreground and read gate state, not substrings.",
+    "current": "access-tuning-drive-first",
+    "next_action": "Do queue item access-tuning-drive-first: write scripts/drive/d1027_access_tuning.py from the spec's AC drive (spec/changes/the-vault-map-is-shaped-by-what-agents-ask-for, task-f1acf3d2a499) and record it failing at check 1 on today's tree. Run it in the foreground; never end a turn on a backgrounded drive.",
     "queue": [
         {
             "id": "specs-vault-close",
@@ -61,10 +61,34 @@
         },
         {
             "id": "access-tuning-spec",
-            "status": "open",
+            "status": "done",
             "title": "Author the access-tuning change",
             "detail": "Opus; only if the day can still commit the slice before stop_at.",
             "model": "opus"
+        },
+        {
+            "id": "access-tuning-drive-first",
+            "status": "open",
+            "title": "Write scripts/drive/d1027_access_tuning.py and record it failing (task-f1acf3d2a499)",
+            "detail": "Spec: spec/changes/the-vault-map-is-shaped-by-what-agents-ask-for (AC drive). Copy d1024_reports.py: scratch Hub 8110+, Haiku claude runner + agent; upload sources A,B,C in turn; write facts A1 (older), A2, B1 via write_fact; one agent turn: vault_read A1 twice, B once; operator GET entry C; check fetches on both maps, order A,A1,A2,B,B1,C; Chromium Vault counts + shot_counts.png. Must fail at check 1 (no fetches field)."
+        },
+        {
+            "id": "access-tuning-backend-impl",
+            "status": "open",
+            "title": "Backend: vault_fetches, migration 0126, counting, ordered map, agent texts (task-312f70f31ffa)",
+            "detail": "FR-1..FR-4, FR-6. Read .claude/rules/db-migrations.md and mcp-server.md first. models.py VaultFetch; 0126 (guarded), head asserts in test_migrations.py + test_project_persistence.py; agent_actions.py read_vault_entry counts after 200 at offset 0 (own txn, failure logged); api/v1/vault.py read_map/read_one merge counts; vault.build_map orders areas; mcp_server.py vault_map docstring; agents.py vault_map text. Failing tests first: hub/tests/test_vault_access.py. Migration reaches :8000 on restart: say so in the log."
+        },
+        {
+            "id": "access-tuning-tab-impl",
+            "status": "open",
+            "title": "Vault page shows agent read counts (task-3178cb4fe6f6)",
+            "detail": "FR-5. vitest first (src/__tests__/vaultAccess.test.tsx), VaultEntry fetches/last_fetched_at in api/vault.ts, VaultPage.tsx list badge (>0) + selected entry line ('Not read by agents yet'), tolerant of missing field. npm run build, refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together. Bundle reaches :8000 on reload: say so."
+        },
+        {
+            "id": "access-tuning-drive",
+            "status": "open",
+            "title": "Acceptance drive green on committed tree, scratch Hub 8110+, Haiku only; close the change",
+            "detail": "d1027 in the foreground. Full Hub suite in chunks, vitest once; METRICS row. close_change.py: add an faccess entry (pattern fimages): tasks task-f1acf3d2a499, then task-312f70f31ffa, task-3178cb4fe6f6; --fold-change faccess into knowledge-vault; reindex; mark roadmap slice access-tuning done (the roadmap's last slice)."
         },
         {
             "id": "ledger-close",
@@ -79,7 +103,9 @@
         "build-1011-3",
         "build-1012-1",
         "build-1012-2",
-        "build-1012-3"
+        "build-1012-3",
+        "build-1012-4",
+        "build-1012-5"
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window's merge-gate item (build-window.md, 'The merge gate'), which may fast-forward master to this branch with 'git fetch . <branch>:master' and 'git push origin master' when all four gate conditions hold -- operator, 2026-10-11 (DECISIONS.md away-1011). Never a merge commit, never a conflict resolved.",

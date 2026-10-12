@@ -1,0 +1,254 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub from source with a fresh database, a scratch git repository, a Claude runner bound to claude-haiku-4-5 and one agent on it; three sources uploaded oldest to newest (A, B, C) with two facts written citing A (A1 older, A2 newer) and one citing B (scripts/drive/d1027_access_tuning.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1027_access_tuning.py",
+      "key": "drive",
+      "requirement": "map-order",
+      "then": "before the turn the map is C, B, B1, A, A2, A1 with every fetches 0; after it A1 has fetches 2, B has 1, A2 and C 0; the map is A, A1, A2, B, B1, C; the agents' and the operator's map agree; the operator's read of C through the dashboard route left C at 0; in Chromium the Vault page shows a count of 2 on A1 and 1 on B, with a screenshot saved. The drive fails on today's Hub at its first check (map entries carry no fetches).",
+      "when": "a Haiku agent is told to read A1 with vault_read twice and B once, the operator reads C, and the drive reads both maps"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub test client with a run credential and a vault with a long source",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_access.py",
+      "key": "counted",
+      "requirement": "count-fetch",
+      "then": "one count after the agent read at offset 0 and its next page; none for a 404, the operator's read or either map; two after two concurrent reads; the read still answers 200 when recording the count raises",
+      "when": "the agent route reads it at offset 0 then at its next_offset, an unknown id, the operator route reads it, both maps are read, two reads run concurrently, and the counter is made to fail"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a vault with a source read twice by an agent and a fact never read",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_access.py",
+      "key": "listed",
+      "requirement": "counts-listed",
+      "then": "the source carries fetches 2 and an ISO last_fetched_at, the fact fetches 0 and last_fetched_at null, alike on both routes",
+      "when": "the operator's and the agents' map and entry routes are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a vault with sources and facts, some read by agents, and a count left for a deleted entry",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_access.py",
+      "key": "ordered",
+      "requirement": "map-order",
+      "then": "the areas and the facts within them are in the order map-order states; the deleted entry's count is absent; with no counts the map equals the one build_map answered before the change",
+      "when": "the map is built"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an empty database at revision 0125 and one at 0126",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_migrations.py",
+      "key": "migrated",
+      "requirement": "migration",
+      "then": "0126 adds vault_fetches and nothing else; its downgrade removes it; the head assertions name 0126",
+      "when": "upgrade and downgrade run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the mcp_server tool and the agents' instruction text",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_access.py",
+      "key": "told",
+      "requirement": "agents-told",
+      "then": "both say the areas are ordered by agents' reads and name fetches; neither says only newest first",
+      "when": "they are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Vault page against a map with counts 2, 1 and 0 and one with no fetches field",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/vaultAccess.test.tsx",
+      "key": "shown",
+      "requirement": "wiki-counts",
+      "then": "the list shows 2 and 1 and nothing for 0, in the map's order; the selected entry shows its count and last-read date, or 'Not read by agents yet'; the old map shows no count and no alert",
+      "when": "a vitest renders each and selects entries"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the drive's screenshot",
+      "how_to_check": "open testbed/drive1027-access-tuning/<stamp>/shot_counts.png",
+      "key": "look",
+      "requirement": "wiki-counts",
+      "then": "the most-read entries are at the top and their counts read clearly without crowding the list",
+      "when": "the operator looks at it"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "defa4898116a952dfa39c6b7f71fccdd9b1f42435e3d5654a6a2fa99973c8fc7",
+      "FR-2": "2f18c79b8641e6deeabedeef3f48efe5e5460806e9b6bd9de52cf915929fb85d",
+      "FR-3": "75545d0bff27e363a0487ae292ce876851c66ee3bbd9beb70d2028ed6fe2a8a5",
+      "FR-4": "d7c9079d7e7ec33922c68c23a040d3d44b8c625de77dce3a7f46c42198cc1b46",
+      "FR-5": "fc7ce16869f138ef95ba4e115bb2aa03d1abd4844aabea0ad8d21e10f8b0cdbb",
+      "FR-6": "b6ce460ee9bc243aea1bd7962c311551f1df60b0a7bbb648d2550cc9f2acba1d"
+    },
+    "high_water": 6,
+    "requirements": {
+      "agents-told": "FR-4",
+      "count-fetch": "FR-1",
+      "counts-listed": "FR-2",
+      "map-order": "FR-3",
+      "migration": "FR-6",
+      "wiki-counts": "FR-5"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 Tier 2. Hazard: migration 0126 reaches the operator's real database on their next :8000 restart. It only creates vault_fetches (project_id, entry_id, count, last_fetched_at; primary key the first two), guarded like the other migrations for a missing table. Rollback: the downgrade drops the table; a reverted Hub ignores it. The bundle reaches :8000's app on its next reload; until the Hub restarts the map has no fetches field and the page shows no counts, without error.\n\nD2 Counts in a Hub table, one row per entry. Rejected: one event_logs row per read (unbounded growth, and every map read would aggregate them) and counter files under knowledge/ or the private location (each read would dirty the repository, and two colleagues' counters conflict on merge). Consequence: counts are per Hub.\n\nD3 Ordering on read, no model. The map is already built from files on every read; it now also reads one small table and sorts. Rejected for this slice: a manager job writing short summaries or regrouping the map (a paid spawn per reshape, a new record kind with private handling, and the done sentence needs neither). The roadmap's intent names a manager job; this is a narrowing the operator can reverse.\n\nD4 What counts. The agents' vault_read at offset 0, after the entry is found. Not the operator's reads (the dashboard is not an agent asking), not vault_map (it lists everything), not later pages (one entry read once). The count is recorded in its own transaction after the read, and a failure there is logged, not raised.\n\nD5 Areas are the map's existing grouping (a source and the facts citing it). Ordering areas by total keeps a source and its facts together, so an agent scanning the top of the map sees a whole topic. A new unread source sorts after every read area; nothing is hidden, since the map lists every entry.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "When closed, this change folds into the knowledge-vault capability, and the roadmap's access-tuning slice, its last, is then done.",
+  "open_questions": [],
+  "problem": "The map lists every source and fact newest first, whatever agents actually need. An entry agents read on almost every task sits wherever its upload date puts it, under newer entries nobody reads, and the operator cannot see which entries their agents rely on and which they never touch. The roadmap's access-tuning slice: 'Every fetch is counted per entry; a manager job reshapes the map (ordering, grouping, short summaries) around what is actually requested, and the operator can see the counts.' Done means: 'After a run of agent fetches, the most-fetched entries lead their area in the map and the counts are visible in the wiki.'",
+  "requirements": [
+    {
+      "key": "count-fetch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "vault_read is the one way an agent asks for an entry. Counting only the first page keeps a long transcript read in three pages one read; the operator's route is the dashboard, not an agent asking.",
+      "statement": "Each answer of 200 from the agent route GET /vault/entries/{id} (vault_read) with offset 0 MUST add one to that entry's fetch count in the actor's project and set its last-fetched time to now. A later page (offset above 0), an answer other than 200, the operator's GET /vault/entries/{id}, and either map route MUST NOT change any count. Two fetches of one entry at the same moment MUST both be counted. A failure to record the count MUST NOT fail the read."
+    },
+    {
+      "key": "counts-listed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The ordering is only trustworthy if the number behind it is visible to both the operator and the agents.",
+      "statement": "Every entry in the map and every entry read, on the operator's and the agents' routes, MUST carry fetches (an integer, 0 when never read) and last_fetched_at (an ISO time, null when never read). A count for an id that is no longer in the vault MUST NOT appear in the map."
+    },
+    {
+      "key": "map-order",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roadmap's done sentence: the most-fetched entries lead their area. An area is the grouping the map already has, so nothing a colleague's older Hub writes changes shape.",
+      "statement": "The map MUST be built of areas: each source followed by the facts that cite it (a fact under the first of its sources present), and the facts with no source present as one last area. The source MUST lead its area; the facts in an area MUST be ordered by fetches, most first, then newest first. Areas MUST be ordered by the sum of their entries' fetches, most first, then by their source newest first; the area of sourceless facts MUST stay last. When no entry has been read, the map MUST be exactly the newest-first map it is today."
+    },
+    {
+      "key": "agents-told",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Both texts say 'newest first' today; an agent reading a map ordered otherwise would be misled about what the top of it means.",
+      "statement": "vault_map's tool description and the vault_map line of the agents' instruction text MUST say that the map's areas are ordered by how often agents have read them, then newest first, and that fetches is how many times agents have read an entry."
+    },
+    {
+      "key": "wiki-counts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator can see the counts: the second half of the done sentence. A missing field is the :8000 skew, a committed bundle reaching the operator's app before their Hub restarts.",
+      "statement": "The Vault page MUST show, in the entry list, each entry's fetch count when it is above 0, and on the selected entry the count and the date it was last read, or 'Not read by agents yet' when it is 0. The entry list MUST keep the map's order. When the map carries no fetches field the page MUST show no count and no error."
+    },
+    {
+      "key": "migration",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The migration reaches the operator's real database on their next :8000 restart; it only adds a table.",
+      "statement": "Migration 0126 MUST create the table vault_fetches keyed by project_id and entry_id, holding count and last_fetched_at, and its downgrade MUST drop that table and nothing else. It MUST NOT touch another table. Counts MUST NOT be written under knowledge/ or the private location."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/the-knowledge-vault-and-its-manager-roadmap/spec.json",
+    "slice": "access-tuning"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Counting each agent read of a vault entry (vault_read's first page) per project and entry, with the time of the last read",
+      "A new table vault_fetches, migration 0126, with a downgrade that drops it",
+      "fetches and last_fetched_at on every map entry and entry read, on the operator's and the agents' routes",
+      "The map ordered by those counts: most-read facts first within their source's area, and the most-read areas first, newest first among equals",
+      "vault_map's tool description and the agents' instruction text saying how the map is ordered",
+      "The Vault page showing the counts in the entry list and on the selected entry"
+    ],
+    "non_goals": [
+      "A manager job writing summaries or regrouping the map: the ordering is computed on read (D3); a summary job is a later slice if wanted",
+      "Sharing counts between machines: counts are this Hub's; a colleague's Hub counts its own agents' reads",
+      "Counting the operator's reads in the dashboard, the manager's own reads, or vault_map calls",
+      "Decay or time windows on the counts: an entry's count only grows",
+      "Resetting counts from the app"
+    ]
+  },
+  "summary": "Every time a working agent reads a vault entry through vault_read, the Hub counts it against that entry. The map lists each entry's count and last read, and is ordered by it: an area (a source with the facts that cite it) is led by its most-read facts, and areas are ordered by how often agents read them, newest first among equals. With no reads the map is exactly today's newest-first order. The Vault page shows the counts. The counts live in a new Hub table, migration 0126, because a counter written into knowledge/ would dirty the repository on every read. The ordering is computed when the map is read, with no model: nothing in the roadmap's done sentence needs a paid spawn. Tier 2 because of the migration.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1027_access_tuning.py, from d1024: a scratch Hub, a Haiku Claude runner and agent, sources A, B, C uploaded in turn, facts written as d1024's write_fact does, one agent turn told to vault_read A1 twice and B once, the operator reading C, both maps checked, Chromium for the counts. Recorded failing at its first check before any build task.",
+      "files": [
+        "scripts/drive/d1027_access_tuning.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "map-order",
+        "count-fetch",
+        "wiki-counts"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "models.py VaultFetch; migration 0126 and the head assertions in test_migrations.py and test_project_persistence.py; agent_actions.py counts after a 200 at offset 0; api/v1/vault.py read_map and read_one merge counts; vault.py build_map orders areas by counts; mcp_server.py vault_map docstring and agents.py instruction text. Failing tests first in hub/tests/test_vault_access.py.",
+      "files": [
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/0126_vault_fetches.py",
+        "hub/hub/vault.py",
+        "hub/hub/api/v1/vault.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/hub/mcp_server.py",
+        "hub/tests/test_vault_access.py",
+        "hub/tests/test_migrations.py",
+        "hub/tests/test_project_persistence.py"
+      ],
+      "from": null,
+      "key": "access-backend",
+      "requirements": [
+        "count-fetch",
+        "counts-listed",
+        "map-order",
+        "agents-told",
+        "migration"
+      ],
+      "reviewer": null,
+      "title": "Fetch counts, the migration and the map ordered by them"
+    },
+    {
+      "depends_on": [
+        "access-backend"
+      ],
+      "description": "VaultPage.tsx: a count in the entry list above 0, the count and last-read date (or 'Not read by agents yet') on the selected entry, tolerant of a map with no fetches. VaultEntry in api/vault.ts. The vitest comes first; the bundle is committed with the source.",
+      "files": [
+        "hub/ui/src/components/vault/VaultPage.tsx",
+        "hub/ui/src/api/vault.ts",
+        "hub/ui/src/__tests__/vaultAccess.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "access-wiki",
+      "requirements": [
+        "wiki-counts"
+      ],
+      "reviewer": null,
+      "title": "The Vault page shows how often agents read each entry"
+    }
+  ],
+  "title": "The vault map is shaped by what agents ask for"
+}
