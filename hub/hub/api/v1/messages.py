@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import project_workspace
@@ -479,7 +479,11 @@ async def list_messages(
             )
         )
     order_col = Message.timestamp.desc() if sort == "desc" else Message.timestamp.asc()
-    q = q.order_by(order_col).offset(offset).limit(limit)
+    # `timestamp` ties on a coarse wall clock; insertion order (the rowid of this String-keyed table)
+    # breaks the tie in the direction asked for.
+    row_order = literal_column("messages.rowid")
+    row_col = row_order.desc() if sort == "desc" else row_order.asc()
+    q = q.order_by(order_col, row_col).offset(offset).limit(limit)
     result = await session.execute(q)
     return result.scalars().all()
 

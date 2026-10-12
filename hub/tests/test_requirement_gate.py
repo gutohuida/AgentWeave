@@ -11,7 +11,7 @@ outcomes.
 """
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import literal_column, select, update
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
@@ -884,7 +884,9 @@ async def test_every_rigor_change_is_recorded_and_attributed(app, auth_headers, 
         events = (
             (
                 await session.execute(
-                    select(SpecRigorEvent).order_by(SpecRigorEvent.created_at, SpecRigorEvent.id)
+                    select(SpecRigorEvent).order_by(
+                        SpecRigorEvent.created_at, literal_column("spec_rigor_events.rowid")
+                    )
                 )
             )
             .scalars()
@@ -916,6 +918,46 @@ async def test_the_rigor_history_route_answers_oldest_first(app, auth_headers, b
     assert [e["reason"] for e in events] == ["", "ready to enforce"]
     assert events[0]["created_at"] <= events[1]["created_at"]
     assert all(e["actor_kind"] == "operator" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_rigor_changes_that_tie_on_the_clock_keep_the_order_they_were_made_in(
+    app, auth_headers, builder, tmp_path
+):
+    """`created_at` ties on a coarse Windows clock; the random id must not decide the order."""
+    await _document(app, auth_headers, builder)
+    await _set_rigor(app, auth_headers, "contract", reason="")
+    await _set_rigor(app, auth_headers, "gate", reason="ready to enforce")
+    async with async_session_factory() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(SpecRigorEvent).order_by(literal_column("spec_rigor_events.rowid"))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        tied = rows[0].created_at
+        # The first change gets the id that sorts last, so an id tie-break reverses the pair.
+        await session.execute(
+            update(SpecRigorEvent)
+            .where(SpecRigorEvent.id == rows[0].id)
+            .values(id="zzz", created_at=tied)
+        )
+        await session.execute(
+            update(SpecRigorEvent)
+            .where(SpecRigorEvent.id == rows[1].id)
+            .values(id="aaa", created_at=tied)
+        )
+        await session.commit()
+
+    response = await app.get(f"{BASE}/documents/{PATH}/rigor-history", headers=auth_headers)
+
+    assert [(e["from"], e["to"]) for e in response.json()["events"]] == [
+        ("sketch", "contract"),
+        ("contract", "gate"),
+    ]
 
 
 @pytest.mark.asyncio

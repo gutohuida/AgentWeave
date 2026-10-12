@@ -29,7 +29,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import DEFAULT_SPEC_RIGOR, SPEC_RIGORS, SpecDocument, SpecRigorEvent
@@ -181,9 +181,10 @@ def promotion_blockers(content: Optional[str]) -> List[str]:
 
 async def history_for(session: AsyncSession, document_id: str) -> List[SpecRigorEvent]:
     result = await session.execute(
-        select(SpecRigorEvent)
-        .where(SpecRigorEvent.document_id == document_id)
-        .order_by(SpecRigorEvent.created_at, SpecRigorEvent.id)
+        select(SpecRigorEvent).where(SpecRigorEvent.document_id == document_id)
+        # `created_at` ties on a coarse wall clock; insertion order (the rowid of this String-keyed
+        # table) breaks the tie, not the random id.
+        .order_by(SpecRigorEvent.created_at, literal_column("spec_rigor_events.rowid"))
     )
     return list(result.scalars().all())
 
