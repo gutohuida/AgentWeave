@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 17,
+    "iteration": 18,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "refill-7-compose",
-    "next_action": "Run queue item refill-7-compose: refill the queue from the backlog (BACKLOG.html / FINDINGS.md) if before 05:00 -- pick one ready Tier 0 finding (check it is still present in code, not held by an openspec change or the build log), queue its impl item plus refill-8-compose. Passed over so far: F538/F548 (design calls), F537, F574/F578/F579/F492 (undecided), F560 (sweep), F445/F446, F455, F465/F443, F556 (OPEN decision). At/after 05:00, or if nothing qualifies, set next_action to null and write the closing entry per night-window.md 'Ending the window'.",
+    "current": "f260-impl",
+    "next_action": "Run queue item f260-impl: delete the dead Messages UI subtree per the operator's 2026-09-24 decision (B10 D6.3, recipe spec-queue/tracks/B10.md:249) -- components/messages/, api/messages.ts, the conversationShell.test.tsx:49 mock, n11's three DEAD rows; measure n11 before/after and lower test_surface_ceilings.py ceilings by the measured drop only; vitest, npm run lint, rebuild + commit the bundle with hub/ui/src; drive the app (loads, a conversation renders); set F260's Status line; METRICS row. Then refill-8-compose.",
     "queue": [
         {
             "id": "compose",
@@ -113,9 +113,21 @@
         },
         {
             "id": "refill-7-compose",
+            "status": "done",
+            "title": "Refill the queue from the backlog if it empties before 05:00",
+            "detail": "Picked F260 (C): delete the dead Messages UI subtree, operator-decided 2026-09-24 (B10 D6.3, no-spec round, recipe spec-queue/tracks/B10.md:249). Mapped unarchived openspec changes first: F183/F134 held by charters-are-named-once. Passed over F544 (posture), F549, F523/F573 (Tier 1), F457, F469 (Tier 1), F562 (spec text), F480/F476, F454/F563."
+        },
+        {
+            "id": "f260-impl",
+            "status": "open",
+            "title": "F260 (C, Tier 0): delete the dead Messages UI subtree",
+            "detail": "Delete hub/ui/src/components/messages/, hub/ui/src/api/messages.ts and the @/api/messages mock at conversationShell.test.tsx:49; remove n11's three DEAD rows (n11_query_error_surface.py:162-164); lower MISREPORT/UNHANDLED ceilings by the drop n11 MEASURES (DEAD rows are already excluded from MISREPORT at :422); CLIENTLESS_ROUTE_CEILING stays. vitest + lint + tsc; rebuild and commit the bundle with hub/ui/src; drive: app still loads and a conversation renders."
+        },
+        {
+            "id": "refill-8-compose",
             "status": "open",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Same rule as refill-6. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
+            "detail": "Same rule as refill-7. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
         }
     ],
     "decisions_for_user": [],
