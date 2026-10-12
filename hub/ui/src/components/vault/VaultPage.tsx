@@ -209,6 +209,16 @@ function EntryRow({
           <Badge variant="default">{fileKindOf(entry.media_type) === 'pdf' ? 'PDF' : 'image'}</Badge>
         )}
         {entry.visibility === 'private' && <Badge variant="warning">private</Badge>}
+        {(entry.fetches ?? 0) > 0 && (
+          <span
+            data-testid={`vault-fetches-${entry.id}`}
+            title="Times agents read this entry"
+            className="ml-auto text-xs"
+            style={{ color: 'var(--text-2)' }}
+          >
+            {entry.fetches}
+          </span>
+        )}
       </span>
       <span className="line-clamp-2 text-xs" style={{ color: 'var(--text-3)' }}>
         {entry.available ? entry.opening : `Held on ${entry.holder ?? 'another machine'}`}
@@ -255,6 +265,15 @@ function EntryView({
             {entry.dated ? `said ${entry.dated} · ` : ''}
             {hubDate(entry.created_at).toLocaleString()} · <code>{entry.id}</code>
           </p>
+          {entry.fetches !== undefined && (
+            <p data-testid="vault-entry-fetches" className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
+              {entry.fetches > 0
+                ? `Read by agents ${entry.fetches === 1 ? 'once' : `${entry.fetches} times`}${
+                    entry.last_fetched_at ? `, last ${hubDate(entry.last_fetched_at).toLocaleString()}` : ''
+                  }`
+                : 'Not read by agents yet'}
+            </p>
+          )}
         </div>
         {source && <DistilButton entry={entry} onDistilling={onDistilling} />}
       </header>

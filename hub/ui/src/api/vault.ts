@@ -43,6 +43,11 @@ export interface VaultEntry {
   /** A fact's: the `decision` source of a resolved contradiction that set it aside, or the
    *  corrected fact (`fct-`) a report replaced it with. */
   superseded_by?: string | null
+  /** How many times agents read the entry (`vault_read` at offset 0). Absent on a Hub that predates
+   *  counts, which the page treats as nothing to show. */
+  fetches?: number
+  /** When an agent last read it; null when none has. */
+  last_fetched_at?: string | null
 }
 
 /** Where a fact's quote sits in its source, 1-based lines found by the Hub, not the model. */
