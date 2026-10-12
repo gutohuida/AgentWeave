@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 25,
+    "iteration": 26,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "refill-11-compose",
-    "next_action": "Run queue item refill-11-compose: refill from the backlog (see its detail). If it is at or after 05:00, or nothing qualifies, write the closing entry per night-window.md 'Ending the window' and set next_action null.",
+    "current": "f438-impl",
+    "next_action": "Run queue item f438-impl: fix F438 per its detail (Tier 0: failing route test first, fix, drive on a fresh source Hub, set the finding's Status, METRICS row).",
     "queue": [
         {
             "id": "compose",
@@ -161,9 +161,21 @@
         },
         {
             "id": "refill-11-compose",
+            "status": "done",
+            "title": "Refill the queue from the backlog if it empties before 05:00",
+            "detail": "Picked F438 (C, Tier 0): the holder refusal says 'Let the review in flight finish' at both sites (agent_trigger.py:677 review_dispatch_refusal, :1151 the dispatch) even when task_attendance shows no turn of the holder's running or queued on the task. Not cited by any unarchived openspec change. Passed over this pass: F423 (repair re-keys the pending note, not one sentence), F442 (needs the deferred-dispatch path traced), F456 (D, wording of a deliberate asymmetry, lower than F438), F486 (a note for an unbuilt openspec change being migrated)."
+        },
+        {
+            "id": "f438-impl",
+            "status": "open",
+            "title": "F438 (C, Tier 0): the holder refusal claims a review is in flight when the holder has no turn on the task",
+            "detail": "One helper used by both sites: when task_attendance(...).attends(task.id, task.assignee) is false, the refusal says no turn of the holder's is running or queued on the task instead of 'Let the review in flight finish'; own_review_remedy stays. Route test (failing first) at POST /agent/trigger with a silent under_review holder; keep test_a_refused_request_says_so.py's attended wording; drive on a fresh source Hub."
+        },
+        {
+            "id": "refill-12-compose",
             "status": "open",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Same rule as refill-10. Passed over so far: F557, F581, F556, F553 remainder, F551 provisional part, F449, F382, F439, F441, F350, F336, F433. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
+            "detail": "Same rule as refill-11. Passed over so far: F557, F581, F556, F553 remainder, F551 provisional part, F449, F382, F439, F441, F350, F336, F433, F423, F442, F456, F486. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
         }
     ],
     "decisions_for_user": [],
