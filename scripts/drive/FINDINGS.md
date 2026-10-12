@@ -13961,7 +13961,7 @@ Not queued. No product code was touched to establish this.
 ---
 
 ## F165 addendum, measured 2026-08-31 (iteration 16) — the unknown branch has **two** spellings, and the merge path knows neither
-**Status:** open (note: measured/narrowed twice by a1b2270 and ccae08b; no fix commit exists; last confirmed open at line 13803)
+**Status:** fixed 2026-09-26 by `a-footprint-names-the-line-of-work-its-commit-is-on` (D12 option (a): one spelling `""`, a detached checkout resolved through `line_of_work` in `read_footprint` and `restamp_run_footprints` (`requirement_evidence.py:852-855`, `:1365-1368`), and a data migration rewriting stored `'HEAD'`). Ledger-closed 2026-10-12 (night refill-12): `test_a_footprint_names_its_line_of_work.py` (incl. `..._unknown_never_head`, `test_the_migration_rewrites_head_...`), `test_task_integration.py`, `test_requirement_drift.py`: 60 passed. Earlier status: open (note: measured/narrowed twice by a1b2270 and ccae08b; no fix commit exists; last confirmed open at line 13803)
 
 Read at the source, no code touched. This narrows F165's repair a second time; the finding, its
 severity (**B**) and its unqueued status are unchanged.

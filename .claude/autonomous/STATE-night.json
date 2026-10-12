@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 27,
+    "iteration": 28,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "refill-12-compose",
-    "next_action": "Run queue item refill-12-compose: re-list the open ledger and pick the next ready Tier-0 finding (skip the passed-over list in its detail); queue it with its impl item and a refill-13-compose. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -173,9 +173,9 @@
         },
         {
             "id": "refill-12-compose",
-            "status": "open",
+            "status": "done",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Same rule as refill-11. Passed over so far: F438 (done), F557, F581, F556, F553 remainder, F551 provisional part, F449, F382, F439, F441, F350, F336, F433, F423, F442, F456, F486. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
+            "detail": "No ready Tier-0 finding left: the rest are design or operator calls (F123, F147, F240, F349 remainder, F389, F444, F350, F456), a spec track (F417), deferred by the operator (F299, F301, F339, F340), Codex/Copilot or evidence-only (F466, F481, F482, F494, F498), records (F164, F467, F472, F503, F506, F511), or passed over by refills 1-11. Ledger-closed F165's addendum (60 passed). Closing entry written; next_action null."
         }
     ],
     "decisions_for_user": [],
