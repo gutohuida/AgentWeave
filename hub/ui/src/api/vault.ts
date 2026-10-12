@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, getJson, postJson, putJson } from './client'
+import { ApiError, fetchWithAuth, getJson, postJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
 /** `a-vault-the-operator-fills-with-text-and-agents-can-read`: the project's knowledge vault. The
@@ -29,6 +30,9 @@ export interface VaultEntry {
   kind?: 'source' | 'fact'
   /** A fact's: the sources it cites. */
   sources?: string[]
+  /** A source's: `text/plain` for pasted text, else the PDF or image it was uploaded as. Absent on
+   *  a Hub that predates files, whose sources are all text. */
+  media_type?: string
   /** A source's: the day it was said, `YYYY-MM-DD`, when the operator gave one. */
   dated?: string | null
   /** A fact's, derived by the Hub from its contradictions: an open one cites it. Absent on a Hub
@@ -63,6 +67,34 @@ export interface VaultEntryPage extends VaultEntry {
 
 export function isFact(entry: VaultEntry): boolean {
   return entry.kind === 'fact'
+}
+
+/** What an uploaded file is, by the media types `POST /vault/files` accepts. */
+export type VaultFileKind = 'pdf' | 'image'
+
+const FILE_EXTENSIONS: Record<string, string> = {
+  pdf: 'application/pdf',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+}
+export const VAULT_FILE_ACCEPT = '.pdf,.png,.jpg,.jpeg,.gif,.webp'
+
+/** The accepted media type of a file the operator chose, from its type or, failing that, its
+ *  extension; null for anything else, which is read as text. */
+export function vaultFileMediaType(file: Pick<File, 'name' | 'type'>): string | null {
+  const known = Object.values(FILE_EXTENSIONS)
+  if (known.includes(file.type)) return file.type
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return FILE_EXTENSIONS[extension] ?? null
+}
+
+export function fileKindOf(mediaType: string | undefined): VaultFileKind | null {
+  if (mediaType === 'application/pdf') return 'pdf'
+  if (mediaType && Object.values(FILE_EXTENSIONS).includes(mediaType)) return 'image'
+  return null
 }
 
 export interface VaultSettings {
@@ -172,6 +204,64 @@ export function useUploadVaultSource() {
       void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault', 'map'] })
     },
   })
+}
+
+export interface VaultFileInput extends Omit<VaultSourceInput, 'content'> {
+  file: File
+  mediaType: string
+}
+
+/** Upload a PDF or image: the bytes are the body, the fields ride in the query (`POST /vault/files`). */
+export function useUploadVaultFile() {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: async ({ file, mediaType, name, type, visibility, dated }: VaultFileInput) => {
+      const query = new URLSearchParams({ name, type, visibility, ...(dated ? { dated } : {}) })
+      const res = await fetchWithAuth(`/api/v1/projects/${projectId}/vault/files?${query}`, {
+        method: 'POST',
+        body: file,
+        headers: { 'Content-Type': mediaType },
+      })
+      return (await res.json()) as VaultEntry
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault', 'map'] })
+    },
+  })
+}
+
+/** A file source's bytes as an object URL the page can show, fetched with the key because the Hub
+ *  authenticates by header and a bare `src` cannot. A 404 is a Hub older than the bundle or a file
+ *  that is gone: no URL and no error. A 409 is a private file held on another machine, which the
+ *  entry's own note already explains. */
+export function useVaultFile(entryId: string, enabled: boolean) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  const query = useQuery<Blob | null>({
+    queryKey: ['project', projectId, 'vault', 'file', entryId],
+    queryFn: async () => {
+      try {
+        return await (await fetchWithAuth(`/api/v1/projects/${projectId}/vault/sources/${entryId}/file`)).blob()
+      } catch (error) {
+        if (error instanceof ApiError && (error.status === 404 || error.status === 409)) return null
+        throw error
+      }
+    },
+    enabled: enabled && isConfigured && !!projectId,
+    staleTime: Infinity,
+    retry: false,
+  })
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!query.data) {
+      setUrl(null)
+      return
+    }
+    const made = URL.createObjectURL(query.data)
+    setUrl(made)
+    return () => URL.revokeObjectURL(made)
+  }, [query.data])
+  return { url, error: query.error }
 }
 
 export function useUpdateVaultSettings() {

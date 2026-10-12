@@ -1,19 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { readableApiError } from '@/api/client'
 import {
+  VAULT_FILE_ACCEPT,
   VAULT_TYPES,
+  fileKindOf,
   isFact,
   isNoVault,
   useDistilVaultSource,
   useCloseVaultReport,
   useResolveContradiction,
   useUpdateVaultSettings,
+  useUploadVaultFile,
   useUploadVaultSource,
+  useVaultFile,
   useVaultContradictions,
   useVaultEntry,
   useVaultMap,
   useVaultReports,
   useVaultSettings,
+  vaultFileMediaType,
   type VaultContradiction,
   type VaultEntry,
   type VaultReport,
@@ -44,6 +49,9 @@ import { hubDate } from '@/lib/hubTime'
  * Contradictions (`sources-that-disagree-are-pointed-out`) are listed above the entries, open
  * first, each with a form that records the operator's decision. A Hub that predates them answers
  * 404, which reads as no section; the facts they dispute carry a mark where they are listed.
+ *
+ * A PDF or image source (`images-and-pdfs-are-vault-sources-too`) is shown above its transcription,
+ * from the file route; where that answers 404 the transcription stands alone.
  *
  * Reports (`a-working-agent-tells-the-manager-an-entry-is-wrong`) follow, each with what the
  * manager did; one it referred carries a form to close it. A fact a report corrected is marked
@@ -197,6 +205,9 @@ function EntryRow({
       <span className="flex w-full items-center gap-2">
         <span className="truncate text-sm font-medium">{entry.name}</span>
         <Badge variant="default">{entry.type}</Badge>
+        {fileKindOf(entry.media_type) && (
+          <Badge variant="default">{fileKindOf(entry.media_type) === 'pdf' ? 'PDF' : 'image'}</Badge>
+        )}
         {entry.visibility === 'private' && <Badge variant="warning">private</Badge>}
       </span>
       <span className="line-clamp-2 text-xs" style={{ color: 'var(--text-3)' }}>
@@ -231,6 +242,7 @@ function EntryView({
     .filter((citation) => citation.source === entry.id)
     .map((citation) => [citation.line_start, citation.line_end] as const)
   const source = !isFact(entry)
+  const fileKind = fileKindOf(entry.media_type)
 
   return (
     <article className="flex flex-col gap-3">
@@ -254,6 +266,7 @@ function EntryView({
           {readableApiError(card.error, 'Could not read where this fact says so.')}
         </p>
       ) : null}
+      {source && fileKind && <FileViewer entry={entry} kind={fileKind} />}
       {pages.error ? (
         <p className="text-xs" style={{ color: 'var(--amber)' }} role="alert">
           {readableApiError(pages.error, 'Could not read this entry.')}
@@ -278,6 +291,37 @@ function EntryView({
         </>
       )}
     </article>
+  )
+}
+
+/** An uploaded PDF in the browser's viewer, or an image, from an object URL; nothing while it loads
+ *  or when the Hub has no file to give (the transcription below says what there is). */
+function FileViewer({ entry, kind }: { entry: VaultEntry; kind: 'pdf' | 'image' }) {
+  const file = useVaultFile(entry.id, entry.available)
+  if (file.error) {
+    return (
+      <p className="text-xs" style={{ color: 'var(--amber)' }} role="alert">
+        {readableApiError(file.error, 'Could not load this file.')}
+      </p>
+    )
+  }
+  if (!file.url) return null
+  return kind === 'pdf' ? (
+    <iframe
+      data-testid="vault-file-pdf"
+      src={file.url}
+      title={entry.name}
+      className="h-[70vh] w-full rounded-md"
+      style={{ border: '1px solid var(--border)' }}
+    />
+  ) : (
+    <img
+      data-testid="vault-file-image"
+      src={file.url}
+      alt={entry.name}
+      className="max-h-[60vh] max-w-full self-start rounded-md object-contain"
+      style={{ border: '1px solid var(--border)' }}
+    />
   )
 }
 
@@ -424,15 +468,29 @@ function UploadForm({
   onCancel: () => void
 }) {
   const upload = useUploadVaultSource()
+  const uploadFile = useUploadVaultFile()
   const [name, setName] = useState('')
   const [type, setType] = useState<VaultType>('transcript')
   const [visibility, setVisibility] = useState<VaultVisibility>(settings?.default_visibility ?? 'tracked')
   const [content, setContent] = useState('')
   const [dated, setDated] = useState('')
   const [fileError, setFileError] = useState<string | null>(null)
+  // A PDF or image goes up as it is; its text is written once the manager has read it.
+  const [binary, setBinary] = useState<{ file: File; mediaType: string } | null>(null)
+  const sending = upload.isPending || uploadFile.isPending
 
   const readFile = async (file: File | undefined) => {
     if (!file) return
+    const mediaType = vaultFileMediaType(file)
+    if (mediaType) {
+      setBinary({ file, mediaType })
+      setContent('')
+      setFileError(null)
+      if (!name) setName(file.name.replace(/\.[^.]+$/, ''))
+      if (type === 'transcript') setType('document')
+      return
+    }
+    setBinary(null)
     try {
       setContent(await file.text())
       setFileError(null)
@@ -448,10 +506,12 @@ function UploadForm({
       aria-label="Add a source"
       onSubmit={(event) => {
         event.preventDefault()
-        upload.mutate(
-          { name, type, content, visibility, ...(dated ? { dated } : {}) },
-          { onSuccess: (entry) => onDone(entry.id) },
-        )
+        const fields = { name, type, visibility, ...(dated ? { dated } : {}) }
+        if (binary) {
+          uploadFile.mutate({ ...fields, ...binary }, { onSuccess: (entry) => onDone(entry.id) })
+          return
+        }
+        upload.mutate({ ...fields, content }, { onSuccess: (entry) => onDone(entry.id) })
       }}
     >
       <h3 className="text-sm font-semibold">Add a source</h3>
@@ -502,27 +562,42 @@ function UploadForm({
           in the repository, so colleagues know it exists.
         </p>
       )}
-      <label className="flex flex-col gap-1 text-xs">
-        Text
-        <Textarea
-          data-testid="vault-upload-content"
-          rows={12}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Paste a transcript, a rule or a document, or choose a text file below."
-        />
-      </label>
+      {binary ? (
+        <p className="text-xs" data-testid="vault-upload-binary" style={{ color: 'var(--text-2)' }}>
+          {binary.file.name} will be stored as it is. Its text is written down once the manager has
+          read it, and agents can read that text from then on.{' '}
+          <button
+            type="button"
+            className="underline"
+            style={{ color: 'var(--blue)' }}
+            onClick={() => setBinary(null)}
+          >
+            Paste text instead
+          </button>
+        </p>
+      ) : (
+        <label className="flex flex-col gap-1 text-xs">
+          Text
+          <Textarea
+            data-testid="vault-upload-content"
+            rows={12}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Paste a transcript, a rule or a document, or choose a text file, a PDF or an image below."
+          />
+        </label>
+      )}
       <input
         type="file"
-        aria-label="Read the text from a file"
+        aria-label="Read the text from a file, or upload a PDF or an image"
         data-testid="vault-upload-file"
-        accept=".txt,.md,.markdown,.vtt,.srt,.csv,.json,text/*"
+        accept={`.txt,.md,.markdown,.vtt,.srt,.csv,.json,text/*,${VAULT_FILE_ACCEPT}`}
         className="text-xs"
         onChange={(e) => void readFile(e.target.files?.[0])}
       />
-      {(fileError || upload.error) && (
+      {(fileError || upload.error || uploadFile.error) && (
         <p className="text-xs" style={{ color: 'var(--amber)' }} role="alert">
-          {fileError ?? readableApiError(upload.error, 'Could not add that source.')}
+          {fileError ?? readableApiError(upload.error ?? uploadFile.error, 'Could not add that source.')}
         </p>
       )}
       <div className="flex gap-2">
@@ -530,7 +605,7 @@ function UploadForm({
           type="submit"
           size="sm"
           data-testid="vault-upload-submit"
-          disabled={upload.isPending || !name.trim() || !content}
+          disabled={sending || !name.trim() || !(content || binary)}
         >
           Add
         </Button>

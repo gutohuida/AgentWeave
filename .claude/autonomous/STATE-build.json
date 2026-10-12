@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-12-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "images-pdfs-tab-impl",
-    "next_action": "Do queue item images-pdfs-tab-impl (task-4bbc7517b786): FR-7. vitest first (hub/ui/src/__tests__/vaultFiles.test.tsx), then VaultPage.tsx + api/vault.ts: a file source shows [data-testid=vault-file-pdf] (iframe/object/embed from a blob: URL fetched from GET /vault/sources/{id}/file) or [data-testid=vault-file-image] (img from a blob: URL) above its transcription, 404-tolerant; an upload form posting the raw body to /vault/files. npm run build, scripts/refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together (the bundle reaches :8000 on reload: say so in the log). Then d1026 should pass 1-8 (Haiku). Do not end the turn while a drive runs in the background.",
+    "current": "images-pdfs-drive",
+    "next_action": "Do queue item images-pdfs-drive: the acceptance drive (d1026) already passes 8/8 on the committed UI (iteration 8, log). Remaining: run the full Hub suite in chunks (py -3.11 -m pytest hub/tests, split by file groups; F583 test_each_piece_is_one_spawn_and_one_firing is a known pre-existing failure) and the CLI suite; ruff + black + mypy per CLAUDE.md; then record evidence on :8010 (proj-d85a82bf4216) through scripts/drive/close_change.py (add an images-pdfs entry; read the script and the fspecvault pattern in 2026-10-11-build-log.md iteration 9): task-edc80dd92218 first, then task-c87dfb6d31ea (409 dependency_unmet until the drive-first task is approved), then task-4bbc7517b786; fold the change and POST /projects/proj-d85a82bf4216/project/spec/reindex {}; commit what spec/ gains; append a spec-queue/METRICS.md row (Tier 2; stage that caught defects: the 405-not-404 prediction at drive-first, the unread-file message path at read-impl, the empty headless PDF frame at tab-impl). Never end a turn on a backgrounded drive; run long things in the foreground.",
     "queue": [
         {
             "id": "specs-vault-close",
@@ -49,7 +49,7 @@
         },
         {
             "id": "images-pdfs-tab-impl",
-            "status": "open",
+            "status": "done",
             "title": "Wiki shows images and PDFs inline and uploads them (task-4bbc7517b786)",
             "detail": "FR-7. vitest first (src/__tests__/vaultFiles.test.tsx), VaultPage.tsx + api/vault.ts, blob URL img/PDF viewer, 404-tolerant, upload form -> /vault/files. npm run build, refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together. Bundle reaches :8000 on reload: say so in the log."
         },
