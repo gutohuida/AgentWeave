@@ -268,11 +268,13 @@ async def verdict_evidence_sentence(
     the gate's own detail, with the task that recorded it where that is another task serving the
     same requirement.
 
-    **The ungranted remedy is `ask_user`**, the one channel from an agent to the operator
-    (`send_message` reaches only agents, none of whom can decide evidence). While the question
-    waits, the reviewer's turn is live, so the flow truthfully reports the review in flight. Not
-    claimed: that an unanswered question parks the task -- `under_review` has no edge to `blocked`,
-    so a question that times out leaves the row to F154's sentence, with the question on record.
+    **The ungranted remedy is to end the turn**, not `ask_user` (F563). This sentence used to send
+    the reviewer to `ask_user`; measured on a flow (tester-amends drive, 2026-10-09) the reviewer
+    polled its question for about five minutes and the turn ended with no verdict, because nobody in
+    a flow watches for it. A turn that ends while the gate refuses is already surfaced to the
+    operator with the gate's own sentence and re-staffs nobody (`run_divergence`, `F374-fix`), so
+    the reviewer's part is to stop and say what waits. Not claimed: that the review resumes once the
+    evidence is decided -- the operator approves or sends it back from the surfaced reason.
     *may_decide* is the reviewer's `can_accept_evidence` grant.
     """
     from . import task_integration
@@ -314,9 +316,10 @@ async def verdict_evidence_sentence(
         )
     return sentence + (
         " Deciding evidence is the operator's, not yours. If the work is right and `approved` is "
-        "refused, your verdict was not recorded: ask the operator with `ask_user` to decide the "
-        "evidence named above, and approve once they say it is accepted. Do not tell anyone the "
-        "task is approved until `update_task` has succeeded."
+        "refused, your verdict was not recorded: end your turn, saying which evidence named above "
+        "is waiting. Do not wait on a question; the Hub shows the operator that the approval is "
+        "held and why, and they decide the evidence. Do not tell anyone the task is approved "
+        "until `update_task` has succeeded."
     )
 
 

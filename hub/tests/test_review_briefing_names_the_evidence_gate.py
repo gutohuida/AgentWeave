@@ -152,8 +152,13 @@ async def test_an_ungranted_reviewer_is_told_the_approval_can_be_refused_and_wha
         assert GATE in rendered
         assert "`FR-1`" in rendered
         assert "Deciding evidence is the operator's, not yours" in rendered
-        # The remedy reaches the operator: `send_message` reaches only agents (review, F357).
-        assert "ask the operator with `ask_user`" in rendered
+        # F563: no question is asked. Nobody in a flow watches for it, the reviewer's turn waited
+        # on it until the timeout, and a turn that ends with the approval refused is already
+        # surfaced to the operator with the gate's sentence (`F374-fix`).
+        assert "ask the operator with" not in rendered
+        assert "Do not wait on a question" in rendered
+        assert "end your turn" in rendered
+        assert "shows the operator" in rendered
         assert "Do not tell anyone the task is approved" in rendered
         # `decide_evidence` takes the evidence id, so the sentence names it.
         assert "`ev-" in rendered

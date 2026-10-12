@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f563-impl",
-    "next_action": "Do queue item f563-impl: F563 a flow reviewer refused by the evidence gate waits on ask_user until timeout. Follow DECISIONS.md DECIDED F374-fix: a 409 whose remedy only the operator can apply ends the review and surfaces the gate's sentence. Test failing first at the seam the finding names, fix, drive, set the F563 Status line. Keep current equal to the item id.",
+    "current": "f538-impl",
+    "next_action": "Do queue item f538-impl: F538 a checkpoint can fire on a context window that was never measured. Test failing first at the seam the finding names (checkpoint_trigger reads percent without checking the usage sample's status; output_recording.resolve_usage_limit fills a catalog window into an `unavailable` sample), fix, drive, set the F538 Status line. Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -65,9 +65,9 @@
         },
         {
             "id": "f563-impl",
-            "status": "open",
+            "status": "done",
             "title": "F563 a flow reviewer refused by the evidence gate waits on ask_user until timeout (Tier 0)",
-            "detail": "Direction follows DECISIONS.md DECIDED F374-fix: a 409 whose remedy only the operator can apply ends the review and surfaces the gate's sentence to the operator. Repro artefacts testbed/drive1013-tester-amends/093412. If it needs a new operator choice, add an OPEN DECISIONS row instead of guessing."
+            "detail": "Fixed iteration 9: the briefing sent an ungranted reviewer to ask_user; it now says to end the turn (F374's surfacing handles the rest). Test + Status line recorded; no live reviewer turn driven."
         },
         {
             "id": "f538-impl",
