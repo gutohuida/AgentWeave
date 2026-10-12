@@ -169,6 +169,58 @@ async def test_work_reaching_the_ledger_closes_an_open_divergence(app):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("decided", "task_id"), [("approved", "task-f548a"), ("rejected", "task-f548b")]
+)
+async def test_a_task_someone_else_decided_while_the_run_was_live_records_nothing(
+    app, decided, task_id
+):
+    """F548. The decision (approve or reject) is a transition that resolves every open divergence
+    *at the moment it lands*; a divergence recorded after it would be born open on a task nothing
+    will ever move again, and under `retry` would queue a run on a finished task."""
+    run_id = f"run-f548-{decided}"
+    async with async_session_factory() as session:
+        await _bound_run(session, run_id, task_id, policy="retry", status="running")
+        task = await session.get(Task, task_id)
+        await apply_transition(session, task, "completed", operator())
+        if decided == "approved":
+            await apply_transition(session, task, "under_review", operator())
+        await apply_transition(session, task, decided, operator())
+        await session.commit()
+        run = await session.get(Run, run_id)
+        run.status = "completed"
+        await session.commit()
+
+    assert await evaluate_run_end(run_id) is None
+
+    async with async_session_factory() as session:
+        assert await _divergence_for(session, run_id) is None
+        assert await _queued_for(session, "worker") == []
+
+
+@pytest.mark.asyncio
+async def test_a_task_the_operator_approves_over_the_route_records_nothing(app, auth_headers):
+    """F548 at the surface: the operator's own route decides the task, then the run ends."""
+    base = "/api/v1/projects/proj-test/tasks/task-f548c"
+    async with async_session_factory() as session:
+        await _bound_run(session, "run-f548-route", "task-f548c", policy="retry", status="running")
+    for status in ("completed", "under_review", "approved"):
+        moved = await app.patch(base, json={"status": status}, headers=auth_headers)
+        assert moved.status_code == 200, moved.text
+    async with async_session_factory() as session:
+        (await session.get(Run, "run-f548-route")).status = "completed"
+        await session.commit()
+
+    assert await evaluate_run_end("run-f548-route") is None
+
+    listed = await app.get(
+        "/api/v1/projects/proj-test/tasks/divergences/recent", headers=auth_headers
+    )
+    assert listed.status_code == 200, listed.text
+    assert [row for row in listed.json() if row["run_id"] == "run-f548-route"] == []
+
+
+@pytest.mark.asyncio
 async def test_the_record_survives_its_own_resolution(app):
     async with async_session_factory() as session:
         await _bound_run(session, "run-div-7", "task-div-7")

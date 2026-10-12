@@ -58,7 +58,7 @@ from .run_task_binding import (
     wait_has_expired,
 )
 from .sse import defer_broadcast, sse_manager
-from .task_transitions import ACTOR_RUN, STATUS_BLOCKED, allowed_targets
+from .task_transitions import ACTOR_RUN, STATUS_BLOCKED, TERMINAL_STATUSES, allowed_targets
 from .utils import persist_event, short_id
 
 if TYPE_CHECKING:
@@ -813,6 +813,13 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
         # *status at the boundary*, not on which run parked it (design D5) — which is what makes a
         # multi-turn blocked task safe now that every turn of a bound conversation is checked.
         if task.status == STATUS_BLOCKED:
+            return None
+
+        # Decided by someone else while this run was live (F548). Approving or rejecting a task is a
+        # transition that closes every divergence open on it *at that moment*, so one recorded now
+        # would be born open on a task nothing will move again — and `retry` would queue a run for
+        # finished work. Nothing was dropped: the decision is the work reaching the ledger.
+        if task.status in TERMINAL_STATUSES:
             return None
 
         # One owned answer to "was this a live flow's own work turn" (design D4), read below by

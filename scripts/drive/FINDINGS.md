@@ -35095,7 +35095,7 @@ The payload allows a declared task `title` of 200 characters (`spec_payload.py:1
 
 ## F548 (C) -- a divergence recorded for a run whose task someone else decides never closes
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** fixed 2026-10-13 (Tier 0, night iteration 14): `evaluate_run_end` records nothing for a task already `approved`/`rejected` at the boundary (decided by someone else while the run was live; the decision had already resolved every open divergence, so a later row was born unresolvable, and `retry` queued a run on finished work). Tests in `test_run_divergence.py` (approved and rejected via `apply_transition`, plus the operator's `PATCH` route and `divergences/recent`) failed first, pass now. Not driven against a live Hub run. Left alone: a task moved to a non-terminal status by someone else (e.g. operator completes it mid-run) still records; the next transition closes it. Filed 2026-10-08 (spec overhaul audit, reading code).
 
 A run bound to a task that another actor approves still has a divergence recorded that nothing resolves
 (`run_divergence.py:762-816`).

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 13,
+    "iteration": 14,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f548-impl",
-    "next_action": "Do queue item f548-impl: F548 a divergence for a run whose task someone else decides never closes. Read run_divergence.py ~762-816 and the F548 entry in scripts/drive/FINDINGS.md; test failing first at the seam, fix, drive, set the F548 Status line. Keep current equal to the item id.",
+    "current": "refill-2",
+    "next_action": "Do queue item refill-2: compose the next batch of ready Tier-0 findings from spec-queue/BACKLOG.html and scripts/drive/FINDINGS.md (by severity; skip OPEN-decision, 'fix shape not decided', and ones the build log holds), append them as -impl items, and make the first one next_action. Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -83,9 +83,15 @@
         },
         {
             "id": "f548-impl",
-            "status": "open",
+            "status": "done",
             "title": "F548 a divergence for a run whose task someone else decides never closes (Tier 0)",
-            "detail": "run_divergence.py ~762-816: a run bound to a task another actor approves keeps an unresolved divergence."
+            "detail": "Fixed iteration 14: no divergence recorded for a task already approved/rejected at the run boundary; tests incl. the operator PATCH route + divergences/recent recorded in the F548 Status line."
+        },
+        {
+            "id": "refill-2",
+            "status": "open",
+            "title": "Refill from backlog (queue emptied before 05:00 on the away night)",
+            "detail": "Compose the next batch of ready Tier-0 findings by severity from BACKLOG.html / FINDINGS.md, skipping any held by the build log or needing a design call; append as -impl items."
         }
     ],
     "decisions_for_user": [],
