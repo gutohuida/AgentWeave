@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-10-12-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "images-pdfs-spec",
-    "next_action": "Do queue item images-pdfs-spec (Opus, Tier 1): author the images-and-pdfs change from the vault roadmap (spdoc-7c75066d6403) with scripts/drive/author_change.py on :8010 (AW_HUB, AW_KEY, AW_PROJECT=proj-d85a82bf4216, MSYS_NO_PATHCONV=1). First settle F573 by measurement: can each Claude runner read PDFs/images natively? Record the result. Approve via the Hub and put the task ids into the later images-pdfs items.",
+    "current": "images-pdfs-drive-first",
+    "next_action": "Do queue item images-pdfs-drive-first: write scripts/drive/d1026_images_pdfs.py from the drive acceptance criterion of spec/changes/images-and-pdfs-are-vault-sources-too/spec.json (copy d1016_distillation.py's scratch-Hub scaffolding), run it on today's tree and record it failing at its first check (POST /vault/files 404). Commit the script.",
     "queue": [
         {
             "id": "specs-vault-close",
@@ -23,29 +23,35 @@
         },
         {
             "id": "images-pdfs-spec",
-            "status": "open",
-            "title": "Author the images-and-pdfs change (Tier 1)",
+            "status": "done",
+            "title": "Author the images-and-pdfs change (Tier 2) - spdoc-99b7eb144fcd",
             "detail": "Opus. Settle F573 by measurement (can each runner read PDFs/images natively) and record it. scripts/drive/author_change.py; approve via Hub; queue task ids into later items.",
             "model": "opus"
         },
         {
             "id": "images-pdfs-drive-first",
             "status": "open",
-            "title": "Write scripts/drive/d<MMDD>_images_pdfs.py and record it failing",
-            "detail": "From the roadmap done sentence: uploaded PDF and screenshot each yield cited facts and the wiki shows both inline."
+            "title": "Write scripts/drive/d1026_images_pdfs.py and record it failing (task-edc80dd92218)",
+            "detail": "Spec: spec/changes/images-and-pdfs-are-vault-sources-too (AC drive). Copy d1016_distillation.py: scratch Hub 8110+, Haiku claude runner, distillation enabled; reportlab 2-page PDF (450 euros) + PIL PNG (75 euros) via POST /vault/files raw body; media_type, file route bytes, facts whose quotes are in the transcription; Chromium inline view, shots. Must fail at check 1 (404) on today's tree."
         },
         {
-            "id": "images-pdfs-backend-impl",
+            "id": "images-pdfs-store-impl",
             "status": "open",
-            "title": "Backend: upload, storage, native read or extractor, distillation",
-            "detail": "Tests first at the seam. py -3.11 only.",
-            "model": "opus"
+            "title": "Backend A: upload, storage, file route, size-cap exemption (task-c87dfb6d31ea)",
+            "detail": "FR-1, FR-2, FR-6, FR-5's not-read-yet note. vault.py add_file + media_type; api/v1/vault.py POST /vault/files (raw body, query fields) and GET /vault/sources/{id}/file; main.py ContentSizeLimitMiddleware exempts /vault/files up to 10 MiB. Failing tests first in hub/tests/test_vault_files.py. Do not close the task: read-impl finishes it."
+        },
+        {
+            "id": "images-pdfs-read-impl",
+            "status": "open",
+            "model": "opus",
+            "title": "Backend B: reading worker, containment, transcribe then distil (task-c87dfb6d31ea)",
+            "detail": "FR-3, FR-4, FR-5. Claude adapter reading one-shot: --tools Read --strict-mcp-config --permission-mode default, no widening flag; other CLIs cannot read. worker.py: spawn in a temp dir holding only a copy of the file. distillation.py: transcribe when no .md, store it, distil as text; failure -> firing failed; non-claude -> 409, no spawn. Tests first in test_vault_files.py."
         },
         {
             "id": "images-pdfs-tab-impl",
             "status": "open",
-            "title": "Wiki shows images and PDFs inline",
-            "detail": "vitest first, npm run build, refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together."
+            "title": "Wiki shows images and PDFs inline and uploads them (task-4bbc7517b786)",
+            "detail": "FR-7. vitest first (src/__tests__/vaultFiles.test.tsx), VaultPage.tsx + api/vault.ts, blob URL img/PDF viewer, 404-tolerant, upload form -> /vault/files. npm run build, refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together. Bundle reaches :8000 on reload: say so in the log."
         },
         {
             "id": "images-pdfs-drive",
@@ -70,7 +76,10 @@
     "decisions_for_user": [
         "build-1011-1",
         "build-1011-2",
-        "build-1011-3"
+        "build-1011-3",
+        "build-1012-1",
+        "build-1012-2",
+        "build-1012-3"
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window's merge-gate item (build-window.md, 'The merge gate'), which may fast-forward master to this branch with 'git fetch . <branch>:master' and 'git push origin master' when all four gate conditions hold -- operator, 2026-10-11 (DECISIONS.md away-1011). Never a merge commit, never a conflict resolved.",

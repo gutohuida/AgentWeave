@@ -35292,6 +35292,8 @@ A roadmap's slices are specified later, one at a time, in their own change docum
 
 **Fix shape (not decided):** let an open question name the slice it belongs to (`slice: <key>`). On a roadmap, only questions with no slice block proposing it. The question should then show up when that slice's change document is written. Tier 1.
 
+**2026-10-12, build window:** the images-and-pdfs question hidden in that slice's `intent` was answered by measurement when the slice was authored (`spdoc-99b7eb144fcd`, design D2): a Claude/Haiku worker given only the Read tool read a PDF and a PNG exactly. Nothing carried it there but the playbook naming F573: the workaround held this once because a human-written queue item repeated it. The finding itself (the roadmap's open questions cannot name their slice) stays open.
+
 ## F574 (C) -- a document written whole through the content route always warns "steps skipped" on approval
 
 **Status:** open 2026-10-09. Found while approving `spdoc-a78776d50704` (`the-hubs-background-jobs-are-configured-on-a-manager-page`), interactive.
