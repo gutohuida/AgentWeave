@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f455-impl",
-    "next_action": "Do queue item f455-impl: fix F455 as Tier 0 (see its queue detail). Keep current equal to the item id.",
+    "current": "f492-impl",
+    "next_action": "Do queue item f492-impl: fix F492 as Tier 0 (see its queue detail). Keep current equal to the item id. Also file a finding for the pre-existing tests/test_skill_sync.py failures (2 mirrors stale: run-iteration.ps1, night-briefing/SKILL.md) if none exists.",
     "queue": [
         {
             "id": "compose",
@@ -35,9 +35,9 @@
         },
         {
             "id": "f455-impl",
-            "status": "open",
+            "status": "done",
             "title": "F455 doctor --port without --profile checks the wrong DB (Tier 0)",
-            "detail": "grep '## F455'. Test, fix, drive."
+            "detail": "Fixed iteration 4: doctor recovers the profile from the live pid file; real-parser test + real-process drive recorded in the F455 Status line."
         },
         {
             "id": "f492-impl",

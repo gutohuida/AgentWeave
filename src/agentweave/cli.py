@@ -127,14 +127,35 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _hub_profile_serving_port(port: int) -> Optional[str]:
+    """The named profile whose live Hub recorded itself on `port`, or None (F455).
+
+    A named profile's Hub writes `hub-<profile>-<port>.pid` (`_hub_pid_file`), so the filename
+    carries the profile. Without this, `doctor --port N` examined the default profile's database
+    and called it accessible while the Hub on N served another one.
+    """
+    suffix = f"-{port}.pid"
+    for pid_file in sorted(HUB_DIR.glob(f"hub-*{suffix}")):
+        profile = pid_file.name[len("hub-") : -len(suffix)]
+        if profile and _hub_pid_running(port=port, profile=profile) is not None:
+            return profile
+    return None
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     """Run runtime readiness diagnostics."""
     import json as _json
 
     from .diagnostics import collect_diagnostics, format_results, has_failures, summarize
 
-    port = getattr(args, "port", None) or DEFAULT_HUB_PORT
-    profile = getattr(args, "profile", "default") or "default"
+    explicit_port = getattr(args, "port", None)
+    port = explicit_port or DEFAULT_HUB_PORT
+    # The global `--profile` defaults to "default", so a parsed namespace never leaves it unset.
+    # "default" with a port is treated as unspecified: one port has one Hub, and if a named
+    # profile's live Hub is on it, the default profile's database is not what stands behind it.
+    profile = getattr(args, "profile", None) or "default"
+    if profile == "default" and explicit_port:
+        profile = _hub_profile_serving_port(port) or "default"
     results = collect_diagnostics(
         include_network=not getattr(args, "no_network", False), port=port, profile=profile
     )

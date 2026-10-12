@@ -33446,7 +33446,8 @@ Nineteen coverage rows driven by five parallel operators plus row 19 by the orch
 
 ## F455 (C) — `agentweave doctor --port N` without `--profile` checks the default profile's database and reports it accessible
 
-**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), CLI.
+**Status:** fixed 2026-10-12 (night window, Tier 0). `cmd_doctor` now recovers the profile from the live `hub-<profile>-<port>.pid` file when `--port` is given and the profile is the default (`_hub_profile_serving_port`, `src/agentweave/cli.py`). Test `tests/test_doctor_port_names_its_profile.py` goes through `cli.main`, because the global `--profile` defaults to `"default"` and a hand-built Namespace hid that (first version passed while the fix could not fire). Drive: real `agentweave.cli doctor` process, redirected home, live pid file `hub-drive455-8030.pid`: `--port 8030` checked `profiles\drive455\agentweave.db`; no port and `--port 8031` kept `data\agentweave.db`. A Hub with no pid file (started by hand) is still not recognised: the default database is checked as before.
+**Found:** the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), CLI.
 **Source:** drive
 **Theme:** Hub plumbing
 
