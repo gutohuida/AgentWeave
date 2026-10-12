@@ -30,7 +30,6 @@ tasks still link a retired requirement, and which tasks the document no longer d
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -79,14 +78,6 @@ ELLIPSIS = "…"
 #: A task in one of these records what was delivered or turned down against what was asked then,
 #: so a later approval leaves it exactly as it is (F535).
 CLOSED_STATUSES = ("approved", "rejected")
-
-
-def _natural(identifier: str) -> list:
-    """`FR-2` before `FR-11`: digit runs compare as numbers."""
-    return [
-        (1, int(part), "") if part.isdigit() else (0, 0, part)
-        for part in re.split(r"(\d+)", identifier)
-    ]
 
 
 @dataclass(frozen=True)
@@ -536,8 +527,8 @@ async def _refresh(
         key=task.spec_task_key or "",
         title=task.title,
         fields=tuple(fields),
-        linked=tuple(sorted(linked, key=_natural)),
-        unlinked=tuple(sorted(unlinked, key=_natural)),
+        linked=tuple(sorted(linked, key=spec_identity.natural_key)),
+        unlinked=tuple(sorted(unlinked, key=spec_identity.natural_key)),
     )
 
 
@@ -580,7 +571,7 @@ async def _report_unrefreshed(
                     id=row.id,
                     key=row.spec_task_key or "",
                     status=row.status,
-                    requirements=tuple(sorted(retired[row.id], key=_natural)),
+                    requirements=tuple(sorted(retired[row.id], key=spec_identity.natural_key)),
                 )
             )
 

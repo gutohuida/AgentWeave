@@ -28,6 +28,20 @@ IDENTIFIER_PREFIX = "FR-"
 _IDENTIFIER_RE = re.compile(r"^FR-(\d+)$")
 
 
+def natural_key(identifier: str) -> list:
+    """`FR-2` before `FR-11`: digit runs compare as numbers, everything else as text.
+
+    Nothing constrains an operator-authored identifier to the `XX-N` shape, so a wholly
+    non-numeric one has to come out somewhere deterministic rather than raise. A natural sort has
+    no portable SQL expression across SQLite and Postgres, so callers sort the rows they read; the
+    query's own ordering is kept first, which is what makes the sort's stability meaningful.
+    """
+    return [
+        (1, int(part), "") if part.isdigit() else (0, 0, part)
+        for part in re.split(r"(\d+)", identifier)
+    ]
+
+
 def read_identity(stored: Optional[Dict[str, Any]]) -> Tuple[Dict[str, str], int]:
     """The key→identifier map and high-water mark carried by a stored payload."""
     if not isinstance(stored, dict):

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 20,
+    "iteration": 21,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f551-sort-impl",
-    "next_action": "Run queue item f551-sort-impl: F551 part 3, requirement identifiers sort as text (FR-10 before FR-2). Test first at the coverage route (FR-2 and FR-10 in one document), then sort requirement_coverage.py:241 and requirement_links.py:256/:350 with the natural key (spec_tasks._natural, maybe promoted to a shared helper), check UI/MCP consumers, drive on a fresh source Hub, set F551's Status, append a METRICS row.",
+    "current": "refill-9-compose",
+    "next_action": "Run queue item refill-9-compose: refill the queue from the backlog (it is before 05:00, so away-1011 refills). Re-list findings whose Status is not fixed/superseded, map unarchived openspec changes first, pick one Tier-0 C (or ready A/B) finding with a one-sentence diff, queue it plus refill-10-compose. At/after 05:00 instead set next_action null and write the closing entry per night-window.md 'Ending the window'.",
     "queue": [
         {
             "id": "compose",
@@ -131,15 +131,15 @@
         },
         {
             "id": "f551-sort-impl",
-            "status": "open",
+            "status": "done",
             "title": "F551 part 3 (C, Tier 0): requirement identifiers sort as text, FR-10 before FR-2",
-            "detail": "Sort the three SQL order_by(SpecRequirement.identifier) sites (requirement_coverage.py:241, requirement_links.py:256, :350) with the natural key from spec_tasks._natural (consider a shared helper; api/v1/tasks.py:199 restates it). Test first at the coverage route with FR-2/FR-10 in one document; check UI/MCP consumers for their own re-sort; drive on a fresh source Hub."
+            "detail": "Fixed: spec_identity.natural_key (promoted from spec_tasks._natural; tasks.py's restated copy removed); coverage report, unserved and for_task re-sort with it; test failed before (3); drive d1012_f551_sort 9/9. GET /spec/requirements left in string order (a test pins it, the app re-sorts). F551's provisional part stays open."
         },
         {
             "id": "refill-9-compose",
             "status": "open",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Same rule as refill-8. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
+            "detail": "Same rule as refill-8. Passed over so far: F557, F581, F556, F553 remainder, F551 provisional part. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
         }
     ],
     "decisions_for_user": [],

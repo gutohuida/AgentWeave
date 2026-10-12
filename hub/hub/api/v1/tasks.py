@@ -1,7 +1,6 @@
 """Task endpoints — POST/GET/GET{id}/PATCH."""
 
 import asyncio
-import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -16,6 +15,7 @@ from ... import (
     dependency_gate,
     loop_history,
     project_workspace,
+    spec_identity,
     spec_lifecycle,
     spec_reading,
     task_dependency_writer,
@@ -192,17 +192,7 @@ async def _attach_requirements(
             entry["count"] += 1
 
     # `.order_by(SpecRequirement.identifier)` above sorts as text, so `FR-11` lands between `FR-1`
-    # and `FR-2`. The data is right and the order reads as a defect, which costs a diagnosis every
-    # time someone checks what a task is tied to. Sorted here rather than in SQL: a natural sort
-    # has no portable expression across SQLite and Postgres, and the rows per task are few. The
-    # query's own ordering is kept — it is what makes this sort's stability meaningful.
-    def _natural(item: dict) -> list:
-        # Digit runs compared as numbers, everything else as text. Nothing constrains an
-        # operator-authored identifier to the `XX-N` shape, so a wholly non-numeric one has to
-        # come out somewhere deterministic rather than raise.
-        parts = re.split(r"(\d+)", item["identifier"])
-        return [(1, int(part), "") if part.isdigit() else (0, 0, part) for part in parts]
-
+    # and `FR-2`; the links are re-sorted with `spec_identity.natural_key` below.
     by_task: dict[str, list] = {}
     for task_id, requirement in rows:
         stated = wording.get(requirement.document_id, {}).get(requirement.key) or {}
@@ -238,7 +228,7 @@ async def _attach_requirements(
         )
 
     for links in by_task.values():
-        links.sort(key=_natural)
+        links.sort(key=lambda item: spec_identity.natural_key(item["identifier"]))
 
     for response in responses:
         response.requirement_links = by_task.get(response.id, [])

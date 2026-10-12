@@ -36,6 +36,7 @@ from .db.models import (
     TaskRequirementLink,
     TaskRequirementReference,
 )
+from .spec_identity import natural_key
 from .spec_lifecycle import Actor
 from .utils import short_id
 
@@ -255,7 +256,7 @@ async def for_task(session: AsyncSession, task_id: str) -> List[SpecRequirement]
         .where(TaskRequirementLink.task_id == task_id)
         .order_by(SpecRequirement.identifier)
     )
-    return list(result.scalars().all())
+    return sorted(result.scalars().all(), key=lambda row: natural_key(row.identifier))
 
 
 async def unresolved_for_task(
@@ -348,6 +349,7 @@ async def unserved(
 
     linked = await linked_requirement_ids(session, project_id)
     rows = list((await session.execute(query.order_by(SpecRequirement.identifier))).scalars().all())
+    rows.sort(key=lambda row: natural_key(row.identifier))
     return [row for row in rows if row.id not in linked]
 
 

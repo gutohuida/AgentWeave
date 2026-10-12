@@ -45,6 +45,7 @@ from .db.models import (
     TaskRequirementLink,
 )
 from .requirement_evidence import ACCEPTED, AWAITING, REJECTED, open_drift_for
+from .spec_identity import natural_key
 
 DRIFTING = "drifting"
 # A tester changed or removed one of its criteria, or reported one cannot be satisfied, and the
@@ -240,6 +241,7 @@ async def requirement_coverage(
     requirements = list(
         (await session.execute(query.order_by(SpecRequirement.identifier))).scalars().all()
     )
+    requirements.sort(key=lambda row: natural_key(row.identifier))
 
     report = CoverageReport()
     if not requirements:
