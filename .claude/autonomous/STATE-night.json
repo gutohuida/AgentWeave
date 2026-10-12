@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "refill",
-    "next_action": "Do queue item refill: per night-window 'Ending the window', re-compose the queue from open Tier-0 B/C findings with repros (F523, F563, F538, F548, F544), skipping any a build-window log holds; write them as -impl items, then stop (compose only). Keep current equal to the item id.",
+    "current": "f523-impl",
+    "next_action": "Do queue item f523-impl: F523 list_tasks spills the whole board; reuse spec_reading's read budget and .agentweave/reads/ path. Test failing first at list_tasks, fix, drive through the real MCP tool, set the F523 Status line. Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -53,9 +53,39 @@
         },
         {
             "id": "refill",
-            "status": "open",
+            "status": "done",
             "title": "Refill from backlog when above is done",
-            "detail": "Per night-window 'Ending the window' (away-1011 until 10-14): re-compose from open Tier-0 B/C findings with repros (e.g. F523, F563, F538, F548, F544), skipping any a build-window log holds."
+            "detail": "Refilled iteration 7: F523, F563, F538, F544, F548 appended as -impl items (none held by the 10-12 build log, which has closed out; all tagged ready on BACKLOG.html)."
+        },
+        {
+            "id": "f523-impl",
+            "status": "open",
+            "title": "F523 list_tasks returns the whole board in one result and spills to tool-results/ (Tier 0)",
+            "detail": "Same answer read_spec_document took (spec_reading.READ_BUDGET_CHARS 25,000 and reads_directory): inline when it fits, otherwise written to <workspace>/.agentweave/reads/ with the path in the answer. If the reuse is not one-sentence-sized, stop and record why instead of building a Tier 1 change."
+        },
+        {
+            "id": "f563-impl",
+            "status": "open",
+            "title": "F563 a flow reviewer refused by the evidence gate waits on ask_user until timeout (Tier 0)",
+            "detail": "Direction follows DECISIONS.md DECIDED F374-fix: a 409 whose remedy only the operator can apply ends the review and surfaces the gate's sentence to the operator. Repro artefacts testbed/drive1013-tester-amends/093412. If it needs a new operator choice, add an OPEN DECISIONS row instead of guessing."
+        },
+        {
+            "id": "f538-impl",
+            "status": "open",
+            "title": "F538 a checkpoint can fire on a context window that was never measured (Tier 0)",
+            "detail": "checkpoint_trigger reads percent without checking the usage sample's status; resolve_usage_limit fills a catalog window into an `unavailable` sample. Repro: output_recording.resolve_usage_limit on a Copilot usage_update with no size."
+        },
+        {
+            "id": "f544-impl",
+            "status": "open",
+            "title": "F544 explicit Workspace-only Claude run without the tool server denies every prompted call (Tier 0)",
+            "detail": "runner_commands.py ~247-263: explicit Workspace-only with no MCP server yields manual with no --permission-prompt-tool; the built-in default falls back to acceptEdits. Decide the fallback from the code's own rule (DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER) and make the run say so."
+        },
+        {
+            "id": "f548-impl",
+            "status": "open",
+            "title": "F548 a divergence for a run whose task someone else decides never closes (Tier 0)",
+            "detail": "run_divergence.py ~762-816: a run bound to a task another actor approves keeps an unresolved divergence."
         }
     ],
     "decisions_for_user": [],
