@@ -380,7 +380,9 @@ def list_tasks(
     Answers `{"tasks": [...], "total": N, "has_more": bool}`. The ledger is returned oldest
     first, a page at a time — 100 by default, 1000 at most. **`has_more` true means the newest
     work is not in front of you**: ask again with `offset` set to how many you have, or narrow
-    with `agent`.
+    with `agent`. A page too large for one result is written to `.agentweave/reads/` in your
+    workspace instead: the answer then carries `written_to`, `task_ids`, `total` and `has_more`
+    (no `tasks`), and you open the file with your file-reading tool.
 
     Args:
         agent: Only tasks assigned to this agent.

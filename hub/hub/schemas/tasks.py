@@ -420,3 +420,22 @@ class TaskListResponse(BaseModel):
     #: false for an `offset` past the end, where the rows a caller has not seen are behind them
     #: rather than ahead — `total` is what tells them that, and it is always the honest count.
     has_more: bool
+
+
+class TaskListWrittenResponse(BaseModel):
+    """A page of the ledger too large for one tool result, written to a file instead (F523).
+
+    The agent-facing `GET /agent-actions/tasks` answers this where `TaskListResponse` would not fit
+    `spec_reading.READ_BUDGET_CHARS`: the page is in `written_to` under the run's workspace, and
+    `total` and `has_more` mean what they mean in `TaskListResponse`.
+    """
+
+    total: int
+    has_more: bool
+    count: int
+    task_ids: List[str]
+    written_to: str
+    written_to_absolute: str
+    lines: int
+    characters: int
+    read_with: str

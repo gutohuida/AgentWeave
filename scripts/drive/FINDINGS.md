@@ -34814,7 +34814,7 @@ say "already in master; approval merges nothing".
 
 ## F523 (B) — `list_tasks` returns every task in one result, and a real board spills it to `tool-results/`
 
-**Status:** open (filed 2026-10-07 from F363's measurements; not driven on its own)
+**Status:** fixed (Tier 0, 2026-10-12) -- the agent-facing `GET /agent-actions/tasks` writes a page over `spec_reading.READ_BUDGET_CHARS` to `<workspace>/.agentweave/reads/tasks.<agent>.<status>.<offset>.md` and answers `{total, has_more, count, task_ids, written_to, read_with}`; with nowhere to write it cuts the page to fit and `has_more` says so. Test: `test_list_tasks_read_budget.py` (failed before at the size assertion). Drive: real stdio MCP `list_tasks` on a throwaway Hub with 60 tasks answered 1,766 characters, the file held all 60.
 **Source:** drive (F363, LoopEngine on `:8000`, read-only)
 **Theme:** Agent tool surface
 

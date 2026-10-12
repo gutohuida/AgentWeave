@@ -1128,7 +1128,9 @@ def _operations() -> List[_Operation]:
             text=(
                 "read the shared task ledger. Answers `{tasks, total, has_more}`, oldest first, "
                 "100 per page and 1000 at most; `has_more` true means the *newest* work is not "
-                "in front of you, so ask again with `offset`, or narrow with `agent`."
+                "in front of you, so ask again with `offset`, or narrow with `agent`. A page too large "
+                "for one result is written to `.agentweave/reads/` in your workspace instead: the "
+                "answer then carries `written_to`, `task_ids`, `total` and `has_more`, not `tasks`."
             ),
         ),
         _Operation(

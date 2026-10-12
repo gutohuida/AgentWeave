@@ -492,10 +492,17 @@ def write_read(
     Returns (workspace-relative path, absolute path, lines, characters), or None where it could not
     be written, and the caller answers inline instead.
     """
+    return write_text(render_read(view), workspace_dir, name=name)
+
+
+def write_text(text: str, workspace_dir: str, *, name: str) -> Optional[Tuple[str, str, int, int]]:
+    """Write *text* to `<workspace>/.agentweave/reads/<name>`, in the shape `write_read` returns.
+
+    Shared with any other read that can outgrow a tool result (`list_tasks`, F523).
+    """
     directory = reads_directory(workspace_dir)
     if directory is None:
         return None
-    text = render_read(view)
     target = os.path.join(directory, name)
     try:
         with open(target, "w", encoding="utf-8", newline="\n") as handle:
@@ -503,6 +510,16 @@ def write_read(
     except OSError:
         return None
     return "/".join((*READS_DIR, name)), target, text.count("\n"), len(text)
+
+
+def render_tasks(tasks: List[Dict[str, Any]]) -> str:
+    """A page of the task ledger as plain text: a heading per task, then its fields, wrapped."""
+    lines: List[str] = []
+    for task in tasks:
+        lines.extend([f"## {task.get('id')} - {task.get('title')}", ""])
+        lines.extend(_structured(task))
+        lines.append("")
+    return "\n".join(lines) + "\n"
 
 
 _ANSWER_FIELDS = (

@@ -17,7 +17,7 @@ from pydantic import AliasChoices, BaseModel, Field, ValidationInfo, field_valid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import mcp_announce, run_liveness
+from ... import mcp_announce, run_liveness, spec_reading
 from ...agent_auth import AgentActor, get_agent_actor
 from ...checkpoint_access import (
     AccessDeniedError,
@@ -45,6 +45,7 @@ from ...schemas.tasks import (
     _PRIORITIES,
     TaskCreate,
     TaskListResponse,
+    TaskListWrittenResponse,
     TaskResponse,
     TaskUpdate,
     check_task_id,
@@ -251,7 +252,12 @@ async def create_shared_task(
     )
 
 
-@router.get("/tasks", response_model=TaskListResponse)
+def _file_part(value: Optional[str]) -> str:
+    """A filter value as a piece of a file name: letters, digits, `_` and `-`, or `all`."""
+    return re.sub(r"[^A-Za-z0-9_-]", "_", value)[:40] if value else "all"
+
+
+@router.get("/tasks", response_model=TaskListResponse | TaskListWrittenResponse)
 async def list_shared_tasks(
     agent: Optional[str] = Query(None),
     task_status: Optional[str] = Query(None, alias="status"),
@@ -260,7 +266,7 @@ async def list_shared_tasks(
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
-    return await list_tasks(
+    page = await list_tasks(
         agent=agent,
         task_status=task_status,
         spec_document_id=None,
@@ -270,6 +276,51 @@ async def list_shared_tasks(
         limit=limit,
         project=(actor.project_id, actor.project_id),
         session=session,
+    )
+    tasks = [task.model_dump(mode="json") for task in page.tasks]
+    if len(json.dumps({"tasks": tasks, "total": page.total, "has_more": page.has_more})) <= (
+        spec_reading.READ_BUDGET_CHARS
+    ):
+        return page
+    # F523: a board's page outgrows one tool result (the spill file lies outside the workspace, where
+    # the guard refuses it), so it goes into a file in the agent's own workspace, as a large
+    # specification read does (`a-specification-is-read-in-results-that-fit` D7).
+    run = await session.get(Run, actor.run_id)
+    if run is not None and run.workspace_dir:
+        name = f"tasks.{_file_part(agent)}.{_file_part(task_status)}.{offset}.md"
+        written = await asyncio.to_thread(
+            spec_reading.write_text,
+            spec_reading.render_tasks(tasks),
+            run.workspace_dir,
+            name=name,
+        )
+        if written is not None:
+            relative, absolute, lines, chars = written
+            return TaskListWrittenResponse(
+                total=page.total,
+                has_more=page.has_more,
+                count=len(tasks),
+                task_ids=[task["id"] for task in tasks],
+                written_to=relative,
+                written_to_absolute=absolute,
+                lines=lines,
+                characters=chars,
+                read_with=(
+                    f"This page of {len(tasks)} tasks is too large for one tool result, so all of it "
+                    f"is in {relative} in your workspace ({lines} lines). Open it with your "
+                    "file-reading tool, a part at a time if your tool limits how much it shows. It "
+                    "is rewritten on every read of this page."
+                ),
+            )
+    # Nowhere to write: the longest prefix that fits (at least one task), and `has_more` says the
+    # rest is still there, to be asked for with `offset`.
+    kept = len(tasks)
+    while kept > 1 and len(json.dumps({"tasks": tasks[:kept], "total": 0, "has_more": True})) > (
+        spec_reading.READ_BUDGET_CHARS
+    ):
+        kept -= 1
+    return TaskListResponse(
+        tasks=page.tasks[:kept], total=page.total, has_more=offset + kept < page.total
     )
 
 
