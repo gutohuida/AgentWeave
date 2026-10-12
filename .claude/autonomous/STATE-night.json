@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 19,
+    "iteration": 20,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "refill-8-compose",
-    "next_action": "Run queue item refill-8-compose: if the clock is before 05:00, pick the next ready Tier-0 finding from the backlog (A/B first, then ready C; map unarchived openspec changes to their findings first; passed over so far are listed in the refill-1..7 details and the iteration 18 log entry), queue it as an impl item plus refill-9-compose. At or after 05:00, or if none qualifies, write the closing entry per night-window.md 'Ending the window' and set next_action to null.",
+    "current": "f551-sort-impl",
+    "next_action": "Run queue item f551-sort-impl: F551 part 3, requirement identifiers sort as text (FR-10 before FR-2). Test first at the coverage route (FR-2 and FR-10 in one document), then sort requirement_coverage.py:241 and requirement_links.py:256/:350 with the natural key (spec_tasks._natural, maybe promoted to a shared helper), check UI/MCP consumers, drive on a fresh source Hub, set F551's Status, append a METRICS row.",
     "queue": [
         {
             "id": "compose",
@@ -125,9 +125,21 @@
         },
         {
             "id": "refill-8-compose",
+            "status": "done",
+            "title": "Refill the queue from the backlog if it empties before 05:00",
+            "detail": "Picked F551 part 3 (C, Tier 0): requirement identifiers sort as text (FR-10 before FR-2) at requirement_coverage.py:241 and requirement_links.py:256/:350; natural key already exists at spec_tasks._natural. Passed over F557 (operator question), F581 (Tier 1/2), F556 (decision does not fix it literally), F553 remainder (undecided)."
+        },
+        {
+            "id": "f551-sort-impl",
+            "status": "open",
+            "title": "F551 part 3 (C, Tier 0): requirement identifiers sort as text, FR-10 before FR-2",
+            "detail": "Sort the three SQL order_by(SpecRequirement.identifier) sites (requirement_coverage.py:241, requirement_links.py:256, :350) with the natural key from spec_tasks._natural (consider a shared helper; api/v1/tasks.py:199 restates it). Test first at the coverage route with FR-2/FR-10 in one document; check UI/MCP consumers for their own re-sort; drive on a fresh source Hub."
+        },
+        {
+            "id": "refill-9-compose",
             "status": "open",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Same rule as refill-7. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
+            "detail": "Same rule as refill-8. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
         }
     ],
     "decisions_for_user": [],
