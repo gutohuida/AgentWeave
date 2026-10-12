@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 15,
+    "iteration": 16,
     "log_file": ".claude/autonomous/2026-10-12-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "access-tuning-drive",
-    "next_action": "Do queue item access-tuning-drive: full Hub suite in chunks (hub/tests, py -3.11), vitest already green at 2063; d1027 is green (9/9, iteration 14; check 7 was rewritten to the page's structure, see log iteration 14 - note that in the change's evidence). Then METRICS row in spec-queue/METRICS.md, then close the change via scripts/drive/close_change.py (add an faccess entry, pattern fimages): tasks task-f1acf3d2a499, task-312f70f31ffa, task-3178cb4fe6f6 in that order; --fold-change faccess into knowledge-vault; reindex; mark the roadmap slice access-tuning done.",
+    "current": "ledger-close",
+    "next_action": "Do queue item ledger-close: run py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-12 and append the result as the final log entry (note the access-tuning change is closed and folded; the roadmap's slices are all built). Then set next_action to null.",
     "queue": [
         {
             "id": "specs-vault-close",
@@ -86,7 +86,7 @@
         },
         {
             "id": "access-tuning-drive",
-            "status": "open",
+            "status": "done",
             "title": "Acceptance drive green on committed tree, scratch Hub 8110+, Haiku only; close the change",
             "detail": "d1027 in the foreground. Full Hub suite in chunks, vitest once; METRICS row. close_change.py: add an faccess entry (pattern fimages): tasks task-f1acf3d2a499, then task-312f70f31ffa, task-3178cb4fe6f6; --fold-change faccess into knowledge-vault; reindex; mark roadmap slice access-tuning done (the roadmap's last slice)."
         },

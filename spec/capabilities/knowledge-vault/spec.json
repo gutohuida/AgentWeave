@@ -548,6 +548,78 @@
       "requirement": "images-and-pdfs-are-vault-sources-too-wiki-inline",
       "then": "the PDF and the screenshot read as the source, with their transcription and the facts beside them",
       "when": "the operator looks at them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub from source with a fresh database, a scratch git repository, a Claude runner bound to claude-haiku-4-5 and one agent on it; three sources uploaded oldest to newest (A, B, C) with two facts written citing A (A1 older, A2 newer) and one citing B (scripts/drive/d1027_access_tuning.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1027_access_tuning.py",
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-drive",
+      "requirement": "the-vault-map-is-shaped-by-what-agents-ask-for-map-order",
+      "then": "before the turn the map is C, B, B1, A, A2, A1 with every fetches 0; after it A1 has fetches 2, B has 1, A2 and C 0; the map is A, A1, A2, B, B1, C; the agents' and the operator's map agree; the operator's read of C through the dashboard route left C at 0; in Chromium the Vault page shows a count of 2 on A1 and 1 on B, with a screenshot saved. The drive fails on today's Hub at its first check (map entries carry no fetches).",
+      "when": "a Haiku agent is told to read A1 with vault_read twice and B once, the operator reads C, and the drive reads both maps"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub test client with a run credential and a vault with a long source",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_access.py",
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-counted",
+      "requirement": "the-vault-map-is-shaped-by-what-agents-ask-for-count-fetch",
+      "then": "one count after the agent read at offset 0 and its next page; none for a 404, the operator's read or either map; two after two concurrent reads; the read still answers 200 when recording the count raises",
+      "when": "the agent route reads it at offset 0 then at its next_offset, an unknown id, the operator route reads it, both maps are read, two reads run concurrently, and the counter is made to fail"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a vault with a source read twice by an agent and a fact never read",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_access.py",
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-listed",
+      "requirement": "the-vault-map-is-shaped-by-what-agents-ask-for-counts-listed",
+      "then": "the source carries fetches 2 and an ISO last_fetched_at, the fact fetches 0 and last_fetched_at null, alike on both routes",
+      "when": "the operator's and the agents' map and entry routes are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a vault with sources and facts, some read by agents, and a count left for a deleted entry",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_access.py",
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-ordered",
+      "requirement": "the-vault-map-is-shaped-by-what-agents-ask-for-map-order",
+      "then": "the areas and the facts within them are in the order map-order states; the deleted entry's count is absent; with no counts the map equals the one build_map answered before the change",
+      "when": "the map is built"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an empty database at revision 0125 and one at 0126",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_migrations.py",
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-migrated",
+      "requirement": "the-vault-map-is-shaped-by-what-agents-ask-for-migration",
+      "then": "0126 adds vault_fetches and nothing else; its downgrade removes it; the head assertions name 0126",
+      "when": "upgrade and downgrade run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the mcp_server tool and the agents' instruction text",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_access.py",
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-told",
+      "requirement": "the-vault-map-is-shaped-by-what-agents-ask-for-agents-told",
+      "then": "both say the areas are ordered by agents' reads and name fetches; neither says only newest first",
+      "when": "they are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Vault page against a map with counts 2, 1 and 0 and one with no fetches field",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/vaultAccess.test.tsx",
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-shown",
+      "requirement": "the-vault-map-is-shaped-by-what-agents-ask-for-wiki-counts",
+      "then": "the list shows 2 and 1 and nothing for 0, in the map's order; the selected entry shows its count and last-read date, or 'Not read by agents yet'; the old map shows no count and no alert",
+      "when": "a vitest renders each and selects entries"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the drive's screenshot",
+      "how_to_check": "open testbed/drive1027-access-tuning/<stamp>/shot_counts.png",
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-look",
+      "requirement": "the-vault-map-is-shaped-by-what-agents-ask-for-wiki-counts",
+      "then": "the most-read entries are at the top and their counts read clearly without crowding the list",
+      "when": "the operator looks at it"
     }
   ],
   "algorithms": [],
@@ -595,13 +667,19 @@
       "FR-45": "0b158d022acbe5c942a4aa4bbbe5d58bfe68fba7779c90142ad3b32a2b8aca43",
       "FR-46": "c7e40dc94a9e1d341b7f050189183e5963f1695aac5923ef3cf9e705472206da",
       "FR-47": "e0039b249c6da0222662117cef975adab50411c80d3ef7a1433e79ea7f633ea4",
+      "FR-48": "defa4898116a952dfa39c6b7f71fccdd9b1f42435e3d5654a6a2fa99973c8fc7",
+      "FR-49": "2f18c79b8641e6deeabedeef3f48efe5e5460806e9b6bd9de52cf915929fb85d",
       "FR-5": "ec6d4b7d25f5a9aeb6223834ed5877ac76e75de49077f636eac5b022f5324a39",
+      "FR-50": "75545d0bff27e363a0487ae292ce876851c66ee3bbd9beb70d2028ed6fe2a8a5",
+      "FR-51": "d7c9079d7e7ec33922c68c23a040d3d44b8c625de77dce3a7f46c42198cc1b46",
+      "FR-52": "fc7ce16869f138ef95ba4e115bb2aa03d1abd4844aabea0ad8d21e10f8b0cdbb",
+      "FR-53": "b6ce460ee9bc243aea1bd7962c311551f1df60b0a7bbb648d2550cc9f2acba1d",
       "FR-6": "791cb5f62ecc7dd06403d8feb531680b9a75b9213bf36e7fba8f53633baf0812",
       "FR-7": "8854e9978008cfeee475c44a7e3fe72a3268790028901bf5811da93b9ed77b47",
       "FR-8": "c8aab6cb4927a911090490cc9d2c8c268539b152640846216c4adafd492f317b",
       "FR-9": "dcd141a4a6ed7104aad675231554a940069eb75a84c77422a6b3212cffd4d26e"
     },
-    "high_water": 47,
+    "high_water": 53,
     "requirements": {
       "a-requirement-is-checked-against-what-th-approval-lists-warnings": "FR-39",
       "a-requirement-is-checked-against-what-th-requirement-cites-facts": "FR-35",
@@ -649,7 +727,13 @@
       "the-manager-distils-vault-sources-into-cited-facts-facts-in-map": "FR-16",
       "the-manager-distils-vault-sources-into-cited-facts-facts-in-wiki": "FR-17",
       "the-manager-distils-vault-sources-into-cited-facts-private-facts": "FR-15",
-      "the-manager-distils-vault-sources-into-cited-pieces-and-firings": "FR-14"
+      "the-manager-distils-vault-sources-into-cited-pieces-and-firings": "FR-14",
+      "the-vault-map-is-shaped-by-what-agents-ask-for-agents-told": "FR-51",
+      "the-vault-map-is-shaped-by-what-agents-ask-for-count-fetch": "FR-48",
+      "the-vault-map-is-shaped-by-what-agents-ask-for-counts-listed": "FR-49",
+      "the-vault-map-is-shaped-by-what-agents-ask-for-map-order": "FR-50",
+      "the-vault-map-is-shaped-by-what-agents-ask-for-migration": "FR-53",
+      "the-vault-map-is-shaped-by-what-agents-ask-for-wiki-counts": "FR-52"
     },
     "retired": {}
   },
@@ -997,6 +1081,48 @@
       "party": null,
       "rationale": "The roadmap's done sentence names the wiki. A 404 is the :8000 skew: a committed bundle reaches the operator's app before their Hub restarts.",
       "statement": "The Vault page MUST show a selected image source as an image and a selected PDF source in an embedded viewer, from the file route, above its transcription with the cited lines highlighted as a text source's are; show the not-read-yet note in place of the transcription before it exists; mark image and PDF entries in the entry list; and accept .pdf, .png, .jpg, .jpeg, .gif and .webp files in the upload form, sending them to POST /vault/files. When the file route answers 404 (a Hub older than the bundle) the page MUST show the transcription without the file and no error."
+    },
+    {
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-count-fetch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "vault_read is the one way an agent asks for an entry. Counting only the first page keeps a long transcript read in three pages one read; the operator's route is the dashboard, not an agent asking.",
+      "statement": "Each answer of 200 from the agent route GET /vault/entries/{id} (vault_read) with offset 0 MUST add one to that entry's fetch count in the actor's project and set its last-fetched time to now. A later page (offset above 0), an answer other than 200, the operator's GET /vault/entries/{id}, and either map route MUST NOT change any count. Two fetches of one entry at the same moment MUST both be counted. A failure to record the count MUST NOT fail the read."
+    },
+    {
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-counts-listed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The ordering is only trustworthy if the number behind it is visible to both the operator and the agents.",
+      "statement": "Every entry in the map and every entry read, on the operator's and the agents' routes, MUST carry fetches (an integer, 0 when never read) and last_fetched_at (an ISO time, null when never read). A count for an id that is no longer in the vault MUST NOT appear in the map."
+    },
+    {
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-map-order",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roadmap's done sentence: the most-fetched entries lead their area. An area is the grouping the map already has, so nothing a colleague's older Hub writes changes shape.",
+      "statement": "The map MUST be built of areas: each source followed by the facts that cite it (a fact under the first of its sources present), and the facts with no source present as one last area. The source MUST lead its area; the facts in an area MUST be ordered by fetches, most first, then newest first. Areas MUST be ordered by the sum of their entries' fetches, most first, then by their source newest first; the area of sourceless facts MUST stay last. When no entry has been read, the map MUST be exactly the newest-first map it is today."
+    },
+    {
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-agents-told",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Both texts say 'newest first' today; an agent reading a map ordered otherwise would be misled about what the top of it means.",
+      "statement": "vault_map's tool description and the vault_map line of the agents' instruction text MUST say that the map's areas are ordered by how often agents have read them, then newest first, and that fetches is how many times agents have read an entry."
+    },
+    {
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-wiki-counts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator can see the counts: the second half of the done sentence. A missing field is the :8000 skew, a committed bundle reaching the operator's app before their Hub restarts.",
+      "statement": "The Vault page MUST show, in the entry list, each entry's fetch count when it is above 0, and on the selected entry the count and the date it was last read, or 'Not read by agents yet' when it is 0. The entry list MUST keep the map's order. When the map carries no fetches field the page MUST show no count and no error."
+    },
+    {
+      "key": "the-vault-map-is-shaped-by-what-agents-ask-for-migration",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The migration reaches the operator's real database on their next :8000 restart; it only adds a table.",
+      "statement": "Migration 0126 MUST create the table vault_fetches keyed by project_id and entry_id, holding count and last_fetched_at, and its downgrade MUST drop that table and nothing else. It MUST NOT touch another table. Counts MUST NOT be written under knowledge/ or the private location."
     }
   ],
   "schema_version": 1,
