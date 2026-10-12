@@ -118,6 +118,7 @@ class ClaudeAdapter(RunnerAdapter):
     write_tool_kinds = CLAUDE_WRITE_TOOLS
     # `checkpoint_policy.py:24`'s comment: the value today's thresholds were chosen against.
     compaction_percent = 95
+    one_shot_reads_files = True
 
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:
         cli, present, reason = probe_binary(self.binary, config.get("cli"), agent)
@@ -168,6 +169,24 @@ class ClaudeAdapter(RunnerAdapter):
             cmd = [self.binary, "--tools", "", "--strict-mcp-config", "--output-format", "json"]
         else:
             cmd = [self.binary, "--tools", "", "--strict-mcp-config"]
+        if model:
+            cmd += ["--model", model]
+        return cmd + ["-p", neutralise_file_mentions(prompt)]
+
+    def read_one_shot(self, *, model: Optional[str], prompt: str) -> Optional[List[str]]:
+        """The Read tool alone, no MCP server, and an explicit `--permission-mode default`: in -p
+        mode a Read outside the working directory is then denied, even when the operator's own
+        settings default to bypassing permissions (measured 2026-10-12, claude 2.1.291)."""
+        cmd = [
+            self.binary,
+            "--tools",
+            "Read",
+            "--strict-mcp-config",
+            "--permission-mode",
+            "default",
+            "--output-format",
+            "json",
+        ]
         if model:
             cmd += ["--model", model]
         return cmd + ["-p", neutralise_file_mentions(prompt)]

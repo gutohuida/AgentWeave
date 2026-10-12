@@ -275,6 +275,9 @@ class RunnerAdapter(ABC):
     mcp_env_names: ClassVar[Optional[Tuple[str, ...]]] = None
     write_tool_kinds: ClassVar[Mapping[str, str]]
     one_shot_takes_schema: ClassVar[bool] = False
+    # Whether `read_one_shot` builds a command: a one-shot that may read one file with the CLI's
+    # own Read tool (`images-and-pdfs-are-vault-sources-too` D2). Measured for Claude only.
+    one_shot_reads_files: ClassVar[bool] = False
     # Whether this runner's shell may be sandboxed away from the Hub's address, so a run told
     # the call command is told it may report `unreachable` (`a-run-reaches-the-hub-without-mcp`
     # D10). True for Codex, whose `workspace-write` sandbox's network default is unverified.
@@ -332,6 +335,12 @@ class RunnerAdapter(ABC):
         """A no-tools, one-prompt invocation's argv. Receives `prompt` **raw** and neutralises it
         itself with `file_mentions.neutralise_file_mentions`, as today's builders do. Raises only
         `FileNotFoundError`, when the executable cannot be resolved — only Copilot's does."""
+
+    def read_one_shot(self, *, model: Optional[str], prompt: str) -> Optional[List[str]]:
+        """A worker one-shot that may read files in its working directory and nothing else, or
+        None when this CLI cannot (`one_shot_reads_files`). It must carry no flag that skips or
+        widens permissions (reader-contained)."""
+        return None
 
     def one_shot_env(
         self, purpose: Literal["worker", "title"], config: Optional[Mapping[str, Any]] = None

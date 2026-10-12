@@ -144,6 +144,7 @@ def build_worker_command(
     model: Optional[str],
     prompt: str,
     output_schema_path: Optional[str] = None,
+    reading: bool = False,
 ) -> Optional[List[str]]:
     """The one-shot invocation in JSON mode, or None when this CLI has no supported one.
 
@@ -151,9 +152,12 @@ def build_worker_command(
     chosen over plain text for both CLIs because it is the only way the call reports what it cost,
     and because it puts the answer at a fixed address instead of at the end of a stream of prose.
 
-    Every runner goes through its adapter's `one_shot` (design D8).
+    Every runner goes through its adapter's `one_shot` (design D8). *reading* asks for the
+    adapter's `read_one_shot` instead: None for a CLI that cannot read files.
     """
     adapter = get_adapter(cli)
+    if adapter is not None and reading:
+        return adapter.read_one_shot(model=model, prompt=prompt)
     if adapter is not None:
         return adapter.one_shot(
             "worker", model=model, prompt=prompt, output_schema_path=output_schema_path
@@ -321,6 +325,7 @@ async def run_worker(
     conversation_id: Optional[str] = None,
     timeout_seconds: int = WORKER_TIMEOUT_SECONDS,
     cwd: Optional[str] = None,
+    reading: bool = False,
 ) -> WorkerResult:
     """Run one worker invocation and record it. Returns an outcome; never raises.
 
@@ -328,6 +333,9 @@ async def run_worker(
     across a call that can take minutes. Every exit records an invocation, including the ones that
     never spawn — an operator asking why no checkpoint appeared should find the answer in one
     place regardless of how early it failed.
+
+    *reading* spawns the adapter's `read_one_shot`, which may Read files in *cwd* and nothing
+    else; the caller puts the one file to read there (`distillation.transcribe`).
     """
     try:
         config: Optional[Dict[str, Any]] = await _runner_config(runner_id, model)
@@ -365,6 +373,7 @@ async def run_worker(
                 model=model,
                 prompt=prompt,
                 output_schema_path=schema_path,
+                reading=reading,
             )
             env = one_shot_env(cli, config)
         except FileNotFoundError as exc:

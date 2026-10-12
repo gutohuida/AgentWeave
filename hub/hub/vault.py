@@ -646,6 +646,17 @@ def file_of(
     return record.media_type, record.file_bytes(), elsewhere
 
 
+def set_transcription(project_root: Path, private_root: Path, source_id: str, text: str) -> None:
+    """Store what a file source says as its text, `sources/<id>.md` beside the file. Refused for
+    a text source, an unknown one, or one whose file is on another machine."""
+    record = (
+        _records(project_root, private_root).get(source_id) if _ID_RE.match(source_id) else None
+    )
+    if record is None or record.file_kind is None or record.text_root is None:
+        raise VaultError(f"No file source '{source_id}' on this machine.", status=404)
+    storage.write(record.text_root, f"{SOURCES}/{source_id}.md", text.encode("utf-8"))
+
+
 def source_text(
     project_root: Path, private_root: Path, source_id: str
 ) -> Optional[Tuple[Dict[str, Any], Optional[str]]]:

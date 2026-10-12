@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-12-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "images-pdfs-read-impl",
-    "next_action": "Do queue item images-pdfs-read-impl (Opus; task-c87dfb6d31ea, close it when FR-3, FR-4, FR-5 are verified): failing tests first in hub/tests/test_vault_file_reading.py, then the Claude adapter reading one-shot (--tools Read --strict-mcp-config --permission-mode default, no widening flag), worker.py spawn in a temp dir holding only a copy of the file, distillation.py transcribe-when-no-.md then store it and distil as text (failure -> firing failed, no text/facts; non-claude runner -> 409 naming its CLI and the Manager page, no spawn, upload-triggered records nothing). distillation.prepare at distillation.py:201 currently answers an unread file with the private 'held on another machine' message: replace for file sources. d1026 should then pass checks 1-6 and stop at 7 (Chromium; tab item). Real turns Haiku only.",
+    "current": "images-pdfs-tab-impl",
+    "next_action": "Do queue item images-pdfs-tab-impl (task-4bbc7517b786): FR-7. vitest first (hub/ui/src/__tests__/vaultFiles.test.tsx), then VaultPage.tsx + api/vault.ts: a file source shows [data-testid=vault-file-pdf] (iframe/object/embed from a blob: URL fetched from GET /vault/sources/{id}/file) or [data-testid=vault-file-image] (img from a blob: URL) above its transcription, 404-tolerant; an upload form posting the raw body to /vault/files. npm run build, scripts/refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together (the bundle reaches :8000 on reload: say so in the log). Then d1026 should pass 1-8 (Haiku). Do not end the turn while a drive runs in the background.",
     "queue": [
         {
             "id": "specs-vault-close",
@@ -42,7 +42,7 @@
         },
         {
             "id": "images-pdfs-read-impl",
-            "status": "open",
+            "status": "done",
             "model": "opus",
             "title": "Backend B: reading worker, containment, transcribe then distil (task-c87dfb6d31ea)",
             "detail": "FR-3, FR-4, FR-5. Claude adapter reading one-shot: --tools Read --strict-mcp-config --permission-mode default, no widening flag; other CLIs cannot read. worker.py: spawn in a temp dir holding only a copy of the file. distillation.py: transcribe when no .md, store it, distil as text; failure -> firing failed; non-claude -> 409, no spawn. Tests first in test_vault_files.py."
@@ -57,7 +57,7 @@
             "id": "images-pdfs-drive",
             "status": "open",
             "title": "Acceptance drive green on committed tree, scratch Hub 8110+, Haiku only",
-            "detail": "Full Hub suite in chunks, vitest once; evidence on :8010 not landed; METRICS row."
+            "detail": "Full Hub suite in chunks, vitest once; evidence on :8010 not landed; METRICS row. Then close the change through close_change.py (add an images-pdfs entry): task-edc80dd92218 first, then task-c87dfb6d31ea (409 dependency_unmet until the drive-first task is approved) and task-4bbc7517b786."
         },
         {
             "id": "access-tuning-spec",
