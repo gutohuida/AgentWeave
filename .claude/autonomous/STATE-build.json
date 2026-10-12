@@ -8,19 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-12-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "merge-gate",
-    "next_action": "Do queue item merge-gate per .claude/loops/build-window.md 'The merge gate': measure all four conditions on the branch tip (CI for that exact sha; wait up to 25 min if running), fast-forward master if all hold, log the four values and the sha. Gate shut: log which failed and mark the -close items blocked.",
+    "current": "specs-vault-close",
+    "next_action": "Do queue item specs-vault-close: gate landed master=6208e9a, so run close_change.py fspecvault on :8010, then --fold-change fspecvault, then POST /projects/proj-d85a82bf4216/project/spec/reindex {}; commit what spec/ gains. Pattern: iteration 9 of 2026-10-11-build-log.md.",
     "queue": [
-        {
-            "id": "merge-gate",
-            "status": "open",
-            "title": "Fast-forward master to the cycle branch if the four conditions hold",
-            "detail": "master is 4ccbec6; branch carries the specs-against-the-vault slice (fspecvault) plus night fixes. Four conditions in build-window.md."
-        },
         {
             "id": "specs-vault-close",
             "status": "open",
