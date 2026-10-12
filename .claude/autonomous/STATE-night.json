@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f582-impl",
-    "next_action": "Do queue item f582-impl: fix F582 as Tier 0 (see its queue detail). Keep current equal to the item id.",
+    "current": "f449-impl",
+    "next_action": "Do queue item f449-impl: fix F449 as Tier 0 (see its queue detail). Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -23,9 +23,9 @@
         },
         {
             "id": "f582-impl",
-            "status": "open",
+            "status": "done",
             "title": "F582 unknown API route answers 405 not 404 (Tier 0)",
-            "detail": "Read the F582 section in scripts/drive/FINDINGS.md (grep '## F582'). Test failing at the seam it names, fix, ruff/black/mypy, CLI suite, drive on a fresh drive port, then Status line."
+            "detail": "Fixed iteration 2: 405 handler beside serve_spa answers 404 unless another route owns the path; test + drive recorded in the F582 Status line."
         },
         {
             "id": "f449-impl",

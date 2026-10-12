@@ -35365,7 +35365,7 @@ The spec-vault-check firing recorded `outcome empty`, `0 conflicts kept, 0 dropp
 
 ## F582 (C) -- an unknown API route answers 405 Method Not Allowed, not 404, to anything but GET
 
-**Status:** open 2026-10-12. Measured 2026-10-12 (build window iteration 5, d1026 run `testbed/drive1026-images-pdfs/093112/`).
+**Status:** fixed 2026-10-12 (night window iteration 2, Tier 0): `hub/hub/main.py` registers a 405 handler beside `serve_spa` that answers 404 `{"detail": "Not Found"}` unless another route recognises the path (a real route's wrong-method 405 and `Allow` header are kept); test `hub/tests/test_an_unknown_route_answers_404_for_every_method.py` failed 5 of 7 before the fix; driven on a throwaway Hub (port 8582): POST/PUT/DELETE to unknown `/api/...` and `/zzz` answer 404, `POST /health` and `DELETE` on a POST-only route stay 405. Measured 2026-10-12 (build window iteration 5, d1026 run `testbed/drive1026-images-pdfs/093112/`).
 
 `POST /api/v1/projects/{id}/vault/files` on a Hub that has no such route answered `405 {"detail": "Method Not Allowed"}`. The dashboard's SPA fallback `@app.get("/{full_path:path}")` (`hub/hub/main.py:589`) partially matches every path, so Starlette reports the method as wrong rather than the path as unknown (measured: the only route matching that scope is `/{full_path:path}` with `Match.PARTIAL`). A caller of a route that does not exist yet, such as an agent or script talking to a Hub older than it, is told to change the method. The images-and-pdfs spec predicted 404 for exactly this case.
 

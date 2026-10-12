@@ -15,9 +15,11 @@ from typing import Any, Dict, Optional, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.routing import Match
 
 from . import (
     __version__,
@@ -620,6 +622,24 @@ def create_app() -> FastAPI:
             if not (UI_DIST / "index.html").exists():
                 raise HTTPException(404, "UI not built")
             return HTMLResponse((UI_DIST / "index.html").read_text())
+
+        # F582: `serve_spa` is GET-only and its path matches everything, so Starlette scores it a
+        # *partial* match for any other method and a path no route owns answers 405 - telling the
+        # caller to change the method when the path is what does not exist. Registering the
+        # fallback for every method would instead turn a real route's wrong-method 405 into a 404
+        # (a full match beats a partial one), so the 405 is kept only when some other route
+        # recognises the path.
+        @app.exception_handler(405)
+        async def _method_not_allowed(request: Request, exc: Exception):
+            scope = request.scope
+            owned = any(
+                getattr(route, "endpoint", None) is not serve_spa
+                and route.matches(scope)[0] is not Match.NONE
+                for route in app.router.routes
+            )
+            if owned:
+                return await http_exception_handler(request, exc)  # type: ignore[arg-type]
+            return UTF8JSONResponse(status_code=404, content={"detail": "Not Found"})
 
     return app
 
