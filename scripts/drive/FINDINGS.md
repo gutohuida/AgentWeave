@@ -32869,7 +32869,7 @@ That change's Open Question 3 offers folding it in.
 
 ## F413 (B) -- a firing that fails with no row left behind is invisible, and Run calls it "nothing is wrong"
 
-**Status:** open
+**Status:** fixed 2026-10-13 (Tier 0, night iteration 17): `_do_fire_job`'s `except` builds a `failed` `JobRun` (with its `job_run_failed` event) wherever the firing has no row in the session -- raised before building one, or after discarding it as a decline -- so a press answers 500 with the reason through `run_job`'s existing D3 read, and a cron crash is visible. A crash recurring with the same summary counts into the newest `failed` row (`_stall_run_to_increment(..., status="failed")`), one event, no new rows. The staged-edit announcement after a failure no longer raises out of the handler. Five tests in `test_pressing_run_names_the_reason.py` failed first (incl. 1.12, which encoded the no-row behaviour), pass now. Drive: the D-2b probe's r3raise/r3busy/r3disc now answer `500 "r3 probe: ..."`, each with one `failed` row the event names; r3tick unchanged (409). Not driven against a live Hub.
 **Source:** drive
 **Theme:** Operator surfaces
 **Related:** F373, F412, F23. Found by D-4b's R3 of `pressing-run-names-the-reason-that-held` on

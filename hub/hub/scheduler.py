@@ -1001,7 +1001,11 @@ class LoopSelection:
 
 
 async def _stall_run_to_increment(
-    session: AsyncSession, job_id: str, stall_reason: str, exclude_run_id: str
+    session: AsyncSession,
+    job_id: str,
+    stall_reason: str,
+    exclude_run_id: Optional[str],
+    status: str = "skipped",
 ) -> "Optional[JobRun]":
     """The `JobRun` this stall should count against, or `None` to write a new row.
 
@@ -1020,25 +1024,23 @@ async def _stall_run_to_increment(
       the queue does.
 
     `exclude_run_id` is the run this firing has already constructed. Without it the newest row is
-    always this firing's own and nothing ever matches.
+    always this firing's own and nothing ever matches. `None` where the firing has no row of its
+    own in the session (F413's crash before its row, or after discarding it).
+
+    `status` is `failed` for a crash that recurs every tick (F413), counted the same way and for
+    the same reason.
     """
     from sqlalchemy import select
 
+    query = select(JobRun).where(JobRun.job_id == job_id)
+    if exclude_run_id is not None:
+        query = query.where(JobRun.id != exclude_run_id)
     latest = (
-        (
-            await session.execute(
-                select(JobRun)
-                .where(JobRun.job_id == job_id, JobRun.id != exclude_run_id)
-                .order_by(JobRun.fired_at.desc())
-                .limit(1)
-            )
-        )
-        .scalars()
-        .first()
+        (await session.execute(query.order_by(JobRun.fired_at.desc()).limit(1))).scalars().first()
     )
     if latest is None:
         return None
-    if latest.status != "skipped" or latest.error_summary != fit_error_summary(stall_reason):
+    if latest.status != status or latest.error_summary != fit_error_summary(stall_reason):
         return None
     return latest
 
@@ -3988,32 +3990,69 @@ class JobScheduler:
         except Exception as e:
             error_summary = _safe_error_summary(e)
             logger.error(f"Failed to fire job {job.id}: {error_summary}")
-            # Mark run as failed
-            if "run" in locals():
-                run.status = "failed"
-                run.error_summary = error_summary
-                await persist_event(
-                    session,
-                    job.project_id,
-                    "job_run_failed",
-                    {
-                        "job_id": job.id,
-                        "job_name": job.name,
-                        "agent": acting_agent,
-                        "trigger": trigger,
-                        "job_run_id": run.id,
-                        "error_summary": error_summary,
-                    },
-                    agent=acting_agent,
-                    severity="error",
+            # Finding F413: every failed firing leaves a `failed` row. Where this firing has no row
+            # in the session -- it raised before building one, or after discarding it as a
+            # decline -- one is built here. Without it nothing was written, the event (if any)
+            # named a row that did not exist, and a press could not tell the crash from a healthy
+            # decline that also writes nothing: it re-decided the loop and answered "nothing is
+            # wrong". On the cron path the crash existed only in this log line.
+            failed_run = run if "run" in locals() and run in session else None
+            if failed_run is None:
+                # A crash that recurs every tick counts into its row, as a continuing stall does,
+                # rather than evicting real history through `_prune_job_history`'s window. A press
+                # reads the count as its answer (`run_job`'s `counted`).
+                counted = await _stall_run_to_increment(
+                    session, job.id, error_summary, exclude_run_id=None, status="failed"
                 )
-                await session.commit()
-                if pending_edit_payload is not None:
-                    # This commit included the edit, so announce it; a raise before any `JobRun`
-                    # commits nothing and the edit simply stays staged.
-                    await _emit_loop_edit_applied(session, pending_edit_payload)
-                    pending_edit_payload = None
+                if counted is not None:
+                    counted.tick_count += 1
+                    await session.commit()
+                    await self._announce_edit_after_failure(session, pending_edit_payload)
+                    return False
+                failed_run = JobRun(
+                    id=f"run-{short_id()}",
+                    job_id=job.id,
+                    project_id=job.project_id,
+                    fired_at=datetime.now(timezone.utc),
+                    status="failed",
+                    trigger=trigger,
+                    session_id=job.last_session_id if job.session_mode == "resume" else None,
+                )
+                session.add(failed_run)
+                await self._prune_job_history(session, job.id)
+            failed_run.status = "failed"
+            failed_run.error_summary = error_summary
+            await persist_event(
+                session,
+                job.project_id,
+                "job_run_failed",
+                {
+                    "job_id": job.id,
+                    "job_name": job.name,
+                    "agent": acting_agent,
+                    "trigger": trigger,
+                    "job_run_id": failed_run.id,
+                    "error_summary": error_summary,
+                },
+                agent=acting_agent,
+                severity="error",
+            )
+            await session.commit()
+            await self._announce_edit_after_failure(session, pending_edit_payload)
             return False
+
+    async def _announce_edit_after_failure(
+        self, session: AsyncSession, pending_edit_payload: Optional[dict]
+    ) -> None:
+        """Announce a staged edit the failure's commit landed, without letting the announcement
+        raise out of the failure path: the raise being handled may have been this very emit
+        (F413's discarded-row case), and the failed row is already committed."""
+        if pending_edit_payload is None:
+            return
+        try:
+            await _emit_loop_edit_applied(session, pending_edit_payload)
+        except Exception as e:
+            logger.error(f"Loop edit audit failed after a failed firing: {_safe_error_summary(e)}")
 
     async def _stage_additional_selections(
         self,

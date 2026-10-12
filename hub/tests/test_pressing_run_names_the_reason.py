@@ -328,10 +328,11 @@ async def test_a_firing_that_raises_before_its_row_is_not_answered_by_an_earlier
         res = await _run(app, auth_headers, job)
     assert res.status_code == 500, res.text
     assert "earlier reason" not in res.json()["detail"]
-    rows = await _rows(job.id)
-    assert len(rows) == 1
-    assert rows[0].tick_count == 1
-    assert rows[0].requested_by_run_id == "run-sentinel"
+    rows = sorted(await _rows(job.id), key=lambda r: r.fired_at)
+    # The earlier row is untouched; the crash is a row of its own (F413).
+    assert len(rows) == 2
+    assert (rows[0].tick_count, rows[0].requested_by_run_id) == (1, "run-sentinel")
+    assert (rows[1].status, rows[1].error_summary) == ("failed", "boom")
 
 
 async def test_a_firing_that_fails_after_its_turn_started_is_answered_from_its_row(
@@ -425,3 +426,109 @@ async def test_a_press_whose_turn_is_merely_waiting_is_still_success(
     assert res.status_code == 200, res.text
     assert res.json()["success"] is True
     assert [r.status for r in await _rows(job.id)] == ["in_progress"]
+
+
+# --- F413: a firing that fails leaves a failed row, whatever point it failed at -------------
+
+
+async def _failed_events(job_id):
+    from hub.db.models import EventLog
+
+    async with async_session_factory() as db:
+        events = (
+            (await db.execute(select(EventLog).where(EventLog.event_type == "job_run_failed")))
+            .scalars()
+            .all()
+        )
+    return [e.data for e in events if (e.data or {}).get("job_id") == job_id]
+
+
+async def _assert_answered_by_its_failed_row(res, job_id, reason):
+    assert res.status_code == 500, res.text
+    assert reason in res.json()["detail"]
+    assert "nothing is wrong" not in res.json()["detail"]
+    rows = await _rows(job_id)
+    assert [(r.status, r.error_summary, r.tick_count) for r in rows] == [("failed", reason, 1)]
+    events = await _failed_events(job_id)
+    assert [e["job_run_id"] for e in events] == [rows[0].id]
+
+
+async def test_a_crash_before_the_row_on_an_in_flight_flow_leaves_a_failed_row(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """F413 r3raise: the crash is not answered as F23's healthy in-flight decline."""
+    await _roster(app, auth_headers, bind_runner, "press-owner17", "press-free17")
+    async with async_session_factory() as db:
+        job, _loop, _task = await _flow_all_in_flight(db, "press-17", "press-owner17")
+        job.session_mode = "resume"
+        job.last_session_id = "sess-17"
+        await db.commit()
+    boom = RuntimeError("f413: resume lookup failed")
+    with (
+        _no_spawn(),
+        patch("hub.scheduler.conversation_for_provider_session", side_effect=boom),
+    ):
+        res = await _run(app, auth_headers, job)
+    await _assert_answered_by_its_failed_row(res, job.id, "f413: resume lookup failed")
+
+
+async def test_a_crash_before_the_row_on_a_busy_loop_leaves_a_failed_row(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """F413 r3busy: the crash precedes the busy guard, so the route's re-ask must not answer it."""
+    await _roster(app, auth_headers, bind_runner, "press-owner18", "press-free18")
+    async with async_session_factory() as db:
+        job, _loop, _task = await _make_loop_job(db, suffix="press-18", agent="press-owner18")
+        job.session_mode = "resume"
+        job.last_session_id = "sess-18"
+        await db.commit()
+        await _running_turn(db, agent="press-owner18", suffix="press-18")
+    boom = RuntimeError("f413: resume lookup failed")
+    with (
+        _no_spawn(),
+        patch("hub.scheduler.conversation_for_provider_session", side_effect=boom),
+    ):
+        res = await _run(app, auth_headers, job)
+    await _assert_answered_by_its_failed_row(res, job.id, "f413: resume lookup failed")
+
+
+async def test_a_crash_after_the_row_was_discarded_leaves_a_failed_row(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """F413 r3disc: the in-flight branch discards its row and commits, then the staged edit's
+    audit raises. The event must name a row that exists, and the press must not say all is well."""
+    await _roster(app, auth_headers, bind_runner, "press-owner19", "press-free19")
+    async with async_session_factory() as db:
+        job, loop, _task = await _flow_all_in_flight(db, "press-19", "press-owner19")
+        loop.pending_edit_at = datetime.now(timezone.utc)
+        loop.pending_purpose = "f413: a staged purpose"
+        await db.commit()
+    boom = RuntimeError("f413: edit audit failed")
+    with _no_spawn(), patch("hub.scheduler._emit_loop_edit_applied", side_effect=boom):
+        res = await _run(app, auth_headers, job)
+    await _assert_answered_by_its_failed_row(res, job.id, "f413: edit audit failed")
+
+
+async def test_a_recurring_crash_counts_into_its_row(app, auth_headers, live_scheduler):
+    """F413: a crash that recurs every tick counts into one row, as a continuing stall does, so
+    it cannot evict real history through `_prune_job_history`'s window. Cron path, then a press."""
+    async with async_session_factory() as db:
+        job, _loop, _task = await _make_loop_job(db, suffix="press-20", agent="press-owner20")
+        job.session_mode = "resume"
+        job.last_session_id = "sess-20"
+        await db.commit()
+    boom = RuntimeError("f413: resume lookup failed")
+    with (
+        _no_spawn(),
+        patch("hub.scheduler.conversation_for_provider_session", side_effect=boom),
+    ):
+        for _ in range(2):
+            async with async_session_factory() as db:
+                cron_job = await db.get(type(job), job.id)
+                assert await live_scheduler._fire_job_internal(cron_job, session=db) is False
+        res = await _run(app, auth_headers, job)
+    assert res.status_code == 500, res.text
+    assert "f413: resume lookup failed" in res.json()["detail"]
+    rows = await _rows(job.id)
+    assert [(r.status, r.trigger, r.tick_count) for r in rows] == [("failed", "scheduled", 3)]
+    assert len(await _failed_events(job.id)) == 1
