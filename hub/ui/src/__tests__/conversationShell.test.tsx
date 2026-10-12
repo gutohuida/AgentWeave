@@ -46,7 +46,6 @@ vi.mock('@/api/questions', () => ({
   useQuestions: () => ({ data: [] }),
   useDeclineQuestion: () => ({ mutate: vi.fn(), isPending: false }),
 }))
-vi.mock('@/api/messages', () => ({ useMessages: () => ({ data: [] }) }))
 
 vi.mock('@/components/overview/OverviewPage', () => ({
   OverviewPage: ({ onNavigate }: { onNavigate: (destination: string) => void }) => (

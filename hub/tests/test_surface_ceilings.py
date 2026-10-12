@@ -33,7 +33,7 @@ DRIVE = REPO_ROOT / "scripts" / "drive"
 
 # Measured 2026-09-10. Lower these when the count drops; never raise one.
 CLIENTLESS_ROUTE_CEILING = 21  # 22 -> 21 2026-10-10: F568 retired GET /agents/context (the POST /context-usage one had a CLI client)
-UNHANDLED_SITE_CEILING = 95  # 97 -> 95 2026-10-11: Settings reads its query's error (F197); 100 -> 97 2026-09-23: Logs reads both its errors (F252, F256); so does the resolved-questions list
+UNHANDLED_SITE_CEILING = 92  # 95 -> 92 2026-10-12: the dead Messages UI subtree is deleted (F260), its three DEAD sites with it; 97 -> 95 2026-10-11: Settings reads its query's error (F197); 100 -> 97 2026-09-23: Logs reads both its errors (F252, F256); so does the resolved-questions list
 # Re-measured 2026-09-22, the one exception to "never raise". The 52 of 2026-09-10 was counted
 # through a table keyed by line number, and by then 5 of its MISREPORT rows already named lines
 # with no call site. Those 5 surfaces had dropped out of the count while still misreporting, and 3

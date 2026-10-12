@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 18,
+    "iteration": 19,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f260-impl",
-    "next_action": "Run queue item f260-impl: delete the dead Messages UI subtree per the operator's 2026-09-24 decision (B10 D6.3, recipe spec-queue/tracks/B10.md:249) -- components/messages/, api/messages.ts, the conversationShell.test.tsx:49 mock, n11's three DEAD rows; measure n11 before/after and lower test_surface_ceilings.py ceilings by the measured drop only; vitest, npm run lint, rebuild + commit the bundle with hub/ui/src; drive the app (loads, a conversation renders); set F260's Status line; METRICS row. Then refill-8-compose.",
+    "current": "refill-8-compose",
+    "next_action": "Run queue item refill-8-compose: if the clock is before 05:00, pick the next ready Tier-0 finding from the backlog (A/B first, then ready C; map unarchived openspec changes to their findings first; passed over so far are listed in the refill-1..7 details and the iteration 18 log entry), queue it as an impl item plus refill-9-compose. At or after 05:00, or if none qualifies, write the closing entry per night-window.md 'Ending the window' and set next_action to null.",
     "queue": [
         {
             "id": "compose",
@@ -119,9 +119,9 @@
         },
         {
             "id": "f260-impl",
-            "status": "open",
+            "status": "done",
             "title": "F260 (C, Tier 0): delete the dead Messages UI subtree",
-            "detail": "Delete hub/ui/src/components/messages/, hub/ui/src/api/messages.ts and the @/api/messages mock at conversationShell.test.tsx:49; remove n11's three DEAD rows (n11_query_error_surface.py:162-164); lower MISREPORT/UNHANDLED ceilings by the drop n11 MEASURES (DEAD rows are already excluded from MISREPORT at :422); CLIENTLESS_ROUTE_CEILING stays. vitest + lint + tsc; rebuild and commit the bundle with hub/ui/src; drive: app still loads and a conversation renders."
+            "detail": "Fixed: Messages UI subtree, api/messages.ts, the mock and n11's DEAD rows deleted; UNHANDLED ceiling 95->92 (measured), MISREPORT stays 50; vitest 2050, drive d1012_f260 8/8; bundle rebuilt."
         },
         {
             "id": "refill-8-compose",
