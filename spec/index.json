@@ -686,7 +686,7 @@
       "path": "spec/changes/images-and-pdfs-are-vault-sources-too/spec.json",
       "title": "Images and PDFs are vault sources too",
       "kind": "change-spec",
-      "status": "approved",
+      "status": "archived",
       "parent": null,
       "order": 1000
     },
