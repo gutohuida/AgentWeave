@@ -1044,7 +1044,7 @@ CHANGES = {
     },
     "faccess": {
         "document": "spec/changes/the-vault-map-is-shaped-by-what-agents-ask-for/spec.json",
-        "commit": "d9af495",
+        "commit": "9c8ffc2",
         "tasks": ["task-f1acf3d2a499", "task-312f70f31ffa", "task-3178cb4fe6f6"],
         "evidence": [
             ("FR-1", "task-312f70f31ffa", "test_result", ACCESS_TESTS,
