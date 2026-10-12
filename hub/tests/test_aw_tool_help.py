@@ -76,4 +76,6 @@ def test_no_migration_file_differs_from_master():
     )
     if result.returncode != 0:
         pytest.skip(f"no master to compare with: {result.stderr.strip()}")
-    assert result.stdout.strip() == ""
+    # A migration the branch adds is new work; only a changed or deleted one is a defect.
+    changed = [ln for ln in result.stdout.splitlines() if ln.strip() and not ln.startswith("A	")]
+    assert changed == []
