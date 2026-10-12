@@ -18443,7 +18443,7 @@ version was three lines from being written down.
 
 ## F235 (C) — "Still bounded by each checkpoint's own visibility" is a bound that cannot exist
 
-**Status:** open. Verified 2026-09-09: `visibility` is still declared only on the
+**Status:** **fixed** by `the-checkpoint-grant-says-it-reaches-every-checkpoint` (archived `f91e58b`, 2026-09-29; decision D11, B2): the claim and the unwritten `visibility` column were deleted, the hint says the grant reaches every conversation. Ledger closed 2026-10-12 (night iteration 24): `agentCheckpointSettings.test.tsx` 22 passed, incl. `states the read grant reaches every conversation, and does not claim a bound nothing sets`; `test_checkpoint_access.py` passes. Superseded text: open. Verified 2026-09-09: `visibility` is still declared only on the
 checkpoint *response* (`hub/hub/api/v1/checkpoints.py:37`, `:58`) and by no request body anywhere, so
 the grant is still all-or-nothing while the operator's own hint says it is bounded. [classified 2026-09-09, D-3]
 
@@ -21007,7 +21007,7 @@ URL *without* an explicit pool is not a change at all — SQLAlchemy still picks
 
 
 ## F273 (B) — the one write whose purpose is to outlive the process is the one whose failure nothing surfaces
-**Status:** open
+**Status:** **closed, no product change** (DECIDED `F291-F273-run-facts`, B2 D11): the premise is obsolete, the run's row and its facts map carry status and exit code whatever the status-line write does; pinned by `an-undelivered-message-says-how-its-last-attempt-ended` task 1.8 (archived `26b98cb`, 2026-09-29). Ledger closed 2026-10-12 (night iteration 24): `test_a_turn_says_how_it_ended.py` passes, incl. `test_a_status_line_that_cannot_be_written_leaves_a_lock_the_outcome_intact`.
 
 Split out of **F272** on 2026-09-03 (night window, iteration 8), because F272 itself turned out to be a test-harness artefact and this part of it is not. Nothing here has been observed in a drive; it is read from the code, and this entry says so rather than claiming a sighting.
 
@@ -22835,7 +22835,7 @@ check: watch the reconnected stream for a `run_interrupted` frame and confirm no
 
 ## F291 (C) - a run that fails before its process spawns tells the conversation nothing, and the one path where that is total leaves the turn silent
 
-**Status:** **still open** after `2026-09-05-the-conversation-carries-its-own-run-facts` shipped,
+**Status:** **fixed** by `an-undelivered-message-says-how-its-last-attempt-ended` (archived `26b98cb`, 2026-09-29, driven live; DECISIONS `F291-F273-run-facts`): the abandoned turn renders the run's own `error` beneath the Hub's reason, and `queue_entry_abandoned` reaches the chat hooks. Ledger closed 2026-10-12 (night iteration 24): `test_an_undelivered_message_says_why.py` passes. Superseded text: **still open** after `2026-09-05-the-conversation-carries-its-own-run-facts` shipped,
 and that change's own task 7.1 - which instructs the implementer to mark this `fixed` - is wrong.
 Re-driven 2026-09-09 against the built code: the run facts for the failing runs **are** now in the
 chat response, and the screen is unchanged, because `groupIntoTurns` partitions on

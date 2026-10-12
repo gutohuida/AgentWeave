@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 23,
+    "iteration": 24,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "refill-10-compose",
-    "next_action": "Run queue item refill-10-compose: compose from the backlog (re-list findings whose Status is not fixed/superseded; passed over so far: F557, F581, F556, F553 remainder, F551 provisional part, F449, F382). If it is at or after 05:00, or nothing qualifies, set next_action null and write the closing entry per night-window.md 'Ending the window'.",
+    "current": "ledger-sweep-2",
+    "next_action": "Run queue item ledger-sweep-2: for F77, F132, F253, F335, F378, F443, read the archived change that cites each (names in the item's detail), confirm in code, run its tests, and close the stale ones in scripts/drive/FINDINGS.md with that evidence. If it is at or after 05:00, write the closing entry per night-window.md 'Ending the window' and set next_action null instead.",
     "queue": [
         {
             "id": "compose",
@@ -149,9 +149,21 @@
         },
         {
             "id": "refill-10-compose",
+            "status": "done",
+            "title": "Refill the queue from the backlog if it empties before 05:00",
+            "detail": "Ledger-closed F235 (f91e58b), F273 (DECIDED F291-F273-run-facts, pinned 26b98cb), F291 (26b98cb), 41 Hub + 22 vitest passed. Passed over F439 (archive refuses queued input, premise needs a path first), F441, F350, F336 (Tier 1), F385/F168/F15 (held by unbuilt openspec changes), F433. Queued ledger-sweep-2."
+        },
+        {
+            "id": "ledger-sweep-2",
+            "status": "open",
+            "title": "Check six open findings an archived change cites after they were filed; close the stale ones with a test run",
+            "detail": "F77 (2026-09-29-a-message-to-the-operator-is-told-where-the-operator-reads), F132 (2026-10-07-drift-is-scanned-and-answered-on-the-document), F253 (2026-09-26-a-live-view-that-fell-behind-is-told-and-catches-up), F335 (2026-09-25-an-event-is-announced-only-once-its-write-is-committed), F378 (2026-09-29-request-agent-models-the-new-agent-on-one-the-operator-made), F443 (2026-09-29-an-agent-updates-a-task-with-what-its-tool-carries). For each: read what the archived change claims to fix, confirm it in code, run its tests; set Status fixed/closed only on evidence. A finding the change only partly covers stays open with a narrowed Status."
+        },
+        {
+            "id": "refill-11-compose",
             "status": "open",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Same rule as refill-9. Passed over so far: F557, F581, F556, F553 remainder, F551 provisional part, F449, F382. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
+            "detail": "Same rule as refill-10. Passed over so far: F557, F581, F556, F553 remainder, F551 provisional part, F449, F382, F439, F441, F350, F336, F433. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
         }
     ],
     "decisions_for_user": [],
