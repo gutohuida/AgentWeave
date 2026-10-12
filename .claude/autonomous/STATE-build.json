@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 13,
+    "iteration": 14,
     "log_file": ".claude/autonomous/2026-10-12-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "access-tuning-tab-impl",
-    "next_action": "Do queue item access-tuning-tab-impl (task-3178cb4fe6f6): vitest first (src/__tests__/vaultAccess.test.tsx), then VaultEntry fetches/last_fetched_at in api/vault.ts and VaultPage.tsx per the item's detail; npm run build, refresh_ui_bundle.py, commit hub/ui/src and hub/hub/static/ui together. Then run d1027 in the foreground: all 7 checks must pass (checks 1-6 passed on iteration 13). Do not close the task.",
+    "current": "access-tuning-drive",
+    "next_action": "Do queue item access-tuning-drive: full Hub suite in chunks (hub/tests, py -3.11), vitest already green at 2063; d1027 is green (9/9, iteration 14; check 7 was rewritten to the page's structure, see log iteration 14 - note that in the change's evidence). Then METRICS row in spec-queue/METRICS.md, then close the change via scripts/drive/close_change.py (add an faccess entry, pattern fimages): tasks task-f1acf3d2a499, task-312f70f31ffa, task-3178cb4fe6f6 in that order; --fold-change faccess into knowledge-vault; reindex; mark the roadmap slice access-tuning done.",
     "queue": [
         {
             "id": "specs-vault-close",
@@ -80,7 +80,7 @@
         },
         {
             "id": "access-tuning-tab-impl",
-            "status": "open",
+            "status": "done",
             "title": "Vault page shows agent read counts (task-3178cb4fe6f6)",
             "detail": "FR-5. vitest first (src/__tests__/vaultAccess.test.tsx), VaultEntry fetches/last_fetched_at in api/vault.ts, VaultPage.tsx list badge (>0) + selected entry line ('Not read by agents yet'), tolerant of missing field. npm run build, refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together. Bundle reaches :8000 on reload: say so. Testids d1027 checks: list badge [data-testid=vault-fetches-<id>] (text is the count, absent when 0), selected-entry line [data-testid=vault-entry-fetches]."
         },
