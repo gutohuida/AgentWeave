@@ -35373,8 +35373,12 @@ The spec-vault-check firing recorded `outcome empty`, `0 conflicts kept, 0 dropp
 
 ## F583 (C) -- `test_each_piece_is_one_spawn_and_one_firing` fails on this machine whatever the tree
 
-**Status:** open 2026-10-12. Measured 2026-10-12 (build window iteration 6): `py -3.11 -m pytest hub/tests/test_vault_distillation.py -k each_piece_is_one_spawn` failed 3 of 3 runs with this window's changes and 3 of 3 more with them stashed (one earlier run passed), asserting `['failed', 'written', 'written'] == ['written', 'failed', 'written']`. It also failed inside a 1,000-test chunk.
+**Status:** fixed 2026-10-12 (build window iteration 9): `_firings()` now breaks the timestamp tie by `event_logs.rowid`; the test passed 3 of 3 runs after. Measured 2026-10-12 (build window iteration 6): `py -3.11 -m pytest hub/tests/test_vault_distillation.py -k each_piece_is_one_spawn` failed 3 of 3 runs with this window's changes and 3 of 3 more with them stashed (one earlier run passed), asserting `['failed', 'written', 'written'] == ['written', 'failed', 'written']`. It also failed inside a 1,000-test chunk.
 
 `_firings()` (`hub/tests/test_vault_distillation.py:89`) orders by `EventLog.timestamp, EventLog.id`; three firings written within one tick of the Windows clock tie on timestamp and fall back to the random id. Unverified: the timestamp resolution was not read, only the symptom (order differs run to run) measured.
 
 **Fix shape (not decided):** order by a column that is monotone for rows written in sequence, or compare the outcomes as a multiset with the position of the failed piece taken from its call index. Tier 0.
+
+## F584 (C) -- `spec_reconcile.latest` picks a random reconcile result when two are recorded within one clock tick
+
+**Status:** fixed 2026-10-12 (build window iteration 9). Found by the task gate: `hub-tests` on `task-edc80dd92218` failed `test_the_fold_state_carries_the_latest_result_and_fold_is_not_refused` (`'first' == 'second'`; failed 2 of 2 alone, passed in an xdist chunk). `latest` ordered by `created_at desc, id desc`, and the id is random, so a tie on the 15.625 ms wall clock returned the older result. It now breaks the tie by `spec_document_events.rowid` as `_approval_outcome` already does; the test passes 3 of 3 runs. It was a product defect, not only a test one.

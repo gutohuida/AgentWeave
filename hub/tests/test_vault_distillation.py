@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import literal_column, select
 
 from hub import distillation, manager, vault
 from hub.db.engine import async_session_factory
@@ -93,7 +93,7 @@ async def _firings() -> list:
                 await db.execute(
                     select(EventLog)
                     .where(EventLog.event_type == manager.FIRED_EVENT)
-                    .order_by(EventLog.timestamp, EventLog.id)
+                    .order_by(EventLog.timestamp, literal_column("event_logs.rowid"))
                 )
             )
             .scalars()

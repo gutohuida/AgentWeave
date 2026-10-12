@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import SpecDocument, SpecDocumentEvent
@@ -165,7 +165,12 @@ async def latest(session: AsyncSession, document_id: str) -> Optional[SpecDocume
     result = await session.execute(
         select(SpecDocumentEvent)
         .where(SpecDocumentEvent.document_id == document_id, SpecDocumentEvent.kind == EVENT)
-        .order_by(SpecDocumentEvent.created_at.desc(), SpecDocumentEvent.id.desc())
+        # `created_at` ties on a 15.625 ms wall clock; insertion order (the rowid of this String-keyed
+        # table) breaks the tie, not the random id.
+        .order_by(
+            SpecDocumentEvent.created_at.desc(),
+            literal_column("spec_document_events.rowid").desc(),
+        )
         .limit(1)
     )
     return result.scalars().first()
