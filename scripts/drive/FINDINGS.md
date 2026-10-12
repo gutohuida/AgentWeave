@@ -35016,7 +35016,7 @@ rationales were unaffected (0 of 1,542). Fix if the converter is ever run again:
 
 ## F538 (C) -- a checkpoint can fire on a context window that was never measured
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit; found by running `output_recording.resolve_usage_limit`).
+**Status:** fixed 2026-10-13 (Tier 0, branch autonomous/2026-10-11-daily). `resolve_usage_limit` returns an `unavailable`/`unsupported` sample untouched, and `consider_from_reading` drops the percent of one (the provider-reported token count still counts toward a token threshold). Tests `test_an_unavailable_sample_is_not_completed_from_the_catalog` and `test_a_checkpoint_is_not_considered_on_a_percent_of_an_unmeasured_window` failed before. Driven: the real `copilot_acp.usage_sample` for `used` with no `size` on `claude-sonnet-5` now resolves to no limit and no percent, and the trigger is dispatched with `percent=None`; a measured sample still resolves 1.22% of 1,000,000. **Not verified:** no live Copilot run; full Hub suite not run (CI is the full check). Filed 2026-10-08 (spec overhaul audit; found by running `output_recording.resolve_usage_limit`).
 
 `output_recording.resolve_usage_limit` fills the catalog's window into any usage sample, including one marked
 `unavailable`: a Copilot `usage_update` with no `size` on `claude-sonnet-5` came back with a 1,000,000 limit and 1.22%.

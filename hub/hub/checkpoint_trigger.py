@@ -418,6 +418,10 @@ def consider_from_reading(
     if not conversation_id:
         return
     percent = payload.get("percent")
+    if payload.get("status") in ("unavailable", "unsupported"):
+        # Not a measurement of the window (F538): whatever percentage rides on the sample was
+        # not computed against one. The token count, if the provider reported it, still counts.
+        percent = None
     context_tokens = payload.get("context_tokens")
     if percent is None and context_tokens is None:
         return

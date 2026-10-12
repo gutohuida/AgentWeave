@@ -162,8 +162,12 @@ def resolve_usage_limit(payload: Dict[str, Any]) -> Dict[str, Any]:
     own, at the one place every write path funnels through.
 
     Nothing is invented: a model the catalog does not declare leaves `limit_tokens` and `percent`
-    as they were. A sample that already carries a limit (Codex reports its own) is untouched.
+    as they were. A sample that already carries a limit (Codex reports its own) is untouched, and
+    so is one that says it is not a measurement (`unavailable`, `unsupported`): Copilot's
+    `usage_update` with no `size` came back as 1.22% of a catalog window nobody measured (F538).
     """
+    if payload.get("status") in ("unavailable", "unsupported"):
+        return payload
     if payload.get("limit_tokens") is not None or payload.get("percent") is not None:
         return payload
     context_tokens = payload.get("context_tokens")

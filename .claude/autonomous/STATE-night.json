@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f538-impl",
-    "next_action": "Do queue item f538-impl: F538 a checkpoint can fire on a context window that was never measured. Test failing first at the seam the finding names (checkpoint_trigger reads percent without checking the usage sample's status; output_recording.resolve_usage_limit fills a catalog window into an `unavailable` sample), fix, drive, set the F538 Status line. Keep current equal to the item id.",
+    "current": "f544-impl",
+    "next_action": "Do queue item f544-impl: F544 explicit Workspace-only Claude run without the tool server denies every prompted call. Read runner_commands.py ~247-263; decide the fallback from the code's own rule (DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER) and make the run say so. Test failing first at the seam, fix, drive, set the F544 Status line. Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -71,9 +71,9 @@
         },
         {
             "id": "f538-impl",
-            "status": "open",
+            "status": "done",
             "title": "F538 a checkpoint can fire on a context window that was never measured (Tier 0)",
-            "detail": "checkpoint_trigger reads percent without checking the usage sample's status; resolve_usage_limit fills a catalog window into an `unavailable` sample. Repro: output_recording.resolve_usage_limit on a Copilot usage_update with no size."
+            "detail": "Fixed iteration 11: resolve_usage_limit leaves an unavailable/unsupported sample alone and consider_from_reading drops its percent; tests + Copilot-shape drive recorded in the F538 Status line."
         },
         {
             "id": "f544-impl",

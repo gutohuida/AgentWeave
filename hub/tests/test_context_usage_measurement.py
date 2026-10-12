@@ -305,3 +305,49 @@ async def test_a_reading_for_an_agent_with_no_conversation_creates_none(app):
         conversations = (await db.execute(select(Conversation))).scalars().all()
 
     assert conversations == []
+
+
+def test_an_unavailable_sample_is_not_completed_from_the_catalog():
+    """F538: Copilot reported `used` with no `size` (`copilot_acp.usage_sample` -> `unavailable`),
+    and the catalog's 1,000,000-token window was filled in anyway, yielding 1.22% of a window
+    nobody measured."""
+    payload = {
+        "status": "unavailable",
+        "source": "copilot_acp",
+        "basis": None,
+        "context_tokens": 12_200,
+        "limit_tokens": None,
+        "model": "claude-sonnet-5",
+    }
+    resolved = resolve_usage_limit(dict(payload))
+    assert resolved.get("limit_tokens") is None
+    assert resolved.get("percent") is None
+
+
+@pytest.mark.parametrize("status", ["unavailable", "unsupported"])
+def test_a_checkpoint_is_not_considered_on_a_percent_of_an_unmeasured_window(monkeypatch, status):
+    """F538: whatever `percent` rides on a sample that says it is not a measurement is not read
+    by the trigger. The token count, which the provider did report, still is."""
+    from hub import checkpoint_trigger
+
+    seen = []
+    monkeypatch.setattr(checkpoint_trigger, "_dispatch", lambda *a, **k: seen.append(k))
+    checkpoint_trigger.consider_from_reading(
+        "proj-1",
+        "alice",
+        "conv-1",
+        {"status": status, "context_tokens": 12_200, "percent": 97.0},
+    )
+    assert seen == [{"context_tokens": 12_200, "percent": None, "compacted": False}]
+
+    seen.clear()
+    checkpoint_trigger.consider_from_reading(
+        "proj-1", "alice", "conv-2", {"status": status, "percent": 97.0}
+    )
+    assert seen == []
+
+    seen.clear()
+    checkpoint_trigger.consider_from_reading(
+        "proj-1", "alice", "conv-3", {"status": "measured", "context_tokens": 5, "percent": 97.0}
+    )
+    assert seen == [{"context_tokens": 5, "percent": 97.0, "compacted": False}]
