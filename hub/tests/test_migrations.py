@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0125"
+HEAD_REVISION = "0126"
 
 
 # ---------------------------------------------------------------------------
@@ -5166,3 +5166,54 @@ def test_migration_run_divergence_task_nullable_keeps_rows_and_downgrade_drops_o
             3
         ] == 1
         assert conn.execute("SELECT id FROM run_divergences").fetchall() == [("d1",)]
+
+
+# ---------------------------------------------------------------------------------------------
+# 0126 -- vault_fetches (`the-vault-map-is-shaped-by-what-agents-ask-for`). A new table only: it
+# starts empty, nothing existing is copied, and the downgrade drops it and nothing else.
+# ---------------------------------------------------------------------------------------------
+
+
+def test_migration_vault_fetches_creates_the_table_and_its_downgrade_drops_only_it(
+    tmp_path,
+) -> None:
+    db_file = tmp_path / "fetches.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        before = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        conn.execute("DROP TABLE vault_fetches")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0125')")
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p', 'p', '2026-01-01T00:00:00Z')"
+        )
+        conn.commit()
+
+    _upgrade_to(db_url, "0126")
+
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert tables == before | {"alembic_version"}  # it came back; nothing else changed
+        assert conn.execute("SELECT count(*) FROM vault_fetches").fetchone() == (0,)
+        info = {r[1]: r for r in conn.execute("PRAGMA table_info(vault_fetches)")}
+        assert set(info) == {"project_id", "entry_id", "count", "last_fetched_at"}
+        assert info["project_id"][5] == 1 and info["entry_id"][5] == 2  # the composite key
+        conn.execute(
+            "INSERT INTO vault_fetches (project_id, entry_id, last_fetched_at) "
+            "VALUES ('p', 'src-aaaaaaaaaaaa', '2026-01-01T00:00:00Z')"
+        )
+        assert conn.execute("SELECT count FROM vault_fetches").fetchone() == (0,)
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO vault_fetches (project_id, entry_id, last_fetched_at) "
+                "VALUES ('p', 'src-aaaaaaaaaaaa', '2026-01-01T00:00:00Z')"
+            )
+        conn.commit()
+
+    _downgrade_to(db_url, "0125")
+
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert conn.execute("SELECT id FROM projects").fetchall() == [("p",)]
+    assert tables == (before - {"vault_fetches"}) | {"alembic_version"}

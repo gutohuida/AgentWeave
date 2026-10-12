@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-12-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "access-tuning-backend-impl",
-    "next_action": "Do queue item access-tuning-backend-impl (task-312f70f31ffa): read .claude/rules/db-migrations.md and mcp-server.md first; failing tests first in hub/tests/test_vault_access.py; build FR-1..FR-4, FR-6 per the item's detail. Then run d1027 in the foreground: checks 1-6 must pass (7 needs the tab item). Do not close the task.",
+    "current": "access-tuning-tab-impl",
+    "next_action": "Do queue item access-tuning-tab-impl (task-3178cb4fe6f6): vitest first (src/__tests__/vaultAccess.test.tsx), then VaultEntry fetches/last_fetched_at in api/vault.ts and VaultPage.tsx per the item's detail; npm run build, refresh_ui_bundle.py, commit hub/ui/src and hub/hub/static/ui together. Then run d1027 in the foreground: all 7 checks must pass (checks 1-6 passed on iteration 13). Do not close the task.",
     "queue": [
         {
             "id": "specs-vault-close",
@@ -74,7 +74,7 @@
         },
         {
             "id": "access-tuning-backend-impl",
-            "status": "open",
+            "status": "done",
             "title": "Backend: vault_fetches, migration 0126, counting, ordered map, agent texts (task-312f70f31ffa)",
             "detail": "FR-1..FR-4, FR-6. Read .claude/rules/db-migrations.md and mcp-server.md first. models.py VaultFetch; 0126 (guarded), head asserts in test_migrations.py + test_project_persistence.py; agent_actions.py read_vault_entry counts after 200 at offset 0 (own txn, failure logged); api/v1/vault.py read_map/read_one merge counts; vault.build_map orders areas; mcp_server.py vault_map docstring; agents.py vault_map text. Failing tests first: hub/tests/test_vault_access.py. Migration reaches :8000 on restart: say so in the log. Agent route path is /agent-actions/vault/entries/{id} (agent_actions.py read_vault_entry); d1027 check 6 compares /agent-actions/vault/map to the operator's map."
         },

@@ -719,10 +719,13 @@ def recall(observation_id: str) -> Dict[str, Any]:
 
 @_tool()
 def vault_map() -> Dict[str, Any]:
-    """The project's knowledge vault: what the business has told this project, newest first.
+    """The project's knowledge vault: what the business has told this project.
 
-    Meeting transcripts, business rules, documents and examples the operator uploaded. Each entry
-    has its `id`, `type`, `name` and `opening` lines; read one in full with `vault_read`. **Check
+    Meeting transcripts, business rules, documents and examples the operator uploaded. The map is
+    in areas, a source followed by the facts that cite it, and the areas are ordered by how often
+    agents have read them, then newest first; `fetches` is how many times agents have read an
+    entry, so what comes first is what agents have needed most. Each entry has its `id`, `type`,
+    `name`, `fetches` and `opening` lines; read one in full with `vault_read`. **Check
     here before guessing at what the business decided.** An entry with `available: false` is
     private to another machine (`holder` names it): its text is not here, so ask the operator.
     """

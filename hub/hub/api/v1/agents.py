@@ -1489,9 +1489,11 @@ def _operations() -> List[_Operation]:
             required=(),
             text=(
                 "the project's knowledge vault: meeting transcripts, business rules, documents and "
-                "examples the operator gave the project, newest first, each with its id, type, "
-                "name and opening lines. Read it to find what the business decided before you "
-                "guess; an entry marked unavailable is private to another machine."
+                "examples the operator gave the project, in areas ordered by how often agents have "
+                "read them, then newest first (fetches is how many times agents have read an "
+                "entry), each with its id, type, name and opening lines. Read it to find what the "
+                "business decided before you guess; an entry marked unavailable is private to "
+                "another machine."
             ),
         ),
         _Operation(

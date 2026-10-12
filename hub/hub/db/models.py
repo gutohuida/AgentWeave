@@ -1111,6 +1111,25 @@ class ManagerJob(Base):
     __table_args__ = (PrimaryKeyConstraint("project_id", "job", name="pk_manager_jobs"),)
 
 
+class VaultFetch(Base):
+    """How many times agents have read one vault entry (migration 0126).
+
+    `the-vault-map-is-shaped-by-what-agents-ask-for`. One row per entry per project, bumped by the
+    agents' `vault_read` at offset 0 (`hub/hub/vault_access.py`); the map is ordered by it. It is a
+    Hub table, not a file under `knowledge/`: a count changes on every read, and a counter in the
+    repository would dirty it and conflict between colleagues. Counts are therefore per Hub.
+    """
+
+    __tablename__ = "vault_fetches"
+
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"))
+    entry_id: Mapped[str] = mapped_column(String(64))
+    count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    last_fetched_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (PrimaryKeyConstraint("project_id", "entry_id", name="pk_vault_fetches"),)
+
+
 class VaultSettings(Base):
     """Where a project's knowledge vault puts what it is given (migration 0124).
 

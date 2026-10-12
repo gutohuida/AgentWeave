@@ -26,7 +26,7 @@ from ...checkpoint_access import (
     recall_observation,
 )
 from ...conversations import conversation_id_for_run
-from ...db.engine import get_session
+from ...db.engine import async_session_factory, get_session
 from ...db.models import Agent, CheckpointNote, Project, Question, Run, Task
 from ...launchability import record_harness_mcp_status
 from ...run_task_binding import (
@@ -487,10 +487,23 @@ async def read_vault_entry(
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
-    """One vault entry with a page of its text, from *offset*."""
+    """One vault entry with a page of its text, from *offset*.
+
+    The first page of an entry that exists counts as one read by an agent
+    (`the-vault-map-is-shaped-by-what-agents-ask-for`); a later page, and a 404, do not.
+    """
+    from ... import vault_access
     from . import vault as vault_routes
 
-    return await vault_routes.read_one(session, actor.project_id, entry_id, offset)
+    entry = await vault_routes.read_one(session, actor.project_id, entry_id, offset)
+    if offset == 0:
+        try:
+            async with async_session_factory() as own:
+                count = await vault_access.record_fetch(own, actor.project_id, entry_id)
+            entry = vault_access.annotate(entry, count)
+        except Exception:
+            logger.warning("could not count a vault read of %s", entry_id, exc_info=True)
+    return entry
 
 
 class VaultReportCreate(RequestModel):

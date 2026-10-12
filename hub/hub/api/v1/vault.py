@@ -38,7 +38,14 @@ from fastapi import (
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import distillation, project_workspace, spec_lifecycle, vault, vault_spec_check
+from ... import (
+    distillation,
+    project_workspace,
+    spec_lifecycle,
+    vault,
+    vault_access,
+    vault_spec_check,
+)
 from ...auth import get_project
 from ...db.engine import get_session
 from ...spec_manifest import SpecPathError, validate_spec_path
@@ -105,7 +112,10 @@ def _refused(exc: vault.VaultError) -> HTTPException:
 
 async def read_map(session: AsyncSession, project_id: str) -> Dict[str, Any]:
     root, private = await roots(session, project_id)
-    return {"entries": await asyncio.to_thread(vault.build_map, root, private)}
+    entries = await asyncio.to_thread(vault.build_map, root, private)
+    return {
+        "entries": vault_access.shape(entries, await vault_access.counts_for(session, project_id))
+    }
 
 
 async def read_one(
@@ -115,7 +125,8 @@ async def read_one(
     entry = await asyncio.to_thread(vault.read_entry, root, private, entry_id, offset)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No entry '{entry_id}'")
-    return entry
+    counts = await vault_access.counts_for(session, project_id)
+    return vault_access.annotate(entry, counts.get(entry_id))
 
 
 @router.get("/settings")
