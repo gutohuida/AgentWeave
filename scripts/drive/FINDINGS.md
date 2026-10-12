@@ -34205,7 +34205,7 @@ gets a longer limit; or the timeout resume continues the same work instead of st
 
 ## F492 (C) — a full commit SHA in a tool's input is stored as `<redacted>`
 
-**Status:** open, found 2026-10-04 by drive task 7.7 of `a-copilot-agent-uses-hooks-and-its-own-agents`.
+**Status:** fixed 2026-10-12 (night window iteration 5, Tier 0): `runner_events._is_commit_argument` keeps a 40- or 64-character lowercase-hex token that follows `git` in the same string, sits after whitespace or `.` and before whitespace, `.`, `^` or `~`; `https://<hex>@host`, `user:<hex>@host`, `Authorization=<hex>` and a bare hex string stay redacted. Chosen over "a commit known to the repository" because redaction has no repository to ask. Residual: a 40-hex key passed as a plain argument to a git command is stored. Tests in `hub/tests/test_operator_is_told_the_truth.py` failed 5 of 12 new cases before the fix; driven through `parse_claude_line` on a stream-json `tool_use` line: `git diff A..B` stored whole before: `<redacted>..<redacted>`; the clone-URL and `export K=` forms stay redacted. Found 2026-10-04 by drive task 7.7 of `a-copilot-agent-uses-hooks-and-its-own-agents`.
 **Ready:** yes; no change owns it.
 
 `runner_events._SECRET_VALUE_RE`'s catch-all (`[A-Za-z0-9+/=]{32,}`) matches a 40-character hex
@@ -35383,3 +35383,9 @@ The spec-vault-check firing recorded `outcome empty`, `0 conflicts kept, 0 dropp
 ## F584 (C) -- `spec_reconcile.latest` picks a random reconcile result when two are recorded within one clock tick
 
 **Status:** fixed 2026-10-12 (build window iteration 9). Found by the task gate: `hub-tests` on `task-edc80dd92218` failed `test_the_fold_state_carries_the_latest_result_and_fold_is_not_refused` (`'first' == 'second'`; failed 2 of 2 alone, passed in an xdist chunk). `latest` ordered by `created_at desc, id desc`, and the id is random, so a tie on the 15.625 ms wall clock returned the older result. It now breaks the tie by `spec_document_events.rowid` as `_approval_outcome` already does; the test passes 3 of 3 runs. It was a product defect, not only a test one.
+
+## F585 (C) -- `tests/test_skill_sync.py` fails on a clean tree: two skill mirrors are stale
+
+**Status:** open 2026-10-12. Measured (night window iteration 4, clean tree at 8b2bf1d): `py -3.11 -m pytest tests/test_skill_sync.py` fails 2 cases, the Kimi+OpenCode project mirror and the Codex user-level mirror, both stale against `.claude/skills/`: `autonomous-session/scripts/run-iteration.ps1` and `night-briefing/SKILL.md`.
+
+The mirrors live under the user's home, so the autonomous window did not rewrite them. A CI runner has no such home, so this is likely local-only; unverified. **Fix shape (not decided):** re-run the sync for those two mirrors, and have the test skip or point at a temp home when the mirror is outside the repository. Tier 0.

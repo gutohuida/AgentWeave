@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f492-impl",
-    "next_action": "Do queue item f492-impl: fix F492 as Tier 0 (see its queue detail). Keep current equal to the item id. Also file a finding for the pre-existing tests/test_skill_sync.py failures (2 mirrors stale: run-iteration.ps1, night-briefing/SKILL.md) if none exists.",
+    "current": "f446-impl",
+    "next_action": "Do queue item f446-impl: fix F446 as Tier 0 (grep '## F446' in scripts/drive/FINDINGS.md). Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -41,9 +41,9 @@
         },
         {
             "id": "f492-impl",
-            "status": "open",
+            "status": "done",
             "title": "F492 full commit SHA in tool input stored as <redacted> (Tier 0)",
-            "detail": "grep '## F492'. Test, fix, drive."
+            "detail": "Fixed iteration 5: git-argument SHAs kept, credential-shaped neighbours still redacted; tests + parse_claude_line drive recorded in the F492 Status line. F585 filed for stale skill mirrors."
         },
         {
             "id": "f446-impl",

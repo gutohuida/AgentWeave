@@ -73,11 +73,36 @@ _SECRET_VALUE_RE = re.compile(
 )
 _PATH_SEGMENT_RE = re.compile(r"[a-z0-9]+|[A-Z]?[a-z]+(?:[A-Z][a-z]+)*")
 _TOKEN_SEGMENT_RE = re.compile(r"(?=.*[A-Za-z])(?=.*[0-9])")
+_COMMIT_SHA_RE = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
+_GIT_WORD_RE = re.compile(r"\bgit\b")
+
+
+def _is_commit_argument(match: "re.Match[str]") -> bool:
+    """A 40- or 64-character lowercase-hex token that is an argument of a `git` command (F492).
+
+    `git diff A..B` and `git show <sha>` name the range a review worked on, and the catch-all
+    stored it as `<redacted>`. The token is kept only inside a string that says `git` before it,
+    and only in an argument position: after whitespace or `.` (a range), before whitespace, `.`,
+    `^` or `~`. `https://<hex>@host`, `user:<hex>@host` and `Authorization=<hex>` are neighbours
+    that a credential has and a revision does not, so those stay redacted.
+    """
+    if not _COMMIT_SHA_RE.fullmatch(match.group(0)):
+        return False
+    text, start, end = match.string, match.start(), match.end()
+    before = text[start - 1] if start else " "
+    after = text[end] if end < len(text) else " "
+    return (
+        (before.isspace() or before == ".")
+        and (after.isspace() or after in ".^~")
+        and _GIT_WORD_RE.search(text, 0, start) is not None
+    )
 
 
 def _redaction_for(match: "re.Match[str]") -> str:
     """What one `_SECRET_VALUE_RE` match is stored as: a path keeps its words (F278)."""
     text = match.group(0)
+    if match.lastgroup == "entropy" and _is_commit_argument(match):
+        return text
     segments = [segment for segment in text.split("/") if segment]
     if (
         match.lastgroup != "entropy"

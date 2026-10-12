@@ -291,3 +291,49 @@ async def test_an_ordinary_bound_agent_is_unchanged(app):
 
     assert config["runner"] == "codex"
     assert config["model"] == "gpt-5"
+
+
+# ---------------------------------------------------------------------------
+# F492: a commit SHA named in a git command is not a credential
+# ---------------------------------------------------------------------------
+
+_SHA_A = "77f3204b1c9e5d8a0f6b2c4e7a1d3f5b9c8e0a2d"
+_SHA_B = "521e5d3a9b7c1f4e6d8a0b2c4e6f8a1b3c5d7e9f"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"git diff {_SHA_A}..{_SHA_B}",
+        f"git show {_SHA_A}",
+        f"cd /repo && git log --stat {_SHA_A}...{_SHA_B} -- hub/",
+        f"git rev-parse {_SHA_A}^",
+        f"git show {_SHA_A * 2}"[: len("git show ") + 64],  # a SHA-256 object name
+    ],
+)
+def test_a_commit_sha_in_a_git_command_is_stored(command):
+    """The catch-all matched every 40-character hex SHA, so a review's commit range could not be
+    read back from the record."""
+    assert redact_secrets(command) == command
+    assert redact_secrets({"command": command}) == {"command": command}
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        # Not in a git command: a bare 40-hex string is a key until something says otherwise.
+        _SHA_A,
+        f"export DEPLOY_KEY={_SHA_A}",
+        # In a git command, but wearing credential shape.
+        f"git clone https://{_SHA_A}@github.com/org/repo.git",
+        f"git clone https://user:{_SHA_A}@github.com/org/repo.git",
+        f"git -c http.extraheader=Authorization={_SHA_A} fetch",
+        # Not a commit's length.
+        f"git show {_SHA_A}{_SHA_B[:10]}",
+        f"git config user.key {'A1b2C3d4' * 5}",
+    ],
+)
+def test_a_hex_key_outside_a_commit_position_is_still_redacted(value):
+    out = redact_secrets(value)
+    assert "<redacted>" in out
+    assert _SHA_A not in out and ("A1b2C3d4" * 2) not in out
