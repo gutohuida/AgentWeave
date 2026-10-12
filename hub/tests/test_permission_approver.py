@@ -1607,6 +1607,30 @@ def test_no_approver_is_named_when_no_mcp_server_is_configured():
         control_overrides={"permission_mode": WORKSPACE_PERMISSION_MODE},
     )
     assert "--permission-prompt-tool" not in argv
+    # Not `manual`: with nothing to answer it every prompted call is refused (F544). The explicit
+    # choice falls back the way the built-in default does.
+    assert argv.count("--permission-mode") == 1
+    assert (
+        argv[argv.index("--permission-mode") + 1] == DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER
+    )
+
+
+def test_an_explicit_workspace_run_without_a_server_says_it_fell_back(caplog):
+    with caplog.at_level("WARNING", logger="hub.runner_commands"):
+        build_command(
+            runner="claude",
+            cli="claude",
+            prompt="hi",
+            control_overrides={"permission_mode": WORKSPACE_PERMISSION_MODE},
+        )
+    assert "Workspace only" in caplog.text and "acceptEdits" in caplog.text
+
+
+def test_ask_me_without_a_server_is_left_as_the_operator_chose_it():
+    """Only the Hub-answered posture falls back: `manual` is the operator's stricter choice."""
+    argv = build_command(
+        runner="claude", cli="claude", prompt="hi", control_overrides={"permission_mode": "manual"}
+    )
     assert argv[argv.index("--permission-mode") + 1] == "manual"
 
 

@@ -40,10 +40,13 @@ so that server's tools stay usable.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from .model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
+
+logger = logging.getLogger(__name__)
 
 # Copilot names an MCP tool `<server>-<tool>` (VERIFIED: `hubprobe-ping`), so a Copilot run's
 # callable names are known too (`a-copilot-agent-runs-over-acp` D16). `CopilotAdapter` reads it as
@@ -163,6 +166,15 @@ def _claude_mcp_args(mcp_command: Optional[List[str]], *, yolo: bool) -> List[st
 CLAUDE_CALL_COMMAND_RULES = ("Bash(aw-tool:*)", "PowerShell(aw-tool:*)")
 
 
+def _with_permission_mode(control_args: Optional[List[str]], mode: str) -> List[str]:
+    """`control_args` with the value of each `--permission-mode` pair replaced by `mode`."""
+    out = list(control_args or [])
+    for i, token in enumerate(out[:-1]):
+        if token == "--permission-mode":
+            out[i + 1] = mode
+    return out
+
+
 def _build_claude_command(
     *,
     cli: str,
@@ -182,6 +194,23 @@ def _build_claude_command(
     cmd = [cli, "--output-format", "stream-json", "--verbose"]
     if model:
         cmd += ["--model", model]
+    if (
+        not yolo
+        and not mcp_command
+        and (control_overrides or {}).get("permission_mode") == WORKSPACE_PERMISSION_MODE
+    ):
+        # An explicit "Workspace only" with no tool server is `manual` and nothing to answer it, so
+        # every call that prompts is refused -- the failure `DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_
+        # APPROVER` exists to end for the built-in default (F544). The explicit choice gets the same
+        # rule, named outright rather than left to the default, which keys on `approvals`.
+        fallback = DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER
+        control_args = _with_permission_mode(control_args, fallback)
+        control_overrides = {**(control_overrides or {}), "permission_mode": fallback}
+        logger.warning(
+            "Workspace only was chosen for a Claude run with no Hub tool server to answer it; "
+            "running with %s instead",
+            fallback,
+        )
     if control_args:
         cmd += control_args
     if restrict_spec_writes:

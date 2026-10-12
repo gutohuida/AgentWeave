@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f544-impl",
-    "next_action": "Do queue item f544-impl: F544 explicit Workspace-only Claude run without the tool server denies every prompted call. Read runner_commands.py ~247-263; decide the fallback from the code's own rule (DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER) and make the run say so. Test failing first at the seam, fix, drive, set the F544 Status line. Keep current equal to the item id.",
+    "current": "f548-impl",
+    "next_action": "Do queue item f548-impl: F548 a divergence for a run whose task someone else decides never closes. Read run_divergence.py ~762-816 and the F548 entry in scripts/drive/FINDINGS.md; test failing first at the seam, fix, drive, set the F548 Status line. Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -77,9 +77,9 @@
         },
         {
             "id": "f544-impl",
-            "status": "open",
+            "status": "done",
             "title": "F544 explicit Workspace-only Claude run without the tool server denies every prompted call (Tier 0)",
-            "detail": "runner_commands.py ~247-263: explicit Workspace-only with no MCP server yields manual with no --permission-prompt-tool; the built-in default falls back to acceptEdits. Decide the fallback from the code's own rule (DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER) and make the run say so."
+            "detail": "Fixed iteration 13: explicit Workspace-only with no MCP server falls back to acceptEdits and logs a WARNING; tests + build_command drive recorded in the F544 Status line."
         },
         {
             "id": "f548-impl",

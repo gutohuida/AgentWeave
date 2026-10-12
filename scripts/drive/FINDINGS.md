@@ -35065,7 +35065,7 @@ them, against the plane's equal-capability rule. Operator question recorded in D
 
 ## F544 (C) -- an explicit "Workspace only" Claude run without the tool server denies every prompted call
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** fixed 2026-10-13 (night iteration 13; `_build_claude_command` swaps the explicit Workspace-only `--permission-mode manual` for `acceptEdits` when no MCP server is configured and logs a WARNING saying so; `test_permission_approver.py` 3 cases, driven through `build_command`; `manual` (Ask me) left as chosen; only the Hub log says so, no UI notice). Filed 2026-10-08 (spec overhaul audit, reading code).
 
 On a Claude run with no MCP server, an explicitly chosen Workspace-only posture yields `--permission-mode manual` with
 no `--permission-prompt-tool` (`runner_commands.py:247-263`), so every call that would prompt is refused. The built-in
