@@ -518,7 +518,7 @@ the operator's request and told to attack the instrument, and they are worse tha
 - **26 finding numbers had no section at all** — F66, F67, F69, F72–F86, F130, F131, F132, F145,
   F148, F150, F151, F153. **The ledger holds 297 findings, not 271**, and every census ever run on
   this page — including all three of mine — was blind to 26 of them. **One is open: F77,
-  `**Status:** open — filed, not fixed`, severity C.** No count has ever included it.
+  `**Status (2026-10-12, night ledger-sweep-2): fixed** by `a-message-to-the-operator-is-told-where-the-operator-reads` (archived 2026-09-29; operator decision: a refusal only, no `notify_operator`). A send to `Operator`/`operator`/`USER` through the agent plane now answers 404 naming `update_task` and `ask_user`, reason `operator_not_a_recipient`; `hub/tests/test_a_message_to_the_operator.py` passes (50 passed across the six files run this sweep).`, severity C.** No count has ever included it.
 - **Far worse: a heading the scanner cannot see does not *end* the previous section.** So an
   em-dash finding's whole body was appended to whichever paren-headed finding came before it.
   **F71's "section" absorbed F72 through F86 — 1,223 lines.**
@@ -10294,7 +10294,9 @@ A third caller was corrected alongside: `checkpoint_cutover.py`'s `auto_continue
 
 ## F132 (C) — drift has no agent-side half either, and the gate's remedy names an action no surface offers
 
-**Status:** open. Verified 2026-09-09: `hub/ui/src` still contains no reference to
+**Status (2026-10-12, night ledger-sweep-2): fixed** by `drift-is-scanned-and-answered-on-the-document` (archived 2026-10-07): the document panel scans and answers drift (`SpecDriftPanel`), and the gate remedy names the operator answering the candidate. `hub/tests/test_requirement_drift.py` and `specDriftPanel.test.tsx` (6) pass. Older text kept below.
+
+**Earlier status:** open. Verified 2026-09-09: `hub/ui/src` still contains no reference to
 `spec/drift`, `drift/detect` or `requirement_drift`, so neither plane can raise or clear a candidate,
 and the gate's `DRIFTING` remedy still names an action no surface offers. Carried by the release
 roadmap as a proposal that was never written. [classified 2026-09-09, D-3]
@@ -19274,7 +19276,9 @@ from whatever half-hour happens to sit inside the first 500 rows.
 
 ## F253 (B) — a subscriber that falls behind loses events silently: 1,426 of 3,000, twice, with no gap on the wire and no disconnect
 
-**Status:** open. Filed by the row-16 drive (`00b5dd9`), never fixed and never specced. [classified 2026-09-09, D-2]
+**Status (2026-10-12, night ledger-sweep-2): fixed** by `a-live-view-that-fell-behind-is-told-and-catches-up` (archived 2026-09-26): `SSEManager` subscriber queues count `dropped` and tell the client; `useSSE.ts`, `ActivityLog.tsx` and `eventSummary.ts` handle `stream_gap`; `test_a_stream_that_fell_behind_is_told.py` passes. Older text kept below.
+
+**Earlier status:** open. Filed by the row-16 drive (`00b5dd9`), never fixed and never specced. [classified 2026-09-09, D-2]
 
 `SSEManager.broadcast` (`hub/hub/sse.py:93`, `:102`) drops on a full queue:
 
@@ -28223,7 +28227,7 @@ human judgement this finding feeds.
 
 **Status (2026-09-25, night iteration 7): fixed in code** by `an-event-is-announced-only-once-its-write-is-committed` — `resolve_divergences_for_task` now announces through `defer_broadcast`, published from the session's `after_commit` listener, so a refused review publishes nothing (`hub/tests/test_an_event_is_announced_after_commit.py`; mutation to a staging-time `publish` fails three tests). F251's coupling is released: admitting the kind to the allowlist no longer surfaces a false line. Not driven on a live Hub yet (night-drive).
 
-**Status:** open, latent behind F251 — re-read 2026-09-15 (night `ledger-conflicts`): `resolve_divergences_for_task` still broadcasts at staging time (`hub/hub/run_divergence.py:104`, before its caller commits), and `SSE_EVENT_TYPES` (`hub/ui/src/hooks/useSSE.ts:21`) still omits the kind, so the false event is on the wire and in no UI surface; F251 has no fix either.
+**Earlier status (superseded by the fixed line above; `test_an_event_is_announced_after_commit.py` passes 2026-10-12):** open, latent behind F251 — re-read 2026-09-15 (night `ledger-conflicts`): `resolve_divergences_for_task` still broadcasts at staging time (`hub/hub/run_divergence.py:104`, before its caller commits), and `SSE_EVENT_TYPES` (`hub/ui/src/hooks/useSSE.ts:21`) still omits the kind, so the false event is on the wire and in no UI surface; F251 has no fix either.
 
 **Narrowed by the 2026-09-13 day drive: the false broadcast is real on the wire,
 and no UI surface renders it today.** The live activity feed drops `run_divergence_resolved` before
@@ -30444,7 +30448,9 @@ what happened in F376, and it was refused by a setting with no visible state.
 
 ## F378 (B) — `request_agent` reads templates from a table no surface writes, and it is empty in every project on this Hub
 
-**Status:** open. Filed 2026-09-17 by an interactive session, from `LoopEngine_2` on `:8000`.
+**Status (2026-10-12, night ledger-sweep-2): fixed** by `request-agent-models-the-new-agent-on-one-the-operator-made` (archived 2026-09-29; template = an existing open agent): `request_agent` reads an `Agent` row; `test_request_agent_models_an_existing_agent.py` passes. Older text kept below.
+
+**Earlier status:** open. Filed 2026-09-17 by an interactive session, from `LoopEngine_2` on `:8000`.
 
 **Source:** drive — found by exercising the product and reading what it actually recorded.
 **Theme:** Agents & runners
@@ -33288,7 +33294,9 @@ and passes today.
 
 ## F443 (C) — an agent can still set a task's holder, priority and description when it creates the task
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), from the Opus review of B3
+**Status (2026-10-12, night ledger-sweep-2): still open.** The archived `an-agent-updates-a-task-with-what-its-tool-carries` covers update only and names F443 out of scope (design.md:9, proposal.md:45). Nothing to close.
+
+**Earlier status:** open. Filed 2026-09-24 (daily review, operator-accepted), from the Opus review of B3
 (`spec-queue/tracks/reviews/B3-2026-09-24.md` §7). B3's `an-agent-updates-a-task-with-what-its-tool-carries`
 makes holder, priority and description the operator's fields on *update* (403 for a run actor). But
 `POST /agent-actions/tasks` still lets an agent set all three at *creation*

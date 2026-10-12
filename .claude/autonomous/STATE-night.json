@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 24,
+    "iteration": 25,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ledger-sweep-2",
-    "next_action": "Run queue item ledger-sweep-2: for F77, F132, F253, F335, F378, F443, read the archived change that cites each (names in the item's detail), confirm in code, run its tests, and close the stale ones in scripts/drive/FINDINGS.md with that evidence. If it is at or after 05:00, write the closing entry per night-window.md 'Ending the window' and set next_action null instead.",
+    "current": "refill-11-compose",
+    "next_action": "Run queue item refill-11-compose: refill from the backlog (see its detail). If it is at or after 05:00, or nothing qualifies, write the closing entry per night-window.md 'Ending the window' and set next_action null.",
     "queue": [
         {
             "id": "compose",
@@ -155,9 +155,9 @@
         },
         {
             "id": "ledger-sweep-2",
-            "status": "open",
+            "status": "done",
             "title": "Check six open findings an archived change cites after they were filed; close the stale ones with a test run",
-            "detail": "F77 (2026-09-29-a-message-to-the-operator-is-told-where-the-operator-reads), F132 (2026-10-07-drift-is-scanned-and-answered-on-the-document), F253 (2026-09-26-a-live-view-that-fell-behind-is-told-and-catches-up), F335 (2026-09-25-an-event-is-announced-only-once-its-write-is-committed), F378 (2026-09-29-request-agent-models-the-new-agent-on-one-the-operator-made), F443 (2026-09-29-an-agent-updates-a-task-with-what-its-tool-carries). For each: read what the archived change claims to fix, confirm it in code, run its tests; set Status fixed/closed only on evidence. A finding the change only partly covers stays open with a narrowed Status."
+            "detail": "Closed F77, F132, F253, F378 (F335 already fixed; stale older Status line marked superseded); F443 stays open (the archived change excludes creation). Hub tests 50 passed, specDriftPanel 6 passed."
         },
         {
             "id": "refill-11-compose",
