@@ -65,6 +65,8 @@ DEFAULT_VISIBILITY = "tracked"
 
 MAX_NAME_CHARS = 200
 MAX_CONTENT_BYTES = 1_048_576
+MAX_FILE_BYTES = 10 * 1_048_576
+TEXT_MEDIA_TYPE = "text/plain"
 PAGE_CHARS = 50_000
 OPENING_CHARS = 300
 
@@ -83,6 +85,21 @@ _DATED_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _FACT_STUB_KEYS = ("id", "kind", "visibility", "holder", "created_at", "sources")
 # A private contradiction's stub: which two facts, never what either claims or why they disagree.
 _CTR_STUB_KEYS = ("id", "kind", "visibility", "holder", "created_at", "facts")
+
+
+def _is_webp(data: bytes) -> bool:
+    return data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+
+
+#: The file types a source may be: media type -> (extension, what its bytes begin with, the word
+#: a note uses for it). The extension names the stored file, `sources/<id>.<ext>`.
+FILE_TYPES: Dict[str, Tuple[str, Any, str]] = {
+    "application/pdf": ("pdf", lambda data: data.startswith(b"%PDF-"), "PDF"),
+    "image/png": ("png", lambda data: data.startswith(b"\x89PNG\r\n\x1a\n"), "image"),
+    "image/jpeg": ("jpg", lambda data: data.startswith(b"\xff\xd8\xff"), "image"),
+    "image/gif": ("gif", lambda data: data[:6] in (b"GIF87a", b"GIF89a"), "image"),
+    "image/webp": ("webp", _is_webp, "image"),
+}
 
 
 class VaultError(ValueError):
@@ -332,6 +349,23 @@ class _Record:
         raw = storage.read(self.text_root, f"{SOURCES}/{self.meta['id']}.md")
         return None if raw is None else raw.decode("utf-8", errors="replace")
 
+    @property
+    def media_type(self) -> str:
+        return self.meta.get("media_type") or TEXT_MEDIA_TYPE
+
+    @property
+    def file_kind(self) -> Optional[Tuple[str, str]]:
+        """A file source's extension and the word for it, or None for a text source."""
+        known = FILE_TYPES.get(self.media_type)
+        return None if known is None else (known[0], known[2])
+
+    def file_bytes(self) -> Optional[bytes]:
+        """A file source's bytes, None for a text source or one held on another machine."""
+        kind = self.file_kind
+        if kind is None or self.text_root is None:
+            return None
+        return storage.read(self.text_root, f"{SOURCES}/{self.meta['id']}.{kind[0]}")
+
     def listed(self, text: Optional[str]) -> Dict[str, Any]:
         meta = self.meta
         return {
@@ -339,6 +373,7 @@ class _Record:
             "kind": "source",
             "name": meta["name"],
             "type": meta["type"],
+            "media_type": self.media_type,
             "visibility": meta["visibility"],
             "created_at": meta["created_at"],
             "dated": meta.get("dated"),
@@ -574,12 +609,41 @@ def read_entry(
         return None
     text = record.text()
     entry = record.listed(text)
+    kind = record.file_kind
     if text is None:
-        entry.update(content=None, next_offset=None, note=_held_elsewhere(entry["holder"]))
+        note = _held_elsewhere(entry["holder"])
+        if kind is not None and record.text_root is not None:
+            note = _not_read_yet(kind[1])
+        entry.update(content=None, next_offset=None, note=note)
         return entry
     end = offset + PAGE_CHARS
-    entry.update(content=text[offset:end], next_offset=end if end < len(text) else None, note=None)
+    note = (
+        None if kind is None else f"This text was transcribed from the {kind[1]} '{entry['name']}'."
+    )
+    entry.update(content=text[offset:end], next_offset=end if end < len(text) else None, note=note)
     return entry
+
+
+def _not_read_yet(word: str) -> str:
+    return (
+        f"This {word} has not been read yet, so it has no text. It is read when the vault "
+        "distillation job runs on it: enable the job with a Claude runner on the Manager page, "
+        "then distil the source."
+    )
+
+
+def file_of(
+    project_root: Path, private_root: Path, source_id: str
+) -> Optional[Tuple[str, Optional[bytes], Optional[str]]]:
+    """A file source's media type, its bytes and, when the bytes are on another machine, its
+    holder when they are held on another machine -- or None when there is no such file source."""
+    if not _ID_RE.match(source_id):
+        return None
+    record = _records(project_root, private_root).get(source_id)
+    if record is None or record.file_kind is None:
+        return None
+    elsewhere = record.meta.get("holder") or "another machine" if record.text_root is None else None
+    return record.media_type, record.file_bytes(), elsewhere
 
 
 def source_text(
@@ -606,6 +670,75 @@ def check_dated(dated: str) -> None:
         ) from None
 
 
+def _checked_fields(
+    project_root: Path,
+    private_root: Path,
+    *,
+    name: str,
+    type: str,  # noqa: A002 -- the field's own name
+    visibility: str,
+    dated: Optional[str],
+) -> str:
+    """The fields a source of any kind needs, checked before anything is written; the name,
+    stripped."""
+    name = (name or "").strip()
+    if not name:
+        raise VaultError("A source needs a name.")
+    if len(name) > MAX_NAME_CHARS:
+        raise VaultError(f"A source's name is at most {MAX_NAME_CHARS} characters.")
+    if type not in TYPES:
+        raise VaultError(f"type must be one of {', '.join(TYPES)}, not {type!r}.")
+    if visibility not in VISIBILITIES:
+        raise VaultError(f"visibility must be tracked or private, not {visibility!r}.")
+    if dated is not None:
+        check_dated(dated)
+    if visibility == "private":
+        # The stored location was checked when it was set; the project may have moved since.
+        check_private_location(str(private_root), project_root)
+    return name
+
+
+def _store(
+    project_root: Path,
+    private_root: Path,
+    *,
+    name: str,
+    type: str,  # noqa: A002 -- the field's own name
+    visibility: str,
+    dated: Optional[str],
+    media_type: str,
+    extension: str,
+    data: bytes,
+) -> Tuple[Dict[str, Any], str]:
+    """Write a new source's body as `sources/<id>.<extension>`, then its metadata; answer the
+    metadata and where the body went."""
+    entry_id = f"src-{secrets.token_hex(6)}"
+    meta = {
+        "id": entry_id,
+        "name": name,
+        "type": type,
+        "visibility": visibility,
+        "created_at": _now(),
+        "holder": holder_name() if visibility == "private" else None,
+        "media_type": media_type,
+        "dated": dated,
+    }
+    tracked = tracked_root(project_root)
+    body_root = tracked if visibility == "tracked" else str(private_root)
+    # The body before its metadata: the .json is what lists an entry, so a failure in between
+    # leaves an unlisted file rather than a listed entry with no body.
+    storage.write(body_root, f"{SOURCES}/{entry_id}.{extension}", data)
+    storage.write(body_root, f"{SOURCES}/{entry_id}.json", _encode(meta))
+    if visibility == "private":
+        keys = ["id", "name", "type", "visibility", "created_at", "dated"]
+        if media_type != TEXT_MEDIA_TYPE:
+            keys.append("media_type")  # so a colleague's checkout can tell a scan from a note
+        stub = {key: meta[key] for key in keys}
+        stub["holder"] = meta["holder"]
+        storage.write(tracked, f"{SOURCES}/{entry_id}.json", _encode(stub))
+    return meta, body_root
+
+
 def add_source(
     project_root: Path,
     private_root: Path,
@@ -619,17 +752,9 @@ def add_source(
     """Write a new source and answer it as the map lists it. Checked before anything is written.
     *dated* is the day it was said (YYYY-MM-DD), which decides the newer side of a
     contradiction."""
-    name = (name or "").strip()
-    if not name:
-        raise VaultError("A source needs a name.")
-    if len(name) > MAX_NAME_CHARS:
-        raise VaultError(f"A source's name is at most {MAX_NAME_CHARS} characters.")
-    if type not in TYPES:
-        raise VaultError(f"type must be one of {', '.join(TYPES)}, not {type!r}.")
-    if visibility not in VISIBILITIES:
-        raise VaultError(f"visibility must be tracked or private, not {visibility!r}.")
-    if dated is not None:
-        check_dated(dated)
+    name = _checked_fields(
+        project_root, private_root, name=name, type=type, visibility=visibility, dated=dated
+    )
     if not content:
         raise VaultError("A source needs some text.")
     data = content.encode("utf-8")
@@ -637,34 +762,60 @@ def add_source(
         raise VaultError(
             f"The text is {len(data)} bytes; a source is at most {MAX_CONTENT_BYTES}.", status=413
         )
-    if visibility == "private":
-        # The stored location was checked when it was set; the project may have moved since.
-        check_private_location(str(private_root), project_root)
+    meta, body_root = _store(
+        project_root,
+        private_root,
+        name=name,
+        type=type,
+        visibility=visibility,
+        dated=dated,
+        media_type=TEXT_MEDIA_TYPE,
+        extension="md",
+        data=data,
+    )
+    return _Record(meta, body_root).listed(content)
 
-    entry_id = f"src-{secrets.token_hex(6)}"
-    meta = {
-        "id": entry_id,
-        "name": name,
-        "type": type,
-        "visibility": visibility,
-        "created_at": _now(),
-        "holder": holder_name() if visibility == "private" else None,
-        "media_type": "text/plain",
-        "dated": dated,
-    }
-    tracked = tracked_root(project_root)
-    text_root = tracked if visibility == "tracked" else str(private_root)
-    # The text before its metadata: the .json is what lists an entry, so a failure in between
-    # leaves an unlisted file rather than a listed entry with no text.
-    storage.write(text_root, f"{SOURCES}/{entry_id}.md", data)
-    storage.write(text_root, f"{SOURCES}/{entry_id}.json", _encode(meta))
-    if visibility == "private":
-        stub = {
-            key: meta[key] for key in ("id", "name", "type", "visibility", "created_at", "dated")
-        }
-        stub["holder"] = meta["holder"]
-        storage.write(tracked, f"{SOURCES}/{entry_id}.json", _encode(stub))
-    return _Record(meta, text_root).listed(content)
+
+def add_file(
+    project_root: Path,
+    private_root: Path,
+    *,
+    name: str,
+    type: str,  # noqa: A002 -- the field's own name
+    media_type: str,
+    data: bytes,
+    visibility: str,
+    dated: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Write a new PDF or image source and answer it as the map lists it. It has no text until it
+    is read (`distillation.py` transcribes it): 415 for another media type, 400 for bytes that do
+    not begin as that type's do, 413 above MAX_FILE_BYTES."""
+    known = FILE_TYPES.get(media_type)
+    if known is None:
+        raise VaultError(
+            f"A file source is one of {', '.join(FILE_TYPES)}, not {media_type!r}.", status=415
+        )
+    name = _checked_fields(
+        project_root, private_root, name=name, type=type, visibility=visibility, dated=dated
+    )
+    if len(data) > MAX_FILE_BYTES:
+        raise VaultError(
+            f"The file is {len(data)} bytes; a source is at most {MAX_FILE_BYTES}.", status=413
+        )
+    if not data or not known[1](data):
+        raise VaultError(f"The bytes are not {media_type}: they do not begin as that type does.")
+    meta, body_root = _store(
+        project_root,
+        private_root,
+        name=name,
+        type=type,
+        visibility=visibility,
+        dated=dated,
+        media_type=media_type,
+        extension=known[0],
+        data=data,
+    )
+    return _Record(meta, body_root).listed(None)
 
 
 # ---------------------------------------------------------------------------

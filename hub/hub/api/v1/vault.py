@@ -7,6 +7,9 @@ same map and entries through `agent_actions.py`, and nothing an agent can call w
 `the-manager-distils-vault-sources-into-cited-facts`: an upload is distilled into facts after it
 is answered, when the job is on, and the distil route runs that again for one source.
 
+`images-and-pdfs-are-vault-sources-too`: a PDF or image is uploaded as a raw body (`/files`) and
+its bytes are served back (`/sources/{id}/file`).
+
 `sources-that-disagree-are-pointed-out`: an upload may say when it was said (`dated`), the
 contradictions the distillation's check recorded are listed, and the operator resolves one.
 
@@ -22,7 +25,16 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -167,6 +179,77 @@ async def upload_vault_source(
         trigger=distillation.UPLOADED,
     )
     return entry
+
+
+@router.post("/files", status_code=status.HTTP_201_CREATED)
+async def upload_vault_file(
+    request: Request,
+    background: BackgroundTasks,
+    name: str = Query(default=""),
+    type: str = Query(default=""),  # noqa: A002 -- the field's own name
+    visibility: Optional[str] = Query(default=None),
+    dated: Optional[str] = Query(default=None),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Store a PDF or an image sent as the raw request body, its fields in the query. 415 for
+    another Content-Type, 400 for bytes that are not that type or fields a text upload would
+    refuse, 413 above 10 MiB (the size cap is lifted for this route alone, in `main.py`)."""
+    project_id = project[0]
+    media_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if media_type not in vault.FILE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"A file source is one of {', '.join(vault.FILE_TYPES)}, not {media_type!r}.",
+        )
+    data = await request.body()
+    root, private = await roots(session, project_id)
+    if visibility is None:
+        visibility = (await vault.get_settings(session, project_id))["default_visibility"]
+    try:
+        entry = await asyncio.to_thread(
+            vault.add_file,
+            root,
+            private,
+            name=name,
+            type=type,
+            media_type=media_type,
+            data=data,
+            visibility=visibility,
+            dated=dated,
+        )
+    except vault.VaultError as exc:
+        raise _refused(exc) from exc
+    background.add_task(
+        distillation.distil_in_background,
+        project_id,
+        entry["id"],
+        trigger=distillation.UPLOADED,
+    )
+    return entry
+
+
+@router.get("/sources/{source_id}/file")
+async def get_vault_file(
+    source_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """A file source's bytes with their media type: 404 for an unknown id, a text source or a file
+    that is gone, 409 naming the holder when the file is on another machine."""
+    root, private = await roots(session, project[0])
+    found = await asyncio.to_thread(vault.file_of, root, private, source_id)
+    if found is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No file '{source_id}'")
+    media_type, data, elsewhere = found
+    if elsewhere is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"This file is private and held on {elsewhere}, not on this machine.",
+        )
+    if data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No file '{source_id}'")
+    return Response(content=data, media_type=media_type)
 
 
 @router.post("/sources/{source_id}/distil", status_code=status.HTTP_202_ACCEPTED)

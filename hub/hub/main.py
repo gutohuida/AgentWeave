@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 from contextlib import asynccontextmanager
@@ -18,7 +19,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, bound_address, instance_identity, run_reconciliation, tool_server
+from . import (
+    __version__,
+    bound_address,
+    instance_identity,
+    run_reconciliation,
+    tool_server,
+    vault,
+)
 from .agent_action_scrub import AgentActionScrubMiddleware
 from .api.v1 import agent_trigger, v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
@@ -311,6 +319,11 @@ def _reset_ui_staleness_cache() -> None:
     _ui_staleness_cache = None
 
 
+#: The one route that takes a body over the global cap: a PDF or image for the vault, whose own
+#: limit is `vault.MAX_FILE_BYTES`.
+_FILE_UPLOAD_PATH = re.compile(r"^/api/v1/projects/[^/]+/vault/files$")
+
+
 class ContentSizeLimitMiddleware:
     """ASGI middleware that rejects request bodies larger than a configured limit.
 
@@ -318,9 +331,22 @@ class ContentSizeLimitMiddleware:
     payloads from reaching FastAPI validation or route handlers.
     """
 
-    def __init__(self, app, max_size: int = 1_048_576):
+    def __init__(
+        self,
+        app,
+        max_size: int = 1_048_576,
+        larger: Sequence["tuple[re.Pattern[str], int]"] = (),
+    ):
         self.app = app
         self.max_size = max_size
+        # (path pattern, limit) for the routes that take a bigger body than everything else.
+        self.larger = larger
+
+    def _limit(self, path: str) -> int:
+        for pattern, limit in self.larger:
+            if pattern.match(path):
+                return max(limit, self.max_size)
+        return self.max_size
 
     async def __call__(self, scope: Dict[str, Any], receive, send) -> None:
         if scope.get("type") != "http":
@@ -339,7 +365,7 @@ class ContentSizeLimitMiddleware:
                 length = int(content_length.decode())
             except (ValueError, UnicodeDecodeError):
                 length = 0
-            if length > self.max_size:
+            if length > self._limit(scope.get("path", "")):
                 await send(
                     {
                         "type": "http.response.start",
@@ -527,6 +553,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         ContentSizeLimitMiddleware,
         max_size=settings.aw_max_body_size,
+        larger=[(_FILE_UPLOAD_PATH, vault.MAX_FILE_BYTES)],
     )
 
     @app.middleware("http")

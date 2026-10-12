@@ -35370,3 +35370,11 @@ The spec-vault-check firing recorded `outcome empty`, `0 conflicts kept, 0 dropp
 `POST /api/v1/projects/{id}/vault/files` on a Hub that has no such route answered `405 {"detail": "Method Not Allowed"}`. The dashboard's SPA fallback `@app.get("/{full_path:path}")` (`hub/hub/main.py:589`) partially matches every path, so Starlette reports the method as wrong rather than the path as unknown (measured: the only route matching that scope is `/{full_path:path}` with `Match.PARTIAL`). A caller of a route that does not exist yet, such as an agent or script talking to a Hub older than it, is told to change the method. The images-and-pdfs spec predicted 404 for exactly this case.
 
 **Fix shape (not decided):** let the fallback answer 404 for any non-GET method and for `/api/` paths, or register it for every method and answer 404 itself outside the bundle. Tier 0.
+
+## F583 (C) -- `test_each_piece_is_one_spawn_and_one_firing` fails on this machine whatever the tree
+
+**Status:** open 2026-10-12. Measured 2026-10-12 (build window iteration 6): `py -3.11 -m pytest hub/tests/test_vault_distillation.py -k each_piece_is_one_spawn` failed 3 of 3 runs with this window's changes and 3 of 3 more with them stashed (one earlier run passed), asserting `['failed', 'written', 'written'] == ['written', 'failed', 'written']`. It also failed inside a 1,000-test chunk.
+
+`_firings()` (`hub/tests/test_vault_distillation.py:89`) orders by `EventLog.timestamp, EventLog.id`; three firings written within one tick of the Windows clock tie on timestamp and fall back to the random id. Unverified: the timestamp resolution was not read, only the symptom (order differs run to run) measured.
+
+**Fix shape (not decided):** order by a column that is monotone for rows written in sequence, or compare the outcomes as a multiset with the position of the failed piece taken from its call index. Tier 0.

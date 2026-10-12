@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-12-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "images-pdfs-store-impl",
-    "next_action": "Do queue item images-pdfs-store-impl (task-c87dfb6d31ea, do not close it): failing tests first in hub/tests/test_vault_files.py for FR-1, FR-2, FR-6 and FR-5's not-read-yet note (upload/file-bytes/agents keys of the spec's acceptance criteria), then vault.py add_file + media_type, api/v1/vault.py POST /vault/files (raw body, query fields) and GET /vault/sources/{id}/file, main.py ContentSizeLimitMiddleware exempting /vault/files up to 10 MiB. Run the vault Hub tests; d1026 should then pass checks 1-4 and stop at 5.",
+    "current": "images-pdfs-read-impl",
+    "next_action": "Do queue item images-pdfs-read-impl (Opus; task-c87dfb6d31ea, close it when FR-3, FR-4, FR-5 are verified): failing tests first in hub/tests/test_vault_file_reading.py, then the Claude adapter reading one-shot (--tools Read --strict-mcp-config --permission-mode default, no widening flag), worker.py spawn in a temp dir holding only a copy of the file, distillation.py transcribe-when-no-.md then store it and distil as text (failure -> firing failed, no text/facts; non-claude runner -> 409 naming its CLI and the Manager page, no spawn, upload-triggered records nothing). distillation.prepare at distillation.py:201 currently answers an unread file with the private 'held on another machine' message: replace for file sources. d1026 should then pass checks 1-6 and stop at 7 (Chromium; tab item). Real turns Haiku only.",
     "queue": [
         {
             "id": "specs-vault-close",
@@ -36,7 +36,7 @@
         },
         {
             "id": "images-pdfs-store-impl",
-            "status": "open",
+            "status": "done",
             "title": "Backend A: upload, storage, file route, size-cap exemption (task-c87dfb6d31ea)",
             "detail": "FR-1, FR-2, FR-6, FR-5's not-read-yet note. vault.py add_file + media_type; api/v1/vault.py POST /vault/files (raw body, query fields) and GET /vault/sources/{id}/file; main.py ContentSizeLimitMiddleware exempts /vault/files up to 10 MiB. Failing tests first in hub/tests/test_vault_files.py. Do not close the task: read-impl finishes it."
         },
