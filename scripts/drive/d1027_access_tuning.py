@@ -343,6 +343,7 @@ def drive():
         poll(lambda: "once" in line(), 10)
         b_line = line()
         b_facts = [i for i in testid_order("vault-fact-") if i in names]
+        b1_badge = badge("B1")
         browser.close()
     order = [names.get(i) for i in listed if i in names]
     a_order = [names.get(i) for i in a_facts]
@@ -352,7 +353,7 @@ def drive():
           and sources == {"A": None, "B": "1", "C": None}
           and a_order == ["A1", "A2"] and a_badges == {"A1": "2", "A2": None}
           and "Not read by agents yet" in a_line
-          and "once" in b_line and [names.get(i) for i in b_facts] == ["B1"] and badge("B1") is None,
+          and "once" in b_line and [names.get(i) for i in b_facts] == ["B1"] and b1_badge is None,
           f"shown={shown} order={order} sources={sources} a_facts={a_order} a_badges={a_badges} "
           f"a_line={a_line!r} b_line={b_line!r} b_facts={[names.get(i) for i in b_facts]}")
 
