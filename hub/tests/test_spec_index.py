@@ -8,7 +8,7 @@ away. Each of those fails silently if it fails at all.
 """
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import literal_column, select
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
@@ -110,7 +110,10 @@ async def _revisions(identifier, path=PATH):
         result = await session.execute(
             select(SpecRequirementRevision)
             .where(SpecRequirementRevision.requirement_id == row.id)
-            .order_by(SpecRequirementRevision.created_at, SpecRequirementRevision.id)
+            .order_by(
+                SpecRequirementRevision.created_at,
+                literal_column("spec_requirement_revisions.rowid"),
+            )
         )
         return list(result.scalars().all())
 
