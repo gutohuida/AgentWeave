@@ -24,6 +24,17 @@ const OLD_HUB = {
   visibility: 'tracked', created_at: '2026-10-12T10:00:00.000000Z', holder: null, available: true,
   opening: 'No count field.',
 }
+// A fact is listed under its source, and counted like a source.
+const FACT_READ = {
+  id: 'fct-readreadread', name: 'Fact read', type: 'note', kind: 'fact', sources: ['src-readreadread'],
+  visibility: 'tracked', created_at: '2026-10-12T10:03:00.000000Z', holder: null, available: true,
+  opening: 'Refunds up to 450 euros.', fetches: 3, last_fetched_at: '2026-10-12T11:00:00.000000Z',
+}
+const FACT_UNREAD = {
+  id: 'fct-unreadunread', name: 'Fact unread', type: 'note', kind: 'fact', sources: ['src-readreadread'],
+  visibility: 'tracked', created_at: '2026-10-12T10:04:00.000000Z', holder: null, available: true,
+  opening: 'Shipping is free over 75.', fetches: 0, last_fetched_at: null,
+}
 const SETTINGS = {
   private_location: null,
   effective_private_location: 'C:/Users/me/.agentweave/hub/vaults/proj-a',
@@ -42,7 +53,7 @@ function respond(status: number, body: unknown) {
 beforeEach(() => {
   useConfigStore.setState({ apiKey: 'aw_live_test', hubUrl: 'http://hub', isConfigured: true, selectedProjectId: 'proj-a' })
   vi.stubGlobal('fetch', vi.fn((url: string) => {
-    if (url.endsWith('/vault/map')) return respond(200, { entries: [READ, UNREAD, OLD_HUB] })
+    if (url.endsWith('/vault/map')) return respond(200, { entries: [READ, FACT_READ, FACT_UNREAD, UNREAD, OLD_HUB] })
     if (url.endsWith('/vault/settings')) return respond(200, SETTINGS)
     const entry = [READ, UNREAD, OLD_HUB].find((candidate) => url.includes(`/vault/entries/${candidate.id}`))
     if (entry) return respond(200, { ...entry, content: 'text\n', next_offset: null, note: null })
@@ -61,6 +72,16 @@ describe('the Vault tab, agent read counts', () => {
     expect(badge).toHaveTextContent(/^2$/)
     expect(screen.queryByTestId('vault-fetches-src-unreadunread')).toBeNull()
     expect(screen.queryByTestId('vault-fetches-src-oldhuboldhub')).toBeNull()
+  })
+
+  it('badges a fact in the fact list of its source, in the map order, and not an unread one', async () => {
+    render(<VaultPage />, { wrapper })
+    fireEvent.click(await screen.findByTestId('vault-entry-src-readreadread'))
+    const read = await screen.findByTestId('vault-fetches-fct-readreadread')
+    expect(read).toHaveTextContent(/^3$/)
+    expect(screen.queryByTestId('vault-fetches-fct-unreadunread')).toBeNull()
+    const facts = screen.getAllByTestId(/^vault-fact-fct-/).map((el) => el.dataset.testid)
+    expect(facts).toEqual(['vault-fact-fct-readreadread', 'vault-fact-fct-unreadunread'])
   })
 
   it('says on the selected entry how many times agents read it', async () => {

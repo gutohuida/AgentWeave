@@ -419,6 +419,16 @@ function FactList({
                 </>
               )}
             </span>
+            {(fact.fetches ?? 0) > 0 && (
+              <span
+                data-testid={`vault-fetches-${fact.id}`}
+                title="Times agents read this fact"
+                className="shrink-0 text-xs"
+                style={{ color: 'var(--text-2)' }}
+              >
+                {fact.fetches}
+              </span>
+            )}
             {fact.available && (
               <button
                 type="button"

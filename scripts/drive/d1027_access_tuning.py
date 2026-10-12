@@ -15,8 +15,9 @@ three fact files beside them: A1 (older) and A2 (newer) citing A, B1 citing B. I
   5. the map is A, A1, A2, B, B1, C;
   6. the agents' map (read with a run credential) lists the same entries in the same order
      with the same counts;
-  7. in Chromium the Vault page lists the entries in that order, shows 2 on A1 and 1 on B and
-     no count elsewhere, and A1 selected says it was read 2 times (shot_counts.png).
+  7. in Chromium the Vault page (which lists sources, a fact sitting under its source) shows the
+     sources A, B, C with a count on B only; opening A lists A1, A2 with 2 on A1 and says A itself
+     was not read; opening B says once (shot_counts.png is A open).
 
 It fails on today's Hub at check 1 (map entries carry no fetches). It stops at the first
 failure, so a red run spends no model call. Run from anywhere:
@@ -312,28 +313,48 @@ def drive():
         page = browser.new_page(viewport={"width": 1500, "height": 1100})
         page.add_init_script(seed)
         page.goto(f"{HUB}/?project={pid}&tab=vault", wait_until="domcontentloaded")
-        shown = poll(lambda: page.locator(f"[data-testid=vault-fetches-{ids['A1']}]").count() == 1, 20)
-        listed = page.eval_on_selector_all(
-            "[data-testid^='vault-entry-']",
-            "els => els.map(e => e.dataset.testid.slice('vault-entry-'.length))")
-        badges = {label: (page.locator(f"[data-testid=vault-fetches-{ids[label]}]").inner_text().strip()
-                          if page.locator(f"[data-testid=vault-fetches-{ids[label]}]").count() else None)
-                  for label in ids}
-        selected = ""
-        if shown:
-            page.locator(f"[data-testid=vault-entry-{ids['A1']}]").click()
-            poll(lambda: page.locator("[data-testid=vault-entry-fetches]").count() == 1, 10)
-            if page.locator("[data-testid=vault-entry-fetches]").count():
-                selected = page.locator("[data-testid=vault-entry-fetches]").inner_text()
+        # The page lists sources; a fact sits under its source, shown when that source is selected.
+        # So: the source list in the map's order with B's badge, then A open (its facts, A1's badge,
+        # its own line), then B open.
+        def testid_order(prefix):
+            return page.eval_on_selector_all(
+                f"[data-testid^='{prefix}']",
+                f"els => els.map(e => e.dataset.testid.slice('{prefix}'.length))")
+
+        def badge(label):
+            loc = page.locator(f"[data-testid=vault-fetches-{ids[label]}]")
+            return loc.inner_text().strip() if loc.count() else None
+
+        def line():
+            loc = page.locator("[data-testid=vault-entry-fetches]")
+            return loc.inner_text() if loc.count() == 1 else ""
+
+        shown = poll(lambda: page.locator(f"[data-testid=vault-fetches-{ids['B']}]").count() == 1, 20)
+        listed = testid_order("vault-entry-")
+        sources = {label: badge(label) for label in ("A", "B", "C")}
+        page.locator(f"[data-testid=vault-entry-{ids['A']}]").click()
+        poll(lambda: page.locator(f"[data-testid=vault-fact-{ids['A1']}]").count() == 1, 10)
+        poll(lambda: bool(line()), 10)
+        a_facts = [i for i in testid_order("vault-fact-") if i in names]
+        a_badges = {label: badge(label) for label in ("A1", "A2")}
+        a_line = line()
         page.screenshot(path=str(SHOT) + "_counts.png", full_page=True)
+        page.locator(f"[data-testid=vault-entry-{ids['B']}]").click()
+        poll(lambda: "once" in line(), 10)
+        b_line = line()
+        b_facts = [i for i in testid_order("vault-fact-") if i in names]
         browser.close()
     order = [names.get(i) for i in listed if i in names]
-    check("7 the Vault page lists A, A1, A2, B, B1, C with 2 on A1, 1 on B and no other count, "
-          "and A1 selected says 2",
-          shown and order == ["A", "A1", "A2", "B", "B1", "C"]
-          and badges == {"A": None, "A1": "2", "A2": None, "B": "1", "B1": None, "C": None}
-          and "2" in selected,
-          f"shown={shown} order={order} badges={badges} selected={selected!r}")
+    a_order = [names.get(i) for i in a_facts]
+    check("7 the Vault page lists A, B, C with a count on B only; A opens its facts A1, A2 with 2 on A1 "
+          "and says it was not read itself; B says once and lists B1",
+          shown and order == ["A", "B", "C"]
+          and sources == {"A": None, "B": "1", "C": None}
+          and a_order == ["A1", "A2"] and a_badges == {"A1": "2", "A2": None}
+          and "Not read by agents yet" in a_line
+          and "once" in b_line and [names.get(i) for i in b_facts] == ["B1"] and badge("B1") is None,
+          f"shown={shown} order={order} sources={sources} a_facts={a_order} a_badges={a_badges} "
+          f"a_line={a_line!r} b_line={b_line!r} b_facts={[names.get(i) for i in b_facts]}")
 
 
 if __name__ == "__main__":
