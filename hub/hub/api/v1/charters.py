@@ -3,7 +3,7 @@
 from typing import List, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
@@ -40,8 +40,12 @@ async def list_charters(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    # `charters` has a String primary key, so it is a rowid table: the rowid breaks a created_at
+    # tie in insert order (F177).
     result = await session.execute(
-        select(Charter).where(Charter.project_id == project_id).order_by(Charter.created_at)
+        select(Charter)
+        .where(Charter.project_id == project_id)
+        .order_by(Charter.created_at, literal_column("charters.rowid"))
     )
     return result.scalars().all()
 

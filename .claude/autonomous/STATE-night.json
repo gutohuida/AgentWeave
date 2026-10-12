@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 22,
+    "iteration": 23,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f177-impl",
-    "next_action": "Run queue item f177-impl: F177 (C, Tier 0, operator-decided B11). Write the failing route test first (create runners ZB then ZA with one created_at, expect GET order ZB, ZA; same for charters), then order_by(created_at, rowid) at hub/hub/api/v1/runners.py:115 and charters.py:44. Check the app does not re-sort. Drive on a fresh source Hub, set F177's Status, append a METRICS row.",
+    "current": "refill-10-compose",
+    "next_action": "Run queue item refill-10-compose: compose from the backlog (re-list findings whose Status is not fixed/superseded; passed over so far: F557, F581, F556, F553 remainder, F551 provisional part, F449, F382). If it is at or after 05:00, or nothing qualifies, set next_action null and write the closing entry per night-window.md 'Ending the window'.",
     "queue": [
         {
             "id": "compose",
@@ -143,9 +143,9 @@
         },
         {
             "id": "f177-impl",
-            "status": "open",
+            "status": "done",
             "title": "F177 (C, Tier 0): the runner and charter lists fall back to name order on a created_at tie",
-            "detail": "Decided B11 Final: order_by(created_at, rowid) at hub/hub/api/v1/runners.py:115 and charters.py:44; failing test first at the route: insert ZB then ZA with one created_at, expect ZB, ZA (both lists). Drive on a fresh source Hub; set F177 Status; METRICS row."
+            "detail": "Fixed: both lists order by (created_at, rowid); route test failed before (2); drive d1012_f177 20/20, red with the fix stashed; 701 runner/charter Hub tests pass."
         },
         {
             "id": "refill-10-compose",

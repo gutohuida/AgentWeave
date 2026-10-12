@@ -6,7 +6,7 @@ See openspec/changes/runner-agent-charter-separation/specs/runner-registry/spec.
 from typing import Any, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import literal_column, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -111,8 +111,12 @@ async def list_runners(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    # `runners` has a String primary key, so it is a rowid table: the rowid breaks a created_at
+    # tie in insert order (F177).
     result = await session.execute(
-        select(Runner).where(Runner.project_id == project_id).order_by(Runner.created_at)
+        select(Runner)
+        .where(Runner.project_id == project_id)
+        .order_by(Runner.created_at, literal_column("runners.rowid"))
     )
     return result.scalars().all()
 
