@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 11,
+    "iteration": 12,
     "log_file": ".claude/autonomous/2026-10-12-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "access-tuning-drive-first",
-    "next_action": "Do queue item access-tuning-drive-first: write scripts/drive/d1027_access_tuning.py from the spec's AC drive (spec/changes/the-vault-map-is-shaped-by-what-agents-ask-for, task-f1acf3d2a499) and record it failing at check 1 on today's tree. Run it in the foreground; never end a turn on a backgrounded drive.",
+    "current": "access-tuning-backend-impl",
+    "next_action": "Do queue item access-tuning-backend-impl (task-312f70f31ffa): read .claude/rules/db-migrations.md and mcp-server.md first; failing tests first in hub/tests/test_vault_access.py; build FR-1..FR-4, FR-6 per the item's detail. Then run d1027 in the foreground: checks 1-6 must pass (7 needs the tab item). Do not close the task.",
     "queue": [
         {
             "id": "specs-vault-close",
@@ -68,7 +68,7 @@
         },
         {
             "id": "access-tuning-drive-first",
-            "status": "open",
+            "status": "done",
             "title": "Write scripts/drive/d1027_access_tuning.py and record it failing (task-f1acf3d2a499)",
             "detail": "Spec: spec/changes/the-vault-map-is-shaped-by-what-agents-ask-for (AC drive). Copy d1024_reports.py: scratch Hub 8110+, Haiku claude runner + agent; upload sources A,B,C in turn; write facts A1 (older), A2, B1 via write_fact; one agent turn: vault_read A1 twice, B once; operator GET entry C; check fetches on both maps, order A,A1,A2,B,B1,C; Chromium Vault counts + shot_counts.png. Must fail at check 1 (no fetches field)."
         },
@@ -76,13 +76,13 @@
             "id": "access-tuning-backend-impl",
             "status": "open",
             "title": "Backend: vault_fetches, migration 0126, counting, ordered map, agent texts (task-312f70f31ffa)",
-            "detail": "FR-1..FR-4, FR-6. Read .claude/rules/db-migrations.md and mcp-server.md first. models.py VaultFetch; 0126 (guarded), head asserts in test_migrations.py + test_project_persistence.py; agent_actions.py read_vault_entry counts after 200 at offset 0 (own txn, failure logged); api/v1/vault.py read_map/read_one merge counts; vault.build_map orders areas; mcp_server.py vault_map docstring; agents.py vault_map text. Failing tests first: hub/tests/test_vault_access.py. Migration reaches :8000 on restart: say so in the log."
+            "detail": "FR-1..FR-4, FR-6. Read .claude/rules/db-migrations.md and mcp-server.md first. models.py VaultFetch; 0126 (guarded), head asserts in test_migrations.py + test_project_persistence.py; agent_actions.py read_vault_entry counts after 200 at offset 0 (own txn, failure logged); api/v1/vault.py read_map/read_one merge counts; vault.build_map orders areas; mcp_server.py vault_map docstring; agents.py vault_map text. Failing tests first: hub/tests/test_vault_access.py. Migration reaches :8000 on restart: say so in the log. Agent route path is /agent-actions/vault/entries/{id} (agent_actions.py read_vault_entry); d1027 check 6 compares /agent-actions/vault/map to the operator's map."
         },
         {
             "id": "access-tuning-tab-impl",
             "status": "open",
             "title": "Vault page shows agent read counts (task-3178cb4fe6f6)",
-            "detail": "FR-5. vitest first (src/__tests__/vaultAccess.test.tsx), VaultEntry fetches/last_fetched_at in api/vault.ts, VaultPage.tsx list badge (>0) + selected entry line ('Not read by agents yet'), tolerant of missing field. npm run build, refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together. Bundle reaches :8000 on reload: say so."
+            "detail": "FR-5. vitest first (src/__tests__/vaultAccess.test.tsx), VaultEntry fetches/last_fetched_at in api/vault.ts, VaultPage.tsx list badge (>0) + selected entry line ('Not read by agents yet'), tolerant of missing field. npm run build, refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together. Bundle reaches :8000 on reload: say so. Testids d1027 checks: list badge [data-testid=vault-fetches-<id>] (text is the count, absent when 0), selected-entry line [data-testid=vault-entry-fetches]."
         },
         {
             "id": "access-tuning-drive",
