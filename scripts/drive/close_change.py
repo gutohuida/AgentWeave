@@ -52,6 +52,9 @@ SPECVAULT_TESTS = "hub/tests/test_vault_spec_check.py"
 SPECVAULT_UI = "hub/ui/src/__tests__/specVaultWarnings.test.tsx"
 SPECVAULT_DRIVE = "scripts/drive/d1025_specs_against_vault.py"
 FILES_TESTS = "hub/tests/test_vault_files.py"
+ACCESS_TESTS = "hub/tests/test_vault_access.py"
+ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
+ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
 FILES_UI = "hub/ui/src/__tests__/vaultFiles.test.tsx"
 FILES_DRIVE = "scripts/drive/d1026_images_pdfs.py"
@@ -1039,6 +1042,28 @@ CHANGES = {
              "d1026 was committed failing at check 1 (404) before the build; on the committed tree (9f2d941) it passed 8/8 with real Haiku (testbed/drive1026-images-pdfs/101435)."),
         ],
     },
+    "faccess": {
+        "document": "spec/changes/the-vault-map-is-shaped-by-what-agents-ask-for/spec.json",
+        "commit": "d9af495",
+        "tasks": ["task-f1acf3d2a499", "task-312f70f31ffa", "task-3178cb4fe6f6"],
+        "evidence": [
+            ("FR-1", "task-312f70f31ffa", "test_result", ACCESS_TESTS,
+             "test_an_agent_read_at_offset_zero_counts_once_and_its_next_page_does_not, test_a_404_the_operators_read_and_both_maps_do_not_count, test_two_reads_at_the_same_moment_are_both_counted, test_a_count_that_cannot_be_recorded_does_not_fail_the_read and test_a_fact_read_is_counted_too."),
+            ("FR-2", "task-312f70f31ffa", "test_result", ACCESS_TESTS,
+             "test_counts_are_listed_alike_on_both_maps_and_both_entry_routes. Drive d1027 checks 2-6."),
+            ("FR-3", "task-312f70f31ffa", "test_result", ACCESS_TESTS,
+             "test_with_no_reads_the_map_is_the_newest_first_map, test_the_most_read_area_leads_its_source_first_then_its_most_read_facts, test_facts_in_an_area_are_ordered_by_reads_then_newest, test_a_deleted_entrys_count_is_absent_from_the_map and the tie/orphan unit test. Drive d1027: map C,B,B1,A,A2,A1 before the turn, A,A1,A2,B,B1,C after."),
+            ("FR-4", "task-312f70f31ffa", "test_result", ACCESS_TESTS,
+             "test_the_tool_description_and_the_instruction_line_name_the_ordering_and_fetches."),
+            ("FR-5", "task-3178cb4fe6f6", "test_result", ACCESS_UI,
+             "Five cases: list badge on a read source, a fact's badge in its source's fact list, the selected-entry line, 'Not read by agents yet', and no line or badge when the Hub sends no field. "
+             "Spec wording amended by the drive: the page lists sources only and nests facts under their source, so the order is the map's order of sources and a fact's badge sits on its fact row; check 7 follows that structure."),
+            ("FR-6", "task-312f70f31ffa", "test_result", "hub/tests/test_migrations.py",
+             "0126 upgrade adds vault_fetches only and downgrade removes it; head asserts name 0126. test_the_counts_are_stored_in_a_hub_table_and_nowhere_under_the_vault."),
+            ("FR-1", "task-f1acf3d2a499", "manual_observation", ACCESS_DRIVE,
+             "d1027 was committed failing at check 1 (no fetches field) before the build; on the committed tree it passed 9/9 with real Haiku (testbed/drive1027-access-tuning/125857)."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1054,6 +1079,7 @@ CHANGE_FOLDS = {
     "freports": 'knowledge-vault',
     "fspecvault": 'knowledge-vault',
     "fimages": 'knowledge-vault',
+    "faccess": 'knowledge-vault',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
