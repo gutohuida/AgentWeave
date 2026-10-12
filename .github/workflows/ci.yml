@@ -94,6 +94,7 @@ jobs:
         pytest tests/ -v --cov=agentweave --cov-report=xml
     
     - name: Upload coverage
+      continue-on-error: true
       uses: codecov/codecov-action@v4
       with:
         files: ./coverage.xml
