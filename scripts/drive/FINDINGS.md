@@ -33270,7 +33270,7 @@ and passes today.
 
 ## F438 (C) — the holder check's "Let the review in flight finish" is false for a silent holder whose review ended without a verdict
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R1. The sentence tells the operator to wait on a review that is no longer in flight. S13's option (ii) holder check changes who may be replaced; its wording should stop claiming a review is in flight when none is.
+**Status:** fixed 2026-10-12 (night iteration 27, Tier 0): `holder_refusal` (`agent_trigger.py`) writes the refusal once for both sites and says "Let the review in flight finish" only when `task_attendance(...).attends(task, holder)`; otherwise it says the holder has no turn running or queued on the task, so no review is in flight, and the remedy stays. Route test failed before (2), `d1012_f438_holder_refusal` 8/8 on a fresh source Hub. Earlier status: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R1. The sentence tells the operator to wait on a review that is no longer in flight. S13's option (ii) holder check changes who may be replaced; its wording should stop claiming a review is in flight when none is.
 
 
 ## F439 (C) — input in a closed conversation counts as queued, so after the attended change such a task reads as in flight

@@ -676,6 +676,116 @@ async def test_the_dispatch_itself_names_the_remedy_exactly_once(app, auth_heade
 
 
 # ---------------------------------------------------------------------------
+# F438 — "Let the review in flight finish" is said only where a review is in flight
+# ---------------------------------------------------------------------------
+
+
+async def _held_for_review(app, auth_headers, bind_runner, suffix, *, holder_runs: bool):
+    """A task `under_review` and held by a reviewer, with a second reviewer to send."""
+    from hub.run_task_binding import bind_run_to_task
+
+    holder, other = f"holder-438{suffix}", f"other-438{suffix}"
+    await _roster(app, auth_headers, bind_runner, holder, other)
+    async with async_session_factory() as db:
+        await _document(db, f"doc-438{suffix}")
+        task = Task(
+            id=f"task-438{suffix}",
+            project_id="proj-test",
+            title="held by a reviewer",
+            status="under_review",
+            assignee=holder,
+        )
+        db.add(task)
+        await db.commit()
+        await _evidence(
+            db,
+            task.id,
+            suffix=f"438{suffix}",
+            agent=f"author-438{suffix}",
+            document_id=f"doc-438{suffix}",
+        )
+        if holder_runs:
+            run = Run(id=f"run-438{suffix}", project_id="proj-test", agent=holder, status="running")
+            db.add(run)
+            await db.flush()
+            await bind_run_to_task(db, run, await db.get(Task, task.id))
+            await db.commit()
+    return holder, other, task.id
+
+
+async def test_a_silent_holder_is_not_said_to_have_a_review_in_flight(
+    app, auth_headers, bind_runner
+):
+    """F438, site 1. The holder has no turn on the task, so nothing is in flight to wait for."""
+    holder, other, task_id = await _held_for_review(
+        app, auth_headers, bind_runner, "a", holder_runs=False
+    )
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={"agent": other, "message": "review it", "review_task_id": task_id},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert f"already under review by {holder!r}" in detail
+    assert "Let the review in flight finish" not in detail, detail
+    assert "no review is in flight" in detail, detail
+    assert "Decide it yourself" in detail, "the remedy stays"
+
+
+async def test_a_holder_with_a_turn_on_the_task_is_told_to_let_it_finish(
+    app, auth_headers, bind_runner
+):
+    """F438 control: where the holder's turn is running on the task, the old sentence is true."""
+    holder, other, task_id = await _held_for_review(
+        app, auth_headers, bind_runner, "b", holder_runs=True
+    )
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={"agent": other, "message": "review it", "review_task_id": task_id},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert "Let the review in flight finish" in detail, detail
+    assert "no review is in flight" not in detail, detail
+
+
+async def test_the_dispatch_says_the_same_of_a_silent_holder(app, auth_headers, bind_runner):
+    """F438, site 2 (`trigger_agent_directly`), reached past the route's precheck."""
+    from hub.api.v1.agent_trigger import TriggerAgentError, trigger_agent_directly
+    from hub.conversations import new_conversation
+
+    holder, other, task_id = await _held_for_review(
+        app, auth_headers, bind_runner, "c", holder_runs=False
+    )
+    async with async_session_factory() as session:
+        conversation = new_conversation(project_id="proj-test", agent=other, origin="operator")
+        session.add(conversation)
+        await session.commit()
+
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            with pytest.raises(TriggerAgentError) as excinfo:
+                await trigger_agent_directly(
+                    project_id="proj-test",
+                    agent=other,
+                    message="review it",
+                    conversation_id=conversation.id,
+                    session=session,
+                    review_task_id=task_id,
+                )
+
+    detail = excinfo.value.detail
+    assert excinfo.value.status_code == 409
+    assert "Let the review in flight finish" not in detail, detail
+    assert "no review is in flight" in detail, detail
+
+
+# ---------------------------------------------------------------------------
 # 4.10 — the guard's sentence fits its column even at worst-case ids
 # ---------------------------------------------------------------------------
 

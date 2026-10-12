@@ -672,11 +672,7 @@ async def review_dispatch_refusal(
         and task.assignee != reviewer
         and not await holder_may_be_replaced(session, task, agent=reviewer)
     ):
-        return (
-            status.HTTP_409_CONFLICT,
-            f"Task {task.id} is already under review by {task.assignee!r}. Let the review in "
-            f"flight finish. {own_review_remedy(task)}",
-        )
+        return (status.HTTP_409_CONFLICT, await holder_refusal(session, task))
     completing_agent = await agent_that_completed(session, task.id)
     if completing_agent is not None and completing_agent == reviewer:
         return (
@@ -694,6 +690,28 @@ async def review_dispatch_refusal(
             f"review could never end. {own_review_remedy(task)}",
         )
     return None
+
+
+async def holder_refusal(session: AsyncSession, task: "Task") -> str:
+    """The holder check's refusal, written once for both sites (F438).
+
+    "Let the review in flight finish" is true only while a turn of the holder's is running or queued
+    on the task (`TaskAttendance.attends`). A holder with none -- a reviewer whose review ended
+    without a verdict, outside a recorded restaff -- has no review in flight, and the operator is
+    told so rather than sent to wait for one.
+    """
+    from ...run_task_binding import task_attendance
+
+    attendance = await task_attendance(session, task.project_id)
+    if attendance.attends(task.id, task.assignee):
+        waiting = "Let the review in flight finish."
+    else:
+        waiting = (
+            f"{task.assignee!r} has no turn running or queued on it, so no review is in flight."
+        )
+    return f"Task {task.id} is already under review by {task.assignee!r}. {waiting} " + (
+        own_review_remedy(task)
+    )
 
 
 async def holder_may_be_replaced(
@@ -1148,8 +1166,7 @@ async def _trigger_agent_directly(
         ):
             raise TriggerAgentError(
                 status.HTTP_409_CONFLICT,
-                f"Task {review_task.id} is already under review by {review_task.assignee!r}. "
-                f"Let the review in flight finish. {own_review_remedy(review_task)}",
+                await holder_refusal(session, review_task),
                 request_level=True,
             )
         try:

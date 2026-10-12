@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 26,
+    "iteration": 27,
     "log_file": ".claude/autonomous/2026-10-11-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f438-impl",
-    "next_action": "Run queue item f438-impl: fix F438 per its detail (Tier 0: failing route test first, fix, drive on a fresh source Hub, set the finding's Status, METRICS row).",
+    "current": "refill-12-compose",
+    "next_action": "Run queue item refill-12-compose: re-list the open ledger and pick the next ready Tier-0 finding (skip the passed-over list in its detail); queue it with its impl item and a refill-13-compose. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'.",
     "queue": [
         {
             "id": "compose",
@@ -167,15 +167,15 @@
         },
         {
             "id": "f438-impl",
-            "status": "open",
+            "status": "done",
             "title": "F438 (C, Tier 0): the holder refusal claims a review is in flight when the holder has no turn on the task",
-            "detail": "One helper used by both sites: when task_attendance(...).attends(task.id, task.assignee) is false, the refusal says no turn of the holder's is running or queued on the task instead of 'Let the review in flight finish'; own_review_remedy stays. Route test (failing first) at POST /agent/trigger with a silent under_review holder; keep test_a_refused_request_says_so.py's attended wording; drive on a fresh source Hub."
+            "detail": "Fixed: holder_refusal (agent_trigger.py) written once for both sites; 'Let the review in flight finish' only when the holder attends the task, else the holder has no turn running or queued so no review is in flight; remedy stays. Route tests failed before (2); d1012_f438_holder_refusal 8/8; 84 passed in five neighbouring Hub test files."
         },
         {
             "id": "refill-12-compose",
             "status": "open",
             "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Same rule as refill-11. Passed over so far: F557, F581, F556, F553 remainder, F551 provisional part, F449, F382, F439, F441, F350, F336, F433, F423, F442, F456, F486. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
+            "detail": "Same rule as refill-11. Passed over so far: F438 (done), F557, F581, F556, F553 remainder, F551 provisional part, F449, F382, F439, F441, F350, F336, F433, F423, F442, F456, F486. Null next_action if none, or at/after 05:00 write the closing entry per night-window.md 'Ending the window'."
         }
     ],
     "decisions_for_user": [],
