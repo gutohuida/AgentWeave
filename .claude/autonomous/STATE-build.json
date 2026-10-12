@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-10-12-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "images-pdfs-drive-first",
-    "next_action": "Do queue item images-pdfs-drive-first: write scripts/drive/d1026_images_pdfs.py from the drive acceptance criterion of spec/changes/images-and-pdfs-are-vault-sources-too/spec.json (copy d1016_distillation.py's scratch-Hub scaffolding), run it on today's tree and record it failing at its first check (POST /vault/files 404). Commit the script.",
+    "current": "images-pdfs-store-impl",
+    "next_action": "Do queue item images-pdfs-store-impl (task-c87dfb6d31ea, do not close it): failing tests first in hub/tests/test_vault_files.py for FR-1, FR-2, FR-6 and FR-5's not-read-yet note (upload/file-bytes/agents keys of the spec's acceptance criteria), then vault.py add_file + media_type, api/v1/vault.py POST /vault/files (raw body, query fields) and GET /vault/sources/{id}/file, main.py ContentSizeLimitMiddleware exempting /vault/files up to 10 MiB. Run the vault Hub tests; d1026 should then pass checks 1-4 and stop at 5.",
     "queue": [
         {
             "id": "specs-vault-close",
@@ -30,7 +30,7 @@
         },
         {
             "id": "images-pdfs-drive-first",
-            "status": "open",
+            "status": "done",
             "title": "Write scripts/drive/d1026_images_pdfs.py and record it failing (task-edc80dd92218)",
             "detail": "Spec: spec/changes/images-and-pdfs-are-vault-sources-too (AC drive). Copy d1016_distillation.py: scratch Hub 8110+, Haiku claude runner, distillation enabled; reportlab 2-page PDF (450 euros) + PIL PNG (75 euros) via POST /vault/files raw body; media_type, file route bytes, facts whose quotes are in the transcription; Chromium inline view, shots. Must fail at check 1 (404) on today's tree."
         },

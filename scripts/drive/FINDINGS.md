@@ -35362,3 +35362,11 @@ The build playbook's close step ends "mark the slice done in the roadmap documen
 The spec-vault-check firing recorded `outcome empty`, `0 conflicts kept, 0 dropped` and 1,373 output tokens, but neither `worker_invocations` (`hub/hub/worker.py`, `_record`; columns are usage and outcome only) nor the `manager_job_fired` event keeps what the model answered, so *why* it found nothing was unreadable. It took re-sending the same prompt by hand (`claude -p`) to see Haiku's reasoning (it read "300 euros or less need no approval" as silent beyond 300). The same holds for every vault job (distillation, contradictions, reports): an operator who doubts a judgement has only the count.
 
 **Fix shape (not decided):** keep the parsed answer (or its first N characters) on the invocation row or the firing event, private-vault redaction rules applying. Likely Tier 1 (a column means a migration, so Tier 2 if stored on the row).
+
+## F582 (C) -- an unknown API route answers 405 Method Not Allowed, not 404, to anything but GET
+
+**Status:** open 2026-10-12. Measured 2026-10-12 (build window iteration 5, d1026 run `testbed/drive1026-images-pdfs/093112/`).
+
+`POST /api/v1/projects/{id}/vault/files` on a Hub that has no such route answered `405 {"detail": "Method Not Allowed"}`. The dashboard's SPA fallback `@app.get("/{full_path:path}")` (`hub/hub/main.py:589`) partially matches every path, so Starlette reports the method as wrong rather than the path as unknown (measured: the only route matching that scope is `/{full_path:path}` with `Match.PARTIAL`). A caller of a route that does not exist yet, such as an agent or script talking to a Hub older than it, is told to change the method. The images-and-pdfs spec predicted 404 for exactly this case.
+
+**Fix shape (not decided):** let the fallback answer 404 for any non-GET method and for `/api/` paths, or register it for every method and answer 404 itself outside the bundle. Tier 0.
