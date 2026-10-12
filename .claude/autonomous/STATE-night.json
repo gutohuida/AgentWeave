@@ -1,202 +1,47 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-11-daily",
-    "parent_branch": "master",
-    "parent_sha": "4ccbec6",
-    "stop_at": "2026-10-12T07:00:00+01:00",
-    "iteration": 28,
-    "log_file": ".claude/autonomous/2026-10-11-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "compose",
-            "status": "done",
-            "title": "Compose this window's queue",
-            "detail": "No 2026-10-11 APPROVALS section; whole window to the backlog. All 9 unarchived openspec changes are unbuilt and belong to the app migration, so not built here."
-        },
-        {
-            "id": "f580-impl",
-            "status": "done",
-            "title": "F580 (C, Tier 0): approve_anyway as query param silently ignored",
-            "detail": "Fixed fc7e37d; route refuses misplaced query params, message names the body field; drive 4/4."
-        },
-        {
-            "id": "f412-impl",
-            "status": "done",
-            "title": "F412 (B): Run answers 200 success when a firing ended terminal_failure",
-            "detail": "Fixed 5f46cb6: _do_fire_job returns False on a terminal schedule failure; route answers 500 with the row reason; drive 7/7."
-        },
-        {
-            "id": "f411-impl",
-            "status": "done",
-            "title": "F411 (B): Jobs Run button drops the Hub's refusal (UI)",
-            "detail": "Fixed 8937006: JobsPage handleRun shows the Hub detail in the shared alert; 3 vitest + browser drive 7/7; bundle rebuilt."
-        },
-        {
-            "id": "refill-1-compose",
-            "status": "done",
-            "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Picked F419 (B, Tier 0, UI): ready, still present in code at OverviewPage.tsx:109/:218, not held by the build log, no openspec change names it."
-        },
-        {
-            "id": "f419-impl",
-            "status": "done",
-            "title": "F419 (B): Overview activity strip shows every project's events; its warning dot never fires",
-            "detail": "Fixed 61f9bc1: OverviewPage filters the buffer by project id and tests 'warn'; 3 vitest (failed before) + browser drive 12/12 with two projects; bundle rebuilt."
-        },
-        {
-            "id": "refill-2-compose",
-            "status": "done",
-            "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Picked F197 (B, Tier 0, UI). F461/F325/F322 skipped as Codex-only; F139 non-deterministic agent behaviour; F273 read-not-run, needs a fault-injection design; F378 shape not a one-sentence diff. F197 still present at ProjectSettingsPanel.tsx:88 (error reads only the two mutations); R-1 (DECIDED, ratchet) permits instance repair; only archived openspec changes cite it."
-        },
-        {
-            "id": "f197-impl",
-            "status": "done",
-            "title": "F197 (B): Settings page has no error state; a failed settings query shows a skeleton forever",
-            "detail": "Fixed f061e8b: panel renders the query error as an alert with Retry; vitest failed before; browser drive 8/8; ceilings 97->95, 53->50; bundle rebuilt."
-        },
-        {
-            "id": "refill-3-compose",
-            "status": "done",
-            "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "No ready A/B finding qualified (F413 re-read: needs a prune-window design call). Widened to ready C per night-window.md 'Tier-0 findings by severity' (iteration 1 queued C F580). Picked F546: spec_tasks.py _title_for cuts a declared title at 80 chars mid-word; _title_from beside it already clips at a word boundary."
-        },
-        {
-            "id": "f546-impl",
-            "status": "done",
-            "title": "F546 (C, Tier 0): a declared task title is cut to 80 characters mid-word",
-            "detail": "Fixed ea32608: _title_for clips a long declared title through the shared word-boundary clip; test failed before; drive d1012 7/7."
-        },
-        {
-            "id": "refill-4-compose",
-            "status": "done",
-            "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Picked F547 (C, Tier 0, audit): GET .../fold-draft (api/v1/spec.py:3002 -> spec_service.fold_draft:869) has no change-phase check, while fold() refuses anything but an approved change-spec. One sentence: move that refusal into fold_draft so both paths share it. FoldIntoCapabilityDialog already renders draft.isError. Passed over: F560 (~70 test files, mechanical sweep, not Tier 0-sized), F445/F446 (posture/path-rule hazard), F455 (CLI, needs a design for which DB backs a port)."
-        },
-        {
-            "id": "f547-impl",
-            "status": "done",
-            "title": "F547 (C, Tier 0): the fold draft is served for a change that is not approved",
-            "detail": "Fixed a530484: _require_approved_change shared by fold_draft and fold; route test failed before; drive 11/11."
-        },
-        {
-            "id": "refill-5-compose",
-            "status": "done",
-            "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Picked F576 (C, Tier 0, test hazard): the two 'adds no migration' tests diff the whole branch against master, so any cycle branch carrying a migration turns them red; both slices shipped. Passed over: F366 (maybe already closed by B3, check the ledger), F465/F443 (operator policy questions), plus the earlier passes."
-        },
-        {
-            "id": "f576-impl",
-            "status": "done",
-            "title": "F576 (C, Tier 0): the 'adds no migration' tests fail on any branch that carries a migration",
-            "detail": "Fixed e7d2763: both tests and their sole-use imports removed; repro in a throwaway worktree (both red) first; 18 pass in the two files."
-        },
-        {
-            "id": "refill-6-compose",
-            "status": "done",
-            "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Ledger-closed F366 (52e156b), F125 (44938da), F418 (ba1027e), F550 (superseded by b1a4559), each with its test run. Picked F551's blank-reason part: requirement_evidence.decide records a rejection with reason ''. Passed over F538/F548 (design calls), F537 (fix only if converter re-run), F574/F578/F579/F492 (undecided)."
-        },
-        {
-            "id": "f551-impl",
-            "status": "done",
-            "title": "F551 part 1 (C, Tier 0): a rejection of evidence is recorded with a blank reason",
-            "detail": "Fixed: decide refuses a blank rejection reason (422 rejection_needs_reason) on both planes; test failed before (3); drive d1012_f551 10/10; UI already required a reason. F551 provisional and sort parts stay open."
-        },
-        {
-            "id": "refill-7-compose",
-            "status": "done",
-            "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Picked F260 (C): delete the dead Messages UI subtree, operator-decided 2026-09-24 (B10 D6.3, no-spec round, recipe spec-queue/tracks/B10.md:249). Mapped unarchived openspec changes first: F183/F134 held by charters-are-named-once. Passed over F544 (posture), F549, F523/F573 (Tier 1), F457, F469 (Tier 1), F562 (spec text), F480/F476, F454/F563."
-        },
-        {
-            "id": "f260-impl",
-            "status": "done",
-            "title": "F260 (C, Tier 0): delete the dead Messages UI subtree",
-            "detail": "Fixed: Messages UI subtree, api/messages.ts, the mock and n11's DEAD rows deleted; UNHANDLED ceiling 95->92 (measured), MISREPORT stays 50; vitest 2050, drive d1012_f260 8/8; bundle rebuilt."
-        },
-        {
-            "id": "refill-8-compose",
-            "status": "done",
-            "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Picked F551 part 3 (C, Tier 0): requirement identifiers sort as text (FR-10 before FR-2) at requirement_coverage.py:241 and requirement_links.py:256/:350; natural key already exists at spec_tasks._natural. Passed over F557 (operator question), F581 (Tier 1/2), F556 (decision does not fix it literally), F553 remainder (undecided)."
-        },
-        {
-            "id": "f551-sort-impl",
-            "status": "done",
-            "title": "F551 part 3 (C, Tier 0): requirement identifiers sort as text, FR-10 before FR-2",
-            "detail": "Fixed: spec_identity.natural_key (promoted from spec_tasks._natural; tasks.py's restated copy removed); coverage report, unserved and for_task re-sort with it; test failed before (3); drive d1012_f551_sort 9/9. GET /spec/requirements left in string order (a test pins it, the app re-sorts). F551's provisional part stays open."
-        },
-        {
-            "id": "refill-9-compose",
-            "status": "done",
-            "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Picked F177 (C, Tier 0, operator-decided B11 no-spec round): runners.py:115 and charters.py:44 order by created_at alone; add rowid as the tiebreaker. Not held by charters-are-named-once (that change only preserves rowid). Passed over F449 (fix shape is an operator call), F382."
-        },
-        {
-            "id": "f177-impl",
-            "status": "done",
-            "title": "F177 (C, Tier 0): the runner and charter lists fall back to name order on a created_at tie",
-            "detail": "Fixed: both lists order by (created_at, rowid); route test failed before (2); drive d1012_f177 20/20, red with the fix stashed; 701 runner/charter Hub tests pass."
-        },
-        {
-            "id": "refill-10-compose",
-            "status": "done",
-            "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Ledger-closed F235 (f91e58b), F273 (DECIDED F291-F273-run-facts, pinned 26b98cb), F291 (26b98cb), 41 Hub + 22 vitest passed. Passed over F439 (archive refuses queued input, premise needs a path first), F441, F350, F336 (Tier 1), F385/F168/F15 (held by unbuilt openspec changes), F433. Queued ledger-sweep-2."
-        },
-        {
-            "id": "ledger-sweep-2",
-            "status": "done",
-            "title": "Check six open findings an archived change cites after they were filed; close the stale ones with a test run",
-            "detail": "Closed F77, F132, F253, F378 (F335 already fixed; stale older Status line marked superseded); F443 stays open (the archived change excludes creation). Hub tests 50 passed, specDriftPanel 6 passed."
-        },
-        {
-            "id": "refill-11-compose",
-            "status": "done",
-            "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "Picked F438 (C, Tier 0): the holder refusal says 'Let the review in flight finish' at both sites (agent_trigger.py:677 review_dispatch_refusal, :1151 the dispatch) even when task_attendance shows no turn of the holder's running or queued on the task. Not cited by any unarchived openspec change. Passed over this pass: F423 (repair re-keys the pending note, not one sentence), F442 (needs the deferred-dispatch path traced), F456 (D, wording of a deliberate asymmetry, lower than F438), F486 (a note for an unbuilt openspec change being migrated)."
-        },
-        {
-            "id": "f438-impl",
-            "status": "done",
-            "title": "F438 (C, Tier 0): the holder refusal claims a review is in flight when the holder has no turn on the task",
-            "detail": "Fixed: holder_refusal (agent_trigger.py) written once for both sites; 'Let the review in flight finish' only when the holder attends the task, else the holder has no turn running or queued so no review is in flight; remedy stays. Route tests failed before (2); d1012_f438_holder_refusal 8/8; 84 passed in five neighbouring Hub test files."
-        },
-        {
-            "id": "refill-12-compose",
-            "status": "done",
-            "title": "Refill the queue from the backlog if it empties before 05:00",
-            "detail": "No ready Tier-0 finding left: the rest are design or operator calls (F123, F147, F240, F349 remainder, F389, F444, F350, F456), a spec track (F417), deferred by the operator (F299, F301, F339, F340), Codex/Copilot or evidence-only (F466, F481, F482, F494, F498), records (F164, F467, F472, F503, F506, F511), or passed over by refills 1-11. Ledger-closed F165's addendum (60 passed). Closing entry written; next_action null."
-        }
-    ],
-    "decisions_for_user": [],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ],
-    "closeout": {
-        "briefing": "claude-doc",
-        "model": "sonnet",
-        "skill": ".claude/skills/night-briefing/SKILL.md"
-    },
-    "armed_at": "2026-10-11T22:55:03+01:00",
-    "driver_log": ".claude/autonomous/driver-night.log",
-    "briefing_url": "https://claude.ai/code/artifact/99389643-ef6f-4e83-bb84-294e7dace8c7"
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-10-11-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "6208e9a",
+    "stop_at":  "2026-10-13T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-10-12-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ],
+    "closeout":  {
+                     "briefing":  "claude-doc",
+                     "model":  "sonnet",
+                     "skill":  ".claude/skills/night-briefing/SKILL.md"
+                 },
+    "armed_at":  "2026-10-12T22:55:02+01:00",
+    "driver_log":  ".claude/autonomous/driver-night.log"
 }
