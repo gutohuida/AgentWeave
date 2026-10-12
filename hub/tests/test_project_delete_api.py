@@ -59,6 +59,7 @@ from hub.db.models import (
     TaskRequirementReference,
     TaskTransition,
     TurnUsage,
+    VaultFetch,
     VaultSettings,
     WorkerInvocation,
 )
@@ -107,6 +108,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "permission_requests",
     "manager_jobs",
     "vault_settings",
+    "vault_fetches",
     "event_logs",
     "conversations",
     "checkpoint_notes",
@@ -257,6 +259,7 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
     session.add(EventLog(id=f"event-{tag}", project_id=project_id, event_type="test_event"))
     session.add(ManagerJob(project_id=project_id, job=f"job-{tag}", enabled=True))
     session.add(VaultSettings(project_id=project_id, private_location=f"/vault-{tag}"))
+    session.add(VaultFetch(project_id=project_id, entry_id=f"entry-{tag}", count=2))
     session.add(AgentHeartbeat(id=f"heartbeat-{tag}", project_id=project_id, agent=f"agent-{tag}"))
     session.add(
         AgentOutput(id=f"output-{tag}", project_id=project_id, agent=f"agent-{tag}", content="hi")
