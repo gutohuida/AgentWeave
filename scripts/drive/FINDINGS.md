@@ -33384,7 +33384,7 @@ Same Hub (`drive0925`, 8025), real HTTP. Measured: a conversation with two ready
 
 ## F449 (C) — the tool-server pin's startup line is never printed: `hub.*` INFO is below the root level
 
-**Status:** open. Found 2026-09-25 driving `an-agents-tool-server-is-the-one-its-hub-loaded` task 3.1 on a fresh trial Hub (8026).
+**Status:** fixed (Tier 0, 2026-10-12): `main.py`'s lifespan logs the pin and the prune at WARNING, like its sibling `_log_database_before_opening` (the narrow candidate; a Hub logging configuration was not built). Test `hub/tests/test_the_tool_server_pin_is_named_at_startup.py` launches a real `uvicorn hub.main:app` with a fake home and reads stderr; red before the fix. Driven on a throwaway Hub (port 8583, own DB and home): stderr shows `WARNI [hub.main] Tool server pinned at ...	ool-server\<digest>\mcp_server.py`. Was: open. Found 2026-09-25 driving `an-agents-tool-server-is-the-one-its-hub-loaded` task 3.1 on a fresh trial Hub (8026).
 **Source:** drive
 **Theme:** Hub plumbing
 **Source:** drive

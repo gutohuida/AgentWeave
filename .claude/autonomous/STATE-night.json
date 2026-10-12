@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f449-impl",
-    "next_action": "Do queue item f449-impl: fix F449 as Tier 0 (see its queue detail). Keep current equal to the item id.",
+    "current": "f455-impl",
+    "next_action": "Do queue item f455-impl: fix F455 as Tier 0 (see its queue detail). Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -29,9 +29,9 @@
         },
         {
             "id": "f449-impl",
-            "status": "open",
+            "status": "done",
             "title": "F449 tool-server pin startup line never printed (Tier 0)",
-            "detail": "grep '## F449' in FINDINGS.md; hub.* INFO is below root level. Test, fix, drive."
+            "detail": "Fixed iteration 3: pin and prune lines logged at WARNING; real-process test + drive recorded in the F449 Status line."
         },
         {
             "id": "f455-impl",

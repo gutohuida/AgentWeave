@@ -503,12 +503,15 @@ async def lifespan(app: FastAPI):
     # After the scheduler, which holds the wakes; after both reconciliations, whose rows it reads
     # past (`a-spent-allowance-holds-the-queue`, D5).
     await arm_held_queues()
+    # WARNING, not INFO, for the same reason as `_log_database_before_opening`: the root logger is
+    # WARN after `init_db()`'s alembic `fileConfig`, so an INFO line never reaches the operator
+    # (F449) and "the startup log names that path" would be false.
     try:
-        logger.info("Tool server pinned at %s", tool_server.pinned_server_path())
+        logger.warning("Tool server pinned at %s", tool_server.pinned_server_path())
     except OSError as exc:
         logger.warning("Could not pin the tool server at start: %s", exc)
     for pruned in tool_server.PIN.prune_stale():
-        logger.info("Pruned stale tool server %s", pruned)
+        logger.warning("Pruned stale tool server %s", pruned)
     warning = _ui_staleness_warning()
     if warning:
         logger.warning(warning)
