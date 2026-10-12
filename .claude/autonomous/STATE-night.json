@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f446-impl",
-    "next_action": "Do queue item f446-impl: fix F446 as Tier 0 (grep '## F446' in scripts/drive/FINDINGS.md). Keep current equal to the item id.",
+    "current": "refill",
+    "next_action": "Do queue item refill: per night-window 'Ending the window', re-compose the queue from open Tier-0 B/C findings with repros (F523, F563, F538, F548, F544), skipping any a build-window log holds; write them as -impl items, then stop (compose only). Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -47,9 +47,9 @@
         },
         {
             "id": "f446-impl",
-            "status": "open",
+            "status": "done",
             "title": "F446 path word with colon in later component refused on Windows (Tier 0)",
-            "detail": "grep '## F446'. Test, fix, drive."
+            "detail": "Fixed iteration 6: rule 5 divides a plain word at colons on a drive-letter host; test + stdio MCP drive recorded in the F446 Status line."
         },
         {
             "id": "refill",

@@ -33332,7 +33332,7 @@ the picker's listing by the same resolution the reader uses. Sibling of F444.
 
 ## F446 (C) — a plain path word with a colon in a later component is refused on Windows
 
-**Status:** open. Filed 2026-09-24 (operator decision `B4-approve`), measured by R8 of B4
+**Status:** fixed 2026-10-12 (night window iteration 6, Tier 0). Rule 5 (`_judge_word`, `hub/hub/mcp_server.py`) now divides a plain word at its colons on a drive-letter host (`_colon_segments`, after a leading drive) and judges each part, as `_judge_whole_value` does. Test `hub/tests/test_a_path_word_with_a_later_colon_is_judged_by_its_names.py`: 5 allow cases failed before, 11 pass after; the escape cases (`src/a:../../x`, `src/a:/..`, `../a:1`) stay refused. Drive through the real stdio MCP server (`approve_tool_call`): `rg foo src/a:1` denied before, allowed after; `src/a:../../x` denied both ways. Original filing: Filed 2026-09-24 (operator decision `B4-approve`), measured by R8 of B4
 (`spec-queue/tracks/B4.md` `## R8`). On a drive-letter host, today's rule 5 judges a plain word such as
 `src/a:1` (as in `rg foo src/a:1`) through `ntpath.realpath`, which on Python 3.11 reads any component
 whose second character is `:` as a drive and drops everything before it, so the word lands outside and

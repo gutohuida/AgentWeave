@@ -2294,6 +2294,19 @@ def _judge_drive_word(
     return _judge_path(value, root, word, argument, continues)
 
 
+def _colon_segments(word: str) -> List[str]:
+    """F446: `word` divided at its colons -- after a leading drive, which keeps its own -- on a
+    drive-letter host; else `[word]`, since on POSIX `:` is an ordinary name character."""
+    if not _DRIVE_LETTERS or ":" not in word:
+        return [word]
+    drive, rest = os.path.splitdrive(word)
+    segments = [segment for segment in rest.split(":") if segment]
+    if not segments:
+        return [word]
+    segments[0] = drive + segments[0]
+    return segments
+
+
 def _judge_word(
     budget: "_Budget",
     word: str,
@@ -2371,10 +2384,20 @@ def _judge_word(
     if "::" not in word and (  # D7: a `::` word is not plain in either dialect -- rule 6 reads it
         os.path.isabs(word) or _PLAIN_RELATIVE_RE.match(word)
     ):  # 5: a path, resolved
-        rewritten = _rewrite_dotdot_globs(word)
-        refusal = _judge_path(rewritten, root, word, argument, continues)
-        if refusal:
-            return refusal
+        # F446: on a drive-letter host `ntpath.realpath` reads a component whose second character
+        # is `:` as a drive, so `src/a:1` was judged as `a:1`. A Windows name holds no colon, so
+        # the word is divided at its colons and each part judged, as `_judge_whole_value` does.
+        segments = _colon_segments(word)
+        for index, segment in enumerate(segments):
+            refusal = _judge_path(
+                _rewrite_dotdot_globs(segment),
+                root,
+                word,
+                argument,
+                continues and index == len(segments) - 1,
+            )
+            if refusal:
+                return refusal
         # (R5, D8) An absolute word holding a glob character or an extglob group is also matched
         # against the links it finds, not only judged by its literal text -- `_PLAIN_RELATIVE_RE`
         # already keeps every relative glob out of this branch (D8, "Where it runs"). Matched on
