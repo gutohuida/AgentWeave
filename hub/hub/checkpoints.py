@@ -23,13 +23,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import worktrees
 from .db.models import (
     Checkpoint,
+    CheckpointNote,
     Conversation,
+    InboundQueueEntry,
     JobRun,
     Loop,
     PermissionRequest,
     Question,
     Run,
     Task,
+    TaskTransition,
 )
 from .task_transitions import LIVE_STATUSES
 from .utils import short_id
@@ -477,6 +480,53 @@ async def create_checkpoint(
     db.add(checkpoint)
     await db.commit()
     return checkpoint
+
+
+def notes_about_task(task_id: str):
+    """The `CheckpointNote` rows that are about *task_id*, as a WHERE clause.
+
+    Finding F423. A note records the conversation and run that wrote it and nothing about a task,
+    and a flow job is `session_mode: new`, so a task that takes more than one firing keeps its notes
+    in a conversation that is not the one that completes it. A note belongs to a task when either
+    link is there: the run that wrote it appears in the task's transition history, or the queue
+    entry that started its conversation named the task (`InboundQueueEntry.task_id`, which survives
+    delivery). Both are read because `Run.task_id` is unreliable (six of ten completing runs held
+    NULL when F43 measured it) and a firing that wrote a note may have moved nothing. Derived, not
+    stored, so no migration.
+    """
+    via_transition = CheckpointNote.run_id.in_(
+        select(TaskTransition.run_id).where(
+            TaskTransition.task_id == task_id, TaskTransition.run_id.is_not(None)
+        )
+    )
+    via_entry = CheckpointNote.conversation_id.in_(
+        select(InboundQueueEntry.conversation_id).where(
+            InboundQueueEntry.task_id == task_id, InboundQueueEntry.conversation_id.is_not(None)
+        )
+    )
+    return via_transition | via_entry
+
+
+async def pending_note_for_task(
+    db: AsyncSession, task_id: str, *, agent: Optional[str] = None
+) -> Optional[CheckpointNote]:
+    """The newest unconsumed note written about *task_id* (by *agent*, when given), or None.
+
+    The task-keyed counterpart of `checkpoint_handover._authors_pending_note`'s old "newest note
+    this agent wrote anywhere in the loop", which could hand one task's note to another task's
+    checkpoint. A note whose handover was declined (no checkpoint runner, or the spend gate) stays
+    unconsumed, and this is how that task's reviewer finds it.
+    """
+    query = (
+        select(CheckpointNote)
+        .where(CheckpointNote.consumed_by_checkpoint_id.is_(None))
+        .where(notes_about_task(task_id))
+        .order_by(CheckpointNote.created_at.desc(), CheckpointNote.id.desc())
+        .limit(1)
+    )
+    if agent is not None:
+        query = query.where(CheckpointNote.agent == agent)
+    return (await db.execute(query)).scalars().first()
 
 
 async def checkpoint_by_task_author(

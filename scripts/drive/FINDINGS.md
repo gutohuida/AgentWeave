@@ -33163,7 +33163,7 @@ rows on `:8000`, roughly 1 ms today, and growing).
 
 ## F423 (C) — a declined handover's note never reaches that task's reviewer
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final) (found by R3). `_briefing_checkpoint` falls back to the loop's latest
+**Status:** fixed (Tier 0, 2026-10-13, night iteration 18): a note is tied to its task by `checkpoints.notes_about_task` (its run is in the task's transition history, or the queue entry that started its conversation named the task; derived, no migration). `consider_handover` takes only the completed task's note, and the review briefing (`_compose_loop_briefing`) carries the task's still-unconsumed note under "What the author left for you". Tests `hub/tests/test_handover_briefs_the_reviewer.py` (3 new, all failed before; 1132 passed across 41 checkpoint/briefing files). Not driven against a live Hub or a real reviewer turn; the briefing composer and handover were run on the real schema. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final) (found by R3). `_briefing_checkpoint` falls back to the loop's latest
 checkpoint; later, `_authors_pending_note` carries only the author's newest note, possibly into a
 later task's checkpoint. So the note written for a declined handover can land beside the wrong task, or
 nowhere. Today this happens when no checkpoint runner is set; with B7's

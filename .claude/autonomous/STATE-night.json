@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 17,
+    "iteration": 18,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f423-impl",
-    "next_action": "Do queue item f423-impl: F423 (C) -- a declined handover's note never reaches that task's reviewer (Tier 0). Read its FINDINGS.md entry, write the failing test at _authors_pending_note / _briefing_checkpoint first (key the note to its task, deliver it with that task's review briefing), fix, drive, set the Status line. Keep current equal to the item id.",
+    "current": "f439-impl",
+    "next_action": "Do queue item f439-impl: F439 (C) -- input in a closed conversation counts as queued, so the task reads as in flight (Tier 0). Read its FINDINGS.md entry, write the failing test at the seam it names (turn_scheduler.py ~344-350: exclude queued input whose conversation is closed from the queued/attended count) first, fix, drive, set the Status line. Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -102,9 +102,9 @@
         },
         {
             "id": "f423-impl",
-            "status": "open",
+            "status": "done",
             "title": "F423 a declined handover's note never reaches that task's reviewer (Tier 0)",
-            "detail": "Key the author's pending note to its task (_authors_pending_note / _briefing_checkpoint) and deliver it with that task's review briefing, not the loop's latest checkpoint."
+            "detail": "Fixed iteration 18: notes tied to their task (notes_about_task); consider_handover takes only the completed task's note and the review briefing carries the task's unconsumed note. 3 tests + Status line recorded; no live reviewer turn driven."
         },
         {
             "id": "f439-impl",

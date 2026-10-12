@@ -14,8 +14,12 @@ from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import dependency_gate, requirement_evidence, requirement_links
-from .checkpoint_generation import render_checkpoint
-from .checkpoints import checkpoint_by_task_author, latest_checkpoint_for_loop
+from .checkpoint_generation import format_notes, render_checkpoint
+from .checkpoints import (
+    checkpoint_by_task_author,
+    latest_checkpoint_for_loop,
+    pending_note_for_task,
+)
 from .conversations import (
     conversation_for_provider_session,
     inherit_runtime_overrides,
@@ -3211,6 +3215,19 @@ async def _compose_loop_briefing(
         lines.append("")
         lines.append(rendered)
         lines.append("")
+
+    if is_review and claimed_task is not None:
+        # F423: the author's notes whose handover was declined (no checkpoint runner, spend gate)
+        # were never consumed into a checkpoint, so the fallback above briefed the reviewer with
+        # the loop's latest -- some other task's -- or nothing. Keyed to *this* task and handed
+        # over as written; left unconsumed, because a re-fired review of the same task needs them
+        # again and `consume_note` names a checkpoint that does not exist here.
+        left_behind = await pending_note_for_task(session, claimed_task.id)
+        if left_behind is not None:
+            lines.append("## What the author left for you")
+            lines.append("")
+            lines.append(format_notes(left_behind))
+            lines.append("")
 
     # Same per-status group-by `_batch_loop_summaries` already computes (`api/v1/jobs.py:136-143`)
     # recomputed directly here rather than imported — L6's own precedent already rejected an

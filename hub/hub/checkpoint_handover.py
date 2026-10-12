@@ -39,7 +39,7 @@ from sqlalchemy import select
 
 from .checkpoint_generation import consume_note, format_notes, generate_checkpoint
 from .checkpoint_policy import resolve_policy
-from .checkpoints import loop_for_conversation
+from .checkpoints import loop_for_conversation, notes_about_task
 from .conversations import get_conversation_by_id
 from .db.engine import async_session_factory
 from .db.models import (
@@ -121,8 +121,8 @@ async def _conversation_ids_for_loop(db, loop) -> list:
     )
 
 
-async def _authors_pending_note(db, loop, *, agent: str) -> Optional[CheckpointNote]:
-    """The newest unconsumed note *agent* has written anywhere in this loop.
+async def _authors_pending_note(db, loop, *, agent: str, task_id: str) -> Optional[CheckpointNote]:
+    """The newest unconsumed note *agent* has written about *task_id* anywhere in this loop.
 
     **Scoped to the loop, not to the completing conversation**, and that distinction is the whole
     difference between this firing and never firing at all. `submit_checkpoint_notes` scopes a note
@@ -138,6 +138,11 @@ async def _authors_pending_note(db, loop, *, agent: str) -> Optional[CheckpointN
     declined every one of them, which is F41's failure mode reproduced inside F41's own remedy.
 
     By agent, because a flow runs several concurrently and one agent's notes are not another's.
+
+    **And by task** (F423): an agent that does several tasks in one loop has several notes, and the
+    newest of them is not necessarily about the task just completed -- it would have been consumed
+    into the wrong task's checkpoint, and the right task's note left stranded. A note is tied to its
+    task by `checkpoints.notes_about_task`.
     """
     conversations = await _conversation_ids_for_loop(db, loop)
     if not conversations:
@@ -149,6 +154,7 @@ async def _authors_pending_note(db, loop, *, agent: str) -> Optional[CheckpointN
                 .where(CheckpointNote.conversation_id.in_(conversations))
                 .where(CheckpointNote.agent == agent)
                 .where(CheckpointNote.consumed_by_checkpoint_id.is_(None))
+                .where(notes_about_task(task_id))
                 .order_by(CheckpointNote.created_at.desc(), CheckpointNote.id.desc())
                 .limit(1)
             )
@@ -213,7 +219,7 @@ async def consider_handover(run_id: str) -> Optional[str]:
             _declined(run_id, "the conversation is not a loop firing")
             return None
 
-        note = await _authors_pending_note(db, loop, agent=run.agent)
+        note = await _authors_pending_note(db, loop, agent=run.agent, task_id=completed_task_id)
         if note is None:
             _declined(run_id, "the agent recorded no notes for its reviewer")
             return None

@@ -43,6 +43,7 @@ from hub.db.models import (
     Checkpoint,
     CheckpointNote,
     Conversation,
+    InboundQueueEntry,
     JobRun,
     Loop,
     Project,
@@ -50,7 +51,7 @@ from hub.db.models import (
     Runner,
     Task,
 )
-from hub.scheduler import _briefing_checkpoint
+from hub.scheduler import _briefing_checkpoint, _compose_loop_briefing
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import run_actor
 
@@ -551,3 +552,155 @@ async def test_a_review_falls_back_when_the_author_left_no_checkpoint(
         task_row = await db.get(Task, task.id)
         found = await _briefing_checkpoint(db, loop_row, task_row, is_review=True)
         assert found is not None and found.id == "ckpt-hand-fb"
+
+
+# ---------------------------------------------------------------------------
+# F423 — a declined handover's note is the reviewer of *that task's*, and no other task's
+# ---------------------------------------------------------------------------
+
+
+async def test_a_declined_handovers_note_reaches_that_tasks_reviewer(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """No checkpoint runner: the handover is declined, the note stays unconsumed, and a newer
+    checkpoint from an unrelated task is the loop's latest. The review briefing must still carry
+    the author's note for *this* task -- it used to carry the unrelated checkpoint and nothing else.
+    """
+    await _roster(app, auth_headers, bind_runner, AUTHOR, OTHER)
+    async with async_session_factory() as db:
+        _, loop, task, _, run = await _flow_handover(db, suffix="declined")
+        db.add(Conversation(id="conv-hand-dx", project_id="proj-test", agent=OTHER, origin="job"))
+        await db.commit()
+        db.add(
+            Checkpoint(
+                id="ckpt-hand-dx",
+                project_id="proj-test",
+                conversation_id="conv-hand-dx",
+                loop_id=loop.id,
+                agent=OTHER,
+                trigger="operator",
+                status="ready",
+                lineage_id="ckpt-hand-dx",
+                body=OTHER_AGENTS_BODY,
+            )
+        )
+        await db.commit()
+
+    assert await consider_handover(run.id) is None  # declined: no runner
+
+    async with async_session_factory() as db:
+        loop_row = await db.get(Loop, loop.id)
+        task_row = await db.get(Task, task.id)
+        prior = await _briefing_checkpoint(db, loop_row, task_row, is_review=True)
+        briefing = await _compose_loop_briefing(
+            db, loop_row, task_row, prior, is_review=True, agent="reviewer"
+        )
+        assert GOOD_BODY["intent"] in briefing, "the reviewer was not given the author's note"
+        assert GOOD_BODY["warnings"][0] in briefing
+        # Not delivered to a turn that is not reviewing this task's work.
+        work = await _compose_loop_briefing(
+            db, loop_row, task_row, prior, is_review=False, agent=AUTHOR
+        )
+        assert GOOD_BODY["intent"] not in work
+        # And still pending: nothing consumed it, so a re-fired review reads it again.
+        assert (
+            await db.get(CheckpointNote, "note-hand-declined")
+        ).consumed_by_checkpoint_id is None
+
+
+async def test_a_note_about_another_task_is_not_given_to_this_tasks_reviewer(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """The same author finishes a second task in the same loop and wrote nothing for it. The first
+    task's note must not be consumed into the second task's checkpoint, nor shown to its reviewer.
+    """
+    await _roster(app, auth_headers, bind_runner, AUTHOR)
+    async with async_session_factory() as db:
+        await _checkpoint_runner(db)
+        _, loop, _, _, _ = await _flow_handover(db, suffix="cross")
+        second_task = Task(
+            id="task-hand-cross-2",
+            project_id="proj-test",
+            title="A second task by the same author",
+            status="pending",
+            loop_id=loop.id,
+        )
+        db.add(second_task)
+        db.add(
+            Conversation(id="conv-hand-cross-2", project_id="proj-test", agent=AUTHOR, origin="job")
+        )
+        await db.commit()
+        db.add(
+            JobRun(
+                id="jobrun-hand-cross-2",
+                job_id="job-hand-cross",
+                project_id="proj-test",
+                status="in_progress",
+                trigger="scheduled",
+                conversation_id="conv-hand-cross-2",
+            )
+        )
+        second_run = Run(
+            id="run-hand-cross-2",
+            project_id="proj-test",
+            agent=AUTHOR,
+            conversation_id="conv-hand-cross-2",
+            task_id=None,
+            status="completed",
+        )
+        db.add(second_run)
+        await db.commit()
+        actor = run_actor(agent=AUTHOR, run_id=second_run.id)
+        await apply_transition(db, second_task, "assigned", actor)
+        await apply_transition(db, second_task, "in_progress", actor)
+        await apply_transition(db, second_task, "completed", actor)
+        await db.commit()
+
+    def explode(*args, **kwargs):
+        raise AssertionError("a checkpoint was generated from another task's note")
+
+    monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+    monkeypatch.setattr(subprocess, "run", explode)
+    assert await consider_handover(second_run.id) is None
+
+    async with async_session_factory() as db:
+        loop_row = await db.get(Loop, loop.id)
+        second_row = await db.get(Task, "task-hand-cross-2")
+        briefing = await _compose_loop_briefing(
+            db, loop_row, second_row, None, is_review=True, agent="reviewer"
+        )
+        assert GOOD_BODY["intent"] not in briefing
+        first_note = await db.get(CheckpointNote, "note-hand-cross")
+        assert first_note.consumed_by_checkpoint_id is None, "the first task's note was taken"
+
+
+async def test_a_note_written_in_a_firing_that_moved_nothing_is_tied_by_its_queue_entry(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """The other link: an earlier firing's run wrote the note and made no transition, so only the
+    queue entry that started its conversation (carrying the task id) says what it was about."""
+    await _roster(app, auth_headers, bind_runner, AUTHOR)
+    async with async_session_factory() as db:
+        _, loop, task, _, _ = await _flow_handover(db, suffix="entry")
+        note = await db.get(CheckpointNote, "note-hand-entry")
+        note.run_id = "run-hand-entry-prior"  # not a run the task's transitions name
+        db.add(
+            InboundQueueEntry(
+                id="qe-hand-entry",
+                project_id="proj-test",
+                agent=AUTHOR,
+                origin_type="job",
+                content="work",
+                hop_depth=0,
+                conversation_id="conv-hand-entry-prior",
+                task_id=task.id,
+            )
+        )
+        await db.commit()
+
+        loop_row = await db.get(Loop, loop.id)
+        task_row = await db.get(Task, task.id)
+        briefing = await _compose_loop_briefing(
+            db, loop_row, task_row, None, is_review=True, agent="reviewer"
+        )
+        assert GOOD_BODY["intent"] in briefing
