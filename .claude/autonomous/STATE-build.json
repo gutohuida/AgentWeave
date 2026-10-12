@@ -8,16 +8,16 @@
     "parent_branch": "master",
     "parent_sha": "4ccbec6",
     "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-12-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "specs-vault-close",
-    "next_action": "Do queue item specs-vault-close: gate landed master=6208e9a, so run close_change.py fspecvault on :8010, then --fold-change fspecvault, then POST /projects/proj-d85a82bf4216/project/spec/reindex {}; commit what spec/ gains. Pattern: iteration 9 of 2026-10-11-build-log.md.",
+    "current": "images-pdfs-spec",
+    "next_action": "Do queue item images-pdfs-spec (Opus, Tier 1): author the images-and-pdfs change from the vault roadmap (spdoc-7c75066d6403) with scripts/drive/author_change.py on :8010 (AW_HUB, AW_KEY, AW_PROJECT=proj-d85a82bf4216, MSYS_NO_PATHCONV=1). First settle F573 by measurement: can each Claude runner read PDFs/images natively? Record the result. Approve via the Hub and put the task ids into the later images-pdfs items.",
     "queue": [
         {
             "id": "specs-vault-close",
-            "status": "open",
+            "status": "done",
             "title": "Close specs-against-the-vault (fspecvault) on :8010",
             "detail": "Needs the gate to have landed the commits on master, else blocked. close_change.py fspecvault; then --fold-change fspecvault; then POST /projects/proj-d85a82bf4216/project/spec/reindex {}; commit what spec/ gains. Log iteration 9 of 2026-10-11-build-log.md has the pattern."
         },

@@ -395,6 +395,78 @@
       "requirement": "a-working-agent-tells-the-manager-an-entry-is-wro-reports-in-tab",
       "then": "who reported what, what the manager did about it, and which fact replaced which are clear at a glance",
       "when": "the operator looks at them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub with a fresh database, a scratch git repository, a Haiku runner with vault-distillation and spec-vault-check enabled, and a transcript dated 2026-01-10 saying refunds up to 300 euros need no approval, distilled into a fact (scripts/drive/d1025_specs_against_vault.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1025_specs_against_vault.py",
+      "key": "a-requirement-is-checked-against-what-the-vault-recorded-drive",
+      "requirement": "a-requirement-is-checked-against-what-the-va-cited-fact-warnings",
+      "then": "spec-vault-check is listed and fires once with trigger document_proposed, keeping a conflict on R2; after the second upload an open contradiction cites both facts and GET /vault/warnings has a disputed warning on R1 whose message names both transcripts' names; approval without approve anyway answers 409 approval_warnings with a vault_warning gap on requirements[0]; with it, 200 and warnings_overridden holds it; the spec page in Chromium shows the R1 warning naming both transcripts. The drive fails on today's Hub at its first check (no spec-vault-check job).",
+      "when": "a change is authored whose requirement R1 cites that fact and says refunds up to 300 euros need no approval, and whose requirement R2 cites nothing and says refunds up to 3,000 euros need no approval; it is proposed; then a transcript dated 2026-03-01 saying the limit is now 500 euros is uploaded and distilled; then the document is approved without and with approve anyway"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub test client",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_spec_check.py",
+      "key": "a-requirement-is-checked-against-what-the-vault-recor-cites-kept",
+      "requirement": "a-requirement-is-checked-against-what-th-requirement-cites-facts",
+      "then": "the first is read back with the same facts list; the second is refused naming the requirement",
+      "when": "a document is saved with a requirement citing a fact id, then with facts holding 'refunds' and a number"
+    },
+    {
+      "checked_by": "agent",
+      "given": "four requirements citing a fact under an open contradiction, a superseded fact, a fact with a referred report, and an unknown id; and one citing a fact whose contradiction is then resolved in its favour",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_spec_check.py",
+      "key": "a-requirement-is-checked-against-what-the-vault-recorded-derived",
+      "requirement": "a-requirement-is-checked-against-what-the-va-cited-fact-warnings",
+      "then": "kinds disputed, superseded, reported, missing with both sources named; the resolved one and the closed report's carry none afterwards",
+      "when": "a test reads GET /vault/warnings before and after the resolution and after closing the report"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake worker answering one valid conflict, one naming an unknown requirement, one naming an unknown fact; then failing; then the job disabled",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_spec_check.py",
+      "key": "a-requirement-is-checked-against-what-the-vault-recorded-job",
+      "requirement": "a-requirement-is-checked-against-what-the-vault-record-check-job",
+      "then": "one firing per spawn, written with only the valid conflict and its judged statement, then failed; the proposal's answer did not wait; disabled: 409 and no spawn; the job is listed disabled on a fresh project",
+      "when": "the document is proposed, checked again through the route, and checked while disabled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a firing holding a conflict on R2",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_spec_check.py",
+      "key": "a-requirement-is-checked-against-what-the-vault-recorde-reworded",
+      "requirement": "a-requirement-is-checked-against-what-the-vault-r-warnings-route",
+      "then": "the conflict is gone; 404 for an unknown path",
+      "when": "R2's statement is changed and the warnings read again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a proposed document with one vault warning",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_spec_check.py",
+      "key": "a-requirement-is-checked-against-what-the-vault-recorded-gaps",
+      "requirement": "a-requirement-is-checked-against-what-th-approval-lists-warnings",
+      "then": "409 approval_warnings with a vault_warning gap at requirements[0]; then 200 with it in warnings_overridden",
+      "when": "it is approved without and with approve_anyway"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the spec panel against a warnings route answering two warnings, then one answering 404",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/specVaultWarnings.test.tsx",
+      "key": "a-requirement-is-checked-against-what-the-vault-recorded-panel",
+      "requirement": "a-requirement-is-checked-against-what-the-warnings-on-spec-page",
+      "then": "both rows show the identifier, statement and message; on 404 nothing renders",
+      "when": "a vitest renders it"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the drive's screenshot",
+      "how_to_check": "open testbed/drive1025-specs-vault/<stamp>/shot_warnings.png",
+      "key": "a-requirement-is-checked-against-what-the-vault-recor-panel-look",
+      "requirement": "a-requirement-is-checked-against-what-the-warnings-on-spec-page",
+      "then": "which requirement the vault disagrees with, and which two sources say what, are clear at a glance",
+      "when": "the operator looks at it"
     }
   ],
   "algorithms": [],
@@ -428,15 +500,27 @@
       "FR-32": "6235edc6020367361b43821c6ff5d22bc799431fce9b17d1fe922c129a8ac821",
       "FR-33": "0a9a83ee086dd2052413aea0b4dfa7fe124f4aaa4b137f0b1befa9bad2b880e5",
       "FR-34": "289d04a8a80d6ef0bf1352e75937ca9be231b19f7ac57ec1fa0d1c26f2cb90b0",
+      "FR-35": "0aae45fca0c24db3fbb05c04a505acf2a72edba039464e8f46640ce0c94857cf",
+      "FR-36": "35cc60c774d27d14792a804cfe03237039804e6728f43f4b26fc6e06769432fc",
+      "FR-37": "f016876d3d60ace43a97ce8dce5bc1fd5f2648ea6ea85ab90acce012a5230967",
+      "FR-38": "f6e84505fa2b95b462f4d5d983e8fefa643cb603080d382099527790acc1ae41",
+      "FR-39": "1897f132a21061d6f9dd18d6345cdecaace6a83033b411a2379d5745c524319a",
       "FR-4": "6a4e8d01ffa6b483dc15e52f42bb16db7376dd3dc1c08ea01f5f3f3599cae3d6",
+      "FR-40": "2733b4dd41ec87749bfc78e29e22257fe89d77d2ce435c3b5066c6dbc424bee0",
       "FR-5": "ec6d4b7d25f5a9aeb6223834ed5877ac76e75de49077f636eac5b022f5324a39",
       "FR-6": "791cb5f62ecc7dd06403d8feb531680b9a75b9213bf36e7fba8f53633baf0812",
       "FR-7": "8854e9978008cfeee475c44a7e3fe72a3268790028901bf5811da93b9ed77b47",
       "FR-8": "c8aab6cb4927a911090490cc9d2c8c268539b152640846216c4adafd492f317b",
       "FR-9": "dcd141a4a6ed7104aad675231554a940069eb75a84c77422a6b3212cffd4d26e"
     },
-    "high_water": 34,
+    "high_water": 40,
     "requirements": {
+      "a-requirement-is-checked-against-what-th-approval-lists-warnings": "FR-39",
+      "a-requirement-is-checked-against-what-th-requirement-cites-facts": "FR-35",
+      "a-requirement-is-checked-against-what-the-va-cited-fact-warnings": "FR-36",
+      "a-requirement-is-checked-against-what-the-vault-r-warnings-route": "FR-38",
+      "a-requirement-is-checked-against-what-the-vault-record-check-job": "FR-37",
+      "a-requirement-is-checked-against-what-the-warnings-on-spec-page": "FR-40",
       "a-vault-the-operator-fills-with-text-and-a-one-storage-interface": "FR-7",
       "a-vault-the-operator-fills-with-text-and-agen-settings-migration": "FR-8",
       "a-vault-the-operator-fills-with-text-and-agents-c-vault-settings": "FR-1",
@@ -727,6 +811,48 @@
       "party": null,
       "rationale": "The operator reads reports where they read the vault; the activity log alone does not show the message.",
       "statement": "The Vault tab MUST show a Reports section listing each report with its entry, reporter, message, status, the manager's answer and, when corrected, a link to the new fact, and a form to close a referred report with a note; a refusal shows the Hub's reason. A superseded fact MUST carry the superseded mark and a fact disputed by a report the disputed mark."
+    },
+    {
+      "key": "a-requirement-is-checked-against-what-th-requirement-cites-facts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap: a requirement can cite the facts it rests on. An id, not a quote, so the citation follows the fact's marks as they change.",
+      "statement": "A requirement in a spec document MUST accept an optional facts list of vault fact ids (fct- followed by 12 hex characters), kept unchanged through save, read and fold, and the requirement field's schema description MUST tell an author to cite ids it read with vault_map or vault_read. A list holding anything other than such ids MUST be refused on save naming the requirement."
+    },
+    {
+      "key": "a-requirement-is-checked-against-what-the-va-cited-fact-warnings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Derived on read, as the vault's own marks are, so the warning appears the moment the contradiction is recorded and never goes stale.",
+      "statement": "For each fact a requirement cites, the Hub MUST derive on read a warning when the fact is disputed by an open contradiction (naming the cited fact's claim and source and the other fact's claim and source, and which one is presumed), when it is superseded (naming the fact that replaced it and its source), when it is disputed by a referred report (naming the report's message), or when no fact with that id is in the vault on this machine. A source held privately on another machine is named as held elsewhere. Resolving the contradiction in the cited fact's favour, or closing the report, MUST clear the warning."
+    },
+    {
+      "key": "a-requirement-is-checked-against-what-the-vault-record-check-job",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D7: each manager job names its own runner and model. A requirement nobody cited can still contradict a fact; only a model can see it.",
+      "statement": "The manager's registry MUST include spec-vault-check (trigger document_proposed), disabled with nothing chosen until the operator enables it with a runner. When a document with requirements is proposed, the job is enabled and the vault holds a fact, the Hub MUST, in the background and without delaying the proposal's answer, make one spawn with each requirement's key and statement and each fact's id and claim, and keep from the answer only the conflicts naming a requirement key in the document and a fact id in the vault. It MUST record one manager_job_fired event with job spec-vault-check, trigger document_proposed, subject {document}, outcome written when a conflict was kept, empty when none, failed when the spawn failed or its answer did not parse, and the kept conflicts with the statement each was judged against. POST /vault/warnings/check?path= MUST run the same check with trigger requested, answering 202, 404 for an unknown document and 409 while the job is disabled."
+    },
+    {
+      "key": "a-requirement-is-checked-against-what-the-vault-r-warnings-route",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One answer for the spec page and the approval gaps, so the two never disagree. A conflict judged against an earlier wording is not shown as if it were about the new one.",
+      "statement": "GET /vault/warnings?path= MUST answer the document's warnings: every cited-fact warning, then each conflict of the newest spec-vault-check firing for that document whose requirement still has the statement it was judged against. Each warning MUST carry the requirement's key and identifier, its kind (disputed, superseded, reported, missing or conflict), the fact id and a message naming the sources. It MUST answer 404 for an unknown document and an empty list for a document with no warnings."
+    },
+    {
+      "key": "a-requirement-is-checked-against-what-th-approval-lists-warnings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-08 (approvals are scarce): warn, never gate; approve shows what is missing and approves anyway.",
+      "statement": "Proposal and approval MUST report each warning of GET /vault/warnings as a gap with code vault_warning, where requirements[<index>] and the warning's message. Approval MUST then answer approval_warnings unless approve_anyway is sent, and an approval made anyway MUST record them in warnings_overridden. A vault_warning MUST never be a refusal."
+    },
+    {
+      "key": "a-requirement-is-checked-against-what-the-warnings-on-spec-page",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roadmap's done sentence names the spec page. A 404 is an un-restarted Hub serving a newer bundle (the :8000 skew).",
+      "statement": "The spec page MUST show a Vault warnings panel listing each warning with the requirement's identifier and statement and the warning's message, and MUST show nothing when there are none or the warnings route answers 404."
     }
   ],
   "schema_version": 1,

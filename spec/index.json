@@ -571,6 +571,14 @@
       "order": 640
     },
     {
+      "path": "spec/changes/a-requirement-is-checked-against-what-the-vault-recorded/spec.json",
+      "title": "A requirement is checked against what the vault recorded",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 990
+    },
+    {
       "path": "spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/spec.json",
       "title": "A review turn reviews the branch tip where evidence does not govern the merge",
       "kind": "change-spec",
