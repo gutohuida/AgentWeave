@@ -1,185 +1,47 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-11-daily",
-    "parent_branch": "master",
-    "parent_sha": "6208e9a",
-    "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 27,
-    "log_file": ".claude/autonomous/2026-10-12-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "compose",
-            "status": "done",
-            "title": "Compose this window's queue from the playbook",
-            "detail": "Composed iteration 1; no 2026-10-12 APPROVALS section, so whole window goes to backlog; no unarchived change is implemented-only."
-        },
-        {
-            "id": "f582-impl",
-            "status": "done",
-            "title": "F582 unknown API route answers 405 not 404 (Tier 0)",
-            "detail": "Fixed iteration 2: 405 handler beside serve_spa answers 404 unless another route owns the path; test + drive recorded in the F582 Status line."
-        },
-        {
-            "id": "f449-impl",
-            "status": "done",
-            "title": "F449 tool-server pin startup line never printed (Tier 0)",
-            "detail": "Fixed iteration 3: pin and prune lines logged at WARNING; real-process test + drive recorded in the F449 Status line."
-        },
-        {
-            "id": "f455-impl",
-            "status": "done",
-            "title": "F455 doctor --port without --profile checks the wrong DB (Tier 0)",
-            "detail": "Fixed iteration 4: doctor recovers the profile from the live pid file; real-parser test + real-process drive recorded in the F455 Status line."
-        },
-        {
-            "id": "f492-impl",
-            "status": "done",
-            "title": "F492 full commit SHA in tool input stored as <redacted> (Tier 0)",
-            "detail": "Fixed iteration 5: git-argument SHAs kept, credential-shaped neighbours still redacted; tests + parse_claude_line drive recorded in the F492 Status line. F585 filed for stale skill mirrors."
-        },
-        {
-            "id": "f446-impl",
-            "status": "done",
-            "title": "F446 path word with colon in later component refused on Windows (Tier 0)",
-            "detail": "Fixed iteration 6: rule 5 divides a plain word at colons on a drive-letter host; test + stdio MCP drive recorded in the F446 Status line."
-        },
-        {
-            "id": "refill",
-            "status": "done",
-            "title": "Refill from backlog when above is done",
-            "detail": "Refilled iteration 7: F523, F563, F538, F544, F548 appended as -impl items (none held by the 10-12 build log, which has closed out; all tagged ready on BACKLOG.html)."
-        },
-        {
-            "id": "f523-impl",
-            "status": "done",
-            "title": "F523 list_tasks returns the whole board in one result and spills to tool-results/ (Tier 0)",
-            "detail": "Fixed iteration 8: oversized list_tasks page written to .agentweave/reads/ (cut to fit where it cannot be); test + real stdio MCP drive recorded in the F523 Status line."
-        },
-        {
-            "id": "f563-impl",
-            "status": "done",
-            "title": "F563 a flow reviewer refused by the evidence gate waits on ask_user until timeout (Tier 0)",
-            "detail": "Fixed iteration 9: the briefing sent an ungranted reviewer to ask_user; it now says to end the turn (F374's surfacing handles the rest). Test + Status line recorded; no live reviewer turn driven."
-        },
-        {
-            "id": "f538-impl",
-            "status": "done",
-            "title": "F538 a checkpoint can fire on a context window that was never measured (Tier 0)",
-            "detail": "Fixed iteration 11: resolve_usage_limit leaves an unavailable/unsupported sample alone and consider_from_reading drops its percent; tests + Copilot-shape drive recorded in the F538 Status line."
-        },
-        {
-            "id": "f544-impl",
-            "status": "done",
-            "title": "F544 explicit Workspace-only Claude run without the tool server denies every prompted call (Tier 0)",
-            "detail": "Fixed iteration 13: explicit Workspace-only with no MCP server falls back to acceptEdits and logs a WARNING; tests + build_command drive recorded in the F544 Status line."
-        },
-        {
-            "id": "f548-impl",
-            "status": "done",
-            "title": "F548 a divergence for a run whose task someone else decides never closes (Tier 0)",
-            "detail": "Fixed iteration 14: no divergence recorded for a task already approved/rejected at the run boundary; tests incl. the operator PATCH route + divergences/recent recorded in the F548 Status line."
-        },
-        {
-            "id": "refill-2",
-            "status": "done",
-            "title": "Refill from backlog (queue emptied before 05:00 on the away night)",
-            "detail": "Refilled iteration 15: F413, F423, F439, F441, F457 appended as -impl items (ready on BACKLOG.html, a stated repair shape, none held by a build log or an OPEN decision)."
-        },
-        {
-            "id": "f413-impl",
-            "status": "done",
-            "title": "F413 a firing that fails with no row left behind is invisible; Run says nothing is wrong (Tier 0)",
-            "detail": "Fixed iteration 17: _do_fire_job's except builds a failed JobRun (and event) where the firing has none in the session; a recurring crash counts into its row. Tests + d2b probe drive recorded in the F413 Status line.",
-            "model": "opus"
-        },
-        {
-            "id": "f423-impl",
-            "status": "done",
-            "title": "F423 a declined handover's note never reaches that task's reviewer (Tier 0)",
-            "detail": "Fixed iteration 18: notes tied to their task (notes_about_task); consider_handover takes only the completed task's note and the review briefing carries the task's unconsumed note. 3 tests + Status line recorded; no live reviewer turn driven."
-        },
-        {
-            "id": "f439-impl",
-            "status": "done",
-            "title": "F439 input in a closed conversation counts as queued, so the task reads as in flight (Tier 0)",
-            "detail": "Fixed iteration 19: task_attendance excludes queued input whose conversation is not open; 2 tests + Status line recorded; not driven on a live Hub."
-        },
-        {
-            "id": "f441-impl",
-            "status": "done",
-            "title": "F441 Run says 'already being worked' for an idle assignee whose queued turn cannot start (Tier 0)",
-            "detail": "Fixed iteration 20: Run press names a spent token budget for an idle assignee (_token_budget_holds); 2 tests + Status line recorded; closed-conversation half is F439's; not driven on a live Hub."
-        },
-        {
-            "id": "f457-impl",
-            "status": "done",
-            "title": "F457 a firing that loaded its loop before an edit was staged clears that edit's marker (Tier 0)",
-            "detail": "Fixed iteration 21: pending fields cleared in memory as committed values and in the row by UPDATE ... WHERE pending_edit_at = <loaded>; two-session test + Status line recorded (actor-credit half not fixed)."
-        },
-        {
-            "id": "refill-3",
-            "status": "done",
-            "title": "Refill from backlog (queue emptied at 01:26 with five hours to stop_at)",
-            "detail": "Refilled iteration 22: F461, F537, F456 appended (the only ready findings on BACKLOG.html with a stated or one-sentence repair, no OPEN decision, no build-log hold; the rest need design, an operator answer, or are records)."
-        },
-        {
-            "id": "f461-impl",
-            "status": "done",
-            "title": "F461 a Codex agent's configured question wait never reaches ask_user (Tier 0)",
-            "detail": "Fixed iteration 23: AW_QUESTION_TIMEOUT added to CODEX_MCP_ENV_NAMES; exec and app-server tests assert it (failed before); golden argv re-captured; Status line recorded; Codex not run."
-        },
-        {
-            "id": "f537-impl",
-            "status": "done",
-            "title": "F537 openspec corpus importer drops wrapped scenario-clause lines (Tier 0)",
-            "detail": "Fixed iteration 24: parse_scenario joins indented continuation lines to the clause; 4 tests (3 failed before) + converter drive on agent-capability-plane into a temp dir; Status line recorded."
-        },
-        {
-            "id": "f456-impl",
-            "status": "done",
-            "title": "F456 a budget-exhausted project runs an operator trigger without saying so (Tier 0)",
-            "detail": "Fixed iteration 25: trigger response gains budget_note and a token_budget_passed_over warn event when a spent budget is passed over; 2 tests (spent case failed before) + Status line recorded; no live drive."
-        },
-        {
-            "id": "refill-4",
-            "status": "done",
-            "title": "Refill from backlog (queue emptied with ~4.5 hours to stop_at)",
-            "detail": "Refilled iteration 26: F382 only (operator-decided 2026-09-24 tripwires, neither built). Every other ready item needs an OPEN decision (F556), a design or undecided fix shape (F579, F481, F466), live Copilot evidence (F494, F482, F498), a spec-text choice on :8010 (F562), a proposal (R7, R8), or was passed over in iteration 22."
-        },
-        {
-            "id": "f382-impl",
-            "status": "done",
-            "title": "F382 tripwires: bound released.wait() in test_agent_trigger.py and give the windows' full-suite run CI's timeout (Tier 0)",
-            "detail": "Built iteration 27: _wait_released bounds both fake-PTY waits at 30 s (raises, naming F382); night-window.md F392 rule 1 names CI's --timeout=300 --timeout-method=thread. 77 passed in test_agent_trigger.py; Status stays open for two clean weeks."
-        }
-    ],
-    "decisions_for_user": [],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ],
-    "closeout": {
-        "briefing": "claude-doc",
-        "model": "sonnet",
-        "skill": ".claude/skills/night-briefing/SKILL.md"
-    },
-    "armed_at": "2026-10-12T22:55:02+01:00",
-    "driver_log": ".claude/autonomous/driver-night.log",
-    "briefing_url": "https://claude.ai/code/artifact/babc8c8b-122b-4a68-9888-e0a69e1919f2"
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-10-11-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "979adaa",
+    "stop_at":  "2026-10-14T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-10-13-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ],
+    "closeout":  {
+                     "briefing":  "claude-doc",
+                     "model":  "sonnet",
+                     "skill":  ".claude/skills/night-briefing/SKILL.md"
+                 },
+    "armed_at":  "2026-10-13T22:55:02+01:00",
+    "driver_log":  ".claude/autonomous/driver-night.log"
 }
