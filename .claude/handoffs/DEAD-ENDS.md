@@ -2397,3 +2397,11 @@ disappears is indistinguishable from one that was forgotten.
 
 - **A Hub started from `hub/` never hits the "no DATABASE_URL → refuse" guard on this machine:** `config.py` reads `.env` in the cwd, and the untracked `hub/.env` (2026-09-09) sets `DATABASE_URL=sqlite+aiosqlite:///data/agentweave.db`. So `env -u DATABASE_URL uvicorn hub.main:app` from `hub/` silently serves and migrates `hub/data/agentweave.db` — a stray, *not* :8000's (`~/.agentweave/hub/data/agentweave.db`). `hubs.md` says that file was deleted 2026-09-07; it was recreated (instance_identity from 2026-09-23) and migrated to 0126 by a probe today. To test the guard, start from a cwd with no `.env`, or move `hub/.env` aside. Always pass `DATABASE_URL` explicitly. (2026-10-15)
 - **Parallel `e2e.py` drives each need `AW_E2E_STATE=<own file>.json`;** without it every `hub-up` overwrites `~/.agentweave/e2e-current.json` and later calls hit another group's Hub. (2026-10-15)
+
+## 2026-10-12 (work PC, Copilot drive — handoff `.claude/work-pc/handoff-0162-...`)
+
+- **Work PC: `git push` answers 403.** Carry work home some other way. Python is not on PATH here; use `~/.agentweave/venv-workpc\Scripts\python.exe`, and set `PYTHONIOENCODING=utf-8` before printing DB rows (cp1252 chokes on `→`). (2026-10-12)
+- **A checkpoint answers 409 until `checkpoint_runner_id` is set:** `PUT /api/v1/projects/{P}/settings {"checkpoint_runner_id": "<runner>"}`. (2026-10-12)
+- **The `copilot` runner's `permission_mode` is `acceptEdits | bypassPermissions | manual | workspace`;** `full` answers 400. (2026-10-12)
+- **On Copilot, a refused tool call ends the turn silently** (WPC-1 in handoff 0162). A Workspace-posture drive that hits a refusal looks like a completed turn with no reply. Drive tasks with `bypassPermissions`, or expect it. Drive agents also have no Python on PATH, so give them the venv path. (2026-10-12)
+- **PowerShell 5: `python -c` with nested quotes mangles the code.** Pipe a here-string (`@'...'@ | & $py -`) instead. (2026-10-12)
