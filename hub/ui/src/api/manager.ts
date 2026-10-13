@@ -9,6 +9,8 @@ export interface ManagerJob {
   title: string
   description: string
   trigger: string
+  /** True: with no runner the job does nothing. Absent on a Hub that predates it, read as false. */
+  needs_runner?: boolean
   enabled: boolean
   /** Null: the job's own default runner (for titles, the conversation's agent's). */
   runner_id: string | null

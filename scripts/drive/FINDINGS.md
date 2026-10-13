@@ -35430,7 +35430,7 @@ Seam: runners x manager jobs. **Fix shape:** refuse the deletion with 409 naming
 
 ## F590 (C) -- the Manager page tells the operator a vault job without a runner uses "the agent's own runner"
 
-**Status:** open 2026-10-13. Measured in the same sweep (Chromium against the served bundle, Environment > Manager).
+**Status:** fixed 2026-10-13 (Tier 0, build window iteration 12). `JobSpec.needs_runner` (False only for the titler) is listed by `GET /manager/jobs`; the page words a needs-runner job's empty choice "No runner (the job does nothing)" with help "It does nothing until a runner is chosen.". `test_each_job_says_whether_it_can_run_without_a_runner` failed (KeyError) before; `managerSection.test.tsx` fails before on the option. Driven on scratch Hub `:8112` in Chromium against the rebuilt bundle: titles row keeps "The agent's own runner", vault-distillation row shows the new wording. A Hub that predates the field reads as the old wording.
 
 Every job's runner control carries the conversation-titles wording: help "None uses each conversation's own agent's runner." and the empty option "The agent's own runner" (`hub/ui/src/components/environment/ManagerPanel.tsx:134,144`). For the three vault jobs that is false: their own descriptions say "Needs a runner", and with none they do nothing (`distillation.prepare` refuses "has no runner"). Seam: manager framework x the vault jobs it later hosted. Tier 0 (per-job wording, the empty option saying the job does nothing).
 

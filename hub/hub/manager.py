@@ -42,6 +42,9 @@ class JobSpec:
     title: str
     description: str
     trigger: str
+    # False: with no runner chosen the job borrows one (the titler uses the conversation's own
+    # agent's). True: with none it does nothing. The Manager page words its empty choice from this.
+    needs_runner: bool = True
 
 
 JOBS = (
@@ -53,6 +56,7 @@ JOBS = (
             "message. Off: conversations keep the truncated title."
         ),
         trigger="turn_completed",
+        needs_runner=False,
     ),
     JobSpec(
         key=DISTILLATION,
@@ -102,6 +106,7 @@ def _listed(spec: JobSpec, row: Optional[ManagerJob]) -> Dict[str, Any]:
         "title": spec.title,
         "description": spec.description,
         "trigger": spec.trigger,
+        "needs_runner": spec.needs_runner,
         "enabled": bool(row.enabled) if row is not None else False,
         "runner_id": row.runner_id if row is not None else None,
         "model": row.model if row is not None else None,

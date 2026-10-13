@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "312aece",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 11,
+    "iteration": 12,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "sweep-fix-impl",
-    "next_action": "Do queue item sweep-fix-impl per night-window.md 'Implementing' (test failing at the seam first), one finding per firing. F594, F595, F589 (iteration 7), F596 (iteration 8; DECISIONS build-1013-2 OPEN), F586 (iteration 9) and F588 (iteration 11) are fixed. Next: F590 (Manager page says a vault job without a runner uses 'the agent's own runner', Tier 0), then F591. F587, F592, F593, F597 are design/operator's call. When none of these remain buildable, mark sweep-fix-impl done and do ledger-close.",
+    "next_action": "Do queue item sweep-fix-impl per night-window.md 'Implementing' (test failing at the seam first), one finding per firing. F594, F595, F589 (iteration 7), F596 (iteration 8; DECISIONS build-1013-2 OPEN), F586 (iteration 9), F588 (iteration 11) and F590 (iteration 12) are fixed. Next: F591 (a file source not yet read or failed is labelled 'Held on another machine', Tier 0, VaultPage.tsx:224; UI change, rebuild the bundle). F587, F592, F593, F597 are design/operator's call. When none of these remain buildable, mark sweep-fix-impl done and do ledger-close.",
     "queue": [
         {
             "id": "merge-gate",

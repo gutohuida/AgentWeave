@@ -55,6 +55,24 @@ async def test_a_project_with_no_rows_lists_the_title_job_disabled(app, auth_hea
 
 
 @pytest.mark.asyncio
+async def test_each_job_says_whether_it_can_run_without_a_runner(app, auth_headers) -> None:
+    """F590: the page words the empty runner choice from this, so it must be true of every job.
+
+    Only the titler borrows a runner (the conversation's own agent's); the three vault jobs do
+    nothing without one (`distillation.prepare` refuses "has no runner").
+    """
+    listed = await app.get(f"{BASE}/manager/jobs", headers=auth_headers)
+    assert listed.status_code == 200, listed.text
+    needs = {job["key"]: job["needs_runner"] for job in listed.json()["jobs"]}
+    assert needs == {
+        manager.TITLES: False,
+        manager.DISTILLATION: True,
+        manager.REPORTS: True,
+        manager.SPEC_VAULT_CHECK: True,
+    }
+
+
+@pytest.mark.asyncio
 async def test_patching_refuses_unknown_jobs_and_foreign_runners(app, auth_headers) -> None:
     """routes: 404, then 400 with the job unchanged, then 200 with the job as listed."""
     runner_id = await _runner(app, auth_headers)

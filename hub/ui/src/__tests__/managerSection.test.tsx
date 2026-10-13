@@ -28,6 +28,7 @@ const JOB = {
   title: 'Conversation titles',
   description: 'Names a conversation after its first exchange.',
   trigger: 'turn_completed',
+  needs_runner: false,
   enabled: true,
   runner_id: 'runner-titles',
   model: 'claude-haiku-4-5-20251001',
@@ -114,6 +115,27 @@ describe('Environment > Manager', () => {
     const second = screen.getByTestId('manager-firing-1')
     expect(within(second).getByText('Bakery naming ideas')).toBeInTheDocument()
     expect(within(second).getByText(/written/i)).toBeInTheDocument()
+  })
+
+  it('words the empty runner choice by what the job does with none (F590)', async () => {
+    const vault = {
+      ...JOB, key: 'vault-distillation', title: 'Vault distillation', needs_runner: true,
+      runner_id: null, model: null,
+    }
+    manager = (url) => {
+      if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [JOB, vault] } }
+      if (url.includes('/manager/activity')) return { status: 200, body: { firings: [] } }
+      return undefined
+    }
+    render(<ManagerPanel />, { wrapper })
+
+    const titles = await screen.findByTestId('manager-job-conversation-titles')
+    expect(within(titles).getByRole('option', { name: "The agent's own runner" })).toBeInTheDocument()
+    const distil = screen.getByTestId('manager-job-vault-distillation')
+    expect(within(distil).queryByRole('option', { name: "The agent's own runner" })).toBeNull()
+    expect(within(distil).getByRole('option', { name: 'No runner (the job does nothing)' })).toBeInTheDocument()
+    expect(within(distil).queryByText(/own agent's runner/)).toBeNull()
+    expect(within(distil).getByText(/does nothing until a runner is chosen/i)).toBeInTheDocument()
   })
 
   it('sends only what changed when a control is used', async () => {

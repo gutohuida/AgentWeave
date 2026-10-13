@@ -131,7 +131,11 @@ function JobRow({
       </SettingsRow>
       <SettingsRow
         label="Runner"
-        description="Which runner does this job. None uses each conversation's own agent's runner."
+        description={
+          job.needs_runner
+            ? 'Which runner does this job. It does nothing until a runner is chosen.'
+            : "Which runner does this job. None uses each conversation's own agent's runner."
+        }
       >
         <Select
           aria-label={`${job.title} runner`}
@@ -141,7 +145,9 @@ function JobRow({
           wrapperClassName="w-56"
           className="px-2 py-1.5 text-xs"
         >
-          <option value="">The agent's own runner</option>
+          <option value="">
+            {job.needs_runner ? 'No runner (the job does nothing)' : "The agent's own runner"}
+          </option>
           {runners.map((item) => (
             <option key={item.id} value={item.id}>{runnerOptionLabel(item, catalog)}</option>
           ))}
