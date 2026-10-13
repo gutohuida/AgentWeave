@@ -69,6 +69,15 @@ class ScheduleResult:
     #: Set only by `schedule_accepted` when `schedule_agent` itself raised, so a caller can re-read
     #: what became of its input (the raise may have come after a run took it).
     scheduling_failed: bool = False
+    #: Set only where the refusal is about the *environment* -- no runner bound, the CLI missing --
+    #: and the entry therefore stays queued for the operator's repair to deliver (F96, F596). The
+    #: turn did not begin, but nothing failed: the input is kept and will run.
+    kept_for_repair: bool = False
+
+    @property
+    def no_turn_began(self) -> bool:
+        """Terminal, and the input is gone or refused: a firing that records this says `failed`."""
+        return bool(self.waiting_reason and self.terminal_failure and not self.kept_for_repair)
 
 
 def _lock_for(project_id: str, agent: str) -> asyncio.Lock:
@@ -755,6 +764,7 @@ async def _attempt_turn(
                 waiting_reason=exc.detail,
                 terminal_failure=not transient,
                 refusal=refusal,
+                kept_for_repair=not transient and refusal is None,
             ),
             attempted=True,
             gave_up=tuple(entry.id for entry in abandoned),

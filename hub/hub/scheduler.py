@@ -4027,7 +4027,7 @@ class JobScheduler:
             # non-terminal wait, which leaves the `JobRun` in progress: a firing that has not
             # started yet, not a failed one.
             schedule_result = await schedule_accepted(project_id, acting_agent)
-            turn_began = not (schedule_result.waiting_reason and schedule_result.terminal_failure)
+            turn_began = not schedule_result.no_turn_began
             if not turn_began:
                 # This is the same terminal outcome startup reconciliation would eventually
                 # record, reached honestly at the moment the Hub knows no turn began. Reusing
@@ -4214,7 +4214,7 @@ class JobScheduler:
             # Never raises; a transient failure is retried by the Hub and leaves the selection's
             # `JobRun` in progress (F349, design D6).
             result = await schedule_accepted(project_id, agent)
-            if result.waiting_reason and result.terminal_failure:
+            if result.no_turn_began:
                 async with async_session_factory() as session:
                     run = await session.get(JobRun, run_id)
                     if run is not None:

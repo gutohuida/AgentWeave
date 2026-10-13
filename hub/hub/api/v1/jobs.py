@@ -16,6 +16,7 @@ from ...db.engine import get_session
 from ...db.models import (
     Agent,
     AIJob,
+    InboundQueueEntry,
     JobRun,
     Loop,
     Project,
@@ -1899,4 +1900,22 @@ async def run_job(
 
     # Note: sse_manager.broadcast("job_fired") is already done by _fire_job_internal
     # We only return the success response here to avoid duplicate events
-    return {"success": True, "job_id": job_id, "job_run_id": job_run_id}
+    answer = {"success": True, "job_id": job_id, "job_run_id": job_run_id}
+    # F596: a firing whose message the queue keeps for a repair (no runner bound) is a wait, not a
+    # failure; the press says why, as an operator trigger to the same agent does.
+    if wrote_row and latest_run.status == "in_progress" and latest_run.conversation_id:
+        waiting = (
+            (
+                await session.execute(
+                    select(InboundQueueEntry.waiting_reason).where(
+                        InboundQueueEntry.conversation_id == latest_run.conversation_id,
+                        InboundQueueEntry.state == "queued",
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if waiting:
+            answer["waiting_reason"] = waiting
+    return answer

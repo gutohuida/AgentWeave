@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "312aece",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "sweep-fix-impl",
-    "next_action": "Do queue item sweep-fix-impl per night-window.md 'Implementing' (test failing at the seam first), one finding per firing. F594, F595 and F589 are fixed (iteration 7). Next: F596 (take the recommended option: a no-runner firing is a wait, not failed/500; add an OPEN build-1013-<n> row in DECISIONS.md and put only that id in decisions_for_user), then F586 (all B, Tier 0); then F588, F590, F591. F587, F592, F593, F597 are design/operator's call. When none of these remain buildable, mark sweep-fix-impl done and do ledger-close.",
+    "next_action": "Do queue item sweep-fix-impl per night-window.md 'Implementing' (test failing at the seam first), one finding per firing. F594, F595, F589 (iteration 7) and F596 (iteration 8; DECISIONS build-1013-2 OPEN) are fixed. Next: F586 (all B, Tier 0); then F588, F590, F591. F587, F592, F593, F597 are design/operator's call. When none of these remain buildable, mark sweep-fix-impl done and do ledger-close.",
     "queue": [
         {
             "id": "merge-gate",
@@ -82,7 +82,9 @@
             "detail": "Final log entry with py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-13."
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": [
+        "build-1013-2"
+    ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window's merge-gate item (build-window.md, 'The merge gate'), which may fast-forward master to this branch with 'git fetch . <branch>:master' and 'git push origin master' when all four gate conditions hold -- operator, 2026-10-11 (DECISIONS.md away-1011). Never a merge commit, never a conflict resolved.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
