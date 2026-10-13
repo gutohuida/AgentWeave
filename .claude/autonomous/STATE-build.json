@@ -8,16 +8,16 @@
     "parent_branch": "master",
     "parent_sha": "312aece",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "merge-gate",
-    "next_action": "Do queue item merge-gate per .claude/loops/build-window.md 'The merge gate'; log the four measured values; then the next open item is sweep-vault-drive.",
+    "current": "sweep-vault-drive",
+    "next_action": "Do queue item sweep-vault-drive per .claude/loops/build-window.md 'Driving sweeps'; then sweep-spec-flow-drive.",
     "queue": [
         {
             "id": "merge-gate",
-            "status": "open",
+            "status": "done",
             "title": "Merge gate",
             "detail": "Playbook 'The merge gate': measure the four conditions on the tip; ff master if all hold, else log which failed and carry on."
         },
