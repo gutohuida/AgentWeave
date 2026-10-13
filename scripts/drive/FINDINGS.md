@@ -35455,3 +35455,23 @@ A change `indigo-kirin` (FR-1 `subtract`, FR-2 `help`) was built by a Haiku agen
 A related symptom from the same drive: the agent's commit changed `calc.py`'s CLI so that the capability's existing `add` requirement (`python calc.py A B`) no longer holds (it now prints "Unknown command: 2"). Nothing could notice, because the capability's requirements carry no verification at all.
 
 Seam: fold x coverage. **Fix shape (operator's call):** one option is that a fold carries accepted evidence across to the capability requirement when the digest is unchanged, and coverage leaves archived documents out of its totals. The other is that capabilities are declared outside coverage and the page says so. This is a design question, not Tier 0.
+
+## F594 (B) -- an answered question can be answered again; the second answer overwrites the first, and after delivery it spends a new turn
+
+**Status:** open 2026-10-13. Measured in driving sweep 3 (agents-runs), scratch Hub `:8110`, `scripts/drive/s1013_agents_runs_sweep.py ask`.
+
+A Haiku agent called `ask_user` ("Pick a colour", red/blue). `PATCH /questions/{id}` with `blue` answered 200. A second `PATCH` 20 ms later with `red` **also answered 200**: it overwrote `answer`, cleared `answer_labels`, and restamped `answered_at`. The agent's `ask_user` returned `red`, and the agent replied `red`. After that run had completed, a third `PATCH` (`green, actually`) answered 200 again (`asker_waiting: false`). It queued `Question: Pick a colour / Answer: green, actually` as a new operator entry and **started a new run** (`run-f117e6b31547`), which replied `green`. The decline route refuses an answered question ("Declining it would discard a decision that was already made"). The answer route has no mirror refusal: the conditional `UPDATE` in `answer_question` (`hub/hub/api/v1/questions.py:476`) guards `declined == False` only, not `answered == False`. No UI surface offers to change an answer (grep of `hub/ui/src`: no edit or re-answer), so the reachable paths are a double submit, a second tab, or a stale page. Same shape as F430 (drift candidates).
+
+Seam: operator answer x the asker's tool wait and late-answer delivery. **Fix shape:** add `Question.answered == False` to the claim, and answer 409 "already answered" when it claims nothing (mirroring decline, F227). Test: answer twice, expect 409, the first answer kept, and nothing queued. Tier 0.
+
+## F595 (B) -- deleting the runner that project settings name leaves a dangling id; every later settings save is refused, and checkpoints say no runner is configured
+
+**Status:** open 2026-10-13. Measured in driving sweep 3 (agents-runs), scratch Hub `:8110`.
+
+Created runner `Ck`, then `PUT /projects/{p}/settings` with `checkpoint_runner_id` = `Ck` and `conversation_title_mode: generate` + `conversation_title_runner_id` = `Ck` (200). `DELETE /runners/Ck` answered **204**. `GET settings` still names the deleted id for both. Then:
+- `PUT settings {"hop_budget": 7}`, an unrelated change, answered **400** "Unknown runner 'runner-8b04…': no runner by that id belongs to this project". The merge validates the stale stored id (`projects.py:574-583`), so the project's settings cannot be saved at all until the operator first re-picks a runner. Nothing names that as the cause of the error.
+- `POST /conversations/{c}/checkpoint` answered 409 "No checkpoint runner is configured for this project", while settings show one configured.
+
+`delete_runner` (`hub/hub/api/v1/runners.py:231`) checks only `Agent.runner_id`. The title runner is a job's runner (`projects.py:453`), so that half is F589's root. The checkpoint runner is a `Project` column that F589's fix would not reach.
+
+Seam: runners x project settings (checkpoint and title). **Fix shape:** have `delete_runner` refuse with 409, naming every holder (agents, jobs, the project's checkpoint runner), so one fix closes F589 and F595 together. The alternative is to clear the references and say so. Tier 0.
