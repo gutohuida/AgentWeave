@@ -26,10 +26,18 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, FrozenSet, Iterable, List, Mapping, NamedTuple, Optional, Set, Tuple
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import InboundQueueEntry, Question, Run, SpecDocument, Task, TaskTransition
+from .db.models import (
+    Conversation,
+    InboundQueueEntry,
+    Question,
+    Run,
+    SpecDocument,
+    Task,
+    TaskTransition,
+)
 from .inbound_queue import project_limits, select_turn
 from .sse import sse_manager
 from .task_transition_service import (
@@ -356,7 +364,9 @@ async def task_attendance(session: AsyncSession, project_id: str) -> TaskAttenda
     - **Queued**: input naming the task (`task_id` or `review_task_id`) for the agent, within the
       hop budget read through `project_limits`, the reader `_attempt_turn` uses. Suspended input
       past the budget is not a pair. `state == "queued"`: `"withdrawn"` means it will never be
-      delivered.
+      delivered. Input in a closed (archived) conversation is not a pair either: nothing delivers
+      into one (`_attempt_turn`: "conversation is unavailable"), so it would read as a turn that
+      can never reach the task (F439).
     - **Refused**: read at the agent's *head*, `select_turn(...).controlling`, the entry its next
       turn starts with. Nothing behind a refused head is delivered before it is delivered or given
       up, so where the head is refused every queued pair of that agent is refused, carrying the
@@ -369,6 +379,14 @@ async def task_attendance(session: AsyncSession, project_id: str) -> TaskAttenda
         .where(InboundQueueEntry.project_id == project_id)
         .where(InboundQueueEntry.state == "queued")
         .where(InboundQueueEntry.agent.isnot(None))
+        .where(
+            or_(
+                InboundQueueEntry.conversation_id.is_(None),
+                InboundQueueEntry.conversation_id.notin_(
+                    select(Conversation.id).where(Conversation.lifecycle != "open")
+                ),
+            )
+        )
         .order_by(InboundQueueEntry.sequence)
     )
     by_agent: "Dict[str, List[InboundQueueEntry]]" = {}

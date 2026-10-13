@@ -424,3 +424,37 @@ async def test_a_deferred_author_wedge_is_not_surfaced_as_a_review_the_author_is
 
     assert decision.kind == DECISION_IN_FLIGHT
     assert decision.unstaffed == ()
+
+
+async def _archive(conversation, agent):
+    async with async_session_factory() as db:
+        row = (
+            await db.execute(
+                select(Conversation).where(Conversation.id == f"{conversation}-{agent}")
+            )
+        ).scalar_one()
+        row.lifecycle = "archived"
+        await db.commit()
+
+
+async def test_input_in_a_closed_conversation_is_no_pair_and_leaves_the_task_unattended(app):
+    """F439: nothing delivers into an archived conversation, so its input reaches no task."""
+    await _entry("dev", "t-closed", seq=1, conversation="c-closed")
+    await _entry("dev", "t-closed-review", seq=2, conversation="c-closed", review=True)
+    await _archive("c-closed", "dev")
+    attendance = await _attendance()
+
+    assert ("t-closed", "dev") not in attendance.pairs
+    assert not attendance.attends("t-closed", "dev")
+    assert not attendance.attended("t-closed-review")
+    assert not attendance.has_turn("t-closed", "dev")
+
+
+async def test_an_open_conversation_beside_a_closed_one_is_still_attended(app):
+    await _entry("dev", "t-closed", seq=1, conversation="c-closed")
+    await _entry("dev", "t-open", seq=2, conversation="c-open")
+    await _archive("c-closed", "dev")
+    attendance = await _attendance()
+
+    assert not attendance.attends("t-closed", "dev")
+    assert attendance.attends("t-open", "dev")

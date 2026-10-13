@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 18,
+    "iteration": 19,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f439-impl",
-    "next_action": "Do queue item f439-impl: F439 (C) -- input in a closed conversation counts as queued, so the task reads as in flight (Tier 0). Read its FINDINGS.md entry, write the failing test at the seam it names (turn_scheduler.py ~344-350: exclude queued input whose conversation is closed from the queued/attended count) first, fix, drive, set the Status line. Keep current equal to the item id.",
+    "current": "f441-impl",
+    "next_action": "Do queue item f441-impl: F441 (C) -- Run says 'already being worked' for an idle assignee whose queued turn cannot start (Tier 0). Read its FINDINGS.md entry, write the failing test at the seam it names (the Run press answer qualifies only a provider hold; qualify a token-budget hold and a closed conversation) first, fix, drive, set the Status line. Keep current equal to the item id. Note F439's fix already removes closed-conversation input from task_attendance, so check what remains of the closed-conversation half before writing the test.",
     "queue": [
         {
             "id": "compose",
@@ -108,9 +108,9 @@
         },
         {
             "id": "f439-impl",
-            "status": "open",
+            "status": "done",
             "title": "F439 input in a closed conversation counts as queued, so the task reads as in flight (Tier 0)",
-            "detail": "turn_scheduler.py ~344-350: exclude queued input whose conversation is closed from the queued/attended count. Test the seam the finding names."
+            "detail": "Fixed iteration 19: task_attendance excludes queued input whose conversation is not open; 2 tests + Status line recorded; not driven on a live Hub."
         },
         {
             "id": "f441-impl",

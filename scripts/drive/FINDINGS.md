@@ -33275,7 +33275,7 @@ and passes today.
 
 ## F439 (C) — input in a closed conversation counts as queued, so after the attended change such a task reads as in flight
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R1. `turn_scheduler.py:344-350` counts queued input in a closed conversation. Once `a-task-is-attended-only-by-a-turn-that-will-reach-it` lands, such a task would read as attended by a turn that can never reach it.
+**Status:** fixed 2026-10-13 (night iteration 19, Tier 0): `task_attendance` (`run_task_binding.py`) leaves out queued input whose conversation is not open (the reason `_attempt_turn` answers "conversation is unavailable"), so such a task is no pair, not attended, and has no turn. Two tests in `test_a_task_is_attended_only_by_a_turn_that_will_reach_it.py` failed before (archived conversation read as `queued`), pass after; 933 passed across the 38 attendance/queue-status test files. Not driven on a live Hub. Earlier status: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R1. The old seam, `turn_scheduler.py:344-350`, counted queued input in a closed conversation. Once `a-task-is-attended-only-by-a-turn-that-will-reach-it` lands, such a task would read as attended by a turn that can never reach it.
 
 
 ## F440 (B) — a decided task's queued review entry is never released; it is refused up to three times, then withdrawn
