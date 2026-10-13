@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 26,
+    "iteration": 27,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f382-impl",
-    "next_action": "Do queue item f382-impl: build F382's two decided tripwires (bounded released.wait at hub/tests/test_agent_trigger.py:2015 and :2169; CI's --timeout=300 --timeout-method=thread named for the windows' full-suite run in .claude/loops/night-window.md F392 rule 1), run test_agent_trigger.py, record in F382's Status line. Then set next_action to null: the queue is drained and nothing else on the backlog qualifies (iteration 26).",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -156,9 +156,9 @@
         },
         {
             "id": "f382-impl",
-            "status": "open",
+            "status": "done",
             "title": "F382 tripwires: bound released.wait() in test_agent_trigger.py and give the windows' full-suite run CI's timeout (Tier 0)",
-            "detail": "Decided 2026-09-24 (B11 Final): released.wait(timeout=30) then fail at the two test_agent_trigger.py sites (now :2015 and :2169), and the playbooks' full-suite run carries --timeout=300 --timeout-method=thread. Status line stays open (close after two clean weeks) with the tripwires recorded."
+            "detail": "Built iteration 27: _wait_released bounds both fake-PTY waits at 30 s (raises, naming F382); night-window.md F392 rule 1 names CI's --timeout=300 --timeout-method=thread. 77 passed in test_agent_trigger.py; Status stays open for two clean weeks."
         }
     ],
     "decisions_for_user": [],

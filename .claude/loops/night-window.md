@@ -238,6 +238,9 @@ time:
   2026-09-20 (F392): a 6.2 ticked *"recorded in the log rather than here"* cited a log entry that
   was never written, while three tests in a sibling change's guard file were red. If the run has not
   finished, the task stays `[ ]` and the log says it is still running.
+  **F382 tripwire:** a full-suite run carries CI's bound, `--timeout=300 --timeout-method=thread`
+  (`.github/workflows/ci.yml`), so a wedged test becomes a dumped stack and a failure in minutes,
+  not a silent overnight stall (operator, 2026-09-24, B11).
 - **F392 rule 2 — a change's regression set is the union of every open change's guard files.**
   Before starting a change and again before closing it, list the guard/regression test files named
   by **every** unarchived change under `openspec/changes/` (grep each `tasks.md` for

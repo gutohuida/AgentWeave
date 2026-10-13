@@ -1998,6 +1998,23 @@ async def test_spawn_failure_broadcasts_run_failed_event(app, auth_headers, bind
     assert not [d for t, d in events if t == "run_started"]
 
 
+_RELEASE_WAIT_SECONDS = 30
+
+
+def _wait_released(released):
+    """Block a fake PTY read until `released` is set, but never forever (F382 tripwire).
+
+    An unbounded `Event.wait()` in a worker thread is a silent stall if the stop never reaches
+    `terminate`; here the read raises after the bound, the run fails, and the test's own
+    assertions fail with it instead of the suite hanging.
+    """
+    if not released.wait(timeout=_RELEASE_WAIT_SECONDS):
+        raise AssertionError(
+            f"fake PTY read was not released within {_RELEASE_WAIT_SECONDS}s: "
+            "the stop/terminate never reached the session (F382)"
+        )
+
+
 def _stoppable_pty(pid=555, exit_code=15):
     """A fake PtySession whose `.read()` blocks until `.terminate()` is called.
 
@@ -2012,7 +2029,7 @@ def _stoppable_pty(pid=555, exit_code=15):
     released = threading.Event()
 
     def _blocking_read(size=4096):
-        released.wait()
+        _wait_released(released)
         return ""
 
     def _terminate(force=False):
@@ -2166,7 +2183,7 @@ async def test_shutdown_terminates_all_active_runs(app, auth_headers, bind_runne
     released = threading.Event()
 
     def _blocking_read(size=4096):
-        released.wait()
+        _wait_released(released)
         return ""
 
     fake_session = MagicMock()
