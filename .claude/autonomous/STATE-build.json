@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "312aece",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-vault-drive",
-    "next_action": "Do queue item sweep-vault-drive per .claude/loops/build-window.md 'Driving sweeps'; then sweep-spec-flow-drive.",
+    "current": "sweep-spec-flow-drive",
+    "next_action": "Do queue item sweep-spec-flow-drive per .claude/loops/build-window.md 'Driving sweeps' (scripts/drive/sweep_client.py is reusable); then sweep-agents-runs-drive. sweep-fix-impl candidates so far, severity first: F586, F589 (B, Tier 0), then F588, F590, F591.",
     "queue": [
         {
             "id": "merge-gate",
@@ -23,10 +23,19 @@
         },
         {
             "id": "sweep-vault-drive",
-            "status": "open",
+            "status": "done",
             "model": "opus",
             "title": "Driving sweep 1: vault",
-            "detail": "Playbook 'Driving sweeps': one area, e2e-loop Steps 3-8, scratch Hub from source on a free port 8110+ with a fresh DB under testbed/, Haiku turns only, stop the Hub after. File each defect as a new F<n> in scripts/drive/FINDINGS.md with repro/severity/seam/Tier 0?. Log what passed too. All eight vault slices together."
+            "detail": "Playbook 'Driving sweeps': one area, e2e-loop Steps 3-8, scratch Hub from source on a free port 8110+ with a fresh DB under testbed/, Haiku turns only, stop the Hub after. File each defect as a new F<n> in scripts/drive/FINDINGS.md with repro/severity/seam/Tier 0?. Log what passed too. All eight vault slices together.",
+            "filed": [
+                "F586",
+                "F587",
+                "F588",
+                "F589",
+                "F590",
+                "F591",
+                "F592"
+            ]
         },
         {
             "id": "sweep-spec-flow-drive",

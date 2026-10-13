@@ -35391,3 +35391,57 @@ The spec-vault-check firing recorded `outcome empty`, `0 conflicts kept, 0 dropp
 **Status:** fixed 2026-10-13 (Tier 0, build window iteration 3). Re-ran `py -3.11 scripts/sync_skills.py` (additive; 18 skills into `.agents/skills` and `~/.codex/skills`); `tests/test_skill_sync.py` 2 failed -> 2 passed. The CI half is already covered: the test skips a destination that is not a directory (`tests/test_skill_sync.py:68`) and the script's docstring records both trees as machine-local, so no code change was needed. The mirrors are untracked, so the fix leaves no diff beyond this line. Original report: open 2026-10-12. Measured (night window iteration 4, clean tree at 8b2bf1d): `py -3.11 -m pytest tests/test_skill_sync.py` fails 2 cases, the Kimi+OpenCode project mirror and the Codex user-level mirror, both stale against `.claude/skills/`: `autonomous-session/scripts/run-iteration.ps1` and `night-briefing/SKILL.md`.
 
 The mirrors live under the user's home, so the autonomous window did not rewrite them. A CI runner has no such home, so this is likely local-only; unverified. **Fix shape (not decided):** re-run the sync for those two mirrors, and have the test skip or point at a temp home when the mirror is outside the repository. Tier 0.
+
+## F586 (B) -- re-distilling a source re-opens a contradiction the operator resolved, and presumes the fact they overruled
+
+**Status:** open 2026-10-13. Measured 2026-10-13 (build window, driving sweep 1 `vault`, scratch Hub :8110, `testbed/sweep1013-vault/`, `scripts/drive/s1013_vault_sweep.py`).
+
+Repro: a transcript dated 2026-01-10 (300-euro refund limit) and a PDF dated 2026-03-01 (500 euros) are distilled; contradiction `ctr-7f0006294a4d` pairs the two facts, the 500 one presumed. The operator resolves it with the 300 fact standing (`POST /vault/contradictions/{id}/resolve`, 200); the map then shows the 500 fact `superseded_by` the decision and nothing disputed. Pressing Distil on the January transcript (`POST /vault/sources/{id}/distil`, 202) re-writes its facts and its `facts_written` check records **a new open contradiction `ctr-99cdc445147e` between the new 300 fact and the superseded 500 fact**, the 500 fact `presumed: true` again. The map now marks the overruled fact disputed and presumed, which is what an agent reading `vault_map` is told.
+
+Seam: distillation x contradictions. `distillation._check` compares the new facts with every fact `vault.dated_facts` returns (`hub/hub/distillation.py:415-418`, `compared_set`), superseded ones included, while `vault_spec_check.prepare` already leaves superseded facts out (`hub/hub/vault_spec_check.py:255-264`).
+
+**Fix shape:** leave superseded facts out of the distillation check's compared set, as spec-vault-check does. Tier 0.
+
+## F587 (B) -- re-distilling a source replaces every fact with a new id, orphaning the decision and the requirements that cite them
+
+**Status:** open 2026-10-13. Measured in the same sweep as F586.
+
+After the same re-distil, the 300 fact that stood in the resolved contradiction (`fct-1b7ccb9bf93f`) is deleted (`distillation.distil` deletes `earlier - stored`, `hub/hub/distillation.py:312-322`) and an identical claim is written under a new id. Consequences, each measured: the resolved contradiction's `stands` side now reads `claim: None, source: None`, and the Vault tab renders it as "A private fact, held on another machine" (`VaultPage.tsx:748`) though nothing is private; the approved change `spec/changes/refund-limits/spec.json` that cited the fact gets a `missing` warning ("It cites fct-1b7c..., which is not in the vault on this machine"); its R2 conflict names a deleted image fact the same way. Only open contradictions citing the old facts are cleaned up (`delete_open_contradictions_citing`), so resolved ones keep pointing at nothing.
+
+Seam: distillation x contradiction resolution x spec citations. Not Tier 0: whether a re-distil keeps the id of a fact whose claim is unchanged, or refuses/asks when a fact stands in a decision or is cited by a requirement, is a design choice (operator's or a Tier 1 change).
+
+## F588 (C) -- a spec-vault-check conflict against a fact the operator has since overruled stays on the spec page
+
+**Status:** open 2026-10-13. Measured in the same sweep.
+
+The proposed document's R1 (300 euros) got a spec-vault-check conflict naming the 500 fact. After the operator resolved the contradiction against the 500 fact (superseded by the decision), `GET /vault/warnings` still answers that conflict, its message even saying the 500 fact "supersedes the January version". After F587's re-distil the R2 conflict names a fact that no longer exists ("which is not in the vault on this machine"). Pressing check again (`POST /vault/warnings/check`) cures it, because `prepare` leaves superseded facts out; nothing tells the operator to.
+
+Seam: contradiction resolution x spec-vault-check. `document_warnings` drops a conflict only when its requirement was reworded (`hub/hub/vault_spec_check.py:159-163`), not when its fact is superseded or gone, against D5's "a warning always points at something real".
+
+**Fix shape:** in `document_warnings`, skip a conflict whose fact is superseded or missing. Tier 0.
+
+## F589 (B) -- deleting a runner a manager job uses is allowed, and the job then silently does nothing
+
+**Status:** open 2026-10-13. Measured in the same sweep.
+
+`DELETE /runners/{id}` refuses a runner an agent is bound to (409 "Runner is bound to agent(s): scout"), but answered 204 for a runner the enabled `vault-distillation` job used. `GET /manager/jobs` then still reports the job `enabled: true` with the deleted `runner_id`. A source uploaded next (201) got no facts and **no firing at all** in the activity log; only pressing Distil says why (409 "The vault distillation job has no runner"). The Manager page shows the dangling job's runner control as "The agent's own runner" (see F590).
+
+Seam: runners x manager jobs. **Fix shape:** refuse the deletion with 409 naming the jobs, as for agents (or clear the job's runner and say so). Tier 0.
+
+## F590 (C) -- the Manager page tells the operator a vault job without a runner uses "the agent's own runner"
+
+**Status:** open 2026-10-13. Measured in the same sweep (Chromium against the served bundle, Environment > Manager).
+
+Every job's runner control carries the conversation-titles wording: help "None uses each conversation's own agent's runner." and the empty option "The agent's own runner" (`hub/ui/src/components/environment/ManagerPanel.tsx:134,144`). For the three vault jobs that is false: their own descriptions say "Needs a runner", and with none they do nothing (`distillation.prepare` refuses "has no runner"). Seam: manager framework x the vault jobs it later hosted. Tier 0 (per-job wording, the empty option saying the job does nothing).
+
+## F591 (C) -- a file source whose transcription failed or has not run yet is shown as "Held on another machine"
+
+**Status:** open 2026-10-13. Measured in the same sweep.
+
+A tracked GIF whose reading failed (firing `failed`, "reading the image: 1 schema violation(s): Field required") is listed in the Vault tab as "Held on another machine", and a just-uploaded PDF reads the same until it is transcribed: the map answers `available: false, holder: null` and `VaultPage.tsx:224` renders any unavailable entry as held elsewhere. The file is in the repository. Seam: images-and-pdfs x text-sources' availability label. Tier 0 (say "not read yet" / "could not be read" when the entry is a file source on this machine). The failure detail itself ("Field required") is also not operator language; noted, not filed separately.
+
+## F592 (C) -- deleting a project leaves its private vault behind in the Hub's own directory
+
+**Status:** open 2026-10-13. Measured at the end of driving sweep 1 (`vault`).
+
+`DELETE /projects/{id}` answered 204 and, as its docstring says, "never touches the filesystem" (`hub/hub/api/v1/projects.py:740`). That is right for the project's own directory, but the default private location is the Hub's (`~/.agentweave/hub/vaults/<project-id>/`), and the private note's full text (`sources/src-....md`) stayed there with nothing in the app pointing at it any more. Seam: project deletion x vault private location. Not Tier 0: whether deletion removes, keeps, or asks about private vault contents is the operator's call (private data either way).
