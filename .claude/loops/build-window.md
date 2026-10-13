@@ -42,10 +42,44 @@ the worked example of one slice going spec → drive-first → build → drive �
      `py -3.11 .claude/loops/usage_report.py --windows --since <today>`.
    Keep STATE small: `detail` ≤ ~600 characters, results go in the log. Do no other work this
    iteration.
-4. If every remaining slice is built and closed, the roadmap is finished: queue `merge-gate`, then
-   Tier-0 fixes from the backlog (`night-window.md` "Implementing", severity first; check the night
-   log so you do not take what it is working on), then `ledger-close`. Update the roadmap's memory
-   line in the log so the operator sees it ended.
+4. If every remaining slice is built and closed, the roadmap is finished (it was, on 2026-10-12):
+   queue `merge-gate`, then **driving sweeps** (below), then `ledger-close`. Operator, 2026-10-13
+   (`away-1011`, addendum): "Drive the product".
+
+## Driving sweeps — when the roadmap is finished
+
+The ready backlog ran dry on 2026-10-13: both windows idled by mid-morning while most open
+findings wait on a spec or a decision. The cure is new, repro'd findings, which only driving finds.
+
+- **One area per item**, id `sweep-<area>-drive` with `"model": "opus"` (finding bugs is judgement;
+  the week's budget allows it). Up to four per day, then `sweep-fix-impl` items for what they filed.
+  Rotate areas across days; read previous build logs so you do not repeat a sweep:
+  1. `vault` — all eight vault slices **together**, each was only driven alone: upload text, a PDF
+     and an image, distil, a contradicting second source, an agent's report, a requirement citing
+     a disputed fact (warning, approve anyway), fetch counts reshaping the map, the Manager page's
+     jobs and activity log.
+  2. `spec-flow` — create → explore → propose → approve (and approve anyway) → tasks → a Haiku agent
+     builds one → evidence → land → fold into a capability; amend an approved document.
+  3. `agents-runs` — runners and models (Sonnet 5.5 bind), request_agent and the budget, ask_user
+     answered and timed out, stop, checkpoint and cut-over, archived agents.
+  4. `jobs-loops` — a flow/loop with a job, firing, disable, queue release, the inbound queue.
+  5. `project-ui` — the project page, settings, deletion, the header and tabs, in a browser
+     against the served bundle (claude-in-chrome if available; otherwise say it was not browsed).
+- **How:** `.claude/skills/e2e-loop/SKILL.md` Steps 3–8 and its harness (`e2e.py`). Its Step 1–2
+  questions are answered here: scope is the area above, and nothing stops for an operator. Its
+  "no spec/ at the root" line is pre-2026-08-16 and does not apply. Scratch Hub from source on a
+  free port (8110+) with a fresh database under `testbed/`, test projects under `testbed/`; every
+  real agent turn binds `claude-haiku-4-5`; never leave a job enabled; stop the Hub after.
+- **Drive as the operator would**, through the routes the UI calls, and check what the operator
+  would *see* (the event, the panel, the status) — not only the database. Every seam between two
+  features is a candidate. Ask what each route returns when the thing it calls fails.
+- **Record:** each defect a new `F<n>` in `scripts/drive/FINDINGS.md` with a repro, severity, the
+  seam, and whether it is Tier 0. The sweep's log entry lists what was exercised and passed too, so
+  the next sweep widens instead of repeating. Keep the drive script under `scripts/drive/` when it
+  is reusable.
+- **`sweep-fix-impl`:** a Tier-0 finding the sweep filed, severity first, built as
+  `night-window.md` "Implementing" (test failing at the seam first). What the build window does not
+  reach, the night picks up.
 
 ## The merge gate
 
