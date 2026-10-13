@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "312aece",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 13,
+    "iteration": 14,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ledger-close",
-    "next_action": "Mark nothing further in sweep-fix-impl: F594, F595, F589, F596, F586, F588, F590 and F591 are fixed; F587, F592, F593 and F597 are design or the operator's call (grounds in each finding). Do queue item ledger-close: final log entry with py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-13, then set next_action to null.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "merge-gate",
@@ -77,7 +77,7 @@
         },
         {
             "id": "ledger-close",
-            "status": "open",
+            "status": "done",
             "title": "Ledger close",
             "detail": "Final log entry with py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-13."
         }
