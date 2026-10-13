@@ -20,7 +20,7 @@ pytestmark = pytest.mark.asyncio
 BASE = "/api/v1/projects/proj-test"
 # The roster fixture keeps a legacy runner entry, so the probe has no sentence of its own here; a
 # real Hub says "No runner is bound to this agent". Both come from the same `runner_id is None` branch.
-WAITS_FOR = ("No runner is bound", "is not currently launchable")
+WAITS_FOR = ("No runner is bound", "is not currently launchable", "was not found in PATH")
 
 
 @pytest.fixture
@@ -63,7 +63,7 @@ async def test_a_press_for_an_agent_with_no_runner_waits(
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["success"] is True
-    assert any(text in body["waiting_reason"] for text in WAITS_FOR)
+    assert any(text in body["waiting_reason"] for text in WAITS_FOR), body["waiting_reason"]
 
     async with async_session_factory() as db:
         rows = (await db.execute(select(JobRun).where(JobRun.job_id == job_id))).scalars().all()

@@ -3525,7 +3525,7 @@ class JobScheduler:
         whether the watchdog actually managed to trigger anything.
         """
         from .inbound_queue import new_entry
-        from .turn_scheduler import schedule_accepted
+        from .turn_scheduler import no_turn_began, schedule_accepted
 
         # Bound before anything that can raise: the handler below reads both, and an exception
         # ahead of their old binding points raised `UnboundLocalError` out of it (D2a).
@@ -4027,7 +4027,7 @@ class JobScheduler:
             # non-terminal wait, which leaves the `JobRun` in progress: a firing that has not
             # started yet, not a failed one.
             schedule_result = await schedule_accepted(project_id, acting_agent)
-            turn_began = not schedule_result.no_turn_began
+            turn_began = not no_turn_began(schedule_result)
             if not turn_began:
                 # This is the same terminal outcome startup reconciliation would eventually
                 # record, reached honestly at the moment the Hub knows no turn began. Reusing
@@ -4208,13 +4208,13 @@ class JobScheduler:
         the same outcome the primary path records for itself, and the reason design D13 gives each
         selection a row: one agent's launch failing says nothing about the others.
         """
-        from .turn_scheduler import schedule_accepted
+        from .turn_scheduler import no_turn_began, schedule_accepted
 
         for agent, run_id in staged:
             # Never raises; a transient failure is retried by the Hub and leaves the selection's
             # `JobRun` in progress (F349, design D6).
             result = await schedule_accepted(project_id, agent)
-            if result.no_turn_began:
+            if no_turn_began(result):
                 async with async_session_factory() as session:
                     run = await session.get(JobRun, run_id)
                     if run is not None:

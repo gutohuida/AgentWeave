@@ -74,10 +74,17 @@ class ScheduleResult:
     #: turn did not begin, but nothing failed: the input is kept and will run.
     kept_for_repair: bool = False
 
-    @property
-    def no_turn_began(self) -> bool:
-        """Terminal, and the input is gone or refused: a firing that records this says `failed`."""
-        return bool(self.waiting_reason and self.terminal_failure and not self.kept_for_repair)
+
+def no_turn_began(result: "ScheduleResult") -> bool:
+    """Terminal, and the input is gone or refused: a firing that records this says `failed`.
+
+    A function over the fields, not a property, so a caller handed a stand-in that sets only
+    `waiting_reason` and `terminal_failure` still reads it right."""
+    return bool(
+        result.waiting_reason
+        and result.terminal_failure
+        and getattr(result, "kept_for_repair", False) is not True
+    )
 
 
 def _lock_for(project_id: str, agent: str) -> asyncio.Lock:
