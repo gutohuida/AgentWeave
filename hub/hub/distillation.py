@@ -412,7 +412,9 @@ def _lines_of(facts: List[Dict[str, Any]]) -> str:
 async def _check(plan: Plan, stored_ids: List[str]) -> None:
     """Compare the facts just stored with other sources' facts, as one spawn and one firing."""
     source_id = plan.source["id"]
-    everything = await asyncio.to_thread(vault.dated_facts, plan.project_root, plan.private_root)
+    everything = await asyncio.to_thread(
+        lambda: vault.dated_facts(plan.project_root, plan.private_root, current_only=True)
+    )
     by_id = {fact["id"]: fact for fact in everything}
     new = [by_id[fact_id] for fact_id in stored_ids if fact_id in by_id]
     sent, left_out = compared_set(everything, source_id)

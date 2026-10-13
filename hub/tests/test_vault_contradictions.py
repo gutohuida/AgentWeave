@@ -558,6 +558,29 @@ async def test_resolving_writes_a_decision_and_supersedes_the_other_fact(
 
 
 @pytest.mark.asyncio
+async def test_a_redistil_does_not_compare_with_a_fact_the_operator_overruled(
+    app, auth_headers, worker, tmp_path
+) -> None:
+    """F586: the 437 fact is superseded by the operator's decision, so pressing Distil on the
+    source that stands must not set it against the new 300 fact and open the case again."""
+    fake, newer, _, fact300, fact437, record = await _one_open(app, auth_headers, worker, tmp_path)
+    resolved = await _resolve(app, auth_headers, record["id"], stands=fact300, note="Finance.")
+    assert resolved.status_code == 200, resolved.text
+    fake.answers.extend([[F300], []])
+
+    assert (await _distil(app, auth_headers, newer["id"])).status_code == 202
+
+    [_, check] = fake.checks()
+    sent = [fact_id for fact_id, _ in _section(check["prompt"], distillation.EXISTING_START)]
+    assert fact437 not in sent and sent, sent
+    assert [r["status"] for r in _records(tmp_path / "knowledge" / "contradictions", "ctr")] == [
+        "resolved"
+    ]
+    listed = await _map(app, auth_headers)
+    assert not any(e.get("disputed") for e in listed.values())
+
+
+@pytest.mark.asyncio
 async def test_resolving_for_neither_supersedes_both(app, auth_headers, worker, tmp_path) -> None:
     _, _, _, fact300, fact437, record = await _one_open(app, auth_headers, worker, tmp_path)
     done = await _resolve(app, auth_headers, record["id"], stands=None, note="Neither; ask Dana.")

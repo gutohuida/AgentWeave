@@ -252,16 +252,7 @@ async def prepare(project_id: str, path: str) -> Plan:
 
     def read() -> tuple:
         stored = spec_documents.read_payload(workspace, safe)
-        superseded = {
-            entry["id"]
-            for entry in vault.build_map(workspace.root, private)
-            if entry["kind"] == "fact" and entry.get("superseded_by")
-        }
-        current = [
-            fact
-            for fact in vault.dated_facts(workspace.root, private)
-            if fact["id"] not in superseded
-        ]
+        current = vault.dated_facts(workspace.root, private, current_only=True)
         return requirements_of(stored), _compared(current)
 
     requirements, facts = await asyncio.to_thread(read)

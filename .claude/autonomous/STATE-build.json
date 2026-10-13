@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "312aece",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "sweep-fix-impl",
-    "next_action": "Do queue item sweep-fix-impl per night-window.md 'Implementing' (test failing at the seam first), one finding per firing. F594, F595, F589 (iteration 7) and F596 (iteration 8; DECISIONS build-1013-2 OPEN) are fixed. Next: F586 (all B, Tier 0); then F588, F590, F591. F587, F592, F593, F597 are design/operator's call. When none of these remain buildable, mark sweep-fix-impl done and do ledger-close.",
+    "next_action": "Do queue item sweep-fix-impl per night-window.md 'Implementing' (test failing at the seam first), one finding per firing. F594, F595, F589 (iteration 7), F596 (iteration 8; DECISIONS build-1013-2 OPEN) and F586 (iteration 9) are fixed. Next: F588 (document_warnings skips a conflict whose fact is superseded or missing, Tier 0); then F590, F591. F587, F592, F593, F597 are design/operator's call. When none of these remain buildable, mark sweep-fix-impl done and do ledger-close.",
     "queue": [
         {
             "id": "merge-gate",

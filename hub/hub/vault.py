@@ -466,14 +466,26 @@ def _fact_order(fact: _Fact, records: Dict[str, _Record]) -> Tuple[str, str, str
     return _source_date(source.meta), source.meta["created_at"], created
 
 
-def dated_facts(project_root: Path, private_root: Path) -> List[Dict[str, Any]]:
+def dated_facts(
+    project_root: Path, private_root: Path, *, current_only: bool = False
+) -> List[Dict[str, Any]]:
     """Every fact whose claim is on this machine, latest-dated first: its id, claim, sources,
     visibility, date, and `order`, the key that decides which side of a contradiction is
-    presumed."""
+    presumed. With *current_only*, those a decision or a corrected report has superseded are
+    left out."""
     records = _records(project_root, private_root)
+    superseded = (
+        {
+            fact_id
+            for fact_id, mark in _all_flags(project_root, private_root).items()
+            if mark["superseded_by"]
+        }
+        if current_only
+        else set()
+    )
     listed = []
     for fact in _facts(project_root, private_root).values():
-        if fact.claim is None:
+        if fact.claim is None or fact.meta["id"] in superseded:
             continue
         order = _fact_order(fact, records)
         listed.append(
