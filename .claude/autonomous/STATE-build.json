@@ -1,47 +1,69 @@
 {
-    "purpose":  "BUILD. Open with the merge gate (gated ff of master), close any roadmap slice whose commits are now on master, then spec, drive-first, build and drive the next knowledge-vault roadmap slice. Design questions: take the recommended option and record an OPEN row. Playbook: .claude/loops/build-window.md",
-    "playbook":  ".claude/loops/build-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-10-11-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "6208e9a",
-    "stop_at":  "2026-10-13T21:30:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-10-13-build-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/build-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-build.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/build-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window\u0027s merge-gate item (build-window.md, \u0027The merge gate\u0027), which may fast-forward master to this branch with \u0027git fetch . \u003cbranch\u003e:master\u0027 and \u0027git push origin master\u0027 when all four gate conditions hold -- operator, 2026-10-11 (DECISIONS.md away-1011). Never a merge commit, never a conflict resolved.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ],
-    "closeout":  {
-                     "briefing":  "claude-doc",
-                     "model":  "sonnet",
-                     "skill":  ".claude/skills/night-briefing/SKILL.md"
-                 },
-    "armed_at":  "2026-10-13T08:55:02+01:00",
-    "driver_log":  ".claude/autonomous/driver-build.log"
+    "purpose": "BUILD. Open with the merge gate (gated ff of master), close any roadmap slice whose commits are now on master, then spec, drive-first, build and drive the next knowledge-vault roadmap slice. Design questions: take the recommended option and record an OPEN row. Playbook: .claude/loops/build-window.md",
+    "playbook": ".claude/loops/build-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-10-11-daily",
+    "parent_branch": "master",
+    "parent_sha": "6208e9a",
+    "stop_at": "2026-10-13T21:30:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-10-13-build-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "merge-gate",
+    "next_action": "Do queue item merge-gate (build-window.md 'The merge gate'): measure the four conditions, fast-forward master if all hold, log values. Then continue the queue in order.",
+    "queue": [
+        {
+            "id": "merge-gate",
+            "status": "open",
+            "title": "Merge gate",
+            "detail": "Playbook 'The merge gate': measure all four conditions on the branch tip; if all hold, git fetch . autonomous/2026-10-11-daily:master && git push origin master. Log the four values and the sha. If shut, log which failed and carry on. Roadmap is fully built (all 8 slices folded); the 58 commits ahead of master are what lands."
+        },
+        {
+            "id": "f585-impl",
+            "status": "open",
+            "title": "F585: stale skill mirrors fail tests/test_skill_sync.py (Tier 0)",
+            "detail": "tests/test_skill_sync.py fails on a clean tree: two skill mirrors are stale. Regenerate/sync the mirrors, confirm the test passes, set the finding's Status line in scripts/drive/FINDINGS.md."
+        },
+        {
+            "id": "f465-impl",
+            "status": "open",
+            "title": "F465: archived agents count against the agent budget (Tier 0)",
+            "detail": "Failing test at the budget seam first (archived agent must not count), fix, drive, set Status. Grep openspec/changes and spec/changes for F465 first."
+        },
+        {
+            "id": "f349-impl",
+            "status": "open",
+            "title": "F349: concurrent agent triggers can 500 'database is locked' (Tier 0)",
+            "detail": "Reproduce with a test at the trigger route first; fix; set Status. Split if not one-sentence."
+        },
+        {
+            "id": "ledger-close",
+            "status": "open",
+            "title": "Ledger close",
+            "detail": "Final log entry with py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-13. Then next_action null."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window's merge-gate item (build-window.md, 'The merge gate'), which may fast-forward master to this branch with 'git fetch . <branch>:master' and 'git push origin master' when all four gate conditions hold -- operator, 2026-10-11 (DECISIONS.md away-1011). Never a merge commit, never a conflict resolved.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ],
+    "closeout": {
+        "briefing": "claude-doc",
+        "model": "sonnet",
+        "skill": ".claude/skills/night-briefing/SKILL.md"
+    },
+    "armed_at": "2026-10-13T08:55:02+01:00",
+    "driver_log": ".claude/autonomous/driver-build.log"
 }
