@@ -241,3 +241,219 @@ async def test_accepted_event_failure_is_logged_and_swallowed(app, caplog):
             select(EventLog).where(EventLog.event_type == "queue_entry_queued")
         )
         assert written.scalars().all() == []
+
+
+# --- Slice 2 (design D4): the six other routes that schedule after committing input ----------
+#
+# Each site is a setup that leaves the route one request away, and the request itself. Every test
+# asks two things of it: with `schedule_agent` raising a lock, the route answers what it answers
+# when scheduling succeeds; and with the route's post-commit event raising, the agent is still
+# scheduled (the event used to raise out of the route before the schedule was reached).
+
+PROJECT_URL = "/api/v1/projects/proj-test"
+
+
+class _Recorder:
+    """A `schedule_agent` that records who it was asked to start; raises *error* if given."""
+
+    def __init__(self, error=None):
+        self.error = error
+        self.agents = []
+
+    async def __call__(self, project_id, agent):
+        self.agents.append(agent)
+        if self.error is not None:
+            raise self.error
+        return ScheduleResult(waiting_reason="queue is empty", terminal_failure=False)
+
+
+async def _site_message(app, auth_headers, add_agent, bind_runner):
+    await add_agent("recipient")
+
+    async def _send():
+        return await app.post(
+            f"{PROJECT_URL}/messages",
+            json={"to": "recipient", "content": "hello"},
+            headers=auth_headers,
+        )
+
+    return _send, ["recipient"], 201
+
+
+async def _site_request_agent(app, auth_headers, add_agent, bind_runner):
+    from .test_request_agent_models_an_existing_agent import _actor
+
+    await add_agent("tmpl")
+    await bind_runner("tmpl", cli="claude")
+    headers = await _actor(run_id="run-d4-request")
+
+    async def _request():
+        return await app.post(
+            "/api/v1/agent-actions/agents/request",
+            json={"name": "requested", "template": "tmpl", "task": "help"},
+            headers=headers,
+        )
+
+    return _request, ["requested"], 201
+
+
+async def _site_runner_rebind(app, auth_headers, add_agent, bind_runner):
+    await add_agent("unbound")
+    created = await app.post(
+        f"{PROJECT_URL}/runners",
+        json={"name": "late-runner", "cli": "claude"},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    runner_id = created.json()["id"]
+
+    async def _bind():
+        return await app.patch(
+            f"{PROJECT_URL}/agents/unbound", json={"runner_id": runner_id}, headers=auth_headers
+        )
+
+    return _bind, ["unbound"], 200
+
+
+async def _site_answer(app, auth_headers, add_agent, bind_runner):
+    from hub.db.models import Question, Run
+
+    async with async_session_factory() as db:
+        db.add(Run(id="run-d4-asked", project_id="proj-test", agent="asker", status="completed"))
+        db.add(
+            Question(
+                id="q-d4",
+                project_id="proj-test",
+                from_agent="asker",
+                question="which?",
+                blocking=True,
+                created_by_run_id="run-d4-asked",
+                options=[{"label": "yes"}, {"label": "no"}],
+            )
+        )
+        await db.commit()
+
+    async def _answer():
+        return await app.patch(
+            f"{PROJECT_URL}/questions/q-d4",
+            json={"answer": "yes", "labels": ["yes"]},
+            headers=auth_headers,
+        )
+
+    return _answer, ["asker"], 200
+
+
+async def _site_release(app, auth_headers, add_agent, bind_runner):
+    from hub.db.models import Conversation, Project
+    from hub.inbound_queue import new_entry
+
+    await add_agent("held")
+    entry = new_entry(
+        project_id="proj-test",
+        agent="held",
+        origin_type="agent",
+        origin_agent="relay",
+        content="held over the budget",
+        hop_depth=2,
+        conversation_id="conv-d4-held",
+    )
+    async with async_session_factory() as db:
+        (await db.get(Project, "proj-test")).hop_budget = 1
+        db.add(
+            Conversation(id="conv-d4-held", project_id="proj-test", agent="held", lifecycle="open")
+        )
+        db.add(entry)
+        await db.commit()
+    entry_id = entry.id
+
+    async def _release():
+        return await app.post(
+            f"{PROJECT_URL}/queue/entries/{entry_id}/release", headers=auth_headers
+        )
+
+    return _release, ["held"], 200
+
+
+async def _site_budget(app, auth_headers, add_agent, bind_runner):
+    from hub.conversations import new_conversation
+    from hub.inbound_queue import new_entry
+
+    async with async_session_factory() as db:
+        for name in ("first", "second"):
+            conversation = new_conversation(project_id="proj-test", agent=name, origin="operator")
+            db.add(conversation)
+            db.add(
+                new_entry(
+                    project_id="proj-test",
+                    agent=name,
+                    origin_type="operator",
+                    content="waiting on the budget",
+                    hop_depth=0,
+                    conversation_id=conversation.id,
+                )
+            )
+        await db.commit()
+
+    async def _raise_budget():
+        return await app.patch(
+            f"{PROJECT_URL}/accounting/budget",
+            json={"token_budget": 10_000_000},
+            headers=auth_headers,
+        )
+
+    return _raise_budget, ["first", "second"], 200
+
+
+# (setup, the module whose `persist_event` the route calls, the post-commit events it writes)
+SITES = {
+    "message": (_site_message, "messages", {"message_created", "queue_entry_queued"}),
+    "request_agent": (_site_request_agent, "agents", {"agent_requested", "queue_entry_queued"}),
+    "runner_rebind": (_site_runner_rebind, "agents", set()),
+    "answer": (_site_answer, "questions", {"question_answered", "queue_entry_queued"}),
+    "release": (_site_release, "inbound_queue", {"queue_entry_released"}),
+    "budget": (_site_budget, "accounting", {"accounting_budget_updated"}),
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("site", sorted(SITES))
+async def test_a_locked_start_does_not_fail_a_route_that_committed_input(
+    site, app, auth_headers, add_agent, bind_runner
+):
+    setup, _, _ = SITES[site]
+    act, agents, ok = await setup(app, auth_headers, add_agent, bind_runner)
+    locked = _Recorder(_locked())
+    with patch("hub.turn_scheduler.schedule_agent", locked):
+        resp = await act()
+        await _settle_retries()
+    assert resp.status_code == ok, resp.text
+    # Every agent with committed input was tried, including after an earlier one raised (budget).
+    assert set(agents) <= set(locked.agents)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("site", sorted(name for name, (_, _, events) in SITES.items() if events))
+async def test_a_failed_post_commit_event_still_starts_the_agent(
+    site, app, auth_headers, add_agent, bind_runner
+):
+    setup, module, events = SITES[site]
+    act, agents, ok = await setup(app, auth_headers, add_agent, bind_runner)
+    real = utils.persist_event
+    refused = []
+
+    async def _persist(session, project_id, event_type, *args, **kwargs):
+        if event_type in events:
+            refused.append(event_type)
+            raise _locked()
+        return await real(session, project_id, event_type, *args, **kwargs)
+
+    scheduled = _Recorder()
+    with (
+        patch("hub.utils.persist_event", _persist),
+        patch(f"hub.api.v1.{module}.persist_event", _persist, create=True),
+        patch("hub.turn_scheduler.schedule_agent", scheduled),
+    ):
+        resp = await act()
+    assert refused, f"none of {events} was attempted"
+    assert resp.status_code == ok, resp.text
+    assert set(agents) <= set(scheduled.agents)

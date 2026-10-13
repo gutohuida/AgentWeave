@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f349-sites",
-    "next_action": "Do queue item f349-sites (F349 slice 2, design D4). Slice 1 (trigger route + helpers) closed in iteration 5.",
+    "current": "f349-firing",
+    "next_action": "Do queue item f349-firing (F349 slice 3, design D6). Slices 1 and 2 (trigger route, the six other sites) closed in iterations 5 and 6.",
     "queue": [
         {
             "id": "merge-gate",
@@ -41,9 +41,9 @@
         },
         {
             "id": "f349-sites",
-            "status": "open",
+            "status": "done",
             "title": "F349 slice 2: the six other post-commit schedule sites (design D4)",
-            "detail": "openspec/changes/input-the-hub-accepted-is-answered-as-accepted design D4 and tasks 1.6/1.7: messages.py, agents.py x2 (request_agent, runner rebind), questions.py, inbound_queue.py, accounting.py call schedule_accepted and persist_accepted_event in place of schedule_agent/persist_event. Test per site first (schedule raising -> answers as on success; persist raising -> schedule still called). Reuse hub/tests/test_accepted_input_is_answered_as_accepted.py helpers."
+            "detail": "Built: the six D4 sites use schedule_accepted and persist_accepted_event; 11 parametrised tests; drive d1013_f349_sites.py 12/12. See iteration 6 log."
         },
         {
             "id": "f349-firing",

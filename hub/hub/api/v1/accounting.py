@@ -13,7 +13,7 @@ from ...db.models import InboundQueueEntry, Project
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...usage_accounting import accounting_snapshot, budget_state, conversation_usage
-from ...utils import persist_event
+from ...utils import persist_accepted_event
 
 router = APIRouter(prefix="/accounting", tags=["accounting"])
 
@@ -61,7 +61,8 @@ async def update_budget(
     project_row.token_budget = body.token_budget
     await session.commit()
     event_payload = {"token_budget": body.token_budget}
-    await persist_event(session, project_id, "accounting_budget_updated", event_payload)
+    # The budget is committed: the event cannot fail the request or skip the starts below (F349).
+    await persist_accepted_event(project_id, "accounting_budget_updated", event_payload)
     await sse_manager.broadcast(project_id, "accounting_budget_updated", event_payload)
     snapshot = await accounting_snapshot(session, project_id, recent_limit=0)
     queued_result = await session.execute(
@@ -72,8 +73,9 @@ async def update_budget(
         )
         .distinct()
     )
-    from ...turn_scheduler import schedule_agent
+    from ...turn_scheduler import schedule_accepted
 
+    # `schedule_accepted` never raises, so one agent's locked start cannot skip the rest (D4).
     for agent in queued_result.scalars().all():
-        await schedule_agent(project_id, agent)
+        await schedule_accepted(project_id, agent)
     return budget_state(body.token_budget, snapshot["project"]["total_tokens"])

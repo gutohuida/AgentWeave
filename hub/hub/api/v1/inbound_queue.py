@@ -34,7 +34,7 @@ from ...run_task_binding import (
 )
 from ...sse import sse_manager
 from ...usage_accounting import project_budget_state
-from ...utils import persist_event
+from ...utils import persist_accepted_event, persist_event
 
 logger = logging.getLogger(__name__)
 
@@ -330,12 +330,13 @@ async def release_queue_entry(
         # the row itself says 0, and nothing else would show that a chain was restarted here.
         "released_from_depth": outcome.released_from_depth,
     }
-    await persist_event(session, project_id, "queue_entry_released", payload, agent=entry.agent)
+    # The release is committed: the event and the start cannot fail it (F349, design D3a/D4).
+    await persist_accepted_event(project_id, "queue_entry_released", payload, agent=entry.agent)
     await sse_manager.broadcast(project_id, "queue_entry_released", payload)
 
-    from ...turn_scheduler import schedule_agent
+    from ...turn_scheduler import schedule_accepted
 
-    await schedule_agent(project_id, entry.agent)
+    await schedule_accepted(project_id, entry.agent)
     await session.refresh(entry)
     return entry
 

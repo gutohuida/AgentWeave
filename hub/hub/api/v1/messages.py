@@ -24,7 +24,7 @@ from ...run_task_binding import resolve_task_for_project
 from ...schemas.common import SuccessResponse
 from ...schemas.messages import OPERATOR_SENDER, MessageCreate, MessageResponse
 from ...sse import sse_manager
-from ...utils import persist_event, short_id
+from ...utils import persist_accepted_event, persist_event, short_id
 from ...worktrees import is_reserved_agent_name
 
 router = APIRouter(prefix="/messages", tags=["messages"])
@@ -365,7 +365,9 @@ async def create_message_for_actor(
     await session.commit()
     await session.refresh(msg)
     await sse_manager.broadcast(project_id, "message_created", _msg_dict(msg))
-    await persist_event(session, project_id, "message_created", _msg_dict(msg), agent=event_agent)
+    # Post-commit events go on their own session and never raise: the message is accepted, and a
+    # failed write here must not skip the start below (F349, design D3a).
+    await persist_accepted_event(project_id, "message_created", _msg_dict(msg), agent=event_agent)
     queue_payload = {
         "entry_id": entry.id,
         "agent": entry.agent,
@@ -375,8 +377,8 @@ async def create_message_for_actor(
         "conversation_id": recipient_conversation.id,
         "source_conversation_id": source_conversation_id,
     }
-    await persist_event(
-        session, project_id, "queue_entry_queued", queue_payload, agent=body.recipient
+    await persist_accepted_event(
+        project_id, "queue_entry_queued", queue_payload, agent=body.recipient
     )
     await sse_manager.broadcast(project_id, "queue_entry_queued", queue_payload)
     if hop_depth > hop_budget:
@@ -386,8 +388,7 @@ async def create_message_for_actor(
             "hop_depth": hop_depth,
             "hop_budget": hop_budget,
         }
-        await persist_event(
-            session,
+        await persist_accepted_event(
             project_id,
             "queue_chain_suspended",
             suspended,
@@ -396,9 +397,9 @@ async def create_message_for_actor(
         )
         await sse_manager.broadcast(project_id, "queue_chain_suspended", suspended)
 
-    from ...turn_scheduler import schedule_agent
+    from ...turn_scheduler import schedule_accepted
 
-    await schedule_agent(project_id, body.recipient)
+    await schedule_accepted(project_id, body.recipient)
     held_by_budget = (
         held_note(msg.id, body.recipient, hop_depth, hop_budget) if hop_depth > hop_budget else None
     )

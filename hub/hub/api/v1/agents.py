@@ -80,7 +80,7 @@ from ...schemas.common import RequestModel
 from ...schemas.messages import OPERATOR_SENDER
 from ...sse import sse_manager
 from ...task_transitions import LIVE_STATUSES
-from ...utils import persist_event, short_id
+from ...utils import persist_accepted_event, persist_event, short_id
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 logger = logging.getLogger(__name__)
@@ -2811,22 +2811,16 @@ async def request_agent(
         "hop_depth": hop_depth,
         "conversation_id": conversation.id,
     }
-    await persist_event(session, project_id, "agent_requested", payload, agent=source_run.agent)
+    # The agent and its first entry are committed: neither event nor start may fail the request,
+    # and a failed event must not skip the start (F349, design D3a/D4).
+    await persist_accepted_event(project_id, "agent_requested", payload, agent=source_run.agent)
     await sse_manager.broadcast(project_id, "agent_requested", payload)
-    await persist_event(session, project_id, "queue_entry_queued", payload, agent=body.name)
+    await persist_accepted_event(project_id, "queue_entry_queued", payload, agent=body.name)
     await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
 
-    from ...turn_scheduler import schedule_agent
+    from ...turn_scheduler import schedule_accepted
 
-    try:
-        await schedule_agent(project_id, body.name)
-    except Exception:
-        logger.exception(
-            "request_agent: scheduling %s's first turn raised after the agent and its queue "
-            "entry were already committed; the entry stays queued until %s is next scheduled",
-            body.name,
-            body.name,
-        )
+    await schedule_accepted(project_id, body.name)
     return {**payload, "status": "queued"}
 
 
@@ -3218,9 +3212,12 @@ async def patch_agent(
         # `schedule_agent` rather than `redrain_queued_agents`: this repair is agent-scoped, and
         # it is a no-op ("queue is empty") for the overwhelmingly common case of binding a runner
         # to an agent nobody has written to yet.
-        from ...turn_scheduler import schedule_agent
+        #
+        # `schedule_accepted`: the binding is committed, so a locked start is retried rather than
+        # answered as a failed PATCH (F349, design D4).
+        from ...turn_scheduler import schedule_accepted
 
-        await schedule_agent(project_id, name)
+        await schedule_accepted(project_id, name)
 
     return {
         "id": agent_row.id,

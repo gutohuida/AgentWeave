@@ -22,7 +22,7 @@ from ...inbound_queue import new_entry
 from ...run_task_binding import release_block_for_question
 from ...schemas.questions import QuestionAnswer, QuestionCreate, QuestionResponse
 from ...sse import sse_manager
-from ...utils import persist_event, short_id
+from ...utils import persist_accepted_event, persist_event, short_id
 
 router = APIRouter(prefix="/questions", tags=["questions"])
 
@@ -208,12 +208,14 @@ async def announce_queued_answer(
         "question_id": question.id,
         "conversation_id": conversation.id,
     }
-    await persist_event(session, project_id, "queue_entry_queued", queue_payload, agent=from_agent)
+    # The entry is committed: a failed event or a locked start is logged and retried, never the
+    # caller's failure, and the event failing does not skip the start (F349, design D3a/D4).
+    await persist_accepted_event(project_id, "queue_entry_queued", queue_payload, agent=from_agent)
     await sse_manager.broadcast(project_id, "queue_entry_queued", queue_payload)
 
-    from ...turn_scheduler import schedule_agent
+    from ...turn_scheduler import schedule_accepted
 
-    await schedule_agent(project_id, from_agent)
+    await schedule_accepted(project_id, from_agent)
 
 
 def _delivered_answer(row: Question) -> str:
@@ -532,10 +534,11 @@ async def answer_question(
             "task_title": released.title,
             "question_id": question_id,
         }
-        await persist_event(session, project_id, "task_unblocked", unblocked, agent=from_agent)
+        await persist_accepted_event(project_id, "task_unblocked", unblocked, agent=from_agent)
         await sse_manager.broadcast(project_id, "task_unblocked", unblocked)
-    await persist_event(
-        session,
+    # After the commits above: the answer and any delivery are accepted, so these events cannot
+    # stop the announce below from starting the asker (F349).
+    await persist_accepted_event(
         project_id,
         "question_answered",
         {"id": question_id, "answer": body.answer},
@@ -616,8 +619,8 @@ async def decline_question(
         delivered = await deliver_batch_if_complete(session, question, project_id)
 
     payload = {"id": question_id, "agent": question.from_agent}
-    await persist_event(
-        session, project_id, "question_declined", payload, agent=question.from_agent
+    await persist_accepted_event(
+        project_id, "question_declined", payload, agent=question.from_agent
     )
     await sse_manager.broadcast(project_id, "question_declined", payload)
 
@@ -627,8 +630,8 @@ async def decline_question(
             "task_title": released.title,
             "question_id": question_id,
         }
-        await persist_event(
-            session, project_id, "task_unblocked", unblocked, agent=question.from_agent
+        await persist_accepted_event(
+            project_id, "task_unblocked", unblocked, agent=question.from_agent
         )
         await sse_manager.broadcast(project_id, "task_unblocked", unblocked)
 

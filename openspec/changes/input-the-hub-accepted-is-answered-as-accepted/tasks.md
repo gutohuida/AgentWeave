@@ -27,7 +27,7 @@ New `hub/tests/test_accepted_input_is_answered_as_accepted.py`. Patch `hub.turn_
 
 ## 2. The fix
 
-> **Slice 1 built 2026-10-13** (build window, iteration 5): D1, D2, D3 and D3a for the trigger route only (`schedule_accepted`, `is_transient`, `retry_schedule`, `run_reconciliation.defer`, `persist_accepted_event`; tests in `hub/tests/test_accepted_input_is_answered_as_accepted.py`). Not done: D4 (the six other sites) and D6 (the firing path).
+> **Slice 1 built 2026-10-13** (build window, iteration 5): D1, D2, D3 and D3a for the trigger route only (`schedule_accepted`, `is_transient`, `retry_schedule`, `run_reconciliation.defer`, `persist_accepted_event`; tests in `hub/tests/test_accepted_input_is_answered_as_accepted.py`). **Slice 2 built 2026-10-13** (iteration 6): D4, the six other sites, tests 1.6 parametrised in the same file, drive `scripts/drive/d1013_f349_sites.py`. Not done: D6 (the firing path).
 
 - [ ] 2.1 `turn_scheduler.py`: `schedule_accepted` and `retry_schedule` per D1 and D2, with the delays as module constants
 - [ ] 2.2 `run_reconciliation.py`: a public `defer(agents)`; `_schedule_now` calls `schedule_accepted`
