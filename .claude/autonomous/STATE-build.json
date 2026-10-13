@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ledger-close",
-    "next_action": "Do queue item ledger-close: the final log entry with py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-13, then set next_action to null.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "merge-gate",
@@ -53,7 +53,7 @@
         },
         {
             "id": "ledger-close",
-            "status": "open",
+            "status": "done",
             "title": "Ledger close",
             "detail": "Final log entry with py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-13. Then next_action null."
         }
