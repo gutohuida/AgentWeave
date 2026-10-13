@@ -1,9 +1,13 @@
 """Shared utilities for the Hub package."""
 
+import asyncio
+import logging
 import uuid
 from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 #: How many hex characters an id segment carries. Twelve, widened from eight on 2026-08-24.
 #:
@@ -71,3 +75,31 @@ async def persist_event(
     if commit:
         await session.commit()
     return normalised_severity
+
+
+async def persist_accepted_event(
+    project_id: str,
+    event_type: str,
+    data: Optional[Dict[str, Any]] = None,
+    *,
+    agent: Optional[str] = None,
+    severity: str = "info",
+    loop_id: Optional[str] = None,
+) -> None:
+    """Record an event about input that is already committed; never raises (F349).
+
+    Its own session: a failed commit here cannot poison the caller's, and nothing the caller
+    loaded is expired. The input is accepted whether or not its event was written, so a failure is
+    logged and the caller carries on to start the turn.
+    """
+    from .db.engine import async_session_factory
+
+    try:
+        async with async_session_factory() as own:
+            await persist_event(
+                own, project_id, event_type, data, agent=agent, severity=severity, loop_id=loop_id
+            )
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("Could not record %s for %s after accepting input", event_type, project_id)

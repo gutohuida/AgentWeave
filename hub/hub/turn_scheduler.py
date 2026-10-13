@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
+import sqlalchemy.exc
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
@@ -29,6 +32,8 @@ from .sse import sse_manager
 from .task_workspace import takes_own_checkout
 from .usage_accounting import project_budget_state
 from .utils import persist_event
+
+logger = logging.getLogger(__name__)
 
 _agent_locks: Dict[Tuple[str, str], asyncio.Lock] = {}
 
@@ -61,6 +66,9 @@ class ScheduleResult:
     waiting_reason: Optional[str] = None
     terminal_failure: bool = True
     refusal: Optional[TurnRefusal] = None
+    #: Set only by `schedule_accepted` when `schedule_agent` itself raised, so a caller can re-read
+    #: what became of its input (the raise may have come after a run took it).
+    scheduling_failed: bool = False
 
 
 def _lock_for(project_id: str, agent: str) -> asyncio.Lock:
@@ -296,6 +304,97 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
         if attempt.nothing_queued and after_give_up is not None:
             return after_give_up
         return attempt.result
+
+
+def is_transient(exc: BaseException) -> bool:
+    """A failure that can clear on its own: a busy or locked database.
+
+    Anything else (a bug, an integrity error, a missing row) fails the same way on every attempt,
+    and retrying it would only hide the defect.
+    """
+    return isinstance(exc, (sqlalchemy.exc.OperationalError, sqlite3.OperationalError)) or (
+        "database is locked" in str(exc).lower()
+    )
+
+
+#: How long `retry_schedule` waits before each of its attempts (F349, design D2).
+RETRY_DELAYS: Tuple[float, ...] = (1.0, 5.0, 30.0)
+
+#: Pending retries keyed `(project_id, agent)`. The dict is the "already pending" test and the
+#: strong reference asyncio needs to keep a task from being collected before it runs.
+_pending_retries: Dict[Tuple[str, str], "asyncio.Task[None]"] = {}
+
+
+async def schedule_accepted(project_id: str, agent: str) -> ScheduleResult:
+    """Schedule input that is already committed. A failure here is not the request's failure.
+
+    The entry is durable and queued, so "accepted" is true whatever happens next. A transient
+    failure is retried by the Hub (`retry_schedule`); any other is logged once, with its traceback,
+    and left for the next re-drain the Hub already runs. The exception's text is logged, never
+    returned: a `database is locked` is not a sentence the operator can act on.
+    """
+    try:
+        return await schedule_agent(project_id, agent)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        if is_transient(exc):
+            logger.warning(
+                "Could not start a turn for %s/%s after accepting input: %r",
+                project_id,
+                agent,
+                exc,
+            )
+            retry_schedule(project_id, agent)
+            return ScheduleResult(
+                waiting_reason="accepted; the Hub could not start a turn yet and will try again",
+                terminal_failure=False,
+                scheduling_failed=True,
+            )
+        logger.exception(
+            "Could not start a turn for %s/%s after accepting input", project_id, agent
+        )
+        return ScheduleResult(
+            waiting_reason="accepted; the Hub could not start a turn for it, and it stays queued",
+            terminal_failure=False,
+            scheduling_failed=True,
+        )
+
+
+def retry_schedule(project_id: str, agent: str) -> None:
+    """Start one background retry for this agent unless one is already pending."""
+    key = (project_id, agent)
+    if key in _pending_retries:
+        return
+    task = asyncio.get_running_loop().create_task(_retry(project_id, agent))
+    _pending_retries[key] = task
+    task.add_done_callback(lambda _t, key=key: _pending_retries.pop(key, None))
+
+
+async def _retry(project_id: str, agent: str) -> None:
+    """Try again after each delay; stop at the first call that does not raise a transient error.
+
+    After the last failure the pair joins the deferred-schedule set, which the next request the
+    Hub serves drains. Pending retries live in memory and do not survive a restart; the queued
+    entry does, and project open re-drains it.
+    """
+    from .run_reconciliation import defer
+
+    for delay in RETRY_DELAYS:
+        await asyncio.sleep(delay)
+        try:
+            await schedule_agent(project_id, agent)
+            return
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            if not is_transient(exc):
+                logger.exception(
+                    "Could not start a turn for %s/%s on retry; it stays queued", project_id, agent
+                )
+                return
+            logger.warning("Retry to start a turn for %s/%s failed: %r", project_id, agent, exc)
+    defer({(project_id, agent)})
 
 
 async def _attempt_turn(

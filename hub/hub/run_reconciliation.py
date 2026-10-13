@@ -180,11 +180,18 @@ async def schedule_or_defer(agents: set[tuple[str, str]]) -> None:
     _deferred_schedules.update(agents)
 
 
-async def _schedule_now(agents: set[tuple[str, str]]) -> None:
-    from .turn_scheduler import schedule_agent
+def defer(agents: set[tuple[str, str]]) -> None:
+    """Hand agents to the next request the Hub serves (F349: a retry that ran out of attempts)."""
+    _deferred_schedules.update(agents)
 
+
+async def _schedule_now(agents: set[tuple[str, str]]) -> None:
+    from .turn_scheduler import schedule_accepted
+
+    # `schedule_accepted`, not `schedule_agent`: the drain empties the set before its first
+    # `await`, so a pair whose schedule raised was lost. A failed one now re-enters the retry.
     for project_id, agent in sorted(agents):
-        await schedule_agent(project_id, agent)
+        await schedule_accepted(project_id, agent)
 
 
 def has_deferred_schedules() -> bool:

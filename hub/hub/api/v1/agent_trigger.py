@@ -150,7 +150,7 @@ from ...usage_accounting import (
     record_turn_usage,
     settle_copilot_credits,
 )
-from ...utils import persist_event, short_id
+from ...utils import persist_accepted_event, persist_event, short_id
 
 logger = logging.getLogger(__name__)
 
@@ -1847,6 +1847,22 @@ async def _trigger_agent_directly(
     )
 
 
+async def _delivered_run_id(entry_id: str) -> Optional[str]:
+    """The run that took *entry_id*, or None when it is still queued or cannot be read."""
+    from ...db.models import InboundQueueEntry
+
+    try:
+        async with async_session_factory() as own:
+            entry = (
+                await own.execute(select(InboundQueueEntry).where(InboundQueueEntry.id == entry_id))
+            ).scalar_one_or_none()
+            if entry is not None and entry.state == "delivered":
+                return entry.delivered_in_run_id
+    except Exception:
+        logger.warning("Could not re-read queue entry %s after a failed start", entry_id)
+    return None
+
+
 @router.post("/trigger", response_model=TriggerAgentResponse)
 async def trigger_agent(
     body: TriggerAgentRequest,
@@ -2045,13 +2061,32 @@ async def trigger_agent(
         "origin_type": "operator",
         "hop_depth": 0,
     }
-    await persist_event(session, project_id, "queue_entry_queued", payload, agent=body.agent)
+    # The input is committed, so it is accepted whatever happens next (F349). The event goes
+    # through its own session and never raises, and the start through `schedule_accepted`, which
+    # retries a locked database instead of answering 500 for input that is in the queue.
+    await persist_accepted_event(project_id, "queue_entry_queued", payload, agent=body.agent)
     await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
 
-    from ...turn_scheduler import schedule_agent
+    from ...turn_scheduler import schedule_accepted
 
     budget_was_spent = (await project_budget_state(session, project_id))["exhausted"]
-    scheduled = await schedule_agent(project_id, body.agent)
+    scheduled = await schedule_accepted(project_id, body.agent)
+    if scheduled.scheduling_failed:
+        # The start raised, possibly after a run took this input: "queued" would then be false.
+        # Re-read the entry in a fresh session; if that fails too, "accepted" is what is known.
+        delivered_run_id = await _delivered_run_id(entry.id)
+        if delivered_run_id is not None:
+            return TriggerAgentResponse(
+                success=True,
+                message=f"{body.agent} started (run {delivered_run_id}).",
+                agent=body.agent,
+                run_id=delivered_run_id,
+                status="running",
+                conversation_id=conversation.id,
+                provider_session_id=conversation.provider_session_id,
+                session_id=conversation.provider_session_id,
+                queue_entry_id=entry.id,
+            )
     # The scheduler picks the conversation of the *oldest* eligible entry across this
     # agent's whole queue, which is not necessarily the conversation this request just
     # appended to (spec `agent-conversation-workspace`: "Different conversations never
