@@ -20,6 +20,10 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### build-1013-1: archiving an agent frees a slot of the agent budget (F465) -- 2026-10-13 build window
+
+- OPEN      build-1013-1  Taken by the loop: `request_agent` counts only **open** agents against `Project.agent_budget`, so archiving frees a slot; an archived agent's name stays taken (design D5 of the request-agent change), so freeing the slot does not free the name. Rejected: a lifetime cap on agents ever created (agents cannot be deleted, so a project at budget could never again have a peer request one, however many were retired, short of the operator raising the budget). Consequence: a project can churn through unlimited archived names at a fixed open size. Confirm or reverse.
+
 ### away-1011: away until Wednesday — a build window by day, and the loop may fast-forward master -- DECIDED 2026-10-11
 
 - DECIDED   away-1011  Operator, 2026-10-11 ~08:00, in an interactive session: travelling until Wednesday 2026-10-14, "organize yourself … to create loops and keep working … I want you to mainly drive it". Chosen from three questions: (1) **the loop may fast-forward master itself** through the gated `merge-gate` item (fast-forward only, clean pushed tree, CI `success` on that exact sha, no `HOLD MERGE`), so finished vault slices can be landed and folded on `:8010`; (2) **the day builds the knowledge-vault roadmap** (close contradictions and reports, then specs-against-the-vault, images-and-pdfs, access-tuning), design questions taken by the loop as `build-<MMDD>-<n>` OPEN rows; (3) the night window keeps fixing the backlog, refilling its queue rather than ending early. Mechanism: `AgentWeaveArmBuild` (08:55 daily, ends 2026-10-15) runs `arm-cycle.ps1 -Window build` → `AgentWeaveBuildLoop` 09:00-21:30 on the shared `autonomous/<date>-daily` branch, playbook `.claude/loops/build-window.md`; both windows publish a close-out briefing. To stop merges: a `HOLD MERGE` line in a new dated `DIRECTION.md` section. To stop the day: `Disable-ScheduledTask AgentWeaveArmBuild`.

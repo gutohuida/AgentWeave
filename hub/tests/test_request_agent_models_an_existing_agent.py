@@ -389,6 +389,78 @@ async def test_the_budget_still_bounds_it(app, auth_headers, add_agent, bind_run
         assert result.scalar_one_or_none() is None
 
 
+async def _archive_and_set_budget(app, auth_headers, add_agent, bind_runner, budget):
+    """A budget-full project: one open template plus one archived agent, `agent_budget=budget`."""
+    await _template(add_agent, bind_runner, "budget-template")
+    await _template(add_agent, bind_runner, "retired-one")
+    archive_resp = await app.post(
+        "/api/v1/projects/proj-test/agents/retired-one/archive", headers=auth_headers
+    )
+    assert archive_resp.status_code == 200, archive_resp.text
+    async with async_session_factory() as session:
+        from hub.db.models import Project
+
+        project = await session.get(Project, "proj-test")
+        project.agent_budget = budget
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_an_archived_agent_does_not_count_against_the_budget(
+    app, auth_headers, add_agent, bind_runner
+):
+    """F465. Two rows, one archived, budget 2: the open count is 1, so a request fits."""
+    await _archive_and_set_budget(app, auth_headers, add_agent, bind_runner, 2)
+
+    headers = await _actor(run_id="run-f465-a")
+    resp = await app.post(
+        REQUEST_URL,
+        headers=headers,
+        json={"name": "fits", "template": "budget-template", "task": "help"},
+    )
+    assert resp.status_code == 201, resp.text
+    assert (await _agent_row("fits")).lifecycle == "open"
+
+
+@pytest.mark.asyncio
+async def test_the_budget_counts_open_agents_and_says_so(app, auth_headers, add_agent, bind_runner):
+    """F465. At two open agents under budget 2 the request is refused, naming the open count."""
+    await _archive_and_set_budget(app, auth_headers, add_agent, bind_runner, 2)
+    headers = await _actor(run_id="run-f465-b")
+    first = await app.post(
+        REQUEST_URL,
+        headers=headers,
+        json={"name": "fits", "template": "budget-template", "task": "help"},
+    )
+    assert first.status_code == 201, first.text
+
+    headers = await _actor(run_id="run-f465-c")
+    resp = await app.post(
+        REQUEST_URL,
+        headers=headers,
+        json={"name": "one-too-many", "template": "budget-template", "task": "help"},
+    )
+    assert resp.status_code == 409, resp.text
+    assert "(2/2)" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_an_archived_agents_name_stays_taken_when_the_budget_has_room(
+    app, auth_headers, add_agent, bind_runner
+):
+    """F465, the other half: freeing the slot does not free the name (design D5)."""
+    await _archive_and_set_budget(app, auth_headers, add_agent, bind_runner, 5)
+
+    headers = await _actor(run_id="run-f465-d")
+    resp = await app.post(
+        REQUEST_URL,
+        headers=headers,
+        json={"name": "retired-one", "template": "budget-template", "task": "help"},
+    )
+    assert resp.status_code == 409, resp.text
+    assert "already exists" in resp.json()["detail"]
+
+
 @pytest.mark.asyncio
 async def test_a_raise_from_scheduling_still_answers_queued(
     app, auth_headers, add_agent, bind_runner

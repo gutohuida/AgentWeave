@@ -2741,13 +2741,13 @@ async def request_agent(
     project_row = await session.get(Project, project_id)
     if project_row is None:
         raise HTTPException(status_code=404, detail="Project not found")
-    if len(existing_names) >= project_row.agent_budget:
+    # F465: the budget bounds the agents the project can run now, so archiving frees a slot. The
+    # taken-name check above still counts archived rows, because a name is never reused.
+    open_count = sum(1 for row in existing_rows if row.lifecycle != "archived")
+    if open_count >= project_row.agent_budget:
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Project agent budget exhausted ({len(existing_names)}/"
-                f"{project_row.agent_budget})"
-            ),
+            detail=(f"Project agent budget exhausted ({open_count}/{project_row.agent_budget})"),
         )
 
     from .agent_trigger import QUESTION_WAIT_ENV
