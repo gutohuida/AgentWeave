@@ -35412,7 +35412,7 @@ Seam: distillation x contradiction resolution x spec citations. Not Tier 0: whet
 
 ## F588 (C) -- a spec-vault-check conflict against a fact the operator has since overruled stays on the spec page
 
-**Status:** open 2026-10-13. Measured in the same sweep.
+**Status:** fixed 2026-10-13 (Tier 0, build window iteration 11). `document_warnings` now skips a conflict whose fact is superseded or no longer in the vault (`vault.dated_facts(current_only=True)`). `test_a_conflict_against_a_fact_since_overruled_or_gone_is_not_shown` (real routes: contradiction resolved through `/resolve`, then `GET /vault/warnings`) failed before and passes after; stashing the fix makes it fail again.
 
 The proposed document's R1 (300 euros) got a spec-vault-check conflict naming the 500 fact. After the operator resolved the contradiction against the 500 fact (superseded by the decision), `GET /vault/warnings` still answers that conflict, its message even saying the 500 fact "supersedes the January version". After F587's re-distil the R2 conflict names a fact that no longer exists ("which is not in the vault on this machine"). Pressing check again (`POST /vault/warnings/check`) cures it, because `prepare` leaves superseded facts out; nothing tells the operator to.
 

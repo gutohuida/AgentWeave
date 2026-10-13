@@ -520,6 +520,63 @@ async def test_a_conflict_judged_against_an_earlier_wording_is_not_shown(
     assert await _warnings(app, auth_headers) == []
 
 
+async def _firing_with_conflicts(conflicts: list) -> None:
+    async with async_session_factory() as db:
+        await manager.record_firing(
+            db,
+            "proj-test",
+            job=JOB,
+            trigger="document_proposed",
+            subject={"document": PATH},
+            runner_id="runner-x",
+            cli="claude",
+            model=HAIKU,
+            outcome="written",
+            detail=f"{len(conflicts)} conflict kept",
+            duration_ms=1,
+            usage=None,
+            extra={"conflicts": conflicts},
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_conflict_against_a_fact_since_overruled_or_gone_is_not_shown(
+    app, auth_headers, run_headers, tmp_path  # noqa: F811
+) -> None:
+    """F588: the page kept a conflict naming a fact the operator had overruled (its message still
+    said that fact "supersedes" another), or one that no longer exists, until a check was pressed.
+    """
+    january = await _source(app, auth_headers, JANUARY, "2026-01-10")
+    march = await _source(app, auth_headers, "march.txt", "2026-03-10")
+    kept = await _fact(app, auth_headers, tmp_path, january, "Refunds up to 300 need none.")
+    overruled = await _fact(app, auth_headers, tmp_path, march, "Refunds up to 500 need none.")
+    ctr = await _contradiction(app, auth_headers, tmp_path, [kept, overruled], presumed=overruled)
+    await _create(app, auth_headers)
+    await _saved(app, run_headers, _requirement("r1", "Refunds up to 300 euros need none."))
+    await _firing_with_conflicts(
+        [
+            {
+                "requirement": "r1",
+                "fact": fact,
+                "statement": "Refunds up to 300 euros need none.",
+                "explanation": "Differs.",
+            }
+            for fact in (overruled, "fct-ffffffffffff")
+        ]
+    )
+    shown = await _warnings(app, auth_headers)
+    # Open still, the overruled-to-be fact is shown; the one that is not in the vault is not.
+    assert [w["fact"] for w in shown] == [overruled]
+
+    resolved = await app.post(
+        f"{PROJECT}/vault/contradictions/{ctr}/resolve",
+        json={"stands": kept, "note": "January was right"},
+        headers=auth_headers,
+    )
+    assert resolved.status_code == 200, resolved.text
+    assert await _warnings(app, auth_headers) == []
+
+
 # ---------------------------------------------------------------------------
 # gaps
 # ---------------------------------------------------------------------------

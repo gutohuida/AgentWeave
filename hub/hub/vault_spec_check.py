@@ -144,7 +144,7 @@ def document_warnings(
 ) -> List[Dict[str, Any]]:
     """Every cited-fact warning in document order, then each conflict of *firing* (the newest
     spec-vault-check firing for the document) whose requirement still says what it was judged
-    against (FR-4)."""
+    against and whose fact still stands (FR-4)."""
     requirements = requirements_of(stored)
     cited = [fact for requirement in requirements for fact in requirement["facts"]]
     derived = vault.fact_warnings(project_root, private_root, cited) if cited else {}
@@ -155,10 +155,19 @@ def document_warnings(
         for found in derived.get(fact, [])
     ]
     by_key = {requirement["key"]: requirement for requirement in requirements}
+    standing = None
     current = []
     for conflict in (firing or {}).get("conflicts") or []:
         requirement = by_key.get(conflict.get("requirement"))
         if requirement is None or requirement["statement"] != conflict.get("statement"):
+            continue
+        if standing is None:
+            standing = {
+                f["id"] for f in vault.dated_facts(project_root, private_root, current_only=True)
+            }
+        # A conflict names a fact the check judged against; one the operator has since overruled,
+        # or that is no longer here, points at nothing real (D5), whatever the check said.
+        if conflict.get("fact") not in standing:
             continue
         current.append((requirement, conflict))
     if current:
