@@ -1497,7 +1497,7 @@ async def _trigger_agent_directly(
             setup_events.append(
                 diagnostic_event(
                     stream="workspace",
-                    severity="warn",
+                    severity="warning",
                     summary=link_sentence,
                     code="workspace.dependency_link_failed",
                     facts={"failed": [{"name": f.name, "reason": f.reason} for f in link_failures]},
@@ -3601,7 +3601,7 @@ async def _prepare_copilot_turn(
         events.append(
             diagnostic_event(
                 stream="copilot",
-                severity="warn",
+                severity="warning",
                 summary=copilot_env_removal_sentence(name),
                 code="copilot.permission_override_removed",
                 facts={"name": name},
@@ -3611,7 +3611,7 @@ async def _prepare_copilot_turn(
         events.append(
             diagnostic_event(
                 stream="copilot",
-                severity="warn",
+                severity="warning",
                 summary=(
                     "Removed from this agent's Copilot home, because AgentWeave did not write "
                     f"them and they could decide its permissions: {', '.join(home.removed)}."
