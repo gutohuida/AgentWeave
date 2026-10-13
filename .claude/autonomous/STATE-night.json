@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 20,
+    "iteration": 21,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f457-impl",
-    "next_action": "Do queue item f457-impl: F457 (C) -- a firing that loaded its loop before an edit was staged clears that edit's marker (Tier 0). Read its FINDINGS.md entry, write the failing test at the seam it names first (two sessions: firing loads loop, edit staged, firing's commit must not clear pending_edit_at), fix with a conditional UPDATE ... WHERE pending_edit_at = <value loaded> in _stage_pending_loop_edit, drive, set the Status line. Keep current equal to the item id. It is the last queued item: after it, refill from BACKLOG.html if time remains before stop_at, else set next_action to null.",
+    "current": "refill-3",
+    "next_action": "Do queue item refill-3: compose up to five further -impl items from spec-queue/BACKLOG.html (open findings tagged ready with a stated repair shape, not held by a build log or an OPEN DECISIONS.md row, not already queued); append them, mark refill-3 done, set current and next_action to the first. If nothing qualifies, set next_action to null. Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -120,9 +120,15 @@
         },
         {
             "id": "f457-impl",
-            "status": "open",
+            "status": "done",
             "title": "F457 a firing that loaded its loop before an edit was staged clears that edit's marker (Tier 0)",
-            "detail": "Clear pending_edit_at with a conditional UPDATE ... WHERE pending_edit_at = <value loaded> in _stage_pending_loop_edit, so a later-staged edit survives the firing's commit."
+            "detail": "Fixed iteration 21: pending fields cleared in memory as committed values and in the row by UPDATE ... WHERE pending_edit_at = <loaded>; two-session test + Status line recorded (actor-credit half not fixed)."
+        },
+        {
+            "id": "refill-3",
+            "status": "open",
+            "title": "Refill from backlog (queue emptied at 01:26 with five hours to stop_at)",
+            "detail": "Read the data block at the top of spec-queue/BACKLOG.html (ready, Tier 0-shaped open findings with a stated repair shape, none held by a build log or an OPEN decision, not already in this queue); append up to five as -impl items, set current to the first, and next_action to it."
         }
     ],
     "decisions_for_user": [],

@@ -10,8 +10,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, Iterable, Mapping, NamedTuple, Optional, Sequence, Set
 
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from . import dependency_gate, requirement_evidence, requirement_links
 from .checkpoint_generation import format_notes, render_checkpoint
@@ -2612,6 +2613,16 @@ async def finalize_job_run_for_conversation(
 _LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000
 
 
+_PENDING_EDIT_COLUMNS = (
+    "pending_agent",
+    "pending_purpose",
+    "pending_stop_at",
+    "pending_stop_when_queue_empties",
+    "pending_edit_actor",
+    "pending_edit_at",
+)
+
+
 def _stage_pending_loop_edit(
     loop: Loop, job: AIJob, *, agent_archived: bool = False
 ) -> Optional[dict]:
@@ -2672,12 +2683,11 @@ def _stage_pending_loop_edit(
     actor = loop.pending_edit_actor
     staged_at = loop.pending_edit_at
 
-    loop.pending_agent = None
-    loop.pending_purpose = None
-    loop.pending_stop_at = None
-    loop.pending_stop_when_queue_empties = None
-    loop.pending_edit_actor = None
-    loop.pending_edit_at = None
+    # Cleared in memory only, as *committed* values: the ORM must not flush these NULLs from this
+    # possibly stale copy over an edit staged since the loop was loaded (F457). The rows are
+    # cleared by `_release_staged_edit`, conditionally on the marker this copy loaded.
+    for column in _PENDING_EDIT_COLUMNS:
+        set_committed_value(loop, column, None)
 
     return {
         "id": loop.id,
@@ -2686,6 +2696,37 @@ def _stage_pending_loop_edit(
         "staged_at": staged_at.isoformat() if staged_at else None,
         "changes": changes,
     }
+
+
+async def _release_staged_edit(session: AsyncSession, loop: Loop, payload: dict) -> None:
+    """Clear the pending columns of the edit `_stage_pending_loop_edit` applied, but only if the
+    row still holds the edit that was loaded (F457).
+
+    An edit staged between the firing's load and its commit has a newer `pending_edit_at`; the
+    conditional UPDATE then matches nothing and leaves that edit staged for the next firing. The
+    loop's pending attributes are re-read in that case so nothing later in this firing sees the
+    cleared copy. No commit: the statement joins the caller's transaction.
+    """
+    staged_at = datetime.fromisoformat(payload["staged_at"])
+    with session.no_autoflush:
+        released = await session.execute(
+            update(Loop)
+            .where(Loop.id == loop.id, Loop.pending_edit_at == staged_at)
+            .values(dict.fromkeys(_PENDING_EDIT_COLUMNS))
+            .execution_options(synchronize_session=False)
+        )
+        if released.rowcount == 0:
+            await session.refresh(loop, list(_PENDING_EDIT_COLUMNS))
+
+
+async def _stage_and_release_loop_edit(
+    session: AsyncSession, loop: Loop, job: AIJob, *, agent_archived: bool
+) -> Optional[dict]:
+    """`_stage_pending_loop_edit` plus the conditional clear of the staged row."""
+    payload = _stage_pending_loop_edit(loop, job, agent_archived=agent_archived)
+    if payload is not None:
+        await _release_staged_edit(session, loop, payload)
+    return payload
 
 
 async def _agent_archived(session: AsyncSession, project_id: str, name: str) -> bool:
@@ -2745,7 +2786,8 @@ async def _apply_staged_edit_if_idle(
         return None
     if job.id in await _jobs_with_active_firing(session, [job.id]):
         return None
-    return _stage_pending_loop_edit(
+    return await _stage_and_release_loop_edit(
+        session,
         loop,
         job,
         agent_archived=bool(loop.pending_agent)
@@ -3610,7 +3652,8 @@ class JobScheduler:
             # is emitted only after this branch's own commit lands `run`'s final status (below),
             # not here — see `_stage_pending_loop_edit`'s own comment for why.
             if loop is not None and pending_edit_payload is None:
-                pending_edit_payload = _stage_pending_loop_edit(
+                pending_edit_payload = await _stage_and_release_loop_edit(
+                    session,
                     loop,
                     job,
                     agent_archived=bool(loop.pending_agent)

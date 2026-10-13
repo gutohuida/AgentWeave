@@ -33466,7 +33466,7 @@ Nineteen coverage rows driven by five parallel operators plus row 19 by the orch
 
 ## F457 (C) — a firing that loaded its loop before an edit was staged clears that edit's marker, and the edit is stranded
 
-**Status:** open. Filed 2026-09-25 by an interactive session, from the Opus review of request R1's changes (`spec-queue/tracks/reviews/R1-2026-09-25.md`, change 1 finding 8). Read in code, not driven.
+**Status:** fixed (Tier 0, 2026-10-13) -- `_stage_pending_loop_edit` clears the pending fields in memory as committed values (so the ORM flushes no stale NULLs) and `_release_staged_edit` clears the row with `UPDATE loops ... WHERE id = ? AND pending_edit_at = <value loaded>`; an edit staged since stays staged (and the loop's pending attributes are re-read). Both firing paths go through `_stage_and_release_loop_edit`. Test: `hub/tests/test_a_late_staged_edit_survives_a_firing.py` (two sessions; failed before at `pending_edit_at is not None`). Not fixed: `pending_edit_actor` is still one value per edit, so a later edit by another actor takes the credit for fields staged earlier (the review's second half). Not driven on a live Hub. Was: open. Filed 2026-09-25 by an interactive session, from the Opus review of request R1's changes (`spec-queue/tracks/reviews/R1-2026-09-25.md`, change 1 finding 8). Read in code, not driven.
 **Source:** code — found by reading code, not by driving.
 **Theme:** Flows & loops
 
