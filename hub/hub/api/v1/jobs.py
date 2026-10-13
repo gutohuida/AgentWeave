@@ -1676,7 +1676,8 @@ async def _held_in_flight_reasons(
 
     A held agent's task is staffed and its input queued, but nobody is working it, so *"already
     being worked"* would be false for it. Read through `staffing_from_decision`, the one sanctioned
-    reader of the decision's cannot-staff collection.
+    reader of the decision's cannot-staff collection. Two things hold a queued turn: the provider's
+    refusal until its reset, and the project's token budget for an autonomous turn (F441).
     """
     from ...provider_allowance import hold_busy_reason, provider_hold
 
@@ -1687,7 +1688,34 @@ async def _held_in_flight_reasons(
         hold = await provider_hold(session, project_id, agent)
         if hold is not None:
             reasons.append(hold_busy_reason(agent, hold))
+        elif await _token_budget_holds(session, project_id, agent):
+            reasons.append(f"{agent} is held by the project's spent token budget")
     return reasons
+
+
+async def _token_budget_holds(session: AsyncSession, project_id: str, agent: str) -> bool:
+    """Whether *agent* is idle with a queued turn the spent token budget keeps from starting.
+
+    The same two conditions `turn_scheduler._attempt_turn` refuses on: the budget is exhausted and
+    the turn it would build carries no operator input, which a spent budget lets through.
+    """
+    from ...db.models import Run
+    from ...inbound_queue import project_limits, queued_entries, select_turn
+    from ...usage_accounting import project_budget_state
+
+    running = await session.execute(
+        select(Run.id)
+        .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
+        .limit(1)
+    )
+    if running.scalar_one_or_none() is not None:
+        return False
+    entries = await queued_entries(session, project_id, agent)
+    hop_budget, cap = await project_limits(session, project_id)
+    _controlling, turn = select_turn(entries, hop_budget, cap)
+    if not turn or any(entry.origin_type == "operator" for entry in turn):
+        return False
+    return bool((await project_budget_state(session, project_id))["exhausted"])
 
 
 async def _job_loop(session: AsyncSession, job: AIJob) -> Optional[Loop]:
@@ -1848,7 +1876,7 @@ async def run_job(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=(
                         "Every task on this loop's queue is staffed, but "
-                        f"{'; '.join(held)}. The queued input is delivered at the reset. "
+                        f"{'; '.join(held)}. The queued input is delivered when the hold lifts. "
                         "Nothing was started."
                     ),
                 )

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 19,
+    "iteration": 20,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f441-impl",
-    "next_action": "Do queue item f441-impl: F441 (C) -- Run says 'already being worked' for an idle assignee whose queued turn cannot start (Tier 0). Read its FINDINGS.md entry, write the failing test at the seam it names (the Run press answer qualifies only a provider hold; qualify a token-budget hold and a closed conversation) first, fix, drive, set the Status line. Keep current equal to the item id. Note F439's fix already removes closed-conversation input from task_attendance, so check what remains of the closed-conversation half before writing the test.",
+    "current": "f457-impl",
+    "next_action": "Do queue item f457-impl: F457 (C) -- a firing that loaded its loop before an edit was staged clears that edit's marker (Tier 0). Read its FINDINGS.md entry, write the failing test at the seam it names first (two sessions: firing loads loop, edit staged, firing's commit must not clear pending_edit_at), fix with a conditional UPDATE ... WHERE pending_edit_at = <value loaded> in _stage_pending_loop_edit, drive, set the Status line. Keep current equal to the item id. It is the last queued item: after it, refill from BACKLOG.html if time remains before stop_at, else set next_action to null.",
     "queue": [
         {
             "id": "compose",
@@ -114,9 +114,9 @@
         },
         {
             "id": "f441-impl",
-            "status": "open",
+            "status": "done",
             "title": "F441 Run says 'already being worked' for an idle assignee whose queued turn cannot start (Tier 0)",
-            "detail": "Only a provider hold is qualified today; a token-budget hold or a closed conversation also keeps the queued turn from starting. Qualify those in the Run press answer."
+            "detail": "Fixed iteration 20: Run press names a spent token budget for an idle assignee (_token_budget_holds); 2 tests + Status line recorded; closed-conversation half is F439's; not driven on a live Hub."
         },
         {
             "id": "f457-impl",

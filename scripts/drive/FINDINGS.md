@@ -33285,7 +33285,9 @@ and passes today.
 
 ## F441 (C) — after the attended change, Run can say "already being worked" for an idle assignee whose queued turn cannot start
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R2. Only a provider hold is qualified. A token-budget hold or a closed conversation also keeps the queued turn from starting, but the Run press would still report the task as being worked.
+**Status:** fixed 2026-10-13 (night window iteration 20, Tier 0). `_held_in_flight_reasons` (`hub/hub/api/v1/jobs.py`) now also names a spent project token budget (`_token_budget_holds`: the agent is idle, its queued turn carries no operator input, the budget is exhausted -- the scheduler's own refusal conditions). Test `hub/tests/test_run_names_a_spent_token_budget.py`: the budget case failed before ("already being worked ... nothing is wrong"), passes after; an operator's queued input is not named as held. The closed-conversation half is F439's: input in a non-open conversation no longer counts as attending, so such a task is not declined as in flight. Driven through the real `POST /jobs/{id}/run` route in-process, not on a live Hub.
+
+**Earlier status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R2. Only a provider hold is qualified. A token-budget hold or a closed conversation also keeps the queued turn from starting, but the Run press would still report the task as being worked.
 
 
 ## F442 (C) — a flow review refused at a deferred dispatch (the run-end re-drain) does not finalize the firing's JobRun
