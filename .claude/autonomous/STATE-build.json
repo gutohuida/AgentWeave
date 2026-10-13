@@ -1,130 +1,47 @@
 {
-    "purpose": "BUILD. Open with the merge gate (gated ff of master), close any roadmap slice whose commits are now on master, then spec, drive-first, build and drive the next knowledge-vault roadmap slice. Design questions: take the recommended option and record an OPEN row. Playbook: .claude/loops/build-window.md",
-    "playbook": ".claude/loops/build-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-11-daily",
-    "parent_branch": "master",
-    "parent_sha": "4ccbec6",
-    "stop_at": "2026-10-12T21:30:00+01:00",
-    "iteration": 17,
-    "log_file": ".claude/autonomous/2026-10-12-build-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "specs-vault-close",
-            "status": "done",
-            "title": "Close specs-against-the-vault (fspecvault) on :8010",
-            "detail": "Needs the gate to have landed the commits on master, else blocked. close_change.py fspecvault; then --fold-change fspecvault; then POST /projects/proj-d85a82bf4216/project/spec/reindex {}; commit what spec/ gains. Log iteration 9 of 2026-10-11-build-log.md has the pattern."
-        },
-        {
-            "id": "images-pdfs-spec",
-            "status": "done",
-            "title": "Author the images-and-pdfs change (Tier 2) - spdoc-99b7eb144fcd",
-            "detail": "Opus. Settle F573 by measurement (can each runner read PDFs/images natively) and record it. scripts/drive/author_change.py; approve via Hub; queue task ids into later items.",
-            "model": "opus"
-        },
-        {
-            "id": "images-pdfs-drive-first",
-            "status": "done",
-            "title": "Write scripts/drive/d1026_images_pdfs.py and record it failing (task-edc80dd92218)",
-            "detail": "Spec: spec/changes/images-and-pdfs-are-vault-sources-too (AC drive). Copy d1016_distillation.py: scratch Hub 8110+, Haiku claude runner, distillation enabled; reportlab 2-page PDF (450 euros) + PIL PNG (75 euros) via POST /vault/files raw body; media_type, file route bytes, facts whose quotes are in the transcription; Chromium inline view, shots. Must fail at check 1 (404) on today's tree."
-        },
-        {
-            "id": "images-pdfs-store-impl",
-            "status": "done",
-            "title": "Backend A: upload, storage, file route, size-cap exemption (task-c87dfb6d31ea)",
-            "detail": "FR-1, FR-2, FR-6, FR-5's not-read-yet note. vault.py add_file + media_type; api/v1/vault.py POST /vault/files (raw body, query fields) and GET /vault/sources/{id}/file; main.py ContentSizeLimitMiddleware exempts /vault/files up to 10 MiB. Failing tests first in hub/tests/test_vault_files.py. Do not close the task: read-impl finishes it."
-        },
-        {
-            "id": "images-pdfs-read-impl",
-            "status": "done",
-            "model": "opus",
-            "title": "Backend B: reading worker, containment, transcribe then distil (task-c87dfb6d31ea)",
-            "detail": "FR-3, FR-4, FR-5. Claude adapter reading one-shot: --tools Read --strict-mcp-config --permission-mode default, no widening flag; other CLIs cannot read. worker.py: spawn in a temp dir holding only a copy of the file. distillation.py: transcribe when no .md, store it, distil as text; failure -> firing failed; non-claude -> 409, no spawn. Tests first in test_vault_files.py."
-        },
-        {
-            "id": "images-pdfs-tab-impl",
-            "status": "done",
-            "title": "Wiki shows images and PDFs inline and uploads them (task-4bbc7517b786)",
-            "detail": "FR-7. vitest first (src/__tests__/vaultFiles.test.tsx), VaultPage.tsx + api/vault.ts, blob URL img/PDF viewer, 404-tolerant, upload form -> /vault/files. npm run build, refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together. Bundle reaches :8000 on reload: say so in the log."
-        },
-        {
-            "id": "images-pdfs-drive",
-            "status": "done",
-            "title": "Acceptance drive green on committed tree, scratch Hub 8110+, Haiku only",
-            "detail": "Full Hub suite in chunks, vitest once; evidence on :8010 not landed; METRICS row. Then close the change through close_change.py (add an images-pdfs entry): task-edc80dd92218 first, then task-c87dfb6d31ea (409 dependency_unmet until the drive-first task is approved) and task-4bbc7517b786."
-        },
-        {
-            "id": "access-tuning-spec",
-            "status": "done",
-            "title": "Author the access-tuning change",
-            "detail": "Opus; only if the day can still commit the slice before stop_at.",
-            "model": "opus"
-        },
-        {
-            "id": "access-tuning-drive-first",
-            "status": "done",
-            "title": "Write scripts/drive/d1027_access_tuning.py and record it failing (task-f1acf3d2a499)",
-            "detail": "Spec: spec/changes/the-vault-map-is-shaped-by-what-agents-ask-for (AC drive). Copy d1024_reports.py: scratch Hub 8110+, Haiku claude runner + agent; upload sources A,B,C in turn; write facts A1 (older), A2, B1 via write_fact; one agent turn: vault_read A1 twice, B once; operator GET entry C; check fetches on both maps, order A,A1,A2,B,B1,C; Chromium Vault counts + shot_counts.png. Must fail at check 1 (no fetches field)."
-        },
-        {
-            "id": "access-tuning-backend-impl",
-            "status": "done",
-            "title": "Backend: vault_fetches, migration 0126, counting, ordered map, agent texts (task-312f70f31ffa)",
-            "detail": "FR-1..FR-4, FR-6. Read .claude/rules/db-migrations.md and mcp-server.md first. models.py VaultFetch; 0126 (guarded), head asserts in test_migrations.py + test_project_persistence.py; agent_actions.py read_vault_entry counts after 200 at offset 0 (own txn, failure logged); api/v1/vault.py read_map/read_one merge counts; vault.build_map orders areas; mcp_server.py vault_map docstring; agents.py vault_map text. Failing tests first: hub/tests/test_vault_access.py. Migration reaches :8000 on restart: say so in the log. Agent route path is /agent-actions/vault/entries/{id} (agent_actions.py read_vault_entry); d1027 check 6 compares /agent-actions/vault/map to the operator's map."
-        },
-        {
-            "id": "access-tuning-tab-impl",
-            "status": "done",
-            "title": "Vault page shows agent read counts (task-3178cb4fe6f6)",
-            "detail": "FR-5. vitest first (src/__tests__/vaultAccess.test.tsx), VaultEntry fetches/last_fetched_at in api/vault.ts, VaultPage.tsx list badge (>0) + selected entry line ('Not read by agents yet'), tolerant of missing field. npm run build, refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together. Bundle reaches :8000 on reload: say so. Testids d1027 checks: list badge [data-testid=vault-fetches-<id>] (text is the count, absent when 0), selected-entry line [data-testid=vault-entry-fetches]."
-        },
-        {
-            "id": "access-tuning-drive",
-            "status": "done",
-            "title": "Acceptance drive green on committed tree, scratch Hub 8110+, Haiku only; close the change",
-            "detail": "d1027 in the foreground. Full Hub suite in chunks, vitest once; METRICS row. close_change.py: add an faccess entry (pattern fimages): tasks task-f1acf3d2a499, then task-312f70f31ffa, task-3178cb4fe6f6; --fold-change faccess into knowledge-vault; reindex; mark roadmap slice access-tuning done (the roadmap's last slice)."
-        },
-        {
-            "id": "ledger-close",
-            "status": "done",
-            "title": "Final log entry with usage report",
-            "detail": "py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-12"
-        }
-    ],
-    "decisions_for_user": [
-        "build-1011-1",
-        "build-1011-2",
-        "build-1011-3",
-        "build-1012-1",
-        "build-1012-2",
-        "build-1012-3",
-        "build-1012-4",
-        "build-1012-5"
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window's merge-gate item (build-window.md, 'The merge gate'), which may fast-forward master to this branch with 'git fetch . <branch>:master' and 'git push origin master' when all four gate conditions hold -- operator, 2026-10-11 (DECISIONS.md away-1011). Never a merge commit, never a conflict resolved.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ],
-    "closeout": {
-        "briefing": "claude-doc",
-        "model": "sonnet",
-        "skill": ".claude/skills/night-briefing/SKILL.md"
-    },
-    "armed_at": "2026-10-12T08:55:01+01:00",
-    "driver_log": ".claude/autonomous/driver-build.log",
-    "briefing_url": "https://claude.ai/code/artifact/129c077d-db9a-4643-8322-1c658668b539"
+    "purpose":  "BUILD. Open with the merge gate (gated ff of master), close any roadmap slice whose commits are now on master, then spec, drive-first, build and drive the next knowledge-vault roadmap slice. Design questions: take the recommended option and record an OPEN row. Playbook: .claude/loops/build-window.md",
+    "playbook":  ".claude/loops/build-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-10-11-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "6208e9a",
+    "stop_at":  "2026-10-13T21:30:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-10-13-build-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/build-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-build.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/build-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window\u0027s merge-gate item (build-window.md, \u0027The merge gate\u0027), which may fast-forward master to this branch with \u0027git fetch . \u003cbranch\u003e:master\u0027 and \u0027git push origin master\u0027 when all four gate conditions hold -- operator, 2026-10-11 (DECISIONS.md away-1011). Never a merge commit, never a conflict resolved.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ],
+    "closeout":  {
+                     "briefing":  "claude-doc",
+                     "model":  "sonnet",
+                     "skill":  ".claude/skills/night-briefing/SKILL.md"
+                 },
+    "armed_at":  "2026-10-13T08:55:02+01:00",
+    "driver_log":  ".claude/autonomous/driver-build.log"
 }
