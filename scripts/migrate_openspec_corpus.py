@@ -152,6 +152,9 @@ def parse_scenario(name: str, body: str) -> Tuple[Dict[str, str], List[Limit]]:
             if current and line.startswith("-"):
                 # A bare bullet continuing the previous clause.
                 parts[current].append(line.lstrip("- ").strip())
+            elif current and line and raw[:1].isspace() and parts[current]:
+                # A clause wrapped in the source markdown: the indented line is the same clause.
+                parts[current][-1] = f"{parts[current][-1]} {line}"
             continue
         label, text = matched.group(1), matched.group(2).strip()
         if label == "AND":

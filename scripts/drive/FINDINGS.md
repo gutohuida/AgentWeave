@@ -35008,7 +35008,7 @@ requirements retired with it, dropped from `spec/index.json` and coverage, the f
 
 ## F537 (C) -- the openspec corpus importer dropped every wrapped line of a scenario clause
 
-**Status:** open; corpus repaired. Filed 2026-10-08 (interactive, spec overhaul). The 2026-10-08 overhaul restored 117 cut clauses from `openspec/specs/` in the capabilities it rewrote; the converter itself is unchanged.
+**Status:** fixed 2026-10-13 (night iteration 24, Tier 0). `parse_scenario` joins an indented continuation line to the clause it wraps (`scripts/migrate_openspec_corpus.py`); `tests/test_migrate_openspec_corpus_wrapped_clause.py` has 3 of its 4 tests failing before the fix (the fourth pins unchanged behaviour) and all passing after. Driven: the converter run on `agent-capability-plane` into a temp dir now emits "...presented to an operator API" whole; `spec/` untouched. Corpus repaired earlier. Filed 2026-10-08 (interactive, spec overhaul). The 2026-10-08 overhaul restored 117 cut clauses from `openspec/specs/` in the capabilities it rewrote; the converter itself is unchanged.
 
 `scripts/migrate_openspec_corpus.py:147-153` (`parse_scenario`) keeps a GIVEN/WHEN/THEN/AND bullet's first physical line and
 skips any continuation line that does not start with `-`, so a clause wrapped in the source markdown was imported cut

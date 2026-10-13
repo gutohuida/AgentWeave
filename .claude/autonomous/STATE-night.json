@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 23,
+    "iteration": 24,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f537-impl",
-    "next_action": "Do queue item f537-impl: scripts/migrate_openspec_corpus.py parse_scenario joins indented continuation lines to the clause; test with a wrapped GIVEN/THEN bullet; drive the converter on one real openspec capability into a temp dir (never over spec/); set the F537 Status line. Keep current equal to the item id.",
+    "current": "f456-impl",
+    "next_action": "Do queue item f456-impl: POST /agent/trigger on an exhausted token budget still runs (deliberate, turn_scheduler gates autonomous only) but its response and timeline must say the budget was passed over. Test the response field/event; drive on a scratch Hub if cheap. Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -138,9 +138,9 @@
         },
         {
             "id": "f537-impl",
-            "status": "open",
+            "status": "done",
             "title": "F537 openspec corpus importer drops wrapped scenario-clause lines (Tier 0)",
-            "detail": "scripts/migrate_openspec_corpus.py parse_scenario: join indented continuation lines to the clause. Test with a wrapped GIVEN/THEN bullet; drive the converter on one real openspec capability into a temp dir (never over spec/)."
+            "detail": "Fixed iteration 24: parse_scenario joins indented continuation lines to the clause; 4 tests (3 failed before) + converter drive on agent-capability-plane into a temp dir; Status line recorded."
         },
         {
             "id": "f456-impl",
