@@ -485,58 +485,54 @@ async def _pending_loop_request(
                 "created_at": question.created_at.isoformat(),
             }
 
-    # "addressed to the creator" is the Message model's own `recipient` field — the thing that
-    # actually decides whose inbox it lands in — not a conversation match; only the Question half
-    # of D6's sentence carries the "in the firing's conversation" qualifier grammatically.
-    creator_agent: Optional[str] = None
-    if loop.created_by_run_id:
-        # Same `created_by_run_id` -> `Run.agent` resolution `questions.py`'s
-        # `_asking_run_has_ended` already uses for a different row's creator — cited as precedent
-        # rather than a second pattern.
-        creator_run = await session.get(Run, loop.created_by_run_id)
-        if creator_run is not None:
-            creator_agent = creator_run.agent
-    if creator_agent is not None:
-        # Outstanding is read from the message's inbound entry, not `Message.read`, which nothing in
-        # the product sets (F259): still queued, or delivered into a creator turn that has not ended
-        # (the creator has it and has not answered). An uncorrelated `IN`, so a message counts once
-        # however many entries name it; one with no entry will never arrive and is not outstanding.
-        in_flight = (
-            select(InboundQueueEntry.message_id)
-            .outerjoin(Run, Run.id == InboundQueueEntry.delivered_in_run_id)
-            .where(
-                InboundQueueEntry.project_id == job.project_id,
-                InboundQueueEntry.agent == creator_agent,
-                InboundQueueEntry.message_id.is_not(None),
-                or_(
-                    InboundQueueEntry.state == "queued",
-                    and_(InboundQueueEntry.state == "delivered", Run.status == "running"),
-                ),
-            )
+    # What the loop stopped without dealing with is inbound: mail addressed TO the agent the job
+    # names, from anyone else (F556, decision F556-outstanding-message-direction). It used to look
+    # for the job's agent writing to the loop's creating run's agent, which an operator-created
+    # loop (no creating run) could never report and which the "creator is the job's agent" rule
+    # would have turned into an agent's mail to itself. `recipient` is the Message model's own
+    # field — the thing that decides whose inbox it lands in — not a conversation match; only the
+    # Question half of D6's sentence carries the "in the firing's conversation" qualifier.
+    #
+    # Outstanding is read from the message's inbound entry, not `Message.read`, which nothing in
+    # the product sets (F259): still queued, or delivered into a turn of the job's agent that has
+    # not ended (it has the mail and has not answered). An uncorrelated `IN`, so a message counts
+    # once however many entries name it; one with no entry will never arrive and is not outstanding.
+    in_flight = (
+        select(InboundQueueEntry.message_id)
+        .outerjoin(Run, Run.id == InboundQueueEntry.delivered_in_run_id)
+        .where(
+            InboundQueueEntry.project_id == job.project_id,
+            InboundQueueEntry.agent == job.agent,
+            InboundQueueEntry.message_id.is_not(None),
+            or_(
+                InboundQueueEntry.state == "queued",
+                and_(InboundQueueEntry.state == "delivered", Run.status == "running"),
+            ),
         )
-        message_result = await session.execute(
-            select(Message)
-            .where(
-                # Agent names repeat across projects; without this the newest pending mail between
-                # two same-named agents anywhere on the instance became this loop's reason (F264).
-                Message.project_id == job.project_id,
-                Message.sender == job.agent,
-                Message.recipient == creator_agent,
-                Message.id.in_(in_flight),
-            )
-            .order_by(Message.timestamp.desc())
+    )
+    message_result = await session.execute(
+        select(Message)
+        .where(
+            # Agent names repeat across projects; without this the newest pending mail between
+            # two same-named agents anywhere on the instance became this loop's reason (F264).
+            Message.project_id == job.project_id,
+            Message.recipient == job.agent,
+            Message.sender != job.agent,
+            Message.id.in_(in_flight),
         )
-        message = message_result.scalars().first()
-        if message is not None:
-            reason = message.subject or message.content
-            if len(reason) > _LOOP_PENDING_REQUEST_REASON_CHARS:
-                reason = reason[:_LOOP_PENDING_REQUEST_REASON_CHARS]
-            return {
-                "kind": "message",
-                "to": message.recipient,
-                "reason": reason,
-                "created_at": message.timestamp.isoformat(),
-            }
+        .order_by(Message.timestamp.desc())
+    )
+    message = message_result.scalars().first()
+    if message is not None:
+        reason = message.subject or message.content
+        if len(reason) > _LOOP_PENDING_REQUEST_REASON_CHARS:
+            reason = reason[:_LOOP_PENDING_REQUEST_REASON_CHARS]
+        return {
+            "kind": "message",
+            "to": message.recipient,
+            "reason": reason,
+            "created_at": message.timestamp.isoformat(),
+        }
 
     return None
 

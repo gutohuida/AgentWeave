@@ -42,6 +42,7 @@ from hub.scheduler import (
     _claim_loop_task,
     _loop_stall_reason,
     _loop_stop_reason,
+    _pending_loop_request,
     cron_day_ambiguity_reason,
     finalize_job_run_for_conversation,
 )
@@ -1828,28 +1829,15 @@ async def test_loop_queue_exhausted_event_fires_with_no_pending_request():
 
 
 @pytest.mark.asyncio
-async def test_loop_queue_exhausted_event_names_an_unread_message_to_the_creator():
-    """The `Message` case: mail from the loop's executor to its creator, still unread when the
-    queue drains, is named on the event. `to` is the `Message` model's own `recipient` field, not a
-    conversation match — only the `Question` half of D6's sentence carries a conversation
-    qualifier, grammatically."""
+async def test_loop_queue_exhausted_event_names_mail_waiting_for_the_jobs_agent():
+    """The `Message` case (F556): mail addressed TO the agent the job names, from anyone else, still
+    undelivered when the queue drains, is named on the event. The loop here has no creating run
+    (the operator made it), which the old creator-directed check could never report on. `to` is the
+    `Message` model's own `recipient` field."""
     async with async_session_factory() as db:
-        creator_run = Run(
-            id="run-loop-exhausted-creator",
-            project_id="proj-test",
-            agent="loop-creator-agent",
-            status="completed",
-        )
-        db.add(creator_run)
-        await db.commit()
-
         job = await _make_job(db, suffix="exhausted-message", agent="loop-agent-exhausted-message")
         loop = await _make_loop(
-            db,
-            job_id=job.id,
-            purpose="wait on the creator",
-            stop_when_queue_empties=True,
-            created_by_run_id=creator_run.id,
+            db, job_id=job.id, purpose="answer the mail", stop_when_queue_empties=True
         )
         db.add(
             Task(
@@ -1864,19 +1852,15 @@ async def test_loop_queue_exhausted_event_names_an_unread_message_to_the_creator
             Message(
                 id="msg-loop-exhausted-1",
                 project_id="proj-test",
-                sender="loop-agent-exhausted-message",
-                recipient="loop-creator-agent",
+                sender="someone-else",
+                recipient="loop-agent-exhausted-message",
                 subject="need a decision",
                 content="need a decision on the next batch",
                 read=False,
             )
         )
         # Outstanding means not yet delivered, which the message's inbound entry records.
-        db.add(
-            _mail_entry(
-                "msg-loop-exhausted-1", "loop-creator-agent", "loop-agent-exhausted-message"
-            )
-        )
+        db.add(_mail_entry("msg-loop-exhausted-1", "loop-agent-exhausted-message", "someone-else"))
         await db.commit()
 
     scheduler = JobScheduler()
@@ -1909,7 +1893,7 @@ async def test_loop_queue_exhausted_event_names_an_unread_message_to_the_creator
     assert len(matching) == 1
     pending = matching[0].data["pending_request"]
     assert pending["kind"] == "message"
-    assert pending["to"] == "loop-creator-agent"
+    assert pending["to"] == "loop-agent-exhausted-message"
     assert pending["reason"] == "need a decision"
     assert pending["created_at"] is not None
 
@@ -1924,22 +1908,11 @@ async def test_a_loops_pending_message_is_never_another_projects():
     now = datetime.now(timezone.utc)
     async with async_session_factory() as db:
         db.add(Project(id="proj-f264-other", name="f264-other"))
-        creator_run = Run(
-            id="run-f264-creator",
-            project_id="proj-test",
-            agent="f264-creator",
-            status="completed",
-        )
-        db.add(creator_run)
         await db.commit()
 
         job = await _make_job(db, suffix="f264", agent="f264-executor")
         loop = await _make_loop(
-            db,
-            job_id=job.id,
-            purpose="wait on the creator",
-            stop_when_queue_empties=True,
-            created_by_run_id=creator_run.id,
+            db, job_id=job.id, purpose="answer the mail", stop_when_queue_empties=True
         )
         db.add(
             Task(
@@ -1958,15 +1931,15 @@ async def test_a_loops_pending_message_is_never_another_projects():
                 Message(
                     id=msg_id,
                     project_id=project_id,
-                    sender="f264-executor",
-                    recipient="f264-creator",
+                    sender="f264-sender",
+                    recipient="f264-executor",
                     subject=subject,
                     content=subject,
                     read=False,
                     timestamp=at,
                 )
             )
-            db.add(_mail_entry(msg_id, "f264-creator", "f264-executor", project_id=project_id))
+            db.add(_mail_entry(msg_id, "f264-executor", "f264-sender", project_id=project_id))
         await db.commit()
 
     scheduler = JobScheduler()
@@ -2007,34 +1980,26 @@ def _mail_entry(
 
 
 async def _pending_request_for_mail(suffix, mails, *, reading_run_status=None):
-    """Drain a loop whose executor wrote *mails* to its creator, and return the recorded
-    `pending_request`. Each mail is `(subject, seconds_ago, entry_state)`; a `delivered` one is
-    delivered into a creator run with *reading_run_status* when that is given."""
-    executor, creator = f"exec-{suffix}", f"creator-{suffix}"
+    """Drain a loop and return the recorded `pending_request`, with *mails* written to the job's
+    agent by another agent (F556). Each mail is `(subject, seconds_ago, entry_state)`; a
+    `delivered` one is delivered into a run of the job's agent with *reading_run_status* when that
+    is given."""
+    executor, sender = f"exec-{suffix}", f"sender-{suffix}"
     base = datetime.now(timezone.utc) - timedelta(hours=1)
     async with async_session_factory() as db:
-        db.add(
-            Run(
-                id=f"run-create-{suffix}", project_id="proj-test", agent=creator, status="completed"
-            )
-        )
         if reading_run_status is not None:
             db.add(
                 Run(
                     id=f"run-read-{suffix}",
                     project_id="proj-test",
-                    agent=creator,
+                    agent=executor,
                     status=reading_run_status,
                 )
             )
         await db.commit()
         job = await _make_job(db, suffix=suffix, agent=executor)
         loop = await _make_loop(
-            db,
-            job_id=job.id,
-            purpose="wait on the creator",
-            stop_when_queue_empties=True,
-            created_by_run_id=f"run-create-{suffix}",
+            db, job_id=job.id, purpose="answer the mail", stop_when_queue_empties=True
         )
         db.add(
             Task(
@@ -2053,8 +2018,8 @@ async def _pending_request_for_mail(suffix, mails, *, reading_run_status=None):
                 Message(
                     id=message_id,
                     project_id="proj-test",
-                    sender=executor,
-                    recipient=creator,
+                    sender=sender,
+                    recipient=executor,
                     subject=subject,
                     content=subject,
                     read=False,
@@ -2062,8 +2027,17 @@ async def _pending_request_for_mail(suffix, mails, *, reading_run_status=None):
                 )
             )
             run_id = f"run-read-{suffix}" if state == "delivered" and reading_run_status else None
-            db.add(_mail_entry(message_id, creator, executor, state=state, run_id=run_id))
+            db.add(_mail_entry(message_id, executor, sender, state=state, run_id=run_id))
         await db.commit()
+
+    if reading_run_status == "running":
+        # A firing is refused while the job's agent has a running turn, before it ever looks at the
+        # queue, so a mail "in a turn that has not ended" cannot be reached through one. Ask the
+        # check itself.
+        async with async_session_factory() as db:
+            return await _pending_loop_request(
+                db, await db.get(AIJob, job.id), await db.get(Loop, loop.id), exclude_run_id="none"
+            )
 
     scheduler = JobScheduler()
     async with async_session_factory() as db:
@@ -2085,7 +2059,7 @@ async def _pending_request_for_mail(suffix, mails, *, reading_run_status=None):
 
 
 # F259: nothing in the product sets `Message.read`, so "unread" named every message ever sent. What
-# the loop is waiting on is mail its creator has not received yet, or is reading in a turn that has
+# the loop is waiting on is mail its agent has not received yet, or is reading in a turn that has
 # not ended (`a-loops-outstanding-mail-is-mail-not-yet-delivered`, design D2).
 # Each takes `app` for the schema, so it runs alone too (F264's foot: the exhaustion tests above
 # rely on an earlier test having created it).
@@ -2121,8 +2095,8 @@ async def test_the_newest_undelivered_message_is_the_one_named(app):
 
 
 @pytest.mark.asyncio
-async def test_a_message_the_creator_is_still_reading_is_outstanding(app):
-    """Delivered into a creator turn that is still running: the creator has it and has not
+async def test_a_message_the_jobs_agent_is_still_reading_is_outstanding(app):
+    """Delivered into a turn of the job's agent that is still running: it has the mail and has not
     answered, which is the plainest case of a request still in flight (design D2, R2)."""
     pending = await _pending_request_for_mail(
         "f259-reading", [("being read", 0, "delivered")], reading_run_status="running"
@@ -2130,6 +2104,58 @@ async def test_a_message_the_creator_is_still_reading_is_outstanding(app):
 
     assert pending is not None
     assert pending["reason"] == "being read"
+
+
+@pytest.mark.asyncio
+async def test_mail_the_jobs_agent_sent_is_not_an_outstanding_request(app):
+    """F556: the check names what the loop has not dealt with, which is inbound. Mail the job's agent
+    wrote to someone else (the old creator-directed direction) is not named, nor is its own."""
+    suffix = "f556-outbound"
+    executor = f"exec-{suffix}"
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix=suffix, agent=executor)
+        loop = await _make_loop(db, job_id=job.id, purpose="x", stop_when_queue_empties=True)
+        db.add(
+            Task(
+                id=f"task-{suffix}",
+                project_id="proj-test",
+                title="finished",
+                status="approved",
+                loop_id=loop.id,
+            )
+        )
+        for n, (sender, recipient) in enumerate(((executor, "someone-else"), (executor, executor))):
+            db.add(
+                Message(
+                    id=f"msg-{suffix}-{n}",
+                    project_id="proj-test",
+                    sender=sender,
+                    recipient=recipient,
+                    subject="not inbound",
+                    content="not inbound",
+                    read=False,
+                )
+            )
+            db.add(_mail_entry(f"msg-{suffix}-{n}", recipient, sender))
+        await db.commit()
+
+    scheduler = JobScheduler()
+    async with async_session_factory() as db:
+        fresh_job = await db.get(AIJob, job.id)
+        await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    async with async_session_factory() as db:
+        events = (
+            (
+                await db.execute(
+                    select(EventLog).where(EventLog.event_type == "loop_queue_exhausted")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    [event] = [e for e in events if e.data.get("loop_id") == loop.id]
+    assert event.data["pending_request"] is None
 
 
 @pytest.mark.asyncio
@@ -2223,27 +2249,14 @@ async def test_loop_queue_exhausted_event_names_an_unanswered_question_from_a_pr
 
 @pytest.mark.asyncio
 async def test_loop_queue_exhausted_event_prefers_the_question_when_both_are_outstanding():
-    """When an unanswered `Question` from a prior firing AND an unread `Message` to the creator
+    """When an unanswered `Question` from a prior firing AND an unread `Message` to the job's agent
     are both outstanding, the event names the `Question` — design decision recorded in
     `tasks.md`'s 10.1/10.2 note: a `Question` is a hard block on the run that asked it, closer to
     "what this loop was actually waiting on" than mail sitting unread, and D6 states no tiebreak."""
     async with async_session_factory() as db:
-        creator_run = Run(
-            id="run-loop-exhausted-both-creator",
-            project_id="proj-test",
-            agent="loop-creator-agent-both",
-            status="completed",
-        )
-        db.add(creator_run)
-        await db.commit()
-
         job = await _make_job(db, suffix="exhausted-both", agent="loop-agent-exhausted-both")
         loop = await _make_loop(
-            db,
-            job_id=job.id,
-            purpose="wait on either",
-            stop_when_queue_empties=True,
-            created_by_run_id=creator_run.id,
+            db, job_id=job.id, purpose="wait on either", stop_when_queue_empties=True
         )
         db.add(
             Task(
@@ -2278,12 +2291,15 @@ async def test_loop_queue_exhausted_event_prefers_the_question_when_both_are_out
             Message(
                 id="msg-loop-exhausted-both-1",
                 project_id="proj-test",
-                sender="loop-agent-exhausted-both",
-                recipient="loop-creator-agent-both",
+                sender="someone-else",
+                recipient="loop-agent-exhausted-both",
                 subject="also waiting on this",
                 content="also waiting on this",
                 read=False,
             )
+        )
+        db.add(
+            _mail_entry("msg-loop-exhausted-both-1", "loop-agent-exhausted-both", "someone-else")
         )
         await db.commit()
 

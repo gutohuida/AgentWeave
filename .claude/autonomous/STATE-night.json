@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "979adaa",
     "stop_at": "2026-10-14T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-13-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f556-impl",
-    "next_action": "Do queue item f556-impl exactly as its detail says. Read DECISIONS.md row F556-outstanding-message-direction and FINDINGS.md F556 first. When done and committed, set next_action to null unless another APPROVED-FIXES finding with a DECIDED decision exists.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -22,7 +22,7 @@
         },
         {
             "id": "f556-impl",
-            "status": "open",
+            "status": "done",
             "title": "F556: an emptied loop names as outstanding the mail addressed TO the job's agent from anyone else (Tier 0)",
             "detail": "Decision F556-outstanding-message-direction (a), DECIDED 2026-10-10 in spec-queue/DECISIONS.md line ~116. Test failing at the scheduler seam first (hub/tests/test_scheduler.py mail tests), fix, CI lint set, mutation check, drive on trial Hub :8010 (from hub/, source), then set F556 Status in scripts/drive/FINDINGS.md. The agent-loops ac41/ac42 amendment goes through the trial Hub's document routes, never by editing spec.json; if it cannot be done safely, record it as a note for the day window."
         },
@@ -31,6 +31,12 @@
             "status": "note",
             "title": "8 unarchived openspec changes are moved into the app, not built here",
             "detail": "Left for the operator's interactive session per CLAUDE.md."
+        },
+        {
+            "id": "note-f556-spec",
+            "status": "note",
+            "title": "agent-loops ac41/ac42 and the outstanding-request requirement still say 'to its creator'",
+            "detail": "Needs a short change document + fold (Tier 1) in the day window; wording: mail addressed to the loop's agent from anyone else, still queued or in a turn that has not ended."
         }
     ],
     "decisions_for_user": [],
