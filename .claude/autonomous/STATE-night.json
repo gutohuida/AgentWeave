@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 21,
+    "iteration": 22,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "refill-3",
-    "next_action": "Do queue item refill-3: compose up to five further -impl items from spec-queue/BACKLOG.html (open findings tagged ready with a stated repair shape, not held by a build log or an OPEN DECISIONS.md row, not already queued); append them, mark refill-3 done, set current and next_action to the first. If nothing qualifies, set next_action to null. Keep current equal to the item id.",
+    "current": "f461-impl",
+    "next_action": "Do queue item f461-impl: add AW_QUESTION_TIMEOUT to CODEX_MCP_ENV_NAMES so a Codex agent's configured question wait reaches ask_user; test both Codex transports forward it; set the F461 Status line. Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -126,9 +126,27 @@
         },
         {
             "id": "refill-3",
-            "status": "open",
+            "status": "done",
             "title": "Refill from backlog (queue emptied at 01:26 with five hours to stop_at)",
-            "detail": "Read the data block at the top of spec-queue/BACKLOG.html (ready, Tier 0-shaped open findings with a stated repair shape, none held by a build log or an OPEN decision, not already in this queue); append up to five as -impl items, set current to the first, and next_action to it."
+            "detail": "Refilled iteration 22: F461, F537, F456 appended (the only ready findings on BACKLOG.html with a stated or one-sentence repair, no OPEN decision, no build-log hold; the rest need design, an operator answer, or are records)."
+        },
+        {
+            "id": "f461-impl",
+            "status": "open",
+            "title": "F461 a Codex agent's configured question wait never reaches ask_user (Tier 0)",
+            "detail": "Add AW_QUESTION_TIMEOUT to CODEX_MCP_ENV_NAMES (runner_commands.py; codex_appserver reads the same tuple). Test: the rendered exec args and the app-server mcp config both forward it. Codex is undrivable: drive build_command/the app-server config builder in-process."
+        },
+        {
+            "id": "f537-impl",
+            "status": "open",
+            "title": "F537 openspec corpus importer drops wrapped scenario-clause lines (Tier 0)",
+            "detail": "scripts/migrate_openspec_corpus.py parse_scenario: join indented continuation lines to the clause. Test with a wrapped GIVEN/THEN bullet; drive the converter on one real openspec capability into a temp dir (never over spec/)."
+        },
+        {
+            "id": "f456-impl",
+            "status": "open",
+            "title": "F456 a budget-exhausted project runs an operator trigger without saying so (Tier 0)",
+            "detail": "POST /agent/trigger on an exhausted token budget still runs (deliberate, turn_scheduler gates autonomous only) but its response and timeline say the budget was passed over. Test the response field/event; drive on a scratch Hub if cheap."
         }
     ],
     "decisions_for_user": [],
