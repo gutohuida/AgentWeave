@@ -282,6 +282,8 @@ class TestRunTurnHappyPath:
         assert mcp_config["command"] == "python"
         assert mcp_config["args"] == ["mcp_server.py"]
         assert "HUB_URL" in mcp_config["env_vars"]
+        # F461: the configured question wait must be forwarded to the tool server too.
+        assert "AW_QUESTION_TIMEOUT" in mcp_config["env_vars"]
 
 
 class TestRunTurnServerRequests:

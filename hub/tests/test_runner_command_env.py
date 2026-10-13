@@ -20,6 +20,8 @@ def test_codex_mcp_server_whitelists_run_identity_environment():
     assert "AW_AGENT_IDENTITY" in env_config
     assert "AW_RUN_ID" in env_config
     assert "HUB_URL" in env_config
+    # F461: the agent's configured question wait reaches the tool server only if Codex forwards it.
+    assert "AW_QUESTION_TIMEOUT" in env_config
     assert "aw_run_" not in env_config
 
 

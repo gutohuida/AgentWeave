@@ -1898,7 +1898,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "workspace-write",
       "hello world"
@@ -1932,7 +1932,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "read-only",
       "hello world"
@@ -1966,7 +1966,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--dangerously-bypass-approvals-and-sandbox",
       "hello world"
     ]
@@ -1999,7 +1999,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "read-only",
       "hello world"
@@ -2142,7 +2142,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "workspace-write",
       "hello world"
@@ -2178,7 +2178,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "read-only",
       "hello world"
@@ -2214,7 +2214,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--dangerously-bypass-approvals-and-sandbox",
       "hello world"
     ]
@@ -2249,7 +2249,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "read-only",
       "hello world"
@@ -2392,7 +2392,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "workspace-write",
       "hello world"
@@ -2428,7 +2428,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "read-only",
       "hello world"
@@ -2464,7 +2464,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--dangerously-bypass-approvals-and-sandbox",
       "hello world"
     ]
@@ -2499,7 +2499,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "read-only",
       "hello world"
@@ -2642,7 +2642,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "workspace-write",
       "hello world"
@@ -2678,7 +2678,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "read-only",
       "hello world"
@@ -2714,7 +2714,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--dangerously-bypass-approvals-and-sandbox",
       "hello world"
     ]
@@ -2749,7 +2749,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "read-only",
       "hello world"
@@ -2891,7 +2891,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--dangerously-bypass-approvals-and-sandbox",
       "hello world"
     ]
@@ -2926,7 +2926,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "read-only",
       "hello world"
@@ -2962,7 +2962,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--dangerously-bypass-approvals-and-sandbox",
       "hello world"
     ]
@@ -2997,7 +2997,7 @@
       "-c",
       "mcp_servers.agentweave.args=[\"<SERVER>\"]",
       "-c",
-      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"AW_QUESTION_TIMEOUT\", \"HUB_URL\"]",
       "--sandbox",
       "read-only",
       "hello world"

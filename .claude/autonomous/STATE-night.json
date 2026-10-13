@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 22,
+    "iteration": 23,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f461-impl",
-    "next_action": "Do queue item f461-impl: add AW_QUESTION_TIMEOUT to CODEX_MCP_ENV_NAMES so a Codex agent's configured question wait reaches ask_user; test both Codex transports forward it; set the F461 Status line. Keep current equal to the item id.",
+    "current": "f537-impl",
+    "next_action": "Do queue item f537-impl: scripts/migrate_openspec_corpus.py parse_scenario joins indented continuation lines to the clause; test with a wrapped GIVEN/THEN bullet; drive the converter on one real openspec capability into a temp dir (never over spec/); set the F537 Status line. Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -132,9 +132,9 @@
         },
         {
             "id": "f461-impl",
-            "status": "open",
+            "status": "done",
             "title": "F461 a Codex agent's configured question wait never reaches ask_user (Tier 0)",
-            "detail": "Add AW_QUESTION_TIMEOUT to CODEX_MCP_ENV_NAMES (runner_commands.py; codex_appserver reads the same tuple). Test: the rendered exec args and the app-server mcp config both forward it. Codex is undrivable: drive build_command/the app-server config builder in-process."
+            "detail": "Fixed iteration 23: AW_QUESTION_TIMEOUT added to CODEX_MCP_ENV_NAMES; exec and app-server tests assert it (failed before); golden argv re-captured; Status line recorded; Codex not run."
         },
         {
             "id": "f537-impl",
