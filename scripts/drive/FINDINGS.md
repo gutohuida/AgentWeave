@@ -35422,7 +35422,7 @@ Seam: contradiction resolution x spec-vault-check. `document_warnings` drops a c
 
 ## F589 (B) -- deleting a runner a manager job uses is allowed, and the job then silently does nothing
 
-**Status:** open 2026-10-13. Measured in the same sweep.
+**Status:** fixed 2026-10-13 (Tier 0, build window iteration 7, with F595). `delete_runner` now also refuses a runner any `manager_jobs` row names, 409 naming the jobs. `hub/tests/test_a_runner_a_setting_names_cannot_be_deleted.py` failed 2 of 3 before (204) and passes after. Driven on scratch Hub `:8111`: DELETE answered 409 "bound to background job(s): conversation-titles; the project's checkpoint runner setting", a settings save still worked, and after the settings were cleared the DELETE answered 204.
 
 `DELETE /runners/{id}` refuses a runner an agent is bound to (409 "Runner is bound to agent(s): scout"), but answered 204 for a runner the enabled `vault-distillation` job used. `GET /manager/jobs` then still reports the job `enabled: true` with the deleted `runner_id`. A source uploaded next (201) got no facts and **no firing at all** in the activity log; only pressing Distil says why (409 "The vault distillation job has no runner"). The Manager page shows the dangling job's runner control as "The agent's own runner" (see F590).
 
@@ -35458,7 +35458,7 @@ Seam: fold x coverage. **Fix shape (operator's call):** one option is that a fol
 
 ## F594 (B) -- an answered question can be answered again; the second answer overwrites the first, and after delivery it spends a new turn
 
-**Status:** open 2026-10-13. Measured in driving sweep 3 (agents-runs), scratch Hub `:8110`, `scripts/drive/s1013_agents_runs_sweep.py ask`.
+**Status:** fixed 2026-10-13 (Tier 0, build window iteration 7). `answer_question` refuses an answered question with 409 and the claim guards `answered == False` too (`questions.py`); `hub/tests/test_an_answered_question_cannot_be_answered_again.py` failed 1 of 1 before (200, `red` overwrote `blue`) and passes after. Driven on a scratch Hub `:8111`: answer 1 200, answer 2 409, `blue` kept. Not re-driven with a live Haiku asker.
 
 A Haiku agent called `ask_user` ("Pick a colour", red/blue). `PATCH /questions/{id}` with `blue` answered 200. A second `PATCH` 20 ms later with `red` **also answered 200**: it overwrote `answer`, cleared `answer_labels`, and restamped `answered_at`. The agent's `ask_user` returned `red`, and the agent replied `red`. After that run had completed, a third `PATCH` (`green, actually`) answered 200 again (`asker_waiting: false`). It queued `Question: Pick a colour / Answer: green, actually` as a new operator entry and **started a new run** (`run-f117e6b31547`), which replied `green`. The decline route refuses an answered question ("Declining it would discard a decision that was already made"). The answer route has no mirror refusal: the conditional `UPDATE` in `answer_question` (`hub/hub/api/v1/questions.py:476`) guards `declined == False` only, not `answered == False`. No UI surface offers to change an answer (grep of `hub/ui/src`: no edit or re-answer), so the reachable paths are a double submit, a second tab, or a stale page. Same shape as F430 (drift candidates).
 
@@ -35466,7 +35466,7 @@ Seam: operator answer x the asker's tool wait and late-answer delivery. **Fix sh
 
 ## F595 (B) -- deleting the runner that project settings name leaves a dangling id; every later settings save is refused, and checkpoints say no runner is configured
 
-**Status:** open 2026-10-13. Measured in driving sweep 3 (agents-runs), scratch Hub `:8110`.
+**Status:** fixed 2026-10-13 (Tier 0, build window iteration 7, with F589). `delete_runner` refuses with 409 naming every holder: open agents, manager jobs (the title runner is one) and the project's `checkpoint_runner_id`. Same test file and live drive as F589.
 
 Created runner `Ck`, then `PUT /projects/{p}/settings` with `checkpoint_runner_id` = `Ck` and `conversation_title_mode: generate` + `conversation_title_runner_id` = `Ck` (200). `DELETE /runners/Ck` answered **204**. `GET settings` still names the deleted id for both. Then:
 - `PUT settings {"hop_budget": 7}`, an unrelated change, answered **400** "Unknown runner 'runner-8b04…': no runner by that id belongs to this project". The merge validates the stale stored id (`projects.py:574-583`), so the project's settings cannot be saved at all until the operator first re-picks a runner. Nothing names that as the cause of the error.

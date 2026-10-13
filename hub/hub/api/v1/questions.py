@@ -30,6 +30,10 @@ _ANSWERED_DETAIL = (
     "This question has already been answered. Declining it would discard a decision "
     "that was already made."
 )
+_REANSWER_DETAIL = (
+    "This question has already been answered, and the asking agent has that answer. A second one "
+    "would overwrite it. Send the agent a message instead."
+)
 _DECLINED_DETAIL = (
     "This question was declined, so its agent was told no answer is coming and to decide for "
     "itself. An answer now would contradict that. Send the agent a message instead."
@@ -463,6 +467,10 @@ async def answer_question(
     # spent a turn on it — for an agent `ask_user` had already told to decide for itself.
     if question.declined:
         raise HTTPException(status_code=409, detail=_DECLINED_DETAIL)
+    # F594: and the mirror of decline's refusal of an answered one. A second answer used to
+    # overwrite the first, and once the asker's run had ended it queued a new turn on the new text.
+    if question.answered:
+        raise HTTPException(status_code=409, detail=_REANSWER_DETAIL)
 
     try:
         await project_workspace.resolve_project_workspace(session, project_id)
@@ -472,10 +480,14 @@ async def answer_question(
     from_agent = question.from_agent
 
     # Claimed with a conditional UPDATE rather than set on the loaded row: the resolve above awaits,
-    # and a decline committed in that gap would otherwise be overwritten into answered-and-declined.
+    # and a decline or a concurrent answer committed in that gap would otherwise be overwritten.
     claimed = await session.execute(
         update(Question)
-        .where(Question.id == question_id, Question.declined == False)  # noqa: E712
+        .where(
+            Question.id == question_id,
+            Question.declined == False,  # noqa: E712
+            Question.answered == False,  # noqa: E712
+        )
         .values(
             answer=body.answer,
             answer_labels=list(body.labels or []),
@@ -486,7 +498,11 @@ async def answer_question(
     )
     if claimed.rowcount == 0:
         await session.rollback()
-        raise HTTPException(status_code=409, detail=_DECLINED_DETAIL)
+        await session.refresh(question)
+        raise HTTPException(
+            status_code=409,
+            detail=_DECLINED_DETAIL if question.declined else _REANSWER_DETAIL,
+        )
     await session.refresh(question)
 
     # Operator answers are typed depth-zero queue entries, not magic "user"

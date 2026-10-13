@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Agent, Runner
+from ...db.models import Agent, ManagerJob, Project, Runner
 from ...launchability import probe_agent
 from ...model_catalog import get_provider, undeclared_model_reason
 from ...runner_adapters import ADAPTERS
@@ -246,10 +246,38 @@ async def delete_runner(
     )
     bound_rows = bound.all()
     open_names = [name for name, lifecycle in bound_rows if lifecycle != "archived"]
+    # F589/F595: agents are not the only holders. A manager job's runner and the project's checkpoint
+    # runner are bare ids with no foreign key, so deleting the runner left them dangling: the job
+    # silently did nothing, and every later settings save answered 400 on the stale id.
+    job_names = (
+        (
+            await session.execute(
+                select(ManagerJob.job).where(
+                    ManagerJob.project_id == project_id, ManagerJob.runner_id == runner_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    checkpoint_holder = (
+        await session.execute(
+            select(Project.id).where(
+                Project.id == project_id, Project.checkpoint_runner_id == runner_id
+            )
+        )
+    ).scalar_one_or_none()
+    holders = []
     if open_names:
+        holders.append(f"agent(s): {', '.join(open_names)}")
+    if job_names:
+        holders.append(f"background job(s): {', '.join(sorted(job_names))}")
+    if checkpoint_holder is not None:
+        holders.append("the project's checkpoint runner setting")
+    if holders:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Runner is bound to agent(s): {', '.join(open_names)}. Unbind before deleting.",
+            detail=f"Runner is bound to {'; '.join(holders)}. Unbind before deleting.",
         )
 
     # An archived agent runs nothing, so its binding only kept the runner undeletable (F532). The

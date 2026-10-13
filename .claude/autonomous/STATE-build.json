@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "312aece",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "sweep-fix-impl",
-    "next_action": "Do queue item sweep-fix-impl per night-window.md 'Implementing' (test failing at the seam first), severity first, one finding per firing: F594 (answer route: add answered==False to the claim, 409), then F595+F589 (one delete_runner 409 naming holders), then F596 (take the recommended option: a no-runner firing is a wait, not failed/500; add an OPEN build-1013-<n> row in DECISIONS.md), then F586 (all B, Tier 0); then F588, F590, F591. F587, F592, F593, F597 are design/operator's call. When none of these remain buildable, mark sweep-fix-impl done and do ledger-close.",
+    "next_action": "Do queue item sweep-fix-impl per night-window.md 'Implementing' (test failing at the seam first), one finding per firing. F594, F595 and F589 are fixed (iteration 7). Next: F596 (take the recommended option: a no-runner firing is a wait, not failed/500; add an OPEN build-1013-<n> row in DECISIONS.md and put only that id in decisions_for_user), then F586 (all B, Tier 0); then F588, F590, F591. F587, F592, F593, F597 are design/operator's call. When none of these remain buildable, mark sweep-fix-impl done and do ledger-close.",
     "queue": [
         {
             "id": "merge-gate",
