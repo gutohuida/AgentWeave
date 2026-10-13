@@ -338,7 +338,9 @@ async def test_a_firing_that_raises_before_its_row_is_not_answered_by_an_earlier
 async def test_a_firing_that_fails_after_its_turn_started_is_answered_from_its_row(
     app, auth_headers, bind_runner, live_scheduler
 ):
-    """1.13."""
+    """1.13. Since F349's design D6 a start that raises after the firing's entry is committed is
+    not a failed firing: the entry is queued and the row stays `in_progress`. The press still
+    answers from that row, not from the running turn it would otherwise read as someone else's."""
     await _roster(app, auth_headers, bind_runner, "press-owner13")
     async with async_session_factory() as db:
         job, _loop, _task = await _make_loop_job(db, suffix="press-13", agent="press-owner13")
@@ -353,10 +355,12 @@ async def test_a_firing_that_fails_after_its_turn_started_is_answered_from_its_r
 
     with patch("hub.turn_scheduler.schedule_agent", side_effect=crash):
         res = await _run(app, auth_headers, job)
-    assert res.status_code == 500, res.text
-    detail = res.json()["detail"]
-    assert "already being worked" not in detail
-    assert "nothing is wrong" not in detail
+    assert res.status_code == 200, res.text
+    assert "already being worked" not in res.text
+    assert "nothing is wrong" not in res.text
+    async with async_session_factory() as db:
+        row = await db.get(JobRun, res.json()["job_run_id"])
+    assert row is not None and row.status == "in_progress"
 
 
 async def test_a_concurrent_ticks_row_is_not_read_as_a_failure(app, auth_headers, live_scheduler):

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f349-firing",
-    "next_action": "Do queue item f349-firing (F349 slice 3, design D6). Slices 1 and 2 (trigger route, the six other sites) closed in iterations 5 and 6.",
+    "current": "ledger-close",
+    "next_action": "Do queue item ledger-close: the final log entry with py -3.11 .claude/loops/usage_report.py --windows --since 2026-10-13, then set next_action to null.",
     "queue": [
         {
             "id": "merge-gate",
@@ -47,9 +47,9 @@
         },
         {
             "id": "f349-firing",
-            "status": "open",
+            "status": "done",
             "title": "F349 slice 3: loop/flow/job firing path (design D6)",
-            "detail": "scheduler.py _do_fire_job, _start_additional_turns, _stage_selection, _emit_loop_edit_applied per design D6 and tasks 1.10-1.13; a waiting firing stays in_progress, not failed. Then set F349 Status fixed, archive the openspec change (openspec archive <name> --skip-specs --yes) with a note."
+            "detail": "Built: D6 firing path on schedule_accepted/persist_accepted_event; 6 tests (5 red before); drive d1013_f349_firing.py 10/10; F349 fixed; openspec change archived. Spec deltas not carried into spec/capabilities. See iteration 7 log."
         },
         {
             "id": "ledger-close",

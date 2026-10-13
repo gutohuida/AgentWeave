@@ -63,7 +63,7 @@ from .task_transitions import (
     WITH_REVIEWER_STATUSES,
     operator,
 )
-from .utils import persist_event, short_id
+from .utils import persist_accepted_event, persist_event, short_id
 
 if TYPE_CHECKING:
     from .requirement_gate import ApprovalHold
@@ -2795,19 +2795,32 @@ async def _apply_staged_edit_if_idle(
     )
 
 
-async def _emit_loop_edit_applied(session: AsyncSession, payload: dict) -> None:
+async def _emit_loop_edit_applied(
+    session: AsyncSession, payload: dict, *, accepted: bool = False
+) -> None:
     """Persist and broadcast the audit event (task A2.5) for a pending edit
     `_stage_pending_loop_edit` already applied in memory. Called only after the caller's own
-    commit has landed `run`'s final status, so this never forces an early, partial commit."""
+    commit has landed `run`'s final status, so this never forces an early, partial commit.
+
+    `accepted`: that commit also queued the firing's entry (F349, design D6), so the event is
+    written in its own session and a failure to write it is logged, never raised: the firing is
+    work by then, and must not be recorded as failed because its audit line was not.
+    """
     actor = payload["actor"]
-    await persist_event(
-        session,
-        payload["project_id"],
-        "loop_edit_applied",
-        payload,
-        agent=None if actor in (None, "operator") else actor,
-        loop_id=payload["id"],
-    )
+    agent = None if actor in (None, "operator") else actor
+    if accepted:
+        await persist_accepted_event(
+            payload["project_id"], "loop_edit_applied", payload, agent=agent, loop_id=payload["id"]
+        )
+    else:
+        await persist_event(
+            session,
+            payload["project_id"],
+            "loop_edit_applied",
+            payload,
+            agent=agent,
+            loop_id=payload["id"],
+        )
     await sse_manager.broadcast(payload["project_id"], "loop_edit_applied", payload)
 
 
@@ -3512,12 +3525,16 @@ class JobScheduler:
         whether the watchdog actually managed to trigger anything.
         """
         from .inbound_queue import new_entry
-        from .turn_scheduler import schedule_agent
+        from .turn_scheduler import schedule_accepted
 
         # Bound before anything that can raise: the handler below reads both, and an exception
         # ahead of their old binding points raised `UnboundLocalError` out of it (D2a).
         pending_edit_payload: Optional[dict] = None
         acting_agent = job.agent
+        # F349, design D6: set once the entry's commit lands. From there the firing is work whose
+        # entry is queued and will run, so a later raise is not a failed firing.
+        accepted = False
+        turn_began = True
         try:
             fired_at = datetime.now(timezone.utc)
 
@@ -3973,6 +3990,9 @@ class JobScheduler:
             job.last_run = fired_at
             job.run_count += 1
             await session.commit()
+            accepted = True
+            job_id, project_id, job_name = job.id, job.project_id, job.name
+            entry_id, conversation_id = entry.id, conversation.id
 
             # Phase 1 of design D5's width: every extra selection's rows are written **before any
             # turn starts**, including this firing's own. `loop` is not None whenever the list is
@@ -3985,22 +4005,28 @@ class JobScheduler:
                 )
 
             if pending_edit_payload is not None:
-                await _emit_loop_edit_applied(session, pending_edit_payload)
+                await _emit_loop_edit_applied(session, pending_edit_payload, accepted=True)
                 pending_edit_payload = None
 
+            # Every event below is about a committed entry, so each is written in its own session
+            # and never raises (F349, design D6): a failed event write used to skip the start and
+            # record a queued firing as failed.
             queue_payload = {
-                "entry_id": entry.id,
+                "entry_id": entry_id,
                 "agent": acting_agent,
                 "origin_type": "job",
                 "hop_depth": 0,
-                "job_id": job.id,
-                "conversation_id": conversation.id,
+                "job_id": job_id,
+                "conversation_id": conversation_id,
             }
-            await persist_event(
-                session, job.project_id, "queue_entry_queued", queue_payload, agent=acting_agent
+            await persist_accepted_event(
+                project_id, "queue_entry_queued", queue_payload, agent=acting_agent
             )
-            await sse_manager.broadcast(job.project_id, "queue_entry_queued", queue_payload)
-            schedule_result = await schedule_agent(job.project_id, acting_agent)
+            await sse_manager.broadcast(project_id, "queue_entry_queued", queue_payload)
+            # Never raises. A transient failure is retried by the Hub and comes back as a
+            # non-terminal wait, which leaves the `JobRun` in progress: a firing that has not
+            # started yet, not a failed one.
+            schedule_result = await schedule_accepted(project_id, acting_agent)
             turn_began = not (schedule_result.waiting_reason and schedule_result.terminal_failure)
             if not turn_began:
                 # This is the same terminal outcome startup reconciliation would eventually
@@ -4011,24 +4037,23 @@ class JobScheduler:
                 await session.commit()
 
             await sse_manager.broadcast(
-                job.project_id,
+                project_id,
                 "job_fired",
                 {
-                    "id": job.id,
-                    "name": job.name,
+                    "id": job_id,
+                    "name": job_name,
                     "agent": acting_agent,
                     "trigger": trigger,
                     "job_run_id": run_id,
                 },
             )
 
-            await persist_event(
-                session,
-                job.project_id,
+            await persist_accepted_event(
+                project_id,
                 "job_fired",
                 {
-                    "job_id": job.id,
-                    "job_name": job.name,
+                    "job_id": job_id,
+                    "job_name": job_name,
                     "agent": acting_agent,
                     "trigger": trigger,
                     "job_run_id": run_id,
@@ -4039,9 +4064,9 @@ class JobScheduler:
             # Phase 2 of design D5's width: every extra selection's rows exist by now, so this
             # only starts their turns. See `_stage_additional_selections` for why the two are
             # separated.
-            await self._start_additional_turns(job.project_id, staged_extras)
+            await self._start_additional_turns(project_id, staged_extras)
 
-            logger.info(f"Job {job.id} fired (trigger: {trigger})")
+            logger.info(f"Job {job_id} fired (trigger: {trigger})")
             # The row above already says `failed`; the answer agrees with it (F412), so a press
             # is told no turn began instead of `200 {"success": true}`. The firing's events and
             # extra selections above are still owed, which is why this is the last line.
@@ -4049,6 +4074,13 @@ class JobScheduler:
 
         except Exception as e:
             error_summary = _safe_error_summary(e)
+            if accepted:
+                # F349, design D6: the entry is committed and queued, and `run` already says what
+                # is true of it. Recording `failed` here would be the lie; the session may be
+                # mid-failure, so it is rolled back and nothing more is written on it.
+                await session.rollback()
+                logger.error(f"Job {job_id} fired, then failed after queueing: {error_summary}")
+                return turn_began
             logger.error(f"Failed to fire job {job.id}: {error_summary}")
             # Finding F413: every failed firing leaves a `failed` row. Where this firing has no row
             # in the session -- it raised before building one, or after discarding it as a
@@ -4176,16 +4208,12 @@ class JobScheduler:
         the same outcome the primary path records for itself, and the reason design D13 gives each
         selection a row: one agent's launch failing says nothing about the others.
         """
-        from .turn_scheduler import schedule_agent
+        from .turn_scheduler import schedule_accepted
 
         for agent, run_id in staged:
-            try:
-                result = await schedule_agent(project_id, agent)
-            except Exception as error:
-                logger.error(
-                    f"Could not start {agent} for run {run_id}: {_safe_error_summary(error)}"
-                )
-                continue
+            # Never raises; a transient failure is retried by the Hub and leaves the selection's
+            # `JobRun` in progress (F349, design D6).
+            result = await schedule_accepted(project_id, agent)
             if result.waiting_reason and result.terminal_failure:
                 async with async_session_factory() as session:
                     run = await session.get(JobRun, run_id)
@@ -4348,8 +4376,10 @@ class JobScheduler:
             "job_id": job.id,
             "conversation_id": conversation.id,
         }
-        await persist_event(
-            session, job.project_id, "queue_entry_queued", queue_payload, agent=agent
+        # The rows are committed, so the selection is staged whatever happens to its events
+        # (F349, design D6): a raise here used to make the caller skip a queued entry's start.
+        await persist_accepted_event(
+            job.project_id, "queue_entry_queued", queue_payload, agent=agent
         )
         await sse_manager.broadcast(job.project_id, "queue_entry_queued", queue_payload)
 
@@ -4371,7 +4401,7 @@ class JobScheduler:
                 "job_run_id": run_id,
             },
         )
-        await persist_event(session, job.project_id, "job_fired", fired_payload, agent=agent)
+        await persist_accepted_event(job.project_id, "job_fired", fired_payload, agent=agent)
         return run_id
 
 

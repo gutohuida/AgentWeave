@@ -2,10 +2,10 @@
 
 `POST /agent/trigger` commits the operator's input as a queue entry and only then writes an event
 and calls `schedule_agent`. A `database is locked` from either used to propagate: the route answered
-500 for a message that was in the queue, and nothing started it. Slice 1 of
-`openspec/changes/input-the-hub-accepted-is-answered-as-accepted` (design D1-D3a): the trigger
-route, the shared helper and the retry. The other post-commit sites (D4) and the firing path (D6)
-are later slices.
+500 for a message that was in the queue, and nothing started it. Design in
+`openspec/changes/archive/2026-10-13-input-the-hub-accepted-is-answered-as-accepted`: the trigger
+route, the shared helper and the retry (D1-D3a), the six other post-commit sites (D4), and the
+job, loop and flow firing path (D6).
 
 Patch `hub.turn_scheduler.schedule_agent`: the route imports it inside the function and
 `schedule_accepted` resolves it as a module global, so the module attribute is what both read.
@@ -22,7 +22,17 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 
 from hub import run_reconciliation, turn_scheduler, utils
 from hub.db.engine import async_session_factory
-from hub.db.models import EventLog, InboundQueueEntry
+from hub.db.models import (
+    AIJob,
+    Conversation,
+    EventLog,
+    InboundQueueEntry,
+    JobRun,
+    Loop,
+    SpecDocument,
+    Task,
+)
+from hub.scheduler import JobScheduler
 from hub.turn_scheduler import ScheduleResult
 
 TRIGGER = "/api/v1/projects/proj-test/agent/trigger"
@@ -457,3 +467,221 @@ async def test_a_failed_post_commit_event_still_starts_the_agent(
     assert refused, f"none of {events} was attempted"
     assert resp.status_code == ok, resp.text
     assert set(agents) <= set(scheduled.agents)
+
+
+# ---------------------------------------------------------------------------
+# Slice 3, design D6: the job, loop and flow firing path. A firing commits its entry and
+# `JobRun` (`in_progress`) before it writes events or starts the turn, so a failure after that
+# commit is a firing that has not started yet, not a failed one.
+# ---------------------------------------------------------------------------
+
+FIRE_OWNER = "fire-owner"
+FIRE_SECOND = "fire-second"
+
+
+async def _plain_job(db):
+    job = AIJob(
+        id="job-f349-plain",
+        project_id="proj-test",
+        name="F349 plain",
+        agent=FIRE_OWNER,
+        message="do the thing",
+        cron="*/5 * * * *",
+        session_mode="new",
+        enabled=True,
+    )
+    db.add(job)
+    await db.commit()
+    return job
+
+
+async def _wide_flow(db):
+    """A flow with two startable tasks; with two agents on the roster it fires both."""
+    job = AIJob(
+        id="job-f349-wide",
+        project_id="proj-test",
+        name="F349 wide",
+        agent=FIRE_OWNER,
+        message="work the queue",
+        cron="*/5 * * * *",
+        session_mode="new",
+        enabled=True,
+    )
+    db.add(job)
+    await db.commit()
+    db.add(
+        SpecDocument(
+            id="doc-f349-wide",
+            project_id="proj-test",
+            path="spec/f349-wide.json",
+            title="F349 wide",
+            phase="current",
+            kind="capability",
+        )
+    )
+    await db.commit()
+    loop = Loop(
+        id="loop-f349-wide",
+        project_id="proj-test",
+        job_id=job.id,
+        purpose="f349 wide",
+        spec_document_id="doc-f349-wide",
+    )
+    db.add(loop)
+    await db.commit()
+    for key in ("a", "b"):
+        db.add(
+            Task(
+                id=f"task-f349-{key}",
+                project_id="proj-test",
+                title=f"work {key}",
+                status="pending",
+                loop_id=loop.id,
+            )
+        )
+    await db.commit()
+    return job
+
+
+@pytest.fixture
+async def roster(app, auth_headers, bind_runner):
+    synced = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {n: {"runner": "claude"} for n in (FIRE_OWNER, FIRE_SECOND)}}},
+        headers=auth_headers,
+    )
+    assert synced.status_code == 200
+    for name in (FIRE_OWNER, FIRE_SECOND):
+        await bind_runner(name, cli="claude")
+
+
+async def _fire(make_job):
+    async with async_session_factory() as db:
+        job = await make_job(db)
+        job_id = job.id
+    async with async_session_factory() as db:
+        fresh = await db.get(AIJob, job_id)
+        fired = await JobScheduler()._fire_job_internal(fresh, trigger="scheduled", session=db)
+    return job_id, fired
+
+
+async def _job_runs(job_id):
+    """The firing's `JobRun` rows keyed by the agent of the conversation each one started."""
+    async with async_session_factory() as db:
+        runs = (await db.execute(select(JobRun).where(JobRun.job_id == job_id))).scalars().all()
+        agents = dict(
+            (await db.execute(select(Conversation.id, Conversation.agent))).tuples().all()
+        )
+        return {agents.get(run.conversation_id): run for run in runs}
+
+
+class _PerAgent:
+    """A `schedule_agent` that raises *error* on *agent*'s first call; records every call."""
+
+    def __init__(self, agent, error):
+        self.agent = agent
+        self.error = error
+        self.calls = []
+
+    async def __call__(self, project_id, agent):
+        self.calls.append(agent)
+        if agent == self.agent and self.calls.count(agent) == 1:
+            raise self.error
+        return ScheduleResult(waiting_reason="queue is empty", terminal_failure=False)
+
+
+def _persist_raising(predicate):
+    real = utils.persist_event
+    refused = []
+
+    async def _persist(session, project_id, event_type, *args, **kwargs):
+        if predicate(event_type, kwargs):
+            refused.append(event_type)
+            raise _locked()
+        return await real(session, project_id, event_type, *args, **kwargs)
+
+    return _persist, refused
+
+
+@pytest.mark.asyncio
+async def test_a_locked_start_leaves_the_firing_in_progress_and_is_retried(roster):
+    """Task 1.10."""
+    flaky = _PerAgent(FIRE_OWNER, _locked())
+    with patch("hub.turn_scheduler.schedule_agent", flaky):
+        job_id, fired = await _fire(_plain_job)
+        await _settle_retries()
+    run = (await _job_runs(job_id))[FIRE_OWNER]
+    assert fired is True
+    assert run.status == "in_progress"
+    assert run.error_summary is None
+    assert [e.state for e in await _entries()] == ["queued"]
+    assert flaky.calls == [FIRE_OWNER, FIRE_OWNER]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("event", ["queue_entry_queued", "job_fired"])
+async def test_a_failed_firing_event_neither_fails_the_firing_nor_skips_the_start(roster, event):
+    """Task 1.11: the queued event used to skip the start and poison the session the `except`
+    then committed on; the fired event, written after the turn began, marked it `failed`."""
+    persist, refused = _persist_raising(lambda t, _kw: t == event)
+    scheduled = _Recorder()
+    with (
+        patch("hub.utils.persist_event", persist),
+        patch("hub.scheduler.persist_event", persist),
+        patch("hub.turn_scheduler.schedule_agent", scheduled),
+    ):
+        job_id, fired = await _fire(_plain_job)
+    run = (await _job_runs(job_id))[FIRE_OWNER]
+    assert refused == [event]
+    assert fired is True
+    assert run.status == "in_progress"
+    assert scheduled.agents == [FIRE_OWNER]
+
+
+@pytest.mark.asyncio
+async def test_a_locked_start_for_an_extra_selection_is_retried(roster):
+    """Task 1.12: `_start_additional_turns` logged the raise and nothing retried the entry."""
+    flaky = _PerAgent(FIRE_SECOND, _locked())
+    with patch("hub.turn_scheduler.schedule_agent", flaky):
+        job_id, _ = await _fire(_wide_flow)
+        await _settle_retries()
+    runs = await _job_runs(job_id)
+    assert set(runs) == {FIRE_OWNER, FIRE_SECOND}
+    assert runs[FIRE_SECOND].status == "in_progress"
+    assert flaky.calls.count(FIRE_SECOND) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_failed_event_for_an_extra_selection_still_starts_its_turn(roster):
+    """Task 1.13: `_stage_selection` commits the rows, then a raising event made
+    `_stage_additional_selections` skip the selection, so its queued entry was never started."""
+    persist, refused = _persist_raising(
+        lambda t, kw: t == "queue_entry_queued" and kw.get("agent") == FIRE_SECOND
+    )
+    scheduled = _Recorder()
+    with (
+        patch("hub.utils.persist_event", persist),
+        patch("hub.scheduler.persist_event", persist),
+        patch("hub.turn_scheduler.schedule_agent", scheduled),
+    ):
+        job_id, _ = await _fire(_wide_flow)
+    runs = await _job_runs(job_id)
+    assert refused == ["queue_entry_queued"]
+    assert set(runs) == {FIRE_OWNER, FIRE_SECOND}
+    assert runs[FIRE_SECOND].status == "in_progress"
+    assert FIRE_SECOND in scheduled.agents
+
+
+@pytest.mark.asyncio
+async def test_a_terminal_refusal_still_fails_the_firing_with_its_reason(roster):
+    """Task 1.13's control: PASS before and after."""
+
+    async def _refuse(project_id, agent):
+        return ScheduleResult(waiting_reason="runner is gone", terminal_failure=True)
+
+    with patch("hub.turn_scheduler.schedule_agent", _refuse):
+        job_id, fired = await _fire(_plain_job)
+    run = (await _job_runs(job_id))[FIRE_OWNER]
+    assert fired is False
+    assert run.status == "failed"
+    assert run.error_summary == "runner is gone"
