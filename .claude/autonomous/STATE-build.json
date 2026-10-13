@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f585-impl",
-    "next_action": "Do queue item f585-impl (F585: stale skill mirrors fail tests/test_skill_sync.py, Tier 0). Master landed at 312aece in iteration 2.",
+    "current": "f465-impl",
+    "next_action": "Do queue item f465-impl (F465: archived agents count against the agent budget, Tier 0). F585 closed in iteration 3.",
     "queue": [
         {
             "id": "merge-gate",
@@ -23,7 +23,7 @@
         },
         {
             "id": "f585-impl",
-            "status": "open",
+            "status": "done",
             "title": "F585: stale skill mirrors fail tests/test_skill_sync.py (Tier 0)",
             "detail": "tests/test_skill_sync.py fails on a clean tree: two skill mirrors are stale. Regenerate/sync the mirrors, confirm the test passes, set the finding's Status line in scripts/drive/FINDINGS.md."
         },
