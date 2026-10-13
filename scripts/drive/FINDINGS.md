@@ -35436,7 +35436,7 @@ Every job's runner control carries the conversation-titles wording: help "None u
 
 ## F591 (C) -- a file source whose transcription failed or has not run yet is shown as "Held on another machine"
 
-**Status:** open 2026-10-13. Measured in the same sweep.
+**Status:** fixed 2026-10-13 (Tier 0, build window iteration 13). A tracked file source with no text now reads "No text yet: the file has not been read, or reading it failed" (`withoutText` in `VaultPage.tsx`); a private entry still says "Held on <machine>". `vaultFiles.test.tsx` failed before (mutation-checked). Driven on scratch Hub `:8113`: an uploaded PNG with no runner shows the new wording in the Vault tab. The failure detail itself is still not operator language (not filed).
 
 A tracked GIF whose reading failed (firing `failed`, "reading the image: 1 schema violation(s): Field required") is listed in the Vault tab as "Held on another machine", and a just-uploaded PDF reads the same until it is transcribed: the map answers `available: false, holder: null` and `VaultPage.tsx:224` renders any unavailable entry as held elsewhere. The file is in the repository. Seam: images-and-pdfs x text-sources' availability label. Tier 0 (say "not read yet" / "could not be read" when the entry is a file source on this machine). The failure detail itself ("Field required") is also not operator language; noted, not filed separately.
 

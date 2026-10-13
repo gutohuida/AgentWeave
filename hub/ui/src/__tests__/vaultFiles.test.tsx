@@ -98,6 +98,20 @@ describe('the Vault tab, image and PDF sources', () => {
     expect(text).not.toHaveTextContent('image')
   })
 
+  it('does not say a tracked file with no text yet is held on another machine (F591)', async () => {
+    const unread = { ...PDF, available: false, opening: null }
+    const heldElsewhere = { ...TEXT, id: 'src-privprivpriv', visibility: 'private', holder: 'colleague-pc', available: false, opening: null }
+    const base = vault
+    vault = (url, init) =>
+      url.endsWith('/vault/map') ? { status: 200, body: { entries: [unread, heldElsewhere] } } : base(url, init)
+    render(<VaultPage />, { wrapper })
+    const row = await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf')
+    expect(row).not.toHaveTextContent('Held on')
+    expect(row).toHaveTextContent('No text yet')
+    // A private entry whose text is on another machine still says so.
+    expect(screen.getByTestId('vault-entry-src-privprivpriv')).toHaveTextContent('Held on colleague-pc')
+  })
+
   it('shows a PDF in an embedded viewer from a blob URL, above its transcription', async () => {
     render(<VaultPage />, { wrapper })
     fireEvent.click(await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf'))

@@ -183,6 +183,16 @@ export function VaultPage() {
   )
 }
 
+/** What the list says for a source with no text here. A tracked file is in the repository, so its
+ *  text is missing because it has not been transcribed yet or the reading failed, not because
+ *  another machine holds it (F591). */
+function withoutText(entry: VaultEntry): string {
+  if (fileKindOf(entry.media_type) && entry.visibility === 'tracked') {
+    return 'No text yet: the file has not been read, or reading it failed'
+  }
+  return `Held on ${entry.holder ?? 'another machine'}`
+}
+
 function EntryRow({
   entry,
   factCount,
@@ -221,7 +231,7 @@ function EntryRow({
         )}
       </span>
       <span className="line-clamp-2 text-xs" style={{ color: 'var(--text-3)' }}>
-        {entry.available ? entry.opening : `Held on ${entry.holder ?? 'another machine'}`}
+        {entry.available ? entry.opening : withoutText(entry)}
       </span>
       {factCount > 0 && (
         <span className="text-xs" style={{ color: 'var(--text-2)' }}>
