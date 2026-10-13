@@ -8,16 +8,16 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "merge-gate",
-    "next_action": "Do queue item merge-gate (build-window.md 'The merge gate'): measure the four conditions, fast-forward master if all hold, log values. Then continue the queue in order.",
+    "current": "f585-impl",
+    "next_action": "Do queue item f585-impl (F585: stale skill mirrors fail tests/test_skill_sync.py, Tier 0). Master landed at 312aece in iteration 2.",
     "queue": [
         {
             "id": "merge-gate",
-            "status": "open",
+            "status": "done",
             "title": "Merge gate",
             "detail": "Playbook 'The merge gate': measure all four conditions on the branch tip; if all hold, git fetch . autonomous/2026-10-11-daily:master && git push origin master. Log the four values and the sha. If shut, log which failed and carry on. Roadmap is fully built (all 8 slices folded); the 58 commits ahead of master are what lands."
         },
