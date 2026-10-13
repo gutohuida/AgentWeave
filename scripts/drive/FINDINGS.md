@@ -35475,3 +35475,17 @@ Created runner `Ck`, then `PUT /projects/{p}/settings` with `checkpoint_runner_i
 `delete_runner` (`hub/hub/api/v1/runners.py:231`) checks only `Agent.runner_id`. The title runner is a job's runner (`projects.py:453`), so that half is F589's root. The checkpoint runner is a `Project` column that F589's fix would not reach.
 
 Seam: runners x project settings (checkpoint and title). **Fix shape:** have `delete_runner` refuse with 409, naming every holder (agents, jobs, the project's checkpoint runner), so one fix closes F589 and F595 together. The alternative is to clear the references and say so. Tier 0.
+
+## F596 (B) -- a job fired at an agent with no runner answers 500 and records the firing `failed`, but its message stays queued and runs as soon as a runner is bound
+
+**Status:** open 2026-10-13. Measured in driving sweep 4 (jobs-loops), scratch Hub `:8110`, `scripts/drive/s1013_jobs_loops_sweep.py plain2`.
+
+Job `norunner` (agent `idle`, enabled, far-future cron). `PATCH /agents/idle {"runner_id": null}`, then `POST /jobs/{id}/run` answered **500** "No runner is bound to this agent. Bind one in the Hub UI before it can run.". The job's history shows the firing `failed` with that summary, and `run_count` became 1. But `GET /queue/idle` still holds the firing's entry as `queued`, and queue status reads `waiting_reason` "No runner is bound…". Re-binding the Haiku runner redrained the queue as designed (F96): `run-a2ba8a095904` delivered the entry and **completed**. The history still says `failed`. So the operator is shown a server error and a failed firing for work that then ran, and nothing in the job's record says it ran. `scheduler.py:4030-4037` treats `waiting_reason` + `terminal_failure` as "no turn began" and writes `failed`, but the entry it committed a few lines earlier is left `queued`. `jobs.py:1815` then maps that `failed` row to a 500.
+
+Seam: job firing x the inbound queue's wait-for-runner redrain. **Fix shape:** pick one of two. Either the firing is a wait (`in_progress`/queued, answered 409 or 202 with the waiting reason, and resolved when the entry is delivered), or a terminal failure withdraws the entry it queued so nothing runs later. In either case "no runner" is not a 500. Tier 0 once the choice is made; the first option matches how an operator trigger to the same agent already behaves (`status: queued`, `waiting_reason`).
+
+## F597 (C) -- the "May agents schedule work?" question stays open after the operator enables `allow_agent_jobs` in settings
+
+**Status:** open 2026-10-13. Measured in driving sweep 4 (jobs-loops).
+
+A Haiku agent's `create_loop` was refused 403 with `allow_agent_jobs` off, and the Hub opened question `q-cbfeb678bbde` ("Enabled it — go ahead" / "Leave it off", subject `capability-refusal:allow_agent_jobs`). The operator then turned the setting on via `PUT /settings`, and the agent's next `create_loop` succeeded. The question was still `answered: false`, `asker_waiting: true`, listed on the Questions page. Answering it now would send the agent a decision about a setting already changed; "Leave it off" would contradict the live setting. Nothing in the settings write (`projects.py`) consults `refused_capability.py`'s record. Seam: settings x refused-capability question. Not Tier 0: whether a settings change resolves the record (and whether that tells the agent) is a design call in `a-refused-capability-reaches-the-operator`'s territory.

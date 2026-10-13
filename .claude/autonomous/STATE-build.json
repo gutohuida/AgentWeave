@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "312aece",
     "stop_at": "2026-10-13T21:30:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-13-build-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-jobs-loops-drive",
-    "next_action": "Do queue item sweep-jobs-loops-drive per .claude/loops/build-window.md 'Driving sweeps' (scripts/drive/sweep_client.py is reusable; s1013_agents_runs_sweep.py shows phases; start the Hub by hand from hub/ with DATABASE_URL + AW_BOOTSTRAP_API_KEY). Then sweep-fix-impl, severity first: F594, F595+F589 (one delete_runner fix), F586 (all B, Tier 0); then F588, F590, F591. F587, F592, F593 are design/operator's call.",
+    "current": "sweep-fix-impl",
+    "next_action": "Do queue item sweep-fix-impl per night-window.md 'Implementing' (test failing at the seam first), severity first, one finding per firing: F594 (answer route: add answered==False to the claim, 409), then F595+F589 (one delete_runner 409 naming holders), then F596 (take the recommended option: a no-runner firing is a wait, not failed/500; add an OPEN build-1013-<n> row in DECISIONS.md), then F586 (all B, Tier 0); then F588, F590, F591. F587, F592, F593, F597 are design/operator's call. When none of these remain buildable, mark sweep-fix-impl done and do ledger-close.",
     "queue": [
         {
             "id": "merge-gate",
@@ -60,10 +60,14 @@
         },
         {
             "id": "sweep-jobs-loops-drive",
-            "status": "open",
+            "status": "done",
             "model": "opus",
             "title": "Driving sweep 4: jobs-loops",
-            "detail": "Playbook 'Driving sweeps': one area, e2e-loop Steps 3-8, scratch Hub from source on a free port 8110+ with a fresh DB under testbed/, Haiku turns only, stop the Hub after. File each defect as a new F<n> in scripts/drive/FINDINGS.md with repro/severity/seam/Tier 0?. Log what passed too. "
+            "detail": "Playbook 'Driving sweeps': one area, e2e-loop Steps 3-8, scratch Hub from source on a free port 8110+ with a fresh DB under testbed/, Haiku turns only, stop the Hub after. File each defect as a new F<n> in scripts/drive/FINDINGS.md with repro/severity/seam/Tier 0?. Log what passed too. ",
+            "filed": [
+                "F596",
+                "F597"
+            ]
         },
         {
             "id": "sweep-fix-impl",
