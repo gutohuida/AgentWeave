@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6208e9a",
     "stop_at": "2026-10-13T07:00:00+01:00",
-    "iteration": 24,
+    "iteration": 25,
     "log_file": ".claude/autonomous/2026-10-12-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f456-impl",
-    "next_action": "Do queue item f456-impl: POST /agent/trigger on an exhausted token budget still runs (deliberate, turn_scheduler gates autonomous only) but its response and timeline must say the budget was passed over. Test the response field/event; drive on a scratch Hub if cheap. Keep current equal to the item id.",
+    "current": "refill-4",
+    "next_action": "Do queue item refill-4: compose further -impl items from BACKLOG.html / FINDINGS.md (ready, stated repair, no OPEN decision, not passed over in iteration 22). If none qualify, set next_action to null and log why. Keep current equal to the item id.",
     "queue": [
         {
             "id": "compose",
@@ -144,9 +144,15 @@
         },
         {
             "id": "f456-impl",
-            "status": "open",
+            "status": "done",
             "title": "F456 a budget-exhausted project runs an operator trigger without saying so (Tier 0)",
-            "detail": "POST /agent/trigger on an exhausted token budget still runs (deliberate, turn_scheduler gates autonomous only) but its response and timeline say the budget was passed over. Test the response field/event; drive on a scratch Hub if cheap."
+            "detail": "Fixed iteration 25: trigger response gains budget_note and a token_budget_passed_over warn event when a spent budget is passed over; 2 tests (spent case failed before) + Status line recorded; no live drive."
+        },
+        {
+            "id": "refill-4",
+            "status": "open",
+            "title": "Refill from backlog (queue emptied with ~4.5 hours to stop_at)",
+            "detail": "Re-read spec-queue/BACKLOG.html data against FINDINGS.md; append -impl items only for ready findings with a stated repair and no OPEN decision. Skip those passed over in iteration 22 unless something has changed. If none qualify, set next_action to null."
         }
     ],
     "decisions_for_user": [],

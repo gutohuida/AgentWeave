@@ -33458,7 +33458,7 @@ Nineteen coverage rows driven by five parallel operators plus row 19 by the orch
 
 ## F456 (D) — a budget-exhausted project runs an operator's trigger without saying the budget was passed over
 
-**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 18.
+**Status:** fixed (Tier 0, 2026-10-13) -- `POST /agent/trigger` reads the project's budget before scheduling; when it was already spent and the operator's turn runs, the response carries `budget_note` and a `token_budget_passed_over` warn event is persisted for the agent. The scheduler's deliberate asymmetry is unchanged. Test: `hub/tests/test_a_budget_passed_over_is_said.py` (through the real route; the spent-budget case failed before at `budget_note`; an under-budget trigger carries neither). Not driven on a live Hub; the UI does not yet render the new event or field. Was: open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 18.
 **Source:** drive
 **Theme:** Operator surfaces
 

@@ -145,7 +145,11 @@ from ...task_transition_service import (
     ORIGIN_JOB,
     TransitionRefusedError,
 )
-from ...usage_accounting import record_turn_usage, settle_copilot_credits
+from ...usage_accounting import (
+    project_budget_state,
+    record_turn_usage,
+    settle_copilot_credits,
+)
 from ...utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
@@ -371,6 +375,12 @@ class TriggerAgentRequest(RequestModel):
             raise ValueError(str(exc)) from exc
 
 
+BUDGET_PASSED_OVER_NOTE = (
+    "The project's token budget is spent. Agent-initiated turns are held for it; this turn ran "
+    "because you started it. Raise the budget to let held work resume."
+)
+
+
 class TriggerAgentResponse(BaseModel):
     success: bool
     message: str
@@ -382,6 +392,10 @@ class TriggerAgentResponse(BaseModel):
     session_id: Optional[str] = None
     queue_entry_id: Optional[str] = None
     waiting_reason: Optional[str] = None
+    #: Set when the project's token budget was already spent and this operator trigger ran anyway
+    #: (F456). The budget gates autonomous turns only; saying so keeps "it ran" from reading as
+    #: "the budget is fine".
+    budget_note: Optional[str] = None
 
 
 class TriggerAgentError(Exception):
@@ -1483,7 +1497,7 @@ async def _trigger_agent_directly(
             setup_events.append(
                 diagnostic_event(
                     stream="workspace",
-                    severity="warning",
+                    severity="warn",
                     summary=link_sentence,
                     code="workspace.dependency_link_failed",
                     facts={"failed": [{"name": f.name, "reason": f.reason} for f in link_failures]},
@@ -2036,6 +2050,7 @@ async def trigger_agent(
 
     from ...turn_scheduler import schedule_agent
 
+    budget_was_spent = (await project_budget_state(session, project_id))["exhausted"]
     scheduled = await schedule_agent(project_id, body.agent)
     # The scheduler picks the conversation of the *oldest* eligible entry across this
     # agent's whole queue, which is not necessarily the conversation this request just
@@ -2048,6 +2063,24 @@ async def trigger_agent(
     if scheduled.response is not None and scheduled.response.conversation_id == conversation.id:
         response = scheduled.response
         response.queue_entry_id = entry.id
+        if budget_was_spent:
+            # The scheduler refuses autonomous turns on a spent budget and deliberately lets an
+            # operator's through (`turn_scheduler.py`, the `initiator == "autonomous"` gate).
+            # Neither the answer nor the timeline said the gate had been passed over (F456).
+            response.budget_note = BUDGET_PASSED_OVER_NOTE
+            await persist_event(
+                session,
+                project_id,
+                "token_budget_passed_over",
+                {
+                    "agent": body.agent,
+                    "run_id": response.run_id,
+                    "conversation_id": conversation.id,
+                    "message": BUDGET_PASSED_OVER_NOTE,
+                },
+                agent=body.agent,
+                severity="warn",
+            )
         return response
     refusal = scheduled.refusal
     if refusal is not None and entry.id in refusal.entry_ids:
@@ -3568,7 +3601,7 @@ async def _prepare_copilot_turn(
         events.append(
             diagnostic_event(
                 stream="copilot",
-                severity="warning",
+                severity="warn",
                 summary=copilot_env_removal_sentence(name),
                 code="copilot.permission_override_removed",
                 facts={"name": name},
@@ -3578,7 +3611,7 @@ async def _prepare_copilot_turn(
         events.append(
             diagnostic_event(
                 stream="copilot",
-                severity="warning",
+                severity="warn",
                 summary=(
                     "Removed from this agent's Copilot home, because AgentWeave did not write "
                     f"them and they could decide its permissions: {', '.join(home.removed)}."
