@@ -2081,6 +2081,15 @@ async def adopt_corpus(
     workspace = await _workspace(session, project_id)
 
     outcome = await spec_adoption.adopt_corpus(session, workspace, project_id, actor=_operator())
+    # As for one document (F612): mint for requirements a hand-placed file names without one.
+    minted: Dict[str, List[str]] = {}
+    for result in outcome.outcomes.values():
+        if isinstance(result, spec_adoption.AdoptionResult):
+            identifiers = await spec_service.mint_missing_identity(
+                session, workspace, result.document, actor=_operator()
+            )
+            if identifiers:
+                minted[result.document.path] = identifiers
     await session.commit()
 
     if outcome.adopted:
@@ -2088,7 +2097,7 @@ async def adopt_corpus(
         # the whole tree either way, and thirty-four broadcasts would be thirty-three
         # redundant re-renders.
         await sse_manager.broadcast(project_id, "spec_updated", {"path": None, "phase": None})
-    return outcome.to_dict()
+    return {**outcome.to_dict(), "minted": minted}
 
 
 @router.post("/documents", status_code=status.HTTP_201_CREATED)
@@ -2192,6 +2201,11 @@ async def adopt_document(
             ),
             detail={"message": outcome.message, **outcome.to_dict()},
         )
+    # The one write adoption leads to, and only for requirements the file names without an
+    # identifier (F612): unminted, the index skips them and the document asserts nothing.
+    minted = await spec_service.mint_missing_identity(
+        session, workspace, outcome.document, actor=_operator()
+    )
 
     await session.commit()
     await sse_manager.broadcast(
@@ -2202,6 +2216,7 @@ async def adopt_document(
     return {
         **await _project_document_view(session, project_id, outcome.document),
         **outcome.to_dict(),
+        "minted": minted,
     }
 
 

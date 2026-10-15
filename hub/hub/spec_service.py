@@ -216,6 +216,47 @@ async def save_document(
     )
 
 
+async def mint_missing_identity(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    document: SpecDocument,
+    *,
+    actor: spec_lifecycle.Actor,
+) -> List[str]:
+    """Identifiers for the requirements a file declares without one, minted by the Hub's write.
+
+    For an adopted file the Hub never wrote (F612): with no `aw_identity` the index skips every
+    requirement, so the document asserts nothing on any operator surface. Adoption stays
+    read-only (`spec_adoption`); its route calls this afterwards, and it writes only when some
+    requirement has no identifier, so a corpus the Hub wrote is never touched. The content is
+    the file's own: `_apply_and_write` adds the identity block and the row's hub block.
+    Returns the identifiers it minted, in requirement order (empty when it wrote nothing).
+    """
+    existing_content = spec_documents.read_document(workspace, document.path)
+    stored = spec_documents.parse_stored(existing_content)
+    if stored is None:
+        return []
+    try:
+        payload = validate_payload(stored)
+    except PayloadError:
+        return []
+    held, _ = spec_identity.read_identity(stored)
+    missing = [r.key for r in payload.requirements if r.key not in held]
+    if not missing:
+        return []
+    result = await _apply_and_write(
+        session,
+        workspace,
+        document,
+        payload,
+        stored,
+        existing_content,
+        actor=actor,
+        extra_detail={"minted_on_adoption": missing},
+    )
+    return [result.identifiers[key] for key in missing]
+
+
 async def _apply_and_write(
     session: AsyncSession,
     workspace: ProjectWorkspace,
