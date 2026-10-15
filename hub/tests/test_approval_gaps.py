@@ -177,6 +177,9 @@ async def test_the_journey_steps_a_document_never_reached_are_a_gap_naming_them(
     for step in ("threat-model", "acceptance", "approach", "tasks", "delivery"):
         assert step in message
     assert message.index("threat-model") < message.index("acceptance")
+    # F574: a document written whole meets this on every approval; the warning names the one
+    # call that records it reached the end of its journey.
+    assert '"step": "delivery"' in message and "documents/journey" in message
     assert not any(r["code"] == "steps_skipped" for r in at_requirements.refusals)
 
     await _place(step="delivery", size="large")

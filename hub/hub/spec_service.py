@@ -1338,12 +1338,17 @@ def _steps_skipped(
     if not ahead:
         return []
     sized = f"size {document.size}" if document.size else "no size, so every step"
+    # The way out, named (F574): a document written whole in one go never moves its step, so it
+    # meets this on every approval. The journey call records where it really stands.
+    last = ahead[-1]
     return [
         spec_completeness.Finding(
             "steps_skipped",
             "step",
             f"the document is at step {document.step!r}; this project's journey ({sized}) goes "
-            f"on to {', '.join(ahead)}, which it never reached",
+            f"on to {', '.join(ahead)}, which it never reached. If it already holds what those "
+            f"steps produce, record that: POST /project/documents/journey?path={document.path} "
+            f'{{"step": "{last}"}} (the step control on its phase bar)',
         )
     ]
 
