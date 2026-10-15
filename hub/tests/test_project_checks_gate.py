@@ -15,7 +15,7 @@ from hub.schemas.tasks import TaskUpdate
 from hub.task_transitions import Actor
 
 from .test_project_checks_run import FAIL, PASS, _project, _runs, _task_with_work
-from .test_task_integration import commits_on, git
+from .test_task_integration import commit_on_branch, commits_on, git
 
 TASKS = "/api/v1/projects/proj-test/tasks"
 
@@ -267,7 +267,35 @@ async def test_approving_over_an_errored_result_runs_the_checks_again(
     refused = await _approve(app, auth_headers, task_id)
     assert refused.status_code == 409, refused.text
     assert refused.json()["detail"]["checks"][0]["state"] == "running"
+    # F613: the retry is said, with what went wrong, never "nothing is wrong yet" over an error
+    # (on the sweep every run was `error` for a merge conflict, and each Land said "still running").
+    message = refused.json()["detail"]["message"]
+    assert "git worktree add timed out" in message, message
+    assert "Nothing is wrong yet" not in message
     await project_checks.drain()
     assert [r.state for r in await _runs(task_id)] == ["error", "passed"]
     approved = await _approve(app, auth_headers, task_id)
     assert approved.status_code == 200, approved.text
+
+
+@pytest.mark.asyncio
+async def test_a_land_refused_for_a_conflict_does_not_restart_the_checks(
+    app, auth_headers, tmp_path
+):
+    """F613: on the sweep each Land press over a conflicting task started another check run, which
+    could only error the same way ("does not merge cleanly"). The conflict is already the refusal;
+    a run starts again once the work or main moves."""
+    task_id, _ = await _task_with_work(tmp_path)
+    commit_on_branch(tmp_path, "main", "feature.py", "x = 2\n", create=False)
+    await _checked(task_id, [PASS])
+    assert [r.state for r in await _runs(task_id)] == ["error"]
+
+    for _ in range(2):
+        refused = await _approve(app, auth_headers, task_id)
+        assert refused.status_code == 409, refused.text
+        await project_checks.drain()
+
+    detail = refused.json()["detail"]
+    assert detail["unmergeable"], detail
+    assert "does not merge cleanly" in detail["message"]
+    assert [r.state for r in await _runs(task_id)] == ["error"]

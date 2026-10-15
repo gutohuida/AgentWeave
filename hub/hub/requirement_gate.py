@@ -381,6 +381,14 @@ class GateRefusal:
             return ""
         entry = self.checks[0]
         state = entry.get("state")
+        if state in ("running", "started") and entry.get("previous_error"):
+            # F613: a retry of an errored run is said with its error, so a run that keeps erroring
+            # (a merge conflict, every time) is not read as "nothing is wrong" on each Land press.
+            return (
+                f"This task's checks could not run last time: {entry['previous_error']}. "
+                "Approving started them again; approval can be retried when they finish, and if "
+                "they error the same way, the cause above needs fixing first."
+            )
         if state in ("running", "started"):
             return (
                 "This task's checks are still running on the work approval would merge. Nothing is "
@@ -797,11 +805,17 @@ async def _check_checks(
         refusal.checks_overridden = True
         return
     state = view.state
+    previous_error = ""
     if state == "error" and start_checks:
         # F516: an error is the Hub failing to produce a result, not a verdict; approving retries.
         project_checks.schedule(task.project_id, task.id)
         state = "running"
+        previous_error = (run.error if run is not None else "") or "an unknown error"
     elif state in ("missing", "stale", "interrupted"):
+        if refusal.unmergeable:
+            # F613: nothing starts over a conflict, so "they start when approval is requested"
+            # would be false; the conflict is the refusal.
+            return
         if start_checks:
             project_checks.schedule(task.project_id, task.id)
             state = "running"
@@ -816,6 +830,7 @@ async def _check_checks(
             ),
             "failing": [r for r in results if project_checks.failed(r)],
             "error": run.error if run is not None and view.state == "error" else "",
+            "previous_error": previous_error,
         }
     )
 
@@ -855,7 +870,9 @@ async def evaluate(
             task,
             refusal,
             situation,
-            start_checks=start_checks,
+            # F613: work that does not merge cannot be checked; a run started now only errors the
+            # same way. One starts again once the work or main moves.
+            start_checks=start_checks and not refusal.unmergeable,
             override_checks_reason=override_checks_reason,
         )
 
