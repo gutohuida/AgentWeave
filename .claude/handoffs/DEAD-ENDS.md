@@ -1714,6 +1714,9 @@ disappears is indistinguishable from one that was forgotten.
   `~/.claude/skills/e2e-loop/` although SKILL.md documents it. Use `scripts/drive/aw.py`
   (`AW_HUB`, `AW_KEY`, `AW_PROJECT`; paths relative to `/api/v1`). A fresh profile's key comes from
   `GET /api/v1/setup/token` (loopback only); fresh profiles write no `bootstrap-key.txt`.
+  **Resolved 2026-10-15:** `e2e.py` exists in both `.claude/skills/e2e-loop/` (tracked source)
+  and `~/.claude/skills/e2e-loop/`, and was driven end to end on :8031/:8032 that day. The key
+  sentence still holds.
 - **2026-09-25 — `scripts/backlog_page.py` reads only a line starting `**Status:**`** (the first
   in the section). A dated form like `**Status (2026-09-25): fixed**` is invisible to it and the
   finding stays counted open. Put the new state on a `**Status:**` line and relabel older ones.
