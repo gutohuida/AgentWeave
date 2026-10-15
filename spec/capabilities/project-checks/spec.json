@@ -188,6 +188,33 @@
       "requirement": "the-operator-may-approve-over-failing-checks-with-a-recorded",
       "then": "the move is refused naming the failing checks",
       "when": "the operator approves with no reason"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch project whose check fails on master, and a Haiku agent's completed task",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f605_preexisting_checks.py <project> (written first: fails before the build)",
+      "key": "a-check-that-fails-on-main-too-is-not-the-tasks-drive",
+      "requirement": "a-check-that-fails-on-main-too-is-not-the-tasks-held",
+      "then": "the first answer says the check fails on main too, has no send-back line and names the override; the second lands the task",
+      "when": "the operator presses Land, then Land with an override reason"
+    },
+    {
+      "checked_by": "agent",
+      "given": "real disposable repositories",
+      "how_to_check": "pytest hub/tests/test_project_checks_gate.py hub/tests/test_project_checks_run.py",
+      "key": "a-check-that-fails-on-main-too-is-not-the-tasks-unit",
+      "requirement": "a-check-that-fails-on-main-too-is-not-the-tasks-baseline",
+      "then": "preexisting is recorded, not recorded, and the check is not re-run",
+      "when": "a check fails on main and the task, fails only on the task, and passes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same held task",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f605_preexisting_checks.py <project>",
+      "key": "a-check-that-fails-on-main-too-is-not-the-tasks-land-override",
+      "requirement": "a-check-that-fails-on-main-too-is-not-the-tasks-land",
+      "then": "the task is approved and its transition records the reason",
+      "when": "the operator presses Land with an override reason"
     }
   ],
   "algorithms": [],
@@ -198,6 +225,9 @@
       "FR-11": "701c505c04f3800e6bc0005738caeed17a8938393694546a2a3259665497c206",
       "FR-12": "7bc72d7624b35a5488a5ee62f7ce886e8a9e6404069ad07de36c358a29fa1969",
       "FR-13": "1b3c9f5f5df007b8c2b74b6417266022ad56baab0f5528b437cc81ce501ee379",
+      "FR-14": "4cedcefecfbfee5a2acddf8d43ef8ab49daf0c66d69786bd49a45561e13c6c05",
+      "FR-15": "1d6e7d8db7c5659f9524c11707ff3e9675365040ba1a7c2b27159642e0921baa",
+      "FR-16": "828a14f8104a9fa5f28f5cebbe5e6468ce2093038f449f43d338ab76297f4ab6",
       "FR-2": "b413f57ebcba36139e13ec83c9178aae38d9e4375281f710036602898530effa",
       "FR-3": "c90e76333fc87d07bd6ceb18b914cf94e00dbc30ede4de0b5209945bc76859f5",
       "FR-4": "b74b03cef2a76c22c2aa71334059cdf8cbe93c4f414646b91be3719f342b8015",
@@ -207,10 +237,13 @@
       "FR-8": "8aea269a27df923c8e3cec427fe2eabafe42d6d7de4cfdeff6eb4cb9980825f9",
       "FR-9": "854991160e82881901ab1fac712c64fd0b2d738ebf6882854911a222d5105cf6"
     },
-    "high_water": 13,
+    "high_water": 16,
     "requirements": {
       "a-check-run-is-never-lost-silently": "FR-3",
       "a-check-runs-with-the-hub-s-environment-minus-the-hub-s-cred": "FR-4",
+      "a-check-that-fails-on-main-too-is-not-the-tasks-baseline": "FR-14",
+      "a-check-that-fails-on-main-too-is-not-the-tasks-held": "FR-15",
+      "a-check-that-fails-on-main-too-is-not-the-tasks-land": "FR-16",
       "a-project-s-checks-are-configured-by-the-operator-only": "FR-1",
       "approval-is-refused-unless-the-project-s-checks-passed-on-th": "FR-12",
       "checks-run-in-the-background-on-the-work-approval-would-merg": "FR-2",
@@ -337,6 +370,27 @@
       "party": null,
       "rationale": "The override covers a known failure the operator accepts, not an unknown, and it is an operator judgement recorded where the history can show it.",
       "statement": "The operator SHALL be able to approve over a failed or errored check result by giving a non-empty reason, which the approval transition keeps; any override reason sent by an agent SHALL be refused, and a running result SHALL NOT be overridable."
+    },
+    {
+      "key": "a-check-that-fails-on-main-too-is-not-the-tasks-baseline",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Charging a task only for what it changed needs main's own answer to the same check.",
+      "statement": "When a check run's check fails on the merged work, the Hub MUST run that check on the main tip the run was cut from and record its outcome on the result as on_main, and preexisting when it failed there too; a check that passed is not re-run."
+    },
+    {
+      "key": "a-check-that-fails-on-main-too-is-not-the-tasks-held",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "fix-D13: never charged silently, never hidden.",
+      "statement": "A refusal whose only failing checks are pre-existing MUST say they fail on main too, MUST NOT tell a reviewer to send the task back, and MUST be held for the operator, who lifts it with override_checks_reason; a refusal with any failure that is not pre-existing MUST stay the author's, as today, naming the pre-existing ones as such."
+    },
+    {
+      "key": "a-check-that-fails-on-main-too-is-not-the-tasks-land",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The sweep's only exit took four PATCHes.",
+      "statement": "POST /tasks/{id}/land MUST accept an optional override_checks_reason and apply it as the approval PATCH does, recording it on the transition."
     }
   ],
   "schema_version": 1,
