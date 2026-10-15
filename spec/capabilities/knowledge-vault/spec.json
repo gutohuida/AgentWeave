@@ -620,6 +620,42 @@
       "requirement": "the-vault-map-is-shaped-by-what-agents-ask-for-wiki-counts",
       "then": "the most-read entries are at the top and their counts read clearly without crowding the list",
       "when": "the operator looks at it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch project whose vault-distillation job runs on Haiku and a tracked source distilled once",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f587_redistil_keeps_ids.py (written first: fails before the build)",
+      "key": "a-redistilled-fact-keeps-its-id-drive",
+      "requirement": "the-manager-distils-vault-sources-into-cited-facts-distil-route",
+      "then": "every fact drawn from the same lines keeps its id, and at least one is",
+      "when": "the source is distilled again from the Distil route"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a source distilled once by a stubbed worker",
+      "how_to_check": "pytest hub/tests/test_a_redistilled_fact_keeps_its_id.py",
+      "key": "a-redistilled-fact-keeps-its-id-unit-ids",
+      "requirement": "the-manager-distils-vault-sources-into-cited-facts-distil-route",
+      "then": "the same draft keeps its id and file, the others get new ids, and the earlier moved fact is deleted",
+      "when": "it is distilled again with one draft the same, one with a moved quote and one new"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a requirement citing a fact id no record or stub holds, and a private stub held by this machine with no text",
+      "how_to_check": "pytest hub/tests/test_a_redistilled_fact_keeps_its_id.py",
+      "key": "a-redistilled-fact-keeps-its-id-unit-words",
+      "requirement": "a-requirement-is-checked-against-what-the-va-cited-fact-warnings",
+      "then": "the warning says no longer in the vault and the entry says not at this machine's private location",
+      "when": "the warnings and the entry are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a private stub whose holder is this machine and whose text is not at the private location",
+      "how_to_check": "pytest hub/tests/test_a_redistilled_fact_keeps_its_id.py",
+      "key": "a-redistilled-fact-keeps-its-id-unit-held-here",
+      "requirement": "a-redistilled-fact-keeps-its-id-held-here-is-not-elsewhere",
+      "then": "its note says the text is not at this machine's private location, not held on another machine",
+      "when": "the entry is read"
     }
   ],
   "algorithms": [],
@@ -628,7 +664,7 @@
       "FR-1": "8e77cc5af44755559235be747d1bc7e8c2177c9f9414e9c88c93b142bd2c199d",
       "FR-10": "e479d875b0020d0eb97bb8bdbc47f600a42f4ac997e61f01278863f04d7acfa0",
       "FR-11": "fab9e6a51d9dac9b9334ae4875e0f4c33117eb771db657f0728080fdf3d206b1",
-      "FR-12": "fe58905bd91f978bf948bc5cb02b844c73752f13fe27b2cc962d63fca70e8e3e",
+      "FR-12": "e05957b41571f720628bcda35c6677a67f226713d955863e397ac6e2ddc127c1",
       "FR-13": "a3fd47bd17cdb1aea843bf2c4579b90d011d4cba26b64afdde20c56550d37dae",
       "FR-14": "c4ac641caa69f1c642cb180a507d45a097c6c387849aca2ac129efa7eb1232de",
       "FR-15": "8273a111fc932d78ac862b477e5b3c5f3006c985c238b90a65e04d87f90bcbda",
@@ -654,7 +690,7 @@
       "FR-33": "0a9a83ee086dd2052413aea0b4dfa7fe124f4aaa4b137f0b1befa9bad2b880e5",
       "FR-34": "289d04a8a80d6ef0bf1352e75937ca9be231b19f7ac57ec1fa0d1c26f2cb90b0",
       "FR-35": "0aae45fca0c24db3fbb05c04a505acf2a72edba039464e8f46640ce0c94857cf",
-      "FR-36": "35cc60c774d27d14792a804cfe03237039804e6728f43f4b26fc6e06769432fc",
+      "FR-36": "0b6a255bc67559b22189c291c85caeb171411840bb66e24b2cde370f8ba59b9c",
       "FR-37": "f016876d3d60ace43a97ce8dce5bc1fd5f2648ea6ea85ab90acce012a5230967",
       "FR-38": "f6e84505fa2b95b462f4d5d983e8fefa643cb603080d382099527790acc1ae41",
       "FR-39": "1897f132a21061d6f9dd18d6345cdecaace6a83033b411a2379d5745c524319a",
@@ -674,13 +710,15 @@
       "FR-51": "d7c9079d7e7ec33922c68c23a040d3d44b8c625de77dce3a7f46c42198cc1b46",
       "FR-52": "fc7ce16869f138ef95ba4e115bb2aa03d1abd4844aabea0ad8d21e10f8b0cdbb",
       "FR-53": "b6ce460ee9bc243aea1bd7962c311551f1df60b0a7bbb648d2550cc9f2acba1d",
+      "FR-54": "50874f9585a6506aee8424b397ecc24d9caf68a1f53169dfc8ef41800bea86f5",
       "FR-6": "791cb5f62ecc7dd06403d8feb531680b9a75b9213bf36e7fba8f53633baf0812",
       "FR-7": "8854e9978008cfeee475c44a7e3fe72a3268790028901bf5811da93b9ed77b47",
       "FR-8": "c8aab6cb4927a911090490cc9d2c8c268539b152640846216c4adafd492f317b",
       "FR-9": "dcd141a4a6ed7104aad675231554a940069eb75a84c77422a6b3212cffd4d26e"
     },
-    "high_water": 53,
+    "high_water": 54,
     "requirements": {
+      "a-redistilled-fact-keeps-its-id-held-here-is-not-elsewhere": "FR-54",
       "a-requirement-is-checked-against-what-th-approval-lists-warnings": "FR-39",
       "a-requirement-is-checked-against-what-th-requirement-cites-facts": "FR-35",
       "a-requirement-is-checked-against-what-the-va-cited-fact-warnings": "FR-36",
@@ -834,8 +872,8 @@
       "key": "the-manager-distils-vault-sources-into-cited-facts-distil-route",
       "modal": "MUST",
       "party": null,
-      "rationale": "The Distil button catches up a source uploaded while the job was off, after a failed firing, or when a restart interrupted one (operator, 2026-10-09).",
-      "statement": "POST /api/v1/projects/{id}/vault/sources/{source_id}/distil MUST answer 202 and distil the source in the background. It MUST answer 404 for an unknown source, and 409 with a reason naming what to do when the job is disabled, has no runner, or the source's text is not on this machine. A distillation that stores at least one fact MUST replace the facts previously distilled from that source; one that stores none MUST leave them as they were."
+      "rationale": "A fact drawn again from the same lines is the same evidence; a new id orphans the decisions and requirements that cite it (F587).",
+      "statement": "POST /api/v1/projects/{id}/vault/sources/{source_id}/distil MUST answer 202 and distil the source in the background. It MUST answer 404 for an unknown source, and 409 with a reason naming what to do when the job is disabled, has no runner, or the source's text is not on this machine. A distillation that stores at least one fact MUST replace the facts previously distilled from that source, except that a drawn fact whose citations equal an earlier fact's as a set (the same source and line span, and the same quote ignoring case, runs of whitespace and trailing punctuation) and whose visibility is the same MUST keep that earlier fact, each earlier fact at most once,, unchanged and under its id, instead of storing a new one; one that stores none MUST leave them as they were."
     },
     {
       "key": "the-manager-distils-vault-sources-into-cited-facts-fact-cited",
@@ -1002,8 +1040,8 @@
       "key": "a-requirement-is-checked-against-what-the-va-cited-fact-warnings",
       "modal": "MUST",
       "party": null,
-      "rationale": "Derived on read, as the vault's own marks are, so the warning appears the moment the contradiction is recorded and never goes stale.",
-      "statement": "For each fact a requirement cites, the Hub MUST derive on read a warning when the fact is disputed by an open contradiction (naming the cited fact's claim and source and the other fact's claim and source, and which one is presumed), when it is superseded (naming the fact that replaced it and its source), when it is disputed by a referred report (naming the report's message), or when no fact with that id is in the vault on this machine. A source held privately on another machine is named as held elsewhere. Resolving the contradiction in the cited fact's favour, or closing the report, MUST clear the warning."
+      "rationale": "A fact with neither record nor stub anywhere is not on another machine; saying so sends the operator looking for a machine problem (F617).",
+      "statement": "For each fact a requirement cites, the Hub MUST derive on read a warning when the fact is disputed by an open contradiction (naming the cited fact's claim and source and the other fact's claim and source, and which one is presumed), when it is superseded (naming the fact that replaced it and its source), when it is disputed by a referred report (naming the report's message), or when no fact with that id is in the vault, saying it is no longer in the vault (deleted, or replaced when its source was distilled again), not that it is on another machine. A source held privately on another machine is named as held elsewhere. Resolving the contradiction in the cited fact's favour, or closing the report, MUST clear the warning."
     },
     {
       "key": "a-requirement-is-checked-against-what-the-vault-record-check-job",
@@ -1123,6 +1161,13 @@
       "party": null,
       "rationale": "The migration reaches the operator's real database on their next :8000 restart; it only adds a table.",
       "statement": "Migration 0126 MUST create the table vault_fetches keyed by project_id and entry_id, holding count and last_fetched_at, and its downgrade MUST drop that table and nothing else. It MUST NOT touch another table. Counts MUST NOT be written under knowledge/ or the private location."
+    },
+    {
+      "key": "a-redistilled-fact-keeps-its-id-held-here-is-not-elsewhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F609's drive: on the machine the stub names, 'held on <this machine>, not on this machine' contradicts itself.",
+      "statement": "A private entry whose stub names this machine as its holder and whose text is not at the private location MUST say its text is not at this machine's private location (removed, or the location changed), not that it is held on another machine."
     }
   ],
   "schema_version": 1,
