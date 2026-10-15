@@ -489,7 +489,15 @@ async def _attempt_turn(
         )
     budget = await project_budget_state(db, project_id)
     if initiator == "autonomous" and budget["exhausted"]:
-        return _Attempt(ScheduleResult(waiting_reason="token budget exhausted"))
+        # A hold, like the allowance's above: the input is kept, and raising the budget re-drains
+        # it. Recorded on the entries so a job's press answers why it waits (F608, F596's shape);
+        # as a terminal failure the firing read `failed` for work that then ran.
+        for entry in selected:
+            entry.waiting_reason = "token budget exhausted"
+        await db.commit()
+        return _Attempt(
+            ScheduleResult(waiting_reason="token budget exhausted", terminal_failure=False)
+        )
     work_dir = controlling_operator.work_dir if controlling_operator is not None else None
     # Read from the same entry `work_dir` comes from, for the same reason: a turn can batch
     # several entries, and the operator's own is the one whose viewing position describes
