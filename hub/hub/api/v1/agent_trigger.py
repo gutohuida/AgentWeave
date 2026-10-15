@@ -1991,6 +1991,16 @@ async def trigger_agent(
         decided = decided_task_refusal(named_task)
         if decided is not None:
             raise HTTPException(status_code=409, detail=decided)
+        # The dependency gate, asked of the start rather than of the status move it implies
+        # (F619): on the same edges `task_transition_service` gates, a run started here did the
+        # whole task, every move was then refused, and its peer mail kept a chain of turns going.
+        # Started work is not asked: a prerequisite regressing under it is flagged, not stopped.
+        if named_task.status in ("pending", "assigned"):
+            from ...dependency_gate import evaluate as evaluate_dependencies
+
+            dependency_refusal = await evaluate_dependencies(session, named_task)
+            if dependency_refusal.refuses:
+                raise HTTPException(status_code=409, detail=dependency_refusal.to_dict())
 
     if body.review_task_id:
         # Same reasoning, and one refusal more: a task with no evidence naming a commit cannot be

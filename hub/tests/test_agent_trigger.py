@@ -3811,3 +3811,90 @@ async def test_a_run_given_no_server_is_not_tested_by_its_init(app, auth_headers
 
     assert run.harness_mcp_status is None
     assert statuses == []
+
+
+async def _gated_pair(prereq_status: str, task_status: str = "pending") -> None:
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Task, TaskDependency
+
+    async with async_session_factory() as db:
+        db.add(
+            Task(
+                id="task-619-a", project_id="proj-test", title="Prerequisite", status=prereq_status
+            )
+        )
+        db.add(
+            Task(
+                id="task-619-b",
+                project_id="proj-test",
+                title="Builds on A",
+                status=task_status,
+                assignee="gated619",
+            )
+        )
+        await db.commit()
+        db.add(
+            TaskDependency(
+                id="dep-619",
+                project_id="proj-test",
+                task_id="task-619-b",
+                depends_on_task_id="task-619-a",
+            )
+        )
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_turn_for_a_task_whose_prerequisite_is_unmet_is_refused(
+    app, auth_headers, bind_runner
+):
+    """F619: the run started and did the whole task; every status move was then refused, and its
+    peer mail ran a seven-turn chain. The start is refused instead, naming the prerequisite."""
+    await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"gated619": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    await bind_runner("gated619", cli="claude")
+    await _gated_pair("pending")
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn") as spawn:  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "gated619", "message": "Build B.", "task_id": "task-619-b"},
+                headers=auth_headers,
+            )
+
+    assert resp.status_code == 409, resp.text
+    detail = json.dumps(resp.json())
+    assert "task-619-a" in detail and "not yet approved" in detail
+    spawn.assert_not_called()
+    status = await app.get("/api/v1/projects/proj-test/queue/gated619/status", headers=auth_headers)
+    assert status.json()["waiting_count"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prereq, task", [("approved", "pending"), ("pending", "in_progress")])
+async def test_a_met_or_already_started_task_is_not_refused(
+    app, auth_headers, bind_runner, prereq, task
+):
+    """Approved prerequisites start; started work is D8's "flagged, not stopped" case."""
+    await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"gated619": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    await bind_runner("gated619", cli="claude")
+    await _gated_pair(prereq, task)
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", MagicMock()):  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "gated619", "message": "Build B.", "task_id": "task-619-b"},
+                headers=auth_headers,
+            )
+            await _await_background_run()
+
+    assert resp.status_code == 200, resp.text

@@ -69,6 +69,19 @@ def main(project, agent="alpha"):
     check("F620 an empty message is refused", status == 422 and "empty" in str(body), f"{status}")
     check("F620 and no run started", runs(project, agent) == before)
 
+    # F619: a turn bound to a task whose prerequisite is not approved is refused before it starts.
+    a = e2e.call("POST", f"/projects/{project}/tasks", {"title": "F619 prerequisite"})["id"]
+    b = e2e.call("POST", f"/projects/{project}/tasks", {"title": "F619 builds on it"})["id"]
+    e2e.call("POST", f"/projects/{project}/tasks/{b}/dependencies", {"depends_on": a})
+    before = runs(project, agent)
+    status, body = e2e.request(
+        "POST", f"/projects/{project}/agent/trigger",
+        {"agent": agent, "message": "Build it.", "task_id": b},
+    )
+    check("F619 the gated start is refused naming the prerequisite",
+          status == 409 and a in str(body), f"{status} {str(body)[:160]}")
+    check("F619 and no run started", runs(project, agent) == before)
+
     # F670
     status, body = e2e.request("PATCH", f"/projects/{project}/accounting/budget", {"token_budget": 2**63})
     check("F670 PATCH /budget past the bound is 422", status == 422, f"{status} {str(body)[:120]}")
