@@ -1,0 +1,138 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch project whose vault-distillation job runs on Haiku and a tracked source distilled once",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f587_redistil_keeps_ids.py (written first: fails before the build)",
+      "key": "drive",
+      "requirement": "same-lines-same-id",
+      "then": "every fact drawn from the same lines keeps its id, and at least one is",
+      "when": "the source is distilled again from the Distil route"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a source distilled once by a stubbed worker",
+      "how_to_check": "pytest hub/tests/test_a_redistilled_fact_keeps_its_id.py",
+      "key": "unit-ids",
+      "requirement": "same-lines-same-id",
+      "then": "the same draft keeps its id and file, the others get new ids, and the earlier moved fact is deleted",
+      "when": "it is distilled again with one draft the same, one with a moved quote and one new"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a requirement citing a fact id no record or stub holds, and a private stub held by this machine with no text",
+      "how_to_check": "pytest hub/tests/test_a_redistilled_fact_keeps_its_id.py",
+      "key": "unit-words",
+      "requirement": "gone-is-gone",
+      "then": "the warning says no longer in the vault and the entry says not at this machine's private location",
+      "when": "the warnings and the entry are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a private stub whose holder is this machine and whose text is not at the private location",
+      "how_to_check": "pytest hub/tests/test_a_redistilled_fact_keeps_its_id.py",
+      "key": "unit-held-here",
+      "requirement": "held-here-is-not-elsewhere",
+      "then": "its note says the text is not at this machine's private location, not held on another machine",
+      "when": "the entry is read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "cbd837743b1f18714b1ad5fc8f8c8e462bb4489a382bc642d3a0c478dd095644",
+      "FR-2": "7289134fbee4ecebb53833387b40b49efd968e8b2a24f8dff807a3971be9d873",
+      "FR-3": "50874f9585a6506aee8424b397ecc24d9caf68a1f53169dfc8ef41800bea86f5"
+    },
+    "high_water": 3,
+    "requirements": {
+      "gone-is-gone": "FR-2",
+      "held-here-is-not-elsewhere": "FR-3",
+      "same-lines-same-id": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1, no migration. D1. distil() hands _distil_piece the earlier facts of the source keyed by (visibility, frozenset of (source, quote, line_start, line_end)); a draft whose key matches keeps the earlier id (its file is not rewritten, as a fact's own file never is), and it counts as stored, so the earlier-minus-stored deletion leaves it. D2. Claim wording is not part of the key: the same lines are the same evidence, and keeping the earlier record keeps what the operator decided about. D3. The comparison uses the Hub's located citation (span) and the quote ignoring case, runs of whitespace and trailing punctuation: the drive on HEAD showed Haiku quoting the same line with and without its final period. Each earlier fact is claimed at most once, so two drafts from one line cannot share an id. D4. The wording fixes are the vault's message strings; the Vault tab's card is the UI batch.",
+  "evidence": {
+    "checked": [
+      "distillation.distil deletes earlier - stored after every distillation that stores a fact",
+      "vault.add_fact always mints a new fct- id",
+      "vault.fact_warnings says 'not in the vault on this machine' for a fact with no record or stub",
+      "vault._held_elsewhere names the stub's holder even when it is this machine"
+    ],
+    "limits": [
+      "A model that quotes differently on the second pass still churns that fact; the drive asserts at least one kept id so a fully re-worded pass is reported, not passed"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "Re-distilling a source deleted every earlier fact and wrote identical claims under new ids (distillation.distil deletes earlier - stored). A resolved contradiction's standing fact then read 'A private fact, held on another machine', and an approved spec citing it was warned the fact 'is not in the vault on this machine', both pointing at a machine or privacy problem that does not exist (F587, F617, re-verified on the 2026-10-15 sweep). F609's drive found the same wording on a private stub whose text was removed on this very machine.",
+  "requirements": [
+    {
+      "key": "same-lines-same-id",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A fact drawn again from the same lines is the same evidence; a new id orphans the decisions and requirements that cite it (F587).",
+      "statement": "POST /api/v1/projects/{id}/vault/sources/{source_id}/distil MUST answer 202 and distil the source in the background. It MUST answer 404 for an unknown source, and 409 with a reason naming what to do when the job is disabled, has no runner, or the source's text is not on this machine. A distillation that stores at least one fact MUST replace the facts previously distilled from that source, except that a drawn fact whose citations equal an earlier fact's as a set (the same source and line span, and the same quote ignoring case, runs of whitespace and trailing punctuation) and whose visibility is the same MUST keep that earlier fact, each earlier fact at most once,, unchanged and under its id, instead of storing a new one; one that stores none MUST leave them as they were."
+    },
+    {
+      "key": "gone-is-gone",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A fact with neither record nor stub anywhere is not on another machine; saying so sends the operator looking for a machine problem (F617).",
+      "statement": "For each fact a requirement cites, the Hub MUST derive on read a warning when the fact is disputed by an open contradiction (naming the cited fact's claim and source and the other fact's claim and source, and which one is presumed), when it is superseded (naming the fact that replaced it and its source), when it is disputed by a referred report (naming the report's message), or when no fact with that id is in the vault, saying it is no longer in the vault (deleted, or replaced when its source was distilled again), not that it is on another machine. A source held privately on another machine is named as held elsewhere. Resolving the contradiction in the cited fact's favour, or closing the report, MUST clear the warning."
+    },
+    {
+      "key": "held-here-is-not-elsewhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F609's drive: on the machine the stub names, 'held on <this machine>, not on this machine' contradicts itself.",
+      "statement": "A private entry whose stub names this machine as its holder and whose text is not at the private location MUST say its text is not at this machine's private location (removed, or the location changed), not that it is held on another machine."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "distillation: a drawn fact whose citations and visibility match an earlier fact of the source keeps the earlier fact",
+      "vault: the missing-fact warning and the private-entry note say what is true",
+      "knowledge-vault: the two requirements this rewrites, one added"
+    ],
+    "non_goals": [
+      "The Vault tab's contradiction card wording for a gone fact (UI batch)",
+      "Keeping a fact whose quotes moved or changed (it is new evidence; it gets a new id as today)",
+      "Repairing citations to facts already churned before this change"
+    ]
+  },
+  "summary": "Re-distilling a source keeps every fact it draws again from the same lines under its existing id, so decisions and spec citations keep pointing at it; a fact that really is gone is called gone, not held on another machine (F587, F617).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "distillation.distil/_distil_piece, vault.fact_warnings, vault._held_elsewhere.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "same-lines-same-id",
+        "gone-is-gone",
+        "held-here-is-not-elsewhere"
+      ],
+      "reviewer": null,
+      "title": "Keep same-line facts across re-distil; honest missing wording"
+    }
+  ],
+  "title": "A re-distilled fact keeps its id"
+}
