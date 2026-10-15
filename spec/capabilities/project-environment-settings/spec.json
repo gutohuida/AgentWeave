@@ -227,6 +227,24 @@
       "requirement": "the-hubs-background-jobs-are-configured-on-a-man-manager-section",
       "then": "the jobs and the activity list read clearly and fit the rest of Environment",
       "when": "the operator looks at them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch project whose vault-distillation job runs on Haiku",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f581_answer_kept.py (written first: fails before the build)",
+      "key": "a-workers-answer-is-kept-drive",
+      "requirement": "a-workers-answer-is-kept-answer-kept",
+      "then": "its firing in GET /manager/activity carries an answer naming a quote from the source",
+      "when": "a source is uploaded and distilled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "each job's firing with a faked worker",
+      "how_to_check": "pytest hub/tests/test_a_workers_answer_is_kept.py",
+      "key": "a-workers-answer-is-kept-unit",
+      "requirement": "a-workers-answer-is-kept-answer-kept",
+      "then": "the event keeps the answer; a long one is cut with the marker; a failed spawn keeps null",
+      "when": "it fires"
     }
   ],
   "algorithms": [],
@@ -245,6 +263,7 @@
       "FR-19": "cf2258c812a99125403af54be6cd6c6fe1c807cdbc3a91128885b9ca114883b6",
       "FR-2": "21c521d1941ebd10d4988a731e78d7c8a92dcb95409e783193bab6c8995ba9b2",
       "FR-20": "02fc54a9edc78a2880a142741feb7a6cb3fdc96b59450d59fe8f8ddb073be90c",
+      "FR-21": "10ba5fcef0ca7146f859b9b3ac5a7109373a2e5a23630e312c4bee62c90940ba",
       "FR-3": "3d17e80456d3f69222d7169a7c4ec9ce2d4a46f47cbc111314070a9aa06d74d3",
       "FR-4": "c3fa0ada765d0b1b4df73f7a0b5713adf89b1ebe9295037ced4ec359b0def217",
       "FR-5": "e96d369a56a85af82bd1c1cded65f19882ef14ac46b961ad196d133b16e4861b",
@@ -253,10 +272,11 @@
       "FR-8": "fbe280747c17fa189e29bd08b42d6ae2417f40c215e181fe700d92ee3e734dc4",
       "FR-9": "5b0433746ab29fd83c04af62dfa6376c1faea677d279d9d7fa87a1dc7e9dcf57"
     },
-    "high_water": 20,
+    "high_water": 21,
     "requirements": {
       "a-configuration-section-occupies-the-content-region": "FR-3",
       "a-configuration-section-states-what-it-governs": "FR-1",
+      "a-workers-answer-is-kept-answer-kept": "FR-21",
       "agent-budget-is-described-as-what-it-caps": "FR-12",
       "n1-a-saved-settings-change-is-recorded-in-history": "FR-8",
       "n2-a-runner-named-in-settings-must-belong-to-the-project": "FR-9",
@@ -436,6 +456,13 @@
       "party": null,
       "rationale": "A committed bundle reaches :8000's app on its next reload, possibly before its server restarts.",
       "statement": "The app's Environment MUST have a Manager section listing each job with an on/off control, a runner select and a model select, and below them the activity list; the Settings section MUST no longer show the conversation title controls. Where the Hub answers 404 for the manager routes, the section MUST say this Hub has no manager yet instead of failing."
+    },
+    {
+      "key": "a-workers-answer-is-kept-answer-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An operator who doubts a judgement needs what was answered, not only a count (F581).",
+      "statement": "Each manager_job_fired event for a firing that spawned a model MUST keep the model's answer as answer: its raw text when the worker returned one, otherwise its parsed answer as JSON, cut to its first 8,000 characters and ending in a marker saying it was cut; a firing whose spawn returned nothing MUST keep answer null. GET /manager/activity MUST list it with the firing."
     }
   ],
   "schema_version": 1,
