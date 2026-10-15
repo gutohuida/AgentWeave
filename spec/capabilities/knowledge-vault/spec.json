@@ -656,6 +656,24 @@
       "requirement": "a-redistilled-fact-keeps-its-id-held-here-is-not-elsewhere",
       "then": "its note says the text is not at this machine's private location, not held on another machine",
       "when": "the entry is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch project with a tracked fact 'Invoices are due within 45 days' citing its source, and vault-reports on Haiku",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f615_outside_news_referred.py (written first: fails before the build)",
+      "key": "a-report-with-news-reaches-the-operator-drive",
+      "requirement": "a-report-with-news-reaches-the-operator-news-is-referred",
+      "then": "the first report is referred and the second is answered",
+      "when": "a Haiku agent reports that the contract was renegotiated to 60 days, and separately that the source says 30 days"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the reports job's prompt",
+      "how_to_check": "pytest hub/tests/test_vault_reports.py",
+      "key": "a-report-with-news-reaches-the-operator-unit",
+      "requirement": "a-report-with-news-reaches-the-operator-news-is-referred",
+      "then": "it names outside information as disputed, keeps answered for what the source settles, and carries the new prompt version",
+      "when": "it is built for a report"
     }
   ],
   "algorithms": [],
@@ -711,14 +729,16 @@
       "FR-52": "fc7ce16869f138ef95ba4e115bb2aa03d1abd4844aabea0ad8d21e10f8b0cdbb",
       "FR-53": "b6ce460ee9bc243aea1bd7962c311551f1df60b0a7bbb648d2550cc9f2acba1d",
       "FR-54": "50874f9585a6506aee8424b397ecc24d9caf68a1f53169dfc8ef41800bea86f5",
+      "FR-55": "9f117c4ba512ce5ada586d310585a14c1e5840aedce3a203390a80c440f3cab8",
       "FR-6": "791cb5f62ecc7dd06403d8feb531680b9a75b9213bf36e7fba8f53633baf0812",
       "FR-7": "8854e9978008cfeee475c44a7e3fe72a3268790028901bf5811da93b9ed77b47",
       "FR-8": "c8aab6cb4927a911090490cc9d2c8c268539b152640846216c4adafd492f317b",
       "FR-9": "dcd141a4a6ed7104aad675231554a940069eb75a84c77422a6b3212cffd4d26e"
     },
-    "high_water": 54,
+    "high_water": 55,
     "requirements": {
       "a-redistilled-fact-keeps-its-id-held-here-is-not-elsewhere": "FR-54",
+      "a-report-with-news-reaches-the-operator-news-is-referred": "FR-55",
       "a-requirement-is-checked-against-what-th-approval-lists-warnings": "FR-39",
       "a-requirement-is-checked-against-what-th-requirement-cites-facts": "FR-35",
       "a-requirement-is-checked-against-what-the-va-cited-fact-warnings": "FR-36",
@@ -1168,6 +1188,13 @@
       "party": null,
       "rationale": "F609's drive: on the machine the stub names, 'held on <this machine>, not on this machine' contradicts itself.",
       "statement": "A private entry whose stub names this machine as its holder and whose text is not at the private location MUST say its text is not at this machine's private location (removed, or the location changed), not that it is held on another machine."
+    },
+    {
+      "key": "a-report-with-news-reaches-the-operator-news-is-referred",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The source cannot settle what happened after it or outside it; only the operator can (F615).",
+      "statement": "The vault-reports job's instruction MUST tell the model that a report bringing information the entry's source does not hold (a later change, something a person said, another document) is not settled by the source and is answered disputed, so the report is referred to the operator; answered MUST be reserved for a report the source itself settles, and the prompt version MUST change with the instruction."
     }
   ],
   "schema_version": 1,
