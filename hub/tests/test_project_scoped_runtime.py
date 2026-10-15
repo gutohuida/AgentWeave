@@ -306,3 +306,37 @@ async def test_work_dir_rejects_a_symlink_that_escapes_the_project(
     )
     assert resp.status_code == 400
     assert "work_dir" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_work_dir_cannot_point_into_the_hubs_own_directory(
+    app, auth_headers, bind_project_workspace, two_projects
+):
+    """F669: `.agentweave/` holds the Hub's state and every agent's isolated workspace, so an
+    explicit work_dir there runs a read-only agent inside another agent's checkout."""
+    dir_a, _ = two_projects
+    await bind_project_workspace(dir_a)
+    (dir_a / ".agentweave" / "worktrees" / "bob").mkdir(parents=True)
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"reader": {"runner": "claude", "read_only": True}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await _bind_runner(app, auth_headers, "proj-test", "reader")
+
+    for bad_work_dir in (
+        ".agentweave",
+        ".agentweave/worktrees/bob",
+        ".AgentWeave/worktrees",
+        "./.agentweave",
+    ):
+        with patch("hub.api.v1.agent_trigger.PtySession.spawn") as spawn:
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "reader", "message": "hi", "work_dir": bad_work_dir},
+                headers=auth_headers,
+            )
+        assert resp.status_code == 400, (bad_work_dir, resp.text)
+        assert ".agentweave" in resp.json()["detail"]
+        spawn.assert_not_called()

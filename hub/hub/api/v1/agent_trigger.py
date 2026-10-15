@@ -251,6 +251,21 @@ def prepend_run_path(env: Dict[str, str], directory: Path) -> None:
     env[key] = str(directory) + (os.pathsep + existing if existing else "")
 
 
+WORK_DIR_IN_HUB_DIRECTORY = (
+    "Invalid work_dir: it is inside .agentweave/, which holds the Hub's own state and every "
+    "agent's isolated workspace, so a turn there would run in another agent's checkout. Choose a "
+    "directory of the project itself."
+)
+
+
+def work_dir_in_hub_directory(root: Path, resolved: Path) -> bool:
+    """F669: whether a resolved work_dir is the project's `.agentweave/` or inside it. Compared
+    case-normalised, so `.AgentWeave` is the same directory where the file system says it is."""
+    hub_directory = os.path.normcase(str((root / ".agentweave").resolve(strict=False)))
+    target = os.path.normcase(str(resolved))
+    return target == hub_directory or target.startswith(hub_directory + os.sep)
+
+
 def prepare_calls_dir(work_dir: str) -> None:
     """Make `<work_dir>/.agentweave/calls/` a real directory for this turn (design D14).
 
@@ -1245,13 +1260,18 @@ async def _trigger_agent_directly(
         # or escaping one — resolve_relative rejects traversal, absolute paths, control
         # characters, and symlink escapes in one place.
         try:
-            effective_work_dir = str(workspace_root.resolve_relative(work_dir))
+            resolved_work_dir = workspace_root.resolve_relative(work_dir)
         except project_workspace.ProjectPathError as exc:
             raise TriggerAgentError(
                 status.HTTP_400_BAD_REQUEST,
                 f"Invalid work_dir: {exc}",
                 request_level=True,
             ) from exc
+        if work_dir_in_hub_directory(workspace_root.root, resolved_work_dir):
+            raise TriggerAgentError(
+                status.HTTP_400_BAD_REQUEST, WORK_DIR_IN_HUB_DIRECTORY, request_level=True
+            )
+        effective_work_dir = str(resolved_work_dir)
         isolated_workspace: Optional[Path] = None
         # Not isolated, so the renderer never reads it; named on every branch so mypy sees one
         # type and a future branch cannot inherit a stale value from the one above it.
@@ -1926,9 +1946,11 @@ async def trigger_agent(
         )
     if body.work_dir:
         try:
-            workspace_root.resolve_relative(body.work_dir)
+            resolved_work_dir = workspace_root.resolve_relative(body.work_dir)
         except project_workspace.ProjectPathError as exc:
             raise HTTPException(status_code=400, detail=f"Invalid work_dir: {exc}") from exc
+        if work_dir_in_hub_directory(workspace_root.root, resolved_work_dir):
+            raise HTTPException(status_code=400, detail=WORK_DIR_IN_HUB_DIRECTORY)
 
     conversation: Optional[Conversation] = None
     if body.conversation_id is not None:
