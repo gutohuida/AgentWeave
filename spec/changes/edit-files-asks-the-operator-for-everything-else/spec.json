@@ -1,0 +1,132 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub and a Haiku agent",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f628_accept_edits_card.py <project> (written first: no card on HEAD)",
+      "key": "drive",
+      "requirement": "card",
+      "then": "a pending permission card names the run; denying it leaves the file absent",
+      "when": "an acceptEdits turn Writes outside the workspace"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an acceptEdits override",
+      "how_to_check": "pytest hub/tests/test_runner_adapters_argv.py hub/tests/test_permission_approver.py",
+      "key": "argv",
+      "requirement": "card",
+      "then": "--permission-prompt-tool is present and AW_PERMISSION_POSTURE is operator",
+      "when": "the Claude argv and run env are built"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same posture",
+      "how_to_check": "pytest hub/tests/test_runner_adapters_argv.py",
+      "key": "inside",
+      "requirement": "edits-free",
+      "then": "--permission-mode acceptEdits is kept, so inside edits stay auto-approved by Claude",
+      "when": "the argv is built"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "050ef73f8906d9ebe5c5e8adf27f373d2581b53081e671ad591feb431913ee4a",
+      "FR-2": "c9340f730a4cddbb33c12f972b3c582fc1e316daafbf7a12a4dee0162231f1ea"
+    },
+    "high_water": 2,
+    "requirements": {
+      "card": "FR-1",
+      "edits-free": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2 (permission posture). Rollback: revert. D1. acceptEdits joins APPROVER_PERMISSION_MODES (the approver flag) and the run env's operator posture (who answers), decided together as for manual. D2. Claude only: Codex's acceptEdits is answered over its app-server protocol and Copilot has its own modes.",
+  "evidence": {
+    "checked": [
+      "runner_commands.py:87 APPROVER_PERMISSION_MODES",
+      "agent_trigger.py:1648 operator posture only for manual",
+      "drive on HEAD: no card"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "`runner_commands.APPROVER_PERMISSION_MODES` holds only workspace and manual, so an acceptEdits run gets no --permission-prompt-tool: Claude refuses an outside Write itself, no permission_requests row exists, and the agent tells the operator to approve it in a dialog that does not exist (2026-10-15 sweep G7; re-driven on HEAD: no card).",
+  "requirements": [
+    {
+      "key": "card",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator decision fix-D12.",
+      "statement": "An acceptEdits Claude run MUST name the Hub's approval tool and have the operator answer, so every call Claude Code does not auto-approve under acceptEdits becomes an operator card."
+    },
+    {
+      "key": "edits-free",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Edits Claude Code auto-approves under acceptEdits MUST still run without a card."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Claude runs under acceptEdits"
+    ],
+    "non_goals": [
+      "Codex and Copilot postures"
+    ]
+  },
+  "summary": "Under the Edit files posture (acceptEdits), a Claude call that Claude Code itself would ask permission for is put to the operator as a card, as under Ask me, instead of being refused with no card (F628; decision fix-D12).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1015_f628_accept_edits_card.py",
+      "files": [
+        "scripts/drive/d1015_f628_accept_edits_card.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "card"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "runner_commands.py; agent_trigger.py; goldens",
+      "files": [
+        "hub/hub/runner_commands.py",
+        "hub/hub/api/v1/agent_trigger.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "card",
+        "edits-free"
+      ],
+      "reviewer": null,
+      "title": "acceptEdits routes through the operator approver"
+    }
+  ],
+  "title": "Edit files asks the operator for everything else"
+}

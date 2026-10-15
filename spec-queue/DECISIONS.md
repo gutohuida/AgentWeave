@@ -35,6 +35,7 @@ Put to the operator in an interactive session, each with background, stakes and 
 - DECIDED   fix-D9   `/compact` and `/new-session` (F618, F417): delete both routes, `hub/ui/src/api/context.ts`, and the `compact_request`/`new_session_request` events. (operator, 2026-10-15)
 - DECIDED   fix-D10  Granting `allow_agent_jobs` in Settings (F597): the settings write resolves the open capability-refusal question as "Enabled it — go ahead" and delivers that answer to the waiting agent. (operator, 2026-10-15)
 - DECIDED   fix-D11  Copilot "Full access" is hidden (wpc-obs-4); a `runtime_overrides` change of model or effort only resumes the same conversation (wpc-obs-2). (operator, 2026-10-15)
+- DECIDED   fix-D12  F628: under "Edit files" (acceptEdits), a call Claude Code asks permission for (an outside write, most shell commands) is put to the operator as a card, as under "Ask me"; edits inside the workspace still run freely. Unattended runs wait up to the agent's permission timeout instead of failing at once. Rejected: keep refusing with an honest note; route through the Workspace judge. (operator, 2026-10-15)
 - DECIDED   fix-hk1  `AgentWeaveResearch` stays enabled. (operator, 2026-10-15)
 - DECIDED   fix-hk2  The stray untracked `hub/.env` and `hub/data/` are removed (G1-12): moved out of the checkout 2026-10-15. (operator, 2026-10-15)
 - DECIDED   fix-hk3  `.claude/work-pc/` stays tracked permanently so a pull carries the work-PC handoffs; noted in CLAUDE.md. (operator, 2026-10-15)
