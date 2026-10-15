@@ -35770,7 +35770,7 @@ Seam: Agents (agent-keyed route guards) x Projects (Overview roster and counts).
 
 ## F619 (C) -- an operator turn bound to a gated task runs the whole job; every status move is refused, and its peer mail starts a seven-turn chain
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Dependencies, Inbound queue; scratch Hub `:8033`).
+**Status:** fixed 2026-10-15 (Tier 0). `POST /agent/trigger` with a `task_id` on a start edge (`pending`/`assigned`, the edges `task_transition_service` gates) asks `dependency_gate.evaluate` and refuses with 409 `dependency_unmet` naming the prerequisite before any run or queue entry. Started work is not asked (D8: flagged, not stopped). `test_a_turn_for_a_task_whose_prerequisite_is_unmet_is_refused` failed before (the run started); controls for an approved prerequisite and an in-progress task pass. Driven with `scripts/drive/d1015_s1_tier0.py` (12/12): 409 naming the prerequisite, no run. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Dependencies, Inbound queue; scratch Hub `:8033`).
 
 `POST /agent/trigger {agent: dev2, task_id: B}` started a run while B's prerequisite A was `pending`. dev2 implemented B in full; `in_progress` and `completed` were both refused with `dependency_unmet` (legible). It messaged dev1, and the agent-to-agent chain ran seven turns (dev2 -> dev1 -> dev2 -> rev -> dev1 -> rev -> dev2) before it went quiet. The trigger itself said nothing about the gate. The spec (`an-unmet-dependency-prevents-starting-and-nothing-else`) gates the status only, so this is a design gap rather than a defect.
 
@@ -35810,7 +35810,7 @@ Seam: Inbound queue & messages x Agent environment (team roster in context). Tie
 
 ## F624 (C) -- a loop's outstanding-request check ignores an operator turn queued from the composer; F556 names only `/messages` mail
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops; scratch Hub `:8036`).
+**Status:** fixed 2026-10-15 (Tier 0). `_pending_loop_request` names an operator entry for the job's agent with no `Message` (the composer's turn), still queued or delivered into a live run, as `{"kind": "operator", "to": <agent>, ...}` after the question and mail cases. `test_an_operator_turn_queued_from_the_composer_is_an_outstanding_request` failed before (`None`); a delivered-turn control passes. **Not driven live:** a drained loop needs an agent's `create_loop`; the check is called directly, as F556's sibling tests do. The UI does not render `pending_request` kinds. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops; scratch Hub `:8036`).
 
 alpha had no runner. `POST /agent/trigger` queued "When you next run, tell me the date." (`status: queued`). The drained loop then fired and `loop_queue_exhausted` gave `pending_request: null`. Same setup with `POST /messages {"to":"alpha",…}` gave `pending_request: {"kind":"message","to":"alpha","reason":"please answer",…}`, so F556 holds for mail. `_pending_loop_request` (`scheduler.py:435`) reads only the `Message` model, and the composer, the operator's commonest door, creates an inbound-queue entry with no `Message`. In the territory of decision `F556-outstanding-message-direction`; the `agent-loops` ac41/ac42 wording is also still open.
 

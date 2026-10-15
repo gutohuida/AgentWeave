@@ -534,6 +534,36 @@ async def _pending_loop_request(
             "created_at": message.timestamp.isoformat(),
         }
 
+    # The composer queues the operator's turn as an entry with no `Message` (F624), and it is the
+    # operator's commonest door. Outstanding by the same rule as mail: still queued, or delivered
+    # into a turn of the job's agent that has not ended.
+    operator_result = await session.execute(
+        select(InboundQueueEntry)
+        .outerjoin(Run, Run.id == InboundQueueEntry.delivered_in_run_id)
+        .where(
+            InboundQueueEntry.project_id == job.project_id,
+            InboundQueueEntry.agent == job.agent,
+            InboundQueueEntry.origin_type == "operator",
+            InboundQueueEntry.message_id.is_(None),
+            or_(
+                InboundQueueEntry.state == "queued",
+                and_(InboundQueueEntry.state == "delivered", Run.status == "running"),
+            ),
+        )
+        .order_by(InboundQueueEntry.sequence.desc())
+    )
+    operator_entry = operator_result.scalars().first()
+    if operator_entry is not None:
+        reason = operator_entry.content
+        if len(reason) > _LOOP_PENDING_REQUEST_REASON_CHARS:
+            reason = reason[:_LOOP_PENDING_REQUEST_REASON_CHARS]
+        return {
+            "kind": "operator",
+            "to": operator_entry.agent,
+            "reason": reason,
+            "created_at": operator_entry.arrived_at.isoformat(),
+        }
+
     return None
 
 

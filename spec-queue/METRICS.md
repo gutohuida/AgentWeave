@@ -113,3 +113,5 @@ not a defect.
 | 2026-10-15 | F608 a spent-budget firing waits, answering 200 (interactive, S1) | 0 | none | ~0h20 (hold + entry reason, one test) | drive: held firing completed after the budget was cleared | none |
 | 2026-10-15 | F625 a withdrawn firing is stopped (interactive, S1) | 0 | none | ~0h25 (helper for withdraw and archive, 3 tests) | drive 2 checks | none; deviation: closed as existing `stopped`, not a new `withdrawn` status |
 | 2026-10-15 | F651 an answer read in-run is not delivered again (interactive, S1) | 0 | none | ~0h25 (withdraw at the agent's GET, 3 tests) | not driven (needs a mid-run timeout and a poll on cue) | none |
+| 2026-10-15 | F619 a gated task's turn is refused before it starts (interactive, S1) | 0 | none | ~0h15 (gate at the trigger, 3 tests) | drive: 2 checks, no turn spent | none |
+| 2026-10-15 | F624 a composer turn is a loop's outstanding request (interactive, S1) | 0 | none | ~0h15 (third case in the check, 2 tests) | not driven (needs an agent-created loop) | test: test_scheduler's schema-order foot (F264) under xdist; run serially |

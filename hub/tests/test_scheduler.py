@@ -2873,3 +2873,43 @@ async def test_a_flow_work_run_that_moves_nothing_is_divergent(app, auth_headers
         )
         assert len(divergences) == 1
         assert divergences[0].task_id == "task-flow-neglects"
+
+
+async def _pending_request_for_composer_turn(suffix, state):
+    """A loop whose agent has an operator turn queued from the composer -- no `Message` row."""
+    executor = f"loop-exec-{suffix}"
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix=suffix, agent=executor)
+        loop = await _make_loop(
+            db, job_id=job.id, purpose="answer the operator", stop_when_queue_empties=True
+        )
+        entry = new_entry(
+            project_id="proj-test",
+            agent=executor,
+            origin_type="operator",
+            content="When you next run, tell me the date.",
+            hop_depth=0,
+        )
+        entry.state = state
+        db.add(entry)
+        await db.commit()
+        return await _pending_loop_request(
+            db, await db.get(AIJob, job.id), await db.get(Loop, loop.id), exclude_run_id="none"
+        )
+
+
+@pytest.mark.asyncio
+async def test_an_operator_turn_queued_from_the_composer_is_an_outstanding_request(app):
+    """F624: the composer, the operator's commonest door, queues an entry with no `Message`, and
+    the drained loop reported `pending_request: null` while `/messages` mail was named (F556)."""
+    pending = await _pending_request_for_composer_turn("f624-queued", "queued")
+
+    assert pending is not None
+    assert pending["kind"] == "operator"
+    assert pending["to"] == "loop-exec-f624-queued"
+    assert pending["reason"] == "When you next run, tell me the date."
+
+
+@pytest.mark.asyncio
+async def test_a_delivered_operator_turn_is_not_an_outstanding_request(app):
+    assert await _pending_request_for_composer_turn("f624-delivered", "delivered") is None
