@@ -1,0 +1,117 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch project with one private and one tracked vault source",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f592_deleted_project_stays_deleted.py (written first: fails before the build)",
+      "key": "drive",
+      "requirement": "deleted-id-not-adopted",
+      "then": "the private folder is gone, the reopened project has a new id, the marker names it, and the vault lists no private source",
+      "when": "it is deleted with remove_private=true and its folder is reopened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "projects with private entries at the default and at a chosen location",
+      "how_to_check": "pytest hub/tests/test_a_deleted_project_stays_deleted.py",
+      "key": "unit-delete",
+      "requirement": "delete-removes-asked-private",
+      "then": "asked removes only the vault's folders, unasked keeps them, shared refuses with nothing deleted, and the project directory is untouched",
+      "when": "each is deleted with and without remove_private, and one whose location another project shares"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a deleted project's folder and a folder marked by another database",
+      "how_to_check": "pytest hub/tests/test_a_deleted_project_stays_deleted.py hub/tests/test_migrations.py",
+      "key": "unit-reopen",
+      "requirement": "deleted-id-not-adopted",
+      "then": "the deleted one gets a new id and marker; the foreign one is adopted under its own id",
+      "when": "each is opened"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "4aa61746644df68bfa7b43c2fcb1817674ddbf9b7ccd3e63057d3189a8af65f0",
+      "FR-2": "2fc746f8ec674f137ee01c18412e97da9f067f99f8fd5e6293c4c569a6675431"
+    },
+    "high_water": 2,
+    "requirements": {
+      "delete-removes-asked-private": "FR-1",
+      "deleted-id-not-adopted": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2: private-data removal and a migration. D1. Migration 0128 adds deleted_projects(id primary key, deleted_at), with no project_id column so the delete sweep never removes it; insert-only, no existing row touched. Rollback: the downgrade drops it; a reopen then adopts the deleted id again (the pre-change behaviour), and files already removed stay removed. D2. Removal runs before the row sweep so a failure deletes nothing and the operator can retry; the reverse order leaves private text nothing points at, which is F592. D3. Removal is bounded: the default location is exactly vaults/<id>; a chosen location loses only the four vault folders, and a location equal to, inside or containing another project's effective private location is refused (its files carry no project id). D4. The API default keeps the entries, so the live app's current bundle deletes exactly as it does today; the dialog will send true by default (UI batch). Hazard: :8000's next restart runs 0128 (creates one empty table).",
+  "evidence": {
+    "checked": [
+      "ProjectLifecycleService.delete sweeps rows only and its docstring forbids any filesystem call",
+      "open_existing registers a marker id with no row under that id (the n2 requirement), whoever deleted it",
+      "vault.default_private_location is ~/.agentweave/hub/vaults/<project id>"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "On the 2026-10-15 sweep DELETE /projects/{id} answered 204 and left the private note's full text under ~/.agentweave/hub/vaults/<id>/ with nothing in the app pointing at it (F592). Reopening the folder then adopted the same id from the marker, and the vault listed and served the 'permanently' deleted private source again (F609). The dialog promises every record is removed permanently; for private data it was false.",
+  "requirements": [
+    {
+      "key": "delete-removes-asked-private",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "fix-D1: deletion asks about private data. The project's own directory stays the operator's; the private location is the vault's, and leaving it behind left private text nothing pointed at (F592).",
+      "statement": "The operator SHALL be able to delete a project and every Hub record scoped to it without the Hub touching the project's directory or any file in it, its marker included; when the delete asks to remove private vault entries, the Hub SHALL remove them before deleting any record (at the Hub's default location the project's whole folder, at a location the operator chose only the vault's sources, facts, contradictions and reports folders, and the folder itself if then empty), SHALL refuse, deleting nothing, when that location is shared with another project or the removal fails, and a delete that does not ask SHALL keep them."
+    },
+    {
+      "key": "deleted-id-not-adopted",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A folder registered in another database should come back as itself; a project this database deleted must not, or deleted private content returns (F609, fix-D1).",
+      "statement": "Opening a directory whose marker names a project ID this database has no record of SHALL register it under the marker's own ID, seeded like a new project, and SHALL record a `project_adopted` event, unless this database deleted that ID: then it SHALL register a new project under a newly minted ID and rewrite the marker to name it, bringing back no record or private entry of the deleted project."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "DELETE /projects/{id}?remove_private=true removes the project's private vault entries before any record",
+      "a deleted_projects table (migration 0128) remembering ids this database deleted",
+      "open_existing registers a new id for a marker naming a deleted id",
+      "local-project-workspace: the two requirements this rewrites"
+    ],
+    "non_goals": [
+      "The delete dialog's checkbox (UI batch; until it lands the app's delete keeps private entries, today's behaviour)",
+      "Tracked vault files under knowledge/ (they are the project's files, never touched by a delete)",
+      "Removing private entries left behind by projects deleted before this change"
+    ]
+  },
+  "summary": "Deleting a project can remove its private vault entries (asked, checked by default in the dialog), and reopening its folder registers a new project instead of resurrecting the deleted id (F592, F609, decision fix-D1).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "project_lifecycle.delete/open_existing, vault.remove_private_entries, the delete route's remove_private, migration 0128, docs/reference/hub-api.md.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "delete-removes-asked-private",
+        "deleted-id-not-adopted"
+      ],
+      "reviewer": null,
+      "title": "Remove asked private entries on delete; never re-adopt a deleted id"
+    }
+  ],
+  "title": "A deleted project stays deleted"
+}
