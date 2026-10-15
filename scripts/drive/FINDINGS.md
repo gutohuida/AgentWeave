@@ -36013,7 +36013,7 @@ Seam: Projects (instructions route x clear confirmation). Tier guess: 0.
 
 ## F648 (C) -- the agent-budget refusal names no remedy
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Agents; scratch Hub `:8031`).
+**Status:** fixed 2026-10-15 (Tier 0). The `request_agent` budget refusal says how many open agents the project has and names both remedies and whose they are: ask the operator to archive an agent (freeing its slot) or raise the agent budget in Settings. `test_the_budget_still_bounds_it` asserts the remedies and failed before. Driven with `scripts/drive/d1015_s4_names.py`: a Haiku agent at budget 1 met the refusal and relayed both remedies; no agent created. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Agents; scratch Hub `:8031`).
 
 An agent's `request_agent` at budget gets `409: Project agent budget exhausted (12/8)` (`run-31a3ebe212d5` transcript). It does not say that the operator raises it in Settings -> Agent budget, or that archiving frees a slot (Step 4 rule 6).
 

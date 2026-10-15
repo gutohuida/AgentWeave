@@ -136,3 +136,4 @@ not a defect.
 
 | 2026-10-15 | F645 a refused trigger leaves no conversation (interactive, S4) | 0 | none | ~0h10 (agent row asked before the conversation; 1 test) | ~0h05 (in d1015_s4_names.py) | test: 4 suite tests triggered agents with no row and now meet the earlier refusal; given rows |
 | 2026-10-15 | F642 a task's assignee is an open agent (interactive, S4) | 0 | none | ~0h25 (one refusal at create and PATCH; 4 tests; 14 suite tests seeded real rows for literal assignees) | ~0h05 (in d1015_s4_names.py) | test: 14 suite tests assigned tasks to names that were never agents |
+| 2026-10-15 | F648 the agent-budget refusal names its remedies (interactive, S4) | 0 | none | ~0h05 (sentence; 1 assertion) | ~0h05 (one Haiku turn in d1015_s4_names.py) | none |

@@ -382,7 +382,10 @@ async def test_the_budget_still_bounds_it(app, auth_headers, add_agent, bind_run
         json={"name": "over-budget", "template": "budget-template", "task": "help"},
     )
     assert resp.status_code == 409, resp.text
-    assert "budget" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    assert "budget" in detail
+    # F648: the refusal names both remedies, and who can take them.
+    assert "archive" in detail and "Settings" in detail and "operator" in detail
 
     async with async_session_factory() as session:
         result = await session.execute(select(Agent).where(Agent.name == "over-budget"))

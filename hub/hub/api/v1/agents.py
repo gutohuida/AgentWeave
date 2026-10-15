@@ -2672,7 +2672,13 @@ async def request_agent(
     if open_count >= project_row.agent_budget:
         raise HTTPException(
             status_code=409,
-            detail=(f"Project agent budget exhausted ({open_count}/{project_row.agent_budget})"),
+            # F648: with the two moves that free a slot, both the operator's to make.
+            detail=(
+                f"Project agent budget exhausted ({open_count}/{project_row.agent_budget}): "
+                f"the project already has {open_count} open agents. Ask the operator to "
+                "archive an agent it no longer needs (an archived agent frees its slot), or to "
+                "raise the agent budget in Settings."
+            ),
         )
 
     from .agent_trigger import QUESTION_WAIT_ENV
