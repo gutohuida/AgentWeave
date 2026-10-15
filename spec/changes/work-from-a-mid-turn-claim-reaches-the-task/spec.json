@@ -1,0 +1,138 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch project and a Haiku agent",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f603_mid_turn_claim.py <project> (written first: no task branch on HEAD)",
+      "key": "drive",
+      "requirement": "carried",
+      "then": "the task's branch holds FIX.txt",
+      "when": "an untasked turn claims a task, writes FIX.txt and completes the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "real disposable repositories",
+      "how_to_check": "pytest hub/tests/test_mid_turn_task_work_is_carried.py",
+      "key": "unit",
+      "requirement": "never-destructive",
+      "then": "created and carried, carried, untouched, untouched with the pick aborted",
+      "when": "the turn's commits are carried into a missing, an existing, a dirty and a conflicting task checkout"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1535af91a815283c417ee1651415e37dc1d7f2cee262529933c743e79f4e206a",
+      "FR-2": "981fb6f795d75375ad833855062b94d71dd3c6e1958d5d2338897ed95400f1c5",
+      "FR-3": "4c3f0720eda2703c5ee76a37aa3b8a16d55b8c2ec5ab4916be23da575a03af96"
+    },
+    "high_water": 3,
+    "requirements": {
+      "carried": "FR-1",
+      "never-destructive": "FR-2",
+      "scope": "FR-3"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1. No migration. D1. Cherry-pick, not merge of the agent branch: the agent branch carries the agent's other work too, which a merge would ride along into the task (F58). D2. The range is the turn's own: HEAD at spawn (captured by the trigger, passed to the executor) to HEAD after the snapshot, merges excluded (F607's catch-up merges happen before spawn). D3. At finalize, after the snapshot and before the run is marked ended, best-effort: a failure never fails the run.",
+  "evidence": {
+    "checked": [
+      "worktrees.resolve_turn_workspace: untasked turns use the agent worktree",
+      "task_transition_service._guard_run_holds_the_task binds mid-turn",
+      "drive on HEAD: no task branch after a mid-turn claim"
+    ],
+    "limits": [
+      "A two-agent mail flow is not driven; one agent's untasked turn stands in for it"
+    ]
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "A mail or untasked turn runs in the agent's own worktree (`resolve_turn_workspace`'s agent arm). Claiming a task mid-turn binds the run (`_guard_run_holds_the_task`) but its work stays on the agent's branch; the task's checkout is cut later from main, so the reviewer reviewed pre-fix code and sent it back (2026-10-15 sweep G3). Re-driven on HEAD: a Haiku turn claimed task-962a9df5e5f8, wrote FIX.txt and completed it; agentweave/task/task-962a9df5e5f8 does not exist.",
+  "requirements": [
+    {
+      "key": "carried",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The review and the merge read the task's branch, not the agent's.",
+      "statement": "When a run that executed in an agent's own worktree ends bound to a task that takes its own checkout, the non-merge commits that run made (from the worktree's HEAD at spawn to its HEAD after the run's snapshot) MUST be cherry-picked onto the task's branch, created at the integration base with its approved prerequisites if it does not exist."
+    },
+    {
+      "key": "never-destructive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task checkout with uncommitted changes, one held by another agent's running turn, or a cherry-pick that conflicts MUST leave both branches as they were (the cherry-pick aborted) and record a warn event naming the task, the commits and the reason."
+    },
+    {
+      "key": "scope",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A run that executed in the task's own checkout, a review run, a read-only agent and a task that does not take its own checkout MUST be unaffected."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "runs bound mid-turn while in the agent's own worktree"
+    ],
+    "non_goals": [
+      "Moving a running process into the task checkout",
+      "F668 (two agents on one task checkout)"
+    ]
+  },
+  "summary": "When a turn running in an agent's own worktree claims a task that takes its own checkout, the commits that turn made are carried onto the task's branch at the run's end, so the review checks out the fixed code and Land merges it (F603).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1015_f603_mid_turn_claim.py",
+      "files": [
+        "scripts/drive/d1015_f603_mid_turn_claim.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "carried"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "worktrees.carry_turn_work_to_task; task_workspace helper; agent_trigger start-head capture and finalize call; tests",
+      "files": [
+        "hub/hub/worktrees.py",
+        "hub/hub/task_workspace.py",
+        "hub/hub/api/v1/agent_trigger.py",
+        "hub/tests/test_mid_turn_task_work_is_carried.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "carried",
+        "never-destructive",
+        "scope"
+      ],
+      "reviewer": null,
+      "title": "Carry a mid-turn claim's commits onto the task branch"
+    }
+  ],
+  "title": "Work from a turn that claimed its task mid-turn reaches the task"
+}
