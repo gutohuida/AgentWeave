@@ -1,0 +1,141 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch project whose check fails on master, and a Haiku agent's completed task",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f605_preexisting_checks.py <project> (written first: fails before the build)",
+      "key": "drive",
+      "requirement": "held",
+      "then": "the first answer says the check fails on main too, has no send-back line and names the override; the second lands the task",
+      "when": "the operator presses Land, then Land with an override reason"
+    },
+    {
+      "checked_by": "agent",
+      "given": "real disposable repositories",
+      "how_to_check": "pytest hub/tests/test_project_checks_gate.py hub/tests/test_project_checks_run.py",
+      "key": "unit",
+      "requirement": "baseline",
+      "then": "preexisting is recorded, not recorded, and the check is not re-run",
+      "when": "a check fails on main and the task, fails only on the task, and passes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same held task",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f605_preexisting_checks.py <project>",
+      "key": "land-override",
+      "requirement": "land",
+      "then": "the task is approved and its transition records the reason",
+      "when": "the operator presses Land with an override reason"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "4cedcefecfbfee5a2acddf8d43ef8ab49daf0c66d69786bd49a45561e13c6c05",
+      "FR-2": "1d6e7d8db7c5659f9524c11707ff3e9675365040ba1a7c2b27159642e0921baa",
+      "FR-3": "828a14f8104a9fa5f28f5cebbe5e6468ce2093038f449f43d338ab76297f4ab6"
+    },
+    "high_water": 3,
+    "requirements": {
+      "baseline": "FR-1",
+      "held": "FR-2",
+      "land": "FR-3"
+    },
+    "retired": {}
+  },
+  "design": "Tier 1. No migration: on_main and preexisting live in the run's JSON results. D1. Only failing checks are re-run on main, in a second checkout of the run's main_sha, so a passing project pays nothing. D2. The run's own state stays failed; the gate reads preexisting per result, so an older run without the field reads as today. D3. All failures pre-existing: entry state preexisting, sentence without REVIEWER_SENDS_BACK_CHECKS, and _operator_only_remedy returns a checks remedy whatever the candidate may accept, so the flow, the divergence and the briefing all say approval waits on the operator. approval_held_for_operator no longer returns early for a project with checks configured. Mixed: state failed as today, the pre-existing ones labelled. D4. Land takes the PATCH's override field and guard; the override clears failed and preexisting as it clears failed today.",
+  "evidence": {
+    "checked": [
+      "requirement_gate._check_checks: override_checks_reason clears failed and error",
+      "tasks.update_task_for_actor: the override is refused to agents (403)",
+      "tasks.land_task takes no body",
+      "approval_held_for_operator returns None early without awaiting evidence or gate rigor"
+    ],
+    "limits": [
+      "A new failure inside an already-failing check is held for the operator, not charged to the task"
+    ]
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "On the 2026-10-15 sweep main carried a defect (F622), so every check run on later work failed on tests the task never touched. The gate said approving \"would land work that breaks the project\" and told the reviewer to send it back, which tester did; Land answered 409 with nothing addressed to the operator, and the only exit took four PATCHes ending in `override_checks_reason`, which no control in the app sends. Checks report one exit code per command, so a new failure inside an already-failing suite cannot be told apart from the old one (fix-D13): such a task is held for the operator, never let through.",
+  "requirements": [
+    {
+      "key": "baseline",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Charging a task only for what it changed needs main's own answer to the same check.",
+      "statement": "When a check run's check fails on the merged work, the Hub MUST run that check on the main tip the run was cut from and record its outcome on the result as on_main, and preexisting when it failed there too; a check that passed is not re-run."
+    },
+    {
+      "key": "held",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "fix-D13: never charged silently, never hidden.",
+      "statement": "A refusal whose only failing checks are pre-existing MUST say they fail on main too, MUST NOT tell a reviewer to send the task back, and MUST be held for the operator, who lifts it with override_checks_reason; a refusal with any failure that is not pre-existing MUST stay the author's, as today, naming the pre-existing ones as such."
+    },
+    {
+      "key": "land",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The sweep's only exit took four PATCHes.",
+      "statement": "POST /tasks/{id}/land MUST accept an optional override_checks_reason and apply it as the approval PATCH does, recording it on the transition."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "project_checks: a failing check is re-run on the main tip and its result records on_main and preexisting",
+      "requirement_gate: a pre-existing-only failure is its own refusal, without the reviewer's send-back line, and an operator-only hold",
+      "POST /tasks/{id}/land accepts override_checks_reason"
+    ],
+    "non_goals": [
+      "The app's override control (the UI batch with F629, F659, F636, F453)",
+      "Comparing which tests failed inside one check (checks report an exit code)",
+      "Caching main's result across tasks"
+    ]
+  },
+  "summary": "When a task's check fails, the Hub runs that check on main's own tip; a failure main shares is labelled pre-existing, reviewers are not told to send the task back for it, and approval waits on the operator's override with a reason, which Land now accepts (F605, decision fix-D13).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "project_checks._execute.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "baseline"
+      ],
+      "reviewer": null,
+      "title": "Re-run failing checks on main and record preexisting"
+    },
+    {
+      "depends_on": [],
+      "description": "requirement_gate: entry state, sentence, _operator_only_remedy, approval_held_for_operator's early return.",
+      "from": null,
+      "key": "t2",
+      "requirements": [
+        "held"
+      ],
+      "reviewer": null,
+      "title": "Pre-existing failures are an operator-only hold"
+    },
+    {
+      "depends_on": [],
+      "description": "tasks.land_task.",
+      "from": null,
+      "key": "t3",
+      "requirements": [
+        "land"
+      ],
+      "reviewer": null,
+      "title": "Land accepts an override reason"
+    }
+  ],
+  "title": "A check that fails on main too is not the task's"
+}
