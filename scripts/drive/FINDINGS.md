@@ -35670,7 +35670,7 @@ Seam: Corpus & folding (reconcile) x Worktrees & integration. Tier guess: 1 (des
 
 ## F608 (B) -- a job fired on a spent token budget answers 500 and records the firing `failed`, but its entry stays queued and runs once the budget is raised (F596's pattern, a different refusal)
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops x Accounting & allowance; scratch Hub `:8036`).
+**Status:** fixed 2026-10-15 (Tier 0). The scheduler's spent-budget refusal is now a hold (`terminal_failure=False`, as the allowance hold already was) and writes its reason on the held entries, so a job's press answers 200 with `waiting_reason: "token budget exhausted"` and the firing stays `in_progress` until the delivered run finishes it. `hub/tests/test_a_job_on_a_spent_budget_waits.py` failed before (500). Driven with `scripts/drive/d1015_s1_tier0.py` on a scratch Hub (Haiku), 10/10. The held firing completed once the budget was cleared. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops x Accounting & allowance; scratch Hub `:8036`).
 
 With `token_budget` set below usage, `POST /jobs/{id}/run` on job `spent` returned **HTTP 500 `{"detail": "token budget exhausted"}`**, and the history shows `failed` / "token budget exhausted". `GET /queue/beta/status` shows `waiting_count: 1, waiting_reason: "token budget exhausted"`. After the budget was cleared the entry was delivered in `run-40d8f19c2d4d` (completed), while the job history still says `failed`. F596's fix (`kept_for_repair`) covers "no runner" and "CLI missing", not the budget refusal.
 
@@ -35778,7 +35778,7 @@ Seam: Dependencies x Inbound queue (operator trigger). **Fix shape (from the rep
 
 ## F620 (C) -- `POST /agent/trigger` with `"message": ""` starts a paid run
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Resilience refusal probes, Conversations; scratch Hub `:8037`).
+**Status:** fixed 2026-10-15 (Tier 0). `TriggerAgentRequest.message` refuses an empty or whitespace-only message with 422 naming Continue as the way to resume without words (the codebase's body-validation convention, not the plan's 400). `test_an_empty_message_is_refused_before_any_run` (3 cases) failed before: each started a run. Driven with `scripts/drive/d1015_s1_tier0.py` on a scratch Hub (Haiku), 10/10. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Resilience refusal probes, Conversations; scratch Hub `:8037`).
 
 `HTTP 200 "alpha started (run run-fe90137bada5)."` The model is `str` with no `min_length` (`agent_trigger.py:386`). The run was stopped at once.
 
@@ -35818,7 +35818,7 @@ Seam: Jobs & loops (loop stop) x Inbound queue (composer entries). Tier guess: 0
 
 ## F625 (C) -- a waiting firing whose queued entry is withdrawn stays `in_progress` forever, even after its job is archived
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops; scratch Hub `:8036`).
+**Status:** fixed 2026-10-15 (Tier 0). `scheduler.close_firings_left_without_input` stops a job's `in_progress` firing that has no queued entry in its conversation and no live run, with "its queued message was withdrawn before a turn delivered it". Called by the withdraw route and by the job archive (for firings orphaned before this fix). Closed as the existing `stopped`, not a new `withdrawn` status, so the UI needs nothing new. Two tests in `test_a_job_for_an_agent_with_no_runner_waits.py` failed before, and a control (archive leaves a still-queued firing `in_progress`) passes. Driven with `scripts/drive/d1015_s1_tier0.py` on a scratch Hub (Haiku), 10/10. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops; scratch Hub `:8036`).
 
 Job `f596` (`job-1529db113fd4`) waited on a runnerless agent (200, `waiting_reason`, history `in_progress`). `DELETE /queue/entries/entry-166e680617e0` answered 200. The history still read `"status": "in_progress"` after the loop drained, stopped and was archived. The follow-on to F596's "the firing stays `in_progress`" choice: nothing resolves the firing when its entry is withdrawn.
 
@@ -36035,7 +36035,7 @@ Seam: CLI & lifecycle (stop x pidfile x Docker fallback). Tier guess: 0.
 
 ## F651 (D) -- an answer that arrives after the timeout is both read in-run by `get_answer` and delivered as a new paid turn
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Questions; scratch Hub `:8032`).
+**Status:** fixed 2026-10-15 (Tier 0). When the asking agent's run reads an answered question (`GET /agent-actions/questions/{id}`, behind both `get_answer` paths), the queued delivery of its completed batch is withdrawn with "the agent read this answer in its run with get_answer" and announced. The entry is identified by its content, which `_batch_delivery_text` renders exactly. `hub/tests/test_an_answer_read_in_run_is_not_delivered_again.py`: 2 failed before, plus controls (a read before the answer withdraws nothing; an unrelated operator message stays). **Not driven live:** it needs a question to time out mid-run and the agent to then poll `get_answer`, which a model does not do on cue. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Questions; scratch Hub `:8032`).
 
 `q-d372bc1b55b6` timed out at 10:48:29 and was answered "No" at 10:48:43 while the run was still alive. The agent's in-run `get_answer` returned "No". When the run ended, `entry-737fc8ae9288` ("Question: … Answer: No"), together with the first late answer, started `run-75314a518786`, whose whole content was "the operator's answers have now come through, and they confirm my implementation decisions": a paid turn repeating what the agent already knew. Delivery as new input is the specified behaviour; the duplicate is the cost. Not covered.
 
@@ -36175,4 +36175,4 @@ Seen in the stop-race retry. Seam: Runs x Conversations (timeline). Recommended 
 
 ## F670 (C) -- `PATCH /budget` commits before reading totals, so an overflow answers 500 and skips rescheduling
 
-**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Noted as F486-adjacent in the handoff addendum; not driven live. Seam: Accounting & allowance x Inbound queue. Tier guess: 0.
+**Status:** fixed 2026-10-15 (Tier 0). Reproduced at home first: 2^63-1 was accepted and 2^63 or more answered 500 (`OverflowError` at the database write); `PUT /settings` had the same hole on `token_budget`. Both doors now refuse past `usage_accounting.MAX_TOKEN_BUDGET` (SQLite's signed 64-bit INTEGER) with 422 before writing. `test_a_budget_the_database_cannot_hold_is_refused_and_nothing_changes` failed before. Driven with `scripts/drive/d1015_s1_tier0.py` on a scratch Hub (Haiku), 10/10. Opened 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Noted as F486-adjacent in the handoff addendum; not driven live. Seam: Accounting & allowance x Inbound queue. Tier guess: 0.

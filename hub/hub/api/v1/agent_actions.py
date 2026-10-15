@@ -57,7 +57,12 @@ from .agent_trigger import effective_question_wait
 from .agents import AgentRequest, request_agent
 from .jobs import archive_job, create_job, delete_job, run_job, update_job
 from .messages import create_message_for_actor, message_response
-from .questions import announce_queued_answer, ask_question_for_actor, deliver_batch_if_complete
+from .questions import (
+    announce_queued_answer,
+    ask_question_for_actor,
+    deliver_batch_if_complete,
+    withdraw_delivery_read_in_run,
+)
 from .tasks import (
     create_task_for_actor,
     get_task,
@@ -982,6 +987,14 @@ async def get_own_question(
         or question.from_agent != actor.agent
     ):
         raise HTTPException(status_code=404, detail="Question not found")
+    # The asker reading its answer in-run is the delivery; a queued copy would start a paid turn
+    # that only repeats it (F651).
+    for entry in await withdraw_delivery_read_in_run(session, question):
+        payload = {"entry_id": entry.id, "agent": entry.agent, "question_id": question.id}
+        await persist_event(
+            session, actor.project_id, "queue_entry_withdrawn", payload, agent=entry.agent
+        )
+        await sse_manager.broadcast(actor.project_id, "queue_entry_withdrawn", payload)
     return question
 
 

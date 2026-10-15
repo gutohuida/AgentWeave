@@ -18,7 +18,7 @@ from ...conversations import (
 from ...db.engine import get_session
 from ...db.models import Conversation, InboundQueueEntry, Question, Run
 from ...file_mentions import neutralise_file_mentions
-from ...inbound_queue import new_entry
+from ...inbound_queue import new_entry, withdraw_entry
 from ...run_task_binding import release_block_for_question
 from ...schemas.questions import QuestionAnswer, QuestionCreate, QuestionResponse
 from ...sse import sse_manager
@@ -220,6 +220,51 @@ async def announce_queued_answer(
     from ...turn_scheduler import schedule_accepted
 
     await schedule_accepted(project_id, from_agent)
+
+
+async def withdraw_delivery_read_in_run(
+    session: AsyncSession, question: Question
+) -> List[InboundQueueEntry]:
+    """Withdraw the queued delivery of *question*'s batch, which its asker has just read in-run.
+
+    A late answer is queued as new input (`a-late-answer-is-delivered`), and the asking run's end
+    starts a turn for it. When that run polled `get_answer` and read the answer first, the turn only
+    repeated it (F651). The entry has no link to its question, but its content is exactly what
+    `_batch_delivery_text` renders for the batch, which identifies it. Only a complete, answered
+    batch has a delivery; a read before then withdraws nothing. Returns what was withdrawn.
+    """
+    if not question.answered:
+        return []
+    batch = await _completed_batch(session, question)
+    content = _batch_delivery_text(batch) if batch is not None else None
+    if content is None:
+        return []
+    candidates = (
+        (
+            await session.execute(
+                select(InboundQueueEntry.id).where(
+                    InboundQueueEntry.project_id == question.project_id,
+                    InboundQueueEntry.agent == question.from_agent,
+                    InboundQueueEntry.origin_type == "operator",
+                    InboundQueueEntry.state == "queued",
+                    InboundQueueEntry.content == content,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    withdrawn = []
+    for entry_id in candidates:
+        entry = await withdraw_entry(
+            session,
+            question.project_id,
+            entry_id,
+            reason="the agent read this answer in its run with get_answer",
+        )
+        if entry is not None:
+            withdrawn.append(entry)
+    return withdrawn
 
 
 def _delivered_answer(row: Question) -> str:

@@ -558,9 +558,12 @@ async def _withdraw_if_queued(
 
 
 async def withdraw_entry(
-    db: AsyncSession, project_id: str, entry_id: str
+    db: AsyncSession, project_id: str, entry_id: str, reason: Optional[str] = None
 ) -> Optional[InboundQueueEntry]:
-    return await _withdraw_if_queued(db, project_id, entry_id)
+    """Withdraw a queued entry; *reason*, when given, is recorded as why the Hub took it out."""
+    if reason is None:
+        return await _withdraw_if_queued(db, project_id, entry_id)
+    return await _withdraw_if_queued(db, project_id, entry_id, abandoned_reason=reason)
 
 
 async def withdraw_refused_entry(
