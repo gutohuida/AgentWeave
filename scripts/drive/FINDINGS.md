@@ -36112,3 +36112,67 @@ Seam: Knowledge vault (spec-vault-check x Spec page). Tier guess: 0 (design gap)
 B's board card kept the yellow "Decided without you" block, with dev2's timed-out question *"Can you either change Task A's status to 'approved'…"*, after A was approved. It also showed "Stalled".
 
 Seam: Questions (timed-out question) x Tasks (board card). Tier guess: 0.
+
+## F660 (A) -- on Copilot, any Hub-refused tool call ends the turn silently: the run records `completed`, exit 0, no reply, and a task turn leaves its task `in_progress` with no notes
+
+**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Draft change (openspec, to be re-authored under `spec/`): `openspec/changes/a-refused-copilot-call-does-not-end-the-turn`; decisions `wpc1-a..h` OPEN in `spec-queue/DECISIONS.md` (wpc1-f is KEY).
+
+A parent-level `reject_once` -- decided by the Workspace judge or by an operator Deny -- ends Copilot's prompt at once. Observed 3 of 3: `run-047359204292` (manual Deny of `echo hi`), `run-b175c9ffa621` (judge refused a listing), `run-b1f5b4bedc18` (a **task** turn: the judge refused `Get-ChildItem 'C:\Python*'`; the turn ended mid-work, the task stayed `in_progress` with no notes, nobody was told). A refusal inside a `task` subagent does not end the parent. `permission_answer` (`hub/hub/copilot_acp.py:863`) can only select `reject_once`, which carries no reason; the reason is recorded as `permission_denied` (`decided_by: runtime`) but the agent sees only "The user rejected this tool call." `stopReason` is not logged. Claude's `approve_tool_call` returns the reason and the agent carries on: a parity gap. With F661 an ordinary listing ends the turn.
+
+Seam: Permissions & sandbox x Runs (Copilot ACP). Recommended fix (wpc1-a): one follow-up `session/prompt` in the same session carrying the refusal reason, plus a visible "turn ended on a refusal" diagnostic. Tier 1 (wpc1-f asks for a narrow carve-out from the no-backstop rule, keyed on the Hub's own refusal record, never on prose).
+
+## F661 (B) -- the Workspace judge reads regex and script-block text as paths: a read-only `-notmatch '\\.git\\'` is refused as a UNC root, and `$` inside a single-quoted pattern as an expansion
+
+**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Draft change: `openspec/changes/the-workspace-judge-reads-paths-not-patterns` (SECURITY-tagged); decisions `wpc2-a..g` OPEN (wpc2-a KEY). Same judge as F601, opposite failure (F601 lets a write through; this refuses a read).
+
+`Get-ChildItem -Recurse -Force -File | Where-Object { $_.FullName -notmatch '\\.git\\' } | Resolve-Path -Relative` is refused "'\\\\.git\\\\' is outside your workspace"; the `-LiteralPath <worktree>` variant is refused because `'\\.git(\\|$)'` "contains a variable". Both are read-only and inside the worktree; plain `Get-ChildItem -Recurse -File` and `git ls-files` are allowed. Repro: `mcp_server._decide("Bash", {"command": ...}, workspace=..., hub_url=...)`. Combined with F660, the refusal ends a Copilot turn.
+
+Seam: Permissions & sandbox. Recommended (wpc2-a): exempt a quoted literal on the right of `-match/-notmatch/-like/-notlike/-replace` (pattern)/`-split`, PowerShell expression mode only; disqualify Unicode quotes (wpc2-g). Precondition: capture one live payload for the subagent's raw toolName. Tier 2 (sandbox boundary): fix together with F601.
+
+## F662 (B) -- the Copilot model catalog has drifted from the CLI: `claude-haiku-5.5` and `grok-4.7` are refused (400) though the CLI runs them, and four retired models are still offered
+
+**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Draft change: `openspec/changes/the-copilot-catalog-matches-the-cli` (with probe evidence); decisions `wpc3-a..g` OPEN (wpc3-b, c, f KEY).
+
+`hub/hub/model_catalog.py` `CATALOG["copilot"]` against `copilot help config` 1.0.94-3: missing `claude-haiku-5.5`, `grok-4.7` (a trigger override with `claude-haiku-5.5` gets 400 "not a model 'copilot' declares"); still listed but no longer offered: `claude-opus-4.7`, `gemini-3.6-flash`, `gemini-3.5-flash`, `kimi-k2.7-code`. R3 also found `worker.py:348-349` refuses a stored model that left the catalog as `unknown_model`, which would stop checkpoints, handovers and distillation (wpc3-f).
+
+Seam: Runners & models. Tier 1.
+
+## F663 (C) -- a stale `.agentweave/calls/*.json` collides with the shim prompt's example name `1.json`; the second shim turn's create failed twice and the turn cost 151k tokens instead of ~75k
+
+**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Draft change: `openspec/changes/a-call-file-turn-starts-clean-and-can-write-its-file`; decisions `wpc4-a`, `wpc4-b` OPEN (wpc4-a KEY).
+
+`prepare_calls_dir` (`hub/hub/api/v1/agent_trigger.py:250`) never clears the directory; the agent read and edited the leftover file. Seam: Runs (`aw-tool` call mode). Recommended (wpc4-a): empty the calls dir only in an isolated workspace, and have the prompt ask for a fresh file name. Tier 1.
+
+## F664 (C) -- a Copilot shim spec turn is told to write its args file with the file-writing tool, which spec turns exclude
+
+**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Same draft change as F663; decision `wpc5-a` OPEN (recommended: keep `edit` excluded, fix the prompt).
+
+`SPEC_TURN_EXCLUDED_TOOLS` (`copilot_acp.py:142`) removes `edit`, but the shim prompt (`launchability.py` ~460, `agents.py` ~1794) says to write the args file with the file-writing tool. Claude keeps `Write` on shim spec turns (D16); Copilot has no equivalent. One call failed before a `Set-Content` fallback worked. Seam: Agent environment x Spec documents. Tier 1 with F663.
+
+## F665 (C) -- Copilot worker credits are outside project accounting: accounting showed 19 premium requests / 154.00 AIU against true 21 / 155.92, and `preferred_display` is `tokens` for an all-Copilot project
+
+**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Draft change: `openspec/changes/copilot-spend-is-counted-in-its-own-units`, gated on `worker-spend-counts-against-the-budget` D7; decisions `wpc6-a..f` OPEN. Copilot face of F240 (worker spend outside every total), re-verified by the 2026-10-15 sweep ($0.52 of checkpoint workers counted nowhere).
+
+The two checkpoint `worker_invocations` rows carry `premium_requests 1.0` and `ai_nano_aiu` ~1.1/0.8 AIU with `input_tokens` NULL; `GET /projects/{pid}/accounting` sums only `turn_usage`. Also `turn_usage.allowance` stored as the string `'null'`. Seam: Accounting & allowance. Tier 1, after F240's decision.
+
+## F666 (C) -- after a Stop, the interrupted shell `tool_use` never gets a `tool_result`, so its timeline card stays "awaiting result" forever
+
+**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Draft change: `openspec/changes/stop-closes-the-tool-card-it-interrupted`; decisions `wpc7-a..d` OPEN (wpc7-d KEY: pair call and result across the whole turn, since 6 of 50 real results sit in a different work block).
+
+Seen in the stop-race retry. Seam: Runs x Conversations (timeline). Recommended (wpc7-a): the Hub persists a synthetic interrupted `tool_result` and the UI derives the state for history and reconciled runs. Tier 1.
+
+## F667 (C) -- read-only agents share the project directory as their workspace, so two of them racing on `.agentweave/calls/` (or any file) collide
+
+**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Raised as `wpc4-c` by the F663 change's R2 round; not driven live. Seam: Worktrees & integration x Runs. Tier guess: 1 (design gap).
+
+## F668 (B) -- two different agents bound to one task both start in the same task checkout; D8 serialises one agent's turns, not different agents'
+
+**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Raised as `wpc4-d` by the F663 change's R2 round from code reading; not driven live. Related to the 2026-10-15 sweep's F603/F606 (reviewer and author on one task). Seam: Worktrees & integration x Tasks. Tier guess: 1.
+
+## F669 (C) -- an explicit `work_dir` can point into another agent's isolated workspace
+
+**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Raised as `wpc4-e` by the F663 change's R3 round; not driven live. Recommended: refuse a `work_dir` under `.agentweave/`. Seam: Worktrees & integration x Permissions & sandbox. Tier guess: 0.
+
+## F670 (C) -- `PATCH /budget` commits before reading totals, so an overflow answers 500 and skips rescheduling
+
+**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Noted as F486-adjacent in the handoff addendum; not driven live. Seam: Accounting & allowance x Inbound queue. Tier guess: 0.
