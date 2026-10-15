@@ -12,7 +12,12 @@ from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
-from ...usage_accounting import accounting_snapshot, budget_state, conversation_usage
+from ...usage_accounting import (
+    MAX_TOKEN_BUDGET,
+    accounting_snapshot,
+    budget_state,
+    conversation_usage,
+)
 from ...utils import persist_accepted_event
 
 router = APIRouter(prefix="/accounting", tags=["accounting"])
@@ -55,6 +60,11 @@ async def update_budget(
     project_id, _ = project
     if body.token_budget is not None and body.token_budget <= 0:
         raise HTTPException(status_code=422, detail="token_budget must be positive or null")
+    if body.token_budget is not None and body.token_budget > MAX_TOKEN_BUDGET:
+        raise HTTPException(
+            status_code=422,
+            detail=f"token_budget must be at most {MAX_TOKEN_BUDGET} or null",
+        )
     project_row = await session.get(Project, project_id)
     if project_row is None:
         raise HTTPException(status_code=404, detail="Project not found")

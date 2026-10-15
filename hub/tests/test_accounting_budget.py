@@ -226,3 +226,38 @@ async def test_increasing_budget_reschedules_retained_autonomous_work(
 async def asyncio_gather_background_runs() -> None:
     for task in list(agent_trigger._background_runs):
         await task
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("budget", [2**63, 10**20])
+async def test_a_budget_the_database_cannot_hold_is_refused_and_nothing_changes(
+    app, auth_headers, budget
+):
+    """F670: past SQLite's integer range the write raised at commit and the route answered 500.
+    Both doors that set the budget refuse it up front, naming the bound, and store nothing."""
+    patched = await app.patch(
+        "/api/v1/projects/proj-test/accounting/budget",
+        json={"token_budget": budget},
+        headers=auth_headers,
+    )
+    settings = (await app.get("/api/v1/projects/proj-test/settings", headers=auth_headers)).json()
+    settings["token_budget"] = budget
+    saved = await app.put(
+        "/api/v1/projects/proj-test/settings", json=settings, headers=auth_headers
+    )
+
+    assert patched.status_code == 422, patched.text
+    assert "9223372036854775807" in patched.text
+    assert saved.status_code == 422, saved.text
+    async with async_session_factory() as session:
+        assert (await session.get(Project, "proj-test")).token_budget is None
+
+
+@pytest.mark.asyncio
+async def test_the_largest_budget_the_database_holds_is_accepted(app, auth_headers):
+    patched = await app.patch(
+        "/api/v1/projects/proj-test/accounting/budget",
+        json={"token_budget": 2**63 - 1},
+        headers=auth_headers,
+    )
+    assert patched.status_code == 200

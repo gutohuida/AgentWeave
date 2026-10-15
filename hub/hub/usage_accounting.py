@@ -306,6 +306,11 @@ def _aggregate_columns() -> tuple[Any, ...]:
     )
 
 
+#: The largest token budget the database can store: SQLite's INTEGER is a signed 64-bit value, and
+#: a larger one raised at commit, answering 500 (F670). Both doors that set a budget refuse past it.
+MAX_TOKEN_BUDGET = 2**63 - 1
+
+
 def budget_state(limit_tokens: Optional[int], used_tokens: Optional[int]) -> Dict[str, Any]:
     used = used_tokens or 0
     return {

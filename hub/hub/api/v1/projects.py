@@ -32,6 +32,7 @@ from ...project_workspace import (
 from ...runner_provider import has_provider, provider_model_problem
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
+from ...usage_accounting import MAX_TOKEN_BUDGET
 from ...utils import persist_event
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,8 @@ class ProjectSettings(BaseModel):
     hop_budget: int = Field(ge=1, le=1000)
     turn_delivery_cap: int = Field(ge=1, le=1000)
     agent_budget: int = Field(ge=1, le=1000)
-    token_budget: Optional[int] = Field(default=None, gt=0)
+    # Bounded by what the database stores; past it the save answered 500 (F670).
+    token_budget: Optional[int] = Field(default=None, gt=0, le=MAX_TOKEN_BUDGET)
     allow_agent_jobs: bool
     # How conversations are named. `truncate` costs nothing and is the default; `generate`
     # spends the operator's tokens on a one-shot spawn, which is their choice to make.
