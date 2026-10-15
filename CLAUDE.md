@@ -213,6 +213,8 @@ agent, transport type, pending messages).
 - **`.claude/handoffs/DEAD-ENDS.md` is the exception and stays tracked**: the durable ledger of what
   does not work on this machine. **Read it before debugging an environment problem, and append to it**
   rather than re-copying facts forward in each handoff. Verify an old-dated entry before believing it.
+- **`.claude/work-pc/` is tracked on purpose** (operator, 2026-10-15): the work PC cannot push to the
+  home chain, so its own handoff chain (its own numbers) rides a pull. Keep `aw_live_` keys out of it.
 
 ## Resources
 

@@ -20,6 +20,25 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### fix-1015: the decisions of the 2026-10-15 fix plan (D1-D11) -- DECIDED 2026-10-15
+
+Put to the operator in an interactive session, each with background, stakes and options. D3-D6 and D11 also decided the `wpc-1012` rows marked DECIDED below; the `wpc-1012` rows still OPEN were not asked, and their recommendation stands until they are.
+
+- DECIDED   fix-D1   Deleting a project (F592, F609): the delete dialog asks whether to remove the private vault entries, checked by default. Reopening a folder after a delete always mints a new project id, so deleted private content is never resurrected. (operator, 2026-10-15)
+- DECIDED   fix-D2   Worker spend (F240, F665): option C of `worker-spend-counts-against-the-budget` D7. Worker spend joins the total as its own lines and counts against the budget; autonomous worker calls pause at exhaustion, operator calls stay available. Copilot budgets stay in tokens, mixed units are shown side by side, and `preferred_display` follows the data (wpc6-a..c). (operator, 2026-10-15)
+- DECIDED   fix-D3   Copilot refusal (F660): yes, the narrow carve-out from the no-backstop rule. After a Hub-decided refusal, or an operator Deny, ends the prompt, the Hub sends one follow-up `session/prompt` carrying the reason, with a timeline diagnostic only. A continuation that fails after producing output fails the run; before output, the first outcome stands. The operator first asked whether this is a Copilot limitation: it is (ACP's reject carries no reason; Claude gets the reason inline as the tool result and continues), so this is parity with Claude, not a new backstop. (operator, 2026-10-15)
+- DECIDED   fix-D4   Workspace judge (F661 + F601): narrowed (a). A quoted literal in the pattern position of -match/-notmatch/-like/-notlike/-replace/-split, in PowerShell expression mode, is not read as a path; double quotes qualify only without `$` or backtick; Unicode quotes disqualify. Fix F601 (provider drives are outside) in the same change. (operator, 2026-10-15)
+- DECIDED   fix-D5   Copilot catalog (F662): wpc3-b keep a stored model that left the catalog working with a warning, refused only when newly chosen; wpc3-c track the newest CLI's list (1.0.94-3), the drift script printing the Hub's pinned build as information; wpc3-f validate on write (manager-job PATCH, `checkpoint_model`), tolerate at run. (operator, 2026-10-15)
+- DECIDED   fix-D6   Call files and tool cards (F663, F666): wpc4-a (a2), empty the calls dir only in an isolated workspace, plus a prompt asking for a fresh file name; wpc7-d pair a call with its result across the whole turn, with the Hub writing a synthetic interrupted `tool_result` after Stop, shown neutral and not counted as failed. (operator, 2026-10-15)
+- DECIDED   fix-D7   A hand-made task with no requirements (F622, wpc-obs-1): Land merges it on an approved review alone; with no requirements, an approved review is the gate. (operator, 2026-10-15)
+- DECIDED   fix-D8   Operator edits at contract/gate rigor (F611): the operator's own edit applies directly at any rigor; proposals are for agents. (operator, 2026-10-15)
+- DECIDED   fix-D9   `/compact` and `/new-session` (F618, F417): delete both routes, `hub/ui/src/api/context.ts`, and the `compact_request`/`new_session_request` events. (operator, 2026-10-15)
+- DECIDED   fix-D10  Granting `allow_agent_jobs` in Settings (F597): the settings write resolves the open capability-refusal question as "Enabled it — go ahead" and delivers that answer to the waiting agent. (operator, 2026-10-15)
+- DECIDED   fix-D11  Copilot "Full access" is hidden (wpc-obs-4); a `runtime_overrides` change of model or effort only resumes the same conversation (wpc-obs-2). (operator, 2026-10-15)
+- DECIDED   fix-hk1  `AgentWeaveResearch` stays enabled. (operator, 2026-10-15)
+- DECIDED   fix-hk2  The stray untracked `hub/.env` and `hub/data/` are removed (G1-12): moved out of the checkout 2026-10-15. (operator, 2026-10-15)
+- DECIDED   fix-hk3  `.claude/work-pc/` stays tracked permanently so a pull carries the work-PC handoffs; noted in CLAUDE.md. (operator, 2026-10-15)
+
 ### build-1013-1: archiving an agent frees a slot of the agent budget (F465) -- 2026-10-13 build window
 
 - DECIDED   build-1013-1  Taken by the loop: `request_agent` counts only **open** agents against `Project.agent_budget`, so archiving frees a slot; an archived agent's name stays taken (design D5 of the request-agent change), so freeing the slot does not free the name. Rejected: a lifetime cap on agents ever created (agents cannot be deleted, so a project at budget could never again have a peer request one, however many were retired, short of the operator raising the budget). Consequence: a project can churn through unlimited archived names at a fixed open size. **Confirmed by the operator 2026-10-15** in an interactive session, as built (no rework).
@@ -33,35 +52,35 @@ DECIDED. Absence is not consent.
 From the live GHCP drive (findings WPC-1..WPC-7, handoff-0162 in `.claude/work-pc/`). Six openspec changes were written and taken through R1, R2 and R3, and each passes `validate --strict`. **Nothing is committed**, because the work PC cannot push. The operator said "take notes of everything, I'll explore them later", so every row is OPEN, with the rounds' recommendation shown. Full options are in each change's `design.md` under "Open questions". Each change's task 0.3 gates on these rows.
 
 `a-refused-copilot-call-does-not-end-the-turn` (WPC-1: a Hub refusal ends Copilot's turn with `end_turn`):
-- OPEN      wpc1-a  Which fix? Recommended: (c) both. Send one follow-up `session/prompt` in the same run, and add a visible "turn ended on a refusal" diagnostic.
-- OPEN      wpc1-b  Does an operator Deny also continue ("The operator did not approve")? Recommended: yes. Counterpoint: Copilot natively stops on a human Deny.
-- OPEN      wpc1-c  How many continuations per turn? Recommended: 1.
+- DECIDED   wpc1-a  Which fix? Recommended: (c) both. Send one follow-up `session/prompt` in the same run, and add a visible "turn ended on a refusal" diagnostic. **Decided by the operator 2026-10-15** (D3 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
+- DECIDED   wpc1-b  Does an operator Deny also continue ("The operator did not approve")? Recommended: yes. Counterpoint: Copilot natively stops on a human Deny. **Decided by the operator 2026-10-15** (D3 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
+- DECIDED   wpc1-c  How many continuations per turn? Recommended: 1. **Decided by the operator 2026-10-15** (D3 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - OPEN      wpc1-d  How is the continuation counted? Recommended: on the same usage row, plus `refusal_continuations`. R3: Copilot usage is cumulative per process, so keep the last value and do not sum.
-- OPEN      wpc1-e  How visible? Recommended: a timeline diagnostic only, no banner.
-- OPEN      wpc1-f  KEY. May the "no Copilot hook decides a call or a turn" / no-backstop rule get a narrow carve-out? It keys only on the Hub's own refusal record, never on prose. Recommended: yes.
+- DECIDED   wpc1-e  How visible? Recommended: a timeline diagnostic only, no banner. **Decided by the operator 2026-10-15** (D3 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
+- DECIDED   wpc1-f  KEY. May the "no Copilot hook decides a call or a turn" / no-backstop rule get a narrow carve-out? It keys only on the Hub's own refusal record, never on prose. Recommended: yes. **Decided by the operator 2026-10-15** (D3 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - OPEN      wpc1-g  Keep `stop_reason` on the payload although it never varies today? Cost: 14 `TurnOutcome` equality asserts change. Recommended: keep.
-- OPEN      wpc1-h  A continuation that fails: if it fails after producing output, the run is failed; if before, keep the first outcome. Recommended: option 2.
+- DECIDED   wpc1-h  A continuation that fails: if it fails after producing output, the run is failed; if before, keep the first outcome. Recommended: option 2. **Decided by the operator 2026-10-15** (D3 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 
 `the-workspace-judge-reads-paths-not-patterns` (WPC-2, SECURITY: `\\.git\\` is read as a UNC root, and `$` in a single-quoted regex is read as an expansion):
-- OPEN      wpc2-a  KEY. Which approach? Recommended: narrowed (a). Exempt a quoted literal on the right of -match/-notmatch/-like/-notlike/-replace (pattern only)/-split, in PowerShell expression mode only.
-- OPEN      wpc2-b  May a double-quoted operand qualify? Recommended: yes, if it has no `$` and no backtick.
+- DECIDED   wpc2-a  KEY. Which approach? Recommended: narrowed (a). Exempt a quoted literal on the right of -match/-notmatch/-like/-notlike/-replace (pattern only)/-split, in PowerShell expression mode only. **Decided by the operator 2026-10-15** (D4 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
+- DECIDED   wpc2-b  May a double-quoted operand qualify? Recommended: yes, if it has no `$` and no backtick. **Decided by the operator 2026-10-15** (D4 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - OPEN      wpc2-c  Cover other pattern positions? Recommended: no, not now.
 - OPEN      wpc2-d  Reword the refusal for a quoted `$`? Recommended: no.
 - OPEN      wpc2-e  Treat an unknown-dialect "Shell" call on a Windows host as PowerShell? Recommended: no. Caveat: the raw toolName of the observed subagent calls is unknown, so implementation must capture one live payload first.
 - OPEN      wpc2-f  Let a bare `'/'` or `'\'` `-replace` replacement pass? Recommended: no.
-- OPEN      wpc2-g  (R3) Must a "quoted literal" exclude Unicode quote characters? Recommended: yes, disqualify them.
+- DECIDED   wpc2-g  (R3) Must a "quoted literal" exclude Unicode quote characters? Recommended: yes, disqualify them. **Decided by the operator 2026-10-15** (D4 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 
 `the-copilot-catalog-matches-the-cli` (WPC-3: the declared catalog refuses `claude-haiku-5.5`, which the CLI runs):
 - OPEN      wpc3-a  How is the list kept right? Recommended: refresh, plus the pinning test, plus the corrected drift script, plus a session-start report of the model that actually ran. Runtime discovery is wpc3-e.
-- OPEN      wpc3-b  KEY. A stored model that left the catalog: keep working with a warning, refuse, or migrate to auto? Recommended: keep working with a warning, refused only when newly chosen.
-- OPEN      wpc3-c  KEY. Which CLI build does the list track? Recommended: the newest `copilot help config` (1.0.94-3), not the Hub's pinned 1.0.89-1 (`--no-auto-update`), because the model list belongs to the service. The drift script compares against the newest list and prints the Hub's build as information.
+- DECIDED   wpc3-b  KEY. A stored model that left the catalog: keep working with a warning, refuse, or migrate to auto? Recommended: keep working with a warning, refused only when newly chosen. **Decided by the operator 2026-10-15** (D5 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
+- DECIDED   wpc3-c  KEY. Which CLI build does the list track? Recommended: the newest `copilot help config` (1.0.94-3), not the Hub's pinned 1.0.89-1 (`--no-auto-update`), because the model list belongs to the service. The drift script compares against the newest list and prints the Hub's build as information. **Decided by the operator 2026-10-15** (D5 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - OPEN      wpc3-d  Per-model effort? Recommended: report substitutions now, read them from Copilot per session later.
 - OPEN      wpc3-e  Should the probe record the account's `availableModels`? Recommended: yes, as the next change, showing entitlement without refusing.
-- OPEN      wpc3-f  KEY. A one-shot worker whose stored model left the catalog (today `worker.py:348-349` refuses it as `unknown_model`, which is HIGH: checkpoints, handovers and distillation stop). Recommended (R3): option 4, validate on write and tolerate at run, which adds catalog checks to the manager-job PATCH and the non-provider `checkpoint_model`.
+- DECIDED   wpc3-f  KEY. A one-shot worker whose stored model left the catalog (today `worker.py:348-349` refuses it as `unknown_model`, which is HIGH: checkpoints, handovers and distillation stop). Recommended (R3): option 4, validate on write and tolerate at run, which adds catalog checks to the manager-job PATCH and the non-provider `checkpoint_model`. **Decided by the operator 2026-10-15** (D5 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - OPEN      wpc3-g  The scenario "Silent provider fallback cannot occur" (`openspec/specs/model-catalog/spec.md:114-117`) contradicts Copilot silently substituting a model. Recommended (R3): option 1, MODIFY it to "reported at session start".
 
 `a-call-file-turn-starts-clean-and-can-write-its-file` (WPC-4/5: a leftover `calls/1.json` makes Copilot's `create` refuse):
-- OPEN      wpc4-a  KEY. How does a turn start clean? Recommended: (a2) empty the calls dir only in an isolated workspace, plus a prompt telling the agent to use a fresh file name.
+- DECIDED   wpc4-a  KEY. How does a turn start clean? Recommended: (a2) empty the calls dir only in an isolated workspace, plus a prompt telling the agent to use a fresh file name. **Decided by the operator 2026-10-15** (D6 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - OPEN      wpc4-b  If emptying fails? Recommended: warn and proceed.
 - OPEN      wpc4-c  The shared project-dir race between read-only agents. Recommended: file it as a separate finding.
 - OPEN      wpc4-d  (R2) D8 does not serialise two different agents on one task. Recommended: file it as a separate finding.
@@ -69,24 +88,24 @@ From the live GHCP drive (findings WPC-1..WPC-7, handoff-0162 in `.claude/work-p
 - OPEN      wpc5-a  Copilot spec-turn writes. Recommended: keep `edit` excluded.
 
 `copilot-spend-is-counted-in-its-own-units` (WPC-6: accounting showed 19 premium requests and 154.00 AIU against true figures of 21 and 155.92, because `accounting_snapshot` misses `worker_invocations`). Depends on `worker-spend-counts-against-the-budget` D7:
-- OPEN      wpc6-a  May a Copilot budget be in premium requests or credits? Recommended: no, tokens only.
-- OPEN      wpc6-b  Mixed units in project accounting? Recommended: show them side by side.
-- OPEN      wpc6-c  Does `preferred_display` follow the dominant runner? Recommended: no, it follows the data that exists.
+- DECIDED   wpc6-a  May a Copilot budget be in premium requests or credits? Recommended: no, tokens only. **Decided by the operator 2026-10-15** (D2 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
+- DECIDED   wpc6-b  Mixed units in project accounting? Recommended: show them side by side. **Decided by the operator 2026-10-15** (D2 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
+- DECIDED   wpc6-c  Does `preferred_display` follow the dominant runner? Recommended: no, it follows the data that exists. **Decided by the operator 2026-10-15** (D2 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - OPEN      wpc6-d  Who carries the worker credit sums? Recommended: this change.
 - OPEN      wpc6-e  Under D7-A or D7-B, do worker credits still reach the project credit total? Recommended: no, only under those options.
 - OPEN      wpc6-f  (R3) Do worker credits alone switch the headline to credits? Recommended: yes.
 
 `stop-closes-the-tool-card-it-interrupted` (WPC-7: after Stop, the tool card stays "awaiting result" forever):
-- OPEN      wpc7-a  Who closes the card? Recommended: both. The Hub persists a synthetic interrupted `tool_result`, and the UI derives the state for history and reconciled runs.
-- OPEN      wpc7-b  How does it read? Recommended: "? interrupted", neutral, not counted as failed.
+- DECIDED   wpc7-a  Who closes the card? Recommended: both. The Hub persists a synthetic interrupted `tool_result`, and the UI derives the state for history and reconciled runs. **Decided by the operator 2026-10-15** (D6 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
+- DECIDED   wpc7-b  How does it read? Recommended: "? interrupted", neutral, not counted as failed. **Decided by the operator 2026-10-15** (D6 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - OPEN      wpc7-c  Close open calls on a `completed` run too? Recommended: no. Show "? no result", because it marks a mapper defect.
-- OPEN      wpc7-d  KEY. Pair a call with its result across the whole turn, since 6 of 50 real results sit in a different work block? Recommended: yes. This REMOVES and re-ADDS the "independent block state" requirement and inverts UI test 1.14.
+- DECIDED   wpc7-d  KEY. Pair a call with its result across the whole turn, since 6 of 50 real results sit in a different work block? Recommended: yes. This REMOVES and re-ADDS the "independent block state" requirement and inverts UI test 1.14. **Decided by the operator 2026-10-15** (D6 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 
 Observations from the drive with no change written yet (product questions):
-- OPEN      wpc-obs-1  A project with no spec cannot get a review (409). Intended?
-- OPEN      wpc-obs-2  Changing a task's `runtime_overrides` starts a new conversation, about 355k tokens re-sent. Intended?
+- DECIDED   wpc-obs-1  A project with no spec cannot get a review (409). Intended? **Decided by the operator 2026-10-15** (D7): not intended. With no requirements, an approved review is the gate, and a spec-less project can be reviewed.
+- DECIDED   wpc-obs-2  Changing a task's `runtime_overrides` starts a new conversation, about 355k tokens re-sent. Intended? **Decided by the operator 2026-10-15** (D11b): not intended. A change of model or effort only resumes the same conversation; only a runner or provider change starts fresh.
 - OPEN      wpc-obs-3  `claude-sonnet-5.5` gives no reasoning output on Copilot. Fixable, or a provider limit to document?
-- OPEN      wpc-obs-4  Copilot `permission_mode` "full" returns a 400 while the UI offers "Full access". Remove the option for Copilot, or support it?
+- DECIDED   wpc-obs-4  Copilot `permission_mode` "full" returns a 400 while the UI offers "Full access". Remove the option for Copilot, or support it? **Decided by the operator 2026-10-15** (D11a): hide Full access for Copilot; offer only the four modes it supports.
 
 ### away-1011: away until Wednesday — a build window by day, and the loop may fast-forward master -- DECIDED 2026-10-11
 
