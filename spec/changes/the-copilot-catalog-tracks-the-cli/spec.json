@@ -1,0 +1,141 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub",
+      "how_to_check": "py -3.11 scripts/drive/d1016_f662_copilot_catalog.py (written first: fails before the build)",
+      "key": "drive",
+      "requirement": "tracks-newest-cli",
+      "then": "the first two are created and the third is refused naming the catalog",
+      "when": "Copilot runners are created on claude-haiku-5.5, grok-4.7 and claude-opus-4.7"
+    },
+    {
+      "checked_by": "agent",
+      "given": "tests/fixtures/copilot/help-config-1.0.94-3.txt",
+      "how_to_check": "pytest tests/test_model_catalog_drift.py",
+      "key": "unit-pin",
+      "requirement": "tracks-newest-cli",
+      "then": "no drift",
+      "when": "the drift test compares the catalog with it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation and a manager job stored on a model since removed",
+      "how_to_check": "pytest hub/tests/test_a_stored_model_outlives_the_catalog.py",
+      "key": "unit-stored",
+      "requirement": "stored-model-tolerated",
+      "then": "the stored one is accepted, the new one refused, the worker spawns",
+      "when": "the operator sends with the stored override, a different undeclared one, and the job's worker runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation stored on a removed model",
+      "how_to_check": "pytest hub/tests/test_a_stored_model_outlives_the_catalog.py",
+      "key": "unit-flag",
+      "requirement": "flagged",
+      "then": "model_unrecognised is true; on a declared model it is false",
+      "when": "it is read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "de375818a809a8e66acbf60823a95e876c08ec81e14b2a554e9bea29ed92d41e",
+      "FR-2": "da79cac217ee0269096f55ada0f7556b84f54042a33dadc950cb0cb9b29eb05a",
+      "FR-3": "4de2cc582a82750a9dfad966e4b7fde231c8d6b567cad1578b28e3af26973793"
+    },
+    "high_water": 3,
+    "requirements": {
+      "flagged": "FR-3",
+      "stored-model-tolerated": "FR-2",
+      "tracks-newest-cli": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1, no migration. D1 (wpc3-c). Track the newest help (the service's list), not the Hub's pinned build; the drift script prints the build it compared against. D2 (wpc3-b). Stored values outlive the catalog: the trigger accepts an override equal to the conversation's stored model, as runners.py already tolerates a runner's current model. D3 (wpc3-f). Validate on write, tolerate at run: run_worker no longer refuses an undeclared model (every worker model is a stored one); writes that choose one (runner, manager job PATCH since F630, checkpoint_model newly set) refuse it. Copilot then runs it or substitutes silently, which the session-start change will report.",
+  "evidence": {
+    "checked": [
+      "openspec/changes/the-copilot-catalog-matches-the-cli/evidence/help-config-1.0.94-3.txt lists 30 models",
+      "model_catalog._COPILOT_MODEL_IDS is the 1.0.90 list",
+      "worker.run_worker returns unknown_model for an undeclared model",
+      "validate_overrides refuses any undeclared model"
+    ],
+    "limits": [
+      "No Copilot turn is driven at home; the work-PC drive covers a live session"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "On the work-PC drive (Copilot CLI 1.0.94-3) a trigger override with claude-haiku-5.5 was refused 400 though the CLI runs it, and grok-4.7 likewise, while four retired models (claude-opus-4.7, gemini-3.6-flash, gemini-3.5-flash, kimi-k2.7-code) were still offered. The pinning test stayed green because its fixture is 1.0.90. Refreshing alone would break what is stored: a conversation's runtime_overrides on a removed model would be refused on every operator message, and one-shot workers (checkpoints, distillation, vault jobs) refuse any undeclared model outright (worker.py), so background work would stop.",
+  "requirements": [
+    {
+      "key": "tracks-newest-cli",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The model list is the service's; every model the Hub's older build offers live is in the newest help (wpc3-c).",
+      "statement": "CATALOG['copilot'] MUST declare exactly the model ids of copilot help config 1.0.94-3, in that build's order after auto, and its pinning test MUST compare against that build's captured help text."
+    },
+    {
+      "key": "stored-model-tolerated",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A refresh must not stop work already configured (wpc3-b, wpc3-f).",
+      "statement": "A model the catalog no longer declares MUST keep working where it is already stored: a trigger override equal to the conversation's stored model is accepted, and a one-shot worker runs a stored model with a logged warning instead of refusing it as unknown_model; a newly chosen undeclared model (a different override, a runner, a manager job, or a newly set checkpoint_model) MUST still be refused naming the catalog."
+    },
+    {
+      "key": "flagged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The runner already says '— unrecognised'; a conversation must not present a removed model as current.",
+      "statement": "A conversation's response MUST carry model_unrecognised, true when its stored runtime_overrides model is one its runner's catalog does not declare."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "model_catalog: _COPILOT_MODEL_IDS = copilot help config 1.0.94-3, in its order; the pinning fixture follows",
+      "scripts/check_model_catalog.py prints the build it compared against",
+      "validate_overrides tolerates a model equal to the one already stored on the conversation",
+      "run_worker runs a stored model the catalog no longer declares, with a warning, instead of refusing it",
+      "project settings validate a newly set checkpoint_model against the runner's catalog (manager jobs: F630)",
+      "conversation responses carry model_unrecognised"
+    ],
+    "non_goals": [
+      "Reporting a model Copilot substituted at session start (its own change)",
+      "Per-model effort values (its own change, with the substitution report)",
+      "The composer pill's 'unrecognised' label (UI batch; the flag is here)"
+    ]
+  },
+  "summary": "CATALOG['copilot'] becomes the 30 models of copilot help config 1.0.94-3; a model that leaves the catalog keeps working where it is already stored, flagged, and is refused only when newly chosen (F662, decision fix-D5). Re-authored from openspec the-copilot-catalog-matches-the-cli, items 1, 2 and 4; its item 3 (substitution reported at session start) is a separate change.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "model_catalog, the fixture and drift tests, check_model_catalog.py, validate_overrides(stored_model=), agent_trigger, worker, projects settings checkpoint_model, conversation response flag.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "tracks-newest-cli",
+        "stored-model-tolerated",
+        "flagged"
+      ],
+      "reviewer": null,
+      "title": "Refresh the Copilot catalog; tolerate stored models"
+    }
+  ],
+  "title": "The Copilot catalog tracks the CLI"
+}
