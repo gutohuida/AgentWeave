@@ -353,9 +353,17 @@ async def run_worker(
         # A provider runner's model is a Claude API id the `copilot` catalog does not declare: the
         # runner registry judges it by the provider rule, and so does this.
         result = WorkerResult("unknown_model", error=provider_model_problem(model))
-    elif not has_provider(provider_config) and not model_is_declared(cli, model):
-        result = WorkerResult("unknown_model", error=undeclared_model_reason(cli, model))
     else:
+        if not has_provider(provider_config) and not model_is_declared(cli, model):
+            # Every worker model is a stored one (a job's, a checkpoint's, a runner's), each
+            # refused when it was chosen. One the catalog has since dropped keeps working with a
+            # warning rather than stopping the background work (fix-D5 wpc3-f).
+            logger.warning(
+                "worker runs %s, which %s no longer declares: %s",
+                model,
+                cli,
+                undeclared_model_reason(cli, model),
+            )
         adapter = get_adapter(cli)
         worker_dir_context = tempfile.TemporaryDirectory(prefix="agentweave-worker-")
         worker_dir = worker_dir_context.name

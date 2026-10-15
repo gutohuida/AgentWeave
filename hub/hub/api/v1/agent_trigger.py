@@ -2194,7 +2194,11 @@ async def trigger_agent(
             problem = provider_override_problem(body.overrides)
             if problem is not None:
                 raise HTTPException(status_code=400, detail=problem)
-        accepted, rejection = validate_overrides(runner_row.cli, body.overrides)
+        accepted, rejection = validate_overrides(
+            runner_row.cli,
+            body.overrides,
+            stored_model=(conversation.runtime_overrides or {}).get("model"),
+        )
         if rejection is not None:
             raise HTTPException(status_code=400, detail=rejection.reason)
         # Overrides are stored per conversation, not per agent — the runner binding

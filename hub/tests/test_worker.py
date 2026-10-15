@@ -422,17 +422,16 @@ async def test_an_unsupported_cli_is_recorded_without_spawning(app, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_an_undeclared_model_is_refused_before_it_is_billed(app, monkeypatch):
-    """A mistyped model is otherwise a slow, billable failure: the CLI starts, contacts the
-    provider, and fails somewhere the operator never looks."""
-
-    def explode(*_args, **_kwargs):  # pragma: no cover
-        raise AssertionError("a worker must not spawn an undeclared model")
-
-    monkeypatch.setattr(subprocess, "run", explode)
-    result = await _run(model="gpt-5.6-terra")  # a codex model, on the claude CLI
-    assert result.outcome == "unknown_model"
-    assert (await _invocations())[0].outcome == "unknown_model"
+async def test_a_stored_model_the_catalog_no_longer_declares_still_runs(app, monkeypatch, caplog):
+    """Validate on write, tolerate at run (`the-copilot-catalog-tracks-the-cli`, fix-D5 wpc3-f).
+    Every worker model is a stored one, refused when it was chosen (a runner, a manager job, a
+    checkpoint model). One the catalog has since dropped used to stop the background work with
+    `unknown_model`; it now runs, with a warning naming the catalog."""
+    _patch_spawn(monkeypatch, stdout=CLAUDE_STDOUT)
+    with caplog.at_level("WARNING", logger="hub.worker"):
+        result = await _run(model="claude-retired-9")
+    assert result.outcome == "ok", result.error
+    assert "claude-retired-9" in caplog.text and "no longer declares" in caplog.text
 
 
 @pytest.mark.asyncio

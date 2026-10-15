@@ -36,6 +36,7 @@ from ...conversations import (
 from ...db.engine import get_session
 from ...db.models import (
     CONVERSATION_TITLE_MAX_LENGTH,
+    Agent,
     AgentOutput,
     AIJob,
     Conversation,
@@ -46,10 +47,13 @@ from ...db.models import (
     Message,
     Project,
     Run,
+    Runner,
 )
+from ...runner_provider import has_provider
 from ...schemas.agents import RunFacts, fit_run_error
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
+from ...worker import model_is_declared
 
 router = APIRouter(prefix="/agent", tags=["agent-chat"])
 
@@ -148,6 +152,9 @@ class ConversationResponse(BaseModel):
     # means the conversation inherits its agent's runner and the catalog's control defaults —
     # this is what the composer reads to show the values the next message will use.
     runtime_overrides: Optional[Dict[str, str]] = None
+    # True when the stored override's model is one the agent's runner's catalog no longer declares:
+    # it keeps working (fix-D5 wpc3-b) and the composer names it "unrecognised", as a runner's is.
+    model_unrecognised: bool = False
     # The task this thread is about, if it is about one. Every turn here binds to it and is checked
     # at its end — which is what the composer has to be able to show, and what the operator has to
     # be able to let go of.
@@ -442,14 +449,38 @@ async def _to_response(
         if conversations
         else {}
     )
+    runners = await _runners_by_agent(session, conversations)
     responses = []
     for row in conversations:
         response = ConversationResponse.model_validate(row, from_attributes=True)
+        response.model_unrecognised = _model_unrecognised(row, runners.get(row.agent))
         response.attention = attention.get(row.id, "idle")  # type: ignore[assignment]
         response.loop = loops.get(row.id)
         response.context_usage = context.get(row.id)
         responses.append(response)
     return responses
+
+
+async def _runners_by_agent(
+    session: AsyncSession, conversations: List[Conversation]
+) -> Dict[str, Runner]:
+    """Each agent's bound runner, for the conversations whose stored overrides name a model."""
+    agents = {row.agent for row in conversations if (row.runtime_overrides or {}).get("model")}
+    if not agents:
+        return {}
+    rows = await session.execute(
+        select(Agent.name, Runner)
+        .join(Runner, Runner.id == Agent.runner_id)
+        .where(Agent.project_id == conversations[0].project_id, Agent.name.in_(agents))
+    )
+    return dict(rows.tuples().all())
+
+
+def _model_unrecognised(conversation: Conversation, runner: Optional[Runner]) -> bool:
+    model = (conversation.runtime_overrides or {}).get("model")
+    if not model or runner is None or has_provider(runner.provider_config):
+        return False
+    return not model_is_declared(runner.cli, model)
 
 
 async def _owned_conversation(

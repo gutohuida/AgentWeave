@@ -22,6 +22,7 @@ from ...auth import get_operator, get_operator_project
 from ...checkpoint_policy import agent_window, threshold_error
 from ...db.engine import get_session
 from ...db.models import Agent, AgentHeartbeat, OperatorCredential, Project, Run, Runner
+from ...model_catalog import undeclared_model_reason
 from ...project_lifecycle import ProjectLifecycleService
 from ...project_workspace import (
     ProjectPathError,
@@ -34,6 +35,7 @@ from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...usage_accounting import MAX_TOKEN_BUDGET
 from ...utils import persist_event
+from ...worker import model_is_declared
 
 logger = logging.getLogger(__name__)
 
@@ -603,6 +605,23 @@ async def update_project_settings(
             problem = provider_model_problem(merged.checkpoint_model)
             if problem is not None:
                 raise HTTPException(status_code=400, detail=f"checkpoint_model: {problem}")
+        # A newly set checkpoint model is one the runner's catalog declares; one stored before it
+        # left the catalog keeps working at run (`the-copilot-catalog-tracks-the-cli`, fix-D5
+        # wpc3-f), so only a change is judged.
+        if (
+            field_name == "checkpoint_runner_id"
+            and pair_changed
+            and merged.checkpoint_model is not None
+            and not has_provider(runner.provider_config)
+            and not model_is_declared(runner.cli, merged.checkpoint_model)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "checkpoint_model: "
+                    f"{undeclared_model_reason(runner.cli, merged.checkpoint_model)}"
+                ),
+            )
     # A merge target that does not exist would fail silently at approval time, recorded as a skip
     # nobody expected. Refused here instead, where the operator is looking at the field.
     main_branch_newly_named = bool(merged.main_branch) and merged.main_branch != project.main_branch

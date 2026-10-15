@@ -82,6 +82,9 @@ NEWS_TESTS = "hub/tests/test_vault_reports.py"
 NEWS_DRIVE = "scripts/drive/d1015_f615_outside_news_referred.py"
 ANSWER_TESTS = "hub/tests/test_a_workers_answer_is_kept.py"
 ANSWER_DRIVE = "scripts/drive/d1015_f581_answer_kept.py"
+CATALOG_TESTS = "hub/tests/test_a_stored_model_outlives_the_catalog.py"
+CATALOG_DRIVE = "scripts/drive/d1016_f662_copilot_catalog.py"
+CATALOG_PIN = "tests/test_model_catalog_drift.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1351,6 +1354,20 @@ CHANGES = {
              "carries the model's JSON with the claim and quote."),
         ],
     },
+    "f662": {
+        "document": "spec/changes/the-copilot-catalog-tracks-the-cli/spec.json",
+        "tasks": ["task-731975d02157"],
+        "evidence": [
+            ("FR-1", "task-731975d02157", "manual_observation", CATALOG_DRIVE,
+             "Written first: on HEAD Copilot runners on claude-haiku-5.5 and grok-4.7 were refused "
+             "and claude-opus-4.7 accepted; after, the reverse. The pin test compares 1.0.94-3."),
+            ("FR-2", "task-731975d02157", "test_result", CATALOG_TESTS,
+             "An override equal to the stored dropped model is accepted, a new undeclared one "
+             "refused, a newly set checkpoint_model refused; the worker runs a stored one."),
+            ("FR-3", "task-731975d02157", "test_result", CATALOG_TESTS,
+             "A conversation stored on a dropped model lists model_unrecognised true."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1396,6 +1413,7 @@ CHANGE_FOLDS = {
     "f593": 'requirement-traceability',
     "f615": 'knowledge-vault',
     "f581": 'project-environment-settings',
+    "f662": 'model-catalog',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [

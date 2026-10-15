@@ -162,3 +162,4 @@ not a defect.
 | 2026-10-15 | F597 enabling allow_agent_jobs answers the open question (interactive, S8, D10) | 0 | none | ~0h30 (apply_answer extracted; settle hook; 1 test) | not driven live (route test with delivery and wake) | none |
 | 2026-10-15 | F627 a locked database answers 503 busy (interactive, S8) | 0 | none | ~0h10 (handler; 1 test) | not driven live | none |
 | 2026-10-15 | F649+F650 the CLI honours profiles and leaves a Hub it did not start (interactive, S8) | 0 | none | ~0h20 (hint helper, profile check, native stop guard; 3 tests) | not driven live | none |
+| 2026-10-16 | F662 the Copilot catalog tracks the CLI (interactive, S7, D5) | 1 | ~0h20 (re-authored from a 70 KB openspec draft into one short change) | ~0h50 (list, fixture, drift script, stored-model tolerance in trigger, worker, settings, conversation flag; 4 tests, 1 flipped) | ~0h05 (runner creates on a scratch Hub) | none |

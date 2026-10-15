@@ -393,7 +393,7 @@ def test_main_exits_two_when_the_cache_is_present_but_unreadable(tmp_path, capsy
 # --provider copilot (`a-copilot-agent-runs-over-acp`, design D13)
 # ---------------------------------------------------------------------------
 
-HELP_CONFIG = REPO_ROOT / "tests" / "fixtures" / "copilot" / "help-config-1.0.90.txt"
+HELP_CONFIG = REPO_ROOT / "tests" / "fixtures" / "copilot" / "help-config-1.0.94-3.txt"
 
 
 def _help_text(*ids):
@@ -412,8 +412,9 @@ def test_parse_copilot_models_reads_only_the_model_section():
 
 def test_parse_copilot_models_reads_the_captured_help():
     ids = cmc.parse_copilot_models(HELP_CONFIG.read_text(encoding="utf-8"))
-    assert len(ids) == 32
-    assert "claude-haiku-4.5" in ids and "mai-code-1.1-flash" in ids
+    assert len(ids) == 30
+    assert "claude-haiku-5.5" in ids and "grok-4.7" in ids and "mai-code-1.1-flash" in ids
+    assert "claude-opus-4.7" not in ids and "kimi-k2.7-code" not in ids
 
 
 def test_copilot_drift_ignores_auto_and_reports_both_directions():

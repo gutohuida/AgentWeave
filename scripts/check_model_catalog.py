@@ -394,6 +394,28 @@ def _copilot_help_config() -> Optional[str]:
     return result.stdout
 
 
+def _copilot_version() -> Optional[str]:
+    """The build `copilot --version` reports, or None: printed so a reader knows which list the
+    catalog was compared against (the newest, auto-updating CLI; fix-D5, wpc3-c)."""
+    executable = shutil.which("copilot")
+    if executable is None:
+        return None
+    try:
+        result = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    line = (result.stdout or "").strip().splitlines()
+    return line[0] if result.returncode == 0 and line else None
+
+
 def main_copilot(catalog_path: Path, help_config: Optional[Path]) -> int:
     try:
         if help_config is not None:
@@ -401,7 +423,8 @@ def main_copilot(catalog_path: Path, help_config: Optional[Path]) -> int:
             source = str(help_config)
         else:
             text = _copilot_help_config()
-            source = "copilot help config"
+            build = _copilot_version() if text is not None else None
+            source = "copilot help config" + (f" ({build})" if build else "")
         if text is None:
             print(
                 "SKIPPED: no `copilot` on PATH and no --help-config file given."

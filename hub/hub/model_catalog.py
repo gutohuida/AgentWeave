@@ -183,8 +183,12 @@ WORKSPACE_PERMISSION_MODE = "workspace"
 # per-run override the composer sends.
 FULL_ACCESS_PERMISSION_MODE = "bypassPermissions"
 
-# The model ids `copilot help config` printed under `model` (build 1.0.90, 2026-10-02; R11), in its order.
+# The model ids `copilot help config` printed under `model` (build 1.0.94-3, 2026-10-12, the
+# work-PC drive; `the-copilot-catalog-tracks-the-cli`), in its order. The newest help, not the
+# build the Hub spawns: the list is the service's, and every model an older build offers live
+# is in it (fix-D5, wpc3-c). A model that leaves it keeps working where it is stored (wpc3-b).
 _COPILOT_MODEL_IDS: Tuple[str, ...] = (
+    "claude-sonnet-5.5",
     "claude-sonnet-5",
     "claude-fable-5.1",
     "claude-fable-5",
@@ -192,8 +196,8 @@ _COPILOT_MODEL_IDS: Tuple[str, ...] = (
     "claude-opus-5",
     "claude-opus-4.8",
     "claude-opus-4.8-fast",
-    "claude-opus-4.7",
     "claude-sonnet-4.6",
+    "claude-haiku-5.5",
     "claude-haiku-4.5",
     "gpt-6.1-sol",
     "gpt-6-sol",
@@ -210,13 +214,10 @@ _COPILOT_MODEL_IDS: Tuple[str, ...] = (
     "mai-code-1.1-flash",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
+    "grok-4.7",
+    "grok-4.6",
     "grok-4.5",
     "kimi-k3",
-    "kimi-k2.7-code",
-    "claude-sonnet-5.5",
-    "grok-4.6",
 )
 
 _UPPERCASE_WORDS = {"gpt", "mai"}
@@ -350,8 +351,8 @@ CATALOG: Dict[str, ProviderDescriptor] = {
         ),
     ),
     # `a-copilot-agent-runs-over-acp` design D13. The model list is the one `copilot help config`
-    # prints (build 1.0.88), captured in the archived change's `evidence/help-config.txt`
-    # (`openspec/changes/archive/2026-09-30-a-copilot-agent-runs-over-acp/`). It is a literal,
+    # prints (build 1.0.94-3 since `the-copilot-catalog-tracks-the-cli`; first 1.0.88), captured in
+    # `tests/fixtures/copilot/help-config-1.0.94-3.txt`. It is a literal,
     # not a runtime read: Copilot keeps no model file to read, and printing the list costs a
     # spawn, which a read route must not do. Drift is checked by
     # `scripts/check_model_catalog.py --provider copilot`. Every window is `None` because Copilot
@@ -632,7 +633,7 @@ class OverrideRejection:
 
 
 def validate_overrides(
-    provider: str, overrides: Dict[str, str]
+    provider: str, overrides: Dict[str, str], *, stored_model: Optional[str] = None
 ) -> Tuple[Dict[str, str], Optional[OverrideRejection]]:
     """Validate *overrides* (control id -> value, plus the special key ``"model"``) against
     *provider*'s catalog entry.
@@ -644,6 +645,10 @@ def validate_overrides(
     an invalid value is refused before a provider process ever starts, rather than passed
     through to a CLI that might silently discard it (see proposal.md's "What the spike
     established").
+
+    *stored_model* is the model already stored on the conversation: equal to it, an undeclared
+    model is accepted, because a model that left the catalog keeps working where it is stored
+    (`the-copilot-catalog-tracks-the-cli`, fix-D5 wpc3-b). Only a newly chosen one is refused.
     """
     entry = get_provider(provider)
     if entry is None:
@@ -652,7 +657,7 @@ def validate_overrides(
     accepted: Dict[str, str] = {}
     for key, value in overrides.items():
         if key == "model":
-            if entry.model(value) is None:
+            if entry.model(value) is None and value != stored_model:
                 return {}, OverrideRejection(
                     control="model",
                     reason=undeclared_model_reason(provider, value),
