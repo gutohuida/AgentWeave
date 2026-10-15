@@ -63,6 +63,8 @@ FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
 FLAG_DRIVE = "scripts/drive/d1015_f599_runner_flags.py"
 SETTINGS_DRIVE = "scripts/drive/d1015_f454_user_skills.py"
 ACCEPT_EDITS_DRIVE = "scripts/drive/d1015_f628_accept_edits_card.py"
+CATCH_UP_TESTS = "hub/tests/test_an_agent_checkout_catches_up_with_main.py"
+CATCH_UP_DRIVE = "scripts/drive/d1015_f607_worktree_catch_up.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1198,6 +1200,25 @@ CHANGES = {
              "four goldens differ by the approver flag pair alone."),
         ],
     },
+    "f607": {
+        "document": "spec/changes/an-agent-checkout-catches-up-with-main/spec.json",
+        "commit": "edab150",
+        "tasks": ["task-b5235ac4e74a", "task-ab3cd68ddb72"],
+        "evidence": [
+            ("FR-1", "task-ab3cd68ddb72", "test_result", CATCH_UP_TESTS,
+             "A worktree behind main is fast-forwarded; one with its own commits takes main in by "
+             "merge (real disposable repositories, failing on HEAD)."),
+            ("FR-1", "task-b5235ac4e74a", "manual_observation", CATCH_UP_DRIVE,
+             "Written first: on HEAD the agent could not find a file committed after its worktree "
+             "was cut; after, it quoted the file (5/5)."),
+            ("FR-2", "task-ab3cd68ddb72", "test_result", CATCH_UP_TESTS,
+             "Uncommitted work is left exactly as it was; a conflict is aborted with HEAD and files "
+             "unchanged and the turn still gets its checkout."),
+            ("FR-3", "task-ab3cd68ddb72", "test_result", CATCH_UP_TESTS,
+             "A read-only agent shares the project checkout untouched; the catch-up is asked only "
+             "on the agent arm (task checkouts keep their own)."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1220,6 +1241,7 @@ CHANGE_FOLDS = {
     "f599": 'runner-registry',
     "f454": 'agent-run-sandboxing',
     "f628": 'agent-run-sandboxing',
+    "f607": 'workspace-isolation',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [

@@ -461,6 +461,24 @@
       "requirement": "a-turn-s-work-dir-override-is-bounded",
       "then": "the first is refused with 400; the second is resolved under the project",
       "when": "a turn requests a `work_dir` in a Git project, and in a non-Git project"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch project, a Haiku agent whose worktree exists, then a file committed to master",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f607_worktree_catch_up.py <project> (written first: the agent could not find the file on HEAD)",
+      "key": "an-agent-checkout-catches-up-with-main-drive",
+      "requirement": "an-agent-checkout-catches-up-with-main-catch-up",
+      "then": "the worktree contains master's commit and the reply quotes the file",
+      "when": "the agent's next turn reads the file"
+    },
+    {
+      "checked_by": "agent",
+      "given": "real disposable repositories",
+      "how_to_check": "pytest hub/tests/test_an_agent_checkout_catches_up_with_main.py",
+      "key": "an-agent-checkout-catches-up-with-main-unit",
+      "requirement": "an-agent-checkout-catches-up-with-main-never-destructive",
+      "then": "fast-forwarded, merged, untouched, untouched with the merge aborted",
+      "when": "the worktree is behind, diverged, dirty, or conflicting"
     }
   ],
   "algorithms": [],
@@ -483,6 +501,9 @@
       "FR-22": "9a3d4a11c8658acdd816d24da0c48d8498a0fa78dd22306718606e78872a56ef",
       "FR-23": "9f9a8d9d8fcc0e8609aa148c0d0d7c02de1e1535f98ce5f5d44ffe700e6eb3ac",
       "FR-24": "33a38a88ced040c65a4284f040c8269c7a9bfb747316ee6a92a46fb56c51c178",
+      "FR-25": "6b54ffbf563e5fb818a4b88c19c32cd6904787594ed13dfb2286a1de0bb24bc3",
+      "FR-26": "65794cb703e9da6938bf6e929f50051c473b2856fdbd53b2d3b21403908f0654",
+      "FR-27": "1fb8b07c4e89bd13a0c9b881fa6ad9dcf8186438ccd9222f813591b4560b1d8f",
       "FR-3": "578c57590967474c1d6097b5947ba8aa5c9b0b55a4f0e5ba74ac23d868def107",
       "FR-4": "779c4ad1e9e50a999c045132129fb97926b8a2e6f3f0bbb6b9fe353dfb87913b",
       "FR-5": "06f5abef393dd426ff6c95abe633ce57112c8f62672e60577c0118d2a5dffb09",
@@ -491,7 +512,7 @@
       "FR-8": "fe2379d83fa6d75cf1038e6cb5dd13e7668a0d84166b3b9902b18318360de9a9",
       "FR-9": "8e45d687d7b57ccd3956b9d857a30802194af946eeb690fa3ec188a9921496c0"
     },
-    "high_water": 24,
+    "high_water": 27,
     "requirements": {
       "a-conflict-is-reported-between-workspaces-not-between-agents": "FR-8",
       "a-finished-task-s-checkout-is-released-and-its-branch-is-not": "FR-20",
@@ -503,6 +524,9 @@
       "a-run-s-recorded-workspace-says-where-it-started-not-where-i": "FR-10",
       "a-task-s-checkout-is-worked-by-one-turn-at-a-time": "FR-23",
       "a-turn-s-work-dir-override-is-bounded": "FR-24",
+      "an-agent-checkout-catches-up-with-main-catch-up": "FR-25",
+      "an-agent-checkout-catches-up-with-main-never-destructive": "FR-26",
+      "an-agent-checkout-catches-up-with-main-scope": "FR-27",
       "asking-where-work-happens-never-causes-it-to-happen": "FR-2",
       "expensive-shared-dependency-directories-are-linked-not-rebui": "FR-6",
       "n1": "FR-17",
@@ -713,6 +737,27 @@
       "party": null,
       "rationale": "There is isolation to override only where a repository exists.",
       "statement": "A turn's `work_dir` override SHALL be refused with 400 for a writing agent in a Git project, and resolved as a project-relative path under the containment guard in a project that is not a Git repository."
+    },
+    {
+      "key": "an-agent-checkout-catches-up-with-main-catch-up",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Reconcile, exploration and mail turns read the agent's checkout as the project's code.",
+      "statement": "Before an untasked turn starts in a writing agent's own worktree, the worktree MUST contain the commit of the project's integration base (Project.main_branch when set and resolving, else the project checkout's HEAD): fast-forwarded when it has no commits of its own, merged when it has and is clean."
+    },
+    {
+      "key": "an-agent-checkout-catches-up-with-main-never-destructive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent's own uncommitted work must not be lost to a catch-up.",
+      "statement": "A worktree with uncommitted changes, or whose merge conflicts, MUST be left exactly as it was (the merge aborted) and the turn MUST still run."
+    },
+    {
+      "key": "an-agent-checkout-catches-up-with-main-scope",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Task checkouts, review checkouts and read-only agents MUST be unaffected."
     }
   ],
   "schema_version": 1,
