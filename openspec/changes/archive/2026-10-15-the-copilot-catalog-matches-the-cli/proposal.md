@@ -1,3 +1,8 @@
+> **Moved to the app 2026-10-16, archived.** Successors: `spec/changes/the-copilot-catalog-tracks-the-cli/spec.json`
+> (items 1, 2 and 4 plus wpc3-f; built and folded into `model-catalog`, commit 3f338c1, decision fix-D5) and
+> `spec/changes/a-substituted-copilot-model-is-reported/spec.json` (item 3, D3: the session-start report; proposed on the
+> trial Hub, not yet built). D5 (per-model effort, wpc3-d) and wpc3-g stay open questions, named in the second successor.
+
 # Proposal — The Copilot catalog matches the CLI
 
 Finding **WPC-3 (medium)**, from the work-PC Copilot drive (`.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md:53-58`). This is Round 1, written 2026-10-12 and verified against HEAD `6208e9a5`, with Round 2's corrections (same day) marked **R2** and Round 3's marked **R3**. Nothing here is implemented yet.

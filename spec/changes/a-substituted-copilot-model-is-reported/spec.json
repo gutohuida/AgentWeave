@@ -1,0 +1,34 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "A substituted Copilot model is reported"
+}
