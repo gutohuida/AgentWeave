@@ -95,7 +95,8 @@ async def test_settings_refuse_locations_in_the_project_and_bad_values(
     assert Path(got["private_location"]) == chosen
     assert Path(got["effective_private_location"]) == chosen
     assert got["default_visibility"] == "private"
-    assert chosen.is_dir()
+    # F610: choosing a location creates nothing; the first private entry written there does.
+    assert not chosen.exists()
 
     cleared = await app.put(
         f"{BASE}/vault/settings", json={"private_location": None}, headers=auth_headers
@@ -104,6 +105,38 @@ async def test_settings_refuse_locations_in_the_project_and_bad_values(
     got = await _settings(app, auth_headers)
     assert got["private_location"] is None
     assert got["default_visibility"] == "private"
+
+
+@pytest.mark.asyncio
+async def test_settings_refuse_another_project_and_any_git_work_tree(
+    app, auth_headers, tmp_path_factory
+) -> None:
+    """F610: "could be committed with the repository" holds for any repository, not only this
+    project's: another project this Hub registered, or any git work tree."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Project
+
+    other = tmp_path_factory.mktemp("other-project")
+    async with async_session_factory() as session:
+        session.add(Project(id="proj-f610-other", name="Other", working_directory=str(other)))
+        await session.commit()
+    repository = tmp_path_factory.mktemp("some-repo")
+    (repository / ".git").mkdir()
+    worktree = tmp_path_factory.mktemp("some-worktree")
+    (worktree / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+
+    for location, named in (
+        (other / "vault", "Other"),
+        (repository / "deep" / "vault", "git"),
+        (worktree / "vault", "git"),
+    ):
+        refused = await app.put(
+            f"{BASE}/vault/settings", json={"private_location": str(location)}, headers=auth_headers
+        )
+        assert refused.status_code == 400, (location, refused.text)
+        assert named in refused.text
+        assert not location.exists()
+    assert (await _settings(app, auth_headers))["private_location"] is None
 
 
 # ---------------------------------------------------------------------------

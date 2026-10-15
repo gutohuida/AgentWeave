@@ -51,11 +51,12 @@ import re
 import secrets
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Protocol, Tuple
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import VaultSettings
+from .db.models import Project, VaultSettings
 from .project_workspace import canonical_path_key
 
 TYPES = ("transcript", "document", "rules", "example", "note", "decision")
@@ -194,12 +195,33 @@ def _inside(path: Path, parent: Path) -> bool:
     return child == ancestor or child.startswith(ancestor.rstrip(separator) + separator)
 
 
-def check_private_location(raw: str, project_root: Path) -> Path:
-    """The private location *raw* names, resolved and created, or `VaultError`.
+def _git_work_tree(path: Path) -> Optional[Path]:
+    """The git work tree *path* lies in (an ancestor holding `.git`, a folder or a worktree's
+    file), or None."""
+    for ancestor in (path, *path.parents):
+        if (ancestor / ".git").exists():
+            return ancestor
+    return None
+
+
+def check_private_location(
+    raw: str,
+    project_root: Path,
+    other_projects: Iterable[Tuple[str, Path]] = (),
+    *,
+    choosing: bool = False,
+) -> Path:
+    """The private location *raw* names, resolved, or `VaultError`. Nothing is created here.
 
     Refused: a relative path, control characters, anything inside the project (its worktrees
-    included), a location whose `sources` folder would fall inside it, and a folder that cannot
-    be created. Checked on resolved paths, so neither `..` nor a symlink gets past it."""
+    included), a location whose `sources` folder would fall inside it, anything inside another
+    project this Hub registered (*other_projects*, name and directory) or inside any git work
+    tree (F610: a private entry there could be committed with that repository just the same), and
+    a path that cannot be a folder. Checked on resolved paths, so neither `..` nor a symlink gets
+    past it. The folder is made when the first private entry is written, not on choosing it.
+    The other-project and work-tree rules are asked when the operator chooses (`choosing`), not on
+    each write: the default location under the home folder must not fail because a home folder
+    happens to be a repository."""
     if not raw or not raw.strip():
         raise VaultError("The private location is empty.")
     if any(ord(character) < 32 or ord(character) == 127 for character in raw):
@@ -214,12 +236,25 @@ def check_private_location(raw: str, project_root: Path) -> Path:
             f"{resolved} is inside the project's directory ({root}). A private entry kept there "
             "could be committed with the repository; choose a folder outside it."
         )
-    try:
-        resolved.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise VaultError(f"The private location {resolved} cannot be created: {exc}") from exc
-    if not resolved.is_dir():
-        raise VaultError(f"The private location {resolved} is not a folder.")
+    for name, directory in other_projects:
+        other = directory.resolve(strict=False)
+        if _inside(resolved, other):
+            raise VaultError(
+                f"{resolved} is inside the directory of another project, {name} ({other}). A "
+                "private entry kept there could be committed with that repository; choose a "
+                "folder outside every project."
+            )
+    work_tree = _git_work_tree(resolved) if choosing else None
+    if work_tree is not None:
+        raise VaultError(
+            f"{resolved} is inside a git work tree ({work_tree}). A private entry kept there "
+            "could be committed with that repository; choose a folder outside it."
+        )
+    existing = next((p for p in (resolved, *resolved.parents) if p.exists()), None)
+    if existing is not None and not existing.is_dir():
+        raise VaultError(
+            f"The private location {resolved} cannot be a folder: {existing} is a file."
+        )
     return resolved
 
 
@@ -249,8 +284,18 @@ async def set_settings(
         values["default_visibility"] = visibility
     if "private_location" in fields:
         raw = fields["private_location"]
+        others: List[Tuple[str, Path]] = []
+        if raw is not None:
+            rows = await db.execute(
+                select(Project.name, Project.working_directory).where(
+                    Project.id != project_id, Project.working_directory.isnot(None)
+                )
+            )
+            others = [(name, Path(directory)) for name, directory in rows]
         values["private_location"] = (
-            None if raw is None else str(check_private_location(raw, project_root))
+            None
+            if raw is None
+            else str(check_private_location(raw, project_root, others, choosing=True))
         )
     row = await db.get(VaultSettings, project_id)
     if row is None:
