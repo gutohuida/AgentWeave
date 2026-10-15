@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Iterable, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Iterable, List, Optional, Sequence, Set, Tuple
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +40,7 @@ def new_entry(
     divergence_source_run_id: Optional[str] = None,
     review_task_id: Optional[str] = None,
     job_id: Optional[str] = None,
+    awaits_continue: bool = False,
 ) -> InboundQueueEntry:
     if origin_type not in ("operator", "agent", "job", "checkpoint", "divergence", "evidence"):
         raise ValueError(
@@ -69,6 +70,7 @@ def new_entry(
         divergence_source_run_id=divergence_source_run_id,
         review_task_id=review_task_id,
         job_id=job_id,
+        awaits_continue=awaits_continue,
         state="queued",
     )
 
@@ -118,6 +120,31 @@ def entry_kind(entry: InboundQueueEntry) -> Optional[str]:
     return None
 
 
+def held_conversations(entries: Iterable[InboundQueueEntry]) -> Set[str]:
+    """The conversations among *entries* that wait for the operator's Continue.
+
+    One holds an entry awaiting Continue and no operator entry: the operator's own message into
+    a held successor is their go, and the checkpoint rides on that turn.
+    """
+    entries = list(entries)
+    awaiting = {
+        entry.conversation_id
+        for entry in entries
+        if entry.awaits_continue and entry.conversation_id is not None
+    }
+    released = {entry.conversation_id for entry in entries if entry.origin_type == "operator"}
+    return awaiting - released
+
+
+def continue_sentence(conversation_ids: Iterable[str]) -> str:
+    """The waiting reason while an agent's only startable input awaits Continue."""
+    named = ", ".join(sorted(conversation_ids))
+    return (
+        f"waiting for Continue: conversation {named} was handed a checkpoint and starts only when "
+        "you press Continue (checkpoint auto-continue is off)"
+    )
+
+
 def select_turn(
     entries: Sequence[InboundQueueEntry], hop_budget: int, cap: int
 ) -> Tuple[Optional[InboundQueueEntry], List[InboundQueueEntry]]:
@@ -136,7 +163,14 @@ def select_turn(
     bundled into a turn admitted by a shallower one (design D1, F5). A review entry and a work
     entry batched together delivered a turn that was neither, so the controlling entry's kind
     decides the turn and the other kind's entries are deferred (design D3, F66).
+
+    A conversation that holds an entry awaiting Continue is left out whole, unless the operator has
+    written into it (`a-held-successor-waits-for-continue`, D2): every scheduling path reads the
+    queue through here, so none of them can start a held successor, and a peer's message into it
+    cannot start it without the checkpoint it was handed.
     """
+    held = held_conversations(entries)
+    entries = [entry for entry in entries if entry.conversation_id not in held]
     controlling = next((entry for entry in entries if entry.hop_depth <= hop_budget), None)
     if controlling is None:
         return None, []

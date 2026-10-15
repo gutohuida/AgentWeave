@@ -199,6 +199,9 @@ async def cut_over(
         hop_depth=hop_depth,
         conversation_id=successor.id,
         session_mode="new",
+        # Off means the operator's Continue, and a redrain is not the operator: without the flag
+        # the next run's end or settings save started this successor anyway (F598).
+        awaits_continue=not auto_continue,
     )
     db.add(entry)
 

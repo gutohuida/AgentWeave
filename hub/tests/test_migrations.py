@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0126"
+HEAD_REVISION = "0127"
 
 
 # ---------------------------------------------------------------------------
@@ -5217,3 +5217,52 @@ def test_migration_vault_fetches_creates_the_table_and_its_downgrade_drops_only_
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert conn.execute("SELECT id FROM projects").fetchall() == [("p",)]
     assert tables == (before - {"vault_fetches"}) | {"alembic_version"}
+
+
+def test_migration_0127_holds_queued_successors_only_where_auto_continue_is_off(tmp_path) -> None:
+    """`a-held-successor-waits-for-continue` (F598): a live database's queued successors were
+    promised a Continue button, so the backfill holds them; nothing else changes, and the
+    downgrade drops the column without touching any entry's state."""
+    db_file = tmp_path / "held.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        # The models already carry the column; take it off to stand at 0126.
+        conn.execute("ALTER TABLE inbound_queue_entries DROP COLUMN awaits_continue")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0126')")
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at, checkpoint_auto_continue) "
+            "VALUES ('p-off', 'Off', '2026-10-15', 0), ('p-on', 'On', '2026-10-15', 1)"
+        )
+        rows = [
+            ("e-off-ckpt", "p-off", "checkpoint", "queued"),
+            ("e-off-done", "p-off", "checkpoint", "delivered"),
+            ("e-off-op", "p-off", "operator", "queued"),
+            ("e-on-ckpt", "p-on", "checkpoint", "queued"),
+        ]
+        for entry_id, project, origin, state in rows:
+            conn.execute(
+                "INSERT INTO inbound_queue_entries "
+                "(id, project_id, agent, origin_type, content, arrived_at, hop_depth, state) "
+                "VALUES (?, ?, 'alpha', ?, 'x', '2026-10-15 10:00:00', 0, ?)",
+                (entry_id, project, origin, state),
+            )
+        conn.commit()
+
+    _upgrade_to(db_url, "0127")
+    with sqlite3.connect(db_file) as conn:
+        held = dict(conn.execute("SELECT id, awaits_continue FROM inbound_queue_entries"))
+    assert held == {"e-off-ckpt": 1, "e-off-done": 0, "e-off-op": 0, "e-on-ckpt": 0}
+
+    _downgrade_to(db_url, "0126")
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(inbound_queue_entries)")}
+        states = dict(conn.execute("SELECT id, state FROM inbound_queue_entries"))
+    assert "awaits_continue" not in columns
+    assert states == {
+        "e-off-ckpt": "queued",
+        "e-off-done": "delivered",
+        "e-off-op": "queued",
+        "e-on-ckpt": "queued",
+    }

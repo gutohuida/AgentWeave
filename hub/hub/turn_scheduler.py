@@ -20,8 +20,10 @@ from .db.models import Conversation, InboundQueueEntry, Run, Task
 from .inbound_queue import (
     DELIVERY_ATTEMPT_LIMIT,
     can_start,
+    continue_sentence,
     entry_kind,
     format_turn_prompt,
+    held_conversations,
     project_limits,
     queued_entries,
     select_turn,
@@ -163,12 +165,15 @@ async def other_input_would_have_run_elsewhere(
     count of review entries outside `selected` is zero.
     """
     chosen = {entry.id for entry in selected}
+    # A held successor could not have run either: it waits for the operator's Continue.
+    held = held_conversations(entries)
     remaining = [
         entry
         for entry in entries
         if entry.id not in chosen
         and entry.hop_depth <= hop_budget
         and entry.conversation_id is not None
+        and entry.conversation_id not in held
     ]
     if not remaining:
         return False
@@ -436,8 +441,14 @@ async def _attempt_turn(
     entries = await queued_entries(db, project_id, agent)
     if not entries:
         return _Attempt(ScheduleResult(waiting_reason="queue is empty"), nothing_queued=True)
+    # Not a failure: the input is kept, and the operator's Continue starts it (F598).
+    held = held_conversations(entries)
+    if all(entry.conversation_id in held for entry in entries):
+        return _Attempt(
+            ScheduleResult(waiting_reason=continue_sentence(held), terminal_failure=False)
+        )
     hop_budget, cap = await project_limits(db, project_id)
-    if not can_start(entries, hop_budget):
+    if not can_start([entry for entry in entries if entry.conversation_id not in held], hop_budget):
         return _Attempt(ScheduleResult(waiting_reason="hop budget exhausted"))
 
     controlling, turn = select_turn(entries, hop_budget, cap)

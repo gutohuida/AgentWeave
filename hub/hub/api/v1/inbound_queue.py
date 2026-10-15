@@ -19,7 +19,9 @@ from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
 from ...inbound_queue import (
     DELIVERY_ATTEMPT_LIMIT,
+    continue_sentence,
     entry_kind,
+    held_conversations,
     not_queued_reason,
     release_entry,
     select_turn,
@@ -193,7 +195,11 @@ async def get_queue_status(
         # so it names the hold exactly while the hold stands, for every entry, whenever it arrived.
         # Not while an operator entry would probe: the next turn will not wait for the reset.
         hold = await provider_hold(session, project_id, agent)
-        if project_row and all(entry.hop_depth > project_row.hop_budget for entry in entries):
+        held = held_conversations(entries)
+        if all(entry.conversation_id in held for entry in entries):
+            # The scheduler's own answer (F598): nothing failed, the operator's Continue starts it.
+            reason = continue_sentence(held)
+        elif project_row and all(entry.hop_depth > project_row.hop_budget for entry in entries):
             reason = "hop budget exhausted"
         elif hold is not None and not operator_would_probe(entries, hold):
             reason = hold_sentence(agent, hold)

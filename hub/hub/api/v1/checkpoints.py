@@ -11,7 +11,7 @@ from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
@@ -332,6 +332,19 @@ async def continue_conversation(
         entry.id
         for entry in await queued_entries(session, project_id, conversation.agent, conversation_id)
     ]
+    # The release is written down before the pass (`a-held-successor-waits-for-continue`, D3): a
+    # press that meets a running agent is then delivered by that run's end, not lost.
+    if queued_before:
+        await session.execute(
+            update(InboundQueueEntry)
+            .where(
+                InboundQueueEntry.id.in_(queued_before),
+                InboundQueueEntry.awaits_continue.is_(True),
+            )
+            .values(awaits_continue=False)
+            .execution_options(synchronize_session=False)
+        )
+        await session.commit()
     result = await schedule_agent(project_id, conversation.agent)
     started_conversation_id = (
         result.response.conversation_id if result.response is not None else None

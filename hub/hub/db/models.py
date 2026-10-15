@@ -636,6 +636,14 @@ class InboundQueueEntry(Base):
     #: The scheduled job that queued this entry, so the cause survives to the dispatch that stages
     #: the review (`a-flows-own-moves-are-recorded-as-the-flows`, D2). Not a ForeignKey.
     job_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    #: Set on the checkpoint entry a cutover queues while the project's auto-continue is off: the
+    #: successor's conversation does not start until the operator presses Continue or writes into
+    #: it (`a-held-successor-waits-for-continue`, F598). A flag rather than a state, because the
+    #: entry is still queued input; and stored rather than derived from the live setting, because a
+    #: Continue pressed while the agent is running has to survive to that run's end.
+    awaits_continue: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
 
     project: Mapped["Project"] = relationship(back_populates="queue_entries")
 

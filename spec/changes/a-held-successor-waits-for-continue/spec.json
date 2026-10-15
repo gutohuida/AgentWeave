@@ -1,0 +1,201 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub, one Haiku agent, checkpoint_mode automatic at a 5,000-token threshold, auto-continue off",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f598_held_successor.py <project> (failed on HEAD 3b3aff3+: runs 1->2 after the settings save, and Continue answered 'queue is empty')",
+      "key": "drive",
+      "requirement": "held",
+      "then": "no turn starts and the checkpoint entry stays queued; the queue status says it waits for Continue; Continue then starts the successor and delivers the entry",
+      "when": "one operator turn crosses the threshold, the Hub cuts over, and the operator saves the settings unchanged"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a cutover with auto-continue off",
+      "how_to_check": "pytest hub/tests/test_a_held_successor_waits_for_continue.py",
+      "key": "redrain",
+      "requirement": "held",
+      "then": "nothing is spawned and both entries stay queued",
+      "when": "redrain_queued_agents runs, and when a peer's entry arrives in the successor conversation"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a held successor",
+      "how_to_check": "pytest hub/tests/test_a_held_successor_waits_for_continue.py",
+      "key": "continue",
+      "requirement": "released",
+      "then": "one turn starts carrying the checkpoint (and the message)",
+      "when": "the operator presses Continue, or sends a message into the successor conversation"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a held successor and nothing else queued",
+      "how_to_check": "pytest hub/tests/test_a_held_successor_waits_for_continue.py",
+      "key": "status",
+      "requirement": "explained",
+      "then": "waiting_reason names Continue and the conversation",
+      "when": "the queue status is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "auto-continue on",
+      "how_to_check": "pytest hub/tests/test_a_held_successor_waits_for_continue.py",
+      "key": "auto-on",
+      "requirement": "auto-on-unchanged",
+      "then": "the entry is not held and the successor starts",
+      "when": "a cutover runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a database at 0126 with queued checkpoint entries in an auto-continue-off and an auto-continue-on project",
+      "how_to_check": "pytest hub/tests/test_migrations.py -k 0127",
+      "key": "migrate",
+      "requirement": "migration",
+      "then": "only the off project's queued checkpoint entries are held; downgrade removes the column",
+      "when": "it upgrades to 0127 and downgrades back"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "b5c2c54fc2c63806078b7df72ec27a90a373ef72a20d6ea529bf728be3097372",
+      "FR-2": "76c62d17d959970ca928965f72267fcc08ea8ab9e7917011235eb148bfbbf076",
+      "FR-3": "3d0d2969669bcbdbe4a9fa82aaf916d9eb6b5971ffc67aaab2b53a734437d0ac",
+      "FR-4": "982404119c3f5dceffda0743693d9de38b5bcad3968bc840ae956073b9fabc21",
+      "FR-5": "3d1fb56781efbb80de3aba607113fee210c7dee604a5e3ae0853e50d4d57d11f"
+    },
+    "high_water": 5,
+    "requirements": {
+      "auto-on-unchanged": "FR-4",
+      "explained": "FR-3",
+      "held": "FR-1",
+      "migration": "FR-5",
+      "released": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2: a migration (it reaches the operator's real :8000 database on their next restart).\n\nD1. A durable per-entry flag, `inbound_queue_entries.awaits_continue` (boolean, not null, default false), rather than a selection rule keyed on the live project setting: Continue pressed while the agent is running must still be honoured at that run's end, which needs the release written down. Rejected: a new entry state `held` -- every `state == 'queued'` reader (archivable, status counts, the UI's waiting counts) would have to learn it, and a held successor is still queued input.\nD2. The hold is applied in `select_turn`, the one function that decides a turn's composition for the scheduler, the status route, jobs and run binding (F133), so they cannot disagree. A conversation holding an awaits-Continue entry is skipped as a whole (a peer message into a successor must not run it without its checkpoint), unless the conversation also holds an operator entry, which releases it.\nD3. Continue clears the flag on that conversation's queued entries and commits before scheduling. Turning auto-continue on later does not release successors already held: they were promised a Continue button.\nD4. The project-wide redrain stays: it is how a run's end releases peers waiting on a checkout (D8 of the workspace change). The defect was the entry being indistinguishable from startable input, not the redrain.\nRollback: downgrade drops the column; held entries become ordinary queued entries again (today's behaviour).",
+  "evidence": {
+    "checked": [
+      "checkpoint_cutover.py:194-242 queues the entry and schedules only if auto_continue",
+      "turn_scheduler.py:782 redrain_queued_agents schedules every agent with a queued entry",
+      "projects.py:349 a settings save redrains",
+      "inbound_queue.py:121 select_turn is shared by turn_scheduler, api/v1/inbound_queue, jobs and run_task_binding",
+      "Drive on :8031 at 146de73: the settings save started run 2 and delivered the held entry; Continue answered 'queue is empty'"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "`cut_over` queues the successor's `origin_type='checkpoint'` entry and schedules it only `if auto_continue` (`checkpoint_cutover.py:194-242`). But the entry is an ordinary `queued` entry, and `redrain_queued_agents` (`turn_scheduler.py:782`), called at every run's end (`agent_trigger.py:2913`, `:3383`, `:4145`, `:4344`) and on every settings save (`projects.py:349`), schedules every agent with anything queued. So the successor starts on the next redrain whatever the setting says. In the 2026-10-15 sweep two agents fed each other this way for 13 unattended turns and 28 checkpoint worker calls, stopped only by turning checkpoints off. The Settings page promises the opposite: \"Off means a Continue button — never a message you have to invent.\"",
+  "requirements": [
+    {
+      "key": "held",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The setting is the operator's spend control; a redrain is not the operator.",
+      "statement": "When a cutover runs with checkpoint auto-continue off, the successor's checkpoint entry MUST be recorded as awaiting Continue, and no scheduling path (run-end redrain, settings-save redrain, project open, a job firing, a peer's message into that conversation) MAY start a turn in that conversation while it awaits Continue."
+    },
+    {
+      "key": "released",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Both are the operator saying go; the checkpoint must reach the successor's first turn either way.",
+      "statement": "Continue on the successor conversation MUST release the hold durably and start the turn, or, while the agent is running, leave it to the run-end redrain. Operator input queued into that conversation MUST release it too, so the checkpoint is delivered in the same turn as the operator's message."
+    },
+    {
+      "key": "explained",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While an agent's only startable input awaits Continue, `GET /queue/{agent}/status` and the scheduler MUST give the reason as waiting for Continue, naming the conversation, not as a failure."
+    },
+    {
+      "key": "auto-on-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With auto-continue on, a cutover's successor entry MUST NOT be held, and starts as it does today."
+    },
+    {
+      "key": "migration",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Successors already queued on a live database were promised the same Continue button.",
+      "statement": "The migration that adds the hold MUST mark every still-queued checkpoint entry in a project whose auto-continue is off as awaiting Continue, and its downgrade MUST drop the column without touching entry states."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The checkpoint entry a cutover queues with auto-continue off, and every scheduling path that reads the queue through select_turn"
+    ],
+    "non_goals": [
+      "F604 (what the checkpoint says): a separate change about when its summary is taken",
+      "The UI's Continue and Waiting controls (F633, F653): S8 polish"
+    ]
+  },
+  "summary": "With checkpoint auto-continue off, the successor a cutover opens waits for the operator's Continue (or the operator's own message) instead of being started by the next project-wide redrain, which today turns automatic checkpoints into a self-sustaining chain of unattended paid turns (F598, severity A).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1015_f598_held_successor.py (fails on HEAD) and hub/tests/test_a_held_successor_waits_for_continue.py.",
+      "files": [
+        "scripts/drive/d1015_f598_held_successor.py",
+        "hub/tests/test_a_held_successor_waits_for_continue.py"
+      ],
+      "from": null,
+      "key": "tests",
+      "requirements": [
+        "held",
+        "released",
+        "explained",
+        "auto-on-unchanged"
+      ],
+      "reviewer": null,
+      "title": "Failing tests and the acceptance drive"
+    },
+    {
+      "depends_on": [
+        "tests"
+      ],
+      "description": "models + migration 0127 with backfill; cut_over sets the flag; select_turn skips held conversations; Continue releases; scheduler and status reason.",
+      "files": [
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/0127_queue_entry_awaits_continue.py",
+        "hub/hub/checkpoint_cutover.py",
+        "hub/hub/inbound_queue.py",
+        "hub/hub/turn_scheduler.py",
+        "hub/hub/api/v1/checkpoints.py",
+        "hub/hub/api/v1/inbound_queue.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "held",
+        "released",
+        "explained",
+        "auto-on-unchanged",
+        "migration"
+      ],
+      "reviewer": null,
+      "title": "The hold, its release, and migration 0127"
+    }
+  ],
+  "title": "A held successor waits for Continue"
+}
