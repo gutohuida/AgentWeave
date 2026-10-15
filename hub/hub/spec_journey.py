@@ -345,6 +345,37 @@ async def set_step(
     return move
 
 
+#: The same work under another journey's name: the small journey joins requirements and acceptance
+#: into one step, the large one splits it (F631).
+_SAME_WORK: Dict[str, Tuple[str, ...]] = {
+    REQUIREMENTS: (REQUIREMENTS_AND_ACCEPTANCE,),
+    ACCEPTANCE: (REQUIREMENTS_AND_ACCEPTANCE,),
+    REQUIREMENTS_AND_ACCEPTANCE: (REQUIREMENTS, ACCEPTANCE),
+}
+
+
+def step_for_size(
+    size: Optional[str], step: Optional[str], steps: Optional[ProjectSteps] = None
+) -> Optional[str]:
+    """Where a document at `step` stands on this size's journey (F631).
+
+    Its own step when the journey has it; the same work under the journey's name for it (the
+    requirements and acceptance steps); otherwise the journey's first step after it in the
+    project's order, as `next_step` moves, or the journey's last step when none comes after. A
+    step the project no longer has, or no step, is left as it is.
+    """
+    steps = steps or BUILT_IN
+    path = journey(size, steps)
+    order = steps.order()
+    if step is None or step in path or step not in order:
+        return step
+    for same in _SAME_WORK.get(step, ()):
+        if same in path:
+            return same
+    place = order.index(step)
+    return next((s for s in path if order.index(s) > place), path[-1] if path else step)
+
+
 async def set_size(
     session: AsyncSession,
     document: SpecDocument,
@@ -352,18 +383,26 @@ async def set_size(
     *,
     actor: Actor,
     reason: str = "",
+    steps: Optional[ProjectSteps] = None,
 ) -> Dict[str, Optional[str]]:
-    """Record the work's size and why. The step stays where it is; the journey around it changes."""
+    """Record the work's size and why, moving a step the new journey lacks to where it now stands.
+
+    It used to leave the step where it was, so a document at `requirements` sized small sat at a
+    step its journey does not have, and propose warned about a step it would never reach (F631).
+    """
     _require_journey(document)
     if size is not None and size not in SIZES:
         raise JourneyError(
             f"unknown size {size!r}; a size is one of: {', '.join(SIZES)}", code="unknown_size"
         )
     move = {"from": document.size, "to": size}
+    detail: Dict[str, Any] = {"size": move, "reason": reason}
     document.size = size
-    await record_event(
-        session, document, kind="journey", actor=actor, detail={"size": move, "reason": reason}
-    )
+    placed = step_for_size(size, document.step, steps)
+    if placed != document.step:
+        detail["step"] = {"from": document.step, "to": placed}
+        document.step = placed
+    await record_event(session, document, kind="journey", actor=actor, detail=detail)
     return move
 
 

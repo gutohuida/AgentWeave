@@ -2271,7 +2271,7 @@ async def set_journey(
     try:
         if body.size is not None:
             await spec_journey.set_size(
-                session, document, body.size, actor=_operator(), reason=body.reason
+                session, document, body.size, actor=_operator(), reason=body.reason, steps=steps
             )
         if body.step is not None:
             await spec_journey.set_step(

@@ -2111,6 +2111,7 @@ async def set_spec_size(
             body.size,
             actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
             reason=body.reason,
+            steps=steps,
         )
     except spec_journey.JourneyError as exc:
         raise HTTPException(

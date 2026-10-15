@@ -217,3 +217,49 @@ async def test_the_journey_route_refuses_what_has_no_journey_saying_why(
 
     assert unknown.status_code == 422 and "intake" in unknown.text
     assert empty.status_code == 422
+
+
+# F631: a size change moves a step its new journey lacks to the nearest step it has.
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "step, size, expected",
+    [
+        ("requirements", "small", "requirements-and-acceptance"),
+        ("acceptance", "small", "requirements-and-acceptance"),
+        ("approach", "small", "tasks"),
+        ("tasks", "small", "tasks"),
+        ("requirements-and-acceptance", "large", "requirements"),
+    ],
+)
+async def test_a_size_change_moves_a_step_the_journey_lacks(
+    app, auth_headers, tmp_path, step, size, expected
+):
+    await _create(app, auth_headers)
+    route = f"{BASE}/documents/journey"
+    moved = await app.post(route, params={"path": PATH}, json={"step": step}, headers=auth_headers)
+    assert moved.status_code == 200, moved.text
+
+    sized = await app.post(route, params={"path": PATH}, json={"size": size}, headers=auth_headers)
+
+    assert sized.status_code == 200, sized.text
+    assert sized.json()["step"] == expected
+    assert expected in sized.json()["journey"]
+
+
+@pytest.mark.asyncio
+async def test_a_step_named_with_the_size_wins(app, auth_headers, tmp_path):
+    await _create(app, auth_headers)
+    route = f"{BASE}/documents/journey"
+    await app.post(
+        route, params={"path": PATH}, json={"step": "requirements"}, headers=auth_headers
+    )
+
+    both = await app.post(
+        route,
+        params={"path": PATH},
+        json={"size": "small", "step": "intake"},
+        headers=auth_headers,
+    )
+
+    assert both.status_code == 200, both.text
+    assert both.json()["step"] == "intake"
