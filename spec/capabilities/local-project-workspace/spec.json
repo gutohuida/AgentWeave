@@ -433,6 +433,33 @@
       "requirement": "n10-deletion-is-guarded-and-confirmed",
       "then": "Deletion cannot be confirmed.",
       "when": "The typed name differs from the project's current name"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch project with one private and one tracked vault source",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f592_deleted_project_stays_deleted.py (written first: fails before the build)",
+      "key": "a-deleted-project-stays-deleted-drive",
+      "requirement": "n2-an-orphaned-marker-is-adopted-under-its-own-id",
+      "then": "the private folder is gone, the reopened project has a new id, the marker names it, and the vault lists no private source",
+      "when": "it is deleted with remove_private=true and its folder is reopened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "projects with private entries at the default and at a chosen location",
+      "how_to_check": "pytest hub/tests/test_a_deleted_project_stays_deleted.py",
+      "key": "a-deleted-project-stays-deleted-unit-delete",
+      "requirement": "a-project-can-be-deleted-from-the-hub-without-touching-its-w",
+      "then": "asked removes only the vault's folders, unasked keeps them, shared refuses with nothing deleted, and the project directory is untouched",
+      "when": "each is deleted with and without remove_private, and one whose location another project shares"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a deleted project's folder and a folder marked by another database",
+      "how_to_check": "pytest hub/tests/test_a_deleted_project_stays_deleted.py hub/tests/test_migrations.py",
+      "key": "a-deleted-project-stays-deleted-unit-reopen",
+      "requirement": "n2-an-orphaned-marker-is-adopted-under-its-own-id",
+      "then": "the deleted one gets a new id and marker; the foreign one is adopted under its own id",
+      "when": "each is opened"
     }
   ],
   "algorithms": [],
@@ -456,11 +483,11 @@
       "FR-35": "9daa0ec392ca5a50d65e9db461415cd744b879fe5bf6695ccc40ee88ae609e59",
       "FR-36": "901b5de47a30368a775212f62ca5b40380f0717619095cb1f345d6353d7a4cee",
       "FR-37": "c47db8e08a1d2e15bf9ee25d2a7d7dd2f793df0da29151f4140f7d1f1985a651",
-      "FR-38": "b041070dab9ab8999c4ad267fc06c9e6d8c69002fac41d5fb70d5ad4de16c430",
+      "FR-38": "1b217fc17f0cba5b894431d6343352ad8559dfcea50ba40dcddfcdab8b33d31a",
       "FR-39": "c9a99f295b6f2f241dfe6b1f0f62442cb39c7837ea8385611b9c7d1aceae3e3a",
       "FR-40": "636b3fb1313bf81d2c80e3bba678b73ca5d23d8bb4f9a64f169453c652f69cf5",
       "FR-41": "987353a723002c5f9f0dd6edd2387eb34591aca2a7b39f2b20e1425e555e881b",
-      "FR-42": "7b1ae29f14c6808fa75a2f7cd9ad61144b5e08ddb4b1abdbfa53005e11c2b4c2",
+      "FR-42": "5996c208c03acb689c38832d4755eb99a7155210b7057002617c55f6130a236a",
       "FR-43": "a869b67c9652553f6f332c7e66a09b63ea15d990df7c65731b32fb1e9e989040",
       "FR-44": "bb41a05ca1a46f5d70d2517139f6dd2859dee5544a2d5614e2cc2f991f4b8e53",
       "FR-45": "bcce20ff07decb236d8405cad38c62b4064efe5e1a1df200d07e93f35240462a",
@@ -550,8 +577,8 @@
       "key": "n2-an-orphaned-marker-is-adopted-under-its-own-id",
       "modal": "SHALL",
       "party": null,
-      "rationale": "A folder registered in another database, or a project deleted from this one, should come back as itself rather than be refused; the event lets the operator see afterwards that it was adopted, not created.",
-      "statement": "Opening a directory whose marker names a project ID this database has no record of SHALL register it under the marker's own ID, seeded like a new project, and SHALL record a `project_adopted` event."
+      "rationale": "A folder registered in another database should come back as itself; a project this database deleted must not, or deleted private content returns (F609, fix-D1).",
+      "statement": "Opening a directory whose marker names a project ID this database has no record of SHALL register it under the marker's own ID, seeded like a new project, and SHALL record a `project_adopted` event, unless this database deleted that ID: then it SHALL register a new project under a newly minted ID and rewrite the marker to name it, bringing back no record or private entry of the deleted project."
     },
     {
       "key": "project-paths-are-resolved-safely-by-the-server",
@@ -702,10 +729,10 @@
     },
     {
       "key": "a-project-can-be-deleted-from-the-hub-without-touching-its-w",
-      "modal": "MUST",
+      "modal": "SHALL",
       "party": null,
-      "rationale": "Deleting from the Hub is about the Hub's collection, not the operator's files.",
-      "statement": "The operator SHALL be able to delete a project and every Hub record scoped to it, removing database rows only and never touching the project's directory or any file in it, including its marker."
+      "rationale": "fix-D1: deletion asks about private data. The project's own directory stays the operator's; the private location is the vault's, and leaving it behind left private text nothing pointed at (F592).",
+      "statement": "The operator SHALL be able to delete a project and every Hub record scoped to it without the Hub touching the project's directory or any file in it, its marker included; when the delete asks to remove private vault entries, the Hub SHALL remove them before deleting any record (at the Hub's default location the project's whole folder, at a location the operator chose only the vault's sources, facts, contradictions and reports folders, and the folder itself if then empty), SHALL refuse, deleting nothing, when that location is shared with another project or the removal fails, and a delete that does not ask SHALL keep them."
     },
     {
       "key": "n10-deletion-is-guarded-and-confirmed",
