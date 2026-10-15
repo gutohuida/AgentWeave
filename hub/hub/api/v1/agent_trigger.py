@@ -21,9 +21,11 @@ them.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import sys
+import weakref
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -253,6 +255,15 @@ def prepend_run_path(env: Dict[str, str], directory: Path) -> None:
 
 #: Each live run's checkout HEAD at spawn (F603), read once at its finalize; cleared when it ends.
 _turn_start_heads: Dict[str, str] = {}
+
+#: One lock per `(project, task)` checkout, held from design D8's read of who holds the task until
+#: the trigger call ends, by which point a started turn's `Run` row is committed (F668). The read
+#: and that commit are separated by awaits and the turn scheduler's lock is per agent, so without it
+#: two agents started together on one task both read "nobody" and both started in its checkout.
+#: Weak values: an entry lives only while a call holds or waits on it.
+_task_checkout_locks: "weakref.WeakValueDictionary[Tuple[str, str], asyncio.Lock]" = (
+    weakref.WeakValueDictionary()
+)
 
 
 async def _carry_mid_turn_claim(
@@ -963,6 +974,8 @@ class _ReviewCheckoutClaim:
         self.repo_root: Optional[Path] = None
         self.reviewer: Optional[str] = None
         self.handed_off = False
+        #: Held until the call ends; entered at the D8 check (F668).
+        self.locks = contextlib.AsyncExitStack()
 
 
 async def trigger_agent_directly(**kwargs: Any) -> TriggerAgentResponse:
@@ -974,12 +987,14 @@ async def trigger_agent_directly(**kwargs: Any) -> TriggerAgentResponse:
     re-trigger, which is the same class of indirection Decision 2 already removed from the
     manual-trigger path in task 3.5. Raises `TriggerAgentError` on any rejection.
 
-    Takes `_trigger_agent_directly`'s keyword arguments. The wrapper exists for one thing: a
-    review checkout this call provisioned is released if the call does not end in a started run.
+    Takes `_trigger_agent_directly`'s keyword arguments. The wrapper exists for two things: a
+    review checkout this call provisioned is released if the call does not end in a started run,
+    and a task checkout's D8 lock (F668) is held until the call ends.
     """
     claim = _ReviewCheckoutClaim()
     try:
-        return await _trigger_agent_directly(**kwargs, review_claim=claim)
+        async with claim.locks:
+            return await _trigger_agent_directly(**kwargs, review_claim=claim)
     except BaseException:
         if claim.repo_root is not None and claim.reviewer is not None and not claim.handed_off:
             try:
@@ -1387,6 +1402,13 @@ async def _trigger_agent_directly(
         # reads only; above `resolve_turn_workspace` because that call is the first thing that
         # *provisions*. Nothing is on disk when this refuses.
         if worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id):
+            # F668: taken before the read and held until this call ends, so a second agent's
+            # read waits for the first turn's committed `Run` row instead of racing it.
+            key = (project_id, turn_workspace.task_id)
+            lock = _task_checkout_locks.get(key)
+            if lock is None:
+                lock = _task_checkout_locks[key] = asyncio.Lock()
+            await review_claim.locks.enter_async_context(lock)
             holder = (await tasks_held_by_a_running_turn(session, project_id)).get(
                 turn_workspace.task_id
             )

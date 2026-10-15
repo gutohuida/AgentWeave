@@ -25,6 +25,7 @@ with `status: "queued"` and a waiting reason. A route-level assertion about a 40
 """
 
 import asyncio
+import contextlib
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -252,6 +253,86 @@ async def test_a_turn_on_a_different_task_is_not_refused(
     )
 
     assert cwd is not None
+
+
+async def test_two_agents_started_together_on_one_task_do_not_both_start(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """F668 — the refusal holds when both turns start at once, not only when one is already running.
+
+    The refusal reads running `Run` rows, and the first turn's row is committed several awaits
+    after its own read. The turn scheduler's lock is per agent, so two different agents triggered
+    together both read "nobody holds it" and both started in one checkout. The first turn is paused
+    between its read and its commit (in `bind_run_to_task`) until the second has either reached the
+    same point or been made to wait; exactly one may start.
+    """
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    # One sync for both: a sync states the whole roster, so a second call would drop the first.
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {HOLDER: {"runner": "claude"}, CHALLENGER: {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200, sync.text
+    for name in (HOLDER, CHALLENGER):
+        await bind_runner(name, cli="claude")
+    conversations = {name: await _conversation(name) for name in (HOLDER, CHALLENGER)}
+    await _task(HELD_TASK)
+
+    real_bind = agent_trigger.bind_run_to_task
+    reached: list = []
+    second_arrived = asyncio.Event()
+
+    async def _paused_bind(session, run, task):
+        reached.append(run.agent)
+        if len(reached) == 1:
+            # The first turn waits here, past its read and before its commit, for the second.
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(second_arrived.wait(), timeout=1.0)
+        else:
+            second_arrived.set()
+        return await real_bind(session, run, task)
+
+    async def _no_process(*args, **kwargs):
+        return None
+
+    async def _start(agent: str):
+        async with async_session_factory() as session:
+            return await trigger_agent_directly(
+                project_id="proj-test",
+                agent=agent,
+                message="work the task",
+                conversation_id=conversations[agent],
+                session=session,
+                task_id=HELD_TASK,
+            )
+
+    with (
+        patch.object(agent_trigger, "bind_run_to_task", _paused_bind),
+        patch.object(agent_trigger, "_execute_run", _no_process),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
+    ):
+        outcomes = await asyncio.gather(_start(HOLDER), _start(CHALLENGER), return_exceptions=True)
+        while agent_trigger._background_runs:
+            await asyncio.gather(*list(agent_trigger._background_runs), return_exceptions=True)
+
+    started = [o for o in outcomes if not isinstance(o, BaseException)]
+    refused = [o for o in outcomes if isinstance(o, TriggerAgentError)]
+    assert len(started) == 1 and len(refused) == 1, outcomes
+    assert started[0].agent in refused[0].detail
+    assert refused[0].transient
+    async with async_session_factory() as session:
+        running = (
+            (
+                await session.execute(
+                    select(Run.agent).where(Run.task_id == HELD_TASK, Run.status == "running")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert running == [started[0].agent]
 
 
 # ---------------------------------------------------------------------------
