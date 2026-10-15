@@ -361,4 +361,10 @@ async def withdraw_queue_entry(
     payload = {"entry_id": entry.id, "agent": entry.agent}
     await persist_event(session, project_id, "queue_entry_withdrawn", payload, agent=entry.agent)
     await sse_manager.broadcast(project_id, "queue_entry_withdrawn", payload)
+    if entry.job_id is not None:
+        # A job's waiting firing has nothing left to deliver once its entry is gone (F625).
+        from ...scheduler import close_firings_left_without_input
+
+        if await close_firings_left_without_input(session, project_id, entry.job_id):
+            await session.commit()
     return entry

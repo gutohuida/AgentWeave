@@ -80,3 +80,70 @@ async def test_a_press_for_an_agent_with_no_runner_waits(
     assert [r.status for r in rows] == ["in_progress"]
     assert rows[0].error_summary is None
     assert [e.state for e in entries] == ["queued"]
+
+
+async def test_withdrawing_a_waiting_firings_message_stops_the_firing(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """F625: withdrawing the entry left the firing `in_progress` forever, even once the job was
+    archived. With nothing left to deliver and no run, the firing is over: `stopped`, naming why."""
+    job_id = await _unbound_agent_job(app, auth_headers, bind_runner, "withdrawn625")
+    assert (await app.post(f"{BASE}/jobs/{job_id}/run", headers=auth_headers)).status_code == 200
+    async with async_session_factory() as db:
+        (entry,) = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.agent == "withdrawn625")
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    withdrawn = await app.delete(f"{BASE}/queue/entries/{entry.id}", headers=auth_headers)
+
+    assert withdrawn.status_code == 200, withdrawn.text
+    async with async_session_factory() as db:
+        rows = (await db.execute(select(JobRun).where(JobRun.job_id == job_id))).scalars().all()
+    assert [r.status for r in rows] == ["stopped"]
+    assert "withdrawn" in rows[0].error_summary
+
+
+async def test_archiving_a_job_closes_a_firing_left_with_nothing_to_deliver(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """A firing orphaned before the withdrawal closed it (live data) is closed by the archive."""
+    job_id = await _unbound_agent_job(app, auth_headers, bind_runner, "orphan625")
+    assert (await app.post(f"{BASE}/jobs/{job_id}/run", headers=auth_headers)).status_code == 200
+    async with async_session_factory() as db:
+        entry = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.agent == "orphan625")
+                )
+            )
+            .scalars()
+            .one()
+        )
+        entry.state = "withdrawn"  # as a Hub before this fix left it
+        await db.commit()
+
+    archived = await app.post(f"{BASE}/jobs/{job_id}/archive", headers=auth_headers)
+
+    assert archived.status_code == 200, archived.text
+    async with async_session_factory() as db:
+        rows = (await db.execute(select(JobRun).where(JobRun.job_id == job_id))).scalars().all()
+    assert [r.status for r in rows] == ["stopped"]
+
+
+async def test_a_firing_whose_message_still_waits_is_left_in_progress_by_the_archive(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    job_id = await _unbound_agent_job(app, auth_headers, bind_runner, "kept625")
+    assert (await app.post(f"{BASE}/jobs/{job_id}/run", headers=auth_headers)).status_code == 200
+
+    await app.post(f"{BASE}/jobs/{job_id}/archive", headers=auth_headers)
+
+    async with async_session_factory() as db:
+        rows = (await db.execute(select(JobRun).where(JobRun.job_id == job_id))).scalars().all()
+    assert [r.status for r in rows] == ["in_progress"]

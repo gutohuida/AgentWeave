@@ -1586,6 +1586,11 @@ async def archive_job(
             job, loop, reason=ARCHIVED_WITH_JOB_REASON, when=archived_at, completed=False
         )
         loop.archived_at = archived_at
+    # A firing whose message was withdrawn before this fix stays `in_progress` with nothing left
+    # to finish it (F625); the archive is the last write this job gets, so it closes them.
+    from ...scheduler import close_firings_left_without_input
+
+    await close_firings_left_without_input(session, project_id, job_id)
 
     # Rows and deferred frames above the one commit, in this order (design D3a): the loop's own
     # history records the stop and the archival, and an open loop tab is told.

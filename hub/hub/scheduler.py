@@ -2600,6 +2600,58 @@ async def finalize_job_run_for_conversation(
         job_run.status = final_status
 
 
+async def close_firings_left_without_input(
+    session: AsyncSession, project_id: str, job_id: str
+) -> int:
+    """Stop *job_id*'s waiting firings that have nothing left to deliver (F625). Returns how many.
+
+    A firing that waits (F596, F608) stays `in_progress` until the run carrying its entry ends.
+    Withdrawn instead, that run never comes, so nothing resolved the firing. One is over when no
+    entry of this job is queued in its conversation and no run there is live. Commits nothing: the
+    caller's write is the occasion for it.
+    """
+    firings = (
+        (
+            await session.execute(
+                select(JobRun).where(
+                    JobRun.project_id == project_id,
+                    JobRun.job_id == job_id,
+                    JobRun.status == "in_progress",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    closed = 0
+    for firing in firings:
+        if firing.conversation_id is None:
+            continue
+        queued = (
+            await session.execute(
+                select(InboundQueueEntry.id)
+                .where(
+                    InboundQueueEntry.conversation_id == firing.conversation_id,
+                    InboundQueueEntry.job_id == job_id,
+                    InboundQueueEntry.state == "queued",
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        live = (
+            await session.execute(
+                select(Run.id)
+                .where(Run.conversation_id == firing.conversation_id, Run.status == "running")
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if queued is None and live is None:
+            firing.status = "stopped"
+            firing.error_summary = "its queued message was withdrawn before a turn delivered it"
+            closed += 1
+    return closed
+
+
 # Consumer-side cap on a rendered checkpoint's contribution to a briefing (design D5). A
 # checkpoint body is already a bounded generator-side summary
 # (`checkpoint_generation._TRANSCRIPT_CHAR_LIMIT`), so this budget is far smaller: 4,000
