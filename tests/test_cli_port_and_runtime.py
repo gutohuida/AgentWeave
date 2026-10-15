@@ -240,3 +240,70 @@ def _install_health(monkeypatch, payload):
             return False
 
     monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _Resp())
+
+
+class TestProfilesAreHonoured:
+    """F649/F650: `status --profile` reported another profile's Hub as this one's, the stopped and
+    reset hints said a bare `agentweave` (the default profile on :8000), and `stop` on a native Hub
+    it did not start fell through to Docker and printed a Docker-daemon error."""
+
+    class _Resp:
+        status = 200
+
+        def __init__(self, health):
+            self.health = health
+
+        def read(self):
+            return json.dumps(self.health).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def test_status_says_when_the_port_is_another_profiles(self, monkeypatch, capsys):
+        from agentweave import cli
+
+        monkeypatch.setattr(cli, "_hub_pid_running", lambda **kw: None)
+        monkeypatch.setattr(cli, "_hub_profile_serving_port", lambda port: "sweep")
+        monkeypatch.setattr(cli, "_hub_project_status_summary", lambda port: "")
+        health = {"status": "ok", "runtime": "native"}
+        monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: self._Resp(health))
+
+        code = cli.cmd_status(argparse.Namespace(port=8031, profile="other"))
+
+        out = capsys.readouterr().out
+        assert code == 1
+        assert "'sweep'" in out and "'other'" in out
+        assert "running" not in out
+
+    def test_the_stopped_hint_names_the_profile_and_port(self, monkeypatch, capsys):
+        from agentweave import cli
+
+        def _boom(*a, **k):
+            raise OSError("connection refused")
+
+        monkeypatch.setattr(cli, "_hub_pid_running", lambda **kw: None)
+        monkeypatch.setattr("urllib.request.urlopen", _boom)
+
+        cli.cmd_status(argparse.Namespace(port=8039, profile="beta"))
+
+        assert "agentweave --profile beta --port 8039" in capsys.readouterr().out
+        assert cli._hub_start_hint("default", None) == "agentweave"
+
+    def test_stop_leaves_a_native_hub_it_did_not_start(self, monkeypatch, capsys):
+        from agentweave import cli
+
+        ran = []
+        monkeypatch.setattr(cli, "_hub_pid_running", lambda **kw: None)
+        health = {"status": "ok", "runtime": "native"}
+        monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: self._Resp(health))
+        monkeypatch.setattr("subprocess.run", lambda *a, **k: ran.append(a))
+
+        code = cli.cmd_stop(argparse.Namespace(port=8038, profile="beta", local=False))
+
+        captured = capsys.readouterr()
+        assert code == 1 and ran == []
+        assert "did not start it" in captured.out + captured.err
+        assert "docker" not in (captured.out + captured.err).lower()

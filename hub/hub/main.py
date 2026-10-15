@@ -19,6 +19,7 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import OperationalError
 from starlette.routing import Match
 
 from . import (
@@ -33,7 +34,7 @@ from .agent_action_scrub import AgentActionScrubMiddleware
 from .api.v1 import agent_trigger, v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
-from .db.engine import engine, init_db
+from .db.engine import SQLITE_BUSY_TIMEOUT_SECONDS, engine, init_db
 from .provider_allowance import arm_held_queues
 from .run_reconciliation import reconcile_interrupted_runs, reconcile_stale_job_runs
 from .run_task_binding import TaskBindingError
@@ -602,6 +603,25 @@ def create_app() -> FastAPI:
         return UTF8JSONResponse(
             status_code=exc.http_status,
             content={"detail": refusal.to_dict() if refusal is not None else exc.detail},
+        )
+
+    @app.exception_handler(OperationalError)
+    async def _database_busy(request: Request, exc: OperationalError):
+        # F627: another process holding the database answered every route a bare 500 after the
+        # busy timeout (30s, F517) ran out. A lock is a state to wait out, so say so; anything
+        # else the driver raises is still a server error.
+        if "database is locked" not in str(exc.orig if exc.orig is not None else exc):
+            raise exc
+        return UTF8JSONResponse(
+            status_code=503,
+            headers={"Retry-After": "5"},
+            content={
+                "detail": (
+                    "The database is busy: another process held it locked for longer than the "
+                    f"Hub waits ({int(SQLITE_BUSY_TIMEOUT_SECONDS)}s). This request did not "
+                    "finish; retry it shortly."
+                )
+            },
         )
 
     @app.exception_handler(TaskBindingError)

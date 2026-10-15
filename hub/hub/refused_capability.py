@@ -345,3 +345,30 @@ async def _record_after_failure(
     if records and not _is_resolved(records[0]):
         return _Outcome("pending", records[0])
     return None
+
+
+async def settle_when_enabled(session: AsyncSession, project_id: str, gate: SettingGate) -> int:
+    """The operator turned *gate*'s setting on in settings: answer its open record with the option
+    that says so, through the operator's own answer path, so the agent that was refused hears it
+    (decision fix-D10, F597). Answering "Leave it off" afterwards would contradict the live
+    setting. Answers how many records were settled; a record another answer or a decline got to
+    first is left as it is."""
+    from .api.v1.questions import apply_answer
+
+    settled = 0
+    for record in await _records(session, project_id, gate.subject_key):
+        if _is_resolved(record):
+            continue
+        options = record.options or []
+        label = options[0].get("label") if options and isinstance(options[0], dict) else None
+        answer = (
+            f"{label or 'Enabled'} (the operator turned {gate.setting} on in "
+            f"{gate.where_changed})"
+        )
+        try:
+            await apply_answer(session, project_id, record, answer, [label] if label else [])
+        except HTTPException:
+            await session.rollback()
+            continue
+        settled += 1
+    return settled

@@ -517,6 +517,24 @@ async def answer_question(
     if question.answered:
         raise HTTPException(status_code=409, detail=_REANSWER_DETAIL)
 
+    question = await apply_answer(
+        session, project_id, question, body.answer, list(body.labels or [])
+    )
+    return await _with_asker_state_one(session, question)
+
+
+async def apply_answer(
+    session: AsyncSession,
+    project_id: str,
+    question: Question,
+    answer: str,
+    labels: List[str],
+) -> Question:
+    """Answer *question* as the operator: claim it, release what it parked, deliver the answer
+    when nobody is waiting for it, and record and broadcast it. Shared by the answer route and by
+    a settings save that settles a refused-capability question (F597). Raises `HTTPException` 409
+    when a decline or another answer got there first."""
+    question_id = question.id
     try:
         await project_workspace.resolve_project_workspace(session, project_id)
     except project_workspace.ProjectWorkspaceError as exc:
@@ -534,8 +552,8 @@ async def answer_question(
             Question.answered == False,  # noqa: E712
         )
         .values(
-            answer=body.answer,
-            answer_labels=list(body.labels or []),
+            answer=answer,
+            answer_labels=labels,
             answered=True,
             answered_at=datetime.now(timezone.utc),
         )
@@ -587,7 +605,7 @@ async def answer_question(
         delivered = await deliver_batch_if_complete(session, question, project_id)
 
     await sse_manager.broadcast(
-        project_id, "question_answered", {"id": question_id, "answer": body.answer}
+        project_id, "question_answered", {"id": question_id, "answer": answer}
     )
     if released is not None:
         unblocked = {
@@ -602,13 +620,13 @@ async def answer_question(
     await persist_accepted_event(
         project_id,
         "question_answered",
-        {"id": question_id, "answer": body.answer},
+        {"id": question_id, "answer": answer},
     )
     # Only a queued answer has a queue event to report, or an agent to wake for it. A blocking
     # asker still waiting is already awake and holding the tool call open.
     if delivered is not None:
         await announce_queued_answer(session, project_id, question, *delivered)
-    return await _with_asker_state_one(session, question)
+    return question
 
 
 @router.post("/{question_id}/decline", response_model=QuestionResponse)

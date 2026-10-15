@@ -76,7 +76,7 @@ async def test_a_refused_review_announces_no_resolution(
 # 1.2 control: the same spy sees a true resolution
 
 
-async def test_a_true_resolution_is_announced_once_after_its_commit(published):
+async def test_a_true_resolution_is_announced_once_after_its_commit(app, published):
     await _completed_with_open_divergence("task-ev-ctl")
     async with async_session_factory() as db:
         task = await db.get(Task, "task-ev-ctl")

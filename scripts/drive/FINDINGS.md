@@ -35536,7 +35536,7 @@ Seam: job firing x the inbound queue's wait-for-runner redrain. **Fix shape:** p
 
 ## F597 (C) -- the "May agents schedule work?" question stays open after the operator enables `allow_agent_jobs` in settings
 
-**Status:** open 2026-10-13. Measured in driving sweep 4 (jobs-loops).
+**Status:** fixed 2026-10-15 (Tier 0, decision fix-D10). A settings save that turns `allow_agent_jobs` on answers each open `capability-refusal:allow_agent_jobs` record with its first option ("Enabled it — go ahead", saying it was turned on in Environment › Settings), through the operator's own answer path (`questions.apply_answer`, extracted from the answer route), so the refused agent is told and woken as an answer would. It is never fatal to the save. `test_refused_capability.test_enabling_the_setting_answers_the_open_question_and_tells_the_agent` failed before. Opened 2026-10-13. Measured in driving sweep 4 (jobs-loops).
 
 A Haiku agent's `create_loop` was refused 403 with `allow_agent_jobs` off, and the Hub opened question `q-cbfeb678bbde` ("Enabled it — go ahead" / "Leave it off", subject `capability-refusal:allow_agent_jobs`). The operator then turned the setting on via `PUT /settings`, and the agent's next `create_loop` succeeded. The question was still `answered: false`, `asker_waiting: true`, listed on the Questions page. Answering it now would send the agent a decision about a setting already changed; "Leave it off" would contradict the live setting. Nothing in the settings write (`projects.py`) consults `refused_capability.py`'s record. Seam: settings x refused-capability question. Not Tier 0: whether a settings change resolves the record (and whether that tells the agent) is a design call in `a-refused-capability-reaches-the-operator`'s territory.
 
@@ -35838,7 +35838,7 @@ Seam: Manager jobs x Knowledge vault (upload trigger). **Fix shape (from the rep
 
 ## F627 (C) -- when another process holds the database, every route answers a bare `500 Internal Server Error` after about 42 s
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Resilience, failure injection; scratch Hub `:8037`).
+**Status:** fixed 2026-10-15 (Tier 0). A `database is locked` error answers 503 with `Retry-After: 5`, saying the database is busy, that the Hub waited its 30 s busy timeout, and that the request did not finish. The wait stays bounded by that timeout (F517 chose 30 s; not shortened). Any other driver error is still a 500. `test_a_locked_database_answers_busy.py` failed before. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Resilience, failure injection; scratch Hub `:8037`).
 
 A `BEGIN EXCLUSIVE` with no writes was held on the scratch DB for 45 s; the journal mode is `delete`, so readers block too. GET agents, GET events/history, PATCH agent, POST trigger, POST permission decide and POST tasks all returned `500 Internal Server Error` in 42.5-42.6 s. The log shows `sqlite3.OperationalError: database is locked`. There is no legible "the database is busy, retry" answer. Not covered: F349 covers concurrent triggers (that held) and F292 CI setup locks; neither covers a route's answer to an external lock.
 
@@ -36023,7 +36023,7 @@ Seam: Agents (`request_agent` x agent budget). Tier guess: 0.
 
 ## F649 (C) -- `agentweave status` ignores `--profile`, and the CLI's hints drop profile and port
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: CLI & lifecycle; scratch Hub `:8031`).
+**Status:** fixed 2026-10-15 (Tier 0). `status --profile X` says when the port is held by another profile's Hub (by its PID file), returns 1, and warns when a hand-started Hub has no PID file for X. The stopped and reset hints name `--profile`/`--port` (`_hub_start_hint`). Tests in `tests/test_cli_port_and_runtime.py::TestProfilesAreHonoured` failed before. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G1: CLI & lifecycle; scratch Hub `:8031`).
 
 `status --profile nosuchprofile1015 --port 8031` reports "running (native) … 4 registered", which is profile `sweep1015g1`'s Hub; the code reads only the port (`src/agentweave/cli.py:85-126`). `status --profile sweep1015g1 --port 8039` says "stopped. Run 'agentweave' to start it", which would start the default profile on :8000. `reset --profile g1throw1015 --yes` ends "Run 'agentweave' to start fresh", with the same problem.
 
@@ -36031,7 +36031,7 @@ Seam: CLI & lifecycle (status/reset x profiles). Tier guess: 0.
 
 ## F650 (C) -- `agentweave stop --profile X --port N` against a native Hub it did not start falls through to Docker and prints a Docker-daemon error
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: CLI & lifecycle).
+**Status:** fixed 2026-10-15 (Tier 0, with F649). `stop` reads the running Hub's `/health`: a native Hub with no PID file for this profile is left running, with an error saying this CLI did not start it; nothing calls Docker. Same test class. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G1: CLI & lifecycle).
 
 The Hub on :8038 was started from source, so it had no pidfile. Stop printed `[ERR] Failed to stop Hub: failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine…` while a native Hub answered `/health` on that port. The CLI-started Hub stopped cleanly ("Stopping Hub (native, PID 9264)… Hub stopped").
 

@@ -2434,3 +2434,10 @@ disappears is indistinguishable from one that was forgotten.
 - **There is no single-document GET under `/project/documents/{path}`;** a drive reads the stored `spec.json` from the project directory. `GET /project/spec/coverage` takes `document=<path>`, not an id. (2026-10-15)
 - **`e2e.py agent ... claude <model>` validates against the catalog:** `claude-haiku-4-5` is refused; use the alias `haiku`. `POST /agents` requires a runner; a runnerless agent is made by creating it, then `PATCH {"runner_id": null}`. (2026-10-15)
 - **Since F618 (2026-10-15) the roster is the `agents` table and agent-keyed writes need a row;** a test that seeds an "agent" by posting heartbeat/output or by assigning a task to a bare name must `add_agent` it first (F642 refuses an assignee with no open row). (2026-10-15)
+
+## 2026-10-15 (interactive fix session, S6-S8, late)
+
+- **Many repo files have mixed line endings** (an LF file with a few CRLF lines from earlier Python edits): detecting the style with `'\r\n' in s` then wrote CRLF into an LF file and made a later exact match fail. Normalise to `\n` on read, edit, and write `\n` (git stores LF either way). (2026-10-15)
+- **Stopping the trial Hub `:8010` (`Stop-Process` on its pid) was refused by the auto-mode classifier** as interfering with a workload. Drive scratch Hubs started with `e2e.py hub-up` (which `hub-down` may stop), and author/fold on `:8010` as it runs; a restart of `:8010` is the operator's to do. (2026-10-15)
+- **`git stash` during a background suite run counts as editing source** (see above): that run's one failure passed alone and the run was repeated. Check "fails before" with `git stash` only when no suite is running. (2026-10-15)
+- **A Haiku quote drops or keeps a sentence's final period between passes** of the same source; anything keyed on a quote must compare it loosely (case, whitespace runs, trailing punctuation), as `vault.loose_quote` does. (2026-10-15)

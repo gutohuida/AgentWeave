@@ -534,3 +534,51 @@ async def test_a_question_a_run_asked_reports_that_run(app, auth_headers):
     )
     row = next(q for q in listed.json() if q["id"] == asked.json()["id"])
     assert row["created_by_run_id"] == "run-asker"
+
+
+async def test_enabling_the_setting_answers_the_open_question_and_tells_the_agent(
+    app, auth_headers, wakes
+):
+    """F597 (decision fix-D10): turning `allow_agent_jobs` on in settings left the question open,
+    still offering "Leave it off" against the live setting. The save now answers it with the option
+    that says so, through the operator's answer path, so the refused agent hears it."""
+    headers = await a_running_agent()
+    detail = await refuse(app, auth_headers, headers)
+    async with async_session_factory() as session:
+        run = await session.get(Run, "run-refused")
+        run.status = "completed"
+        await session.commit()
+
+    saved = await app.put(
+        f"/api/v1/projects/{PROJECT}/settings",
+        headers=auth_headers,
+        json={"allow_agent_jobs": True},
+    )
+
+    assert saved.status_code == 200, saved.text
+    async with async_session_factory() as session:
+        record = await session.get(Question, detail["question_id"])
+        queued = (
+            (
+                await session.execute(
+                    select(InboundQueueEntry).where(
+                        InboundQueueEntry.project_id == PROJECT, InboundQueueEntry.agent == "lead"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert record.answered is True
+    assert record.answer_labels == ["Enabled it — go ahead"]
+    assert "allow_agent_jobs" in record.answer
+    assert len(queued) == 1 and "Enabled it — go ahead" in queued[0].content
+    assert (PROJECT, "lead") in wakes
+
+    again = await app.put(
+        f"/api/v1/projects/{PROJECT}/settings",
+        headers=auth_headers,
+        json={"allow_agent_jobs": True},
+    )
+    assert again.status_code == 200, again.text
+    assert len(await records()) == 1

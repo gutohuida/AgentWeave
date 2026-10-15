@@ -13,7 +13,7 @@ import subprocess
 import sys
 import urllib.request
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from . import __version__
 from .utils import load_dotenv, now_iso, print_error, print_info, print_success, print_warning
@@ -77,6 +77,17 @@ def _print_readiness_summary(results: List[Any], *, title: str = "[READINESS]") 
         print_success("No readiness problems detected.")
 
 
+def _hub_start_hint(profile: str, port: Optional[int]) -> str:
+    """The command that starts *profile*'s Hub on *port* (F649): a bare `agentweave` starts the
+    default profile on the default port, which is not what a named profile's reader asked about."""
+    command = "agentweave"
+    if profile and profile != "default":
+        command += f" --profile {profile}"
+    if port is not None and port != DEFAULT_HUB_PORT:
+        command += f" --port {port}"
+    return command
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     """Report whether the Hub-owned runtime is running, on what port, and against which project."""
     import urllib.error as _uerr
@@ -106,8 +117,22 @@ def cmd_status(args: argparse.Namespace) -> int:
                 # The running process says what it is. Only it knows. An older Hub that does not
                 # report `runtime` is described without a mode rather than guessed about.
                 mode = body.get("runtime") or ("native" if pid is not None else "")
+                # F649: the port answers whichever Hub holds it. Say when that is not the profile
+                # asked about, rather than reporting another profile's Hub as this one's.
+                serving = _hub_profile_serving_port(port)
+                if pid is None and serving is not None and serving != profile:
+                    print(
+                        f"[HUB] Status: port {port} is held by profile '{serving}'s Hub, "
+                        f"not profile '{profile}'s"
+                    )
+                    return 1
                 print(f"[HUB] Status: running ({mode})" if mode else "[HUB] Status: running")
                 print(f"   URL:    {hub_url}")
+                if pid is None and profile != "default":
+                    print_warning(
+                        f"   No PID file for profile '{profile}' on port {port}: this Hub was "
+                        "started by hand and may serve another profile."
+                    )
                 projects = _hub_project_status_summary(port)
                 if projects:
                     print(f"   Projects: {projects}")
@@ -123,7 +148,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         pass
 
     print("[HUB] Status: stopped")
-    print("       Run 'agentweave' to start it")
+    print(f"       Run '{_hub_start_hint(profile, port)}' to start it")
     return 0
 
 
@@ -220,9 +245,21 @@ def cmd_stop(args: argparse.Namespace) -> int:
             if resp.status != 200:
                 print_info("Hub is not running")
                 return 0
+            body: Dict[str, Any] = {}
+            with contextlib.suppress(ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                body = json.loads(resp.read().decode("utf-8"))
     except Exception:
         print_info("Hub is not running")
         return 0
+
+    # F650: a native Hub this CLI did not start (no PID file) used to fall through to Docker and
+    # print a Docker-daemon error. The running Hub says what it is; a native one is left alone.
+    if body.get("runtime") == "native":
+        print_error(
+            f"A native Hub is running on port {port}, but this CLI did not start it (no PID file "
+            f"for profile '{profile}'), so it will not stop it. Stop it where it was started."
+        )
+        return 1
 
     if local:
         compose_dir = Path.cwd() / "hub"
@@ -1469,7 +1506,10 @@ def cmd_reset(args: argparse.Namespace) -> int:
                 log_file.unlink()
                 print_info(f"Deleted {log_file}")
 
-    print_success("Hub data destroyed. Run 'agentweave' to start fresh.")
+    print_success(
+        f"Hub data destroyed. Run '{_hub_start_hint(profile, getattr(args, 'port', None))}' "
+        "to start fresh."
+    )
     return 0
 
 

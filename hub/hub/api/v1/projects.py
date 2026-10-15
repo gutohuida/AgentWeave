@@ -649,6 +649,8 @@ async def update_project_settings(
 
     if main_branch_newly_named:
         await _integrate_what_was_waiting_for_a_branch(session, resolved_project_id)
+    if changed.get("allow_agent_jobs", {}).get("now") is True:
+        await _settle_the_scheduled_work_question(session, resolved_project_id)
 
     from ...turn_scheduler import redrain_queued_agents
 
@@ -668,6 +670,23 @@ async def update_project_settings(
         **merged.model_dump(),
         warnings=await _threshold_warnings(session, resolved_project_id, merged),
     )
+
+
+async def _settle_the_scheduled_work_question(session: AsyncSession, project_id: str) -> None:
+    """Answer the open "May agents schedule work?" question now that the setting is on (F597,
+    decision fix-D10), so the refused agent hears it and the question stops asking something
+    already decided. After the settings commit, and never fatal: the setting stands on its own."""
+    from ... import refused_capability
+
+    try:
+        await refused_capability.settle_when_enabled(
+            session, project_id, refused_capability.AGENT_JOBS
+        )
+    except Exception:  # noqa: BLE001 - never let the question undo the setting that settled it
+        logger.warning(
+            "Could not answer the scheduled-work question for %s", project_id, exc_info=True
+        )
+        await session.rollback()
 
 
 async def _integrate_what_was_waiting_for_a_branch(session: AsyncSession, project_id: str) -> None:

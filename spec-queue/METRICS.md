@@ -159,3 +159,6 @@ not a defect.
 | 2026-10-15 | F638 an agent can create a disabled job (interactive, S8) | 0 | none | ~0h10 (tool arg + surface line; 1 test case, snapshot) | not driven live (payload test at the seam) | suite: the tool-surface test caught the undescribed argument |
 | 2026-10-15 | F646 a nested project directory is refused (interactive, S8) | 0 | none | ~0h15 (one check in open_existing; 1 test) | not driven live | none |
 | 2026-10-15 | F647 an empty instructions body is refused (interactive, S8) | 0 | none | ~0h05 (required field; 1 test) | not driven live | none |
+| 2026-10-15 | F597 enabling allow_agent_jobs answers the open question (interactive, S8, D10) | 0 | none | ~0h30 (apply_answer extracted; settle hook; 1 test) | not driven live (route test with delivery and wake) | none |
+| 2026-10-15 | F627 a locked database answers 503 busy (interactive, S8) | 0 | none | ~0h10 (handler; 1 test) | not driven live | none |
+| 2026-10-15 | F649+F650 the CLI honours profiles and leaves a Hub it did not start (interactive, S8) | 0 | none | ~0h20 (hint helper, profile check, native stop guard; 3 tests) | not driven live | none |
