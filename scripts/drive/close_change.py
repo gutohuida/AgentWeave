@@ -72,6 +72,8 @@ PREEXISTING_DRIVE = "scripts/drive/d1015_f605_preexisting_checks.py"
 OPERATOR_EDIT_TESTS = "hub/tests/test_operator_authored_documents.py"
 AGENT_PROPOSAL_TESTS = "hub/tests/test_spec_edit_proposals.py"
 OPERATOR_EDIT_DRIVE = "scripts/drive/d1015_f611_operator_edit_applies.py"
+FOLDED_TESTS = "hub/tests/test_a_folded_requirement_keeps_its_verification.py"
+FOLDED_DRIVE = "scripts/drive/d1015_f593_fold_keeps_verification.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1278,6 +1280,19 @@ CHANGES = {
              "and records one proposal per changed unit."),
         ],
     },
+    "f593": {
+        "document": "spec/changes/a-folded-requirement-keeps-its-verification/spec.json",
+        "tasks": ["task-c7d8ab1e247c"],
+        "evidence": [
+            ("FR-1", "task-c7d8ab1e247c", "test_result", FOLDED_TESTS,
+             "An unchanged folded requirement is verified and names its change requirement; a "
+             "reworded one inherits nothing; one with its own evidence keeps its own."),
+            ("FR-2", "task-c7d8ab1e247c", "manual_observation", FOLDED_DRIVE,
+             "Written first: on HEAD the capability's folded requirement read unserved and the "
+             "archived change counted in the totals; after, verified via served_by, totals count "
+             "it once, and the change's own coverage still lists it."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1311,6 +1326,7 @@ CHANGE_FOLDS = {
     "f607": 'workspace-isolation',
     "f603": 'workspace-isolation',
     "f605": 'project-checks',
+    "f593": 'requirement-traceability',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [

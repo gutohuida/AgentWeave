@@ -1214,6 +1214,16 @@ async def coverage(
         session, project_id, document_id=document_id
     )
     unserved = await requirement_links.unserved(session, project_id, document_id=document_id)
+    # The same scope as the report (F593): no archived document in the project's rollup, and a
+    # requirement served through a fold is not "no work linked".
+    reported = {entry.requirement_id: entry for entry in report.requirements}
+    in_scope = set(reported) | {entry.requirement_id for entry in report.diagnostics}
+    unserved = [
+        row
+        for row in unserved
+        if (document_id is not None or row.id in in_scope)
+        and not (row.id in reported and reported[row.id].served_by)
+    ]
     return {
         **report.to_dict(),
         # Objects, not bare identifiers (F212). Identifiers are minted per document

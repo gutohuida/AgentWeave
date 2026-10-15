@@ -40,6 +40,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .db.models import (
     EvidenceFootprint,
     RequirementEvidence,
+    SpecDocument,
+    SpecDocumentMerge,
     SpecRequirement,
     Task,
     TaskRequirementLink,
@@ -106,6 +108,8 @@ class Coverage:
     evidence_count: int = 0
     accepted_count: int = 0
     linked_task_ids: List[str] = field(default_factory=list)
+    #: The change requirement whose verification this one carries after a fold (F593), or None.
+    served_by: Optional[Dict[str, str]] = None
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -119,6 +123,7 @@ class Coverage:
             "evidence_count": self.evidence_count,
             "accepted_count": self.accepted_count,
             "linked_task_ids": list(self.linked_task_ids),
+            "served_by": dict(self.served_by) if self.served_by else None,
         }
 
 
@@ -236,6 +241,18 @@ async def requirement_coverage(
     query = select(SpecRequirement).where(SpecRequirement.project_id == project_id)
     if document_id is not None:
         query = query.where(SpecRequirement.document_id == document_id)
+    else:
+        # The project's rollup counts what the project asserts now. An archived change is history,
+        # and its requirements live on in the capability it was folded into (F593); its own
+        # coverage, asked for by document, still lists them.
+        query = query.where(
+            SpecRequirement.document_id.not_in(
+                select(SpecDocument.id).where(
+                    SpecDocument.project_id == project_id,
+                    SpecDocument.phase == "archived",
+                )
+            )
+        )
     if not include_retired:
         query = query.where(SpecRequirement.state == "active")
     requirements = list(
@@ -247,7 +264,14 @@ async def requirement_coverage(
     if not requirements:
         return report
 
+    # F593: a capability requirement with no evidence of its own is served by the requirement of a
+    # change merged into it that carries the same digest. The digest is the requirement's meaning
+    # (modal, statement, party, criteria; not its identifier), so a verbatim fold keeps it and a
+    # reworded one inherits nothing. Read through the rows the Hub already records: merges and
+    # digests, no new link.
+    sources = await _folded_sources(session, project_id, requirements)
     ids = [requirement.id for requirement in requirements]
+    ids += [source.id for source in sources.values() if source.id not in ids]
 
     evidence_rows = list(
         (
@@ -310,6 +334,16 @@ async def requirement_coverage(
 
         evidence = evidence_by_requirement.get(requirement.id, [])
         linked = tasks_by_requirement.get(requirement.id, [])
+        served_by = None
+        source = sources.get(requirement.id)
+        if not evidence and source is not None and evidence_by_requirement.get(source.id):
+            evidence = evidence_by_requirement[source.id]
+            linked = linked or tasks_by_requirement.get(source.id, [])
+            served_by = {
+                "requirement_id": source.id,
+                "identifier": source.identifier,
+                "document_id": source.document_id,
+            }
         state = _state(
             drifting=requirement.id in drifting,
             evidence=evidence,
@@ -335,10 +369,62 @@ async def requirement_coverage(
                 evidence_count=len(evidence),
                 accepted_count=len(accepted),
                 linked_task_ids=[task.id for task in linked],
+                served_by=served_by,
             )
         )
 
     return report
+
+
+async def _folded_sources(
+    session: AsyncSession, project_id: str, requirements: List[SpecRequirement]
+) -> Dict[str, SpecRequirement]:
+    """For each capability requirement, the same-digest requirement of a change merged into it."""
+    by_document: Dict[str, List[SpecRequirement]] = {}
+    for requirement in requirements:
+        if requirement.digest:
+            by_document.setdefault(requirement.document_id, []).append(requirement)
+    if not by_document:
+        return {}
+    merges = (
+        await session.execute(
+            select(SpecDocumentMerge.capability_document_id, SpecDocumentMerge.change_document_id)
+            .where(
+                SpecDocumentMerge.project_id == project_id,
+                SpecDocumentMerge.capability_document_id.in_(list(by_document)),
+            )
+            .order_by(SpecDocumentMerge.id)
+        )
+    ).all()
+    if not merges:
+        return {}
+    changes_of: Dict[str, List[str]] = {}
+    for capability_id, change_id in merges:
+        changes_of.setdefault(capability_id, []).append(change_id)
+    candidates = (
+        (
+            await session.execute(
+                select(SpecRequirement).where(
+                    SpecRequirement.project_id == project_id,
+                    SpecRequirement.document_id.in_({c for _, c in merges}),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_change_digest = {}
+    for candidate in sorted(candidates, key=lambda row: natural_key(row.identifier or "")):
+        by_change_digest.setdefault((candidate.document_id, candidate.digest), candidate)
+    found: Dict[str, SpecRequirement] = {}
+    for capability_id, rows in by_document.items():
+        for requirement in rows:
+            for change_id in changes_of.get(capability_id, []):
+                source = by_change_digest.get((change_id, requirement.digest))
+                if source is not None:
+                    found[requirement.id] = source
+                    break
+    return found
 
 
 async def document_coverage(
