@@ -1,0 +1,96 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch project with a tracked fact 'Invoices are due within 45 days' citing its source, and vault-reports on Haiku",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f615_outside_news_referred.py (written first: fails before the build)",
+      "key": "drive",
+      "requirement": "news-is-referred",
+      "then": "the first report is referred and the second is answered",
+      "when": "a Haiku agent reports that the contract was renegotiated to 60 days, and separately that the source says 30 days"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the reports job's prompt",
+      "how_to_check": "pytest hub/tests/test_vault_reports.py",
+      "key": "unit",
+      "requirement": "news-is-referred",
+      "then": "it names outside information as disputed, keeps answered for what the source settles, and carries the new prompt version",
+      "when": "it is built for a report"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "9f117c4ba512ce5ada586d310585a14c1e5840aedce3a203390a80c440f3cab8"
+    },
+    "high_water": 1,
+    "requirements": {
+      "news-is-referred": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1, no migration. D1. A prompt change, not a new outcome: disputed already maps to referred, which the Vault tab lists with a Close control, so the operator hears it with no new state. D2. The control case in the drive (a report the source settles) stays answered, so the instruction cannot be met by referring everything. D3. PROMPT_VERSION becomes vault-reports-4, recorded on each firing.",
+  "evidence": {
+    "checked": [
+      "vault_reports._PROMPT says 'Decide what is true from the source alone' and offers answered when the entry agrees with the source",
+      "ReportAnswer disputed -> referred in _apply"
+    ],
+    "limits": [
+      "A model judgement: the drive is one Haiku sample per case"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "On the 2026-10-15 sweep an agent reported that a fact ('Invoices are due within 45 days') was out of date: the accountant had said the contract was renegotiated to 60 days. The vault-reports job, told to 'decide what is true from the source alone', answered that the entry agrees with its source, which closes the report with no control. The likeliest real report, 'the source is out of date', never reaches the operator, and the fact keeps answering 45 days to every agent.",
+  "requirements": [
+    {
+      "key": "news-is-referred",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The source cannot settle what happened after it or outside it; only the operator can (F615).",
+      "statement": "The vault-reports job's instruction MUST tell the model that a report bringing information the entry's source does not hold (a later change, something a person said, another document) is not settled by the source and is answered disputed, so the report is referred to the operator; answered MUST be reserved for a report the source itself settles, and the prompt version MUST change with the instruction."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "vault_reports: the instruction tells the model to answer disputed when the report brings information the source does not hold; answered is kept for a report the source itself settles",
+      "knowledge-vault: one requirement added"
+    ],
+    "non_goals": [
+      "A new outcome value (disputed already becomes referred, which the operator sees and closes)",
+      "Showing an answered report's reasoning in the app (F581)"
+    ]
+  },
+  "summary": "A vault report that brings information the entry's source does not hold (a later change, a person's correction) is referred to the operator instead of being answered 'the entry stands' (F615).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "vault_reports._PROMPT and PROMPT_VERSION; a prompt test.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "news-is-referred"
+      ],
+      "reviewer": null,
+      "title": "Refer a report that brings outside information"
+    }
+  ],
+  "title": "A report with news reaches the operator"
+}
