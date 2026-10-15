@@ -1,0 +1,136 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch project, a Haiku agent whose worktree exists, then a file committed to master",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f607_worktree_catch_up.py <project> (written first: the agent could not find the file on HEAD)",
+      "key": "drive",
+      "requirement": "catch-up",
+      "then": "the worktree contains master's commit and the reply quotes the file",
+      "when": "the agent's next turn reads the file"
+    },
+    {
+      "checked_by": "agent",
+      "given": "real disposable repositories",
+      "how_to_check": "pytest hub/tests/test_an_agent_checkout_catches_up_with_main.py",
+      "key": "unit",
+      "requirement": "never-destructive",
+      "then": "fast-forwarded, merged, untouched, untouched with the merge aborted",
+      "when": "the worktree is behind, diverged, dirty, or conflicting"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "6b54ffbf563e5fb818a4b88c19c32cd6904787594ed13dfb2286a1de0bb24bc3",
+      "FR-2": "65794cb703e9da6938bf6e929f50051c473b2856fdbd53b2d3b21403908f0654",
+      "FR-3": "1fb8b07c4e89bd13a0c9b881fa6ad9dcf8186438ccd9222f813591b4560b1d8f"
+    },
+    "high_water": 3,
+    "requirements": {
+      "catch-up": "FR-1",
+      "never-destructive": "FR-2",
+      "scope": "FR-3"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1. No migration. D1. The target is the same integration base a task branch is cut from (`task_workspace.integration_base`), so an agent and its tasks see one main. D2. Non-blocking, unlike the task catch-up (which refuses): an agent's own checkout is not a deliverable, and refusing its mail over a conflict would be an outage; the conflict is logged. D3. In `worktrees.resolve_turn_workspace`, on the agent arm only.",
+  "evidence": {
+    "checked": [
+      "worktrees.ensure_worktree cuts once",
+      "task catch-up exists for prerequisites only (worktrees._catch_up_prerequisites)",
+      "drive on HEAD: the file committed after the worktree was cut is not seen"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "`worktrees.ensure_worktree` cuts an agent's branch once and nothing moves it afterwards, while task checkouts catch up with their approved prerequisites (F158). A reconcile turn ran on a worktree lacking landed code and recorded three false 'missing' gaps (2026-10-15 sweep G4); a turn could not find a file committed to master after its worktree was cut (F602's drive; re-driven on HEAD: 'RELEASE.txt does not exist in my workspace').",
+  "requirements": [
+    {
+      "key": "catch-up",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Reconcile, exploration and mail turns read the agent's checkout as the project's code.",
+      "statement": "Before an untasked turn starts in a writing agent's own worktree, the worktree MUST contain the commit of the project's integration base (Project.main_branch when set and resolving, else the project checkout's HEAD): fast-forwarded when it has no commits of its own, merged when it has and is clean."
+    },
+    {
+      "key": "never-destructive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent's own uncommitted work must not be lost to a catch-up.",
+      "statement": "A worktree with uncommitted changes, or whose merge conflicts, MUST be left exactly as it was (the merge aborted) and the turn MUST still run."
+    },
+    {
+      "key": "scope",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Task checkouts, review checkouts and read-only agents MUST be unaffected."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "writing agents' own worktrees on untasked turns"
+    ],
+    "non_goals": [
+      "F603 (which checkout a review reads)",
+      "telling the agent its checkout is behind when catch-up was declined"
+    ]
+  },
+  "summary": "Before an untasked turn runs in a writing agent's own worktree, the worktree takes in what the project's integration base has that it lacks: fast-forward, or a merge when it carries commits of its own; uncommitted work or a conflict leaves it untouched and the turn runs as before (F607, also seen live in F602's drive).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1015_f607_worktree_catch_up.py",
+      "files": [
+        "scripts/drive/d1015_f607_worktree_catch_up.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "catch-up"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "worktrees.catch_up_agent_worktree; resolve_turn_workspace; task_workspace.integration_base; agent_trigger; tests",
+      "files": [
+        "hub/hub/worktrees.py",
+        "hub/hub/task_workspace.py",
+        "hub/hub/api/v1/agent_trigger.py",
+        "hub/tests/test_an_agent_checkout_catches_up_with_main.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "catch-up",
+        "never-destructive",
+        "scope"
+      ],
+      "reviewer": null,
+      "title": "Agent worktree catch-up"
+    }
+  ],
+  "title": "An agent's own checkout is brought up to main before its turn"
+}
