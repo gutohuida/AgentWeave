@@ -692,6 +692,60 @@
       "requirement": "a-failure-the-provider-names-unretryable-is-given-up-at-once",
       "then": "the input is not returned to the queue the reason recorded names that failure and states that the Hub did not retry the conversation's provider session is still bound",
       "when": "a Copilot run fails because its root `session.error` names `authentication` or `quota`, and the provider's reading does not refuse the turn with a reset ahead"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub, one Haiku agent, checkpoint_mode automatic at a 5,000-token threshold, auto-continue off",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f598_held_successor.py <project> (failed on HEAD 3b3aff3+: runs 1->2 after the settings save, and Continue answered 'queue is empty')",
+      "key": "a-held-successor-waits-for-continue-drive",
+      "requirement": "a-held-successor-waits-for-continue-held",
+      "then": "no turn starts and the checkpoint entry stays queued; the queue status says it waits for Continue; Continue then starts the successor and delivers the entry",
+      "when": "one operator turn crosses the threshold, the Hub cuts over, and the operator saves the settings unchanged"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a cutover with auto-continue off",
+      "how_to_check": "pytest hub/tests/test_a_held_successor_waits_for_continue.py",
+      "key": "a-held-successor-waits-for-continue-redrain",
+      "requirement": "a-held-successor-waits-for-continue-held",
+      "then": "nothing is spawned and both entries stay queued",
+      "when": "redrain_queued_agents runs, and when a peer's entry arrives in the successor conversation"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a held successor",
+      "how_to_check": "pytest hub/tests/test_a_held_successor_waits_for_continue.py",
+      "key": "a-held-successor-waits-for-continue-continue",
+      "requirement": "a-held-successor-waits-for-continue-released",
+      "then": "one turn starts carrying the checkpoint (and the message)",
+      "when": "the operator presses Continue, or sends a message into the successor conversation"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a held successor and nothing else queued",
+      "how_to_check": "pytest hub/tests/test_a_held_successor_waits_for_continue.py",
+      "key": "a-held-successor-waits-for-continue-status",
+      "requirement": "a-held-successor-waits-for-continue-explained",
+      "then": "waiting_reason names Continue and the conversation",
+      "when": "the queue status is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "auto-continue on",
+      "how_to_check": "pytest hub/tests/test_a_held_successor_waits_for_continue.py",
+      "key": "a-held-successor-waits-for-continue-auto-on",
+      "requirement": "a-held-successor-waits-for-continue-auto-on-unchanged",
+      "then": "the entry is not held and the successor starts",
+      "when": "a cutover runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a database at 0126 with queued checkpoint entries in an auto-continue-off and an auto-continue-on project",
+      "how_to_check": "pytest hub/tests/test_migrations.py -k 0127",
+      "key": "a-held-successor-waits-for-continue-migrate",
+      "requirement": "a-held-successor-waits-for-continue-migration",
+      "then": "only the off project's queued checkpoint entries are held; downgrade removes the column",
+      "when": "it upgrades to 0127 and downgrades back"
     }
   ],
   "algorithms": [],
@@ -717,7 +771,12 @@
       "FR-25": "28e0abff9c9fbee8c1f7096277516a6b7eafb9174f63b6bf851cc3641cfeec72",
       "FR-26": "d5516631e89f7a9e9520559546a21e50a56a0246eb42d697dec0f17a06318356",
       "FR-27": "94982b3c3385b41f9c339dfc35120490817f55950c80f0d3f6cffcd0fa7361df",
+      "FR-28": "b5c2c54fc2c63806078b7df72ec27a90a373ef72a20d6ea529bf728be3097372",
+      "FR-29": "76c62d17d959970ca928965f72267fcc08ea8ab9e7917011235eb148bfbbf076",
       "FR-3": "065a0efc441b5b85c0f7d79fdda3b952ef38f4c2c466d9f53817f420c3f28bf5",
+      "FR-30": "3d0d2969669bcbdbe4a9fa82aaf916d9eb6b5971ffc67aaab2b53a734437d0ac",
+      "FR-31": "982404119c3f5dceffda0743693d9de38b5bcad3968bc840ae956073b9fabc21",
+      "FR-32": "3d1fb56781efbb80de3aba607113fee210c7dee604a5e3ae0853e50d4d57d11f",
       "FR-4": "b9994b20205a42b667699a8e27f2ce2abfcffc5ebfa4bd5381f1d0b2a8b53a98",
       "FR-5": "ae17c713ddcd6654c83fcd552e4d17a50923c78336c354540035e06dfecad9cc",
       "FR-6": "40521e886fad38d15d2b3f92fcb9b436c52288a8e195c93cbd49e5c86f438c8b",
@@ -725,12 +784,17 @@
       "FR-8": "9c3ed42e412a52c5efc2b51089c1140f42e440610e47c80fab5d8e3c8fdaa06a",
       "FR-9": "460a821a46a771460ed9dd352b395641d65d2d40c649bcf1558bb17cbef0030d"
     },
-    "high_water": 27,
+    "high_water": 32,
     "requirements": {
       "a-delivered-turn-carries-a-review-or-ordinary-work-never-bot": "FR-7",
       "a-delivered-turn-reaches-the-model-intact": "FR-1",
       "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte": "FR-14",
       "a-failure-the-provider-names-unretryable-is-given-up-at-once": "FR-27",
+      "a-held-successor-waits-for-continue-auto-on-unchanged": "FR-31",
+      "a-held-successor-waits-for-continue-explained": "FR-30",
+      "a-held-successor-waits-for-continue-held": "FR-28",
+      "a-held-successor-waits-for-continue-migration": "FR-32",
+      "a-held-successor-waits-for-continue-released": "FR-29",
       "a-non-queued-entry-cannot-be-withdrawn-or-released-and-says-w": "FR-21",
       "a-peer-message-held-by-the-hop-budget-tells-its-sender": "FR-20",
       "a-re-delivered-turn-says-the-earlier-attempt-was-cut-off": "FR-3",
@@ -961,6 +1025,41 @@
       "party": null,
       "rationale": "A refused credential or spent quota fails the same way on every retry, so each retry only spends a run and an error card.",
       "statement": "Where a Copilot turn fails on a root `session.error` whose `errorType` is `authentication` or `quota` and no allowance refusal with a reset ahead applies, the system SHALL count the attempt, withdraw the input at once with a reason naming the failure and stating the Hub did not retry, and keep the conversation's provider session."
+    },
+    {
+      "key": "a-held-successor-waits-for-continue-held",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The setting is the operator's spend control; a redrain is not the operator.",
+      "statement": "When a cutover runs with checkpoint auto-continue off, the successor's checkpoint entry MUST be recorded as awaiting Continue, and no scheduling path (run-end redrain, settings-save redrain, project open, a job firing, a peer's message into that conversation) MAY start a turn in that conversation while it awaits Continue."
+    },
+    {
+      "key": "a-held-successor-waits-for-continue-released",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Both are the operator saying go; the checkpoint must reach the successor's first turn either way.",
+      "statement": "Continue on the successor conversation MUST release the hold durably and start the turn, or, while the agent is running, leave it to the run-end redrain. Operator input queued into that conversation MUST release it too, so the checkpoint is delivered in the same turn as the operator's message."
+    },
+    {
+      "key": "a-held-successor-waits-for-continue-explained",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While an agent's only startable input awaits Continue, `GET /queue/{agent}/status` and the scheduler MUST give the reason as waiting for Continue, naming the conversation, not as a failure."
+    },
+    {
+      "key": "a-held-successor-waits-for-continue-auto-on-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With auto-continue on, a cutover's successor entry MUST NOT be held, and starts as it does today."
+    },
+    {
+      "key": "a-held-successor-waits-for-continue-migration",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Successors already queued on a live database were promised the same Continue button.",
+      "statement": "The migration that adds the hold MUST mark every still-queued checkpoint entry in a project whose auto-continue is off as awaiting Continue, and its downgrade MUST drop the column without touching entry states."
     }
   ],
   "schema_version": 1,

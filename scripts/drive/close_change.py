@@ -53,6 +53,8 @@ SPECVAULT_UI = "hub/ui/src/__tests__/specVaultWarnings.test.tsx"
 SPECVAULT_DRIVE = "scripts/drive/d1025_specs_against_vault.py"
 FILES_TESTS = "hub/tests/test_vault_files.py"
 ACCESS_TESTS = "hub/tests/test_vault_access.py"
+HELD_TESTS = "hub/tests/test_a_held_successor_waits_for_continue.py"
+HELD_DRIVE = "scripts/drive/d1015_f598_held_successor.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1064,6 +1066,31 @@ CHANGES = {
              "d1027 was committed failing at check 1 (no fetches field) before the build; on the committed tree it passed 9/9 with real Haiku (testbed/drive1027-access-tuning/125857)."),
         ],
     },
+    "f598": {
+        "document": "spec/changes/a-held-successor-waits-for-continue/spec.json",
+        "commit": "0b1f478",
+        "tasks": ["task-73e2a01fc86c", "task-2771d5568f36"],
+        "evidence": [
+            ("FR-1", "task-2771d5568f36", "test_result", HELD_TESTS,
+             "A redrain, a settings save and a peer's message into the successor start nothing; "
+             "input in another conversation still runs (failed on 146de73: the redrain spawned)."),
+            ("FR-1", "task-73e2a01fc86c", "manual_observation", HELD_DRIVE,
+             "Written and run before the build on a scratch Hub with real Haiku: the settings save "
+             "started run 2 and Continue answered 'queue is empty'; after, runs 1->1 across the "
+             "save and Continue starts the successor (9/9)."),
+            ("FR-2", "task-2771d5568f36", "test_result", HELD_TESTS,
+             "Continue starts the successor with its checkpoint; pressed while the agent runs, the "
+             "release is kept and the run's end delivers it; the operator's own message releases it."),
+            ("FR-3", "task-2771d5568f36", "test_result", HELD_TESTS,
+             "Queue status and the scheduler answer 'waiting for Continue' naming the conversation, "
+             "terminal_failure false."),
+            ("FR-4", "task-2771d5568f36", "test_result", HELD_TESTS,
+             "With auto-continue on the entry is not held and the successor starts."),
+            ("FR-5", "task-2771d5568f36", "test_result", "hub/tests/test_migrations.py",
+             "0127 holds only queued checkpoint entries of auto-continue-off projects; downgrade "
+             "drops the column, states unchanged; guarded for a chain with no projects table."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1080,6 +1107,7 @@ CHANGE_FOLDS = {
     "fspecvault": 'knowledge-vault',
     "fimages": 'knowledge-vault',
     "faccess": 'knowledge-vault',
+    "f598": 'inbound-queue-delivery',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
