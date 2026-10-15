@@ -762,7 +762,8 @@ async def review_dispatch_refusal(
     and called from both places rather than written twice: the dispatch is still the authority --
     the flow path never passes through the route -- and this must not drift from it.
 
-    Design D8, D9 and D5, in the order they become knowable.
+    Design D8, D9 and D5, in the order they become knowable; the holder check (F438) comes after
+    the author rules (F654), so an author asking to review is told it is the author.
 
     **Where no agent is recorded as completing the task, an agent that recorded evidence for it is
     its author, and is refused here too** (F306). This is the same rule the transition guards state
@@ -787,13 +788,6 @@ async def review_dispatch_refusal(
             f"A review begins from work that is awaiting one. Staffing a reviewer onto this task "
             f"would take it from whoever holds it and move it nowhere.",
         )
-    if (
-        task.status in WITH_REVIEWER_LOOP_TASK_STATUSES
-        and task.assignee
-        and task.assignee != reviewer
-        and not await holder_may_be_replaced(session, task, agent=reviewer)
-    ):
-        return (status.HTTP_409_CONFLICT, await holder_refusal(session, task))
     completing_agent = await agent_that_completed(session, task.id)
     if completing_agent is not None and completing_agent == reviewer:
         return (
@@ -810,6 +804,14 @@ async def review_dispatch_refusal(
             f"task, which claims the work as its own. Its verdict would be refused, so the "
             f"review could never end. {own_review_remedy(task)}",
         )
+    # F654: after the author rules, so an author asking to review is told that, not who holds it.
+    if (
+        task.status in WITH_REVIEWER_LOOP_TASK_STATUSES
+        and task.assignee
+        and task.assignee != reviewer
+        and not await holder_may_be_replaced(session, task, agent=reviewer)
+    ):
+        return (status.HTTP_409_CONFLICT, await holder_refusal(session, task))
     return None
 
 
@@ -827,8 +829,11 @@ async def holder_refusal(session: AsyncSession, task: "Task") -> str:
     if attendance.attends(task.id, task.assignee):
         waiting = "Let the review in flight finish."
     else:
+        # F654: the remedy that worked on the sweep -- asking the named reviewer again -- first.
         waiting = (
-            f"{task.assignee!r} has no turn running or queued on it, so no review is in flight."
+            f"{task.assignee!r} has no turn running or queued on it, so no review is in flight. "
+            f"Ask {task.assignee!r} to review it again (a review turn for {task.assignee!r} on "
+            f"this task), or:"
         )
     return f"Task {task.id} is already under review by {task.assignee!r}. {waiting} " + (
         own_review_remedy(task)

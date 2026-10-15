@@ -733,6 +733,30 @@ async def test_a_silent_holder_is_not_said_to_have_a_review_in_flight(
     assert "Let the review in flight finish" not in detail, detail
     assert "no review is in flight" in detail, detail
     assert "Decide it yourself" in detail, "the remedy stays"
+    # F654: the remedy that worked on the sweep is named first.
+    assert f"Ask {holder!r} to review it again" in detail, detail
+
+
+async def test_an_author_asking_to_review_is_told_it_is_the_author(app, auth_headers, bind_runner):
+    """F654: the sweep's author asked to review a task a silent reviewer held, and was told who
+    held it -- not that its own verdict would be refused, which is what stops it whoever holds it.
+    """
+    _holder, _other, task_id = await _held_for_review(
+        app, auth_headers, bind_runner, "c", holder_runs=False
+    )
+    author = "author-438c"
+    await _roster(app, auth_headers, bind_runner, author)
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={"agent": author, "message": "review it", "review_task_id": task_id},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 403, response.text
+    detail = response.json()["detail"]
+    assert "recorded evidence for this task" in detail, detail
+    assert "already under review by" not in detail, detail
 
 
 async def test_a_holder_with_a_turn_on_the_task_is_told_to_let_it_finish(

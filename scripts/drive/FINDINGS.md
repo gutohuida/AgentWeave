@@ -35788,7 +35788,7 @@ Seam: Conversations & composer x Runs (trigger validation). Tier guess: 0.
 
 ## F621 (C) -- accepting the evidence a reviewer's verdict waited on does not re-dispatch the review, and the only way to ask again is the API
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Flows & review; scratch Hub `:8033`).
+**Status:** fixed 2026-10-15 (Tier 0). `run_divergence.review_held_on_the_operator` / `ask_held_reviewer_again`: both evidence-decision routes (operator's and a granted agent's) read, before deciding, the reviewer's open `review` divergence on a task under review where approval is held for the operator; after the decision commits, if the hold has lifted and the reviewer has nothing running or queued, the same reviewer is asked again in the same checkout, recorded as that divergence's response (`retried`). A rejection lifts the hold too, so the reviewer can send the work back. 3 tests (asked again on accept; asked for its send-back on reject; nobody asked with no held review on record); the first failed before. Driven with `scripts/drive/d1015_f621_held_review_asked_again.py` (Haiku builder records evidence, Haiku tester's approval held, operator accepts): before, the tester was never asked and the task stayed under review; after, the tester ran again and approved (8/8). The app's own "Ask again" control is left to the UI batch (F336). Opened before: open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Flows & review; scratch Hub `:8033`).
 
 The first tester turn on t-char (`run-a105d649138b`) ended with *"approval cannot be recorded … evidence `ev-f1b8907929a6` … is awaiting the operator's decision"* (so F563's fix holds live: a Haiku reviewer ended its turn instead of waiting on `ask_user`). The operator accepted the evidence. The flow then skipped every tick with *"Ask tester again, review it yourself, or send it back"*. Asking again needs `POST /agent/trigger` with `review_task_id`, which has no UI control (`grep review_task_id hub/ui/src` returns nothing; F336, still open). The flow stalled on a decision the operator had already made. Related: F336, F563, F654.
 
@@ -36061,7 +36061,7 @@ Seam: Inbound queue & messages (hop hold x conversation view). Tier guess: 0 (fr
 
 ## F654 (D) -- the review-dispatch refusal omits the remedy that works
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Flows & review; scratch Hub `:8033`).
+**Status:** fixed 2026-10-15 (Tier 0). `review_dispatch_refusal` now asks the author rules before the holder check, so an author asking to review is told it is the author (403), and `holder_refusal` names asking the silent holder again before deciding it yourself. 2 assertions failed before. Driven on a scratch Hub: the author (builder) got the 403 author sentence, a third agent the 409 naming "Ask 'tester' to review it again". Opened before: open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Flows & review; scratch Hub `:8033`).
 
 `POST /agent/trigger {agent: dev1, review_task_id: t-char}`, where dev1 is the author -> 409 *"already under review by 'tester'. 'tester' has no turn running or queued on it … Decide it yourself: approve, reject, or send it back"*. It names the occupancy, not the author rule, and omits the remedy that worked a moment later: re-dispatching tester, which the flow's own skip line recommends (F621).
 
