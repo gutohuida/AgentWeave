@@ -1,0 +1,117 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch project with a capability and a change whose requirement has accepted evidence and a landed task",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f593_fold_keeps_verification.py <project> (written first: fails before the build)",
+      "key": "drive",
+      "requirement": "folded-served",
+      "then": "the capability's folded requirement is verified, naming the change requirement as served_by",
+      "when": "the operator folds the change into the capability and reads the project's coverage"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same folded project",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f593_fold_keeps_verification.py <project>",
+      "key": "drive-totals",
+      "requirement": "archived-out",
+      "then": "the project totals count the requirement once; the change's own coverage still lists it",
+      "when": "the operator reads the project's coverage and the archived change's own"
+    },
+    {
+      "checked_by": "agent",
+      "given": "requirement rows, merges and evidence",
+      "how_to_check": "pytest hub/tests/test_a_folded_requirement_keeps_its_verification.py",
+      "key": "unit",
+      "requirement": "folded-served",
+      "then": "only the unchanged one inherits; one with its own evidence keeps its own",
+      "when": "coverage is computed for a reworded folded requirement and an unchanged one"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "346ffd27b8618fa7ccb94c04f9f588570279cf3339c1b2b741dbb2e3f78e594d",
+      "FR-2": "166393b3b02cb94ff34cfb68c2daa02acf0434471af20697b937af0ddc030cbc"
+    },
+    "high_water": 2,
+    "requirements": {
+      "archived-out": "FR-2",
+      "folded-served": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1, no migration. D1. The link is what the Hub already records: spec_document_merges (capability <- change) plus the semantic digest, which covers modal, statement, party and criteria and not the identifier, so a requirement folded verbatim keeps its digest. A reworded fold changes the digest and inherits nothing, which is right: the old evidence demonstrated other words. D2. Inherited only when the capability requirement has no evidence of its own; its own evidence, once recorded, governs. D3. Rejected: copying accepted evidence at fold (doubles counts, and F-rules refuse duplicate evidence per commit). D4. The project rollup filters on document phase; document_id-scoped reads are unchanged, so the archived change's page still reads its history.",
+  "evidence": {
+    "checked": [
+      "requirement_coverage has no phase filter and reads evidence by requirement_id only",
+      "spec_digest.semantic_digest takes modal, statement, party and criteria, not the identifier",
+      "spec_document_merges records capability_document_id and change_document_id per fold"
+    ],
+    "limits": [
+      "A capability requirement folded from two changes with the same digest names the first found"
+    ]
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "Folding a verified change into its capability listed the capability's new requirements as unserved with no evidence, while the archived change kept counting as verified in the project totals: coverage said the shipped behaviour was unserved and counted history as verified (sweeps of 2026-10-13 and 2026-10-15, through the API and on screen).",
+  "requirements": [
+    {
+      "key": "folded-served",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The fold carries the requirement's text unchanged; what demonstrated it still demonstrates it.",
+      "statement": "A capability requirement with no evidence of its own SHALL take its coverage state and integration from the requirement of a change merged into that capability that carries the same digest, and its coverage entry SHALL name that requirement as served_by."
+    },
+    {
+      "key": "archived-out",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An archived change is history; counting it beside the capability that holds its requirements counts them twice.",
+      "statement": "The project's coverage rollup SHALL leave out the requirements of archived documents; a document's own coverage SHALL still list them."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "requirement_coverage: a capability requirement with no evidence of its own is served by the same-digest requirement of a change merged into it",
+      "requirement_coverage: the project rollup leaves out requirements of archived documents"
+    ],
+    "non_goals": [
+      "Copying evidence rows into the capability (it would double every count)",
+      "The app showing which change serves a requirement (the UI batch)",
+      "Re-verifying a capability requirement a later commit broke (drift's job)"
+    ]
+  },
+  "summary": "After a fold, a capability requirement folded unchanged from a verified change reads verified, naming the change requirement that serves it; the project's coverage rollup leaves archived documents out of its totals (F593).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "requirement_coverage.requirement_coverage.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "folded-served",
+        "archived-out"
+      ],
+      "reviewer": null,
+      "title": "Coverage reads a folded requirement's verification and leaves archived documents out of the rollup"
+    }
+  ],
+  "title": "A folded requirement keeps the verification it earned"
+}
