@@ -356,6 +356,51 @@
       "requirement": "an-agent-with-no-way-to-be-launched-shall-say-so-and-shall-n",
       "then": "it reports the bound runner",
       "when": "its launchability is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub and project",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f599_runner_flags.py <project> (written first: all seven overrides accepted and the flagged runner bound on HEAD)",
+      "key": "a-runner-s-flags-cannot-override-the-posture-drive",
+      "requirement": "a-runner-s-flags-cannot-override-the-posture-refused",
+      "then": "every override is refused naming its owner, the allowed flag is accepted, and the agent is bound to a runner with no flags",
+      "when": "runners with each override flag are created, then a runner with an allowed flag, then an agent by provider and model"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a runner row storing --dangerously-skip-permissions",
+      "how_to_check": "pytest hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py",
+      "key": "a-runner-s-flags-cannot-override-the-posture-stored-unit",
+      "requirement": "a-runner-s-flags-cannot-override-the-posture-stored",
+      "then": "not runnable with the reason; the trigger refuses with no spawn and the entry stays queued",
+      "when": "its launchability is read and its agent is triggered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a plain runner",
+      "how_to_check": "pytest hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py",
+      "key": "a-runner-s-flags-cannot-override-the-posture-patch-unit",
+      "requirement": "a-runner-s-flags-cannot-override-the-posture-refused",
+      "then": "400 naming the owner, flags unchanged",
+      "when": "PATCH sets an override flag"
+    },
+    {
+      "checked_by": "agent",
+      "given": "runners with --mcp-config and a Copilot --allow-all-tools",
+      "how_to_check": "pytest hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py",
+      "key": "a-runner-s-flags-cannot-override-the-posture-kept-unit",
+      "requirement": "a-runner-s-flags-cannot-override-the-posture-allowed-kept",
+      "then": "accepted and built as today",
+      "when": "created and launched"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flagged and a provider runner of the same cli and model, created first",
+      "how_to_check": "pytest hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py",
+      "key": "a-runner-s-flags-cannot-override-the-posture-add-unit",
+      "requirement": "a-runner-s-flags-cannot-override-the-posture-add-agent",
+      "then": "a plain runner is created and bound",
+      "when": "an agent is added by provider and model"
     }
   ],
   "algorithms": [
@@ -398,11 +443,15 @@
       "FR-34": "791ee5d61ae7bbcf9371cc57046636aebb6ff92f34752cd1aa68c80d4e47fa32",
       "FR-35": "a08ae24a6b39f4df582420d7e9baad7ae9e7be869172fb032a0a4587ace328ec",
       "FR-36": "5d166072cb34f1ab95550611246ba727e57b1974085ddf92e166d74b158d61a0",
+      "FR-37": "21301528376bb473272c4f3aad10de6b3414b4ce59e2d3a996c78f16d6fa707c",
+      "FR-38": "149dc03fcfae585791598d47bd6f45b1cddf423e5786a792c59890cee3609821",
+      "FR-39": "8bffe77027029720c27127ebf5b5ec03f7acd88d02e717c68d08935e62a7f9a0",
+      "FR-40": "404cf4088cc420547eed167d517fac085e3114571f1aa726659faff677554f59",
       "FR-7": "2e8b14c310c7c5600be0755370b28047fd90f05a3d95ef224d745a796c98ece6",
       "FR-8": "050474f8cb6f0870b28f1a305c7eaee3183803b4ad8f6c382833a4399a2d7f83",
       "FR-9": "836acf1a1ceedd13682c78c7fb471b11cfa291b4f3a9ed699d037ce98b319f3e"
     },
-    "high_water": 36,
+    "high_water": 40,
     "requirements": {
       "a-copilot-runner-below-the-supported-version-is-refused": "FR-19",
       "a-copilot-runner-is-spawned-as-its-own-executable": "FR-18",
@@ -411,6 +460,10 @@
       "a-refusal-that-names-a-runner-s-holders-names-where-to-reach": "FR-16",
       "a-run-s-tool-surface-approval-channel-and-plane-access-are-d": "FR-34",
       "a-runner-offered-for-choosing-names-its-model": "FR-17",
+      "a-runner-s-flags-cannot-override-the-posture-add-agent": "FR-39",
+      "a-runner-s-flags-cannot-override-the-posture-allowed-kept": "FR-40",
+      "a-runner-s-flags-cannot-override-the-posture-refused": "FR-37",
+      "a-runner-s-flags-cannot-override-the-posture-stored": "FR-38",
       "a-runner-s-flags-may-select-a-transport-and-unset-means-the-": "FR-14",
       "a-runner-s-model-is-drawn-from-the-catalog": "FR-11",
       "an-agent-is-bound-to-at-most-one-runner": "FR-9",
@@ -668,6 +721,34 @@
       "party": null,
       "rationale": "Naming a binary after the agent sends the operator looking for something that was never supposed to exist.",
       "statement": "Where an agent has no bound runner and its synchronised session configuration names none, its launchability and its queued input's waiting reason SHALL state that no runner is bound, and SHALL NOT name a missing executable derived from the agent's own name; an agent whose session configuration names a runner SHALL keep that configuration's verdict, and a bound runner SHALL outrank it."
+    },
+    {
+      "key": "a-runner-s-flags-cannot-override-the-posture-refused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The posture is the operator's safety control and the model their spend; a free-form flag must not silently override either.",
+      "statement": "POST and PATCH /runners MUST refuse flags that set the model or the permission posture for the runner's CLI -- Claude: --model, --permission-mode, --dangerously-skip-permissions, --allowedTools/--allowed-tools, --disallowedTools/--disallowed-tools, --permission-prompt-tool, --add-dir, --settings; Codex: --model/-m, --sandbox/-s, --ask-for-approval/-a, --dangerously-bypass-approvals-and-sandbox, --full-auto, --add-dir, and -c/--config setting model, sandbox or approval keys; Copilot: --model -- in both `--flag value` and `--flag=value` form, naming the field or setting that owns each."
+    },
+    {
+      "key": "a-runner-s-flags-cannot-override-the-posture-stored",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Runners created before this change exist on live databases.",
+      "statement": "A runner whose stored flags hold one of them MUST be reported not launchable, naming the flag and the remedy (PATCH its flags, or delete it), and no turn MAY start on it; the input waits for the repair."
+    },
+    {
+      "key": "a-runner-s-flags-cannot-override-the-posture-add-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The dialog promises 'the Hub provisions the runner for you' from a provider and a model.",
+      "statement": "Add-agent by provider and model MUST bind only a runner with that cli and model and no flags and no provider config, the oldest first, and create one when none exists."
+    },
+    {
+      "key": "a-runner-s-flags-cannot-override-the-posture-allowed-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every other flag is accepted and run as today (for example --mcp-config, F531; Copilot's widening flags, which the posture strips at run time)."
     }
   ],
   "schema_version": 1,

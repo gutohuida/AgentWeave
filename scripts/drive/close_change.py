@@ -59,6 +59,8 @@ JUDGE_TESTS = "hub/tests/test_the_workspace_judge_reads_paths_not_patterns.py"
 JUDGE_DRIVE = "scripts/drive/d1015_judge_wire.py"
 TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
 TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
+FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
+FLAG_DRIVE = "scripts/drive/d1015_f599_runner_flags.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1138,6 +1140,28 @@ CHANGES = {
              "stored as written."),
         ],
     },
+    "f599": {
+        "document": "spec/changes/a-runner-s-flags-cannot-override-the-posture/spec.json",
+        "commit": "f314366",
+        "tasks": ["task-3b936d807db6", "task-89b47e7be1e0"],
+        "evidence": [
+            ("FR-1", "task-89b47e7be1e0", "test_result", FLAG_TESTS,
+             "Each Claude, Codex and Copilot override flag, in both forms and as a Codex -c key, "
+             "is named with its owner; create and PATCH refuse it and store nothing."),
+            ("FR-1", "task-3b936d807db6", "manual_observation", FLAG_DRIVE,
+             "Written first: on HEAD seven override runners were accepted and Add-agent bound a "
+             "flagged runner; after, 17/17."),
+            ("FR-2", "task-89b47e7be1e0", "test_result", FLAG_TESTS,
+             "A stored --dangerously-skip-permissions runner is not runnable, the trigger spawns "
+             "nothing and names the flag; a PATCH clearing the flags repairs it. Live: binding the "
+             "HEAD run's stored row to a new agent is refused with the reason."),
+            ("FR-3", "task-89b47e7be1e0", "test_result", FLAG_TESTS,
+             "Add-agent skips a flagged runner created first, creates a plain one and reuses it."),
+            ("FR-4", "task-89b47e7be1e0", "test_result", FLAG_TESTS,
+             "--mcp-config, --verbose, a harmless -c key, --no-app-server and Copilot's "
+             "--allow-all-tools stand."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1157,6 +1181,7 @@ CHANGE_FOLDS = {
     "f598": 'inbound-queue-delivery',
     "fjudge": 'agent-run-sandboxing',
     "f602": 'agent-stream-events',
+    "f599": 'runner-registry',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
