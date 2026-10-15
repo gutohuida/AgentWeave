@@ -657,6 +657,57 @@ def _catch_up_prerequisites(
             )
 
 
+def catch_up_agent_worktree(repo_root: Path, worktree: Path, base: str) -> Optional[str]:
+    """Bring an agent's own worktree up to *base* before an untasked turn (F607). Never refuses.
+
+    `an-agent-checkout-catches-up-with-main`. The branch is cut once by `ensure_worktree`, so a
+    reconcile or a mail turn read code main had long moved past. *base* is resolved in the
+    **project** checkout (in the worktree, `HEAD` would name the worktree's own commit):
+
+    - already contained -> nothing happens;
+    - no commits of its own -> fast-forward;
+    - commits of its own and a clean tree -> merged in;
+    - uncommitted changes, or a conflict -> left exactly as it was (the merge aborted).
+
+    Unlike the task catch-up, nothing here refuses the turn: an agent's own checkout is not a
+    deliverable, and refusing its mail over a conflict would be an outage. Returns why it was left
+    behind, or None when it is up to date.
+    """
+    target = _run_git(
+        repo_root, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}", check=False
+    )
+    if target.returncode != 0:
+        return f"{base} does not resolve in the project checkout"
+    sha = target.stdout.strip()
+    contained = _run_git(worktree, "merge-base", "--is-ancestor", sha, "HEAD", check=False)
+    if contained.returncode == 0:
+        return None
+    if _has_uncommitted_changes(worktree):
+        return f"it has uncommitted changes, so {base} ({sha[:12]}) was not merged into it"
+    behind_only = _run_git(worktree, "merge-base", "--is-ancestor", "HEAD", sha, check=False)
+    if behind_only.returncode == 0:
+        moved = _run_git(worktree, "merge", "--ff-only", sha, check=False)
+    else:
+        moved = _run_git(
+            worktree,
+            "-c",
+            f"user.name={COMMIT_IDENTITY[0]}",
+            "-c",
+            f"user.email={COMMIT_IDENTITY[1]}",
+            "merge",
+            "--no-ff",
+            "-m",
+            f"Bring {base} up to date ({sha[:12]})",
+            sha,
+            check=False,
+        )
+    if moved.returncode != 0:
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            _run_git(worktree, "merge", "--abort", check=False)
+        return f"merging {base} ({sha[:12]}) into it conflicts, so it was left as it was"
+    return None
+
+
 def _unwind_task_worktree(repo_root: Path, path: Path, branch: str) -> None:
     """Undo a half-provisioned task checkout, in the order git forces (design D1).
 
@@ -936,8 +987,13 @@ def resolve_turn_workspace(
     base: Optional[str] = None,
     prerequisites: Sequence[str] = (),
     approved: Sequence[Tuple[str, str]] = (),
+    catch_up_to: Optional[str] = None,
 ) -> Path:
     """Return the directory a spawned process should use as its cwd, for *this turn* (design D3).
+
+    *catch_up_to* (F607): on the agent arm, the integration base the agent's own worktree is
+    brought up to first (`catch_up_agent_worktree`). Ignored for a task checkout, a read-only
+    agent and a project that is not a repository, none of which is the agent's own worktree.
 
     The workspace is keyed by what the turn is **about**, not by who is running it: a turn bound to
     a task executes in that task's own checkout, and a turn bound to nothing executes in the
@@ -965,7 +1021,12 @@ def resolve_turn_workspace(
     is precisely the option D1 rejected.
     """
     if not takes_task_workspace(repo_root, config, task_id):
-        return resolve_agent_workspace(repo_root, agent, config)
+        workspace = resolve_agent_workspace(repo_root, agent, config)
+        if catch_up_to and workspace != repo_root:
+            left_behind = catch_up_agent_worktree(repo_root, workspace, catch_up_to)
+            if left_behind is not None:
+                logger.info("%s's worktree was not brought up to date: %s", agent, left_behind)
+        return workspace
     if base is None:
         raise ValueError(f"a task workspace for {task_id} needs a base to be cut from")
     # `resolve_agent_workspace` seeds these on the path above, and states why it does it there

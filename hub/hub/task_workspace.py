@@ -156,13 +156,13 @@ async def resolve_turn_workspace_inputs(
     prerequisites, approved = await _prerequisite_commits(session, task, repo_root)
     return TurnWorkspace(
         task_id=task.id,
-        base=await _integration_base(session, project_id, repo_root),
+        base=await integration_base(session, project_id, repo_root),
         prerequisites=prerequisites,
         approved=approved,
     )
 
 
-async def _integration_base(session: AsyncSession, project_id: str, repo_root: Path) -> str:
+async def integration_base(session: AsyncSession, project_id: str, repo_root: Path) -> str:
     """What a task branch is cut from: the branch approval will merge *into* (design D1).
 
     `Project.main_branch` when it is set **and resolves**, and the project checkout's `HEAD`

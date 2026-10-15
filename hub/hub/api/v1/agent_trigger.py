@@ -1330,6 +1330,16 @@ async def _trigger_agent_directly(
                     transient=True,
                 )
 
+        # F607: an untasked turn in the agent's own worktree reads it as the project's code, so it
+        # is brought up to the same base a task branch is cut from. A task checkout has its own
+        # base and catch-up; this is asked only for the agent arm.
+        catch_up_to = (
+            await task_workspace.integration_base(session, project_id, repo_root)
+            if not worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id)
+            and worktrees.is_writing_agent(config)
+            and worktrees.is_git_repo(repo_root)
+            else None
+        )
         try:
             workspace = worktrees.resolve_turn_workspace(
                 repo_root,
@@ -1339,6 +1349,7 @@ async def _trigger_agent_directly(
                 base=turn_workspace.base,
                 prerequisites=turn_workspace.prerequisites,
                 approved=turn_workspace.approved,
+                catch_up_to=catch_up_to,
             )
         except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
             # Which workspace failed? `resolve_turn_workspace` prepares the **task's** checkout or
