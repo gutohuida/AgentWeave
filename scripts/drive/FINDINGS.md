@@ -15096,6 +15096,8 @@ must not collide with, and no refusal tells them.
 Three assertions in `t_sweep_row4_charters.py` hold this open; both the create door and the rename
 door are probed, because closing one leaves the other.
 
+**Re-verified 2026-10-15** (full sweep, G1: Charters): still open; duplicate charter names are accepted, visible as "Tester, Tester" in the Add-agent charter select.
+
 ## F184 (C) — a whitespace-only charter name is accepted by the API and renders as a blank row
 
 **Status:** fixed (this commit) [Round 4, 2026-09-23] — a whitespace-only charter name is refused; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `CharterCreate.name`
@@ -18742,6 +18744,8 @@ operator language rather than as raw JSON.
 
 ---
 
+**Re-verified 2026-10-15** (full sweep, G6: Accounting & allowance, scratch Hub `:8036`): still reproduces. 28 checkpoint `worker_invocations` costing $0.52 appear in no total (the Hub reported $0.70 for the turns). G2 adds: both `conversation-titles` firings record `"usage": null` in `/manager/activity`, so a titler's spend is unmeasured too.
+
 ## Row 15 WORKTREES — per-agent isolation and conflicts, driven 2026-09-01
 
 Driven on the `:8011` Hub (pid 22908, started 01:48:32; no `.py` under `hub/hub` or `src` newer
@@ -20303,6 +20307,8 @@ question and is **not proposed** here.
 **Reproduction:** section D of `scripts/drive/t_d1_catalog_is_the_only_door.py`, or by hand —
 create two `claude` runners named the same with different models, then open any agent's
 Settings → runner select.
+
+**Re-verified 2026-10-15** (full sweep, G1: Runners & models): the label fix holds (the select reads "name — model (cli)"). Duplicate runner names are still accepted, which this entry's fix did not set out to change (the sweep report called F268 still open; that refers to the uniqueness, not the label).
 
 ## What held, D-1, 2026-09-02 — the independent re-drive of `runner-model-is-chosen-from-the-catalog`
 
@@ -28339,6 +28345,8 @@ Screenshot: `%TEMP%\d1_0913\render\shots\d-094433-5-start-work-menu.png`.
 
 **Related:** F319, F327, F335 (the route's `409` never stages, above).
 
+**Re-verified 2026-10-15** (full sweep, G3: Flows & review, scratch Hub `:8033`): still open. After the operator accepted the evidence a tester's verdict waited on, the flow skipped every tick with *"Ask tester again, review it yourself, or send it back"*; asking again needs `POST /agent/trigger` with `review_task_id`, and `grep review_task_id hub/ui/src` returns nothing. The stall is filed as F621.
+
 ## F337 (C) — a refusal's path or command is recorded and never shown, and its activity line says the agent did the refusing
 
 **Status:** fixed (this commit) [UI-1, 2026-09-23] — a refusal's line says the agent was refused, and shows the bounded detail it was aimed at; see FIXED at the end of this entry. Was: open. Filed 2026-09-13 by the day window's `d3-r2` (F299's round 2). **Read from the
@@ -29016,6 +29024,8 @@ locked` raised by `INSERT INTO agent_outputs`. What the Hub then does with such 
 - **A failure after `trigger_agent`'s entry commit (`agent_trigger.py` ~1515) still answers 500 for input that is queued.** `persist_event` and `schedule_agent` both run after it. Answering `queued` instead is only true if something will drain the entry, and nothing on a timer does (see `_execute_run`'s spawn-failure comment on `redrain_queued_agents`). That needs its own design, not a one-line catch.
 - **The 500 itself was never reproduced in a test**, only the write that caused it. Concurrent `database is locked` from other writers (the run-output INSERTs in the 2026-09-14 observation) is F359's and F292's.
 - Not driven live.
+
+**Re-verified 2026-10-15** (full sweep, G7: Resilience, scratch Hub `:8037`): fix holds. 6 concurrent triggers on a running agent all returned 200 `queued`, each with its own entry, none 500. An external lock on the database still gives a bare 500 on every route (F627, not this finding).
 
 ## F350 (C) — below ~560px of height in a narrow window, the composer's send button is off the panel even with nothing pending
 
@@ -33066,6 +33076,8 @@ change that deletes both routes, `context.ts` and the `compact_request`/`new_ses
 events; mind `every-event-the-hub-sends-reaches-the-app` and
 `an-event-is-announced-only-once-its-write-is-committed`, which name `new_session_request`.
 
+**Re-verified 2026-10-15** (full sweep, G6: Checkpoints; G2: Runs): still bites. `POST /agents/beta/compact` wrote `msg-6f4671798cd6` (`sender='hub'`, unread), no inbound-queue entry, no turn; the text asks a headless agent to "Run `/compact` in your session". `requestCompact`/`requestNewSession` (`hub/ui/src/api/context.ts`) still have no caller, and the composer's only built-in command is `/model`. The same routes (and heartbeat/output) also accept any name and mint phantom agents: filed as F618.
+
 ## F418 (C) — the loop tab fetches the loop's event history and shows none of it
 
 **Status:** fixed `ba1027e` (2026-10-10, Tier 1 loop-history page, F570). Ledger closed 2026-10-12 night: `LoopTab.tsx:487` renders `loop.events` as a History section (`data-testid="loop-tab-events"`); `hub/ui/src/__tests__/loopHistory.test.tsx` 3 passed. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B10 rounds.
@@ -33436,6 +33448,8 @@ Nineteen coverage rows driven by five parallel operators plus row 19 by the orch
 **What happened.** A `manual` turn asked to run `echo checkpoint-one/two/three` ran all three in ~13 s: 0 `permission_requests` rows, no event (`run-4e613a3491fb`). The next turn's `Write` calls each opened a card within a second. The cause is Claude Code's own pre-approval of read-only commands before `--permission-prompt-tool` is consulted, so it is not a Hub defect, but the pill and settings still promise "Ask me" for everything.
 **Related:** F52 (an allow is unobservable). Approve, deny and the 120 s expiry all held in the same row.
 
+**Re-verified 2026-10-15** (full sweep, G2: Agent environment, scratch Hub `:8032`): still bites. Under `manual`, `git status --short` and `echo hello` ran with no card; only the Python write reached the operator (`perm-c25b8d8bd805`).
+
 ## F454 (B) — a Hub-launched agent can load the operator's personal Claude Code skills; a loop firing ran `e2e-loop` and started new loops and commits nobody asked for
 
 **Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 11.
@@ -33445,6 +33459,8 @@ Nineteen coverage rows driven by five parallel operators plus row 19 by the orch
 **What happened.** A scratch loop left enabled (empty queue, message "placeholder", a descriptive `purpose`) fired twice. Both times `builder` read the purpose as a directive and invoked the operator's own `e2e-loop` skill from `~/.claude/skills`. It then tried the trial Hub twice (`curl http://127.0.0.1:8010/health`, denied by the shell judge: "a shell command may name only this run's own Hub"), called `create_loop` and `toggle_job`, wrote an unrequested report and committed it to the project's `master` (conversation `conv-fc2dbb291cc5`; jobs `job-88075aa4fe95`, `job-7cac48f7ca02` created by the agent).
 **Why B.** The operator's user-level skills include ones that register Windows scheduled tasks (`autonomous-session`), and agents run with them available. The shell judge held on the network half; nothing scopes which skills a run sees.
 **Related:** F195 (setting sources), F284.
+
+**Re-verified 2026-10-15** (full sweep, G2: Agent environment, scratch Hub `:8032`): still bites. A Hub-launched Haiku listed e2e-loop, handoff, resume and about 17 more of the operator's personal skills, and the operator's personal `Stop` hook ("Chime: response finished") ran inside the agent's session. Downstream symptom (not filed separately): the composer's `$skill` menu lists only the project's `.claude/skills/` (`lib/composerTriggerSources.ts:5`) and showed "No matches" while the same agent loads about 20 skills; fixing this finding removes the mismatch.
 
 ## F455 (C) — `agentweave doctor --port N` without `--profile` checks the default profile's database and reports it accessible
 
@@ -33463,6 +33479,8 @@ Nineteen coverage rows driven by five parallel operators plus row 19 by the orch
 **Theme:** Operator surfaces
 
 **What happened.** With `token_budget` below `used_tokens` (`exhausted: true`), `POST /agent/trigger` → 200 and the turn ran (`run-ff2da3eff08c`); a peer-triggered turn was held with "token budget exhausted" and drained the moment the budget lifted. The asymmetry is deliberate (`turn_scheduler.py:364` gates `initiator == "autonomous"` only), and neither response nor the timeline says so.
+
+**Re-verified 2026-10-15** (full sweep, G6: Accounting & allowance, scratch Hub `:8036`): fix holds at the API (an operator turn on a spent budget carried `budget_note` and a `token_budget_passed_over` event); the `budget_note` is still not rendered on the conversation screen, as this entry's status says.
 
 ## F457 (C) — a firing that loaded its loop before an edit was staged clears that edit's marker, and the edit is stranded
 
@@ -33689,6 +33707,8 @@ Question for the operator: should `send_message` refuse `to_agent` equal to the 
 Question for the operator: should the Runners page show flags read-only (cheap, removes the invisible state), or edit them (free-form CLI arguments, needs validation per CLI)? Test either way: a runner created with flags through the API shows them on the Runners page.
 
 **Operator answered 2026-09-30 (AskUserQuestion, handoff-0158 resume):** show them read-only. The Runners page renders a runner's `flags`; editing stays with the API (or delete and recreate). Ready to propose.
+
+**Re-verified 2026-10-15** (full sweep, G1: Runners & models): still open; the Runners page and every runner select still show no flags. The sweep showed flags also override the model and the permission posture (a `--dangerously-skip-permissions` runner wrote outside the workspace while the roster said `workspace`): filed as F599, with the Add-agent binding that hands such a runner out as F600.
 
 ## F470 (D) — `each-runner-cli-is-one-adapter`'s design.md predates a same-named function `a-copilot-agent-runs-over-acp` already added
 
@@ -34494,6 +34514,8 @@ The first turn also reported both documents "ready" while its last submit return
 accepted with `done: "false"` (the drafting message prints "Done when: false"). The operator needed
 one corrective turn ($0.37) to get both documents through.
 
+**Re-verified 2026-10-15** (full sweep, G4: Spec documents): the residual this entry's status names (schema discovery by trial) still costs calls. Turn 6 (`run-a1926c8b7bac`): `submit_spec_document` 422 x4 on the criteria shape (fields missing; criteria `key` missing; a criterion naming a requirement by its prose; `requirement` missing), then success on the fifth.
+
 ## F503 (D) — what held in the first real slice drive
 
 **Status:** noted
@@ -35171,6 +35193,8 @@ When a loop's queue empties, the outstanding-request check treats the creator as
 the operator created has no creating run, so it never reports an outstanding message. Operator question in
 DECISIONS.md (`overhaul-loop-creator`).
 
+**Re-verified 2026-10-15** (full sweep, G6: Jobs & loops, scratch Hub `:8036`): fix holds for `/messages` (`pending_request: {"kind":"message","to":"alpha",…}`). An operator turn queued from the composer is not counted: filed as F624.
+
 ## F557 (C) -- agent budget is labelled a concurrency limit, and the Hub enforces it only when an agent staffs an agent
 
 **Status:** open. Filed 2026-10-08 (interactive, reading code while inventorying the project's settings for R2/F379).
@@ -35232,6 +35256,8 @@ the `explore_closed` view field together with those calls (a mechanical sweep), 
 **Status:** fixed 2026-10-12 (Tier 0, night iteration 9). The cause was the briefing: `review_turn.verdict_evidence_sentence` told an ungranted reviewer to `ask_user` the operator when `approved` was refused, which is the wait the drive measured. It now says to end the turn, naming the waiting evidence, and not to wait on a question; a turn that ends while the gate refuses is already surfaced to the operator with the gate's sentence and re-staffs nobody (`run_divergence`, `F374-fix`, driven live 2026-09-26). `test_an_ungranted_reviewer_is_told_the_approval_can_be_refused_and_what_then` fails without the change (both channels, loop briefing and turn context) and passes with it. **Not driven:** no real Haiku reviewer turn on a flow was run, so that a model follows the new sentence by ending its turn is unverified; the surfacing it relies on is F374's. Found by driving (tester-amends d1013 run 2, artefacts `testbed/drive1013-tester-amends/093412`).
 
 A Haiku test turn in a flow (tess, reviewing task `usage`) tried `update_task` to give its verdict and got 409 (the builder's evidence was still `awaiting`; tess has no `can_accept_evidence`). It then called `ask_user` and polled `GET /questions/{id}` for about five minutes until the turn ended; the task stayed `under_review` with no verdict, and the flow had nothing else to do. Hub log lines 165-183 of that run. The review briefing names the evidence gate (`review_turn.verdict_evidence_sentence`) but a reviewer that cannot decide the evidence has no way to end its turn usefully besides a question nobody in a flow is watching. Not caused by tester-amends; the drive avoids it by accepting the evidence as the operator. Worth deciding: should a flow review that cannot pass the gate set `revision_needed`/leave a note and end, rather than ask?
+
+**Re-verified 2026-10-15** (full sweep, G3: Flows & review, scratch Hub `:8033`): fix holds live. The tester's first turn on t-char (`run-a105d649138b`) ended with *"approval cannot be recorded … evidence `ev-f1b8907929a6` … is awaiting the operator's decision"* instead of waiting on `ask_user`.
 
 ## F564 (C) -- deleting a task deletes its divergence records, which the model says are never deleted
 
@@ -35305,6 +35331,8 @@ The operator wrote that change document in one PUT. It had every section filled:
 
 **Fix shape (not decided):** compute the warning from the content each skipped step produces (requirements present, criteria with `how_to_check`, tasks), or advance the step on a content write that fills the later steps. Tier 0 or 1.
 
+**Re-verified 2026-10-15** (full sweep, G4: Spec documents; also listed re-verified open by G3): still bites. A document written in one PUT warned `steps_skipped` on its first propose (`olive-chimera`, `olive-kraken`). One `POST /documents/journey {"step":"delivery"}` clears it (`saffron-selkie`, `russet-minotaur` proposed with `warnings: []`). By spec, not a defect: `steps_skipped` measures only the recorded step, so an operator jump `intake -> delivery` passes (`spec-document-authority`).
+
 ## F575 (C) -- the Claude runner's model catalog does not offer Sonnet 5.5
 
 **Status:** fixed 2026-10-10 with F507 (same change, see its entry; the verified id, window and alias behaviour are recorded there). Opened 2026-10-09. Noticed in sessions 0186 and 0187 while choosing a model for the manager's title job; filed at the operator's request.
@@ -35366,6 +35394,8 @@ The spec-vault-check firing recorded `outcome empty`, `0 conflicts kept, 0 dropp
 
 **Fix shape (not decided):** keep the parsed answer (or its first N characters) on the invocation row or the firing event, private-vault redaction rules applying. Likely Tier 1 (a column means a migration, so Tier 2 if stored on the row).
 
+**Re-verified 2026-10-15** (full sweep, G5: Manager jobs, scratch Hub `:8035`): still open. Activity keeps only a count line; the report answers and the spec-check messages keep the model's reasoning, but the distillation and transcription answers do not. An example of why it matters (model judgement, not filed): `spec-vault-check` (Haiku) judged "pay within 30 days" to contradict "due within 45 days" at propose and again on Check now.
+
 ## F582 (C) -- an unknown API route answers 405 Method Not Allowed, not 404, to anything but GET
 
 **Status:** fixed 2026-10-12 (night window iteration 2, Tier 0): `hub/hub/main.py` registers a 405 handler beside `serve_spa` that answers 404 `{"detail": "Not Found"}` unless another route recognises the path (a real route's wrong-method 405 and `Allow` header are kept); test `hub/tests/test_an_unknown_route_answers_404_for_every_method.py` failed 5 of 7 before the fix; driven on a throwaway Hub (port 8582): POST/PUT/DELETE to unknown `/api/...` and `/zzz` answer 404, `POST /health` and `DELETE` on a POST-only route stay 405. Measured 2026-10-12 (build window iteration 5, d1026 run `testbed/drive1026-images-pdfs/093112/`).
@@ -35402,6 +35432,8 @@ Seam: distillation x contradictions. `distillation._check` compares the new fact
 
 **Fix shape:** leave superseded facts out of the distillation check's compared set, as spec-vault-check does. Tier 0.
 
+**Re-verified 2026-10-15** (full sweep, G5: Knowledge vault, scratch Hub `:8035`): fix holds. A re-distil from the Vault tab's Distil button left `ctr-2f72c1449976` `resolved`, opened no new contradiction and marked no fact disputed; the overruled fact carries `superseded_by: src-38c622894f41` (the decision source).
+
 ## F587 (B) -- re-distilling a source replaces every fact with a new id, orphaning the decision and the requirements that cite them
 
 **Status:** open 2026-10-13. Measured in the same sweep as F586.
@@ -35409,6 +35441,8 @@ Seam: distillation x contradictions. `distillation._check` compares the new fact
 After the same re-distil, the 300 fact that stood in the resolved contradiction (`fct-1b7ccb9bf93f`) is deleted (`distillation.distil` deletes `earlier - stored`, `hub/hub/distillation.py:312-322`) and an identical claim is written under a new id. Consequences, each measured: the resolved contradiction's `stands` side now reads `claim: None, source: None`, and the Vault tab renders it as "A private fact, held on another machine" (`VaultPage.tsx:748`) though nothing is private; the approved change `spec/changes/refund-limits/spec.json` that cited the fact gets a `missing` warning ("It cites fct-1b7c..., which is not in the vault on this machine"); its R2 conflict names a deleted image fact the same way. Only open contradictions citing the old facts are cleaned up (`delete_open_contradictions_citing`), so resolved ones keep pointing at nothing.
 
 Seam: distillation x contradiction resolution x spec citations. Not Tier 0: whether a re-distil keeps the id of a fact whose claim is unchanged, or refuses/asks when a fact stands in a decision or is cited by a requirement, is a design choice (operator's or a Tier 1 change).
+
+**Re-verified 2026-10-15** (full sweep, G5: Knowledge vault): still open. A Distil from the Vault tab on the February source replaced its facts with `fct-9f16f124d469` and `fct-9ea52a3b15d1`; the standing fact `fct-dd4574520c84` of resolved `ctr-2f72c1449976` is gone (`GET /vault/entries/fct-dd4574520c84` -> 404). The operator-visible labels this produces ("A private fact, held on another machine"; "not in the vault on this machine") are filed as F617.
 
 ## F588 (C) -- a spec-vault-check conflict against a fact the operator has since overruled stays on the spec page
 
@@ -35420,6 +35454,8 @@ Seam: contradiction resolution x spec-vault-check. `document_warnings` drops a c
 
 **Fix shape:** in `document_warnings`, skip a conflict whose fact is superseded or missing. Tier 0.
 
+**Re-verified 2026-10-15** (full sweep, G5: Knowledge vault, scratch Hub `:8035`): fix holds. After the resolve, both FR-1 warnings (the disputed one, and the conflict against the overruled 25 kg) left the warnings list; FR-2's unrelated conflict stayed.
+
 ## F589 (B) -- deleting a runner a manager job uses is allowed, and the job then silently does nothing
 
 **Status:** fixed 2026-10-13 (Tier 0, build window iteration 7, with F595). `delete_runner` now also refuses a runner any `manager_jobs` row names, 409 naming the jobs. `hub/tests/test_a_runner_a_setting_names_cannot_be_deleted.py` failed 2 of 3 before (204) and passes after. Driven on scratch Hub `:8111`: DELETE answered 409 "bound to background job(s): conversation-titles; the project's checkpoint runner setting", a settings save still worked, and after the settings were cleared the DELETE answered 204.
@@ -35428,11 +35464,15 @@ Seam: contradiction resolution x spec-vault-check. `document_warnings` drops a c
 
 Seam: runners x manager jobs. **Fix shape:** refuse the deletion with 409 naming the jobs, as for agents (or clear the job's runner and say so). Tier 0.
 
+**Re-verified 2026-10-15** (full sweep, G1: Runners & models, scratch Hub `:8031`): fix holds. Delete names every holder (agent, both jobs, checkpoint setting); an archived holder does not block.
+
 ## F590 (C) -- the Manager page tells the operator a vault job without a runner uses "the agent's own runner"
 
 **Status:** fixed 2026-10-13 (Tier 0, build window iteration 12). `JobSpec.needs_runner` (False only for the titler) is listed by `GET /manager/jobs`; the page words a needs-runner job's empty choice "No runner (the job does nothing)" with help "It does nothing until a runner is chosen.". `test_each_job_says_whether_it_can_run_without_a_runner` failed (KeyError) before; `managerSection.test.tsx` fails before on the option. Driven on scratch Hub `:8112` in Chromium against the rebuilt bundle: titles row keeps "The agent's own runner", vault-distillation row shows the new wording. A Hub that predates the field reads as the old wording.
 
 Every job's runner control carries the conversation-titles wording: help "None uses each conversation's own agent's runner." and the empty option "The agent's own runner" (`hub/ui/src/components/environment/ManagerPanel.tsx:134,144`). For the three vault jobs that is false: their own descriptions say "Needs a runner", and with none they do nothing (`distillation.prepare` refuses "has no runner"). Seam: manager framework x the vault jobs it later hosted. Tier 0 (per-job wording, the empty option saying the job does nothing).
+
+**Re-verified 2026-10-15** (full sweep, G5: Manager jobs, scratch Hub `:8035`): fix holds. The titles row reads "The agent's own runner"; the vault rows read "No runner (the job does nothing)" / "It does nothing until a runner is chosen."
 
 ## F591 (C) -- a file source whose transcription failed or has not run yet is shown as "Held on another machine"
 
@@ -35440,11 +35480,15 @@ Every job's runner control carries the conversation-titles wording: help "None u
 
 A tracked GIF whose reading failed (firing `failed`, "reading the image: 1 schema violation(s): Field required") is listed in the Vault tab as "Held on another machine", and a just-uploaded PDF reads the same until it is transcribed: the map answers `available: false, holder: null` and `VaultPage.tsx:224` renders any unavailable entry as held elsewhere. The file is in the repository. Seam: images-and-pdfs x text-sources' availability label. Tier 0 (say "not read yet" / "could not be read" when the entry is a file source on this machine). The failure detail itself ("Field required") is also not operator language; noted, not filed separately.
 
+**Re-verified 2026-10-15** (full sweep, G5: Knowledge vault, scratch Hub `:8035`): fix holds ("No text yet: the file has not been read, or reading it failed"). The Distil button stays disabled in that state: filed as F616.
+
 ## F592 (C) -- deleting a project leaves its private vault behind in the Hub's own directory
 
 **Status:** open 2026-10-13. Measured at the end of driving sweep 1 (`vault`).
 
 `DELETE /projects/{id}` answered 204 and, as its docstring says, "never touches the filesystem" (`hub/hub/api/v1/projects.py:740`). That is right for the project's own directory, but the default private location is the Hub's (`~/.agentweave/hub/vaults/<project-id>/`), and the private note's full text (`sources/src-....md`) stayed there with nothing in the app pointing at it any more. Seam: project deletion x vault private location. Not Tier 0: whether deletion removes, keeps, or asks about private vault contents is the operator's call (private data either way).
+
+**Re-verified 2026-10-15** (full sweep, G1: Projects x Knowledge vault): still bites, and worse. `DELETE /projects/proj-aba065a4865e` -> 204 left `~/.agentweave/hub/vaults/proj-aba065a4865e/sources/src-….md`; reopening the folder then resurrected the same project id with the private source readable again. That resurrection is filed separately as F609 (B).
 
 ## F593 (B) -- folding a verified change leaves its requirements "unserved" in the capability, while the archived change keeps counting as verified
 
@@ -35455,6 +35499,8 @@ A change `indigo-kirin` (FR-1 `subtract`, FR-2 `help`) was built by a Haiku agen
 A related symptom from the same drive: the agent's commit changed `calc.py`'s CLI so that the capability's existing `add` requirement (`python calc.py A B`) no longer holds (it now prints "Unknown command: 2"). Nothing could notice, because the capability's requirements carry no verification at all.
 
 Seam: fold x coverage. **Fix shape (operator's call):** one option is that a fold carries accepted evidence across to the capability requirement when the digest is unchanged, and coverage leaves archived documents out of its totals. The other is that capabilities are declared outside coverage and the page says so. This is a design question, not Tier 0.
+
+**Re-verified 2026-10-15** (full sweep, G4: Corpus & folding, scratch Hub `:8034`): still bites, through the API and on screen. After folding `olive-chimera` (verified FR-1, evidence digest `bbf6c43c…`), the capability's FR-4 carries that digest in `aw_identity.digests` and reads `unserved`, evidence 0, while the archived change keeps counting `verified` in totals. After folding the flow-delivered `russet-minotaur` (both requirements verified, merged) through the **fold dialog**, the capability's coverage bar reads "7 no work linked", FR-7/FR-8 included.
 
 ## F594 (B) -- an answered question can be answered again; the second answer overwrites the first, and after delivery it spends a new turn
 
@@ -35476,6 +35522,8 @@ Created runner `Ck`, then `PUT /projects/{p}/settings` with `checkpoint_runner_i
 
 Seam: runners x project settings (checkpoint and title). **Fix shape:** have `delete_runner` refuse with 409, naming every holder (agents, jobs, the project's checkpoint runner), so one fix closes F589 and F595 together. The alternative is to clear the references and say so. Tier 0.
 
+**Re-verified 2026-10-15** (full sweep, G1: Runners & models, scratch Hub `:8031`): fix holds; the settings save after the runner's deletion works.
+
 ## F596 (B) -- a job fired at an agent with no runner answers 500 and records the firing `failed`, but its message stays queued and runs as soon as a runner is bound
 
 **Status:** fixed 2026-10-13 (Tier 0, build window iteration 8; option 1, DECISIONS `build-1013-2`). A terminal refusal about the environment (no runner, CLI missing) now sets `ScheduleResult.kept_for_repair`, so `no_turn_began` is false: the firing stays `in_progress` and the press answers 200 with `waiting_reason` (`jobs.py`, `scheduler.py`, `turn_scheduler.py`). `hub/tests/test_a_job_for_an_agent_with_no_runner_waits.py` failed before (500) and passes after. Driven on scratch Hub `:8111`: press 200 with "No runner is bound…", history `in_progress`, entry `queued`; after re-binding Haiku the job run and the agent run both `completed`.
@@ -35484,8 +35532,583 @@ Job `norunner` (agent `idle`, enabled, far-future cron). `PATCH /agents/idle {"r
 
 Seam: job firing x the inbound queue's wait-for-runner redrain. **Fix shape:** pick one of two. Either the firing is a wait (`in_progress`/queued, answered 409 or 202 with the waiting reason, and resolved when the entry is delivered), or a terminal failure withdraws the entry it queued so nothing runs later. In either case "no runner" is not a 500. Tier 0 once the choice is made; the first option matches how an operator trigger to the same agent already behaves (`status: queued`, `waiting_reason`).
 
+**Re-verified 2026-10-15** (full sweep, G6: Jobs & loops, scratch Hub `:8036`): fix holds (runnerless firing: 200 with `waiting_reason`, history `in_progress`). The same pattern with the budget refusal is filed as F608; a waiting firing whose entry is withdrawn stays `in_progress` forever (F625).
+
 ## F597 (C) -- the "May agents schedule work?" question stays open after the operator enables `allow_agent_jobs` in settings
 
 **Status:** open 2026-10-13. Measured in driving sweep 4 (jobs-loops).
 
 A Haiku agent's `create_loop` was refused 403 with `allow_agent_jobs` off, and the Hub opened question `q-cbfeb678bbde` ("Enabled it — go ahead" / "Leave it off", subject `capability-refusal:allow_agent_jobs`). The operator then turned the setting on via `PUT /settings`, and the agent's next `create_loop` succeeded. The question was still `answered: false`, `asker_waiting: true`, listed on the Questions page. Answering it now would send the agent a decision about a setting already changed; "Leave it off" would contradict the live setting. Nothing in the settings write (`projects.py`) consults `refused_capability.py`'s record. Seam: settings x refused-capability question. Not Tier 0: whether a settings change resolves the record (and whether that tells the agent) is a design call in `a-refused-capability-reaches-the-operator`'s territory.
+
+**Re-verified 2026-10-15** (full sweep, G6: Capability plane, scratch Hub `:8036`): still reproduces. After `PUT /settings {"allow_agent_jobs": true}`, `q-a1a891baa04f` stayed `answered: false, asker_waiting: true`.
+
+## F598 (A) -- with `checkpoint_auto_continue` off, automatic checkpoints in a two-agent project feed each other through the project-wide redrain into a self-sustaining chain of autonomous turns
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Checkpoints, with Inbound queue; scratch Hub `:8036`, profile `sweep1015g6`, project `proj-c8a70822d8e2`).
+
+Settings were `checkpoint_mode: automatic`, threshold 5,000 tokens, Haiku as the checkpoint runner, and `checkpoint_auto_continue: false`. The Settings page tells the operator: *"Off means a Continue button — never a message you have to invent."*
+
+Each cutover queues the successor's `origin_type='checkpoint'` entry without scheduling it (`checkpoint_cutover.py:194-203`; `schedule_agent` runs only `if auto_continue:` at :235). But every run's end calls `redrain_queued_agents(project_id)`, which reschedules every queued agent in the project (`agent_trigger.py:2913`, `:3383`, `:4145`, `:4344`; `turn_scheduler.py:782`). Even the operator's `PUT /settings` does this (`projects.py:349`): the sweep's own `checkpoint_mode: off` write started `run-f99b5d0954c5`. With beta's per-minute job running, alpha's successors were drained by beta's run endings, and the reverse. Each successor turn crossed the threshold again, which made another checkpoint, another cutover and another entry.
+
+The record: alpha ran 5 autonomous turns with no operator input (`run-5d4db5c59619` 10:48:09, `run-3292a5bb74bd` 10:49:11, `run-3997e264585b` 10:50:18, `run-a5b266c6c4f2` 10:51:03, `run-f99b5d0954c5` 10:52:40). Beta ran 8 more on top of its 3 job firings. There were 28 checkpoint worker calls ($0.52 that no total shows, F240). It stopped only when the operator set `checkpoint_mode: off`. In `inbound_queue_entries` the checkpoint-origin entries were delivered 0.3-60 s after arrival, for example `10:48:21.368707` -> delivered `10:48:21.655818` in `run-fcf3788a9834`, just as alpha's run ended at `10:48:21.503552`. `conversations` shows alpha's line as 7 conversations, all titled "Continued: Read calc/__init__.py …". The group planned about 12 turns and ran 22; 16 came from this runaway and the job firings.
+
+Not covered: F131 knew that "two cutovers on auto-continue-off" queue without scheduling, but not that the project-wide redrain then delivers them. F604 (the stale summary) is what each of these successor turns then did.
+
+Seam: Checkpoints (cutover) x Inbound queue (project-wide redrain). Tier guess: 0 or 1 (no fix shape in the report).
+
+## F599 (B) -- a runner's `flags` silently override its model and the permission posture; a `--dangerously-skip-permissions` runner wrote outside the workspace while the roster said `workspace`
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Runners & models, Permissions & sandbox; scratch Hub `:8031`, profile `sweep1015g1`, project `proj-f0200ae7d008`).
+
+`POST /runners` accepts `flags: ["--model","claude-opus-5-5"]`, `["--model=opus"]` or `["--dangerously-skip-permissions"]` on a plain `claude` runner whose `model` is `haiku`. `_build_claude_command` appends `extra_flags` after its own `--model` and `--permission-mode`, so the flags win. The command built for such a runner (`hub/hub/runner_commands.py:194-298`, called directly):
+
+```
+['claude', ..., '--model', 'claude-haiku-4-5-20251001', ..., '--permission-mode', 'manual',
+ '--model', 'claude-opus-5-5', '--dangerously-skip-permissions', '-p', 'hi']
+```
+
+Driven: agent `beta` on runner `flagged` (`["--dangerously-skip-permissions"]`) ran `run-627f16bdf402`. Told to run `python -c "open(r'C:/Users/huida/Documents/g1-outside-proof.txt','w')..."`, it did, and the file appeared outside the project. The control, agent `alpha` on `haiku-full` with the same prompt (`run-17534890245f`), was refused: *"denied ... outside my workspace"*. `GET /agents` reports both as `permission_mode_at_rest: workspace`. The Runners page and every runner select show "haiku" and no flags. `provider_flags_problem` refuses `--model` in flags **only** on provider runners (`runner_provider.py:73-81`).
+
+Both runs recorded `outside_workspace_writes = '[]'`, the value that reads "observed, nothing left the workspace". beta's write went through an interpreter inside a shell command, which F281 closed as out of the record's scope by design; F281's remaining no-spec step (reword `models.py:1214` to "no file tool wrote outside this run's boundary") is what would stop `[]` reading as clean here.
+
+Extends **F469** (open; the operator answered "show flags read-only", 2026-09-30, not yet built): the flags were invisible, and are now shown to defeat the posture and the model the UI displays. F600 is how the operator gets such a runner without choosing it.
+
+Seam: Runners & models x Permissions & sandbox. Tier guess: 2 (permission posture; no fix shape in the report beyond F469's read-only display).
+
+## F600 (B) -- the Add-agent dialog binds whichever runner with the same cli and model the database returns first, a flagged one included
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Agents, Runners & models; scratch Hub `:8031`).
+
+The dialog offers only provider + model ("the Hub provisions the runner for you"). Its find-or-create (`hub/hub/api/v1/agents.py:734-741`) selects by `cli` + `model` with no `order_by`, and ignores `flags` and `provider_config`. `POST /agents {"name":"beta","provider":"claude","model":"haiku"}` was bound to `runner-a9034f11968d` "flagged" (`--dangerously-skip-permissions`), although two earlier plain `haiku-alias` runners had the same cli and model:
+
+```
+ro: {'name':'beta','rn':'flagged','model':'haiku','flags':'["--dangerously-skip-permissions"]'}
+```
+
+beta's turn then wrote outside the workspace (F599). The operator picks "Claude Code, Haiku" and silently gets a permission-bypassing runner, or an Opus one (F599), or a provider runner. Not covered: F177 fixed the runner list's unstable order; F268 the indistinguishable labels.
+
+Seam: Agents (Add-agent) x Runners & models. Tier guess: 0 (no fix shape in the report).
+
+## F601 (B) -- Workspace-only allows writes to PowerShell provider drives (`HKCU:`, `Env:`, `Function:`) written without a separator, and says they are "inside your workspace"
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox; scratch Hub `:8037`, profile `sweep1015g7`, project `proj-c62f8f7873d4`).
+
+`_judge_drive_word` (`hub/hub/mcp_server.py:2275`) handles only drive letters and `Temp:`. Every other PowerShell provider drive, written without a separator after its colon, falls through as a relative file name: the call is allowed and the operator is told it is inside the workspace. With a separator (`HKCU:\Software`) the same command is refused. `_decide` called directly (the function the run's tool server calls), with `AW_WORKSPACE_DIR` set to the project and the PowerShell tool:
+
+```
+Remove-Item HKCU:Software\AwG7Probe                      -> True inside your workspace
+New-ItemProperty -Path HKCU:Environment -Name X -Value y -> True inside your workspace   (persistent user env var)
+Remove-Item Env:PATH                                     -> True inside your workspace
+Remove-Item Function:prompt                              -> True inside your workspace
+Get-Content HKCU:\Software                               -> False '\\Software' is outside your workspace
+Copy-Item x Temp:foo                                     -> False 'Temp:foo' is outside your workspace
+```
+
+Not run against a live turn: probed at the function, not the MCP wire; no registry key was touched. Not covered: no registry or provider-drive entry in the ledger; F402 D1 covers drive letters and `Temp:` only.
+
+Seam: Permissions & sandbox (the judge's drive-word path). Tier guess: 2 (sandbox boundary; no fix shape in the report).
+
+## F602 (B) -- an `aw_live_` key in an agent's reply text is stored and broadcast unredacted, while the same value in tool input and output is redacted
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Logs, events & SSE; scratch Hub `:8037`).
+
+A real turn (`run-7f3f8fe482d2`) was asked to write a fake `aw_live_…` key in its reply and to echo an `sk-…` value through the shell. The tool rows carry `<redacted>`; the text row, and its payload `text`, carry the key verbatim:
+
+```
+{'kind': 'text', 'c': 'aw_live_Fake0123456789abcdefghijABCDEFGH', 'p': '{"version": 1, "text": "aw_live_Fake0123456789abcdefghijABCDEFGH"}'}
+{'kind': 'tool_use', ... "echo \"<redacted> and path C:/Users/huida/Documents/aw-sweep-1015-g7/calc/__init__.py\"" ...}
+{'kind': 'tool_result', ... "output": "<redacted> and path C:/Users/.../calc/__init__.py" ...}
+```
+
+The path survived, which is correct. `agent-stream-events` says: *"Before an event is stored or broadcast, the Hub SHALL redact known secret patterns…"*. Separately, the operator route `POST /agents/{name}/output` stores `sk-abc123` and `{"api_key": "hunter2"}` verbatim: it scrubs only the run's registered secrets (`output_recording.py:49`), not the patterns. Not covered: F484/F488 concern registered secrets split across Copilot event boundaries, not pattern redaction of text rows.
+
+Seam: Logs, events & SSE (text-row recording x pattern redaction). Tier guess: 2 (secrets; no fix shape in the report).
+
+## F603 (B) -- a reviewer reviews pre-fix code: work from a mail turn that claimed its task mid-turn sits on the agent's branch, and the task's checkout is cut fresh from main for the review
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Worktrees & integration, Flows & review; scratch Hub `:8033`, profile `sweep1015g3`, project `proj-14a9256af359`).
+
+dev2 messaged dev1. That mail-triggered run (`run-5c239e9c24f3`) claimed task A mid-turn, worked in the **per-agent** worktree (`.agentweave/worktrees/dev1`, commit `7bca975` "Auto-snapshot: dev1's turn") and completed A. dev2 then asked `rev` to review. The reviewer's run (`run-9f7c919c968a`) was given A's **per-task** checkout `.agentweave/tasks/task-e219c28fc828`, created for that run from `master` (`200d5ee`), so without dev1's fix. rev, in its own words: *"The `word_count` function still uses `text.split(" ")` instead of the required `text.split()`"*. It wrote a REJECTED note and sent dev1 back, and dev1 redid the identical fix in the task checkout (`run-a23e7ce9d858`, `223fa49`). Cost: two wasted turns and a false rejection.
+
+The duplicate fix stayed in `GET /worktrees/conflicts` for the rest of the drive, as `agentweave/dev1` against `agentweave/task/task-e219c28fc828` on `wordlib/counts.py`: a conflict between two copies of an approved task's work, after the task's worktree was removed. Related: F10 (fixed, reviewer could not see the work) and F519 (fixed, dependency briefing); neither covers a task claimed mid-turn. F607 is the same staleness seen from reconcile.
+
+Seam: Worktrees & integration (per-agent vs per-task checkout) x Flows & review. Tier guess: 1 (no fix shape in the report).
+
+## F604 (B) -- an automatic checkpoint summarises the turn as it stood at its first context reading, mid-turn, so every successor is told to redo work that finished
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Checkpoints; scratch Hub `:8036`).
+
+`consider_from_reading` fires on the turn's first `context_warning`. For `run-41d73f552632` that was 10:44:53; the run ended at 10:44:56. Checkpoint `ckpt-792cab6b03e7`, written at 10:45:06, says *"Current state: Checkpoint created at task start… File not yet read or analyzed."* and *"Next actions: Read calc/__init__.py…"*, while its own "Recorded observations" list the finished answer `out-be15c2fe2eb3`. Every successor then re-read the file and re-answered the two-sentence question (`run-5d4db5c59619`, `run-3292a5bb74bd`, `run-f99b5d0954c5`: "I'll start by reading the mean() function…"). The job alpha created afterwards (`nightly-tests`, in `conv-00d0cdeed668`) never appears in any later checkpoint objective, so the line of work forgot it. Not covered.
+
+Seam: Checkpoints (summary snapshot taken mid-turn; cutover after the turn). Tier guess: 0 or 1 (no fix shape in the report).
+
+## F605 (B) -- the checks gate charges a task with failures already on main; the reviewer is told to send correct work back, and the override has no control in the app
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Worktrees & integration, project checks; scratch Hub `:8033`).
+
+`master` carried the `word_count` defect, because task A was approved but never merged (F622). Every check run on later work failed on `test_double_space` and `test_newline` (e.g. `chk-6ce5e2f71a26`, `main_sha 200d5ee`), though neither t-char nor t-slug touches `word_count`. The reviewer briefing did what it said: tester sent t-slug back, its notes *"the full test suite has pre-existing failures … These failures existed before this task's changes … Returning to author"*. `POST /tasks/{id}/land` answered 409 `gate_unsatisfied`, *"approving would land work that breaks the project"* (it would not), then *"If you are reviewing this task, fixing what the checks found is its author's work"*; nothing in it is addressed to the operator. The only exit took four PATCHes: under_review refused (author holder) "Land it"; `assignee: null`; `under_review`; `approved` with `override_checks_reason`. `grep override_checks_reason hub/ui/src` returns nothing.
+
+Related: F512 (test-first tasks, a different cause).
+
+Seam: Worktrees & integration (project checks gate) x Flows & review. **Fix shape (not decided):** compare a task's check result against main's own result at the same check, charging only new failures; and give the operator an override control. Tier 1.
+
+## F606 (B) -- a reviewer turn can undo its own send-back and complete the author's task, after which the flow refuses to review it
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Tasks actor boundary, Flows & review; scratch Hub `:8033`).
+
+tester was re-asked on `task-f80bdb75c239` (assignee `dev1`). In one turn (`run-5a2b76860b93`) it moved the task `under_review -> revision_needed` (wrongly: it judged the *other* task's FR-2), then `-> approved` (refused 409), then `revision_needed -> in_progress` (accepted), then `in_progress -> completed` (accepted). `task_transitions` records `actor_agent=tester` on all three accepted moves, so tester is the task's recorded completer. The next flow tick (`job_runs` 11:05) skipped: *"this task names 'tester' as its reviewer, and that agent is the one that completed this task. Naming a different reviewer, or reviewing it yourself, is the way forward"*. The checklist's "finishing *another agent's* task" boundary did not refuse it, and the record then makes the task unreviewable by its named tester. Related: F495 (fixed: revision returns the assignee to the author) covers the assignee, not the reviewer's own moves.
+
+Seam: Tasks (actor boundary) x Flows & review. Tier guess: 0 (no fix shape in the report).
+
+## F607 (B) -- a reconcile pass (and every untasked turn) reads the agent's own worktree, which is never brought up to main; it recorded three false "missing" gaps against shipped code
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Corpus & folding (reconcile), Worktrees & integration; scratch Hub `:8034`, profile `sweep1015g4`, project `proj-681ccc923e49`).
+
+`c_to_k` was landed (`14d271e Integrate approved work edf73bbafe99` on `master`). `POST /project/documents/spec/changes/saffron-selkie/spec.json/reconcile {"agent":"alpha"}` (202) ran alpha in `.agentweave/worktrees/alpha`, branch `agentweave/alpha` at `065cb70`, which lacks it. alpha's `record_reconcile` stored "c_to_k function does not exist", "c_to_k validation does not exist", "tests/test_kelvin.py … does not exist", all `class: missing`, all false on main. Evidence: `git -C .agentweave/worktrees/alpha log --oneline -1` -> `065cb70 c1`; `grep -c "def c_to_k"` -> master 1, alpha worktree 0; the `spec_document_events` kind `reconcile` detail quoted above. The same staleness showed earlier: the exploring turn after the landing read `tempconv/__init__.py` without `c_to_k`. No capability requirement says an agent's own checkout follows the main branch or that a reconcile reads main (searched `spec/capabilities/*`: only task, review and check worktrees are specified). The reconcile record is the operator's evidence that a change matches its code, and here it says the opposite. F603 is the same staleness from the review side.
+
+Seam: Corpus & folding (reconcile) x Worktrees & integration. Tier guess: 1 (design gap; no fix shape in the report).
+
+## F608 (B) -- a job fired on a spent token budget answers 500 and records the firing `failed`, but its entry stays queued and runs once the budget is raised (F596's pattern, a different refusal)
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops x Accounting & allowance; scratch Hub `:8036`).
+
+With `token_budget` set below usage, `POST /jobs/{id}/run` on job `spent` returned **HTTP 500 `{"detail": "token budget exhausted"}`**, and the history shows `failed` / "token budget exhausted". `GET /queue/beta/status` shows `waiting_count: 1, waiting_reason: "token budget exhausted"`. After the budget was cleared the entry was delivered in `run-40d8f19c2d4d` (completed), while the job history still says `failed`. F596's fix (`kept_for_repair`) covers "no runner" and "CLI missing", not the budget refusal.
+
+Seam: Jobs & loops (firing outcome) x Accounting & allowance (budget hold). **Fix shape:** treat the budget refusal as `kept_for_repair` too, as F596 did: firing `in_progress`, answered 200 with `waiting_reason`. Tier 0.
+
+## F609 (B) -- deleting a project and reopening its folder resurrects the same project id and its "permanently" deleted private vault content
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Projects x Knowledge vault; scratch Hub `:8031`, throwaway project `proj-aba065a4865e`).
+
+`DELETE /projects/proj-aba065a4865e` -> 204. `~/.agentweave/hub/vaults/proj-aba065a4865e/sources/src-….md` remains (F592), and the folder keeps `.agentweave/project.json` and the `knowledge/` stub. `POST /projects/open` on the same folder returns the **same id** `proj-aba065a4865e`; `vault map` then lists the private source again, and `GET /vault/entries/src-d4f1f9528bd8` returns its full text. The delete dialog says it removes "every other record — permanently". This is new behaviour beyond F592 (which filed only the leftover files, C): the leftovers come back into the app, and the dialog's promise is false for private data.
+
+Seam: Projects (delete, reopen by marker) x Knowledge vault (private location). Not Tier 0: as F592 says, whether deletion removes, keeps or asks about private vault contents is the operator's call. Tier guess: 2 (private data).
+
+## F610 (B) -- the private vault location may be set inside another registered project or any git work tree, and saving it creates the directory
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`, profile `sweep1015g5`, projects `proj-122981b843d9` and `proj-7283c4a8d706`).
+
+The guard refuses a private location inside *this* project: `…\aw-sweep-1015-g5\secret is inside the project's directory … could be committed with the repository; choose a folder outside it.` It also refuses `..` tricks that resolve inside, and relative and `Z:relative` paths. But both of these answered `200`: `PUT /vault/settings {"private_location":"C:/Users/huida/Documents/aw-sweep-1015-g5b/vault"}` (inside another project this Hub has registered, a git repo) and `{"private_location":"C:/Users/huida/Documents/projects/AgentWeave/x"}`. **The save itself created both directories** (`ls -d …/AgentWeave/x` existed right after; removed by hand, empty). The stated reason, "could be committed with the repository", applies equally to any git work tree. Not covered.
+
+Seam: Knowledge vault (private-location guard) x Projects. **Fix shape:** refuse a location inside any registered project's directory or any git work tree (`git rev-parse` from it); create the directory only when the first private entry is written. Tier 0.
+
+## F611 (B) -- at contract/gate rigor the operator's own edit becomes a pending proposal that approval neither lists nor blocks; it then goes stale and disappears
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Spec documents, proposals x approval; scratch Hub `:8034`).
+
+On `saffron-selkie` at `contract`, the operator PUT the content with one more criterion (`k3`). The response carried `"proposals": [{"id": "spprop-e2959e35e5ee", "unit_kind": "metadata"}]` instead of a write (as `the-operator-can-write-a-document-s-content` specifies). Propose answered 200 `warnings: []`; approve answered 200 with no mention of the pending proposal. The approved document has criteria `['k1', 'k2']` only. Accepting the proposal afterwards: **409 `proposal_stale`**; `GET …/proposals` then returns `[]`, and the Spec page shows no proposals panel (`SpecProposalsPanel` returns null on an empty list, `hub/ui/src/components/spec/SpecProposalsPanel.tsx:30-31`). The operator's edit is gone, and no screen ever said it was waiting. No capability requirement mentions pending proposals at approval. Related: F213 (twin proposals), not this.
+
+Seam: Spec documents (rigor proposals x approval). Tier guess: 1 (design gap; no fix shape in the report).
+
+## F612 (B) -- adopting a hand-placed `spec.json` indexes none of its requirements, and nothing but an agent's read says so
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Corpus & folding (Adopt); scratch Hub `:8034`).
+
+`POST /project/documents/adopt` on an untracked `spec/changes/rounding-rules/spec.json` (one SHALL requirement `one-decimal`, one criterion) answered **201** with `"requirements": {"created": [], ...}`. No `spec_requirements` row was ever made: not by adopt, not by `POST /spec/reindex` (`unchanged: []`), not by propose, not by approve (approved anyway, 200, `tasks_created: []`). `ro "select identifier,state from spec_requirements where document_id='spdoc-1eb00639c57c'"` -> `[]` after each. `GET /spec/coverage` and `GET /spec/requirements` omit it, so the document reads as asserting nothing on every operator surface. Only the agent's `read_spec_document` shows it: `"identifier": null, "state": "unindexed"`, diagnostic "the document declares this requirement and the index has not seen it". Cause: `spec_index.requirements_from_payload` skips a requirement with no minted identifier (`hub/hub/spec_index.py:98-104`), and `spec_adoption.adopt` (`hub/hub/spec_adoption.py:284-345`) is deliberately writer-free, so it never mints one; a hand-placed file has no `aw_identity`. Not covered (grep "adopt", "unindexed").
+
+Seam: Corpus & folding (Adopt) x Requirements, evidence & coverage. Tier guess: 0 (no fix shape in the report).
+
+## F613 (B) -- the gate says "checks are still running… retry when they finish" while every check run is `error`
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Worktrees & integration; scratch Hub `:8033`).
+
+t-slug conflicts with a master commit (`df2cba3`). Two Land calls in a row both ended *"This task's checks are still running on the work approval would merge. Nothing is wrong yet; approval can be retried when they finish."* `GET /tasks/{id}/checks` at the same moment showed `running: false` and three runs, all `state: error`: *"c7f46c47706f does not merge cleanly onto df2cba307a5d … so there is no merged work to check"*. Each Land seems to start another check run. The sentence sends the operator into a retry loop that can never clear.
+
+Seam: Worktrees & integration (gate refusal text x check state). Tier guess: 0 (wrong text in a refusal; no fix shape in the report).
+
+## F614 (B) -- `agent_wrote_outside_workspace` records a write that was refused and never happened
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox, Logs; scratch Hub `:8037`).
+
+Under `acceptEdits`, alpha's `Write` to `C:\Users\huida\Documents\aw-sweep-1015-g7-outside\written.txt` was refused by Claude itself (`tool failed`), and the file does not exist. Even so, `run-e399f409512c` has `outside_workspace_writes = [{"kind": "outside", "tool": "Write", "path": "C:\\Users\\...\\written.txt", "calls": 1}]`, and the Activity feed shows a Warn: **"alpha wrote outside its workspace: Write → C:\Users\huida\Documents\aw-sweep-1015-g7-outside\written.txt"**. Its tool_result is `"Claude requested permissions to write to C:\\...\\written.txt, but you haven't granted it yet."`, `is_error: true`; `ls` of the outside dir shows `outside.txt` only. The recorder classifies the declared `tool_use`, not its result. A false accusation in the durable record. Not covered: F281/F282 cover shell writes not recorded and junction paths. F599 is the opposite error (a real write recorded clean). F628 is the same run's missing card.
+
+Seam: Permissions & sandbox (outside-write recorder x tool result). Tier guess: 0 (no fix shape in the report).
+
+## F615 (B) -- a vault report that brings new outside information can only end "answered", so the operator never hears it
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
+
+The agent reported `fct-1963faa9c835` ("Invoices are due within 45 days"): "The accountant informed this morning that the Nordlicht contract was renegotiated last week to 60-day payment terms." The `vault-reports` job answered `answered: the entry stands`: "…that renegotiated agreement is not part of the source provided for verification. The entry is accurate relative to the source it cites." That follows the design: `vault_reports.py:52` tells the model "Decide what is true from the source alone", and `answered` closes the report with no close control (`vault-report-…-close` count 0). The likeliest real report, "the source is out of date", goes nowhere: the operator never learns of the change, and the fact keeps answering 45 days to every agent. A report on a *source* ("the April email was a typo") did reach the operator as `referred`, and was closed from the Vault tab. Related: F581 (the answer is kept here, but nobody is shown it).
+
+Seam: Knowledge vault (reports) x Manager jobs (`vault-reports`). **Fix shape (not decided):** a fourth outcome, "the source may be outdated -> refer", or refer any report whose claim is not found in the source. Tier 1.
+
+## F616 (B) -- Distil is disabled on exactly the file sources that need it: a PDF or image uploaded while distillation was off never gets its facts from the app
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
+
+`exact.pdf` and `mismatch` (the real `contract.pdf` bytes) were uploaded before the job had a runner. Their entries read "No text yet: the file has not been read, or reading it failed". `vault-distil` is **disabled** on both (`distil_disabled=True`, from `disabled={distil.isPending || !entry.available}`, `VaultPage.tsx:366`). The inline preview is absent too (`vault-file-pdf` count 0), although `GET /vault/sources/src-912e2171d796/file` answers 200. The API path works: `POST /vault/sources/src-912e2171d796/distil` answered `202 {"queued": true}`, then `distil_requested … written … read the PDF: 6 lines transcribed` and `… 1 fact stored`. The button is disabled in the one state where the route would help; the operator's only recourse is the API. F591 changed only this state's wording.
+
+Seam: Knowledge vault (Vault tab x file-source availability). **Fix shape:** gate the button on a tracked file being present, not on `available`; show the preview whenever the file route serves. Tier 0.
+
+## F617 (B) -- after a re-distil, a resolved contradiction calls the standing fact "A private fact, held on another machine", and an approved spec says its cited fact "is not in the vault on this machine"
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
+
+F587's id churn seen from the operator's side. The operator resolved `ctr-2f72c1449976` in the Vault tab: 40 kg (`fct-dd4574520c84`) stands. Pressing **Distil** on the February source in the Vault tab brought its facts back as `fct-9f16f124d469` and `fct-9ea52a3b15d1`; `fct-dd4574520c84` is gone (`GET /vault/entries/fct-dd4574520c84` -> 404). Two screens then mislabel it, both pointing at a machine or privacy problem:
+
+- The contradiction card: `The minimum wholesale order is 25 kilograms per delivery. · 2026-04-20 presumed` / `A private fact, held on another machine` / `Resolved: one fact stands. Müller confirmed by phone…`. The tracked fact the operator chose shows as "private", and the overruled one still "presumed" (F640).
+- The approved document's FR-1 warning (`GET /vault/warnings`): `"kind": "missing", "message": "It cites fct-dd4574520c84, which is not in the vault on this machine."`
+
+The real cause is the vault's own re-distil. F587 covers the id churn, but neither label.
+
+Seam: Knowledge vault (distillation x contradiction card x spec warnings). **Fix shape:** fixing F587 removes both; until then, "no longer in the vault (its source was distilled again)" would be honest. Tier 0 for the wording.
+
+## F618 (B) -- agent-keyed routes (heartbeat, compact, new-session, output, sessions) accept any name, and the writes mint phantom agents that the roster, the Overview and the agent-budget line count
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Agents, Projects (Overview); G2: Runs; G6: Checkpoints, Agents; G7: Resilience refusal probes, Whole-project UI; scratch Hubs `:8031`, `:8032`, `:8036`, `:8037`).
+
+`POST /agents/{name}/heartbeat`, `/compact`, `/new-session` and `/output` answer 201 for a name that was never an agent; the record they write makes the name "known", and `GET /agents` then returns it as an `open` agent. Measured in four groups:
+
+- **G1** (`:8031`): `nonesuch`, `ghost1`, `ghost2` via heartbeat/compact/new-session. Before the heartbeat `GET /queue/ghost1/status -> 404 "ghost1 is not an agent in this project…"`; after it, 200, and every guarded read route (queue status, worktree, chat, conversations) answers 200. `GET /agents` names `[..., 'ghost1', 'ghost2', 'holder1', 'hub', ..., 'nonesuch', ...]` while `select count(*) from agents where lifecycle='open'` -> 11. The Overview reads "15 agents", shows Attention cards for ghost1, ghost2, nonesuch and hub, and Collaboration reads "15 of 8 agents". `hub` is the `sender` of the compact/new-session Message, added because the activity fallback skips only `operator`; even a legitimate New session on a real agent adds it (fresh project: `POST /agents/solo/new-session` changed `GET /agents` from `['solo']` to `['hub','solo']`). `GET /agents/{x}/timeline` and `GET /agent/sessions/{x}` answer 200 for an unknown name even before any write.
+- **G2** (`:8032`): `GET /projects/$P/agent/sessions/nosuch` -> `HTTP 200 {"sessions": []}`, while `PATCH /agents/nosuch` is 404 "Agent 'nosuch' not found"; `POST /agents/nosuch/compact` -> 201 `{"status":"ok","message_id":"msg-5dff461b94f0"}`.
+- **G6** (`:8036`): `POST /agents/ghost/compact` -> **201**; `GET /agents` and the Overview then list alpha, beta, `ghost` ("no runner") and `hub`, and the Overview reads "4 of 8 agents" against `agent_budget`.
+- **G7** (`:8037`): `POST /agents/{name}/output` -> 201 for `nobody`, `operator` (reserved) and `a b c` (an invalid name). Each gets a conversation and then appears in `GET /agents` (`"name": "a b c" / "alpha" / "nobody" / "operator"`). The Overview reads "4 agents" while the header reads "1 agent"; "Delivery cap · agent budget" read "2 of 8 agents" with one phantom; an agent card shows for `nobody` with "no runner".
+
+The checklist requires an unknown agent name to be refused on every agent-keyed route. `request_agent`'s budget is unaffected (it counts the table). The routes are API-only today (`context.ts` has no importers), but the Overview count and budget line are wrong for any project that ever had one. F417 (open) covers compact/new-session delivering nothing; the roster pollution, the `hub` phantom, the unguarded heartbeat, output and sessions routes are not covered. F642 is the same rule broken on the task assignee; F645 the refused trigger's conversation.
+
+Seam: Agents (agent-keyed route guards) x Projects (Overview roster and counts). Tier guess: 0 (no fix shape in the report; F417's own recommendation is to delete compact/new-session and their hooks).
+
+## F619 (C) -- an operator turn bound to a gated task runs the whole job; every status move is refused, and its peer mail starts a seven-turn chain
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Dependencies, Inbound queue; scratch Hub `:8033`).
+
+`POST /agent/trigger {agent: dev2, task_id: B}` started a run while B's prerequisite A was `pending`. dev2 implemented B in full; `in_progress` and `completed` were both refused with `dependency_unmet` (legible). It messaged dev1, and the agent-to-agent chain ran seven turns (dev2 -> dev1 -> dev2 -> rev -> dev1 -> rev -> dev2) before it went quiet. The trigger itself said nothing about the gate. The spec (`an-unmet-dependency-prevents-starting-and-nothing-else`) gates the status only, so this is a design gap rather than a defect.
+
+Seam: Dependencies x Inbound queue (operator trigger). **Fix shape (from the report):** a warning or `waiting_reason` on the trigger would have saved most of the turns. Tier guess: 0.
+
+## F620 (C) -- `POST /agent/trigger` with `"message": ""` starts a paid run
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Resilience refusal probes, Conversations; scratch Hub `:8037`).
+
+`HTTP 200 "alpha started (run run-fe90137bada5)."` The model is `str` with no `min_length` (`agent_trigger.py:386`). The run was stopped at once.
+
+Seam: Conversations & composer x Runs (trigger validation). Tier guess: 0.
+
+## F621 (C) -- accepting the evidence a reviewer's verdict waited on does not re-dispatch the review, and the only way to ask again is the API
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Flows & review; scratch Hub `:8033`).
+
+The first tester turn on t-char (`run-a105d649138b`) ended with *"approval cannot be recorded … evidence `ev-f1b8907929a6` … is awaiting the operator's decision"* (so F563's fix holds live: a Haiku reviewer ended its turn instead of waiting on `ask_user`). The operator accepted the evidence. The flow then skipped every tick with *"Ask tester again, review it yourself, or send it back"*. Asking again needs `POST /agent/trigger` with `review_task_id`, which has no UI control (`grep review_task_id hub/ui/src` returns nothing; F336, still open). The flow stalled on a decision the operator had already made. Related: F336, F563, F654.
+
+Seam: Flows & review x Requirements, evidence & coverage (evidence decision). Tier guess: 0 or 1 (design gap; no fix shape in the report).
+
+## F622 (C) -- a hand-authored task without requirements is approved and Landed, and its work never reaches main
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Worktrees & integration, Tasks; scratch Hub `:8033`).
+
+Task A was free-standing (no document, no requirement), worked by dev1. Land answered 200, approved. The integration record says `skipped: "no accepted evidence names a commit, so there is nothing to merge"`; the drawer shows "Not merged — …", the board Approved. No agent can fix it: recording evidence is refused (*"this project has no requirement task-e219c28fc828"*; dev1 and dev2 both tried). The task's commits `7bca975` and `223fa49` sit on branches, and no message names a remedy (add a requirement, record evidence, or merge by hand). It cascaded into F605: main kept the defect, and every later check failed on it. Deliberate per `task_integration.py:435-458` (a task with no loop lets evidence govern), and the F9-era notes (ledger lines 916 and 5078) record the skip as intended; still, the product approves work and then silently keeps it off main.
+
+Seam: Worktrees & integration (integration skip) x Tasks (free-standing tasks). Tier guess: 1 (design gap; no fix shape in the report).
+
+## F623 (C) -- a message to an agent with no runner answers plain success, and the Team block calls that agent "runner=native"
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Inbound queue & messages, Agent environment; scratch Hub `:8032`, profile `sweep1015g2`, project `proj-47a583065b8e`).
+
+alpha's `send_message` to runnerless gamma returned `{"success":true,"message_id":"msg-316388dd14b5"}` (transcript of `run-c1baf5d3b3ed`, `mcp__agentweave__send_message {"to_agent":"gamma"…}`). Nothing said gamma cannot run; `inbound_queue_entries` `entry-dba7c60b482d` sat `queued` until the operator bound a runner (F96 then held). The turn context's Team block (`GET /agents/agent-context?agent=alpha`) lists ``- `gamma`: runner=native``, which reads as if gamma runs; the palette says "gamma Native · idle". The hop-budget hold on the same tool does carry `held_by_hop_budget` + `delivery_note` (`hub/hub/mcp_server.py:313-318`); the runnerless hold has no equivalent, so the sender tells its operator the message was delivered. Not covered: F96 covers the drain, F97 the operator-side reason.
+
+Seam: Inbound queue & messages x Agent environment (team roster in context). Tier guess: 0 (design gap; no fix shape in the report).
+
+## F624 (C) -- a loop's outstanding-request check ignores an operator turn queued from the composer; F556 names only `/messages` mail
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops; scratch Hub `:8036`).
+
+alpha had no runner. `POST /agent/trigger` queued "When you next run, tell me the date." (`status: queued`). The drained loop then fired and `loop_queue_exhausted` gave `pending_request: null`. Same setup with `POST /messages {"to":"alpha",…}` gave `pending_request: {"kind":"message","to":"alpha","reason":"please answer",…}`, so F556 holds for mail. `_pending_loop_request` (`scheduler.py:435`) reads only the `Message` model, and the composer, the operator's commonest door, creates an inbound-queue entry with no `Message`. In the territory of decision `F556-outstanding-message-direction`; the `agent-loops` ac41/ac42 wording is also still open.
+
+Seam: Jobs & loops (loop stop) x Inbound queue (composer entries). Tier guess: 0 (design gap; no fix shape in the report).
+
+## F625 (C) -- a waiting firing whose queued entry is withdrawn stays `in_progress` forever, even after its job is archived
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops; scratch Hub `:8036`).
+
+Job `f596` (`job-1529db113fd4`) waited on a runnerless agent (200, `waiting_reason`, history `in_progress`). `DELETE /queue/entries/entry-166e680617e0` answered 200. The history still read `"status": "in_progress"` after the loop drained, stopped and was archived. The follow-on to F596's "the firing stays `in_progress`" choice: nothing resolves the firing when its entry is withdrawn.
+
+Seam: Jobs & loops (firing record) x Inbound queue (withdraw). Tier guess: 0 (no fix shape in the report).
+
+## F626 (C) -- with a vault job enabled and no runner, an upload or proposal records nothing at all; only Distil refuses
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Manager jobs; scratch Hub `:8035`).
+
+`PATCH /manager/jobs/vault-distillation {"enabled": true}` with no runner answers 200, `"needs_runner": true, "runner_id": null`. An API upload (`POST /vault/sources`, 201) and an upload from the Vault tab's own form both produced no `manager_job_fired` row, an empty `GET /manager/activity` (`{"firings": []}`), and no message on the page. Only `POST …/distil` says why: `409 "The vault distillation job has no runner. Choose one on the Manager page."` The Manager page does word the row "No runner (the job does nothing)" (F590 holds). This was the 2026-10-13 sweep's unfiled observation, now filed. F590 covers only the page wording.
+
+Seam: Manager jobs x Knowledge vault (upload trigger). **Fix shape (from the report):** the PATCH should refuse, or the upload should say so. Tier guess: 0.
+
+## F627 (C) -- when another process holds the database, every route answers a bare `500 Internal Server Error` after about 42 s
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Resilience, failure injection; scratch Hub `:8037`).
+
+A `BEGIN EXCLUSIVE` with no writes was held on the scratch DB for 45 s; the journal mode is `delete`, so readers block too. GET agents, GET events/history, PATCH agent, POST trigger, POST permission decide and POST tasks all returned `500 Internal Server Error` in 42.5-42.6 s. The log shows `sqlite3.OperationalError: database is locked`. There is no legible "the database is busy, retry" answer. Not covered: F349 covers concurrent triggers (that held) and F292 CI setup locks; neither covers a route's answer to an external lock.
+
+Seam: Resilience (SQLite lock x route error handling). Tier guess: 0 or 1 (design gap; no fix shape in the report).
+
+## F628 (C) -- under `acceptEdits`, a write outside the workspace is refused silently: no card, and the agent tells the operator to approve it in a dialog that does not exist
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox; scratch Hub `:8037`).
+
+No `permission_requests` row was created for `run-e399f409512c`. The agent's reply was *"The Write tool requires permission approval to create the file at that location. The request is pending your approval in the permission dialog."* The run ended `completed`, and there is no dialog to approve. The refusal is legible to the agent but reaches the operator only as the agent's wrong paraphrase. The same run's record wrongly says the write happened (F614).
+
+Seam: Permissions & sandbox (acceptEdits refusal x operator surface). Tier guess: 1 (design gap; no fix shape in the report).
+
+## F629 (C) -- Land is the approval control on a completed task, but the merge-verdict note renders only under review
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Worktrees & integration (UI); scratch Hub `:8033`).
+
+On t-slug (`completed`, conflict with master), the drawer offers **Land it** but no `task-approval-writes-*` note: `ApprovalWritesNote` renders only when `canApprove`, i.e. under review. The operator sees the conflict only after pressing Land, as a 409 (Chromium logged `Failed to load resource: 409`). `GET /integration-preview` already knew: *"approval will be refused: wordlib/shared.py in commit c7f46c47706f conflict with master"*.
+
+Seam: Worktrees & integration (task drawer x integration preview). Tier guess: 0 (missing warning; no fix shape in the report).
+
+## F630 (C) -- a manager job accepts a model its runner's CLI does not declare; it fails only at the firing
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Manager jobs; scratch Hub `:8035`).
+
+`PATCH /manager/jobs/vault-distillation {"runner_id": "<claude runner>", "model": "gpt-9"}` answers 200 and stores it; it answers 200 with no runner as well. `POST /runners {"cli":"claude","model":"gpt-9"}` answers `400 "'gpt-9' is not a model 'claude' declares; expected one of: …"`. The next firing failed with that same sentence (`duration_ms` 0, nothing spent; the sentence shows in activity). Validation at the wrong door; legible later.
+
+Seam: Manager jobs x Runners & models (model catalog). Tier guess: 0 (no fix shape in the report).
+
+## F631 (C) -- setting a document's size leaves its step outside the new journey
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Spec documents; scratch Hub `:8034`).
+
+`POST /documents/journey {"step":"requirements"}` then `{"size":"small"}` -> `step: "requirements"`, `journey: ["intake","requirements-and-acceptance","tasks","delivery"]`. Propose then warned "the document is at step 'requirements'; … goes on to requirements-and-acceptance, tasks, delivery", a step that is not in its journey.
+
+Seam: Spec documents (size x step). Tier guess: 0 (no fix shape in the report).
+
+## F632 (C) -- the payload schema tells agents an unresolved question blocks proposing; it only warns
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Spec documents; scratch Hub `:8034`).
+
+`OpenQuestion.resolved`'s description (`hub/hub/spec_payload.py:239-242`), which is in the tool schema agents read: "An unresolved question blocks the document from being proposed". Observed: propose with an unresolved question -> 200 `proposed: true`, `unresolved_question` under `warnings`. Stale since the warn-don't-gate change (2026-10-08). Related: F573 (roadmap open questions).
+
+Seam: Spec documents (payload schema text x propose warnings). Tier guess: 0.
+
+## F633 (C) -- "1 waiting — hop budget exhausted" shows in a conversation that has nothing waiting, with no Continue and no pointer
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Inbound queue & messages; scratch Hub `:8032`).
+
+After beta's hop-held entry (`conv-1cd110c03f20`), a *fresh* beta conversation (`conv-0dca16415b1e`) showed "1 waiting — hop budget exhausted" under its transcript, with no Continue button and no word of which conversation holds the entry (screenshot `g2-stopped.png`). Not covered: F131 (fixed) was about Continue reporting another conversation's entry.
+
+Seam: Inbound queue & messages (agent-level queue status x conversation view). Tier guess: 0 (wrong context; no fix shape in the report).
+
+## F634 (C) -- in a narrow window the panel toggle flips to "Hide panel" but opens nothing; a separate "Panel" button opens the drawer
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Conversations & composer; scratch Hub `:8032`, Playwright Chromium).
+
+At 700 px, clicking `conversation-toggle-panel` ("Show panel") sets `aria-pressed=true` with no visible change and no dialog. The drawer opens only from the `conversation-open-document` "Panel" button at the top of the page (`ConversationView.tsx:570-580`, where the drawer needs both `shellVisible` and `overlayOpen`). Once open, the drawer takes focus ("Close Panel"), one Escape closes it, and focus returns to the opener: all held.
+
+Seam: Conversations & composer (narrow layout). Tier guess: 0 (dead click; no fix shape in the report).
+
+## F635 (C) -- the Ctrl+K palette drops focus to `<body>` on Escape and after choosing an item
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Keyboard & dialogs; scratch Hub `:8037`, Playwright, keyboard only).
+
+Before: `BUTTON|project-tab-jobs`; open: `INPUT`; after Escape: `BODY`. After typing "alpha" and Enter: `BODY`. Every Radix dialog opened from a button returns focus correctly; the palette (`cmdk` `Command.Dialog`, opened by a global key handler) does not. Not covered.
+
+Seam: Keyboard & dialogs (palette focus return). Tier guess: 0.
+
+## F636 (C) -- the "Permission decisions" history is reachable only while a question is open, and its rows do not say what was decided
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox; scratch Hub `:8037`).
+
+`QuestionsPanel` holds `PermissionDecisions` (`QuestionsPanel.tsx:273`). The only way into the panel is `QuestionInterruptCard` on the Overview, rendered when `unanswered > 0` (`OverviewPage.tsx:155`); the palette has no "questions" entry. With no open question, no screen shows past decisions. The rows show `status · agent · tool · who · when`, not the command, so three "PowerShell" rows cannot be told apart; expired rows show no time. F231's fix (2026-09-23) added the list, but its reachability was not driven.
+
+Seam: Permissions & sandbox (decision history) x Questions (panel entry point). Tier guess: 0 or 1 (design gap; no fix shape in the report).
+
+## F637 (C) -- the Jobs page says "No jobs yet / Create First Job" after six jobs have fired, because archived jobs and loops have no view
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops; scratch Hub `:8036`).
+
+After archiving every job, the Jobs page rendered:
+
+> Scheduled Jobs … all / active 0 / paused 0 · No jobs yet · Create scheduled jobs to automatically trigger agents on a cron schedule. · Create First Job
+
+`GET /jobs` hides archived jobs and the page offers no archived filter, so a past loop's history, firings and stop reason have no screen (a known API trap). Not covered: the ledger notes near line 17912 cover only the enable controls.
+
+Seam: Jobs & loops (archive x Jobs page). Tier guess: 0 or 1 (design gap; no fix shape in the report).
+
+## F638 (C) -- an agent cannot create a disabled job
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Capability plane; scratch Hub `:8036`).
+
+The `create_job` MCP tool has no `enabled` parameter (`mcp_server.py:778`), while the operator route has one. Asked for a disabled job, Haiku created an enabled one and then called `toggle_job`, which leaves a window where a frequent cron could fire. The agent and operator planes disagree.
+
+Seam: Capability plane (MCP `create_job` x operator job route). Tier guess: 0.
+
+## F639 (C) -- the settings copy for `allow_agent_jobs` names only flows and loops, but the setting refuses `create_job` too
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Capability plane; scratch Hub `:8036`).
+
+Settings page: *"Agents may create flows and loops (create_flow, create_loop)."* Overview: *"Agents may start flows — Needed for create_flow and create_loop."* The actual refusal was for `create_job`, and the refused-capability question itself says "loops, flows and jobs".
+
+Seam: Capability plane (settings copy x refusal). Tier guess: 0.
+
+## F640 (C) -- a resolved contradiction keeps marking the overruled fact "presumed"
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
+
+After the resolve, `GET /vault/contradictions` still has `"presumed": "fct-186c668439d9"`, and that side carries `"presumed": true`. The card shows `25 kilograms … · 2026-04-20 presumed` above "Resolved: … 40 kilograms … stands." (see F617 for the same card after a re-distil).
+
+Seam: Knowledge vault (contradiction resolution x card). Tier guess: 0.
+
+## F641 (C) -- the Manager page reads "empty" for a firing that answered a report, and the upload 413 does not name the limit
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Manager jobs, Knowledge vault; scratch Hub `:8035`).
+
+The Manager page lists the `vault-reports` firing that answered a report as `Vault reports · empty · … answered: the entry stands`; an operator reads "empty" as "did nothing". Separately, a PDF of 10 MiB + 19 bytes answers `413 {"detail": "Request body too large"}`, which never says the limit is 10 MiB; one at exactly 10 MiB is accepted (201).
+
+Seam: Manager jobs (firing outcome label) x Knowledge vault (upload limit). Tier guess: 0.
+
+## F642 (C) -- a task's assignee accepts an agent that does not exist
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Tasks; scratch Hub `:8033`).
+
+`PATCH /tasks/{A} {"assignee": "ghost"}` -> 200, and `assignee: "ghost"` was stored. The Agents row requires an unknown agent name to be refused on every agent-keyed route (F618 is the same rule on the agent routes). Not tried: the same value on create.
+
+Seam: Tasks (assignee validation) x Agents. Tier guess: 0.
+
+## F643 (C) -- refusals and diagnostics that give a code instead of a sentence (drift resolve, arrange, the manifest-drift strip)
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Corpus & folding, Drift; scratch Hub `:8034`).
+
+- `POST /spec/drift/{id}/resolve {"resolution":"whatever"}` -> 422 "unknown resolution 'whatever'", naming none of `specification_updated` / `implementation_corrected` / `no_change_required` (`hub/hub/requirement_evidence.py:1736-1741`); the evidence decision route's equivalent names its permitted words.
+- `POST /spec/documents/arrange` cycle / self-parent -> 422 "this placement is not allowed" with only `manifest_parent_cycle` / `manifest_self_parent` codes.
+- The Spec page's manifest-drift strip prints raw codes: "unfiled_document — spec/changes/saffron-selkie/spec.json", "intrinsic_metadata_conflict — … (status: exploring → approved)". Every newly created document shows as `unfiled_document` until someone presses Rebuild.
+
+Seam: Corpus & folding / Drift (refusal wording, Step 4 rule 6). Tier guess: 0.
+
+## F644 (C) -- a capability created from the app lands under `spec/changes/<random-name>/`
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Spec documents, Corpus & folding; scratch Hub `:8034`).
+
+`POST /project/documents {"title":"Temperature conversion","kind":"capability"}` -> `spec/changes/magenta-sylph/spec.json`. `mint_document_path` ignores the kind (`hub/hub/api/v1/spec.py:2099-2101`), so the corpus convention (`spec/capabilities/<name>/`, as this repository's own `spec/` has it) is reachable only by passing an explicit `path`. The name is random, not from the title.
+
+Seam: Spec documents (create) x Corpus & folding (layout). Tier guess: 0.
+
+## F645 (C) -- a refused trigger for an unknown agent leaves an open conversation (and a withdrawn queue entry) that the rail files under "Archived agents"
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Agents, Conversations & composer; G7: Resilience refusal probes; scratch Hubs `:8031`, `:8037`).
+
+- **G1:** `POST /agent/trigger {"agent":"ghost3","message":"refused first send"}` -> 409 "ghost3 is not an agent…". `conversations` gains `conv-ef676120ce46` (agent ghost3, open, titled with the message), and `inbound_queue_entries` gains a withdrawn row. The rail shows it under **Archived agents** marked *agent archived*; opening it showed the composer and no `archived-agent-notice`.
+- **G7:** `POST /agent/trigger {"agent":"ghost","message":"x"}` -> 409 *"ghost is not an agent in this project…"*, but `get_open_conversation` (`agent_trigger.py:922`) has already created `conv-2af9b04f614b` for agent `ghost`, titled "x". The rail lists it under **Archived agents** as "x — agent archived".
+
+The label rests on the F193 premise "an agent absent from the open roster is archived", and neither agent ever existed. The checklist says *"a refused first send deletes the exploration it created"*. Not covered. F618 is the same unknown-name gap on the other agent routes.
+
+Seam: Agents (trigger refusal) x Conversations & composer (conversation created before the check). Tier guess: 0 (no fix shape in the report).
+
+## F646 (C) -- a directory inside another project's directory opens as a separate project
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Projects; scratch Hub `:8031`, nested project `proj-590bb70106aa`).
+
+`POST /projects/open {"path":".../aw-sweep-1015-g1/nested"}` -> 200, a new `proj-590bb70106aa`. Its `.agentweave/project.json` lands inside g1's repository (`git status`: `?? nested/`). One project's agents can then edit the other's files, and the outer project's worktrees and integration see the inner one as untracked content. Whether this should be refused or warned about is a design question (the report grades it C/D). F610 is the same nesting question for the private vault location.
+
+Seam: Projects (open x ProjectWorkspace binding). Tier guess: 1 (design gap).
+
+## F647 (C) -- `PUT /project/instructions {}` clears the instructions without a word
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Projects; scratch Hub `:8031`).
+
+`InstructionsUpdate.content` defaults to `""`, so an omitted field is a clear. The UI asks first ("Clear the instructions…? … no history and no undo"), and that held, but the API's omitted-field path bypasses it (Step 4 rule 7).
+
+Seam: Projects (instructions route x clear confirmation). Tier guess: 0.
+
+## F648 (C) -- the agent-budget refusal names no remedy
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Agents; scratch Hub `:8031`).
+
+An agent's `request_agent` at budget gets `409: Project agent budget exhausted (12/8)` (`run-31a3ebe212d5` transcript). It does not say that the operator raises it in Settings -> Agent budget, or that archiving frees a slot (Step 4 rule 6).
+
+Seam: Agents (`request_agent` x agent budget). Tier guess: 0.
+
+## F649 (C) -- `agentweave status` ignores `--profile`, and the CLI's hints drop profile and port
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: CLI & lifecycle; scratch Hub `:8031`).
+
+`status --profile nosuchprofile1015 --port 8031` reports "running (native) … 4 registered", which is profile `sweep1015g1`'s Hub; the code reads only the port (`src/agentweave/cli.py:85-126`). `status --profile sweep1015g1 --port 8039` says "stopped. Run 'agentweave' to start it", which would start the default profile on :8000. `reset --profile g1throw1015 --yes` ends "Run 'agentweave' to start fresh", with the same problem.
+
+Seam: CLI & lifecycle (status/reset x profiles). Tier guess: 0.
+
+## F650 (C) -- `agentweave stop --profile X --port N` against a native Hub it did not start falls through to Docker and prints a Docker-daemon error
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: CLI & lifecycle).
+
+The Hub on :8038 was started from source, so it had no pidfile. Stop printed `[ERR] Failed to stop Hub: failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine…` while a native Hub answered `/health` on that port. The CLI-started Hub stopped cleanly ("Stopping Hub (native, PID 9264)… Hub stopped").
+
+Seam: CLI & lifecycle (stop x pidfile x Docker fallback). Tier guess: 0.
+
+## F651 (D) -- an answer that arrives after the timeout is both read in-run by `get_answer` and delivered as a new paid turn
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Questions; scratch Hub `:8032`).
+
+`q-d372bc1b55b6` timed out at 10:48:29 and was answered "No" at 10:48:43 while the run was still alive. The agent's in-run `get_answer` returned "No". When the run ended, `entry-737fc8ae9288` ("Question: … Answer: No"), together with the first late answer, started `run-75314a518786`, whose whole content was "the operator's answers have now come through, and they confirm my implementation decisions": a paid turn repeating what the agent already knew. Delivery as new input is the specified behaviour; the duplicate is the cost. Not covered.
+
+Seam: Questions (late answer x in-run `get_answer`). Tier guess: 0 (design gap; no fix shape in the report).
+
+## F652 (D) -- Explore in an existing conversation creates its document on the press; a refused or never-made send leaves an empty `exploring` document
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Conversations & composer; scratch Hub `:8032`).
+
+In an existing conversation, pressing Explore POSTs `/project/documents` at once (201, `teal-pegasus`). A 10,050-character send was then refused with 422 (the UI showed "String should have at most 10000 characters" and kept the draft), but **the document stayed**. A second press in another browser session left `coral-kirin` behind with no send at all. In a *new* conversation the requirement (`spec-chat-session` n1) holds: the document is created at send, the 422 follows, and the DELETE answers 200 (`amber-hydra` gone). n1 is scoped to new conversations, and D4 says one press creates. Side note: the 422 text is pydantic's ("String should have…"); it names the limit, but the composer has no counter.
+
+Seam: Conversations & composer (Explore x refused send). Tier guess: 0 (design gap).
+
+## F653 (D) -- one hop-held entry gets three Continue controls and two explanations
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Inbound queue & messages; scratch Hub `:8032`).
+
+For a single held entry, beta's conversation shows the entry's own `Continue` / `Discard`; an amber banner "Autonomous continuation paused — … Continue"; a red band "Queued messages reached the hop limit … Continue to deliver them, or discard them"; and the composer's `Continue` "beta has work waiting". The red error styling also reads as a failure (screenshot `g2-beta-held.png`).
+
+Seam: Inbound queue & messages (hop hold x conversation view). Tier guess: 0 (friction).
+
+## F654 (D) -- the review-dispatch refusal omits the remedy that works
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Flows & review; scratch Hub `:8033`).
+
+`POST /agent/trigger {agent: dev1, review_task_id: t-char}`, where dev1 is the author -> 409 *"already under review by 'tester'. 'tester' has no turn running or queued on it … Decide it yourself: approve, reject, or send it back"*. It names the occupancy, not the author rule, and omits the remedy that worked a moment later: re-dispatching tester, which the flow's own skip line recommends (F621).
+
+Seam: Flows & review (review-dispatch refusal wording). Tier guess: 0.
+
+## F655 (D) -- a loop past its `stop_at` still shows as enabled with a next run until the next tick records the stop
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops; scratch Hub `:8036`).
+
+`stop_at` was 10:50:00.8. At 10:51:23 the job read `enabled: true, next_run: 10:52:00Z, stop_reason: null`. The 10:52 tick recorded `job_run_skipped` and `loop_stopped` "loop stop time reached". Nothing fired late, so this is display only.
+
+Seam: Jobs & loops (stop_at x job read). Tier guess: 0.
+
+## F656 (D) -- legibility of permission refusal reasons: doubled backslashes, path fragments, an event with no agent, and a stop refusal that hides an unknown name
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox, Logs; scratch Hub `:8037`).
+
+- On Windows the workspace verdict quotes paths through `repr`, so the operator's card reads `'..\\aw-sweep-1015-g7-outside\\outside.txt' is outside your workspace`, with doubled backslashes the agent never wrote (`_quote`, `mcp_server.py:1426`).
+- Provider paths are quoted as fragments: `Get-Content Env:\PATH` gives `'\\PATH' is outside`, `('.'+'.')\x` gives `'\\x'`, and `${HOME}` gives `'${HOME'`.
+- The Activity row reads `permission_denied: an agent was refused PowerShell…`; the event payload carries no `agent`, though the run knows it is alpha.
+- `POST /agent/ghost/stop` gives `404 "ghost has no run in progress."`, not "ghost is not an agent" (cf. F618).
+
+Seam: Permissions & sandbox (verdict wording) x Logs, events & SSE. Tier guess: 0.
+
+## F657 (D) -- small echoes and asymmetries in the spec and evidence routes
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Spec documents, Requirements, evidence & coverage; scratch Hub `:8034`).
+
+- The evidence decision response returns `"footprint": null`; `GET /spec/evidence` shows the footprint (`efp-339be924b892`). Related F280.
+- Unknown rigor -> **409** `unknown_rigor` (a malformed value, not a conflict).
+- Rejecting a proposal needs no reason (200); rejecting evidence does (422 `rejection_needs_reason`).
+- `close-exploration` on an already-`proposed` document answers 200 and records an event (cf. F560).
+- An approval report for a document with no tasks says "the tasks are on the board, started by hand".
+- An unknown roadmap slice is not reported while the roadmap is only proposed (only `roadmap_not_approved`), although the roadmap's slices are already known.
+
+Seam: Spec documents x Requirements, evidence & coverage (route echoes). Tier guess: 0.
+
+## F658 (D) -- Check now is unreachable for a document with no vault warnings
+
+**Status:** open 2026-10-15. Found by reading code in the 2026-10-15 full sweep (G5: Knowledge vault; not driven: no clean document was opened in the browser).
+
+`SpecVaultWarnings.tsx` returns `null` when the list is empty. A document that cites nothing and has no conflict yet therefore has no **Check now**, even when a new vault fact contradicts it later; only the next propose checks it.
+
+Seam: Knowledge vault (spec-vault-check x Spec page). Tier guess: 0 (design gap).
+
+## F659 (D) -- a stale "Decided without you" card stays on a task after its cause is gone
+
+**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Tasks, noted for the Questions row; scratch Hub `:8033`).
+
+B's board card kept the yellow "Decided without you" block, with dev2's timed-out question *"Can you either change Task A's status to 'approved'…"*, after A was approved. It also showed "Stalled".
+
+Seam: Questions (timed-out question) x Tasks (board card). Tier guess: 0.

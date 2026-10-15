@@ -54,7 +54,8 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 HOME = pathlib.Path.home()
-STATE = HOME / ".agentweave" / "e2e-current.json"
+# AW_E2E_STATE lets parallel sweeps each keep their own Hub record.
+STATE = pathlib.Path(os.environ.get("AW_E2E_STATE") or HOME / ".agentweave" / "e2e-current.json")
 PROFILES = HOME / ".agentweave" / "hub" / "profiles"
 #: The checkout the Hub runs from. Override with AW_REPO_ROOT.
 REPO = pathlib.Path(os.environ.get("AW_REPO_ROOT") or HOME / "Documents" / "projects" / "AgentWeave")
@@ -417,11 +418,13 @@ def cmd_task_set(project, task_id, status_value):
 MEDIA = {
     ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+    ".json": "application/json",  # a JSON body too large to quote on the command line
 }
 
 
 def _raw(arg):
-    """`@file` -> (bytes, media type); None for a JSON argument."""
+    """`@file` -> (bytes, media type); None for an inline JSON argument. A `.json` file goes as
+    `application/json`, so the Hub parses it as a body rather than refusing raw bytes (422)."""
     if not (arg and arg.startswith("@")):
         return None
     f = pathlib.Path(arg[1:])

@@ -2392,3 +2392,8 @@ disappears is indistinguishable from one that was forgotten.
 ## 2026-10-12 (build window, CI)
 
 - **Local Node is 24, CI's ui-test runs Node 20, and vitest can differ between them.** jsdom's `Blob` has no `stream()`: Node 20's `new Response(jsdomBlob)` throws `TypeError: object.stream is not a function`, while Node 24 silently stringifies it to `"[object Blob]"`. A fetch stub that answers a Blob body therefore passes locally and fails in CI. Build file responses from a string or bytes with a `Content-Type` header. Reproduce CI's Node with `cd hub/ui && npx -y node@20 node_modules/vitest/vitest.mjs run <file>`. vitest swallows `console.log` from a test here; write probe output to a file. (Confirmed 2026-10-12, run 38228757844.)
+
+## 2026-10-15 (full e2e sweep)
+
+- **A Hub started from `hub/` never hits the "no DATABASE_URL → refuse" guard on this machine:** `config.py` reads `.env` in the cwd, and the untracked `hub/.env` (2026-09-09) sets `DATABASE_URL=sqlite+aiosqlite:///data/agentweave.db`. So `env -u DATABASE_URL uvicorn hub.main:app` from `hub/` silently serves and migrates `hub/data/agentweave.db` — a stray, *not* :8000's (`~/.agentweave/hub/data/agentweave.db`). `hubs.md` says that file was deleted 2026-09-07; it was recreated (instance_identity from 2026-09-23) and migrated to 0126 by a probe today. To test the guard, start from a cwd with no `.env`, or move `hub/.env` aside. Always pass `DATABASE_URL` explicitly. (2026-10-15)
+- **Parallel `e2e.py` drives each need `AW_E2E_STATE=<own file>.json`;** without it every `hub-up` overwrites `~/.agentweave/e2e-current.json` and later calls hit another group's Hub. (2026-10-15)
