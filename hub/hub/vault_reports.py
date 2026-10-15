@@ -82,6 +82,11 @@ class ReportAnswer(BaseModel):
 class CannotReviewError(Exception):
     """Why a report is not looked into now; it stays pending."""
 
+    def __init__(self, reason: str, *, no_runner: bool = False) -> None:
+        super().__init__(reason)
+        # On, with no runner: the background entry records it instead of staying silent (F626).
+        self.no_runner = no_runner
+
 
 @dataclass(frozen=True)
 class Plan:
@@ -117,7 +122,7 @@ async def prepare(project_id: str, report_id: str) -> Plan:
     if job is None or not job.enabled:
         raise CannotReviewError("The vault reports job is disabled.")
     if runner is None or runner.project_id != project_id:
-        raise CannotReviewError("The vault reports job has no runner.")
+        raise CannotReviewError("The vault reports job has no runner.", no_runner=True)
     root, private = workspace.root, Path(settings["effective_private_location"])
 
     def read() -> Tuple[Optional[Dict], Optional[Dict], Optional[str], Optional[str]]:
@@ -270,7 +275,11 @@ async def review_in_background(project_id: str, report_id: str) -> None:
     nothing here raises into the event loop."""
     try:
         plan = await prepare(project_id, report_id)
-    except CannotReviewError:
+    except CannotReviewError as refusal:
+        if refusal.no_runner:
+            await manager.record_no_runner(
+                project_id, job=manager.REPORTS, trigger=TRIGGER, subject={"report": report_id}
+            )
         return
     except Exception:  # noqa: BLE001 -- a background task must not raise
         logger.warning("vault report review could not start for %s", report_id, exc_info=True)

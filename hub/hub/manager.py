@@ -14,6 +14,7 @@ and only spawns are recorded -- a job that exits before spawning anything record
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
@@ -23,6 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .db.models import EventLog, ManagerJob
 from .runner_adapters.one_shot import WorkerUsage
 from .utils import persist_event
+
+logger = logging.getLogger(__name__)
 
 FIRED_EVENT = "manager_job_fired"
 
@@ -192,6 +195,39 @@ async def record_firing(
         },
         commit=commit,
     )
+
+
+async def record_no_runner(
+    project_id: str, *, job: str, trigger: str, subject: Dict[str, Any]
+) -> None:
+    """A firing for a job that is on but has no runner: it did nothing, said where the operator
+    looks (F626). Its background entries used to return silently, leaving the activity empty.
+    Never raises: it runs in a background task."""
+    from .db.engine import async_session_factory
+
+    spec = job_spec(job)
+    title = spec.title if spec is not None else job
+    try:
+        async with async_session_factory() as db:
+            await record_firing(
+                db,
+                project_id,
+                job=job,
+                trigger=trigger,
+                subject=subject,
+                runner_id="",
+                cli="",
+                model=None,
+                outcome="failed",
+                detail=(
+                    f"Did nothing: the {title} job is on but has no runner. Choose one on the "
+                    "Manager page."
+                ),
+                duration_ms=0,
+                usage=None,
+            )
+    except Exception:  # noqa: BLE001 -- a background task must not raise
+        logger.warning("could not record %s's missing runner", job, exc_info=True)
 
 
 async def list_firings(

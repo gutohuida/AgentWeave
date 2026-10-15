@@ -143,10 +143,12 @@ class Contradictions(BaseModel):
 class CannotDistilError(Exception):
     """Why a source cannot be distilled now. `status` is what the distil route answers."""
 
-    def __init__(self, reason: str, status: int = 409) -> None:
+    def __init__(self, reason: str, status: int = 409, *, no_runner: bool = False) -> None:
         super().__init__(reason)
         self.reason = reason
         self.status = status
+        # On, with no runner: the background entry records it instead of staying silent (F626).
+        self.no_runner = no_runner
 
 
 @dataclass(frozen=True)
@@ -219,7 +221,8 @@ async def prepare(project_id: str, source_id: str) -> Plan:
         )
     if runner is None or runner.project_id != project_id:
         raise CannotDistilError(
-            "The vault distillation job has no runner. Choose one on the Manager page."
+            "The vault distillation job has no runner. Choose one on the Manager page.",
+            no_runner=True,
         )
     meta, text = found
     if meta.get("type") == vault.DECISION:
@@ -561,7 +564,11 @@ async def distil_in_background(project_id: str, source_id: str, *, trigger: str)
     upload's floor is the source itself), and nothing here raises into the event loop."""
     try:
         plan = await prepare(project_id, source_id)
-    except CannotDistilError:
+    except CannotDistilError as refusal:
+        if refusal.no_runner:
+            await manager.record_no_runner(
+                project_id, job=manager.DISTILLATION, trigger=trigger, subject={"source": source_id}
+            )
         return
     except Exception:  # noqa: BLE001 -- a background task must not raise
         logger.warning("vault distillation could not start for %s", source_id, exc_info=True)

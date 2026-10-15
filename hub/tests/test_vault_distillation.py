@@ -6,6 +6,7 @@ Hub does with them -- where quotes are found, which facts are kept, what is writ
 what is recorded. The real spawn is the acceptance drive's (`scripts/drive/d1016_distillation.py`).
 """
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -156,7 +157,14 @@ async def test_with_no_runner_nothing_is_spawned_or_recorded(app, auth_headers, 
     assert refused.status_code == 409, refused.text
     assert "runner" in refused.json()["detail"].lower()
     assert fake.calls == []
-    assert await _firings() == []
+    # Nothing spawned; the upload's own background start says it did nothing and why (F626),
+    # and the refused Distil adds nothing to that.
+    for _ in range(50):
+        firings = await _firings()
+        if firings:
+            break
+        await asyncio.sleep(0.1)
+    assert [(f["outcome"], "no runner" in f["detail"]) for f in firings] == [("failed", True)]
 
 
 # ---------------------------------------------------------------------------

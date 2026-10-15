@@ -84,10 +84,12 @@ class CheckAnswer(BaseModel):
 class CannotCheckError(Exception):
     """Why a document is not checked now, with the status the check-now route answers."""
 
-    def __init__(self, reason: str, *, status: int = 409) -> None:
+    def __init__(self, reason: str, *, status: int = 409, no_runner: bool = False) -> None:
         super().__init__(reason)
         self.reason = reason
         self.status = status
+        # On, with no runner: the background entry records it instead of staying silent (F626).
+        self.no_runner = no_runner
 
 
 @dataclass(frozen=True)
@@ -256,7 +258,7 @@ async def prepare(project_id: str, path: str) -> Plan:
     if job is None or not job.enabled:
         raise CannotCheckError("The spec vault check job is disabled.")
     if runner is None or runner.project_id != project_id:
-        raise CannotCheckError("The spec vault check job has no runner.")
+        raise CannotCheckError("The spec vault check job has no runner.", no_runner=True)
     private = Path(settings["effective_private_location"])
 
     def read() -> tuple:
@@ -356,7 +358,11 @@ async def check_in_background(project_id: str, path: str, *, trigger: str) -> No
     nothing here raises into the event loop."""
     try:
         plan = await prepare(project_id, path)
-    except CannotCheckError:
+    except CannotCheckError as refusal:
+        if refusal.no_runner:
+            await manager.record_no_runner(
+                project_id, job=JOB, trigger=trigger, subject={"document": path}
+            )
         return
     except Exception:  # noqa: BLE001 -- a background task must not raise
         logger.warning("spec vault check could not start for %s", path, exc_info=True)
