@@ -1,0 +1,157 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the real tool server spawned over stdio under the Workspace posture, as a Hub spawns it for a Claude run",
+      "how_to_check": "py -3.11 scripts/drive/d1015_judge_wire.py (written first: 9 rows wrong on 146de73+, all controls right)",
+      "key": "wire",
+      "requirement": "provider-drives",
+      "then": "every F601 row is denied naming the drive word, every F661 row is allowed, every control keeps its answer",
+      "when": "approve_tool_call is asked about the F601 commands, the F661 commands and the controls"
+    },
+    {
+      "checked_by": "agent",
+      "given": "_decide with the PowerShell tool",
+      "how_to_check": "pytest hub/tests/test_the_workspace_judge_reads_paths_not_patterns.py",
+      "key": "unit",
+      "requirement": "patterns",
+      "then": "the pattern operand alone is exempt, only where the requirement says",
+      "when": "the F661 repro commands verbatim, each operator and variant, double quotes with and without `$`, a command-mode -match, Unicode quotes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the existing judge suites",
+      "how_to_check": "pytest hub/tests/test_permission_approver.py hub/tests/test_the_shell_judge_reads_a_word_whole.py hub/tests/test_copilot_acp_decide.py",
+      "key": "regressions",
+      "requirement": "unchanged",
+      "then": "no existing row changes, including 1.7c1 (grep -rn '\\.\\./' src, bash, refused)",
+      "when": "they run"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the work PC, a Copilot agent under Workspace",
+      "how_to_check": "work-PC drive; not reachable at home",
+      "key": "copilot",
+      "requirement": "patterns",
+      "then": "the call is allowed (and wpc2-e's raw toolName is captured once)",
+      "when": "it lists its worktree with -notmatch '\\\\.git\\\\'"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "538223d86d4c7d6f1aa23d805e1d2dd6853b525733f0e1a12fb2bc5336629788",
+      "FR-2": "69d5567f044cd32ffa71230a7072635d4845203d1a8e174568fd25bc55905534",
+      "FR-3": "f5806223c136306a2df59b13001bb77d519159914361b98faac9d5aca1206652"
+    },
+    "high_water": 3,
+    "requirements": {
+      "patterns": "FR-2",
+      "provider-drives": "FR-1",
+      "unchanged": "FR-3"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2: the sandbox boundary, reaching both callers of `_decide` (Claude's approve_tool_call and Copilot's _judge) on a Hub's next restart. Hazard: a wrong exemption lets an outside write through, so the exemption is grammar-shaped and narrow. Rollback: revert; no data.\n\nD1 (decided wpc2-a narrowed a, wpc2-b, wpc2-g; operator 2026-10-15). The exemption needs two facts per argument from the PowerShell `_lex`: whether it was wholly one qualifying quoted literal, and whether its pipeline element is in expression mode (first token a variable, a quoted string, a number, `(`, `@(` or `$(`). Inside a script block `{ ... }` each statement is its own element, which is where `$_.FullName -notmatch '...'` sits.\nD2. Provider drives are the built-in non-FileSystem set, not 'any <name>:' as the fix plan first said: that would refuse `git show HEAD:README.md`. A drive New-PSDrive creates needs a -Root, which is already judged as a path, so no special case.\nD3. Not in scope (wpc2-c, wpc2-d, wpc2-e, wpc2-f stay OPEN): Select-String -Pattern and other pattern positions, refusal rewording, unknown-dialect 'Shell' as PowerShell, bare '/' replacements.",
+  "evidence": {
+    "checked": [
+      "mcp_server.py:2275 _judge_drive_word handles drive letters and Temp: only",
+      "mcp_server.py:2338-2340 rule 3 refuses a separator word that expands; _LITERAL_DOLLAR counts",
+      "Wire drive on HEAD: Env:PATH, Function:prompt, HKCU:Software allowed; -notmatch '\\\\.git\\\\' denied as outside"
+    ],
+    "limits": [
+      "Copilot's own call path is not driven at home (work PC)"
+    ]
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "`_judge_drive_word` (`hub/hub/mcp_server.py:2275`) knows drive letters and `Temp:` only, so `Remove-Item Env:PATH` falls through rule 4 as a relative file name and is allowed with the operator told it is inside the workspace (measured with `_decide`, 2026-10-15 sweep G7). Separately, `'\\\\.git\\\\'` in `$_.FullName -notmatch '\\\\.git\\\\'` is lexed as a word starting `\\\\`, a UNC root, and refused as outside; `'\\\\.git(\\\\|$)'` is refused as an expansion because a single-quoted `$` counts as one (work-PC Copilot drive, run-b175c9ffa621). Combined with F660, a routine file listing ends a Copilot turn.",
+  "requirements": [
+    {
+      "key": "provider-drives",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A provider drive names the registry, the environment or the session, never a file in the workspace; calling it inside is false and lets writes to persistent user state through.",
+      "statement": "In the PowerShell reading, a word naming one of PowerShell's built-in non-FileSystem provider drives (Alias, Cert, Env, Function, HKCU, HKLM, Variable, WSMan, any letter case), with or without a separator after its colon, MUST be refused as outside the workspace, quoting the word."
+    },
+    {
+      "key": "patterns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A pattern a comparison operator matches against is never something the command acts on.",
+      "statement": "In the PowerShell reading, a quoted literal that is the right-hand operand of -match, -notmatch, -like, -notlike, -replace (its pattern element), or -split, including their c/i variants, in an expression-mode pipeline element, MUST NOT be judged as a path or as uncheckable. A single-quoted literal qualifies; a double-quoted one only with no `$` and no backtick; one in Unicode quote characters does not."
+    },
+    {
+      "key": "unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every other word keeps today's answer: a command-mode `-match` is an argument and its next word is judged; drive letters and Temp: are judged as today; a New-PSDrive root is judged as a path; the bash reading is unchanged."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The PowerShell reading of `_decide` in hub/hub/mcp_server.py"
+    ],
+    "non_goals": [
+      "The bash reading",
+      "How a Copilot refusal reaches the agent (F660)",
+      "Other pattern positions (wpc2-c)"
+    ]
+  },
+  "summary": "Under the Workspace posture the PowerShell reading is wrong in both directions: provider drives written without a separator (Env:PATH, HKCU:Software\\X, Function:prompt) are allowed as 'inside your workspace' (F601), and a quoted regex on the right of -match/-notmatch is read as a path or an expansion, refusing read-only listings (F661). One change to the judge fixes both.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1015_judge_wire.py",
+      "files": [
+        "scripts/drive/d1015_judge_wire.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "provider-drives",
+        "patterns",
+        "unchanged"
+      ],
+      "reviewer": null,
+      "title": "The wire acceptance drive, failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "mcp_server.py _lex/_words/_judge_word; tests in test_the_workspace_judge_reads_paths_not_patterns.py",
+      "files": [
+        "hub/hub/mcp_server.py",
+        "hub/tests/test_the_workspace_judge_reads_paths_not_patterns.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "provider-drives",
+        "patterns",
+        "unchanged"
+      ],
+      "reviewer": null,
+      "title": "Provider drives and pattern operands in the PowerShell reading"
+    }
+  ],
+  "title": "The Workspace judge reads paths, not patterns or provider drives"
+}
