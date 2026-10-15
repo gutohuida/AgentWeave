@@ -1,0 +1,157 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a fresh scratch project whose committed BUILD-NOTES.txt holds fake aw_live_, aw_run_ and sk- values, and a Haiku agent",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f602_text_redaction.py <project> (written first: all three values and the route's two stored verbatim on HEAD)",
+      "key": "drive",
+      "requirement": "text-rows",
+      "then": "no value is stored verbatim and the rows carry <redacted>",
+      "when": "the agent quotes the file in its reply, and the operator posts an sk- value and an api_key field to the output route"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a run with nothing registered",
+      "how_to_check": "pytest hub/tests/test_a_secret_in_reply_text_is_redacted.py",
+      "key": "unit",
+      "requirement": "split",
+      "then": "the later event carries <redacted> where the rest of the token was",
+      "when": "an aw_live_ key arrives split across two text events, and a field value split at its '='"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a reply naming a 40-hex SHA, a path and 'token budget: 500'",
+      "how_to_check": "pytest hub/tests/test_a_secret_in_reply_text_is_redacted.py",
+      "key": "kept",
+      "requirement": "prose-kept",
+      "then": "it is stored unchanged",
+      "when": "it is recorded"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1b8f25be891f19b9495c5f811992c51b243d7b594bcd172829a60e4038c8cf5b",
+      "FR-2": "e0e094a2604d46fc27bc1cb57c1929889640eb98fa3c9544113ebdaa08d2bb6c",
+      "FR-3": "65f447fe46d89821482167a85c3bd8cc536c62125dcb0f7341dc7dfc0333c6fe",
+      "FR-4": "8eca1d66be909e66c59ab09b00b485df383ace8e48ee1cef0a6367a6202f9c76"
+    },
+    "high_water": 4,
+    "requirements": {
+      "operator-route": "FR-3",
+      "prose-kept": "FR-4",
+      "split": "FR-2",
+      "text-rows": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2 (secrets). No migration, no Hub-restart hazard beyond the code change itself. Rollback: revert.\nD1. A second, narrower redactor `runner_events.redact_text_secrets` for prose: the named tokens and field values only. The tool-event redactor keeps its catch-all.\nD2. Applied in `text_event`/`thinking_event` (the per-event floor every runner path builds through) and in the operator route.\nD3. Splits: `run_secrets.scrub_stream` already joins a run's prose across events for registered values; it now also matches the patterns over the joined text, so it runs for every run, keeping a tail of at least 160 characters. `forget` already clears the tail at every run's end.",
+  "evidence": {
+    "checked": [
+      "runner_events.py:196-209 text_event/thinking_event apply no redaction",
+      "output_recording.py:49 scrubs registered values only",
+      "Drive on :8031: the reply stored all three fake values verbatim"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "`runner_events.redact_secrets` runs on tool events only (`tool_use_event`, `tool_result_event`); `text_event` and `thinking_event` store the model's prose as written, so a reply quoting a file that holds a key stores and broadcasts it while the tool row beside it says <redacted> (driven 2026-10-15: all three fake values verbatim in the text row). `POST /agents/{name}/output` scrubs only the run's registered values (`output_recording.py:49`). `agent-stream-events` requires known secret patterns to be redacted before an event is stored or broadcast.",
+  "requirements": [
+    {
+      "key": "text-rows",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Prose is where a quoted key lands; the tool row being redacted does not help when the reply repeats it.",
+      "statement": "Before a text or thinking event is stored or broadcast, every aw_live_, aw_run_ and sk- token, and the value of an api_key, api-key, apikey, secret_key, access_token, auth_token or password field written as name=value or name: value (quoted or not), MUST be replaced with <redacted> in both its content and its payload."
+    },
+    {
+      "key": "split",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A runner emits prose in pieces; F488 showed a value split over a boundary passes a per-event check.",
+      "statement": "A token of those patterns whose characters fall on both sides of an event boundary MUST still be redacted in the later event, for every run, whether or not it registered values of its own."
+    },
+    {
+      "key": "operator-route",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "POST /agents/{name}/output MUST apply the same patterns to the content and payload it stores."
+    },
+    {
+      "key": "prose-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents write commit SHAs, paths and long identifiers in replies; the tool events' high-entropy catch-all would eat them.",
+      "statement": "Text rows MUST NOT get the high-entropy catch-all of tool events: a 40-character commit SHA, a path and ordinary prose are stored as written."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "text and thinking events of every runner",
+      "POST /agents/{name}/output"
+    ],
+    "non_goals": [
+      "Tool events (unchanged)",
+      "Already-stored rows (no backfill)"
+    ]
+  },
+  "summary": "The named secret patterns (aw_live_, aw_run_, sk- keys, and an api_key/secret/password field's value) are redacted from an agent's text and thinking rows before they are stored or broadcast, including a value split across two events, and from the operator's POST /agents/{name}/output (F602).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1015_f602_text_redaction.py",
+      "files": [
+        "scripts/drive/d1015_f602_text_redaction.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "text-rows",
+        "operator-route"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "runner_events.redact_text_secrets; text/thinking events; run_secrets.scrub_stream; agents.py output route; tests",
+      "files": [
+        "hub/hub/runner_events.py",
+        "hub/hub/run_secrets.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "text-rows",
+        "split",
+        "operator-route",
+        "prose-kept"
+      ],
+      "reviewer": null,
+      "title": "Prose redaction, its stream join, the operator route"
+    }
+  ],
+  "title": "A secret in an agent's reply text is redacted"
+}
