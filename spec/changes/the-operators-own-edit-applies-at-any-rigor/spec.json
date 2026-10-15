@@ -1,0 +1,113 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch project's change document at contract rigor",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f611_operator_edit_applies.py <project> (written first: fails before the build)",
+      "key": "drive",
+      "requirement": "operator-writes",
+      "then": "the write answers with no proposals, the criterion is in the document, and the approved document keeps it",
+      "when": "the operator writes its content with one more criterion, proposes and approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document at contract rigor",
+      "how_to_check": "pytest hub/tests/test_operator_authored_documents.py",
+      "key": "unit-operator",
+      "requirement": "operator-writes",
+      "then": "the file changes and no proposal is recorded",
+      "when": "the operator PUTs its content"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document at contract rigor",
+      "how_to_check": "pytest hub/tests/test_operator_authored_documents.py hub/tests/test_spec_edit_proposals.py",
+      "key": "unit-agent",
+      "requirement": "agents-propose",
+      "then": "the live document is unchanged and proposals are recorded",
+      "when": "an agent submits changed content"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "b431e91cf804d0a925a25b96d307105383ec508a7d850e1d471035431dde81ff",
+      "FR-2": "59fd5acc3c118c2488316353031e6166495e676baeec1b0ab736106e48349b0a"
+    },
+    "high_water": 2,
+    "requirements": {
+      "agents-propose": "FR-2",
+      "operator-writes": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1, no migration. D1. The rigor branch in save_document asks the actor: an operator's write goes to _apply_and_write at any rigor; an agent's is proposed as today. D2. An agent proposal pending when the operator writes is left to the existing staleness check (its base digest no longer matches), as any write does today. Rejected: listing pending proposals at approval (the decision removes the operator's own case; agent proposals were not reproduced lost).",
+  "evidence": {
+    "checked": [
+      "spec_service.save_document sends every contract/gate submission to propose_edit whatever the actor",
+      "test_operator_authored_documents.test_a_gated_document_records_a_proposal_rather_than_writing pins the operator case"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "On the 2026-10-15 sweep the operator PUT a contract-rigor document's content with one more criterion. The write became a pending metadata proposal; propose and approve said nothing about it, the approved document lacked the criterion, and accepting the proposal afterwards answered 409 proposal_stale and the proposal vanished. The operator's edit was lost and no screen ever said it was waiting. Proposals exist so an agent cannot change a gated document unseen; the operator reviewing their own edit is ceremony that loses work (fix-D8).",
+  "requirements": [
+    {
+      "key": "operator-writes",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "fix-D8: the operator's own edit applies directly; proposals are for agents.",
+      "statement": "The operator SHALL be able to write the content of any document other than a capability directly, at any rigor, under the same payload contract, validation and refusals as an agent's submission; the write applies immediately and records no proposal."
+    },
+    {
+      "key": "agents-propose",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The gate is on agents; the operator is the one who reviews.",
+      "statement": "At contract or gate rigor an agent's submission SHALL NOT change the live document; the Hub SHALL diff it against the stored payload and record one pending proposal per added, modified or removed requirement (matched by key) and one for all non-requirement content, recording nothing for an unchanged submission; at sketch an agent's submission applies immediately."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "spec_service.save_document: at contract/gate rigor only a non-operator submission is proposed",
+      "spec-document-authority: the two requirements that said the operator's write is proposed too"
+    ],
+    "non_goals": [
+      "Approval listing or blocking on pending agent proposals (not reproduced for agents; a separate finding if it bites)",
+      "Changing how an agent's proposal is reviewed"
+    ]
+  },
+  "summary": "At contract or gate rigor the operator's own content write applies directly; only an agent's submission becomes pending proposals (F611, decision fix-D8).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "spec_service.save_document; flip the operator test that pinned the old behaviour.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "operator-writes",
+        "agents-propose"
+      ],
+      "reviewer": null,
+      "title": "Propose only an agent's submission at contract/gate rigor"
+    }
+  ],
+  "title": "The operator's own edit applies at any rigor"
+}
