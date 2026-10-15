@@ -33,7 +33,7 @@ import pytest
 from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, EventLog, Run
 from hub.outside_write_record import EVENT_TYPE, MAX_DESTINATIONS, OutsideWriteRecorder
-from hub.runner_events import tool_use_event
+from hub.runner_events import tool_result_event, tool_use_event
 from hub.workspace_writes import WriteLocation
 from hub.worktrees import worktree_path
 
@@ -51,7 +51,7 @@ BASE = f"/api/v1/projects/{PROJECT}"
 SESSION = "sess-p4"
 
 
-def _write_event(path: Path, *, tool: str = "Write", call_id: str = "call-1"):
+def _write_event(path: Path, *, tool: str = "Write", call_id: Optional[str] = "call-1"):
     """One `tool_use` `RunEvent` declaring a write at *path* -- `write_paths` populated for real.
 
     Built through `tool_use_event` rather than by hand: `write_paths` is derived inside it from
@@ -76,6 +76,28 @@ def _write_event(path: Path, *, tool: str = "Write", call_id: str = "call-1"):
         input_data=input_data,
         call_id=call_id,
     )
+
+
+def _result_event(*, tool: str = "Write", call_id: Optional[str] = "call-1", is_error=False):
+    """The `tool_result` a runner emits for the call *call_id* -- what tells the recorder (F614)
+    whether a declared write really ran. Built through `tool_result_event` for the same reason
+    `_write_event` goes through `tool_use_event`."""
+    return tool_result_event(tool=tool, output="ok", call_id=call_id, is_error=is_error)
+
+
+def _landed(path: Path, *, tool: str = "Write", call_id: str = "call-1") -> list:
+    """A write that happened, in the order a real runner emits it: its `tool_use`, then its
+    successful `tool_result` with the same call id."""
+    return [
+        _write_event(path, tool=tool, call_id=call_id),
+        _result_event(tool=tool, call_id=call_id),
+    ]
+
+
+async def land(rec: OutsideWriteRecorder, path: Path, **kwargs) -> None:
+    """Feed *rec* one write that happened -- `tool_use` then its successful `tool_result`."""
+    for event in _landed(path, **kwargs):
+        await rec.note(event)
 
 
 def write_call_line(path: Path, *, call_id: str = "call_w1") -> str:
@@ -105,6 +127,37 @@ def write_call_line(path: Path, *, call_id: str = "call_w1") -> str:
         )
         + "\n"
     )
+
+
+def write_result_line(*, call_id: str = "call_w1", is_error: bool = False) -> str:
+    """The `user` line Claude's `stream-json` emits once a tool call has run: a `tool_result`
+    content block whose `tool_use_id` is the call's id. Shaped like `test_runner_parsing.py`'s
+    `CLAUDE_TOOL_RESULT_LINE` (and `fixtures/runner_adapters/claude_stream.jsonl`). F614: without
+    it the recorder holds the write as `requested` and announces nothing."""
+    return (
+        json.dumps(
+            {
+                "type": "user",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": call_id,
+                            "is_error": is_error,
+                            "content": "File created successfully",
+                        }
+                    ]
+                },
+                "session_id": SESSION,
+            }
+        )
+        + "\n"
+    )
+
+
+def landed_lines(path: Path, *, call_id: str = "call_w1") -> List[str]:
+    """A Claude `Write` that ran: its `assistant` tool_use line, then its `user` tool_result."""
+    return [write_call_line(path, call_id=call_id), write_result_line(call_id=call_id)]
 
 
 async def seed_run(run_id: str, agent: str) -> None:
@@ -195,7 +248,7 @@ async def test_a_watched_run_that_writes_nothing_outside_ends_as_an_empty_list(a
     )
 
     await rec.watch()
-    await rec.note(_write_event(layout["workspace"] / "note.txt"))
+    await land(rec, layout["workspace"] / "note.txt")
     await rec.flush()
 
     assert await column_of("run-clean") == [], "a watched run with no escape reads as []"
@@ -215,7 +268,7 @@ async def test_a_run_whose_workspace_cannot_be_resolved_is_left_null(app, layout
     assert rec.watching is False
 
     await rec.watch()
-    await rec.note(_write_event(layout["stray"] / "note.txt"))
+    await land(rec, layout["stray"] / "note.txt")
     await rec.flush()
 
     assert await column_of("run-blind") is None, "an unwatched run stays NULL, never []"
@@ -240,7 +293,7 @@ async def test_one_outside_write_lands_one_entry_and_one_warn_event(app, layout)
     )
 
     await rec.watch()
-    await rec.note(_write_event(stray_file))
+    await land(rec, stray_file)
 
     assert await column_of("run-stray") == [
         {
@@ -249,6 +302,8 @@ async def test_one_outside_write_lands_one_entry_and_one_warn_event(app, layout)
             "tool": "Write",
             "path": str(stray_file),
             "calls": 1,
+            # F614: the tool_result said the write ran, so it is `written`, not `requested`.
+            "status": "written",
         }
     ]
 
@@ -279,7 +334,7 @@ async def test_a_write_into_another_agents_checkout_names_that_agent(app, layout
     )
 
     await rec.watch()
-    await rec.note(_write_event(neighbour_file))
+    await land(rec, neighbour_file)
 
     (entry,) = await column_of("run-neighbour")
     assert (entry["kind"], entry["name"]) == ("agent", "p4-neighbour")
@@ -305,9 +360,9 @@ async def test_a_second_write_to_a_recorded_destination_adds_no_row_and_no_event
 
     await rec.watch()
     first = layout["stray"] / "one.txt"
-    await rec.note(_write_event(first))
-    await rec.note(_write_event(layout["stray"] / "two.txt", call_id="call-2"))
-    await rec.note(_write_event(layout["stray"] / "three.txt", call_id="call-3"))
+    await land(rec, first)
+    await land(rec, layout["stray"] / "two.txt", call_id="call-2")
+    await land(rec, layout["stray"] / "three.txt", call_id="call-3")
 
     assert len(await notices("run-repeat")) == 1, "one destination, one notice"
     (mid,) = await column_of("run-repeat")
@@ -327,6 +382,11 @@ async def test_every_destination_survives_a_run_that_never_reaches_its_end(app, 
     No `flush` at all here -- the shape of a killed run, or of a Hub that restarted mid-turn.
     Both destinations and both first paths are already on the row; only the exact counts are
     lost, which is the one field the design says is safe to lose.
+
+    No `tool_result` either, and that is the point: a killed run never reports how its calls
+    ended. Since F614 such a destination is on the row as `requested` -- durable from first sight
+    -- but **not announced**: the notice is for a write that happened, and nobody can say these
+    did. So the row keeps both destinations and the operator has been told nothing yet.
     """
     await seed_run("run-killed", "p4-writer")
     rec = recorder(
@@ -346,7 +406,83 @@ async def test_every_destination_survives_a_run_that_never_reaches_its_end(app, 
         ("outside", None),
         ("agent", "p4-neighbour"),
     ]
-    assert len(await notices("run-killed")) == 2, "one notice per distinct destination"
+    # F614: was 2 notices. With no result the writes are requested-not-confirmed: kept, unannounced.
+    assert [e["status"] for e in recorded] == ["requested", "requested"]
+    assert await notices("run-killed") == [], "a write nobody saw complete is not announced"
+
+
+@pytest.mark.asyncio
+async def test_a_refused_write_is_neither_recorded_nor_announced(app, layout):
+    """F614's exact case: a `tool_use` declaring a stray write, then its refusal.
+
+    The approver (or the tool itself) said no, so nothing landed outside the workspace. Recording
+    and announcing it on the `tool_use` alone told the operator a write escaped that never did.
+    The destination is on the row only while the call is in flight; the error result takes it back.
+    """
+    await seed_run("run-refused", "p4-writer")
+    rec = recorder(
+        "run-refused",
+        "p4-writer",
+        workspace_dir=str(layout["workspace"]),
+        project_root=str(layout["root"]),
+    )
+
+    await rec.watch()
+    await rec.note(_write_event(layout["stray"] / "refused.txt"))
+    (pending,) = await column_of("run-refused")
+    assert pending["status"] == "requested", "durable from first sight, as D5 requires"
+    await rec.note(_result_event(is_error=True))
+    await rec.flush()
+
+    assert await column_of("run-refused") == [], "nothing was written, so nothing is recorded"
+    assert await notices("run-refused") == []
+
+
+@pytest.mark.asyncio
+async def test_a_refused_repeat_into_a_recorded_destination_only_takes_back_its_count(app, layout):
+    """A refusal undoes only what its own call added -- never a destination an earlier call wrote."""
+    await seed_run("run-refused-repeat", "p4-writer")
+    rec = recorder(
+        "run-refused-repeat",
+        "p4-writer",
+        workspace_dir=str(layout["workspace"]),
+        project_root=str(layout["root"]),
+    )
+
+    await rec.watch()
+    first = layout["stray"] / "one.txt"
+    await land(rec, first)
+    await rec.note(_write_event(layout["stray"] / "two.txt", call_id="call-2"))
+    await rec.note(_result_event(call_id="call-2", is_error=True))
+    await rec.flush()
+
+    (entry,) = await column_of("run-refused-repeat")
+    assert entry["path"] == str(first)
+    assert entry["status"] == "written"
+    assert entry["calls"] == 1, "the refused repeat gave back the count it took"
+    assert len(await notices("run-refused-repeat")) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_write_with_no_call_id_is_taken_at_its_word(app, layout):
+    """A `tool_use` the Hub cannot pair with a result is recorded and announced at once, as before
+    F614 -- waiting for a result that can never be matched would announce nothing, ever."""
+    await seed_run("run-no-call-id", "p4-writer")
+    rec = recorder(
+        "run-no-call-id",
+        "p4-writer",
+        workspace_dir=str(layout["workspace"]),
+        project_root=str(layout["root"]),
+    )
+
+    await rec.watch()
+    stray_file = layout["stray"] / "unpaired.txt"
+    await rec.note(_write_event(stray_file, call_id=None))
+
+    (entry,) = await column_of("run-no-call-id")
+    assert (entry["path"], entry["status"]) == (str(stray_file), "written")
+    (notice,) = await notices("run-no-call-id")
+    assert notice.data["path"] == str(stray_file)
 
 
 @pytest.mark.asyncio
@@ -369,7 +505,7 @@ async def test_beyond_the_bound_the_list_ends_with_one_overflow_record(app, layo
     await rec.watch()
     for index in range(MAX_DESTINATIONS + 5):
         target = worktree_path(layout["root"], f"p4-n{index:02d}") / "note.txt"
-        await rec.note(_write_event(target, call_id=f"call-{index}"))
+        await land(rec, target, call_id=f"call-{index}")
 
     recorded = await column_of("run-many")
     assert len(recorded) == MAX_DESTINATIONS + 1
@@ -398,7 +534,7 @@ async def test_a_classification_nobody_could_make_is_not_recorded_as_an_escape(a
 
     await rec.watch()
     with patch("hub.outside_write_record.classify", return_value=WriteLocation("unknown")):
-        await rec.note(_write_event(layout["stray"] / "note.txt"))
+        await land(rec, layout["stray"] / "note.txt")
 
     assert await column_of("run-unknown") == [], "watched, and nothing it could call an escape"
     assert await notices("run-unknown") == []
@@ -424,7 +560,7 @@ async def test_recording_that_fails_never_reaches_the_turn(app, layout):
     with patch(
         "hub.outside_write_record.classify", side_effect=RuntimeError("classifier exploded")
     ):
-        await rec.note(_write_event(layout["stray"] / "note.txt"))
+        await land(rec, layout["stray"] / "note.txt")
 
     assert await column_of("run-broken") == [], "the failure changed nothing and raised nothing"
 
@@ -432,7 +568,7 @@ async def test_recording_that_fails_never_reaches_the_turn(app, layout):
         "hub.outside_write_record.async_session_factory", side_effect=RuntimeError("db gone")
     ):
         await rec.watch()
-        await rec.note(_write_event(layout["stray"] / "note.txt"))
+        await land(rec, layout["stray"] / "note.txt")
         await rec.flush()
 
 
@@ -471,7 +607,7 @@ async def test_the_record_is_not_a_refusal_and_does_not_read_as_one(app, layout)
         project_root=str(layout["root"]),
     )
     await rec.watch()
-    await rec.note(_write_event(layout["stray"] / "left-behind.txt"))
+    await land(rec, layout["stray"] / "left-behind.txt")
     await rec.flush()
 
     (notice,) = await notices("run-allowed-write")
@@ -536,9 +672,9 @@ async def test_a_reviewer_writing_into_its_own_checkout_is_outside_its_workspace
     await seed_run("run-review", reviewer)
     rec = recorder("run-review", reviewer, workspace_dir=str(workspace), project_root=str(root))
     await rec.watch()
-    await rec.note(_write_event(workspace / "review-notes.md"))
-    await rec.note(_write_event(own_worktree / "leftover.py", call_id="call-2"))
-    await rec.note(_write_event(task_checkout / "patch.py", call_id="call-3"))
+    await land(rec, workspace / "review-notes.md")
+    await land(rec, own_worktree / "leftover.py", call_id="call-2")
+    await land(rec, task_checkout / "patch.py", call_id="call-3")
     await rec.flush()
 
     entries = await column_of("run-review")
@@ -585,9 +721,9 @@ async def test_a_run_whose_workspace_is_the_project_root_records_nothing_inside_
     await seed_run("run-rootbound", agent)
     rec = recorder("run-rootbound", agent, workspace_dir=str(root), project_root=str(root))
     await rec.watch()
-    await rec.note(_write_event(tracked / "module.py"))
-    await rec.note(_write_event(neighbour / "note.txt", call_id="call-2"))
-    await rec.note(_write_event(hub_dir / "e-1.json", call_id="call-3"))
+    await land(rec, tracked / "module.py")
+    await land(rec, neighbour / "note.txt", call_id="call-2")
+    await land(rec, hub_dir / "e-1.json", call_id="call-3")
     await rec.flush()
 
     assert await column_of("run-rootbound") == [], (
@@ -600,7 +736,7 @@ async def test_a_run_whose_workspace_is_the_project_root_records_nothing_inside_
     # outside it, and this run notices -- so the empty list above is an answer, not a silence.
     stray = tmp_path / "elsewhere" / "drive-note.txt"
     stray.parent.mkdir(parents=True)
-    await rec.note(_write_event(stray, call_id="call-4"))
+    await land(rec, stray, call_id="call-4")
     (entry,) = await column_of("run-rootbound")
     assert entry["kind"] == "outside"
 
@@ -635,10 +771,8 @@ async def test_a_claude_turn_that_writes_outside_its_workspace_records_it(
     await _sync(app, auth_headers, agent)
     await bind_runner(agent, cli="claude")
 
-    lines = [
-        write_call_line(stray),
-        write_call_line(again, call_id="call_w2"),
-    ]
+    # Each write followed by its successful tool_result, as Claude emits them (F614).
+    lines = landed_lines(stray) + landed_lines(again, call_id="call_w2")
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty(lines)):
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             trigger = await app.post(
@@ -677,7 +811,7 @@ async def test_a_claude_turn_that_stays_inside_ends_watched_and_clean(
     await _sync(app, auth_headers, agent)
     await bind_runner(agent, cli="claude")
 
-    with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([write_call_line(inside)])):
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty(landed_lines(inside))):
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
@@ -720,8 +854,8 @@ async def test_a_turn_writing_into_a_neighbours_checkout_names_it_because_the_ro
     await _sync(app, auth_headers, agent)
     await bind_runner(agent, cli="claude")
 
-    line = write_call_line(neighbour / "note.txt")
-    with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([line])):
+    lines = landed_lines(neighbour / "note.txt")
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty(lines)):
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
@@ -754,7 +888,7 @@ async def test_a_codex_app_server_turn_records_it_the_same_way(app, auth_headers
     await _sync(app, auth_headers, agent, runner="codex")
     await _bind_codex_app_server_runner(app, auth_headers)(agent)
 
-    fake = _fake_run_turn(events=[_write_event(stray, tool="apply_patch")])
+    fake = _fake_run_turn(events=_landed(stray, tool="apply_patch"))
     with patch("hub.codex_appserver.run_turn", fake):
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             trigger = await app.post(
@@ -853,6 +987,11 @@ async def test_a_run_killed_mid_turn_keeps_the_destination_it_already_reached(
     `calls` is deliberately not asserted afterwards: it is the one field the boundary owns and
     the only one it is safe to lose.
 
+    **No `tool_result` line is scripted**, deliberately: the run is killed before its calls report
+    how they ended. Since F614 the destination is therefore on the row as `requested` and no
+    notice is emitted -- the notice is for a write that happened, and a killed run's requested
+    entry is durable but not announced.
+
     Deliberately **not** driven through the stop endpoint. F279 records both of this suite's
     stop-then-await tests failing intermittently on an unmodified tree (7 failures in 12,
     measured 2026-09-04), and a new test on that pattern would inherit a coin-flip red no gate
@@ -913,8 +1052,9 @@ async def test_a_run_killed_mid_turn_keeps_the_destination_it_already_reached(
         "Write",
         str(stray),
     ), "a killed run keeps the destination and the first path into it"
-    (notice,) = await notices(run_id)
-    assert notice.data["path"] == str(stray)
+    # F614: was one notice. No result ever arrived, so the entry is `requested` and unannounced.
+    assert survivor["status"] == "requested"
+    assert await notices(run_id) == []
 
 
 @pytest.mark.asyncio
@@ -941,9 +1081,7 @@ async def test_the_timeline_reports_what_a_run_wrote_outside_its_workspace(
     for agent, target in ((escaping, stray), (clean, tmp_path / "note.txt")):
         await _sync(app, auth_headers, agent)
         await bind_runner(agent, cli="claude")
-        with patch(
-            "hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([write_call_line(target)])
-        ):
+        with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty(landed_lines(target))):
             with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 trigger = await app.post(
                     f"{BASE}/agent/trigger",
@@ -982,7 +1120,7 @@ async def test_a_copilot_edit_outside_the_workspace_is_recorded(app, layout):
     )
 
     await rec.watch()
-    await rec.note(_write_event(layout["stray"] / "escaped.txt", tool="edit"))
+    await land(rec, layout["stray"] / "escaped.txt", tool="edit")
     await rec.flush()
 
     recorded = await column_of("run-copilot")

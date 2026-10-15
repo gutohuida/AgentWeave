@@ -119,6 +119,11 @@ class OutsideWriteRecorder:
         self._watching = can_classify(workspace_dir)
         self._destinations: "OrderedDict[WriteLocation, Dict[str, Any]]" = OrderedDict()
         self._overflow: Set[WriteLocation] = set()
+        #: What each call that declared a write did to `_destinations`, by call id, until its
+        #: result arrives (F614): `(location, created)` pairs. The destination is on the row from
+        #: first sight (D5), as `requested`; the result makes it `written` and announces it, or,
+        #: for a refused or failed call, takes back what that call added.
+        self._awaiting: Dict[str, List[Any]] = {}
 
     @property
     def watching(self) -> bool:
@@ -150,11 +155,21 @@ class OutsideWriteRecorder:
         """
         if not self._watching:
             return
+        payload = getattr(event, "payload", None)
+        call_id = payload.get("call_id") if isinstance(payload, dict) else None
+        if getattr(event, "kind", None) == "tool_result" and call_id in self._awaiting:
+            try:
+                await self._resolve(call_id, bool(payload.get("is_error")))
+            except Exception:  # noqa: BLE001 — observational; see the module docstring
+                logger.warning(
+                    "could not resolve an outside write for run %s", self._run_id, exc_info=True
+                )
+            return
         paths = getattr(event, "write_paths", ()) or ()
         if not paths:
             return
         try:
-            await self._note(event, paths)
+            await self._note(event, paths, call_id)
         except Exception:  # noqa: BLE001 — observational; see the module docstring
             logger.warning(
                 "could not record an outside write for run %s", self._run_id, exc_info=True
@@ -177,7 +192,29 @@ class OutsideWriteRecorder:
                 "could not finalise outside-write counts for run %s", self._run_id, exc_info=True
             )
 
-    async def _note(self, event: Any, paths: Any) -> None:
+    async def _resolve(self, call_id: str, failed: bool) -> None:
+        """A declared write's result: announce what it wrote, or take back what it never did."""
+        changed = False
+        for location, created in self._awaiting.pop(call_id):
+            entry = self._destinations.get(location)
+            if entry is None:
+                continue
+            if not failed:
+                if created and entry.get("status") == "requested":
+                    entry["status"] = "written"
+                    await self._store_and_announce(
+                        location, entry["tool"], entry["path"], entry.get("resolved_path")
+                    )
+                continue
+            changed = True
+            if created and entry.get("status") == "requested" and entry["calls"] <= 1:
+                del self._destinations[location]  # refused or failed: nothing was written
+            else:
+                entry["calls"] = max(1, entry["calls"] - 1)
+        if changed:
+            await self._store()
+
+    async def _note(self, event: Any, paths: Any, call_id: Optional[str] = None) -> None:
         tool = ""
         payload = getattr(event, "payload", None)
         if isinstance(payload, dict):
@@ -191,6 +228,8 @@ class OutsideWriteRecorder:
             already = self._destinations.get(location)
             if already is not None:
                 already["calls"] += 1
+                if call_id:
+                    self._awaiting.setdefault(call_id, []).append((location, False))
                 continue
             if len(self._destinations) >= MAX_DESTINATIONS:
                 # Past the bound the destination is counted and not described. No event either:
@@ -207,6 +246,9 @@ class OutsideWriteRecorder:
                 "tool": tool,
                 "path": path,
                 "calls": 1,
+                # A call the Hub can pair with its result is `requested` until that result says
+                # it ran (F614); one it cannot pair is taken at its word, as before.
+                "status": "requested" if call_id else "written",
             }
             # F282: beside the declared path, never instead of it. Present only when a link moved
             # the write, so every other entry reads exactly as before.
@@ -214,7 +256,12 @@ class OutsideWriteRecorder:
             if resolved is not None:
                 entry["resolved_path"] = resolved
             self._destinations[location] = entry
-            await self._store_and_announce(location, tool, path, resolved)
+            if call_id:
+                # On the row now (D5: a killed run keeps it), announced when its result comes.
+                self._awaiting.setdefault(call_id, []).append((location, True))
+                await self._store()
+            else:
+                await self._store_and_announce(location, tool, path, resolved)
 
     def _value(self) -> List[Dict[str, Any]]:
         """The column's value as it stands. A fresh list every time, deliberately.

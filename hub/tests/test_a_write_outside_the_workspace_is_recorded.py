@@ -162,6 +162,29 @@ def write_call_line(path: Path, *, call_id: str = "call_w1", session_id: str = S
     )
 
 
+def write_result_line(*, call_id: str = "call_w1", session_id: str = SESSION) -> str:
+    """The `user` line Claude's `stream-json` emits once the `Write` has run: a `tool_result`
+    block whose `tool_use_id` is the call's id -- `test_runner_parsing.py`'s
+    `CLAUDE_TOOL_RESULT_LINE` shape. F614: the record is only announced once this says the write
+    ran, so a driven turn that stands for a write that happened has to carry it."""
+    return json.dumps(
+        {
+            "type": "user",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": call_id,
+                        "is_error": False,
+                        "content": "File created successfully",
+                    }
+                ]
+            },
+            "session_id": session_id,
+        }
+    )
+
+
 async def prepare(app, auth_headers, bind_runner, agent: str) -> None:
     """Register *agent* and bind it a Claude runner. Once per agent, not once per turn."""
     sync = await app.post(
@@ -189,8 +212,13 @@ async def drive(app, auth_headers, agent: str, destination: Path, *, session_id=
     So this goes through `POST /agent/trigger`, the background task, `_execute_run`, the real
     parser and both of `_flush_line`'s writes, with only the spawned process faked.
     """
-    line = write_call_line(destination, session_id=session_id)
-    with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([line])):
+    # The call, then its successful result -- the order a real Claude run emits (F614). Newline
+    # terminated: `_fake_pty` hands chunks over raw, and two unterminated lines would be one.
+    lines = [
+        write_call_line(destination, session_id=session_id) + "\n",
+        write_result_line(session_id=session_id) + "\n",
+    ]
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty(lines)):
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             trigger = await app.post(
                 f"/api/v1/projects/{PROJECT}/agent/trigger",
@@ -341,6 +369,8 @@ async def test_the_run_records_the_outside_write(
                 "tool": "Write",
                 "path": str(layout.stray_file),
                 "calls": 1,
+                # F614: confirmed by the call's tool_result, so `written` rather than `requested`.
+                "status": "written",
             }
         ]
 
