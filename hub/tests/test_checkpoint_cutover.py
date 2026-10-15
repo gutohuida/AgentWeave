@@ -570,6 +570,89 @@ async def test_crossing_the_threshold_under_automatic_generates_and_cuts_over(ap
 
 
 @pytest.mark.asyncio
+async def test_an_automatic_checkpoint_waits_for_the_turn_it_was_read_in_to_end(app, monkeypatch):
+    """F604: the first reading over the threshold arrives mid-turn, and the checkpoint used to be
+    written from the record as it stood then -- "File not yet read" about a turn that went on to
+    answer -- so every successor redid finished work. It is now written once the turn has ended."""
+    import asyncio
+
+    import hub.checkpoint_trigger as trigger
+
+    turn = {"status": "running"}
+    generated_while = []
+
+    def fake_run(cmd, **kwargs):
+        generated_while.append(turn["status"])
+        stdout = _claude_stdout(
+            GOOD_BODY
+            if "checkpoint" in cmd[-1] or "objective" in cmd[-1]
+            else {"files_changed": [], "task_ids": [], "unanswered_question_ids": []}
+        )
+        return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+
+    async with async_session_factory() as db:
+        await _configured_project(db)
+        await _conversation(db)
+        db.add(
+            Run(
+                id="run-mid-turn",
+                project_id=PROJECT,
+                agent=AGENT,
+                status="running",
+                conversation_id="conv-1",
+            )
+        )
+        await db.commit()
+
+    monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(trigger, "TURN_END_POLL_SECONDS", 0.05, raising=False)
+    considering = asyncio.create_task(
+        consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0)
+    )
+    await asyncio.sleep(0.5)
+    assert generated_while == [], "generated while the turn was still running"
+    assert not considering.done()
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, "run-mid-turn")
+        run.status = "completed"
+        await db.commit()
+    turn["status"] = "completed"
+    checkpoint_id = await asyncio.wait_for(considering, timeout=10)
+
+    assert checkpoint_id is not None
+    assert generated_while and set(generated_while) == {"completed"}
+    async with async_session_factory() as db:
+        assert (await get_conversation_by_id(db, "conv-1")).lifecycle == "archived"
+
+
+@pytest.mark.asyncio
+async def test_a_turn_that_never_ends_gets_no_checkpoint_from_its_reading(app, monkeypatch):
+    """Bounded: past the wait the reading is declined, nothing is billed, and a later reading
+    (after the turn) tries again."""
+    import hub.checkpoint_trigger as trigger
+
+    spawned = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: spawned.append(cmd))
+    async with async_session_factory() as db:
+        await _configured_project(db)
+        await _conversation(db)
+        db.add(
+            Run(id="run-stuck", project_id=PROJECT, agent=AGENT, status="running",
+                conversation_id="conv-1")
+        )
+        await db.commit()
+    monkeypatch.setattr(trigger, "TURN_END_POLL_SECONDS", 0.02, raising=False)
+    monkeypatch.setattr(trigger, "TURN_END_WAIT_SECONDS", 0.1, raising=False)
+
+    assert await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0) is None
+    assert spawned == []
+    async with async_session_factory() as db:
+        assert (await get_conversation_by_id(db, "conv-1")).lifecycle == "open"
+
+
+@pytest.mark.asyncio
 async def test_under_offered_nothing_is_made_and_nothing_is_cut_over(app, monkeypatch):
     """**This assertion inverted.** It used to read "a checkpoint is made but nothing is cut
     over", on the reasoning that generation no longer depends on the agent so there is nothing to

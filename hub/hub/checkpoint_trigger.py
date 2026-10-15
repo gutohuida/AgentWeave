@@ -177,6 +177,33 @@ async def _agent_compaction_percent(db, agent: Optional[Agent]) -> Optional[int]
     return adapter.compaction_percent
 
 
+#: How often, and for how long, an automatic checkpoint waits for the turn it was read in (F604).
+#: A reading for this conversation that arrives meanwhile is dropped by `_in_flight`, so the wait
+#: is one per conversation; past the bound the reading is declined and a later one tries again.
+TURN_END_POLL_SECONDS = 2.0
+TURN_END_WAIT_SECONDS = 30 * 60.0
+
+
+async def _turn_ended(conversation_id: str) -> bool:
+    """Wait until no run in *conversation_id* is running. False if the bound passes first."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + TURN_END_WAIT_SECONDS
+    while True:
+        async with async_session_factory() as db:
+            running = (
+                await db.execute(
+                    select(Run.id)
+                    .where(Run.conversation_id == conversation_id, Run.status == "running")
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+        if running is None:
+            return True
+        if loop.time() >= deadline:
+            return False
+        await asyncio.sleep(TURN_END_POLL_SECONDS)
+
+
 async def consider(
     project_id: str,
     agent_name: str,
@@ -357,6 +384,25 @@ async def consider(
                 "checkpoint runner configured",
                 conversation_id,
             )
+            return None
+
+        # The reading that crossed the threshold arrives mid-turn, and a checkpoint written from
+        # the record as it stood then told every successor to redo work that turn went on to
+        # finish (F604). The cutover could only happen after the turn anyway, so write it then.
+        # The read transaction is ended for the wait; nothing is pending, and expire_on_commit is
+        # off, so the rows are refreshed rather than lost.
+        await db.commit()
+        if not await _turn_ended(conversation_id):
+            _declined(
+                conversation_id,
+                f"its turn was still running after {TURN_END_WAIT_SECONDS:.0f}s; "
+                "a later reading tries again",
+            )
+            return None
+        await db.refresh(conversation)
+        await db.refresh(project)
+        if conversation.lifecycle != "open":
+            _declined(conversation_id, "the conversation closed while its turn was ending")
             return None
 
         checkpoint = await generate_checkpoint(
