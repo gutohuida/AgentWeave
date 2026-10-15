@@ -63,7 +63,8 @@ async def test_get_task_by_id(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_task_responses_include_assignee_runtime_status(app, auth_headers):
+async def test_task_responses_include_assignee_runtime_status(app, auth_headers, add_agent):
+    await add_agent("kimi")
     heartbeat = await app.post(
         "/api/v1/projects/proj-test/agents/kimi/heartbeat",
         json={"status": "running", "message": "Working on task"},
@@ -107,7 +108,9 @@ async def test_assigned_task_without_heartbeat_reports_idle(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_agent_list_counts_task_assignees_without_session_sync(app, auth_headers):
+async def test_agent_list_counts_an_agents_active_tasks(app, auth_headers, add_agent):
+    # A task's assignee no longer adds a name to the roster on its own (F618).
+    await add_agent("codex-backend")
     resp = await app.post(
         "/api/v1/projects/proj-test/tasks",
         json={"title": "Fallback agent task", "assignee": "codex-backend"},

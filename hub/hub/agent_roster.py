@@ -6,8 +6,8 @@ F247). The trigger route has always refused the same mistake by name; this is th
 once, for every other route that takes an agent name.
 
 **Known** means anything in this project recorded under the name — and it must stay a superset of
-every source `GET /agents` lists a name from (`api/v1/agents.py` `list_agents`: the roster, message
-senders and recipients, heartbeats, output, task assignees). A name the roster shows and these
+every source `GET /agents` lists a name from (`api/v1/agents.py` `list_agents`: since F618, the
+`agents` table alone). A name the roster shows and these
 routes refuse is the one thing worse than the empty answer this replaced (Round 4 review). The rows
 beyond the roster matter for a second reason: session sync deletes the roster row of an agent the
 session no longer declares and keeps its history. A name with none of these is a mistake.
@@ -51,13 +51,34 @@ async def agent_is_known(session: AsyncSession, project_id: str, agent: str) -> 
     return False
 
 
+def _not_an_agent(agent: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=(
+            f"{agent} is not an agent in this project: nothing here is recorded under that "
+            "name. Correct the name, or create the agent in the Hub UI."
+        ),
+    )
+
+
 async def require_known_agent(session: AsyncSession, project_id: str, agent: str) -> None:
     """404 naming the mistake, unless *agent* is known to this project (see the module)."""
     if not await agent_is_known(session, project_id, agent):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                f"{agent} is not an agent in this project: nothing here is recorded under that "
-                "name. Correct the name, or create the agent in the Hub UI."
-            ),
-        )
+        raise _not_an_agent(agent)
+
+
+async def require_agent_row(session: AsyncSession, project_id: str, agent: str) -> None:
+    """404 naming the mistake, unless this project has an agent row under *agent*.
+
+    For a route that *writes* under the name. It cannot ask `agent_is_known`: its own write is
+    what would make the name known, so one call to a typo minted an agent (F618).
+    """
+    try:
+        worktrees.validate_agent_name(agent)
+    except ValueError:
+        raise _not_an_agent(agent) from None
+    found = await session.scalar(
+        select(exists().where(Agent.project_id == project_id, Agent.name == agent))
+    )
+    if not found:
+        raise _not_an_agent(agent)

@@ -173,7 +173,7 @@ async def project_a_resources(app, project_a, add_agent):
                 id="evt-bola-a-run",
                 project_id=project_a["project_id"],
                 event_type="run_stopped",
-                agent="alice",
+                agent="b-agent",
                 data={"run_id": run_id},
             )
         )
@@ -214,7 +214,9 @@ async def test_cross_project_object_reads_return_404(app, other_project, project
 
 
 @pytest.mark.asyncio
-async def test_cross_project_list_reads_return_empty_data(app, other_project, project_a_resources):
+async def test_cross_project_list_reads_return_empty_data(
+    app, other_project, project_a_resources, add_agent
+):
     """Project B's key must see empty project-scoped lists, not Project A's data."""
     b = other_project["headers"]
     a_ids = set(project_a_resources.values())
@@ -228,8 +230,10 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
         f"{base}/events/history",
         f"{base}/logs",
         f"{base}/agents",
-        f"{base}/agents/alice/output",
     ]
+    # Project A's agent is not an agent of Project B: refused by name, nothing read (F618).
+    resp = await app.get(f"{base}/agents/alice/output", headers=b)
+    assert resp.status_code == 404, resp.text
 
     for path in list_endpoints:
         resp = await app.get(path, headers=b)
@@ -267,13 +271,16 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
                 id="evt-bola-b-names-a-run",
                 project_id=other_project["project_id"],
                 event_type="run_stopped",
-                agent="alice",
+                agent="b-agent",
                 data={"run_id": project_a_resources["run_id"]},
             )
         )
         await session.commit()
+    # Project B's own agent, so its timeline answers and the run-facts predicate is what is
+    # tested (a name with no agent in B is refused outright since F618).
+    await add_agent("b-agent", project_id=other_project["project_id"])
 
-    timeline_resp = await app.get(f"{base}/agents/alice/timeline", headers=b)
+    timeline_resp = await app.get(f"{base}/agents/b-agent/timeline", headers=b)
     assert timeline_resp.status_code == 200
     timeline = timeline_resp.json()
     assert not any(
@@ -283,7 +290,7 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
     assert project_a_resources["run_id"] not in timeline["runs"]
 
     # Agent sessions returns a dict wrapper; ensure the inner list is empty.
-    sessions_resp = await app.get(f"{base}/agent/sessions/alice", headers=b)
+    sessions_resp = await app.get(f"{base}/agent/sessions/b-agent", headers=b)
     assert sessions_resp.status_code == 200
     assert sessions_resp.json()["sessions"] == []
 

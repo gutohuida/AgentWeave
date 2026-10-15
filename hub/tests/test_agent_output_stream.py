@@ -10,6 +10,20 @@ from hub.db.models import AgentOutput
 from hub.sse import sse_manager
 
 
+@pytest.fixture(autouse=True)
+async def _rostered(add_agent):
+    """A write under a name with no agent row is refused (F618)."""
+    for name in (
+        "stream-roundtrip",
+        "stream-reject",
+        "stream-sse",
+        "stream-chat",
+        "stream-window",
+        "stream-bounds",
+    ):
+        await add_agent(name)
+
+
 async def _project_id(app, auth_headers) -> str:
     response = await app.get("/api/v1/projects/proj-test/status", headers=auth_headers)
     assert response.status_code == 200

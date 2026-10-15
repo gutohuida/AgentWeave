@@ -4570,6 +4570,7 @@ async def get_agent_sessions(
     from ...db.models import AgentOutput
 
     project_id, _ = project
+    await require_known_agent(session, project_id, agent)
 
     # Group by session_id to get first and last output timestamps per session
     q = (

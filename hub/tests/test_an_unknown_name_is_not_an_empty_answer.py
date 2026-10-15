@@ -98,12 +98,9 @@ async def test_a_removed_agent_s_history_stays_readable(app, auth_headers, route
     ],
 )
 async def test_every_name_the_roster_lists_is_known(app, auth_headers, route):
-    """Round 4 review: `GET /agents` lists a task's assignee before the agent has any row, and
-    these routes 404'd that name while the rail showed it. Every name the roster lists answers."""
-    created = await app.post(
-        f"{P}/tasks", json={"title": "for later", "assignee": "planned"}, headers=auth_headers
-    )
-    assert created.status_code == 201, created.text
+    """Round 4 review: these routes 404'd a name the rail showed. Every name the roster lists
+    answers. (The roster is the agents table since F618; a task assignee no longer adds a name.)"""
+    await _rostered("planned")
     roster = await app.get(f"{P}/agents", headers=auth_headers)
     names = {row["name"] for row in roster.json()}
     assert "planned" in names

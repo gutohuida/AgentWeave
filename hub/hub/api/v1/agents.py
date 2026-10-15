@@ -27,6 +27,7 @@ from ...agent_colors import next_color_index
 from ...agent_lifecycle import archivable as agent_archivable
 from ...agent_lifecycle import archive as archive_agent_row
 from ...agent_lifecycle import unarchive as unarchive_agent_row
+from ...agent_roster import require_agent_row, require_known_agent
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...checkpoint_policy import CHECKPOINT_MODES, agent_window, threshold_error
@@ -77,7 +78,6 @@ from ...schemas.agents import (
     fit_run_error,
 )
 from ...schemas.common import RequestModel
-from ...schemas.messages import OPERATOR_SENDER
 from ...sse import sse_manager
 from ...task_transitions import LIVE_STATUSES
 from ...utils import persist_accepted_event, persist_event, short_id
@@ -301,107 +301,19 @@ async def list_agents(
     session_data = await _get_session_data(project_id, session)
     session_agents_meta: dict = session_data.get("agents", {}) if session_data else {}
 
-    # If no session.json, fall back to agents seen in DB activity (last 24h).
-    # This covers the Docker case where the hub can't read the host's session.json —
-    # the watchdog pushes heartbeats on startup to register agents.
-    if not session_agents_meta:
-        senders_q = (
-            select(Message.sender)
-            .distinct()
-            .where(
-                Message.project_id == project_id,
-                Message.timestamp >= cutoff,
-                # The operator sends mail too, and is not an agent (F261).
-                Message.sender != OPERATOR_SENDER,
-            )
-        )
-        recipients_q = (
-            select(Message.recipient)
-            .distinct()
-            .where(Message.project_id == project_id, Message.timestamp >= cutoff)
-        )
-        hb_q = (
-            select(AgentHeartbeat.agent)
-            .distinct()
-            .where(
-                AgentHeartbeat.project_id == project_id,
-                AgentHeartbeat.timestamp >= cutoff,
-            )
-        )
-        out_q = (
-            select(AgentOutput.agent)
-            .distinct()
-            .where(
-                AgentOutput.project_id == project_id,
-                AgentOutput.timestamp >= cutoff,
-            )
-        )
-        task_assignees_q = (
-            select(Task.assignee)
-            .distinct()
-            .where(
-                Task.project_id == project_id,
-                Task.assignee.isnot(None),
-                Task.status.in_(_ACTIVE_TASK_STATUSES),
-            )
-        )
-        s_res, r_res, hb_res, out_res, task_assignees_res = await asyncio.gather(
-            session.execute(senders_q),
-            session.execute(recipients_q),
-            session.execute(hb_q),
-            session.execute(out_q),
-            session.execute(task_assignees_q),
-        )
-        fallback_names: set[str] = set()
-        for (name,) in s_res:
-            fallback_names.add(name)
-        for (name,) in r_res:
-            fallback_names.add(name)
-        for (name,) in hb_res:
-            fallback_names.add(name)
-        for (name,) in out_res:
-            fallback_names.add(name)
-        for (name,) in task_assignees_res:
-            if name:
-                fallback_names.add(name)
-        session_agents_meta = {name: {} for name in fallback_names}
-
-    # Task assignees are meaningful even when a synced session config exists:
-    # users can create tasks for an agent before it has heartbeats/messages.
-    task_assignees_q = (
-        select(Task.assignee)
-        .distinct()
-        .where(
-            Task.project_id == project_id,
-            Task.assignee.isnot(None),
-            Task.status.in_(_ACTIVE_TASK_STATUSES),
-        )
-    )
-    task_assignees_res = await session.execute(task_assignees_q)
-    for (name,) in task_assignees_res:
-        if name and name not in session_agents_meta:
-            session_agents_meta[name] = {}
-
-    # Also include agents from the Agent table (every agent the operator or a request created)
+    # The roster is the `agents` table: every agent the operator, a request or a session sync
+    # created. It used to add every name seen in 24 hours of mail, heartbeats and output, and
+    # every task assignee, for a watchdog that no longer exists; one heartbeat to a typo then
+    # listed an open agent the Overview counted against the budget, and the Hub's own `hub`
+    # sender was listed too (F618). The session config only adds metadata for a row's name.
     agent_q = select(Agent).where(Agent.project_id == project_id)
     agent_res = await session.execute(agent_q)
-    db_agents: dict[str, Agent] = {}
-    for agent_row in agent_res.scalars().all():
-        db_agents[agent_row.name] = agent_row
-        if agent_row.name not in session_agents_meta:
-            session_agents_meta[agent_row.name] = {}
-
-    # Applied after every source has contributed, not to the Agent query alone: a name also
-    # arrives here from session config, from 24h of activity, and from being a task's assignee.
-    # Filtering only the query would let an archived agent back in through any of those.
-    if lifecycle != "all":
-        wanted = lifecycle
-        session_agents_meta = {
-            name: meta
-            for name, meta in session_agents_meta.items()
-            # An agent with no row cannot have been archived, so it counts as open.
-            if (db_agents[name].lifecycle if name in db_agents else "open") == wanted
-        }
+    db_agents: dict[str, Agent] = {
+        agent_row.name: agent_row
+        for agent_row in agent_res.scalars().all()
+        if lifecycle == "all" or agent_row.lifecycle == lifecycle
+    }
+    session_agents_meta = {name: session_agents_meta.get(name) or {} for name in db_agents}
 
     # The bound Runner is the truth about what a Hub-spawned agent actually runs. Without it
     # `_runner`/`_display_model` below fall through to their "native"/"Native" defaults, because
@@ -846,6 +758,7 @@ async def agent_timeline(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    await require_known_agent(session, project_id, name)
 
     msg_q = (
         select(Message)
@@ -3430,6 +3343,7 @@ async def post_heartbeat(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    await require_agent_row(session, project_id, name)
     hb = AgentHeartbeat(
         id=f"hb-{short_id()}",
         project_id=project_id,
@@ -3453,6 +3367,7 @@ async def post_agent_output(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    await require_agent_row(session, project_id, name)
     row = await record_agent_output(
         session,
         project_id,
@@ -3467,79 +3382,6 @@ async def post_agent_output(
     return {"id": row.id}
 
 
-@router.post("/{name}/compact", status_code=status.HTTP_201_CREATED)
-async def post_compact_request(
-    name: str,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Send a compact request to the agent's inbox."""
-    project_id, _ = project
-    msg = Message(
-        id=f"msg-{short_id()}",
-        project_id=project_id,
-        sender="hub",
-        recipient=name,
-        subject="compact_request",
-        content=(
-            # Was: "Run `/aw-checkpoint` to save your session state" — a skill AgentWeave has
-            # never installed, followed by "re-read your checkpoint", a file nothing wrote.
-            # The Hub now generates checkpoints itself, so the only thing worth asking the agent
-            # for is what its record cannot hold.
-            "**Context management: Compact requested**\n\n"
-            "1. Call `submit_checkpoint_notes` with what this conversation's record cannot "
-            "show: what you are mid-way through, what you suspect but have not verified, and "
-            "what a successor should not repeat. Skip the files, tasks and open questions — "
-            "the Hub already has those.\n"
-            "2. Run `/compact` in your session.\n"
-            "3. Carry on. The Hub keeps the checkpoint; you do not need to re-read anything."
-        ),
-        type="message",
-    )
-    session.add(msg)
-    await session.commit()
-    payload = {"agent": name, "action": "compact", "message_id": msg.id}
-    await sse_manager.broadcast(project_id, "message_created", {"id": msg.id, "recipient": name})
-    await persist_event(session, project_id, "compact_request", payload, agent=name)
-    return {"status": "ok", "message_id": msg.id}
-
-
-@router.post("/{name}/new-session", status_code=status.HTTP_201_CREATED)
-async def post_new_session_request(
-    name: str,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Send a new-session request to the agent's inbox."""
-    project_id, _ = project
-    msg = Message(
-        id=f"msg-{short_id()}",
-        project_id=project_id,
-        sender="hub",
-        recipient=name,
-        subject="new_session_request",
-        content=(
-            # Same dead reference as the compact request above, and the same correction: the
-            # successor is handed a Hub-generated checkpoint as a queued entry, so nothing here
-            # depends on the agent writing or finding a file.
-            "**Context management: New session requested**\n\n"
-            "1. Call `submit_checkpoint_notes` with what this conversation's record cannot "
-            "show: work in flight, unverified suspicions, and warnings for whoever continues.\n"
-            "2. The operator will start a fresh session for you.\n"
-            "3. It will be given a checkpoint the Hub generates from this conversation's "
-            "record — you do not need to write or save one."
-        ),
-        type="message",
-    )
-    session.add(msg)
-    await session.commit()
-    payload = {"agent": name, "action": "new_session", "message_id": msg.id}
-    await sse_manager.broadcast(project_id, "message_created", {"id": msg.id, "recipient": name})
-    await sse_manager.broadcast(project_id, "new_session_request", payload)
-    await persist_event(session, project_id, "new_session_request", payload, agent=name)
-    return {"status": "ok", "message_id": msg.id}
-
-
 @router.get("/{name}/output", response_model=List[AgentOutputResponse])
 async def get_agent_output(
     name: str,
@@ -3549,6 +3391,7 @@ async def get_agent_output(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    await require_known_agent(session, project_id, name)
     q = select(AgentOutput).where(
         AgentOutput.project_id == project_id,
         AgentOutput.agent == name,

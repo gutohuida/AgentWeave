@@ -351,8 +351,10 @@ async def test_a_status_with_another_phase_dispatches_nothing(app, seen):
 
 
 async def test_a_consideration_that_raises_does_not_change_what_the_route_answers(
-    app, auth_headers, monkeypatch
+    app, auth_headers, monkeypatch, add_agent
 ):
+    await add_agent("cmp-route", project_id=PROJECT)
+
     async def boom(*_a, **_k):
         raise RuntimeError("consideration failed")
 
@@ -375,10 +377,11 @@ async def test_a_consideration_that_raises_does_not_change_what_the_route_answer
 
 
 async def test_a_dispatch_that_raises_does_not_change_what_the_route_answers(
-    app, auth_headers, monkeypatch
+    app, auth_headers, monkeypatch, add_agent
 ):
     """Raising in the dispatch itself, not inside the dispatched task: the row is committed
     first, so a raise would answer 500 for a stored row and a retry would store it twice."""
+    await add_agent("cmp-route2", project_id=PROJECT)
 
     def boom(*_a, **_k):
         raise RuntimeError("dispatch failed")
@@ -392,7 +395,8 @@ async def test_a_dispatch_that_raises_does_not_change_what_the_route_answers(
     assert response.status_code == 201
 
 
-async def test_a_status_with_no_payload_is_stored_once(app, auth_headers, seen):
+async def test_a_status_with_no_payload_is_stored_once(app, auth_headers, seen, add_agent):
+    await add_agent("cmp-null", project_id=PROJECT)
     response = await app.post(
         f"/api/v1/projects/{PROJECT}/agents/cmp-null/output",
         json={"content": "status", "kind": "status", "payload": None},

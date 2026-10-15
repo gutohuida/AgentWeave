@@ -52,8 +52,6 @@ names that agent's running run; agents send through their own run with the `send
 | `POST` | `/agents/{name}/heartbeat` | Post agent heartbeat |
 | `POST` | `/agents/{name}/output` | Post agent output log |
 | `GET` | `/agents/{name}/output` | Get agent output log |
-| `POST` | `/agents/{name}/compact` | Record a compaction event for an agent |
-| `POST` | `/agents/{name}/new-session` | Record a new agent session event |
 | `GET` | `/agents/{name}/timeline` | Get agent timeline events |
 | `PUT` | `/agents/roles/config` | Update roles configuration |
 | `GET` | `/agents/roles/config` | Get roles configuration |
