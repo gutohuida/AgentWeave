@@ -35986,7 +35986,7 @@ Seam: Spec documents (create) x Corpus & folding (layout). Tier guess: 0.
 
 ## F645 (C) -- a refused trigger for an unknown agent leaves an open conversation (and a withdrawn queue entry) that the rail files under "Archived agents"
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Agents, Conversations & composer; G7: Resilience refusal probes; scratch Hubs `:8031`, `:8037`).
+**Status:** fixed 2026-10-15 (Tier 0). The trigger route asks for the agent row before it opens a conversation or queues an entry (`agent_trigger.trigger_agent`), with the dispatch's own sentence (`_not_an_agent_to_trigger`). `test_a_refused_trigger_leaves_no_conversation_and_no_queue_entry` failed before (a conversation was created). Driven with `scripts/drive/d1015_s4_names.py`: 409, no conversation, no queue entry. Rows left by earlier refused sends stay (no migration). Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Agents, Conversations & composer; G7: Resilience refusal probes; scratch Hubs `:8031`, `:8037`).
 
 - **G1:** `POST /agent/trigger {"agent":"ghost3","message":"refused first send"}` -> 409 "ghost3 is not an agent…". `conversations` gains `conv-ef676120ce46` (agent ghost3, open, titled with the message), and `inbound_queue_entries` gains a withdrawn row. The rail shows it under **Archived agents** marked *agent archived*; opening it showed the composer and no `archived-agent-notice`.
 - **G7:** `POST /agent/trigger {"agent":"ghost","message":"x"}` -> 409 *"ghost is not an agent in this project…"*, but `get_open_conversation` (`agent_trigger.py:922`) has already created `conv-2af9b04f614b` for agent `ghost`, titled "x". The rail lists it under **Archived agents** as "x — agent archived".

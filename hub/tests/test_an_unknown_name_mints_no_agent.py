@@ -97,3 +97,27 @@ async def test_a_read_under_an_unknown_name_is_refused(app, auth_headers, url):
     resp = await app.get(url, headers=auth_headers)
     assert resp.status_code == 404, resp.text
     assert "nosuch is not an agent" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_refused_trigger_leaves_no_conversation_and_no_queue_entry(app, auth_headers):
+    """F645: the trigger route opened a conversation and queued an entry before the dispatch
+    refused the name, so a typo left an "agent archived" conversation in the rail."""
+    from sqlalchemy import func, select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Conversation, InboundQueueEntry
+
+    resp = await app.post(
+        f"{BASE}/agent/trigger",
+        json={"agent": "ghost3", "message": "refused first send"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409, resp.text
+    assert "ghost3 is not an agent in this project" in resp.json()["detail"]
+    async with async_session_factory() as s:
+        for model in (Conversation, InboundQueueEntry):
+            count = await s.scalar(
+                select(func.count()).select_from(model).where(model.agent == "ghost3")
+            )
+            assert count == 0, model.__name__

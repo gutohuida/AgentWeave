@@ -177,7 +177,9 @@ async def test_a_queued_review_of_the_task_is_not_released(app):
 # ---------------------------------------------------------------------------
 
 
-async def test_triggering_a_run_on_an_approved_task_is_refused_over_http(app, auth_headers):
+async def test_triggering_a_run_on_an_approved_task_is_refused_over_http(
+    app, auth_headers, add_agent
+):
     """The on-demand reproduction: the board read `approved` / `assignee: author` / `running`.
 
     **Over HTTP, deliberately.** The unit-level equivalent would pass against a guard that cannot
@@ -185,6 +187,7 @@ async def test_triggering_a_run_on_an_approved_task_is_refused_over_http(app, au
     `resolve_bound_task` as a delegation and never through its explicit branch. Only the request
     proves the refusal is reachable.
     """
+    await add_agent("builder")
     async with async_session_factory() as session:
         await _task(session, "task-f79-approved", status="approved")
         await session.commit()

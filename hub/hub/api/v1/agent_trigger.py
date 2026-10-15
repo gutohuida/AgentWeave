@@ -1011,6 +1011,14 @@ async def trigger_agent_directly(**kwargs: Any) -> TriggerAgentResponse:
         raise
 
 
+def _not_an_agent_to_trigger(agent: str) -> str:
+    return (
+        f"{agent} is not an agent in this project, so there is nothing to trigger. "
+        f"Create it in the Hub UI, or correct the name — if a scheduled job names it, that "
+        f"job will keep failing until the name is fixed."
+    )
+
+
 async def _trigger_agent_directly(
     *,
     project_id: str,
@@ -1059,11 +1067,7 @@ async def _trigger_agent_directly(
         # job for a mistyped agent reported "has no runner bound" every five minutes. The
         # `runner_id is None` branch below is the case that message actually describes.
         raise TriggerAgentError(
-            status.HTTP_409_CONFLICT,
-            f"{agent} is not an agent in this project, so there is nothing to trigger. "
-            f"Create it in the Hub UI, or correct the name — if a scheduled job names it, that "
-            f"job will keep failing until the name is fixed.",
-            request_level=True,
+            status.HTTP_409_CONFLICT, _not_an_agent_to_trigger(agent), request_level=True
         )
     if agent_row.runner_id is None:
         config = await get_agent_config(project_id, agent, session)
@@ -2030,12 +2034,19 @@ async def trigger_agent(
             status_code=400, detail="session_id is required when session_mode='resume'"
         )
 
-    # Mirrors the same guard in `trigger_agent_directly` — see its comment for why this is the
+    # Mirrors the same guards in `trigger_agent_directly` — see its comment for why this is the
     # one invariant that makes "nothing runs an archived agent" true rather than aspirational.
-    archived_check = await session.execute(
-        select(Agent.lifecycle).where(Agent.project_id == project_id, Agent.name == body.agent)
-    )
-    if archived_check.scalars().first() == "archived":
+    # Asked here, before a conversation is opened or an entry queued: the dispatch's own refusal
+    # came after both, so a typo left an open conversation the rail filed as "agent archived"
+    # and a withdrawn entry (F645).
+    lifecycle = (
+        await session.execute(
+            select(Agent.lifecycle).where(Agent.project_id == project_id, Agent.name == body.agent)
+        )
+    ).scalar_one_or_none()
+    if lifecycle is None:
+        raise HTTPException(status_code=409, detail=_not_an_agent_to_trigger(body.agent))
+    if lifecycle == "archived":
         raise HTTPException(
             status_code=409,
             detail=f"{body.agent} is archived and cannot be triggered. Unarchive it first.",

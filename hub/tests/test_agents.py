@@ -6,7 +6,8 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_agent_trigger_rejects_work_dir_with_parent_traversal(app, auth_headers):
+async def test_agent_trigger_rejects_work_dir_with_parent_traversal(app, auth_headers, add_agent):
+    await add_agent("claude")
     resp = await app.post(
         "/api/v1/projects/proj-test/agent/trigger",
         json={
@@ -21,7 +22,8 @@ async def test_agent_trigger_rejects_work_dir_with_parent_traversal(app, auth_he
 
 
 @pytest.mark.asyncio
-async def test_agent_trigger_rejects_work_dir_with_tilde(app, auth_headers):
+async def test_agent_trigger_rejects_work_dir_with_tilde(app, auth_headers, add_agent):
+    await add_agent("claude")
     resp = await app.post(
         "/api/v1/projects/proj-test/agent/trigger",
         json={
@@ -36,7 +38,10 @@ async def test_agent_trigger_rejects_work_dir_with_tilde(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_agent_trigger_rejects_work_dir_with_non_printable_chars(app, auth_headers):
+async def test_agent_trigger_rejects_work_dir_with_non_printable_chars(
+    app, auth_headers, add_agent
+):
+    await add_agent("claude")
     resp = await app.post(
         "/api/v1/projects/proj-test/agent/trigger",
         json={
