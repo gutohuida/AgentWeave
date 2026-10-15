@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0127"
+HEAD_REVISION = "0128"
 
 
 # ---------------------------------------------------------------------------
@@ -5266,3 +5266,49 @@ def test_migration_0127_holds_queued_successors_only_where_auto_continue_is_off(
         "e-off-op": "queued",
         "e-on-ckpt": "queued",
     }
+
+
+# ---------------------------------------------------------------------------------------------
+# 0128 -- deleted_projects (`a-deleted-project-stays-deleted`, F609). A new table only: it starts
+# empty, nothing existing is copied, and the downgrade drops it and nothing else.
+# ---------------------------------------------------------------------------------------------
+
+
+def test_migration_0128_adds_deleted_projects_and_its_downgrade_drops_only_it(tmp_path) -> None:
+    db_file = tmp_path / "deleted.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        before = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        conn.execute("DROP TABLE deleted_projects")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0127')")
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p', 'p', '2026-01-01T00:00:00Z')"
+        )
+        conn.commit()
+
+    _upgrade_to(db_url, "0128")
+
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert tables == before | {"alembic_version"}
+        assert conn.execute("SELECT count(*) FROM deleted_projects").fetchone() == (0,)
+        info = {r[1]: r for r in conn.execute("PRAGMA table_info(deleted_projects)")}
+        assert set(info) == {"id", "deleted_at"}
+        conn.execute(
+            "INSERT INTO deleted_projects (id, deleted_at) VALUES ('gone', '2026-10-15T00:00:00Z')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO deleted_projects (id, deleted_at) "
+                "VALUES ('gone', '2026-10-15T00:00:00Z')"
+            )
+        conn.commit()
+
+    _downgrade_to(db_url, "0127")
+
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert conn.execute("SELECT id FROM projects").fetchall() == [("p",)]
+    assert tables == (before - {"deleted_projects"}) | {"alembic_version"}

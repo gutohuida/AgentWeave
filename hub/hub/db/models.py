@@ -193,6 +193,21 @@ class Project(Base):
     )
 
 
+class DeletedProject(Base):
+    """A project id this database deleted (migration 0128).
+
+    `a-deleted-project-stays-deleted` (F609, fix-D1). Opening a folder whose marker names one of
+    these registers a new project under a new id instead of adopting the marker's id, so nothing of
+    the deleted project comes back. No `project_id` column on purpose: the delete sweeps every table
+    that has one, and this row must outlive the project it names.
+    """
+
+    __tablename__ = "deleted_projects"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    deleted_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+
 class Agent(Base):
     """Agent configuration and self-registration status."""
 

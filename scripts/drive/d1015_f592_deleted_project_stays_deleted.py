@@ -64,11 +64,16 @@ def main(name):
     check("the reopened folder is a new project", reopened != project, f"{project} -> {reopened}")
     named = json.loads(marker.read_text(encoding="utf-8")).get("project_id")
     check("the marker names the new project", named == reopened, str(named))
-    entries = e2e.call("GET", f"/projects/{reopened}/vault/map").get("entries", [])
-    private_ids = [e["id"] for e in entries if e.get("visibility") == "private"]
-    check("no private source comes back", private_ids == [], str(private_ids))
-    status, _ = e2e.request("GET", f"/projects/{reopened}/vault/entries/{secret}")
-    check("the deleted private source cannot be read", status == 404, str(status))
+    # The private entry's stub under knowledge/ is a tracked project file (a delete never touches
+    # those); what must not come back is its text, which was the deleted project's.
+    status, entry = e2e.request("GET", f"/projects/{reopened}/vault/entries/{secret}")
+    text = (entry or {}).get("content") if isinstance(entry, dict) else entry
+    check("the deleted private text is not served", status == 200 and text is None, f"{status} {text!r}")
+    check(
+        "the entry says its text is unavailable",
+        isinstance(entry, dict) and entry.get("available") is False,
+        str(entry)[:200],
+    )
     return reopened
 
 

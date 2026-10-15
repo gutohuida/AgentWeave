@@ -49,6 +49,7 @@ import os
 import platform
 import re
 import secrets
+import shutil
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Protocol, Tuple
@@ -256,6 +257,53 @@ def check_private_location(
             f"The private location {resolved} cannot be a folder: {existing} is a file."
         )
     return resolved
+
+
+async def remove_private_entries(db: AsyncSession, project_id: str) -> None:
+    """Remove *project_id*'s private vault entries, for a delete that asks (fix-D1, F592).
+
+    At the Hub's default location the project's whole folder goes; at a location the operator
+    chose, only the vault's own folders, and the folder itself if that leaves it empty, because the
+    operator may keep other things there. A location equal to, inside or containing another
+    project's is refused (`VaultError`, 409) before anything is removed: private files carry no
+    project id, so removing them there would remove the other project's too. A removal that fails
+    raises `OSError`; the caller deletes no record then, so the operator can retry."""
+    row = await db.get(VaultSettings, project_id)
+    location = Path(_listed_settings(project_id, row)["effective_private_location"])
+    others = await db.execute(
+        select(Project.id, Project.name, VaultSettings.private_location)
+        .outerjoin(VaultSettings, VaultSettings.project_id == Project.id)
+        .where(Project.id != project_id)
+    )
+    for other_id, name, chosen in others:
+        theirs = Path(chosen) if chosen else default_private_location(other_id)
+        if _inside(location, theirs) or _inside(theirs, location):
+            raise VaultError(
+                f"The private location {location} is shared with project {name} ({other_id}), and "
+                "its private files do not say which project they belong to. Delete this project "
+                "keeping its private entries, or choose a separate location for one of them first.",
+                status=409,
+            )
+    if not location.exists():
+        return
+    if row is None or row.private_location is None:
+        _remove_tree(location)
+        return
+    for folder in (SOURCES, FACTS, CONTRADICTIONS, REPORTS):
+        if (location / folder).exists():
+            _remove_tree(location / folder)
+    with contextlib.suppress(OSError):
+        location.rmdir()  # only when empty: whatever else the operator keeps there stays
+
+
+def _remove_tree(path: Path) -> None:
+    """`shutil.rmtree`, clearing a read-only bit Windows leaves on a file before giving up."""
+
+    def writable_then_retry(function: Any, target: str, _exc: Any) -> None:
+        os.chmod(target, 0o700)
+        function(target)
+
+    shutil.rmtree(path, onerror=writable_then_retry)
 
 
 def _listed_settings(project_id: str, row: Optional[VaultSettings]) -> Dict[str, Any]:

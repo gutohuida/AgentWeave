@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from typing import List, Literal, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, create_model, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.fields import FieldInfo
@@ -736,10 +736,16 @@ async def relocate_project(
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     project_id: str,
+    remove_private: bool = Query(False),
     operator: OperatorCredential = Depends(get_operator),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    """Remove a project and every row scoped to it. Never touches the filesystem.
+    """Remove a project and every row scoped to it. Never touches the project's directory.
+
+    `remove_private=true` also removes its private vault entries first (fix-D1, F592); the delete
+    dialog asks, checked by default. Without it they are kept, so a caller that does not say
+    deletes exactly as before. A shared private location or a failed removal answers 409 and
+    deletes nothing.
 
     Instance-level operation (`Depends(get_operator)`, not `get_project`) — deleting a
     project is a decision about the Hub's collection, not something a credential scoped
@@ -748,7 +754,9 @@ async def delete_project(
     """
     del operator
     try:
-        summary = await ProjectLifecycleService(session).delete(project_id)
+        summary = await ProjectLifecycleService(session).delete(
+            project_id, remove_private=remove_private
+        )
     except ProjectPathError as exc:
         if exc.code == "project_not_found":
             raise HTTPException(

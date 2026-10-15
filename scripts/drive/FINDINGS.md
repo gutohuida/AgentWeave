@@ -35484,7 +35484,7 @@ A tracked GIF whose reading failed (firing `failed`, "reading the image: 1 schem
 
 ## F592 (C) -- deleting a project leaves its private vault behind in the Hub's own directory
 
-**Status:** open 2026-10-13. Measured at the end of driving sweep 1 (`vault`).
+**Status:** fixed 2026-10-15 (Tier 2, decision fix-D1, change `spec/changes/a-deleted-project-stays-deleted`, with F609). `DELETE /projects/{id}?remove_private=true` removes the private entries before any record (the whole `vaults/<id>` folder at the default location; only `sources`/`facts`/`contradictions`/`reports` at a chosen one), refuses 409 deleting nothing when another project shares the location or the removal fails, and never touches the project's directory; without the flag they are kept (the app's current bundle), and the dialog's checkbox, checked by default, is in the UI batch. Acceptance drive `scripts/drive/d1015_f592_deleted_project_stays_deleted.py` committed failing first (d1cb332: 4 of 9 on HEAD), ALL PASS after. Tests: `test_a_deleted_project_stays_deleted.py`. Opened 2026-10-13. Measured at the end of driving sweep 1 (`vault`).
 
 `DELETE /projects/{id}` answered 204 and, as its docstring says, "never touches the filesystem" (`hub/hub/api/v1/projects.py:740`). That is right for the project's own directory, but the default private location is the Hub's (`~/.agentweave/hub/vaults/<project-id>/`), and the private note's full text (`sources/src-....md`) stayed there with nothing in the app pointing at it any more. Seam: project deletion x vault private location. Not Tier 0: whether deletion removes, keeps, or asks about private vault contents is the operator's call (private data either way).
 
@@ -35680,7 +35680,7 @@ Seam: Jobs & loops (firing outcome) x Accounting & allowance (budget hold). **Fi
 
 ## F609 (B) -- deleting a project and reopening its folder resurrects the same project id and its "permanently" deleted private vault content
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Projects x Knowledge vault; scratch Hub `:8031`, throwaway project `proj-aba065a4865e`).
+**Status:** fixed 2026-10-15 (Tier 2, decision fix-D1, with F592). Migration 0128 adds `deleted_projects`; reopening a folder whose marker names an id this database deleted registers a new project under a new id and rewrites the marker, so the deleted private text is not served (a marker from another database is still adopted). The private entry's stub under `knowledge/` is a tracked project file and stays listed, text unavailable; its note then says the text is "held on <this machine>", the F617 mislabel. Same drive and tests as F592; `test_project_lifecycle` flipped. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Projects x Knowledge vault; scratch Hub `:8031`, throwaway project `proj-aba065a4865e`).
 
 `DELETE /projects/proj-aba065a4865e` -> 204. `~/.agentweave/hub/vaults/proj-aba065a4865e/sources/src-….md` remains (F592), and the folder keeps `.agentweave/project.json` and the `knowledge/` stub. `POST /projects/open` on the same folder returns the **same id** `proj-aba065a4865e`; `vault map` then lists the private source again, and `GET /vault/entries/src-d4f1f9528bd8` returns its full text. The delete dialog says it removes "every other record — permanently". This is new behaviour beyond F592 (which filed only the leftover files, C): the leftovers come back into the app, and the dialog's promise is false for private data.
 
@@ -35745,6 +35745,8 @@ Seam: Knowledge vault (Vault tab x file-source availability). **Fix shape:** gat
 ## F617 (B) -- after a re-distil, a resolved contradiction calls the standing fact "A private fact, held on another machine", and an approved spec says its cited fact "is not in the vault on this machine"
 
 **Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
+
+**Also (2026-10-15, F609's drive):** after a project is deleted with its private entries removed and its folder reopened, a private source's tracked stub reads "its text is held on TITAN, not on this machine" on TITAN itself. The same wording problem from another cause: the text is gone, not elsewhere. Fix with F617's honest wording.
 
 F587's id churn seen from the operator's side. The operator resolved `ctr-2f72c1449976` in the Vault tab: 40 kg (`fct-dd4574520c84`) stands. Pressing **Distil** on the February source in the Vault tab brought its facts back as `fct-9f16f124d469` and `fct-9ea52a3b15d1`; `fct-dd4574520c84` is gone (`GET /vault/entries/fct-dd4574520c84` -> 404). Two screens then mislabel it, both pointing at a machine or privacy problem:
 

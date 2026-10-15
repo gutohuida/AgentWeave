@@ -173,9 +173,10 @@ async def test_adoption_leaves_a_trace_the_operator_can_find(app, tmp_path) -> N
 
 
 @pytest.mark.asyncio
-async def test_deleted_project_directory_is_adopted_back_under_the_same_id(app, tmp_path) -> None:
-    """`delete()` never touches the filesystem, so the marker survives. Reopening the
-    same directory afterward must restore the original id rather than being refused.
+async def test_deleted_project_directory_is_registered_anew_under_a_new_id(app, tmp_path) -> None:
+    """`delete()` never touches the project's directory, so the marker survives. Reopening the
+    same directory afterward registers a new project rather than being refused or bringing the
+    deleted one back (`a-deleted-project-stays-deleted`, F609), and the marker names it.
     """
     directory = tmp_path / "delete-then-reopen"
     directory.mkdir()
@@ -192,10 +193,12 @@ async def test_deleted_project_directory_is_adopted_back_under_the_same_id(app, 
     async with async_session_factory() as session:
         reopened = await ProjectLifecycleService(session).open_existing(directory)
 
-    assert reopened.id == original_id
+    assert reopened.id != original_id
+    assert _marker(directory)["project_id"] == reopened.id
     async with async_session_factory() as session:
+        assert await session.get(Project, original_id) is None
         runner_count = await session.scalar(
-            select(func.count()).select_from(Runner).where(Runner.project_id == original_id)
+            select(func.count()).select_from(Runner).where(Runner.project_id == reopened.id)
         )
     assert runner_count == len(RUNNER_CLIS)
 

@@ -74,6 +74,8 @@ AGENT_PROPOSAL_TESTS = "hub/tests/test_spec_edit_proposals.py"
 OPERATOR_EDIT_DRIVE = "scripts/drive/d1015_f611_operator_edit_applies.py"
 FOLDED_TESTS = "hub/tests/test_a_folded_requirement_keeps_its_verification.py"
 FOLDED_DRIVE = "scripts/drive/d1015_f593_fold_keeps_verification.py"
+DELETED_TESTS = "hub/tests/test_a_deleted_project_stays_deleted.py"
+DELETED_DRIVE = "scripts/drive/d1015_f592_deleted_project_stays_deleted.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1293,10 +1295,28 @@ CHANGES = {
              "it once, and the change's own coverage still lists it."),
         ],
     },
+    "f592": {
+        "document": "spec/changes/a-deleted-project-stays-deleted/spec.json",
+        "tasks": ["task-dd8bf4db6d84"],
+        "evidence": [
+            ("FR-1", "task-dd8bf4db6d84", "test_result", DELETED_TESTS,
+             "An asked delete removes the default private folder and no project file; an unasked "
+             "one keeps the entries; a chosen location loses only the vault's folders; a shared "
+             "location or a failed removal answers 409 and deletes nothing."),
+            ("FR-2", "task-dd8bf4db6d84", "manual_observation", DELETED_DRIVE,
+             "Written first: on HEAD the private folder survived and the reopened folder came back "
+             "under the deleted id serving the private text; after, a new id, the marker names it, "
+             "and the private text is not served."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
 REPLACE_FOLDS = {
+    "f592": ("local-project-workspace", {
+        "delete-removes-asked-private": "a-project-can-be-deleted-from-the-hub-without-touching-its-w",
+        "deleted-id-not-adopted": "n2-an-orphaned-marker-is-adopted-under-its-own-id",
+    }),
     "f611": ("spec-document-authority", {
         "operator-writes": "the-operator-can-write-a-document-s-content",
         "agents-propose": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",

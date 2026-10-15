@@ -14,7 +14,7 @@ from typing import Any, Optional
 from sqlalchemy import Table, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import RUNNER_CLIS, Base, Charter, Project, Run, Runner
+from .db.models import RUNNER_CLIS, Base, Charter, DeletedProject, Project, Run, Runner
 from .project_workspace import (
     PROJECT_MARKER_PATH,
     PROJECT_MARKER_VERSION,
@@ -91,7 +91,7 @@ class ProjectLifecycleService:
                     if moved:
                         _repair_checkout_registrations(canonical.path)
                     return marked_project
-            elif not register_copy_as_new:
+            elif not register_copy_as_new and not await self._was_deleted(marker["project_id"]):
                 project = Project(
                     id=marker["project_id"],
                     name=name or canonical.path.name,
@@ -188,8 +188,10 @@ class ProjectLifecycleService:
             _repair_checkout_registrations(canonical.path)
         return project
 
-    async def delete(self, project_id: str) -> DeletedProjectSummary:
-        """Remove a project and every row scoped to it. Never touches the filesystem.
+    async def delete(
+        self, project_id: str, *, remove_private: bool = False
+    ) -> DeletedProjectSummary:
+        """Remove a project and every row scoped to it. Never touches the project's directory.
 
         Deletes by introspecting `Base.metadata` for every table carrying a `project_id`
         column, rather than a hand-maintained list of ORM relationships — a fixed list
@@ -197,8 +199,13 @@ class ProjectLifecycleService:
         `openspec/changes/2026-08-16-delete-project-api/design.md` D2.
 
         This function must never import from `project_workspace.py` or call a
-        filesystem API — `Project.working_directory` is read only to report what was
-        removed, never opened, listed, or deleted (design.md D4).
+        filesystem API on the project's directory — `Project.working_directory` is read only to
+        report what was removed, never opened, listed, or deleted (design.md D4).
+
+        `remove_private` (fix-D1, F592) also removes the project's private vault entries, which
+        live outside its directory, before any row goes: a refusal or a failed removal deletes no
+        record, so the operator can retry. The id is remembered in `deleted_projects`, so
+        reopening the folder registers a new project rather than this one (F609).
         """
         project = await self.session.get(Project, project_id)
         if project is None:
@@ -216,11 +223,31 @@ class ProjectLifecycleService:
             )
 
         summary = DeletedProjectSummary(id=project.id, name=project.name)
+        if remove_private:
+            from . import vault
+
+            try:
+                await vault.remove_private_entries(self.session, project_id)
+            except vault.VaultError as exc:
+                raise ProjectPathError(str(exc), code="private_location_shared") from exc
+            except OSError as exc:
+                raise ProjectPathError(
+                    f"The project's private vault entries could not be removed ({exc}); nothing "
+                    "was deleted. Close whatever holds them and delete again.",
+                    code="private_entries_not_removed",
+                ) from exc
         for table in _project_scoped_tables():
             await self.session.execute(table.delete().where(table.c.project_id == project_id))
         await self.session.delete(project)
+        if await self.session.get(DeletedProject, project_id) is None:
+            self.session.add(DeletedProject(id=project_id))
         await self.session.commit()
         return summary
+
+    async def _was_deleted(self, project_id: str) -> bool:
+        """Whether this database deleted *project_id*: its folder's marker is then not adopted
+        (`a-deleted-project-stays-deleted`), while a marker from another database still is."""
+        return await self.session.get(DeletedProject, project_id) is not None
 
     async def _guard_relocation(self, project: Project, destination: CanonicalProjectPath) -> None:
         if project.path_key == destination.path_key:
