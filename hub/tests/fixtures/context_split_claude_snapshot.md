@@ -10,7 +10,7 @@
 - Resolve every path against this directory. Files outside it are normally refused.
 
 ### Team
-- `peer`: runner=native
+- `peer`: no runner; a message to it waits until the operator binds one
 - `splitter`: runner=native <- you
 
 Address a peer by the exact name above when sending a message or assigning a task.

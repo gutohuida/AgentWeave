@@ -501,6 +501,10 @@ async def list_agents(
                 "opencode": agent_meta.get("model", "OpenCode"),
                 "codex_mcp": agent_meta.get("model", "Codex MCP"),
             }.get(_runner, agent_meta.get("model", _runner.replace("_", " ").title()))
+        if agent_row is not None and agent_row.runner_id is None and _runner == "native":
+            # The bare default, not a stored runner/model the config page shows: what the palette
+            # and cards print, where "Native" read as if the agent runs (F623).
+            _display_model = "No runner"
 
         summaries.append(
             AgentSummary(
@@ -2404,6 +2408,13 @@ async def _render_hub_agent_context(
                 if bound.model:
                     meta["model"] = bound.model
             marker = " <- you" if row.name == agent else ""
+            if bound is None and row.name != agent:
+                # Not `runner=native`, which read as if the peer runs (F623).
+                lines.append(
+                    f"- `{row.name}`: no runner; a message to it waits until the operator binds "
+                    f"one{marker}"
+                )
+                continue
             lines.append(f"- `{row.name}`: {_runner_summary(meta)}{marker}")
         lines.append("")
         lines.append(

@@ -392,7 +392,8 @@ async def test_get_agent_context_lists_the_real_roster(app, auth_headers, add_ag
     assert "`roster-two`" in context
     # The reading agent is marked, and only the reading agent.
     assert "`roster-one`: runner=native <- you" in context
-    assert "`roster-two`: runner=native\n" in context
+    # A peer with no runner is said to have none, not `runner=native` (F623).
+    assert "`roster-two`: no runner; a message to it waits" in context
 
 
 @pytest.mark.asyncio

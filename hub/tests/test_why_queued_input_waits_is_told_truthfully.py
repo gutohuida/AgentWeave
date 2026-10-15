@@ -96,7 +96,9 @@ async def test_a_message_within_the_budget_carries_no_note(app, auth_headers):
     assert response.status_code == 201, response.text
     body = response.json()
     assert not body["held_by_hop_budget"]
-    assert body["delivery_note"] is None
+    # `peer` has no runner, so the only hold left is that one (F623), never the budget's.
+    assert body["held"] == "no_runner"
+    assert "hop budget" not in body["delivery_note"]
 
 
 async def test_the_message_list_does_not_claim_a_hold_either_way(app, auth_headers):

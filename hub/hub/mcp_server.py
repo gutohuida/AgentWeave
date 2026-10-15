@@ -315,6 +315,10 @@ def send_message(
         # Recorded, so `success` stays true, but the sender must not report it delivered (F361).
         reply["held_by_hop_budget"] = True
         reply["delivery_note"] = result.get("delivery_note")
+    if result.get("held"):
+        # Either hold, the recipient's missing runner included (F623).
+        reply["held"] = result["held"]
+        reply["delivery_note"] = result.get("delivery_note")
     return reply
 
 

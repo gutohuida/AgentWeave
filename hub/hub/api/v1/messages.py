@@ -1,7 +1,7 @@
 """Message endpoints — POST/GET/PATCH."""
 
 from datetime import datetime, timezone
-from typing import List, Literal, Optional, Tuple
+from typing import List, Literal, NamedTuple, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, literal_column, or_, select
@@ -44,12 +44,29 @@ def held_note(msg_id: str, recipient: str, depth: int, budget: int) -> str:
     )
 
 
-def message_response(msg: Message, held: Optional[str]) -> MessageResponse:
-    """The send answer: the message, and whether the hop budget is holding it (`None` = not)."""
+def no_runner_note(msg_id: str, recipient: str) -> str:
+    """What the sender of a message to an agent with no runner is told (F623)."""
+    return (
+        f"Recorded as {msg_id}, but not delivered: {recipient} has no runner, so nothing can run "
+        f"it. {recipient} receives it when the operator binds one. Do not tell anyone it was "
+        "delivered; if it matters now, ask the operator with ask_user."
+    )
+
+
+class Held(NamedTuple):
+    """Why a recorded message is not on its way: `hop_budget` or `no_runner`, and the note."""
+
+    reason: str
+    note: str
+
+
+def message_response(msg: Message, held: Optional[Held]) -> MessageResponse:
+    """The send answer: the message, and what is holding it (`None` = nothing)."""
     response = MessageResponse.model_validate(msg)
     if held is not None:
-        response.held_by_hop_budget = True
-        response.delivery_note = held
+        response.held = held.reason
+        response.held_by_hop_budget = held.reason == "hop_budget"
+        response.delivery_note = held.note
     return response
 
 
@@ -60,7 +77,7 @@ async def create_message_for_actor(
     sender: str,
     run_id: Optional[str],
     session: AsyncSession,
-) -> Tuple[Message, Optional[str]]:
+) -> Tuple[Message, Optional[Held]]:
     if body.task_id:
         # Validated here, at the moment of the call, rather than at spawn. A task the sender cannot
         # see is a mistake worth learning about in the tool result they are already reading — not
@@ -400,10 +417,11 @@ async def create_message_for_actor(
     from ...turn_scheduler import schedule_accepted
 
     await schedule_accepted(project_id, body.recipient)
-    held_by_budget = (
-        held_note(msg.id, body.recipient, hop_depth, hop_budget) if hop_depth > hop_budget else None
-    )
-    return msg, held_by_budget
+    if hop_depth > hop_budget:
+        return msg, Held("hop_budget", held_note(msg.id, body.recipient, hop_depth, hop_budget))
+    if recipient_row.runner_id is None:
+        return msg, Held("no_runner", no_runner_note(msg.id, body.recipient))
+    return msg, None
 
 
 @router.post("", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
