@@ -411,8 +411,20 @@ class GateRefusal:
                 if failure.get("timed_out")
                 else f"exited {failure.get('exit_code')}"
             )
+            if failure.get("preexisting"):
+                how += " (and fails on main too)"
             tail = str(failure.get("output_tail") or "")[-CHECK_TAIL_IN_MESSAGE:].strip()
             parts.append(f"`{failure.get('name')}` {how}:" + NEWLINE + tail)
+        if state == "preexisting":
+            # F605 (fix-D13): no send-back line; the failure is main's, and the hold is the operator's.
+            return (
+                "This task's checks fail, and they fail on main too, so the failure is not this "
+                "task's work. "
+                + (NEWLINE * 2).join(parts)
+                + NEWLINE * 2
+                + "Approval waits on the operator: land it with an override reason, or fix main "
+                "first. A reviewer should not send it back for this."
+            )
         return (
             "This task's checks failed on the work approval would merge, so approving would land "
             "work that breaks the project. "
@@ -822,13 +834,17 @@ async def _check_checks(
         else:
             state = "not_run"
     results = list(run.results or []) if run is not None and view.state == "failed" else []
+    failing = [r for r in results if project_checks.failed(r)]
+    if failing and all(project_checks.preexisting(r) for r in failing):
+        # F605 (fix-D13): main fails the same checks, so this is not the task's; the operator's.
+        state = "preexisting"
     refusal.checks.append(
         {
             "state": state,
             "run_id": (
                 run.id if run is not None and view.state in ("failed", "error", "running") else None
             ),
-            "failing": [r for r in results if project_checks.failed(r)],
+            "failing": failing,
             "error": run.error if run is not None and view.state == "error" else "",
             "previous_error": previous_error,
         }
@@ -1002,6 +1018,11 @@ DIAGNOSTIC_HOLD_REMEDY = (
     "a requirement it serves cannot be satisfied as written; correct the document"
 )
 DRIFT_HOLD_REMEDY = "resolve the drift candidate on a requirement it serves"
+#: F605 (fix-D13): a check that fails on main too is nobody's to fix on this task.
+PREEXISTING_CHECKS_HOLD_REMEDY = (
+    "its checks fail on main too, so the failure is not its own; land it with an override "
+    "reason, or fix main first"
+)
 
 
 @dataclass(frozen=True)
@@ -1031,6 +1052,8 @@ def _operator_only_remedy(refusal: GateRefusal, *, may_accept: bool) -> Optional
     for entry in refusal.blocking:
         if entry.get("state") == requirement_coverage.DRIFTING:
             return DRIFT_HOLD_REMEDY
+    if any(entry.get("state") == "preexisting" for entry in refusal.checks):
+        return PREEXISTING_CHECKS_HOLD_REMEDY
     if may_accept:
         return None
     if refusal.unaccepted:
@@ -1063,13 +1086,18 @@ async def approval_held_for_operator(
     operator whatever the candidate is granted; anything else is logged at warning and is "not
     held", so no caller fails because a diagnostic could not be computed.
     """
-    from . import requirement_evidence, task_integration
+    from . import project_checks, requirement_evidence, task_integration
     from .spec_lifecycle import Actor
 
     try:
         awaiting = await task_integration.awaiting_targets(session, task)
         _, rigors = await _enforced_requirements(session, task)
-        if not awaiting and spec_rigor.GATE not in rigors.values():
+        if (
+            not awaiting
+            and spec_rigor.GATE not in rigors.values()
+            # F605: a check failing on main too holds approval for the operator.
+            and not await project_checks.configured_for(session, task.project_id)
+        ):
             return None
 
         token = task_integration.GIT_TIMEOUT_SECONDS.set(

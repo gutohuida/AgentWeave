@@ -10,11 +10,16 @@ from hub import project_checks
 from hub.api.v1.tasks import update_task_for_actor
 from hub.db.engine import async_session_factory
 from hub.db.models import Task, TaskCheckRun, TaskTransition
-from hub.requirement_gate import REVIEWER_SENDS_BACK_CHECKS, evaluate
+from hub.requirement_gate import (
+    PREEXISTING_CHECKS_HOLD_REMEDY,
+    REVIEWER_SENDS_BACK_CHECKS,
+    approval_held_for_operator,
+    evaluate,
+)
 from hub.schemas.tasks import TaskUpdate
 from hub.task_transitions import Actor
 
-from .test_project_checks_run import FAIL, PASS, _project, _runs, _task_with_work
+from .test_project_checks_run import FAIL, MAIN_FAIL, PASS, _project, _runs, _task_with_work
 from .test_task_integration import commit_on_branch, commits_on, git
 
 TASKS = "/api/v1/projects/proj-test/tasks"
@@ -299,3 +304,86 @@ async def test_a_land_refused_for_a_conflict_does_not_restart_the_checks(
     assert detail["unmergeable"], detail
     assert "does not merge cleanly" in detail["message"]
     assert [r.state for r in await _runs(task_id)] == ["error"]
+
+
+# --- F605 (fix-D13): a check that fails on main too is not the task's -----------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_check_failing_on_main_too_is_recorded_as_preexisting(app, tmp_path):
+    task_id, _ = await _task_with_work(tmp_path)
+    await _checked(task_id, [PASS, FAIL, MAIN_FAIL])
+
+    [run] = await _runs(task_id)
+    by_name = {r["name"]: r for r in run.results}
+    assert "on_main" not in by_name["ok"], "a passing check is not re-run on main"
+    assert by_name["tests"]["on_main"]["exit_code"] == 0 and not by_name["tests"]["preexisting"]
+    assert by_name["suite"]["on_main"]["exit_code"] == 1 and by_name["suite"]["preexisting"]
+
+
+@pytest.mark.asyncio
+async def test_only_preexisting_failures_are_held_for_the_operator_without_a_send_back(
+    app, auth_headers, tmp_path
+):
+    """On the sweep main's defect failed every task's checks; the gate told the reviewer to send
+    each task back and nothing was addressed to the operator."""
+    task_id, work = await _task_with_work(tmp_path)
+    await _checked(task_id, [MAIN_FAIL])
+
+    refused = await app.post(f"{TASKS}/{task_id}/land", headers=auth_headers)
+
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["checks"][0]["state"] == "preexisting"
+    assert "fail on main too" in detail["message"]
+    assert REVIEWER_SENDS_BACK_CHECKS not in detail["message"]
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        hold = await approval_held_for_operator(session, task, candidate="reviewer")
+    assert hold is not None and hold.remedy == PREEXISTING_CHECKS_HOLD_REMEDY
+    assert work not in commits_on(tmp_path, "main")
+
+
+@pytest.mark.asyncio
+async def test_a_new_failure_beside_a_preexisting_one_stays_the_authors(
+    app, auth_headers, tmp_path
+):
+    task_id, _ = await _task_with_work(tmp_path)
+    await _checked(task_id, [FAIL, MAIN_FAIL])
+
+    refused = await _approve(app, auth_headers, task_id)
+
+    detail = refused.json()["detail"]
+    assert detail["checks"][0]["state"] == "failed"
+    assert REVIEWER_SENDS_BACK_CHECKS in detail["message"]
+    assert "`suite` exited 1 (and fails on main too)" in detail["message"]
+    assert "`tests` exited 3:" in detail["message"]
+
+
+@pytest.mark.asyncio
+async def test_land_takes_the_operators_override_reason(app, auth_headers, tmp_path):
+    """The sweep's only exit was four PATCHes; Land now carries the override itself."""
+    task_id, work = await _task_with_work(tmp_path)
+    await _checked(task_id, [MAIN_FAIL])
+
+    landed = await app.post(
+        f"{TASKS}/{task_id}/land",
+        json={"override_checks_reason": "main carries the defect"},
+        headers=auth_headers,
+    )
+
+    assert landed.status_code == 200, landed.text
+    assert work in commits_on(tmp_path, "main")
+    async with async_session_factory() as session:
+        reasons = (
+            (
+                await session.execute(
+                    select(TaskTransition.override_reason).where(
+                        TaskTransition.task_id == task_id, TaskTransition.to_status == "approved"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert reasons == ["main carries the defect"]

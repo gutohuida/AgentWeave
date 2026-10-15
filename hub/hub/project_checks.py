@@ -262,6 +262,46 @@ def failed(result: Dict[str, Any]) -> bool:
     return bool(result.get("timed_out")) or result.get("exit_code") != 0
 
 
+def preexisting(result: Dict[str, Any]) -> bool:
+    """A failure main shares (F605): the same check failed on the main tip the run was cut from.
+    A run recorded before this field existed reads as not pre-existing, i.e. as before."""
+    return failed(result) and bool(result.get("preexisting"))
+
+
+def _record_main_result(result: Dict[str, Any], on_main: Dict[str, Any]) -> None:
+    result["on_main"] = {"exit_code": on_main["exit_code"], "timed_out": on_main["timed_out"]}
+    result["preexisting"] = failed(on_main)
+
+
+async def _check_main_too(
+    root: Path,
+    task_id: str,
+    main_sha: str,
+    checks: List[Dict[str, Any]],
+    results: List[Dict[str, Any]],
+) -> None:
+    """Run each failing check on the main tip as well, and record what main said (F605, D1).
+
+    Only failing checks, so a passing project pays nothing. Best-effort: a baseline that cannot be
+    taken leaves the results as they were, charged to the task as before.
+    """
+    failing = [r for r in results if failed(r)]
+    if not failing:
+        return
+    by_name = {check["name"]: check for check in checks}
+    try:
+        path = await asyncio.to_thread(_checkout, root, task_id, main_sha)
+        try:
+            for result in failing:
+                check = by_name.get(result["name"])
+                if check is not None:
+                    _record_main_result(result, await asyncio.to_thread(run_one, check, path))
+        finally:
+            await asyncio.to_thread(_remove_checkout, root, path)
+    except Exception:  # noqa: BLE001 -- the task's own result stands without main's
+        logger.warning("could not run task %s's failing checks on main", task_id, exc_info=True)
+
+
 # --- records -------------------------------------------------------------------------------------
 
 
@@ -441,6 +481,7 @@ async def _execute(
                     await _finish(run_id, merged_sha=merged, results=list(results))
             finally:
                 await asyncio.to_thread(_remove_checkout, root, path)
+            await _check_main_too(root, task_id, main_sha, checks, results)
             state = "failed" if any(failed(r) for r in results) else "passed"
             await _finish(run_id, state=state, merged_sha=merged, results=list(results))
     except Exception as exc:  # noqa: BLE001 -- a run must end recorded, never `running` forever

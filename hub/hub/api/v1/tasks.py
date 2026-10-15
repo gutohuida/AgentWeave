@@ -1811,9 +1811,16 @@ async def update_task(
     )
 
 
+class LandRequest(RequestModel):
+    """Land's optional body: the operator's reason to land over failing checks (F605)."""
+
+    override_checks_reason: Optional[str] = Field(default=None, max_length=2000)
+
+
 @router.post("/{task_id}/land", response_model=TaskResponse)
 async def land_task(
     task_id: str,
+    body: Optional[LandRequest] = None,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -1881,14 +1888,24 @@ async def land_task(
     # `test_the_gate_is_decided_before_anything_is_attempted`, which observes the call sequence,
     # fails. What is bought is ordering, which matters the moment a fourth step or a non-gate
     # refusal joins the sequence — not the response, which the transaction already covers.
-    refusal, _policy = await evaluate_approval(session, task, acting_run_id=None, start_checks=True)
+    # F605: the approval PATCH's override, in the one action that lands; operator-only by the route.
+    override = ((body.override_checks_reason if body else None) or "").strip() or None
+    refusal, _policy = await evaluate_approval(
+        session,
+        task,
+        acting_run_id=None,
+        start_checks=True,
+        override_checks_reason=override,
+    )
     if refusal.refuses:
         raise GateUnsatisfiedError(refusal)
     # Step one: the author's hold. `None` rather than the operator's name — the operator is not an
     # agent and `assignee` names agents.
     task.assignee = None
     await apply_transition(session, task, "under_review", actor)
-    transition = await apply_transition(session, task, "approved", actor)
+    transition = await apply_transition(
+        session, task, "approved", actor, override_checks_reason=override
+    )
     approval_report = list(getattr(transition, "reported_advisories", None) or [])
     # The same two the PATCH route does after a terminal transition, for the same reasons: a reason
     # that outlived its block describes something that already arrived, and anything still bound

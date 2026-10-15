@@ -67,6 +67,8 @@ CATCH_UP_TESTS = "hub/tests/test_an_agent_checkout_catches_up_with_main.py"
 CATCH_UP_DRIVE = "scripts/drive/d1015_f607_worktree_catch_up.py"
 CARRY_TESTS = "hub/tests/test_mid_turn_task_work_is_carried.py"
 CARRY_DRIVE = "scripts/drive/d1015_f603_mid_turn_claim.py"
+PREEXISTING_TESTS = "hub/tests/test_project_checks_gate.py"
+PREEXISTING_DRIVE = "scripts/drive/d1015_f605_preexisting_checks.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1240,6 +1242,24 @@ CHANGES = {
              "in an agent's own worktree bound to a task that takes its own checkout."),
         ],
     },
+    "f605": {
+        "document": "spec/changes/a-check-that-fails-on-main-too-is-not-the-tasks/spec.json",
+        "tasks": ["task-80dc16aced8c", "task-931fb71d1584", "task-cde11469d3b8"],
+        "evidence": [
+            ("FR-1", "task-80dc16aced8c", "test_result", PREEXISTING_TESTS,
+             "A failing check is re-run on main and records on_main and preexisting; a check that "
+             "fails only on the task is not pre-existing; a passing check is not re-run."),
+            ("FR-2", "task-931fb71d1584", "test_result", PREEXISTING_TESTS,
+             "Only pre-existing failures: state preexisting, no send-back line, an operator-only "
+             "hold; a new failure beside one stays the author's, the pre-existing one labelled."),
+            ("FR-2", "task-931fb71d1584", "manual_observation", PREEXISTING_DRIVE,
+             "Written first: on HEAD Land said the work breaks the project and told the reviewer to "
+             "send it back; after, it says the check fails on main too, held for the operator."),
+            ("FR-3", "task-cde11469d3b8", "manual_observation", PREEXISTING_DRIVE,
+             "Land with override_checks_reason lands the held task and the approved transition "
+             "records the reason (refused 409 on HEAD)."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1264,6 +1284,7 @@ CHANGE_FOLDS = {
     "f628": 'agent-run-sandboxing',
     "f607": 'workspace-isolation',
     "f603": 'workspace-isolation',
+    "f605": 'project-checks',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [

@@ -20,9 +20,20 @@ from .test_task_integration import commit_on_branch, git, make_repo, set_main_br
 
 PY = f'"{sys.executable}"'
 PASS = {"name": "ok", "command": f'{PY} -c "print(1)"', "timeout_seconds": 60}
+#: Fails where the task's work is (`_task_with_work` adds `feature.py`) and passes on main: the task
+#: broke it. F605 re-runs a failing check on main, so a check failing everywhere is MAIN_FAIL.
 FAIL = {
     "name": "tests",
-    "command": f"{PY} -c \"import sys; print('boom: 2 != 3'); sys.exit(3)\"",
+    "command": (
+        f"{PY} -c \"import os, sys; print('boom: 2 != 3'); "
+        f"sys.exit(3 if os.path.exists('feature.py') else 0)\""
+    ),
+    "timeout_seconds": 60,
+}
+#: Fails on main and on the task alike (F605: pre-existing).
+MAIN_FAIL = {
+    "name": "suite",
+    "command": f"{PY} -c \"import sys; print('main is broken'); sys.exit(1)\"",
     "timeout_seconds": 60,
 }
 
@@ -64,6 +75,7 @@ def test_a_target_that_conflicts_is_an_error_naming_it(tmp_path):
 
 
 def test_a_failing_check_records_its_exit_code_and_output(tmp_path):
+    (tmp_path / "feature.py").write_text("x = 1\n", encoding="utf-8")  # where FAIL fails
     result = project_checks.run_one(FAIL, tmp_path)
     assert result["exit_code"] == 3 and not result["timed_out"]
     assert "boom: 2 != 3" in result["output_tail"]
