@@ -1,0 +1,142 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub, a Haiku agent, and an operator whose ~/.claude/skills holds e2e-loop, handoff and resume",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f454_user_skills.py <project> (written first: all three listed on HEAD)",
+      "key": "drive",
+      "requirement": "project-only",
+      "then": "none of the operator's skills is listed",
+      "when": "the agent is asked to list its skills"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a directory with a CLAUDE.md rule and a .claude/skills/project-probe skill",
+      "how_to_check": "measured 2026-10-15 by hand (ZEBRA ... project-probe); the argv is pinned by hub/tests/test_runner_commands*.py",
+      "key": "manual",
+      "requirement": "project-kept",
+      "then": "the reply follows the CLAUDE.md rule and lists project-probe",
+      "when": "claude -p runs with --setting-sources project,local"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a claude runner",
+      "how_to_check": "pytest hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py",
+      "key": "flag",
+      "requirement": "not-overridable",
+      "then": "create is refused naming it",
+      "when": "its flags hold --setting-sources user"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "ddf7143579779558c8811ed0eb3393c01dc9945ba5872968aab13aeaaab35f5c",
+      "FR-2": "fbeb2027d2c64773e0e4ada366df891b115cd5ace21cdc929b9ffdb71e1ce500",
+      "FR-3": "1e131a36315939c805df8d38891f14a9bc2bc07c38aa2154f2b270216b18e325"
+    },
+    "high_water": 3,
+    "requirements": {
+      "not-overridable": "FR-3",
+      "project-kept": "FR-2",
+      "project-only": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2: it changes every Claude agent spawn (cross-cutting). Hazard: an operator who relied on a personal skill or hook inside Hub agents loses it; that is the intent. Rollback: revert.\nD1. In `runner_commands._build_claude_command`, the one builder of a Claude agent's argv, beside --strict-mcp-config (F531's precedent for 'only what the Hub gives').\nD2. `project,local`, not '': an empty value also drops the project's CLAUDE.md (F195's titler note), which agents need.\nD3. One-shot workers (titler, checkpoint) are out of scope: they already pass their own flags and run no tools.",
+  "evidence": {
+    "checked": [
+      "Hand test 2026-10-15: default lists e2e-loop/handoff/resume and plugin skills; project,local lists built-ins only; a project CLAUDE.md rule and project skill still load",
+      "Drive on :8031: the Hub agent lists the operator's skills"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "The Hub spawns `claude` with every setting source, so a Hub agent sees the operator's user-level skills (`~/.claude/skills`), plugin skills and user hooks. In the 2026-09-25 sweep a loop firing ran the operator's `e2e-loop` skill and created loops and commits nobody asked for; the operator's skills include ones that register Windows scheduled tasks. Re-driven 2026-10-15: a Haiku agent lists e2e-loop, handoff, resume, harness-audit and the anthropic-skills plugin among its skills.",
+  "requirements": [
+    {
+      "key": "project-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "What a Hub agent may do is the operator's decision through the Hub (charter, posture, tools), not whatever their personal configuration happens to hold.",
+      "statement": "Every Claude Code agent run the Hub spawns MUST pass --setting-sources project,local, so the operator's user-level skills, plugins, hooks and settings are not loaded."
+    },
+    {
+      "key": "project-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The project's CLAUDE.md, its .claude/settings*.json and its .claude/skills MUST still load."
+    },
+    {
+      "key": "not-overridable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A runner flag after the Hub's would win, as in F599.",
+      "statement": "A runner's flags MUST NOT carry --setting-sources (refused like the other posture flags)."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Claude Code agent runs"
+    ],
+    "non_goals": [
+      "Codex and Copilot user configuration (separate work, Copilot needs the work PC)",
+      "One-shot workers"
+    ]
+  },
+  "summary": "Every Claude Code agent run the Hub spawns passes --setting-sources project,local, so it loads the project's CLAUDE.md, settings and skills and none of the operator's personal ~/.claude skills, plugins, hooks or settings (F454).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1015_f454_user_skills.py",
+      "files": [
+        "scripts/drive/d1015_f454_user_skills.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "project-only"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "runner_commands.py; runner_flag_rules.py; argv goldens",
+      "files": [
+        "hub/hub/runner_commands.py",
+        "hub/hub/runner_flag_rules.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "project-only",
+        "project-kept",
+        "not-overridable"
+      ],
+      "reviewer": null,
+      "title": "--setting-sources project,local on every Claude agent run"
+    }
+  ],
+  "title": "A Hub agent runs with the project's settings, not the operator's"
+}
