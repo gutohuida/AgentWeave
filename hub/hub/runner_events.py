@@ -17,7 +17,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .workspace_writes import written_paths
 
@@ -118,6 +118,57 @@ def _redaction_for(match: "re.Match[str]") -> str:
         )
         for segment in text.split("/")
     )
+
+
+#: The secrets an agent's prose can carry, by shape (F602): the Hub's own keys and run tokens, an
+#: `sk-` provider key, and the value of a credential-named field. Prose gets these and nothing
+#: else -- not `_SECRET_VALUE_RE`'s high-entropy catch-all, which would eat the commit SHAs, paths
+#: and identifiers agents write in replies.
+_TEXT_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_])(?:aw_live_|aw_run_|sk-)[A-Za-z0-9_=-]+")
+_TEXT_FIELD_RE = re.compile(
+    r"(?i)(?<![A-Za-z0-9_])"
+    r"(?P<name>api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|password)"
+    r"(?P<sep>[\"']?\s*[:=]\s*[\"']?)"
+    # At least one non-letter: a secret has one, and the prose word after `password:` does not.
+    r"(?P<value>(?=[^\s\"',;}\]]*[^A-Za-z\s\"',;}\]])[^\s\"',;}\]]{4,})"
+)
+
+
+_TEXT_FIELD_NAME_RE = re.compile(
+    r"(?i)api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|password"
+)
+
+
+def redact_text_secrets(value: Any) -> Any:
+    """*value* with the named secret patterns replaced by `<redacted>`; everything else as written.
+
+    Through dicts, lists and tuples; a dict entry whose key is a credential name (`{"api_key":
+    "x"}`) has its string value redacted, since there the name and the value are separate strings.
+    """
+    if isinstance(value, str):
+        value = _TEXT_TOKEN_RE.sub("<redacted>", value)
+        return _TEXT_FIELD_RE.sub(lambda m: m.group("name") + m.group("sep") + "<redacted>", value)
+    if isinstance(value, dict):
+        return {
+            key: (
+                "<redacted>"
+                if isinstance(item, str) and _TEXT_FIELD_NAME_RE.fullmatch(str(key))
+                else redact_text_secrets(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_text_secrets(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(redact_text_secrets(item) for item in value)
+    return value
+
+
+def text_secret_spans(text: str) -> List[Tuple[int, int]]:
+    """Where in *text* `redact_text_secrets` would redact: whole tokens, and fields' values."""
+    spans = [match.span() for match in _TEXT_TOKEN_RE.finditer(text)]
+    spans.extend(match.span("value") for match in _TEXT_FIELD_RE.finditer(text))
+    return spans
 
 
 def redact_secrets(value: Any) -> Any:

@@ -35,8 +35,14 @@ REDACTED = "<redacted>"
 
 #: The kinds whose content is the model's own prose, joined across events (design D2).
 STREAM_KINDS = ("text", "thinking")
+#: How much of a run's prose is carried for the named patterns (F602): longer than a Hub key, a
+#: run token or a provider key, and a credential field's name and separator before its value.
+PATTERN_TAIL = 160
 
 _by_run: Dict[str, Tuple[str, ...]] = {}
+#: Runs between `register` and `forget`: the ones whose prose is carried for the named patterns
+#: (F602). A run never registered, or already forgotten, leaves no state behind.
+_live: set = set()
 #: The last `L - 1` characters of each run's recorded text, unredacted, trailing whitespace
 #: removed (`L` the longest registered value): what a value begun there can still complete.
 _tail_by_run: Dict[str, str] = {}
@@ -44,11 +50,13 @@ _tail_by_run: Dict[str, str] = {}
 
 def register(run_id: str, values: Iterable[Optional[str]]) -> None:
     """Hold *values* for *run_id*; empty and missing values are ignored, so a run with nothing to
-    hide registers nothing. Longest first, so a value containing another is replaced whole.
+    hide registers no values -- it is still marked live, so its prose is carried for the named
+    patterns (F602) until `forget`. Longest first, so a value containing another is replaced whole.
 
     Each value is kept stripped, and as written too when that differs (design D7): a key resolved
     with a trailing newline is written by the model without it. A value that strips to nothing
     is dropped, since it would otherwise replace every run of spaces."""
+    _live.add(run_id)
     kept = set()
     for value in values:
         if not value or not value.strip():
@@ -60,6 +68,7 @@ def register(run_id: str, values: Iterable[Optional[str]]) -> None:
 
 
 def forget(run_id: str) -> None:
+    _live.discard(run_id)
     _by_run.pop(run_id, None)
     _tail_by_run.pop(run_id, None)
 
@@ -129,13 +138,14 @@ def scrub_stream(run_id: Optional[str], event: "RunEvent") -> "RunEvent":
     """*event* with each registered value of *run_id* that crosses into it from the run's earlier
     text, or dangles from its end, replaced (design D1). Call once per recorded event, in
     `sequence` order. Any kind but `text`/`thinking` is returned as it is and leaves the carried
-    text alone, so the join spans tool, error and status rows. A run with nothing registered gets
-    its event back unchanged and leaves no state."""
-    if event.kind not in STREAM_KINDS:
+    text alone, so the join spans tool, error and status rows. The named secret patterns
+    (`runner_events.text_secret_spans`) are matched over the same join for every run, registered
+    values or not (F602), so every run carries a tail; `forget` clears it at the run's end."""
+    if event.kind not in STREAM_KINDS or run_id is None or run_id not in _live:
         return event
+    from .runner_events import text_secret_spans
+
     secrets = registered(run_id)
-    if not secrets or run_id is None:
-        return event
     content = event.content
     tail = _tail_by_run.get(run_id, "")
     # Whitespace at an event boundary is skipped when joining: the reader cannot see it, and a
@@ -150,6 +160,11 @@ def scrub_stream(run_id: Optional[str], event: "RunEvent") -> "RunEvent":
             for index in range(at, at + len(secret)):
                 marked[index] = True
             at = joined.find(secret, at + 1)
+    # The named patterns too, for every run (F602): a key that starts in the carried tail and ends
+    # here is redacted here, though neither half matched in its own event.
+    for start, end in text_secret_spans(joined):
+        for index in range(start, end):
+            marked[index] = True
     trimmed = joined.rstrip()
     for secret in secrets:
         for size in range(len(secret) - 1, dangling_minimum(secret) - 1, -1):
@@ -167,7 +182,7 @@ def scrub_stream(run_id: Optional[str], event: "RunEvent") -> "RunEvent":
         else:
             pieces.append(joined[index])
             in_mark = False
-    keep = len(secrets[0]) - 1
+    keep = max(len(secrets[0]) - 1 if secrets else 0, PATTERN_TAIL)
     # Assigned last, from the unredacted text, so a raise above leaves the tail as it was and a
     # value split three ways is still found.
     _tail_by_run[run_id] = trimmed[-keep:] if keep > 0 else ""

@@ -17,6 +17,7 @@ from . import run_secrets
 from .conversations import latest_open_conversation, new_conversation
 from .db.models import AgentOutput, Conversation, EventLog, Run
 from .model_catalog import context_window_for_model
+from .runner_events import redact_text_secrets
 from .sse import sse_manager
 from .utils import persist_event, short_id
 
@@ -48,6 +49,11 @@ async def record_agent_output(
     """
     content = run_secrets.scrub(run_id, content)
     payload = run_secrets.scrub(run_id, payload)
+    # And the named secret patterns, for every kind and caller (F602): a reply quoting a key, or the
+    # operator's own `POST .../output`, used to store it verbatim while the tool rows said
+    # <redacted>. Stateless, so the locked-database retry is safe; splits are `scrub_stream`'s.
+    content = redact_text_secrets(content)
+    payload = redact_text_secrets(payload)
     if conversation_id is None and run_id:
         run_result = await db.execute(
             select(Run.conversation_id).where(
