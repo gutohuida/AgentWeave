@@ -362,6 +362,18 @@ class TriggerAgentRequest(RequestModel):
         "task has no evidence naming a commit, because then there is nothing to review.",
     )
 
+    @field_validator("message")
+    @classmethod
+    def _refuse_an_empty_message(cls, v: str) -> str:
+        # A turn with nothing to say is a paid run that can only guess (F620). Continuing a
+        # conversation without new words is `POST /conversations/{id}/continue`.
+        if not v.strip():
+            raise ValueError(
+                "message is empty: say what the agent should do, or use Continue on the "
+                "conversation to resume without a new message"
+            )
+        return v
+
     @field_validator("spec_document")
     @classmethod
     def _validate_spec_document(cls, v: Optional[str]) -> Optional[str]:

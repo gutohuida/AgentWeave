@@ -217,6 +217,36 @@ async def test_invalid_session_mode_is_rejected(app, auth_headers):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("message", ["", "   ", "\n\t "])
+async def test_an_empty_message_is_refused_before_any_run(app, auth_headers, bind_runner, message):
+    """F620: an empty message started a paid run with nothing to say. It is refused, naming the
+    field, and nothing is spawned or queued."""
+    await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"empty-msg": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    await bind_runner("empty-msg", cli="claude")
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn") as spawn:  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "empty-msg", "message": message},
+                headers=auth_headers,
+            )
+
+    assert resp.status_code == 422
+    assert "message" in json.dumps(resp.json())
+    assert "empty" in json.dumps(resp.json())
+    spawn.assert_not_called()
+    status = await app.get(
+        "/api/v1/projects/proj-test/queue/empty-msg/status", headers=auth_headers
+    )
+    assert status.json()["waiting_count"] == 0
+
+
+@pytest.mark.asyncio
 async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",
