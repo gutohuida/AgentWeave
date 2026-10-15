@@ -479,6 +479,24 @@
       "requirement": "an-agent-checkout-catches-up-with-main-never-destructive",
       "then": "fast-forwarded, merged, untouched, untouched with the merge aborted",
       "when": "the worktree is behind, diverged, dirty, or conflicting"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch project and a Haiku agent",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f603_mid_turn_claim.py <project> (written first: no task branch on HEAD)",
+      "key": "work-from-a-mid-turn-claim-reaches-the-task-drive",
+      "requirement": "work-from-a-mid-turn-claim-reaches-the-task-carried",
+      "then": "the task's branch holds FIX.txt",
+      "when": "an untasked turn claims a task, writes FIX.txt and completes the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "real disposable repositories",
+      "how_to_check": "pytest hub/tests/test_mid_turn_task_work_is_carried.py",
+      "key": "work-from-a-mid-turn-claim-reaches-the-task-unit",
+      "requirement": "work-from-a-mid-turn-claim-reaches-the-task-never-destructive",
+      "then": "created and carried, carried, untouched, untouched with the pick aborted",
+      "when": "the turn's commits are carried into a missing, an existing, a dirty and a conflicting task checkout"
     }
   ],
   "algorithms": [],
@@ -504,7 +522,10 @@
       "FR-25": "6b54ffbf563e5fb818a4b88c19c32cd6904787594ed13dfb2286a1de0bb24bc3",
       "FR-26": "65794cb703e9da6938bf6e929f50051c473b2856fdbd53b2d3b21403908f0654",
       "FR-27": "1fb8b07c4e89bd13a0c9b881fa6ad9dcf8186438ccd9222f813591b4560b1d8f",
+      "FR-28": "1535af91a815283c417ee1651415e37dc1d7f2cee262529933c743e79f4e206a",
+      "FR-29": "981fb6f795d75375ad833855062b94d71dd3c6e1958d5d2338897ed95400f1c5",
       "FR-3": "578c57590967474c1d6097b5947ba8aa5c9b0b55a4f0e5ba74ac23d868def107",
+      "FR-30": "4c3f0720eda2703c5ee76a37aa3b8a16d55b8c2ec5ab4916be23da575a03af96",
       "FR-4": "779c4ad1e9e50a999c045132129fb97926b8a2e6f3f0bbb6b9fe353dfb87913b",
       "FR-5": "06f5abef393dd426ff6c95abe633ce57112c8f62672e60577c0118d2a5dffb09",
       "FR-6": "a72a8e0e1823e288f65cbbb6de4f70d6ea454b337e540023efe7d46da14c6426",
@@ -512,7 +533,7 @@
       "FR-8": "fe2379d83fa6d75cf1038e6cb5dd13e7668a0d84166b3b9902b18318360de9a9",
       "FR-9": "8e45d687d7b57ccd3956b9d857a30802194af946eeb690fa3ec188a9921496c0"
     },
-    "high_water": 27,
+    "high_water": 30,
     "requirements": {
       "a-conflict-is-reported-between-workspaces-not-between-agents": "FR-8",
       "a-finished-task-s-checkout-is-released-and-its-branch-is-not": "FR-20",
@@ -540,7 +561,10 @@
       "the-hub-owns-two-workspace-namespaces-that-cannot-collide": "FR-1",
       "where-evidence-does-not-govern-the-merge-a-review-turn-revie": "FR-19",
       "whether-an-agent-works-in-its-own-checkout-does-not-change-w": "FR-11",
-      "work-already-under-way-keeps-the-checkout-it-started-in": "FR-22"
+      "work-already-under-way-keeps-the-checkout-it-started-in": "FR-22",
+      "work-from-a-mid-turn-claim-reaches-the-task-carried": "FR-28",
+      "work-from-a-mid-turn-claim-reaches-the-task-never-destructive": "FR-29",
+      "work-from-a-mid-turn-claim-reaches-the-task-scope": "FR-30"
     },
     "retired": {}
   },
@@ -758,6 +782,27 @@
       "party": null,
       "rationale": null,
       "statement": "Task checkouts, review checkouts and read-only agents MUST be unaffected."
+    },
+    {
+      "key": "work-from-a-mid-turn-claim-reaches-the-task-carried",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The review and the merge read the task's branch, not the agent's.",
+      "statement": "When a run that executed in an agent's own worktree ends bound to a task that takes its own checkout, the non-merge commits that run made (from the worktree's HEAD at spawn to its HEAD after the run's snapshot) MUST be cherry-picked onto the task's branch, created at the integration base with its approved prerequisites if it does not exist."
+    },
+    {
+      "key": "work-from-a-mid-turn-claim-reaches-the-task-never-destructive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task checkout with uncommitted changes, one held by another agent's running turn, or a cherry-pick that conflicts MUST leave both branches as they were (the cherry-pick aborted) and record a warn event naming the task, the commits and the reason."
+    },
+    {
+      "key": "work-from-a-mid-turn-claim-reaches-the-task-scope",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A run that executed in the task's own checkout, a review run, a read-only agent and a task that does not take its own checkout MUST be unaffected."
     }
   ],
   "schema_version": 1,

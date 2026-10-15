@@ -65,6 +65,8 @@ SETTINGS_DRIVE = "scripts/drive/d1015_f454_user_skills.py"
 ACCEPT_EDITS_DRIVE = "scripts/drive/d1015_f628_accept_edits_card.py"
 CATCH_UP_TESTS = "hub/tests/test_an_agent_checkout_catches_up_with_main.py"
 CATCH_UP_DRIVE = "scripts/drive/d1015_f607_worktree_catch_up.py"
+CARRY_TESTS = "hub/tests/test_mid_turn_task_work_is_carried.py"
+CARRY_DRIVE = "scripts/drive/d1015_f603_mid_turn_claim.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1219,6 +1221,25 @@ CHANGES = {
              "on the agent arm (task checkouts keep their own)."),
         ],
     },
+    "f603": {
+        "document": "spec/changes/work-from-a-mid-turn-claim-reaches-the-task/spec.json",
+        "commit": "3d17425",
+        "tasks": ["task-d91da651ede5", "task-8c07fdbaa183"],
+        "evidence": [
+            ("FR-1", "task-8c07fdbaa183", "test_result", CARRY_TESTS,
+             "The turn's commits reach a task branch that did not exist, and only the turn's own "
+             "range: the agent's earlier work is not carried."),
+            ("FR-1", "task-d91da651ede5", "manual_observation", CARRY_DRIVE,
+             "Written first: on HEAD a mid-turn claim left no task branch; after, the task's branch "
+             "holds the turn's FIX.txt (5/5)."),
+            ("FR-2", "task-8c07fdbaa183", "test_result", CARRY_TESTS,
+             "A dirty task checkout and a conflicting pick leave the task branch as it was, with no "
+             "half-done pick; the caller records task_work_not_carried."),
+            ("FR-3", "task-8c07fdbaa183", "test_result", CARRY_TESTS,
+             "A turn that committed nothing carries nothing; the finalize hook acts only for a run "
+             "in an agent's own worktree bound to a task that takes its own checkout."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1242,6 +1263,7 @@ CHANGE_FOLDS = {
     "f454": 'agent-run-sandboxing',
     "f628": 'agent-run-sandboxing',
     "f607": 'workspace-isolation',
+    "f603": 'workspace-isolation',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
