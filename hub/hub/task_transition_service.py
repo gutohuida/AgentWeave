@@ -591,6 +591,16 @@ async def _guard_run_holds_the_task(
         return
 
     if run.task_id == task.id:
+        # Bound, but a reviewer's run is bound to the task it inspects (F606): in one turn the
+        # tester sent dev1's task back, then moved it to in_progress and completed itself, became
+        # its recorded completer, and the flow refused to review it. A run that gave the task a
+        # verdict, or took it for review while not its assignee, does not then work it.
+        if await _run_reviewed_the_task(session, run, task):
+            raise RunNotBoundError(
+                f"This run cannot move task {task.id} to {to_status}: it reviewed this task, and "
+                f"only its assignee ({task.assignee or 'nobody yet'}) works it. Leave your verdict "
+                f"as it stands; the author picks the task up from here."
+            )
         return
 
     if to_status == "in_progress" and run.task_id is None:
@@ -620,6 +630,27 @@ async def _guard_run_holds_the_task(
         f"takes at most one. To work this task, start a run bound to it — or, if you meant to "
         f"report on work you did not do, say so rather than moving its status."
     )
+
+
+async def _run_reviewed_the_task(session: AsyncSession, run: Run, task: Task) -> bool:
+    """Whether *run* gave *task* a verdict (`revision_needed`), or took it to `under_review` while
+    another agent is its assignee (F606). Read from the task's own history, by run id."""
+    moves = (
+        (
+            await session.execute(
+                select(TaskTransition.to_status).where(
+                    TaskTransition.task_id == task.id,
+                    TaskTransition.run_id == run.id,
+                    TaskTransition.to_status.in_(("revision_needed", "under_review")),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if "revision_needed" in moves:
+        return True
+    return "under_review" in moves and bool(task.assignee) and task.assignee != run.agent
 
 
 def guard_entry_status(status: str) -> None:

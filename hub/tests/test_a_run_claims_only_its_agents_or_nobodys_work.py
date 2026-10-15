@@ -111,3 +111,74 @@ async def test_the_operator_moves_another_agents_task_as_before(app):
         await session.commit()
 
     assert (await _state("task-f450-operator"))[:2] == ("in_progress", "alpha")
+
+
+async def test_a_reviewer_cannot_take_back_its_own_send_back(app):
+    """F606: in one turn the tester sent dev1's task back, then moved it to in_progress and to
+    completed itself, becoming its recorded completer, after which the flow refused to review it.
+    A run that gave the verdict may not then work the task; only its assignee does."""
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id="task-f606",
+                project_id="proj-test",
+                title="dev1's work",
+                status="under_review",
+                assignee="dev1",
+            )
+        )
+        session.add(
+            Run(
+                id="run-f606",
+                project_id="proj-test",
+                agent="tester",
+                status="running",
+                task_id="task-f606",
+            )
+        )
+        await session.commit()
+
+    async with async_session_factory() as session:
+        task = await session.get(Task, "task-f606")
+        await apply_transition(session, task, "revision_needed", run_actor("run-f606", "tester"))
+        await session.commit()
+
+    async with async_session_factory() as session:
+        task = await session.get(Task, "task-f606")
+        with pytest.raises(RunNotBoundError) as excinfo:
+            await apply_transition(session, task, "in_progress", run_actor("run-f606", "tester"))
+    assert "dev1" in str(excinfo.value)
+
+    # And from in_progress (as if dev1 had picked it up), the tester's run still cannot complete it.
+    async with async_session_factory() as session:
+        task = await session.get(Task, "task-f606")
+        task.status = "in_progress"
+        await session.commit()
+    async with async_session_factory() as session:
+        task = await session.get(Task, "task-f606")
+        with pytest.raises(RunNotBoundError):
+            await apply_transition(session, task, "completed", run_actor("run-f606", "tester"))
+        task.status = "revision_needed"
+        await session.commit()
+
+    async with async_session_factory() as session:
+        task = await session.get(Task, "task-f606")
+        movers = (
+            await session.execute(
+                select(TaskTransition.actor_agent, TaskTransition.to_status).where(
+                    TaskTransition.task_id == "task-f606"
+                )
+            )
+        ).all()
+    assert task.status == "revision_needed" and task.assignee == "dev1"
+    assert movers == [("tester", "revision_needed")]
+
+
+async def test_the_assignee_works_the_task_after_a_send_back(app):
+    """The control: dev1's own run takes the task back up as before."""
+    await _setup("task-f606-ok", status="revision_needed", assignee="dev1", run_agent="dev1")
+    async with async_session_factory() as session:
+        task = await session.get(Task, "task-f606-ok")
+        await apply_transition(session, task, "in_progress", run_actor("run-task-f606-ok", "dev1"))
+        await session.commit()
+    assert (await _state("task-f606-ok"))[0] == "in_progress"
