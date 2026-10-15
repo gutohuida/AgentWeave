@@ -330,7 +330,9 @@ async def test_a_task_with_no_evidence_is_refused_before_anything_spawns(
     response = await _trigger_review(app, auth_headers)
 
     assert response.status_code == 409
-    assert "no recorded evidence" in response.json()["detail"]
+    # F622 (D7): a task with no requirements is reviewed at its own branch, so what it lacks is
+    # named as the branch, not as evidence nobody could record.
+    assert "has no branch to review" in response.json()["detail"]
     assert not worktrees.review_path(repo, "critic").exists()
 
 

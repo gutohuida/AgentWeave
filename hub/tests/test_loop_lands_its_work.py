@@ -282,11 +282,13 @@ async def test_retrying_after_the_work_merged_says_so_rather_than_repeating_a_sk
 
 
 @pytest.mark.asyncio
-async def test_a_loop_task_with_no_loop_at_all_is_untouched(app, auth_headers, builder, tmp_path):
-    """An ordinary task — no loop — keeps today's behaviour exactly.
-
-    Arm 1 of the resolver. The commit on the task's own branch is deliberately present, so if a
-    later change ever answered "branch tip" for a task with `loop_id IS NULL`, this fails.
+async def test_an_ordinary_task_with_no_requirements_lands_its_branch_tip(
+    app, auth_headers, builder, tmp_path
+):
+    """**Inverted for F622 (decision D7, operator 2026-10-15).** This used to pin an ordinary task
+    with no requirement link and no evidence to `NOTHING_TO_MERGE`: approved, Landed, and its work
+    never reached main, with nothing anyone could record to change that. With no requirements, the
+    approved review is the gate, so the task's own branch tip merges (`review_alone_gates`).
     """
     make_repo(tmp_path)
     await set_main_branch("main")
@@ -304,9 +306,9 @@ async def test_a_loop_task_with_no_loop_at_all_is_untouched(app, auth_headers, b
     assert approved.status_code == 200, approved.text
 
     recorded = await integrations(app, auth_headers, task)
-    assert [row["outcome"] for row in recorded] == [task_integration.SKIPPED]
-    assert recorded[0]["reason"] == task_integration.NOTHING_TO_MERGE
-    assert work not in commits_on(tmp_path, "main")
+    assert [row["outcome"] for row in recorded] == [task_integration.MERGED], recorded
+    assert work in commits_on(tmp_path, "main")
+    assert "ordinary.py" in files_on(tmp_path, "main")
 
 
 @pytest.mark.asyncio

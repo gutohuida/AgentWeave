@@ -250,17 +250,22 @@ async def test_ordinary_task_with_evidence(
     assert context.commit_sha == c
 
 
-async def test_ordinary_task_without_evidence_is_refused_as_today(
+async def test_ordinary_task_without_requirements_is_reviewed_at_its_branch_tip(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
 ):
+    """**Inverted for F622 / wpc-obs-1 (decision D7, operator 2026-10-15).** A task with no
+    requirement link and no evidence used to be refused as missing evidence nobody could ever
+    record, so a project with no spec could not get a review at all. Its review is now given the
+    task's own branch tip, as a documentless loop's unlinked task already was."""
     repo = await _repo(tmp_path, bind_project_workspace, monkeypatch)
     task_id = await _task("task-f510000000a5", loop_id=None)
     _branch_work(repo, task_id)
 
-    response = await _request_review(app, auth_headers, bind_runner, task_id)
+    async with async_session_factory() as db:
+        target = await task_integration.review_target(db, await db.get(Task, task_id), root=repo)
 
-    assert response.status_code == 409, response.text
-    assert NO_EVIDENCE_WORDS in response.json()["detail"]
+    assert target.resolved, target
+    assert target.branch == worktrees.task_branch_name(task_id)
 
 
 async def test_flow_task_unchanged(

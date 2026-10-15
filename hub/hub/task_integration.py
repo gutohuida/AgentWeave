@@ -459,6 +459,25 @@ async def evidence_governs(session: AsyncSession, task: Task) -> bool:
     return await task_has_requirement_links(session, task)
 
 
+async def review_alone_gates(session: AsyncSession, task: Task) -> bool:
+    """Whether *task*'s approved review is the whole gate (F622, decision D7, operator 2026-10-15).
+
+    A loopless task with no requirement link **and** no evidence of any kind -- a task made by
+    hand, outside every document. Nothing could ever be recorded for it in a project with no
+    requirements, so where evidence governs its Land skipped with `NOTHING_TO_MERGE` and its review
+    was refused as missing evidence, and its work never reached main. It merges, and is reviewed
+    at, its own branch tip instead. A task with evidence keeps evidence governing (D10: the source
+    is not switched once evidence exists).
+    """
+    if task.loop_id is not None or await task_has_requirement_links(session, task):
+        return False
+    return (
+        await session.execute(
+            select(RequirementEvidence.id).where(RequirementEvidence.task_id == task.id).limit(1)
+        )
+    ).first() is None
+
+
 async def merge_targets(session: AsyncSession, task: Task, root: Path) -> List[Target]:
     """What approving *task* would actually merge — the commits, whatever their source (design D5).
 
@@ -475,7 +494,7 @@ async def merge_targets(session: AsyncSession, task: Task, root: Path) -> List[T
     An empty list means different things on the two routes, and the callers say so rather than
     collapsing them: `NOTHING_TO_MERGE` where evidence governs, `NO_TASK_BRANCH` where it does not.
     """
-    if await evidence_governs(session, task):
+    if await evidence_governs(session, task) and not await review_alone_gates(session, task):
         accepted = await _targets(session, task, requirement_evidence.ACCEPTED)
         return await asyncio.to_thread(reduce_by_ancestry, root, accepted)
     tip = await asyncio.to_thread(task_branch_tip, root, task.id)
@@ -501,7 +520,7 @@ async def review_target(
     *root* is the repository; omitted, it is resolved from the project, and only on the branch-tip
     arm, so an evidence-governed task never pays for it.
     """
-    if await evidence_governs(session, task):
+    if await evidence_governs(session, task) and not await review_alone_gates(session, task):
         return await requirement_evidence.commit_for_task_review(session, task.id)
     if root is None:
         from .project_workspace import resolve_project_workspace
