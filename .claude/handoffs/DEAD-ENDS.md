@@ -2415,3 +2415,13 @@ disappears is indistinguishable from one that was forgotten.
 - **conftest stubs `worktrees.resolve_agent_workspace` and `ensure_task_worktree` to return the repo root** (`_no_real_worktree_provision`). A worktree test must capture the real functions at import, restore them with monkeypatch, and assert the worktree is not the repo -- otherwise it passes without testing anything. (2026-10-15)
 - **`test_permission_approver.py::test_another_existing_drive_is_outside` is flaky under xdist** (two workers `subst` the same drive letter); it passes alone. Chain commits with `&&` after a test run, never `;` -- a `;` committed past it once. (2026-10-15)
 - **A drive script whose `main()` raises must not print ALL PASS**: append the exception to `failures` in an `except` before `finally` (the 2026-10-15 drives do). (2026-10-15)
+
+## 2026-10-15 (interactive fix session, S3)
+
+- **`POST /tasks/{id}/land` takes only a `completed` task;** an `under_review` one answers 409 "landing carries *completed* work". A drive that moves the task to `under_review` first never reaches the gate, and checks that only look for "no bad sentence" then pass vacuously -- assert the refusal's `detail.code == "gate_unsatisfied"`. (2026-10-15)
+- **A drive document approved in one PUT needs `"approve_anyway": True`** on `POST .../documents/phase?to=approved`; without it the answer has no `tasks_created` (approval_warnings, steps_skipped). (2026-10-15)
+- **In hub tests, `POST /session/sync` states the whole roster:** a second call for another agent drops the first ("is not an agent in this project"). Sync every agent a test needs in one call. (2026-10-15)
+- **`test_pty_runner.py::TestProcessSessionSpawn::test_terminate_stops_a_long_running_process` fails under load** (full xdist suite while scratch Hubs and a drive run); passes 3/3 alone. (2026-10-15)
+- **Completing a task starts its check run** (`task_transition_service.py:874`), before any Land; count check runs from after completion when asserting what Land starts. (2026-10-15)
+- **`close_change.py` evidence: two rows for one requirement on one task at one commit are refused (409) even when their kinds differ** (test_result vs manual_observation); the first stands. Point them at different tasks or accept the one. (2026-10-15)
+- **To show a drive failing "before", start a second scratch Hub on the committed file** (`git show HEAD:<file> > <file>`, `hub-up` on another port and profile, then restore the edited copy from the scratchpad). The Hub keeps the module it imported at startup. Wait for any running pytest first: workers import late. (2026-10-15)
