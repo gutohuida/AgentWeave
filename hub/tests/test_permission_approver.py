@@ -1558,13 +1558,23 @@ def test_the_workspace_posture_emits_both_flags_exactly_once():
     assert argv[argv.index("--permission-prompt-tool") + 1] == CLAUDE_PERMISSION_PROMPT_TOOL
 
 
-@pytest.mark.parametrize("posture", ["acceptEdits", "bypassPermissions"])
+@pytest.mark.parametrize("posture", ["bypassPermissions"])
 def test_postures_that_decide_nothing_emit_no_approver_flag(posture):
     """`manual` is excluded deliberately — since 2026-08-07 it routes to the operator through the
-    same approver, and has its own test below."""
+    same approver, and has its own test below. `acceptEdits` left this list for F628 (fix-D12)."""
     argv = _claude_argv(control_overrides={"permission_mode": posture})
     assert "--permission-prompt-tool" not in argv
     assert argv[argv.index("--permission-mode") + 1] == posture
+
+
+def test_edit_files_names_the_approver_and_keeps_its_own_mode():
+    """F628 (decision fix-D12): Claude still approves its own edits under acceptEdits; whatever it
+    would ask a person about now reaches the operator through the approver instead of a refusal
+    with no card."""
+    argv = _claude_argv(control_overrides={"permission_mode": "acceptEdits"})
+    assert argv[argv.index("--permission-mode") + 1] == "acceptEdits"
+    assert argv.count("--permission-prompt-tool") == 1
+    assert argv[argv.index("--permission-prompt-tool") + 1] == CLAUDE_PERMISSION_PROMPT_TOOL
 
 
 def test_the_default_posture_is_the_workspace_one_and_names_its_approver():

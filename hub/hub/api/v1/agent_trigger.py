@@ -127,7 +127,7 @@ from ...run_task_binding import (
 from ...runner_adapters import ADAPTERS, build_command, get_adapter, resolve_access_axes
 from ...runner_adapters.base import RpcCallbacks as TransportRpcCallbacks
 from ...runner_adapters.base import RpcTransport, RpcTurnRequest, RunnerAdapter, StreamTransport
-from ...runner_commands import OPERATOR_POSTURE, UnsupportedRunnerError
+from ...runner_commands import OPERATOR_PERMISSION_MODES, OPERATOR_POSTURE, UnsupportedRunnerError
 from ...runner_events import AccountingSample, diagnostic_event, status_event
 from ...runner_provider import has_provider, provider_override_problem, runner_probe_config
 from ...scheduler import (
@@ -1645,7 +1645,7 @@ async def _trigger_agent_directly(
     prepend_run_path(env, launcher_dir)
     # Which approver posture this run is under. The approval tool serves both, and only this
     # tells it whether to decide against the workspace itself or put the call to the operator.
-    if (control_overrides or {}).get("permission_mode") == "manual":
+    if (control_overrides or {}).get("permission_mode") in OPERATOR_PERMISSION_MODES:
         env["AW_PERMISSION_POSTURE"] = OPERATOR_POSTURE
     # How long this agent waits on the operator. Set only when configured — an absent variable is
     # what tells the tool to use its own default, so writing one unconditionally would turn every

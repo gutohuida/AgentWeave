@@ -163,7 +163,8 @@ async def test_a_conversations_own_choice_beats_the_agents_default(app, auth_hea
     command = fake_spawn.call_args.args[0]
     # Stated on the conversation, so it wins over both the agent's default and the Hub's.
     assert command[command.index("--permission-mode") + 1] == "acceptEdits"
-    assert "--permission-prompt-tool" not in command
+    # F628 (fix-D12): "Edit files" puts what Claude would ask about to the operator.
+    assert command.count("--permission-prompt-tool") == 1
     assert command.count("--permission-mode") == 1
 
 

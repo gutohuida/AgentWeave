@@ -35844,7 +35844,7 @@ Seam: Resilience (SQLite lock x route error handling). Tier guess: 0 or 1 (desig
 
 ## F628 (C) -- under `acceptEdits`, a write outside the workspace is refused silently: no card, and the agent tells the operator to approve it in a dialog that does not exist
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox; scratch Hub `:8037`).
+**Status:** fixed 2026-10-15 (Tier 2, decision fix-D12, `spec/changes/edit-files-asks-the-operator-for-everything-else`). `acceptEdits` joins `runner_commands.APPROVER_PERMISSION_MODES` and the operator-answered postures, so a Claude "Edit files" run names the Hub's approval tool and every call Claude Code would ask a person about becomes an operator card; Claude still approves its own edits inside the workspace. Claude only: Codex takes its posture from `posture_for`, not the run env, and keeps its own. Acceptance drive `scripts/drive/d1015_f628_accept_edits_card.py` committed failing (no card on HEAD) and passes 5/5 after (card for the outside Write, denied, nothing written); four argv goldens gain the approver flag pair and nothing else. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox; scratch Hub `:8037`).
 
 No `permission_requests` row was created for `run-e399f409512c`. The agent's reply was *"The Write tool requires permission approval to create the file at that location. The request is pending your approval in the permission dialog."* The run ended `completed`, and there is no dialog to approve. The refusal is legible to the agent but reaches the operator only as the agent's wrong paraphrase. The same run's record wrongly says the write happened (F614).
 

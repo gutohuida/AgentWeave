@@ -443,6 +443,8 @@
       "mcp__agentweave__*",
       "Bash(aw-tool:*)",
       "PowerShell(aw-tool:*)",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
       "-p",
       "hello world"
     ]
@@ -485,6 +487,8 @@
       "mcp__agentweave__*",
       "Bash(aw-tool:*)",
       "PowerShell(aw-tool:*)",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
       "-p",
       "hello world"
     ]
@@ -521,6 +525,8 @@
       "project,local",
       "--mcp-config",
       "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
       "-p",
       "hello world"
     ]
@@ -559,6 +565,8 @@
       "project,local",
       "--mcp-config",
       "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
       "-p",
       "hello world"
     ]

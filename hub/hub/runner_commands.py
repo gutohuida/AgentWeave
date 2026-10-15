@@ -84,7 +84,14 @@ CLAUDE_PERMISSION_PROMPT_TOOL = "mcp__agentweave__approve_tool_call"
 # `workspace` has the Hub decide against the run's own directory; `manual` puts each call to the
 # operator. Before this, `manual` meant "ask" with nothing able to answer, so it refused
 # everything — the label promised a prompt that could never appear.
-APPROVER_PERMISSION_MODES = (WORKSPACE_PERMISSION_MODE, "manual")
+#
+# `acceptEdits` ("Edit files") joins them for F628 (decision fix-D12): Claude still approves its
+# own edits inside the workspace, and everything else it would ask a person about comes to the
+# operator as a card. Without the approver it refused those calls itself, with no card, while the
+# agent told the operator to approve them in a dialog that did not exist.
+APPROVER_PERMISSION_MODES = (WORKSPACE_PERMISSION_MODE, "manual", "acceptEdits")
+#: The approver postures the operator answers, rather than the Hub's workspace judge.
+OPERATOR_PERMISSION_MODES = ("manual", "acceptEdits")
 
 # Value of the spawned run's `AW_PERMISSION_POSTURE`, telling the approval tool that the operator
 # answers rather than the Hub. Restated in `mcp_server.py` rather than imported from here: that
