@@ -367,7 +367,8 @@ class ContentSizeLimitMiddleware:
                 length = int(content_length.decode())
             except (ValueError, UnicodeDecodeError):
                 length = 0
-            if length > self._limit(scope.get("path", "")):
+            limit = self._limit(scope.get("path", ""))
+            if length > limit:
                 await send(
                     {
                         "type": "http.response.start",
@@ -378,12 +379,26 @@ class ContentSizeLimitMiddleware:
                 await send(
                     {
                         "type": "http.response.body",
-                        "body": b'{"detail":"Request body too large"}',
+                        # The limit it applied, which differs by route (F641).
+                        "body": json.dumps(
+                            {
+                                "detail": f"Request body too large: this route takes at most "
+                                f"{_size(limit)} ({limit} bytes)."
+                            }
+                        ).encode(),
                     }
                 )
                 return
 
         await self.app(scope, receive, send)
+
+
+def _size(limit: int) -> str:
+    """A byte limit as people read it: `10 MiB`, `512 KiB`."""
+    for unit, scale in (("MiB", 1 << 20), ("KiB", 1 << 10)):
+        if limit >= scale:
+            return f"{limit / scale:g} {unit}"
+    return f"{limit} bytes"
 
 
 #: How many settle passes shutdown makes before it stops waiting for the background run set to

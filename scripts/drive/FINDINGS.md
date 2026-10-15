@@ -35952,7 +35952,7 @@ Seam: Knowledge vault (contradiction resolution x card). Tier guess: 0.
 
 ## F641 (C) -- the Manager page reads "empty" for a firing that answered a report, and the upload 413 does not name the limit
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Manager jobs, Knowledge vault; scratch Hub `:8035`).
+**Status:** partly fixed 2026-10-15 (Tier 0). The 413 names the limit it applied, which differs by route: "Request body too large: this route takes at most 10 MiB (10485760 bytes)." for a vault file, 1 MiB elsewhere (`main` body-size middleware). `test_vault_files.py` asserts both and failed before. Driven: a 2 MiB JSON source -> 413 naming 1 MiB. **Left for the UI batch:** the reports firing's `empty` -> `answered` (a new outcome; the Manager page types its outcome badges, so the backend and UI change land together). Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Manager jobs, Knowledge vault; scratch Hub `:8035`).
 
 The Manager page lists the `vault-reports` firing that answered a report as `Vault reports · empty · … answered: the entry stands`; an operator reads "empty" as "did nothing". Separately, a PDF of 10 MiB + 19 bytes answers `413 {"detail": "Request body too large"}`, which never says the limit is 10 MiB; one at exactly 10 MiB is accepted (201).
 

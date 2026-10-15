@@ -94,6 +94,7 @@ async def test_a_file_over_the_global_cap_reaches_the_route(app, auth_headers, t
         headers=auth_headers,
     )
     assert refused.status_code == 413, refused.text
+    assert "1 MiB" in refused.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -103,6 +104,8 @@ async def test_a_file_over_ten_mebibytes_is_refused_and_writes_nothing(
     too_big = PDF + b"\x00" * (10 * MEBIBYTE)
     refused = await _post(app, auth_headers, too_big, "application/pdf")
     assert refused.status_code == 413, refused.text
+    # F641: the refusal names the limit it applied.
+    assert "10 MiB" in refused.json()["detail"]
     assert _files(tmp_path / "knowledge") == []
 
     exactly = PDF + b"\x00" * (10 * MEBIBYTE - len(PDF))
