@@ -639,8 +639,13 @@ async def test_a_turn_that_never_ends_gets_no_checkpoint_from_its_reading(app, m
         await _configured_project(db)
         await _conversation(db)
         db.add(
-            Run(id="run-stuck", project_id=PROJECT, agent=AGENT, status="running",
-                conversation_id="conv-1")
+            Run(
+                id="run-stuck",
+                project_id=PROJECT,
+                agent=AGENT,
+                status="running",
+                conversation_id="conv-1",
+            )
         )
         await db.commit()
     monkeypatch.setattr(trigger, "TURN_END_POLL_SECONDS", 0.02, raising=False)
