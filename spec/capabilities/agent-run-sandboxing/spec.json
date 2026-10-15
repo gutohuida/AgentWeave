@@ -1077,6 +1077,42 @@
       "requirement": "n12",
       "then": "the run records it unavailable in the first case only",
       "when": "Copilot reports it failed, and separately reports it still starting"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the real tool server spawned over stdio under the Workspace posture, as a Hub spawns it for a Claude run",
+      "how_to_check": "py -3.11 scripts/drive/d1015_judge_wire.py (written first: 9 rows wrong on 146de73+, all controls right)",
+      "key": "the-workspace-judge-reads-paths-not-patterns-wire",
+      "requirement": "the-workspace-judge-reads-paths-not-patterns-provider-drives",
+      "then": "every F601 row is denied naming the drive word, every F661 row is allowed, every control keeps its answer",
+      "when": "approve_tool_call is asked about the F601 commands, the F661 commands and the controls"
+    },
+    {
+      "checked_by": "agent",
+      "given": "_decide with the PowerShell tool",
+      "how_to_check": "pytest hub/tests/test_the_workspace_judge_reads_paths_not_patterns.py",
+      "key": "the-workspace-judge-reads-paths-not-patterns-unit",
+      "requirement": "the-workspace-judge-reads-paths-not-patterns-patterns",
+      "then": "the pattern operand alone is exempt, only where the requirement says",
+      "when": "the F661 repro commands verbatim, each operator and variant, double quotes with and without `$`, a command-mode -match, Unicode quotes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the existing judge suites",
+      "how_to_check": "pytest hub/tests/test_permission_approver.py hub/tests/test_the_shell_judge_reads_a_word_whole.py hub/tests/test_copilot_acp_decide.py",
+      "key": "the-workspace-judge-reads-paths-not-patterns-regressions",
+      "requirement": "the-workspace-judge-reads-paths-not-patterns-unchanged",
+      "then": "no existing row changes, including 1.7c1 (grep -rn '\\.\\./' src, bash, refused)",
+      "when": "they run"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the work PC, a Copilot agent under Workspace",
+      "how_to_check": "work-PC drive; not reachable at home",
+      "key": "the-workspace-judge-reads-paths-not-patterns-copilot",
+      "requirement": "the-workspace-judge-reads-paths-not-patterns-patterns",
+      "then": "the call is allowed (and wpc2-e's raw toolName is captured once)",
+      "when": "it lists its worktree with -notmatch '\\\\.git\\\\'"
     }
   ],
   "algorithms": [
@@ -1136,9 +1172,12 @@
       "FR-44": "37660ad56bded784afce5be61b76ee1ed89d501f9b4f08cb5756ad99d2ad0036",
       "FR-45": "90e25ec458f5a899838661dd2fec118e094be3889369ef1e7376822b2fd78b99",
       "FR-46": "46c8e11d1d0b78a0ee7880d6ccb2007dcd85596bec4c6dbd7c174be58d4a9786",
+      "FR-47": "538223d86d4c7d6f1aa23d805e1d2dd6853b525733f0e1a12fb2bc5336629788",
+      "FR-48": "69d5567f044cd32ffa71230a7072635d4845203d1a8e174568fd25bc55905534",
+      "FR-49": "f5806223c136306a2df59b13001bb77d519159914361b98faac9d5aca1206652",
       "FR-8": "8cfbe18bf3d8194ee817d7c2752711d6c5a3e8e6fc3922082df2174afb6c9b6b"
     },
-    "high_water": 46,
+    "high_water": 49,
     "requirements": {
       "a-brace-pattern-is-judged-as-the-words-it-expands-to": "FR-39",
       "a-claude-run-pre-allows-the-hub-s-call-command": "FR-38",
@@ -1171,7 +1210,10 @@
       "the-operator-can-clear-an-expired-request-they-have-seen": "FR-24",
       "the-operator-can-see-that-an-agent-stopped-waiting": "FR-23",
       "the-operator-chooses-a-conversation-s-permission-posture": "FR-17",
-      "the-product-states-which-postures-confine-a-run-and-which-do": "FR-27"
+      "the-product-states-which-postures-confine-a-run-and-which-do": "FR-27",
+      "the-workspace-judge-reads-paths-not-patterns-patterns": "FR-48",
+      "the-workspace-judge-reads-paths-not-patterns-provider-drives": "FR-47",
+      "the-workspace-judge-reads-paths-not-patterns-unchanged": "FR-49"
     },
     "retired": {
       "a-refused-action-is-visible-to-the-operator": "FR-20",
@@ -1429,6 +1471,27 @@
       "party": null,
       "rationale": "The Hub's workspace judgement finds nothing to refuse in a GitHub action, so it has no ground to allow one on the operator's behalf.",
       "statement": "With the GitHub server enabled, under Workspace only a call Copilot asks the Hub to decide for any MCP server other than the Hub's own SHALL be put to the operator on a card naming that server (saying it acts on GitHub as the operator only for the GitHub server), a call whose server Copilot did not report SHALL be refused, runner settings that add write tools or servers SHALL be removed from a run without full access with the removal stated in the run, and an unavailable server SHALL be recorded as such (one still starting SHALL NOT)."
+    },
+    {
+      "key": "the-workspace-judge-reads-paths-not-patterns-provider-drives",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A provider drive names the registry, the environment or the session, never a file in the workspace; calling it inside is false and lets writes to persistent user state through.",
+      "statement": "In the PowerShell reading, a word naming one of PowerShell's built-in non-FileSystem provider drives (Alias, Cert, Env, Function, HKCU, HKLM, Variable, WSMan, any letter case), with or without a separator after its colon, MUST be refused as outside the workspace, quoting the word."
+    },
+    {
+      "key": "the-workspace-judge-reads-paths-not-patterns-patterns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A pattern a comparison operator matches against is never something the command acts on.",
+      "statement": "In the PowerShell reading, a quoted literal that is the right-hand operand of -match, -notmatch, -like, -notlike, -replace (its pattern element), or -split, including their c/i variants, in an expression-mode pipeline element, MUST NOT be judged as a path or as uncheckable. A single-quoted literal qualifies; a double-quoted one only with no `$` and no backtick; one in Unicode quote characters does not."
+    },
+    {
+      "key": "the-workspace-judge-reads-paths-not-patterns-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every other word keeps today's answer: a command-mode `-match` is an argument and its next word is judged; drive letters and Temp: are judged as today; a New-PSDrive root is judged as a path; the bash reading is unchanged."
     }
   ],
   "schema_version": 1,

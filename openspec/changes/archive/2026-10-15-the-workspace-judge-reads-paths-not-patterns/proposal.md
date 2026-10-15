@@ -1,3 +1,5 @@
+> **Moved 2026-10-15, not finished here.** Re-authored and built as `spec/changes/the-workspace-judge-reads-paths-not-patterns` (folded into `agent-run-sandboxing`; commit 1d44b8b, with F601). Decided: wpc2-a narrowed, wpc2-b, wpc2-g. Still open: wpc2-c..f. This copy is archived with `--skip-specs`; `spec/` is the source.
+
 # Proposal — the workspace judge reads paths, not patterns
 
 **Round 1, 2026-10-12.** Finding **WPC-2 (medium)**, from the work-PC Copilot drive (handoff 0162,

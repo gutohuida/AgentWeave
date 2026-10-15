@@ -55,6 +55,8 @@ FILES_TESTS = "hub/tests/test_vault_files.py"
 ACCESS_TESTS = "hub/tests/test_vault_access.py"
 HELD_TESTS = "hub/tests/test_a_held_successor_waits_for_continue.py"
 HELD_DRIVE = "scripts/drive/d1015_f598_held_successor.py"
+JUDGE_TESTS = "hub/tests/test_the_workspace_judge_reads_paths_not_patterns.py"
+JUDGE_DRIVE = "scripts/drive/d1015_judge_wire.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1091,6 +1093,27 @@ CHANGES = {
              "drops the column, states unchanged; guarded for a chain with no projects table."),
         ],
     },
+    "fjudge": {
+        "document": "spec/changes/the-workspace-judge-reads-paths-not-patterns/spec.json",
+        "commit": "1d44b8b",
+        "tasks": ["task-dc7c77d66d3a", "task-bed62d97e8f8"],
+        "evidence": [
+            ("FR-1", "task-bed62d97e8f8", "test_result", JUDGE_TESTS,
+             "Every built-in provider drive, with and without a separator and as a colon-joined "
+             "option value, is refused as outside quoting the word; git's HEAD:file and the bash "
+             "reading are unchanged (failed on the unfixed judge)."),
+            ("FR-1", "task-dc7c77d66d3a", "manual_observation", JUDGE_DRIVE,
+             "The real tool server over stdio under Workspace: written first, 9 rows wrong on HEAD "
+             "(six provider-drive writes allowed, three quoted patterns refused); 16/16 after."),
+            ("FR-2", "task-bed62d97e8f8", "test_result", JUDGE_TESTS,
+             "Both recorded commands verbatim, each operator and c/i variant, double quotes without "
+             "expansion and a block closed against its pattern are allowed."),
+            ("FR-3", "task-bed62d97e8f8", "test_result", JUDGE_TESTS,
+             "Command mode, later statements and subexpressions, assignments' right sides, "
+             "number-like command names, -replace pairs, expanding double quotes, Unicode quotes "
+             "and unquoted operands stay judged; 938 existing judge tests unchanged."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1108,6 +1131,7 @@ CHANGE_FOLDS = {
     "fimages": 'knowledge-vault',
     "faccess": 'knowledge-vault',
     "f598": 'inbound-queue-delivery',
+    "fjudge": 'agent-run-sandboxing',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
