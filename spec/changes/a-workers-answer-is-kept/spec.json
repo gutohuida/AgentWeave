@@ -1,0 +1,96 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch project whose vault-distillation job runs on Haiku",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f581_answer_kept.py (written first: fails before the build)",
+      "key": "drive",
+      "requirement": "answer-kept",
+      "then": "its firing in GET /manager/activity carries an answer naming a quote from the source",
+      "when": "a source is uploaded and distilled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "each job's firing with a faked worker",
+      "how_to_check": "pytest hub/tests/test_a_workers_answer_is_kept.py",
+      "key": "unit",
+      "requirement": "answer-kept",
+      "then": "the event keeps the answer; a long one is cut with the marker; a failed spawn keeps null",
+      "when": "it fires"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "10ba5fcef0ca7146f859b9b3ac5a7109373a2e5a23630e312c4bee62c90940ba"
+    },
+    "high_water": 1,
+    "requirements": {
+      "answer-kept": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1, no migration. D1. Kept on the event, not on worker_invocations: the event's data is JSON and is what GET /manager/activity already answers, so no column and no second read. D2. Private content: a private source's facts appear in its distillation answer. The Hub's database is per machine like the private location, never in the repository, and firings are read only through project (operator) routes, never through agent-actions. D3. 8,000 characters keeps a distillation of a long piece readable while bounding the event table.",
+  "evidence": {
+    "checked": [
+      "manager.record_firing keeps job, trigger, subject, runner, cli, model, outcome, detail, duration and usage, no answer",
+      "WorkerResult carries answer_text and parsed",
+      "events and manager activity routes depend on get_project / get_operator, not run credentials"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "A spec-vault-check firing recorded 'empty, 0 conflicts kept' and 1,373 output tokens, but nothing kept what the model answered, so why it found nothing was unreadable; it took re-sending the prompt by hand to see Haiku's reasoning. Re-verified 2026-10-15: activity keeps only a count line for distillation, transcription and the contradiction check.",
+  "requirements": [
+    {
+      "key": "answer-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An operator who doubts a judgement needs what was answered, not only a count (F581).",
+      "statement": "Each manager_job_fired event for a firing that spawned a model MUST keep the model's answer as answer: its raw text when the worker returned one, otherwise its parsed answer as JSON, cut to its first 8,000 characters and ending in a marker saying it was cut; a firing whose spawn returned nothing MUST keep answer null. GET /manager/activity MUST list it with the firing."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "manager.record_firing keeps an answer field, cut at 8,000 characters",
+      "every caller that spawned passes the worker's answer: distillation (read, distil, check), vault reports, spec-vault-check, conversation titles"
+    ],
+    "non_goals": [
+      "Showing the answer in the Manager panel (UI batch)",
+      "A column on worker_invocations (no migration: the event's data is JSON)",
+      "A firing that spawned nothing (no runner, disabled) keeps no answer"
+    ]
+  },
+  "summary": "Every manager firing that spawned a model keeps what the model answered on its manager_job_fired event, so a wrong judgement can be read after the fact (F581).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "manager.record_firing(answer=), manager.answer_record; the six spawning callers.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "answer-kept"
+      ],
+      "reviewer": null,
+      "title": "Keep the worker's answer on each firing"
+    }
+  ],
+  "title": "A worker's answer is kept"
+}
