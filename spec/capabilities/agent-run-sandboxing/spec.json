@@ -1113,6 +1113,33 @@
       "requirement": "the-workspace-judge-reads-paths-not-patterns-patterns",
       "then": "the call is allowed (and wpc2-e's raw toolName is captured once)",
       "when": "it lists its worktree with -notmatch '\\\\.git\\\\'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub, a Haiku agent, and an operator whose ~/.claude/skills holds e2e-loop, handoff and resume",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f454_user_skills.py <project> (written first: all three listed on HEAD)",
+      "key": "a-hub-agent-runs-with-the-projects-settings-drive",
+      "requirement": "a-hub-agent-runs-with-the-projects-settings-project-only",
+      "then": "none of the operator's skills is listed",
+      "when": "the agent is asked to list its skills"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a directory with a CLAUDE.md rule and a .claude/skills/project-probe skill",
+      "how_to_check": "measured 2026-10-15 by hand (ZEBRA ... project-probe); the argv is pinned by hub/tests/test_runner_commands*.py",
+      "key": "a-hub-agent-runs-with-the-projects-settings-manual",
+      "requirement": "a-hub-agent-runs-with-the-projects-settings-project-kept",
+      "then": "the reply follows the CLAUDE.md rule and lists project-probe",
+      "when": "claude -p runs with --setting-sources project,local"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a claude runner",
+      "how_to_check": "pytest hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py",
+      "key": "a-hub-agent-runs-with-the-projects-settings-flag",
+      "requirement": "a-hub-agent-runs-with-the-projects-settings-not-overridable",
+      "then": "create is refused naming it",
+      "when": "its flags hold --setting-sources user"
     }
   ],
   "algorithms": [
@@ -1175,9 +1202,12 @@
       "FR-47": "538223d86d4c7d6f1aa23d805e1d2dd6853b525733f0e1a12fb2bc5336629788",
       "FR-48": "69d5567f044cd32ffa71230a7072635d4845203d1a8e174568fd25bc55905534",
       "FR-49": "f5806223c136306a2df59b13001bb77d519159914361b98faac9d5aca1206652",
+      "FR-50": "ddf7143579779558c8811ed0eb3393c01dc9945ba5872968aab13aeaaab35f5c",
+      "FR-51": "fbeb2027d2c64773e0e4ada366df891b115cd5ace21cdc929b9ffdb71e1ce500",
+      "FR-52": "1e131a36315939c805df8d38891f14a9bc2bc07c38aa2154f2b270216b18e325",
       "FR-8": "8cfbe18bf3d8194ee817d7c2752711d6c5a3e8e6fc3922082df2174afb6c9b6b"
     },
-    "high_water": 49,
+    "high_water": 52,
     "requirements": {
       "a-brace-pattern-is-judged-as-the-words-it-expands-to": "FR-39",
       "a-claude-run-pre-allows-the-hub-s-call-command": "FR-38",
@@ -1185,6 +1215,9 @@
       "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp": "FR-33",
       "a-decision-is-refused-once-nobody-is-waiting-for-it": "FR-22",
       "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-": "FR-26",
+      "a-hub-agent-runs-with-the-projects-settings-not-overridable": "FR-52",
+      "a-hub-agent-runs-with-the-projects-settings-project-kept": "FR-51",
+      "a-hub-agent-runs-with-the-projects-settings-project-only": "FR-50",
       "a-hub-claude-run-gets-only-the-hubs-tool-server": "FR-41",
       "a-network-address-in-a-shell-command-is-decided-as-a-network": "FR-28",
       "a-non-yolo-claude-run-s-sandbox-posture-is-set-by-the-hub-no": "FR-14",
@@ -1492,6 +1525,27 @@
       "party": null,
       "rationale": null,
       "statement": "Every other word keeps today's answer: a command-mode `-match` is an argument and its next word is judged; drive letters and Temp: are judged as today; a New-PSDrive root is judged as a path; the bash reading is unchanged."
+    },
+    {
+      "key": "a-hub-agent-runs-with-the-projects-settings-project-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "What a Hub agent may do is the operator's decision through the Hub (charter, posture, tools), not whatever their personal configuration happens to hold.",
+      "statement": "Every Claude Code agent run the Hub spawns MUST pass --setting-sources project,local, so the operator's user-level skills, plugins, hooks and settings are not loaded."
+    },
+    {
+      "key": "a-hub-agent-runs-with-the-projects-settings-project-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The project's CLAUDE.md, its .claude/settings*.json and its .claude/skills MUST still load."
+    },
+    {
+      "key": "a-hub-agent-runs-with-the-projects-settings-not-overridable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A runner flag after the Hub's would win, as in F599.",
+      "statement": "A runner's flags MUST NOT carry --setting-sources (refused like the other posture flags)."
     }
   ],
   "schema_version": 1,

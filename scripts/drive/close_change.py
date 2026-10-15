@@ -61,6 +61,7 @@ TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
 TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
 FLAG_DRIVE = "scripts/drive/d1015_f599_runner_flags.py"
+SETTINGS_DRIVE = "scripts/drive/d1015_f454_user_skills.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1162,6 +1163,24 @@ CHANGES = {
              "--allow-all-tools stand."),
         ],
     },
+    "f454": {
+        "document": "spec/changes/a-hub-agent-runs-with-the-projects-settings/spec.json",
+        "commit": "25a6288",
+        "tasks": ["task-b86bffdc808a", "task-d519183334a2"],
+        "evidence": [
+            ("FR-1", "task-d519183334a2", "test_result", FLAG_TESTS,
+             "Every Claude agent argv carries --setting-sources project,local once; the 52 argv "
+             "goldens differ by that pair alone."),
+            ("FR-1", "task-b86bffdc808a", "manual_observation", SETTINGS_DRIVE,
+             "Written first: on HEAD a Hub Haiku agent listed the operator's e2e-loop, handoff and "
+             "resume skills; after, only built-ins (6/6)."),
+            ("FR-2", "task-d519183334a2", "manual_observation", SETTINGS_DRIVE,
+             "Hand-measured 2026-10-15: with the flag a project CLAUDE.md rule is obeyed (ZEBRA) "
+             "and the project's own .claude/skills skill is listed."),
+            ("FR-3", "task-d519183334a2", "test_result", FLAG_TESTS,
+             "A runner flag --setting-sources is refused naming it."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1182,6 +1201,7 @@ CHANGE_FOLDS = {
     "fjudge": 'agent-run-sandboxing',
     "f602": 'agent-stream-events',
     "f599": 'runner-registry',
+    "f454": 'agent-run-sandboxing',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
