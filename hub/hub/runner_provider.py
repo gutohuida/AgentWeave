@@ -215,6 +215,8 @@ def runner_probe_config(runner_row: Any) -> dict:
         "runner": runner_row.cli,
         "model": runner_row.model,
         "provider_config": getattr(runner_row, "provider_config", None),
+        # F599: a stored flag that overrides the model or the posture makes it not launchable.
+        "flags": list(getattr(runner_row, "flags", None) or []),
     }
 
 

@@ -27,6 +27,7 @@ from .copilot_env import (  # noqa: F401
 from .file_mentions import MENTION_NOTICE, neutralise_file_mentions
 from .runner_adapters import get_adapter
 from .runner_adapters.base import probe_binary
+from .runner_flag_rules import posture_flags_problem
 from .runner_provider import runner_probe_config
 
 # DEAD (2026-09-20): 6 of these 8 keys name runner kinds no agent can be bound to any more.
@@ -99,6 +100,21 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
             "authorized": True,
             "runnable": False,
             "reason": "No runner is bound to this agent. Bind one in the Hub UI before it can run.",
+        }
+
+    # F599: a stored flag that overrides the model or the posture would win over the Hub's own,
+    # so the runner does not run until its flags are fixed. Before the adapter's own verdict, which
+    # cannot see flags. Runners created since are refused at the door; this covers older rows.
+    flags_problem = posture_flags_problem(runner, config.get("flags"))
+    if flags_problem is not None:
+        return {
+            "runner": runner,
+            "cli": None,
+            "present": False,
+            "authorized": True,
+            "runnable": False,
+            "reason": f"{flags_problem} Edit this runner's flags (PATCH /runners/{{id}}) or "
+            "delete it, then this agent can run.",
         }
 
     cli_override = config.get("cli")

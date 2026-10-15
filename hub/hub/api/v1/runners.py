@@ -16,6 +16,7 @@ from ...db.models import Agent, ManagerJob, Project, Runner
 from ...launchability import probe_agent
 from ...model_catalog import get_provider, undeclared_model_reason
 from ...runner_adapters import ADAPTERS
+from ...runner_flag_rules import posture_flags_problem
 from ...runner_provider import (
     has_provider,
     normalised_provider_config,
@@ -79,6 +80,8 @@ async def create_runner(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    # F599: refused before anything else is judged, so the answer names the flag.
+    _refuse(posture_flags_problem(body.cli, body.flags))
     provider_config = None
     if body.provider_config is not None:
         provider_config = _checked_provider(body.cli, body.provider_config, body.model, body.flags)
@@ -214,6 +217,11 @@ async def update_runner(
         # explicit-null ... for `model` only".
         if model_sent:
             _reject_undeclared_model(runner.cli, body.model, current=runner.model)
+
+    if body.flags is not None:
+        # F599. Only flags this request sends: a runner already storing one stays editable in
+        # every other respect -- it is refused at launch until its flags are fixed (D2).
+        _refuse(posture_flags_problem(runner.cli, body.flags))
 
     if body.name is not None:
         runner.name = body.name

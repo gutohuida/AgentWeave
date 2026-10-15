@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Literal, NamedTuple, Optional, Tuple, get_ar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
@@ -65,7 +65,7 @@ from ...model_catalog import (
 from ...output_recording import record_agent_output
 from ...review_turn import ReviewContext, verdict_evidence_sentence
 from ...runner_adapters import get_adapter, resolve_access_axes
-from ...runner_provider import runner_probe_config
+from ...runner_provider import has_provider, runner_probe_config
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -737,8 +737,20 @@ async def create_operator_agent(
                 Runner.cli == body.provider,
                 Runner.model == body.model,
             )
+            # Oldest first, and the rowid breaks a created_at tie (F177's order).
+            .order_by(Runner.created_at, literal_column("runners.rowid"))
         )
-        runner = existing_runner.scalars().first()
+        # Only a plain runner is what the dialog promises (F600): one with flags or a model
+        # provider runs differently from "Claude Code, Haiku" -- it bound a permission-bypassing
+        # runner in the 2026-10-15 sweep. `None`, `[]` and a provider config of `None` are plain.
+        runner = next(
+            (
+                candidate
+                for candidate in existing_runner.scalars().all()
+                if not candidate.flags and not has_provider(candidate.provider_config)
+            ),
+            None,
+        )
         if runner is None:
             # An alias is named by what was chosen, not by its current target (design.md D1): a
             # runner named for today's target would be a new F268 once the alias moves on.

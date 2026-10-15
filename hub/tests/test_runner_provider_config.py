@@ -312,9 +312,21 @@ async def test_patch_removing_the_provider_with_model_null_is_accepted(app, auth
 async def test_patch_adding_a_provider_to_a_runner_whose_flags_carry_model_is_refused(
     app, auth_headers
 ):
-    created = await _create(app, auth_headers, model="auto", flags=["--model=auto"])
-    assert created.status_code == 201, created.text
-    runner_id = created.json()["id"]
+    # Stored, as a runner from before `a-runner-s-flags-cannot-override-the-posture` is: create now
+    # refuses `--model` in any runner's flags (F599), so the row is written directly.
+    runner_id = "runner-legacy-model-flag"
+    async with async_session_factory() as db:
+        db.add(
+            Runner(
+                id=runner_id,
+                project_id=PROJECT,
+                name="BYOK",
+                cli="copilot",
+                model="auto",
+                flags=["--model=auto"],
+            )
+        )
+        await db.commit()
 
     response = await app.patch(
         f"{RUNNERS}/{runner_id}",
