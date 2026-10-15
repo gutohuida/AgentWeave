@@ -238,7 +238,7 @@ class OpenQuestion(_Part):
     question: str = Field(description="Something genuinely undecided.")
     resolved: bool = Field(
         default=False,
-        description="Whether it has been answered. An unresolved question blocks the document from being proposed — a guess written in the voice of a requirement is indistinguishable from a decision.",
+        description="Whether it has been answered. Proposing or approving with an unresolved question is allowed but warns (`unresolved_question`) — a guess written in the voice of a requirement is indistinguishable from a decision, so answer it first where you can.",
     )
 
 

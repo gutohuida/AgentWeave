@@ -35876,7 +35876,7 @@ Seam: Spec documents (size x step). Tier guess: 0 (no fix shape in the report).
 
 ## F632 (C) -- the payload schema tells agents an unresolved question blocks proposing; it only warns
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Spec documents; scratch Hub `:8034`).
+**Status:** fixed 2026-10-15 (Tier 0). `OpenQuestion.resolved`'s description now says proposing or approving with an unresolved question is allowed but warns (`unresolved_question`). `test_the_schema_says_a_question_warns.py` failed before. Not driven live: text only, read from the same model the tool schema is built from. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Spec documents; scratch Hub `:8034`).
 
 `OpenQuestion.resolved`'s description (`hub/hub/spec_payload.py:239-242`), which is in the tool schema agents read: "An unresolved question blocks the document from being proposed". Observed: propose with an unresolved question -> 200 `proposed: true`, `unresolved_question` under `warnings`. Stale since the warn-don't-gate change (2026-10-08). Related: F573 (roadmap open questions).
 
