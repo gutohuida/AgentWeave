@@ -36088,7 +36088,7 @@ Seam: Permissions & sandbox (verdict wording) x Logs, events & SSE. Tier guess: 
 
 ## F657 (D) -- small echoes and asymmetries in the spec and evidence routes
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Spec documents, Requirements, evidence & coverage; scratch Hub `:8034`).
+**Status:** fixed 2026-10-15 (Tier 0). Taken: an unknown rigor answers 422 (malformed), not 409; the operator's evidence decision answers with the footprint (`_footprints_for`, as every other evidence answer); a no-flow approval of a document with no tasks says "the document declares no tasks" instead of "the tasks are on the board". `test_spec_route_echoes.py` and `test_the_decision_response_reports_the_footprint` failed before. Driven: rigor `bogus` -> 422 on a scratch Hub. **Not taken:** close-exploration on a proposed document is F560's (the route outlived its gate); rejecting a proposal with no reason vs evidence needing one, and the unknown roadmap slice not reported while the roadmap is proposed, are left open here (each needs a choice of which side moves). Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Spec documents, Requirements, evidence & coverage; scratch Hub `:8034`).
 
 - The evidence decision response returns `"footprint": null`; `GET /spec/evidence` shows the footprint (`efp-339be924b892`). Related F280.
 - Unknown rigor -> **409** `unknown_rigor` (a malformed value, not a conflict).

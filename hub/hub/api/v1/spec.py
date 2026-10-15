@@ -738,7 +738,12 @@ async def set_document_rigor(
         )
     except spec_rigor.RigorRefusedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            # A rigor that does not exist is a malformed value, not a conflict (F657).
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_ENTITY
+                if exc.code == "unknown_rigor"
+                else status.HTTP_409_CONFLICT
+            ),
             detail={"message": str(exc), "code": exc.code, "blocking": exc.blocking},
         ) from exc
 
@@ -1428,7 +1433,9 @@ async def decide_evidence(
     await session.commit()
     # Built before the integration below, which rolls back when it fails and expires every loaded
     # row: the decision has committed, and the answer must not depend on what the merge did (F426).
-    view = _evidence_view(evidence, latest_review=review)
+    # With its footprint, as every other evidence answer here has (F657, after F71).
+    prints = await _footprints_for(session, [evidence.id])
+    view = _evidence_view(evidence, prints.get(evidence.id), latest_review=review)
     # Captured here for the same reason: the broadcast below goes after the integration, and reading
     # `evidence.id` then is the 500 F426 fixed.
     announced = await _decision_announcement(session, evidence)
@@ -2762,9 +2769,18 @@ async def _approval_flow(
     if delivery is None:
         return {"state": "none", "messages": ["No delivery was declared."]}, None
     if delivery.mode != "flow":
+        # Which, said for what the document has: "the tasks are on the board" read oddly for a
+        # document that declares none (F657).
+        has_tasks = bool((payload or {}).get("tasks"))
         return {
             "state": "none",
-            "messages": ["The delivery says no flow: the tasks are on the board, started by hand."],
+            "messages": [
+                (
+                    "The delivery says no flow: the tasks are on the board, started by hand."
+                    if has_tasks
+                    else "The delivery says no flow, and the document declares no tasks."
+                )
+            ],
         }, None
     if delivery_agent == "":
         return _not_created("You chose no flow at approval."), None

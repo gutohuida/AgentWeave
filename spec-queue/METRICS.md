@@ -142,3 +142,4 @@ not a defect.
 | 2026-10-15 | F632 the schema says an open question warns, not blocks (interactive, S5) | 0 | none | ~0h05 (description; 1 test) | not driven (schema text) | none |
 | 2026-10-15 | F644 a capability is created under spec/capabilities (interactive, S5) | 0 | none | ~0h15 (kind-aware path minting; 4 tests) | ~0h05 (three creates on a scratch Hub) | none |
 | 2026-10-15 | F643 corpus and drift refusals are sentences (interactive, S5; UI strip pending) | 0 | none | ~0h25 (message beside every diagnostic code, arrange and resolve wording; 5 tests) | ~0h05 (scratch Hub: unfiled message, self-parent arrange) | none |
+| 2026-10-15 | F657 spec and evidence route echoes, three of six (interactive, S5) | 0 | none | ~0h25 (rigor status, decision footprint, no-tasks sentence; 4 tests) | ~0h05 (rigor 422 live) | none |

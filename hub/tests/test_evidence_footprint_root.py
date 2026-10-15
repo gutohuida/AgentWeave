@@ -1284,3 +1284,28 @@ async def test_a_run_nobody_watched_leaves_the_footprint_unobserved(
     footprint = await only_footprint()
     assert footprint.outside_workspace_writes is None
     assert recorded.json()["footprint"]["outside_workspace_writes"] is None
+
+
+@pytest.mark.asyncio
+async def test_the_decision_response_reports_the_footprint(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """F657: the decision answered `footprint: null` while `GET /spec/evidence` showed one."""
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        OPERATOR_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "I looked at it myself"},
+        headers=auth_headers,
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    decided = await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "rejected", "reason": "not enough"},
+        headers=auth_headers,
+    )
+    assert decided.status_code == 200, decided.text
+    assert decided.json()["footprint"] == recorded.json()["footprint"]
