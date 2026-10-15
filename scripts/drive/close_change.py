@@ -76,6 +76,8 @@ FOLDED_TESTS = "hub/tests/test_a_folded_requirement_keeps_its_verification.py"
 FOLDED_DRIVE = "scripts/drive/d1015_f593_fold_keeps_verification.py"
 DELETED_TESTS = "hub/tests/test_a_deleted_project_stays_deleted.py"
 DELETED_DRIVE = "scripts/drive/d1015_f592_deleted_project_stays_deleted.py"
+REDISTIL_TESTS = "hub/tests/test_a_redistilled_fact_keeps_its_id.py"
+REDISTIL_DRIVE = "scripts/drive/d1015_f587_redistil_keeps_ids.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1309,10 +1311,32 @@ CHANGES = {
              "and the private text is not served."),
         ],
     },
+    "f587": {
+        "document": "spec/changes/a-redistilled-fact-keeps-its-id/spec.json",
+        "tasks": ["task-8e1a744d6d31"],
+        "evidence": [
+            ("FR-1", "task-8e1a744d6d31", "manual_observation", REDISTIL_DRIVE,
+             "Written first: on HEAD a second Haiku distil drew both facts from the same lines under "
+             "new ids; after, both keep their ids."),
+            ("FR-1", "task-8e1a744d6d31", "test_result", REDISTIL_TESTS,
+             "A same-line draft (period dropped, spacing changed) keeps its id and file; another "
+             "line is a new fact; each earlier fact is kept once; only new facts are checked."),
+            ("FR-2", "task-8e1a744d6d31", "test_result", REDISTIL_TESTS,
+             "A fact in no record or stub is warned of as no longer in the vault, naming no machine."),
+            ("FR-3", "task-8e1a744d6d31", "test_result", REDISTIL_TESTS,
+             "A private entry held by this machine with its text gone says it is not at this "
+             "machine's private location, not held elsewhere."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
 REPLACE_FOLDS = {
+    "f587": ("knowledge-vault", {
+        "same-lines-same-id": "the-manager-distils-vault-sources-into-cited-facts-distil-route",
+        "gone-is-gone": "a-requirement-is-checked-against-what-the-va-cited-fact-warnings",
+        "held-here-is-not-elsewhere": None,  # added, replacing nothing
+    }),
     "f592": ("local-project-workspace", {
         "delete-removes-asked-private": "a-project-can-be-deleted-from-the-hub-without-touching-its-w",
         "deleted-id-not-adopted": "n2-an-orphaned-marker-is-adopted-under-its-own-id",

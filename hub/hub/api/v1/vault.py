@@ -256,7 +256,7 @@ async def get_vault_file(
     if elsewhere is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"This file is private and held on {elsewhere}, not on this machine.",
+            detail=f"This file is private and {vault.private_text_is(elsewhere)}.",
         )
     if data is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No file '{source_id}'")

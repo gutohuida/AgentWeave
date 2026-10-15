@@ -252,7 +252,9 @@ async def test_each_storing_distillation_is_followed_by_one_check(
         [F300],  # the first source: nothing else to compare with, so no check
         [F437],
         pair("437", "300"),
-        [F437],
+        # Each re-distil draws a fact the source did not already hold from those lines: a fact
+        # drawn again from the same lines is kept and not checked again (F587).
+        [F30],
         [],
         [F437],
         None,
@@ -570,7 +572,11 @@ async def test_a_redistil_does_not_compare_with_a_fact_the_operator_overruled(
     fake, newer, _, fact300, fact437, record = await _one_open(app, auth_headers, worker, tmp_path)
     resolved = await _resolve(app, auth_headers, record["id"], stands=fact300, note="Finance.")
     assert resolved.status_code == 200, resolved.text
-    fake.answers.extend([[F300], []])
+    # Quoted differently, so the re-distil stores a new fact and checks it (F587 keeps one quoted
+    # alike, and does not check it again).
+    fake.answers.extend(
+        [[("The refund limit is 300 euros.", ["Dana: the refund limit is 300 euros."])], []]
+    )
 
     assert (await _distil(app, auth_headers, newer["id"])).status_code == 202
 
@@ -616,7 +622,9 @@ async def test_redistilling_drops_open_contradictions_and_keeps_resolved_ones(
         [F300, ("Returns take 14 days.", ["returns take 14 days."])],
         [F437, F30],
         both,
-        [("The limit is 437 euros.", ["the refund limit is 437 euros."])],
+        # Another quote of the same line: a new fact, so the earlier 437 fact is replaced (one
+        # quoted alike would be kept, with its open contradiction, F587).
+        [("The limit is 437 euros.", ["Dana: the refund limit is 437 euros."])],
         [],
     )
     await _enable(app, auth_headers)

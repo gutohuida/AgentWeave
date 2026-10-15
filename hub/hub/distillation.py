@@ -41,7 +41,7 @@ import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -234,10 +234,14 @@ async def prepare(project_id: str, source_id: str) -> Plan:
         held = await asyncio.to_thread(vault.file_of, root, private, source_id)
         data = held[1] if held is not None else None
     if text is None and data is None:
-        holder = meta.get("holder") or "another machine"
+        holder = meta.get("holder")
+        where = (
+            "It cannot be distilled until its text is back."
+            if holder and holder == vault.holder_name()
+            else "It can be distilled there."
+        )
         raise CannotDistilError(
-            f"This source is private and its text is held on {holder}, not on this machine. "
-            "It can be distilled there."
+            f"This source is private and {vault.private_text_is(holder)}. {where}"
         )
     if text is None:
         adapter = get_adapter(runner.cli)
@@ -307,10 +311,18 @@ async def distil(plan: Plan, *, trigger: str) -> int:
             text = await _transcribe(plan, trigger=trigger)
         if text is None:
             return 0
+        # F587: a fact drawn again from the same lines keeps its id, so the decisions and spec
+        # requirements citing it still point at it. Each earlier fact is claimed at most once.
+        reusable = await asyncio.to_thread(
+            vault.facts_by_citations, plan.project_root, plan.private_root, source_id
+        )
+        kept: Set[str] = set()
         stored_ids: List[str] = []
         line_offset = 0
         for piece in pieces(text):
-            stored_ids += await _distil_piece(plan, piece, line_offset, trigger=trigger)
+            stored_ids += await _distil_piece(
+                plan, piece, line_offset, trigger=trigger, reusable=reusable, kept=kept
+            )
             line_offset += piece.count("\n")
         if stored_ids:
             replaced = sorted(earlier - set(stored_ids))
@@ -324,7 +336,9 @@ async def distil(plan: Plan, *, trigger: str) -> int:
                 plan.private_root,
                 replaced,
             )
-            await _check(plan, stored_ids)
+            # Only what is new is compared: a kept fact was checked when it was first stored, and
+            # checking it again would record its resolved contradictions a second time.
+            await _check(plan, [fact_id for fact_id in stored_ids if fact_id not in kept])
     return len(stored_ids)
 
 
@@ -501,7 +515,19 @@ def _record_pairs(
     return recorded, dropped
 
 
-async def _distil_piece(plan: Plan, piece: str, line_offset: int, *, trigger: str) -> List[str]:
+async def _distil_piece(
+    plan: Plan,
+    piece: str,
+    line_offset: int,
+    *,
+    trigger: str,
+    reusable: Optional[Dict[vault.CitationKey, str]] = None,
+    kept: Optional[Set[str]] = None,
+) -> List[str]:
+    """Distil one piece; answer the ids of its facts, new or kept. A draft whose citations match
+    one of *reusable* (the source's earlier facts) takes that fact out of it and into *kept*."""
+    reusable = {} if reusable is None else reusable
+    kept = set() if kept is None else kept
     source = plan.source
     result = await run_worker(
         project_id=plan.project_id,
@@ -523,6 +549,11 @@ async def _distil_piece(plan: Plan, piece: str, line_offset: int, *, trigger: st
             citations = _cited(piece, line_offset, source["id"], draft)
             if citations is None:
                 dropped += 1
+                continue
+            earlier = reusable.pop(vault.citation_key(citations, source["visibility"]), None)
+            if earlier is not None:
+                kept.add(earlier)
+                stored.append(earlier)
                 continue
             try:
                 meta = await asyncio.to_thread(

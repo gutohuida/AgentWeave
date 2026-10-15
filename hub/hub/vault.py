@@ -624,11 +624,20 @@ def build_map(project_root: Path, private_root: Path) -> List[Dict[str, Any]]:
     return listed + orphans
 
 
+def private_text_is(holder: Optional[str]) -> str:
+    """Where a private entry's missing text is, as a clause: held on its holder, or, when the
+    holder is this machine, not at its private location (F617: "held on TITAN, not on this
+    machine" on TITAN itself, after the entry was removed)."""
+    if holder and holder == holder_name():
+        return (
+            "its text is not at this machine's private location (it was removed, or the private "
+            "location changed)"
+        )
+    return f"its text is held on {holder or 'another machine'}, not on this machine"
+
+
 def _held_elsewhere(holder: Optional[str]) -> str:
-    return (
-        f"This entry is private and its text is held on {holder or 'another machine'}, not on "
-        "this machine. Ask the operator for it if you need it."
-    )
+    return f"This entry is private and {private_text_is(holder)}. Ask the operator for it if you need it."
 
 
 def _lines(citation: Dict[str, Any]) -> str:
@@ -991,6 +1000,40 @@ def add_fact(
         stub = {key: meta[key] for key in _FACT_STUB_KEYS}
         storage.write(tracked, f"{FACTS}/{fact_id}.json", _encode(stub))
     return meta
+
+
+def loose_quote(quote: str) -> str:
+    """A quote compared ignoring case, runs of whitespace and trailing punctuation: a model quotes
+    the same line with and without its final period from one pass to the next (F587)."""
+    return " ".join(quote.split()).rstrip(".,;:!?\"' ").casefold()
+
+
+CitationKey = Tuple[str, frozenset]
+
+
+def citation_key(citations: List[Dict[str, Any]], visibility: str) -> CitationKey:
+    """What makes a fact drawn again the same fact: its visibility and its citations as a set, each
+    its source, line span and loose quote (`a-redistilled-fact-keeps-its-id`)."""
+    return (
+        visibility,
+        frozenset(
+            (c["source"], loose_quote(c["quote"]), c["line_start"], c["line_end"])
+            for c in citations
+        ),
+    )
+
+
+def facts_by_citations(
+    project_root: Path, private_root: Path, source_id: str
+) -> Dict[CitationKey, str]:
+    """The facts citing *source_id* whose record is here, by `citation_key`; the first id wins
+    when two share one."""
+    found: Dict[CitationKey, str] = {}
+    for fact_id, fact in sorted(_facts(project_root, private_root).items()):
+        meta = fact.meta
+        if source_id in meta["sources"] and meta.get("citations"):
+            found.setdefault(citation_key(meta["citations"], meta["visibility"]), fact_id)
+    return found
 
 
 def facts_citing(project_root: Path, private_root: Path, source_id: str) -> List[str]:
@@ -1359,7 +1402,7 @@ def _fact_named(fact_id: str, facts: Dict[str, _Fact], records: Dict[str, _Recor
     """A fact as a warning names it: its id, its claim, and the sources it was said in."""
     fact = facts.get(fact_id)
     if fact is None:
-        return f"{fact_id}, which is not in the vault on this machine"
+        return f"{fact_id}, which is no longer in the vault"
     said = f'"{fact.claim}"' if fact.claim else "(a private fact whose claim is held elsewhere)"
     origin = ", ".join(_source_named(s, records) for s in fact.meta["sources"]) or "no source"
     return f"{fact_id}: {said}, from {origin}"
@@ -1390,7 +1433,10 @@ def fact_warnings(
             warnings.append(
                 {
                     "kind": "missing",
-                    "message": f"It cites {fact_id}, which is not in the vault on this machine.",
+                    "message": (
+                        f"It cites {fact_id}, which is no longer in the vault (it was deleted, or "
+                        "replaced when its source was distilled again)."
+                    ),
                 }
             )
             continue

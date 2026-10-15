@@ -35436,7 +35436,7 @@ Seam: distillation x contradictions. `distillation._check` compares the new fact
 
 ## F587 (B) -- re-distilling a source replaces every fact with a new id, orphaning the decision and the requirements that cite them
 
-**Status:** open 2026-10-13. Measured in the same sweep as F586.
+**Status:** fixed 2026-10-15 (Tier 1, change `spec/changes/a-redistilled-fact-keeps-its-id`, with F617). A re-distil keeps, under its id and unchanged, every earlier fact drawn again from the same lines: the same source and span, and the quote equal ignoring case, runs of whitespace and trailing punctuation. The first drive run on HEAD showed Haiku quoting the same line with and without its period, so an exact quote would churn. Each earlier fact is kept at most once, and only new facts are checked for contradictions. Acceptance drive `scripts/drive/d1015_f587_redistil_keeps_ids.py` committed failing first (efa77b4: both facts re-minted on HEAD), ALL PASS after (Haiku, scratch `:8054`). Tests: `test_a_redistilled_fact_keeps_its_id.py`; three `test_vault_contradictions` re-distils now quote a different line, so they still exercise replacement and the check. Opened 2026-10-13. Measured in the same sweep as F586.
 
 After the same re-distil, the 300 fact that stood in the resolved contradiction (`fct-1b7ccb9bf93f`) is deleted (`distillation.distil` deletes `earlier - stored`, `hub/hub/distillation.py:312-322`) and an identical claim is written under a new id. Consequences, each measured: the resolved contradiction's `stands` side now reads `claim: None, source: None`, and the Vault tab renders it as "A private fact, held on another machine" (`VaultPage.tsx:748`) though nothing is private; the approved change `spec/changes/refund-limits/spec.json` that cited the fact gets a `missing` warning ("It cites fct-1b7c..., which is not in the vault on this machine"); its R2 conflict names a deleted image fact the same way. Only open contradictions citing the old facts are cleaned up (`delete_open_contradictions_citing`), so resolved ones keep pointing at nothing.
 
@@ -35744,7 +35744,7 @@ Seam: Knowledge vault (Vault tab x file-source availability). **Fix shape:** gat
 
 ## F617 (B) -- after a re-distil, a resolved contradiction calls the standing fact "A private fact, held on another machine", and an approved spec says its cited fact "is not in the vault on this machine"
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
+**Status:** fixed 2026-10-15 for the Hub's words (Tier 1, with F587). The churn itself is gone (F587). A fact in no record or stub is now warned of as "no longer in the vault (it was deleted, or replaced when its source was distilled again)". A private entry, file or source whose holder is this machine says its text "is not at this machine's private location (it was removed, or the private location changed)" (`vault.private_text_is`). The Vault tab's card text "A private fact, held on another machine" for a fact that is gone is in the UI batch. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
 
 **Also (2026-10-15, F609's drive):** after a project is deleted with its private entries removed and its folder reopened, a private source's tracked stub reads "its text is held on TITAN, not on this machine" on TITAN itself. The same wording problem from another cause: the text is gone, not elsewhere. Fix with F617's honest wording.
 
