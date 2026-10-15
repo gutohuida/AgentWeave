@@ -1469,12 +1469,16 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="create_job",
-            args="name, agent, message, cron, session_mode=new",
+            args="name, agent, message, cron, session_mode=new, enabled=true",
             method="POST",
             path="/jobs",
-            fields=("name", "agent", "message", "cron", "session_mode"),
+            fields=("name", "agent", "message", "cron", "session_mode", "enabled"),
             required=("name", "agent", "message", "cron"),
-            text=(f"session_mode is one of {values(JobSessionMode)}. {_SCHEDULED_WORK_SETTING}"),
+            text=(
+                f"session_mode is one of {values(JobSessionMode)}. enabled=false creates it switched "
+                "off; ask for that here rather than toggling after, when the schedule could fire "
+                f"in between. {_SCHEDULED_WORK_SETTING}"
+            ),
         ),
         _Operation(
             tool="toggle_job",

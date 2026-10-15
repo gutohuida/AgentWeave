@@ -35930,7 +35930,7 @@ Seam: Jobs & loops (archive x Jobs page). Tier guess: 0 or 1 (design gap; no fix
 
 ## F638 (C) -- an agent cannot create a disabled job
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Capability plane; scratch Hub `:8036`).
+**Status:** fixed 2026-10-15 (Tier 0). The MCP `create_job` takes `enabled` (default true), and passes it to the agent route, which already accepted it; the rendered tool surface describes it. The `test_mcp_server` payload case with `enabled=False` fails on the old signature; `test_tool_surface_matches_server` and the Claude context snapshot are updated. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Capability plane; scratch Hub `:8036`).
 
 The `create_job` MCP tool has no `enabled` parameter (`mcp_server.py:778`), while the operator route has one. Asked for a disabled job, Haiku created an enabled one and then called `toggle_job`, which leaves a window where a frequent cron could fire. The agent and operator planes disagree.
 
@@ -35999,7 +35999,7 @@ Seam: Agents (trigger refusal) x Conversations & composer (conversation created 
 
 ## F646 (C) -- a directory inside another project's directory opens as a separate project
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Projects; scratch Hub `:8031`, nested project `proj-590bb70106aa`).
+**Status:** fixed 2026-10-15 (Tier 0, per the fix plan's S8). Opening (or creating, which opens) a directory inside another registered project's directory is refused 409 `project_nested`, naming that project, and writes no marker. A sibling whose name only starts with the outer's still opens. `test_project_lifecycle.test_a_directory_inside_another_project_is_refused_naming_it` failed before. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Projects; scratch Hub `:8031`, nested project `proj-590bb70106aa`).
 
 `POST /projects/open {"path":".../aw-sweep-1015-g1/nested"}` -> 200, a new `proj-590bb70106aa`. Its `.agentweave/project.json` lands inside g1's repository (`git status`: `?? nested/`). One project's agents can then edit the other's files, and the outer project's worktrees and integration see the inner one as untracked content. Whether this should be refused or warned about is a design question (the report grades it C/D). F610 is the same nesting question for the private vault location.
 
@@ -36007,7 +36007,7 @@ Seam: Projects (open x ProjectWorkspace binding). Tier guess: 1 (design gap).
 
 ## F647 (C) -- `PUT /project/instructions {}` clears the instructions without a word
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Projects; scratch Hub `:8031`).
+**Status:** fixed 2026-10-15 (Tier 0). `InstructionsUpdate.content` is required: `{}` answers 422 naming `content` and changes nothing; clearing is an explicit `{"content": ""}` (the app always sends the field). `test_instructions.test_an_empty_body_is_refused_and_clearing_takes_an_explicit_empty_string` failed before. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G1: Projects; scratch Hub `:8031`).
 
 `InstructionsUpdate.content` defaults to `""`, so an omitted field is a clear. The UI asks first ("Clear the instructions…? … no history and no undo"), and that held, but the API's omitted-field path bypasses it (Step 4 rule 7).
 

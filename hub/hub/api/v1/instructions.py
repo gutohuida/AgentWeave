@@ -22,9 +22,12 @@ class InstructionsUpdate(RequestModel):
     **blanked the project's instructions**, because the default was the empty string and
     the empty string is a legitimate value. There is no field name a caller can send that
     is now silently discarded: `RequestModel` names it instead.
+
+    `content` is required (F647): `{}` used to clear the instructions too, bypassing the app's
+    "no history and no undo" confirmation. Clearing is an explicit `{"content": ""}`.
     """
 
-    content: str = ""
+    content: str
 
 
 @router.get("/instructions")

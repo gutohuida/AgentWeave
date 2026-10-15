@@ -429,3 +429,25 @@ async def test_create_new_creates_exactly_one_directory_and_registers_it(app, tm
     async with async_session_factory() as session:
         with pytest.raises(ProjectPathError, match="use open for a directory that already exists"):
             await ProjectLifecycleService(session).create_new(target)
+
+
+@pytest.mark.asyncio
+async def test_a_directory_inside_another_project_is_refused_naming_it(app, tmp_path) -> None:
+    """F646: a nested folder opened as its own project put its marker in the outer repository, and
+    each project's agents could edit the other's files. A sibling whose name merely starts with
+    the outer's still opens."""
+    outer = tmp_path / "outer"
+    nested = outer / "nested"
+    sibling = tmp_path / "outer-sibling"
+    for directory in (outer, nested, sibling):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    async with async_session_factory() as session:
+        outer_project = await ProjectLifecycleService(session).open_existing(outer)
+        with pytest.raises(ProjectIdentityConflict) as refused:
+            await ProjectLifecycleService(session).open_existing(nested)
+        await ProjectLifecycleService(session).open_existing(sibling)
+
+    assert refused.value.code == "project_nested"
+    assert outer_project.id in str(refused.value)
+    assert not (nested / PROJECT_MARKER_PATH).exists()

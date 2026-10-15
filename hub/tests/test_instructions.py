@@ -90,3 +90,22 @@ async def test_get_agent_context_places_instructions_before_charter(app, auth_he
 
     assert "# Global Rule\n\nBe concise." in content
     assert content.index("# Global Rule") < content.index("Charter guidance")
+
+
+@pytest.mark.asyncio
+async def test_an_empty_body_is_refused_and_clearing_takes_an_explicit_empty_string(
+    app, auth_headers
+):
+    """F647: `{}` used to clear the instructions without a word, bypassing the app's confirmation.
+    An omitted `content` is now refused and changes nothing; `{"content": ""}` still clears."""
+    url = "/api/v1/projects/proj-test/project/instructions"
+    put = await app.put(url, json={"content": "Keep me."}, headers=auth_headers)
+    assert put.status_code == 200, put.text
+
+    empty = await app.put(url, json={}, headers=auth_headers)
+
+    assert empty.status_code == 422, empty.text
+    assert "content" in empty.text
+    assert (await app.get(url, headers=auth_headers)).json()["content"] == "Keep me."
+    cleared = await app.put(url, json={"content": ""}, headers=auth_headers)
+    assert cleared.status_code == 200 and cleared.json()["content"] == ""

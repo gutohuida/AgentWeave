@@ -290,6 +290,21 @@ def test_request_agent_uses_bound_run_without_requester_field(hub):
                 "message": "M",
                 "cron": "0 2 * * *",
                 "session_mode": "new",
+                "enabled": True,
+            },
+        ),
+        (
+            # F638: an agent can create a job switched off, as the operator can.
+            lambda module: module.create_job("N", "worker", "M", "0 2 * * *", enabled=False),
+            "POST",
+            "/api/v1/agent-actions/jobs",
+            {
+                "name": "N",
+                "agent": "worker",
+                "message": "M",
+                "cron": "0 2 * * *",
+                "session_mode": "new",
+                "enabled": False,
             },
         ),
         (

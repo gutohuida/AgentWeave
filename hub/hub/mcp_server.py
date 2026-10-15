@@ -785,6 +785,7 @@ def create_job(
     message: str,
     cron: str,
     session_mode: JobSessionMode = "new",
+    enabled: bool = True,
 ) -> Dict[str, Any]:
     """Create recurring work.
 
@@ -805,6 +806,9 @@ def create_job(
             Choose a slower one only when the work itself is periodic — nightly, weekly — rather
             than to avoid waste.
         session_mode: "new" to start a fresh conversation each run, "resume" to continue.
+        enabled: False creates the job switched off, so it never fires until toggle_job turns
+            it on. Ask for that here rather than creating it on and toggling it after: the
+            schedule could fire in between.
     """
     return _job_effect(
         "POST",
@@ -815,6 +819,7 @@ def create_job(
             "message": message,
             "cron": cron,
             "session_mode": session_mode,
+            "enabled": enabled,
         },
     )
 

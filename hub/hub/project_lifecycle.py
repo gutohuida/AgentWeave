@@ -75,6 +75,9 @@ class ProjectLifecycleService:
             return existing_by_path
 
         marker = _read_marker(canonical.path)
+        await self._refuse_inside_another_project(
+            canonical, marker["project_id"] if marker is not None else None
+        )
         if marker is not None:
             marked_project = await self.session.get(Project, marker["project_id"])
             if marked_project is not None:
@@ -243,6 +246,28 @@ class ProjectLifecycleService:
             self.session.add(DeletedProject(id=project_id))
         await self.session.commit()
         return summary
+
+    async def _refuse_inside_another_project(
+        self, canonical: CanonicalProjectPath, own_id: Optional[str]
+    ) -> None:
+        """Refuse a directory inside another registered project's (F646): its marker would land in
+        that project's repository, and each project's agents could edit the other's files."""
+        separator = "\\" if canonical.path_key.startswith("windows:") else "/"
+        rows = await self.session.execute(
+            select(Project.id, Project.name, Project.path_key, Project.working_directory).where(
+                Project.path_key.isnot(None)
+            )
+        )
+        for other_id, name, path_key, directory in rows:
+            if other_id == own_id:
+                continue
+            if canonical.path_key.startswith(path_key.rstrip(separator) + separator):
+                raise ProjectIdentityConflict(
+                    f"{canonical.path} is inside the directory of project {name} ({other_id}, "
+                    f"{directory}). A project inside another's directory shares its files and "
+                    "repository: open that project instead, or move this folder outside it.",
+                    code="project_nested",
+                )
 
     async def _was_deleted(self, project_id: str) -> bool:
         """Whether this database deleted *project_id*: its folder's marker is then not adopted
