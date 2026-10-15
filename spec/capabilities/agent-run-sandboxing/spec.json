@@ -1140,6 +1140,33 @@
       "requirement": "a-hub-agent-runs-with-the-projects-settings-not-overridable",
       "then": "create is refused naming it",
       "when": "its flags hold --setting-sources user"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub and a Haiku agent",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f628_accept_edits_card.py <project> (written first: no card on HEAD)",
+      "key": "edit-files-asks-the-operator-for-everything-else-drive",
+      "requirement": "edit-files-asks-the-operator-for-everything-else-card",
+      "then": "a pending permission card names the run; denying it leaves the file absent",
+      "when": "an acceptEdits turn Writes outside the workspace"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an acceptEdits override",
+      "how_to_check": "pytest hub/tests/test_runner_adapters_argv.py hub/tests/test_permission_approver.py",
+      "key": "edit-files-asks-the-operator-for-everything-else-argv",
+      "requirement": "edit-files-asks-the-operator-for-everything-else-card",
+      "then": "--permission-prompt-tool is present and AW_PERMISSION_POSTURE is operator",
+      "when": "the Claude argv and run env are built"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same posture",
+      "how_to_check": "pytest hub/tests/test_runner_adapters_argv.py",
+      "key": "edit-files-asks-the-operator-for-everything-else-inside",
+      "requirement": "edit-files-asks-the-operator-for-everything-else-edits-free",
+      "then": "--permission-mode acceptEdits is kept, so inside edits stay auto-approved by Claude",
+      "when": "the argv is built"
     }
   ],
   "algorithms": [
@@ -1205,9 +1232,11 @@
       "FR-50": "ddf7143579779558c8811ed0eb3393c01dc9945ba5872968aab13aeaaab35f5c",
       "FR-51": "fbeb2027d2c64773e0e4ada366df891b115cd5ace21cdc929b9ffdb71e1ce500",
       "FR-52": "1e131a36315939c805df8d38891f14a9bc2bc07c38aa2154f2b270216b18e325",
+      "FR-53": "050ef73f8906d9ebe5c5e8adf27f373d2581b53081e671ad591feb431913ee4a",
+      "FR-54": "c9340f730a4cddbb33c12f972b3c582fc1e316daafbf7a12a4dee0162231f1ea",
       "FR-8": "8cfbe18bf3d8194ee817d7c2752711d6c5a3e8e6fc3922082df2174afb6c9b6b"
     },
-    "high_water": 52,
+    "high_water": 54,
     "requirements": {
       "a-brace-pattern-is-judged-as-the-words-it-expands-to": "FR-39",
       "a-claude-run-pre-allows-the-hub-s-call-command": "FR-38",
@@ -1229,6 +1258,8 @@
       "a-sandboxed-non-yolo-claude-agent-can-still-use-the-hub-s-ow": "FR-15",
       "a-word-with-no-path-separator-is-still-judged-when-it-names-": "FR-30",
       "an-operator-asked-to-decide-a-call-is-shown-what-the-workspa": "FR-36",
+      "edit-files-asks-the-operator-for-everything-else-card": "FR-53",
+      "edit-files-asks-the-operator-for-everything-else-edits-free": "FR-54",
       "every-permission-decision-is-answered-and-answering-never-de": "FR-19",
       "n1": "FR-42",
       "n10": "FR-45",
@@ -1546,6 +1577,20 @@
       "party": null,
       "rationale": "A runner flag after the Hub's would win, as in F599.",
       "statement": "A runner's flags MUST NOT carry --setting-sources (refused like the other posture flags)."
+    },
+    {
+      "key": "edit-files-asks-the-operator-for-everything-else-card",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator decision fix-D12.",
+      "statement": "An acceptEdits Claude run MUST name the Hub's approval tool and have the operator answer, so every call Claude Code does not auto-approve under acceptEdits becomes an operator card."
+    },
+    {
+      "key": "edit-files-asks-the-operator-for-everything-else-edits-free",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Edits Claude Code auto-approves under acceptEdits MUST still run without a card."
     }
   ],
   "schema_version": 1,

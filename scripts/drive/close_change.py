@@ -62,6 +62,7 @@ TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
 FLAG_DRIVE = "scripts/drive/d1015_f599_runner_flags.py"
 SETTINGS_DRIVE = "scripts/drive/d1015_f454_user_skills.py"
+ACCEPT_EDITS_DRIVE = "scripts/drive/d1015_f628_accept_edits_card.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1181,6 +1182,22 @@ CHANGES = {
              "A runner flag --setting-sources is refused naming it."),
         ],
     },
+    "f628": {
+        "document": "spec/changes/edit-files-asks-the-operator-for-everything-else/spec.json",
+        "commit": "c8414df",
+        "tasks": ["task-16f0be97a9b4", "task-d409d4e01bcf"],
+        "evidence": [
+            ("FR-1", "task-d409d4e01bcf", "test_result", "hub/tests/test_permission_approver.py",
+             "An acceptEdits Claude argv names the approval tool once; a conversation's acceptEdits "
+             "choice does too (test_agent_default_permission_mode)."),
+            ("FR-1", "task-16f0be97a9b4", "manual_observation", ACCEPT_EDITS_DRIVE,
+             "Written first: no card on HEAD; after, an outside Write raised a card naming Write, "
+             "the deny was accepted and nothing was written (5/5)."),
+            ("FR-2", "task-d409d4e01bcf", "test_result", "hub/tests/test_runner_adapters_argv.py",
+             "--permission-mode acceptEdits is kept, so inside edits stay Claude's to approve; the "
+             "four goldens differ by the approver flag pair alone."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1202,6 +1219,7 @@ CHANGE_FOLDS = {
     "f602": 'agent-stream-events',
     "f599": 'runner-registry',
     "f454": 'agent-run-sandboxing',
+    "f628": 'agent-run-sandboxing',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
