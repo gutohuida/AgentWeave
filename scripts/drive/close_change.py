@@ -78,6 +78,8 @@ DELETED_TESTS = "hub/tests/test_a_deleted_project_stays_deleted.py"
 DELETED_DRIVE = "scripts/drive/d1015_f592_deleted_project_stays_deleted.py"
 REDISTIL_TESTS = "hub/tests/test_a_redistilled_fact_keeps_its_id.py"
 REDISTIL_DRIVE = "scripts/drive/d1015_f587_redistil_keeps_ids.py"
+NEWS_TESTS = "hub/tests/test_vault_reports.py"
+NEWS_DRIVE = "scripts/drive/d1015_f615_outside_news_referred.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1328,6 +1330,16 @@ CHANGES = {
              "machine's private location, not held elsewhere."),
         ],
     },
+    "f615": {
+        "document": "spec/changes/a-report-with-news-reaches-the-operator/spec.json",
+        "tasks": ["task-0d94cf2b2980"],
+        "evidence": [
+            ("FR-1", "task-0d94cf2b2980", "manual_observation", NEWS_DRIVE,
+             "Written first: on HEAD Haiku answered a 'renegotiated to 60 days' report 'the entry "
+             "stands'; after, referred in two samples, while the control report the source settles "
+             "stays answered."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1371,6 +1383,7 @@ CHANGE_FOLDS = {
     "f603": 'workspace-isolation',
     "f605": 'project-checks',
     "f593": 'requirement-traceability',
+    "f615": 'knowledge-vault',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [

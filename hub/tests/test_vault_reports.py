@@ -339,6 +339,11 @@ async def test_each_report_is_one_firing_and_a_disabled_job_spawns_nothing(
     assert "MSG-0: please check." in first["prompt"] and SOURCE in first["prompt"]
     assert claims[0] in first["prompt"]
     assert first["model"] == HAIKU and first["output_model"] is vault_reports.ReportAnswer
+    # F615: news the source does not hold is the operator's to hear, not "the entry stands".
+    assert "information the source does not hold" in first["prompt"]
+    assert "the source itself settles the report" in first["prompt"]
+    assert "from the source alone" not in first["prompt"]
+    assert first["prompt_version"] == "vault-reports-4"
 
     firings = await _firings()
     assert [f["outcome"] for f in firings] == ["written", "empty", "written", "failed"]
