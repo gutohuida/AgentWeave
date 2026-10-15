@@ -18,14 +18,6 @@ from pathlib import Path
 import pytest
 
 from hub.mcp_server import _decide
-
-
-def quoted(text: str) -> str:
-    """How a refusal quotes a word since F656: single quotes, the text as written (no doubled
-    backslashes), only a character that would not print escaped."""
-    return "'" + "".join(c if c.isprintable() else repr(c)[1:-1] for c in text) + "'"
-
-
 from hub.model_catalog import WORKSPACE_PERMISSION_MODE, get_provider, render_control_args
 from hub.runner_adapters import build_command
 from hub.runner_commands import (
@@ -35,6 +27,12 @@ from hub.runner_commands import (
 )
 
 MCP_SERVER = Path(__file__).resolve().parents[1] / "hub" / "mcp_server.py"
+
+
+def quoted(text: str) -> str:
+    """How a refusal quotes a word since F656: single quotes, the text as written (no doubled
+    backslashes), only a character that would not print escaped."""
+    return "'" + "".join(c if c.isprintable() else repr(c)[1:-1] for c in text) + "'"
 
 
 @pytest.fixture()
