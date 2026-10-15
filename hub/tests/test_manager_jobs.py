@@ -107,7 +107,7 @@ async def test_a_patch_changes_only_the_fields_it_sends(app, auth_headers) -> No
     runner_id = await _runner(app, auth_headers)
     await app.patch(
         f"{BASE}/manager/jobs/{JOB}",
-        json={"enabled": True, "runner_id": runner_id, "model": "m"},
+        json={"enabled": True, "runner_id": runner_id, "model": "claude-haiku-4-5-20251001"},
         headers=auth_headers,
     )
     off = await app.patch(
@@ -117,7 +117,7 @@ async def test_a_patch_changes_only_the_fields_it_sends(app, auth_headers) -> No
     assert (off.json()["enabled"], off.json()["runner_id"], off.json()["model"]) == (
         False,
         runner_id,
-        "m",
+        "claude-haiku-4-5-20251001",
     )
     cleared = await app.patch(
         f"{BASE}/manager/jobs/{JOB}", json={"runner_id": None, "model": None}, headers=auth_headers
@@ -166,13 +166,17 @@ async def test_a_settings_save_that_omits_the_title_fields_leaves_the_job_alone(
     runner_id = await _runner(app, auth_headers)
     await app.patch(
         f"{BASE}/manager/jobs/{JOB}",
-        json={"enabled": True, "runner_id": runner_id, "model": "m"},
+        json={"enabled": True, "runner_id": runner_id, "model": "claude-haiku-4-5-20251001"},
         headers=auth_headers,
     )
     saved = await app.put(f"{BASE}/settings", json={"hop_budget": 7}, headers=auth_headers)
     assert saved.status_code == 200, saved.text
     job = await _job(app, auth_headers)
-    assert (job["enabled"], job["runner_id"], job["model"]) == (True, runner_id, "m")
+    assert (job["enabled"], job["runner_id"], job["model"]) == (
+        True,
+        runner_id,
+        "claude-haiku-4-5-20251001",
+    )
 
 
 # ---------------------------------------------------------------------------

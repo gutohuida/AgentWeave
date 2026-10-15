@@ -35860,7 +35860,7 @@ Seam: Worktrees & integration (task drawer x integration preview). Tier guess: 0
 
 ## F630 (C) -- a manager job accepts a model its runner's CLI does not declare; it fails only at the firing
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Manager jobs; scratch Hub `:8035`).
+**Status:** fixed 2026-10-15 (Tier 0). `PATCH /manager/jobs/{key}` judges a newly set model against the runner the job will use, with the catalog's sentence `POST /runners` gives (400), and refuses a model on a job with no runner ("Choose the job's runner first…"); an unchanged stored model is left alone, as on runners. `test_a_job_model_is_one_its_runner_declares.py` failed before; fixtures in `test_manager_jobs.py` and `test_vault_distillation.py` used undeclared models (`m`, `claude-sonnet-4-6`) and now use declared ones. Driven on a scratch Hub: `gpt-9` -> 400 with the catalog sentence; `haiku` -> 200. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Manager jobs; scratch Hub `:8035`).
 
 `PATCH /manager/jobs/vault-distillation {"runner_id": "<claude runner>", "model": "gpt-9"}` answers 200 and stores it; it answers 200 with no runner as well. `POST /runners {"cli":"claude","model":"gpt-9"}` answers `400 "'gpt-9' is not a model 'claude' declares; expected one of: …"`. The next firing failed with that same sentence (`duration_ms` 0, nothing spent; the sentence shows in activity). Validation at the wrong door; legible later.
 

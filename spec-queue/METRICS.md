@@ -151,3 +151,4 @@ not a defect.
 | 2026-10-15 | F640 a resolved contradiction no longer marks a side presumed (interactive, S6) | 0 | none | ~0h10 (list answer; 1 assertion block) | not driven (needs worker-distilled sources) | none |
 | 2026-10-15 | F641 the 413 names its limit (interactive, S6; 'answered' label in the UI batch) | 0 | none | ~0h10 (middleware body; 2 assertions) | ~0h05 (live 413) | none |
 | 2026-10-15 | F626 a vault job on with no runner says so in the activity (interactive, S6) | 0 | none | ~0h30 (one recorder, three background entries; 4 tests, 1 rewritten) | ~0h05 (enable + upload on a scratch Hub) | design (reading the panel): refusing the enable would have blocked enable-then-pick -> record instead |
+| 2026-10-15 | F630 a manager job's model is validated on PATCH (interactive, S6) | 0 | none | ~0h20 (runner-catalog check on set; 3 tests, 3 fixtures fixed) | ~0h05 (two PATCHes on a scratch Hub) | test: three fixtures stored models no catalog declares |

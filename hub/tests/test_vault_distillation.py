@@ -142,10 +142,10 @@ async def test_the_jobs_model_wins_over_the_runners(app, auth_headers, worker) -
     assert fake.calls[-1]["model"] == HAIKU
     assert fake.calls[-1]["runner_id"] == runner_id
 
-    await _enable(app, auth_headers, model="claude-sonnet-4-6")
+    await _enable(app, auth_headers, model="claude-sonnet-5-5")
     answered = await _distil(app, auth_headers, source["id"])
     assert answered.status_code == 202, answered.text
-    assert fake.calls[-1]["model"] == "claude-sonnet-4-6"
+    assert fake.calls[-1]["model"] == "claude-sonnet-5-5"
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,7 @@ from ... import manager
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Runner
+from ...model_catalog import get_provider, undeclared_model_reason
 
 router = APIRouter(prefix="/manager", tags=["manager"])
 
@@ -56,6 +57,28 @@ async def update_manager_job(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Unknown runner '{runner_id}': no runner by that id belongs to this project",
             )
+    # The model is judged when it is set, against the runner the job will use, as `POST /runners`
+    # judges one; the firing used to be the first to refuse it (F630).
+    model = fields.get("model")
+    if model is not None:
+        row = await manager.get_job_row(session, project_id, key)
+        chosen = runner_id if "runner_id" in fields else (row.runner_id if row else None)
+        runner = await session.get(Runner, chosen) if chosen else None
+        if runner is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Choose the job's runner first: a model is one its runner's CLI declares, "
+                    "and this job has no runner."
+                ),
+            )
+        if model != (row.model if row else None):
+            provider = get_provider(runner.cli)
+            if provider is None or provider.model(model) is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=undeclared_model_reason(runner.cli, model),
+                )
     await manager.set_job(session, project_id, key, **fields)
     await session.commit()
     return await manager.get_job(session, project_id, key)
