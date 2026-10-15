@@ -39,6 +39,9 @@ Put to the operator in an interactive session, each with background, stakes and 
 - DECIDED   fix-hk1  `AgentWeaveResearch` stays enabled. (operator, 2026-10-15)
 - DECIDED   fix-hk2  The stray untracked `hub/.env` and `hub/data/` are removed (G1-12): moved out of the checkout 2026-10-15. (operator, 2026-10-15)
 - DECIDED   fix-hk3  `.claude/work-pc/` stays tracked permanently so a pull carries the work-PC handoffs; noted in CLAUDE.md. (operator, 2026-10-15)
+- DECIDED   fix-D13  F605: a task's failing check that also fails on main is labelled pre-existing; reviewers do not send the task back for it, and approval is held for the operator, who lifts it with an override-with-reason control in the app. Never charged silently, never hidden: checks report one exit code per command, so a new failure inside an already-failing suite cannot be told apart. Rejected: let it through (hides regressions); re-word only. (operator, 2026-10-15)
+- DECIDED   fix-hk4  No scoped /e2e-loop per stream: per-fix drive scripts, and one broader /e2e-loop sweep after S1-S8 close. (operator, 2026-10-15)
+- DECIDED   fix-hk5  `.claude/handoffs/LATEST.md` deleted (stale since 2026-10-07); handoff numbering is the authority. (operator, 2026-10-15)
 
 ### build-1013-1: archiving an agent frees a slot of the agent budget (F465) -- 2026-10-13 build window
 
