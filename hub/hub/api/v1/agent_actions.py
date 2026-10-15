@@ -1555,6 +1555,10 @@ async def decide_evidence(
     if evidence is None or evidence.project_id != actor.project_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence not found")
 
+    from ... import run_divergence
+
+    # F621, as on the operator's route: a review this decision may release, asked before it.
+    held_review = await run_divergence.held_review_before_a_decision(session, evidence)
     try:
         await requirement_evidence.decide(
             session,
@@ -1591,6 +1595,7 @@ async def decide_evidence(
     await task_integration.integrate_what_was_waiting_for_this_evidence(
         session, evidence, run_actor(actor.run_id, actor.agent)
     )
+    await run_divergence.release_held_review(session, held_review)
     # After the integration, and from the values read before it: the operator's screen shows this
     # piece, and an agent's decision moved it exactly as the operator's own would.
     await sse_manager.broadcast(actor.project_id, "spec_updated", announced)

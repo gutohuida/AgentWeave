@@ -33,6 +33,7 @@ from ... import (
     requirement_coverage,
     requirement_evidence,
     requirement_links,
+    run_divergence,
     run_liveness,
     slice_drafting,
     spec_adoption,
@@ -1408,6 +1409,8 @@ async def decide_evidence(
     evidence = await session.get(RequirementEvidence, evidence_id)
     if evidence is None or evidence.project_id != project_id:
         raise HTTPException(status_code=404, detail="Evidence not found")
+    # F621: a review this decision may release, asked before it is made.
+    held_review = await run_divergence.held_review_before_a_decision(session, evidence)
     try:
         review = await requirement_evidence.decide(
             session,
@@ -1436,6 +1439,7 @@ async def decide_evidence(
     await task_integration.integrate_what_was_waiting_for_this_evidence(
         session, evidence, task_transitions.operator()
     )
+    await run_divergence.release_held_review(session, held_review)
     # After the integration, so a view refetching on it sees any merge the decision caused.
     await sse_manager.broadcast(project_id, "spec_updated", announced)
     return view

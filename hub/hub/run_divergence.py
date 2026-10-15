@@ -556,6 +556,141 @@ def _failed_review_prompt(task: Task, diverging_run: Run) -> str:
     )
 
 
+async def review_held_on_the_operator(
+    session: AsyncSession, task_id: Optional[str]
+) -> Optional[str]:
+    """The divergence of a review that ended without a verdict because approval was held for the
+    operator, while it still is (F621), or `None`. Read before the operator decides evidence, so
+    the same question asked after it can tell that the decision lifted the hold.
+
+    The held review is the reviewer's latest unanswered `review` divergence on a task still
+    `under_review` with that reviewer named and nothing of theirs running or queued on it.
+    """
+    from .requirement_gate import approval_held_for_operator
+    from .run_task_binding import task_attendance
+
+    if task_id is None:
+        return None
+    task = await session.get(Task, task_id)
+    if task is None or task.status != "under_review" or not task.assignee:
+        return None
+    divergence = (
+        (
+            await session.execute(
+                select(RunDivergence)
+                .where(RunDivergence.task_id == task.id)
+                .order_by(RunDivergence.sequence.desc())
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if (
+        divergence is None
+        or divergence.policy_applied != POLICY_REVIEW
+        or divergence.outcome != OUTCOME_SURFACED
+        or divergence.response_run_id is not None
+        or divergence.agent != task.assignee
+    ):
+        return None
+    if (await task_attendance(session, task.project_id)).attends(task.id, task.assignee):
+        return None
+    if await approval_held_for_operator(session, task, candidate=task.assignee) is None:
+        return None
+    return divergence.id
+
+
+async def ask_held_reviewer_again(session: AsyncSession, divergence_id: str) -> Optional[str]:
+    """Queue the held review again once the operator's decision has lifted its hold (F621).
+
+    The sweep's operator accepted the evidence a tester's verdict waited on, and the flow then
+    skipped every tick with "Ask tester again", which no control in the app does. The decision is
+    the operator's answer to the hold, so it is acted on: the same reviewer, the same checkout,
+    recorded as this divergence's response (`retried`). Answers the agent asked, or `None` where
+    the hold still stands or the review moved on. The caller commits nothing; this does.
+    """
+    from .requirement_gate import approval_held_for_operator
+    from .run_task_binding import task_attendance
+
+    divergence = (
+        (await session.execute(select(RunDivergence).where(RunDivergence.id == divergence_id)))
+        .scalars()
+        .first()
+    )
+    if divergence is None or divergence.outcome != OUTCOME_SURFACED or divergence.task_id is None:
+        return None
+    task = await session.get(Task, divergence.task_id)
+    run = await session.get(Run, divergence.run_id)
+    if (
+        task is None
+        or run is None
+        or task.status != "under_review"
+        or task.assignee != divergence.agent
+    ):
+        return None
+    if (await task_attendance(session, task.project_id)).attends(task.id, task.assignee):
+        return None
+    if await approval_held_for_operator(session, task, candidate=task.assignee) is not None:
+        return None
+    await _queue_response(
+        session,
+        project_id=task.project_id,
+        agent=divergence.agent,
+        prompt=_released_review_prompt(task, run),
+        task_id=task.id,
+        review_task_id=task.id,
+        source_run_id=run.id,
+        diverged_run=run,
+    )
+    divergence.outcome = OUTCOME_RETRIED
+    await session.commit()
+
+    from .turn_scheduler import schedule_agent
+
+    await schedule_agent(task.project_id, divergence.agent)
+    return divergence.agent
+
+
+async def held_review_before_a_decision(session: AsyncSession, evidence) -> Optional[str]:
+    """`review_held_on_the_operator` for *evidence*'s task; never raises, so it cannot refuse the
+    decision it is asked beside."""
+    try:
+        return await review_held_on_the_operator(session, getattr(evidence, "task_id", None))
+    except Exception:  # noqa: BLE001 - a diagnostic, never a reason to refuse a decision
+        logger.warning("Could not read a held review for %s", evidence.id, exc_info=True)
+        await session.rollback()
+        return None
+
+
+async def release_held_review(session: AsyncSession, divergence_id: Optional[str]) -> None:
+    """`ask_held_reviewer_again` after a decision has committed; never raises (the decision stands
+    whatever happens here)."""
+    if divergence_id is None:
+        return
+    try:
+        await ask_held_reviewer_again(session, divergence_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not ask the held review %s again", divergence_id, exc_info=True)
+        await session.rollback()
+
+
+def _released_review_prompt(task: Task, held_run: Run) -> str:
+    """What a reviewer asked again after the operator lifted the hold its verdict waited on."""
+    reachable = sorted(allowed_targets(task.status, ACTOR_RUN))
+    moves = ", ".join(reachable) if reachable else "none — this task is not yours to move"
+    return (
+        f"Your review of task {task.id} (run {held_run.id}) ended without a verdict because "
+        f"approval was waiting on the operator. The operator has now decided the evidence it "
+        f"waited on, so your verdict can be recorded.\n\n"
+        f"Task: {task.title}\n"
+        f"Current status: {task.status}\n"
+        f"Verdicts available to you: {moves}\n\n"
+        f"Your workspace is the checkout of the work under review. Read it and record one of those "
+        f"verdicts, or say plainly what stops you reaching one."
+    )
+
+
 async def _apply_policy(
     session: AsyncSession, run: Run, task: Task
 ) -> Tuple[str, Optional[str], Optional[str]]:

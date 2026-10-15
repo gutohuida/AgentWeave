@@ -20,7 +20,16 @@ from sqlalchemy.exc import OperationalError
 
 from hub import requirement_gate, task_integration
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, EventLog, InboundQueueEntry, Loop, Run, Task
+from hub.db.models import (
+    Agent,
+    EventLog,
+    InboundQueueEntry,
+    Loop,
+    RequirementEvidence,
+    Run,
+    RunDivergence,
+    Task,
+)
 from hub.run_divergence import evaluate_run_end
 from hub.run_task_binding import bind_run_to_task
 from hub.scheduler import DECISION_STALLED, decide_firing
@@ -299,3 +308,97 @@ async def test_a_wedged_review_with_nothing_to_hold_never_reaches_the_gate(
         with patch.object(requirement_gate, "evaluate", must_not_run):
             hold = await requirement_gate.approval_held_for_operator(db, task, candidate=BETA)
     assert hold is None
+
+
+# --- F621: the operator lifting the hold asks the held reviewer again ------------------------------
+
+
+async def _decide_the_awaiting_evidence(app, auth_headers, task_id, decision, reason=""):
+    async with async_session_factory() as db:
+        [evidence] = (
+            (
+                await db.execute(
+                    select(RequirementEvidence).where(RequirementEvidence.task_id == task_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    answer = await app.post(
+        f"/api/v1/projects/proj-test/project/spec/evidence/{evidence.id}/decision",
+        json={"decision": decision, "reason": reason},
+        headers=auth_headers,
+    )
+    assert answer.status_code == 200, answer.text
+
+
+async def _review_entries_for(agent, task_id):
+    async with async_session_factory() as db:
+        return (
+            (
+                await db.execute(
+                    select(InboundQueueEntry)
+                    .where(InboundQueueEntry.agent == agent)
+                    .where(InboundQueueEntry.origin_type == "divergence")
+                    .where(InboundQueueEntry.review_task_id == task_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+
+async def test_accepting_the_evidence_a_review_waited_on_asks_the_reviewer_again(
+    app, auth_headers, builder, bind_runner, tmp_path
+):
+    """F621: on the sweep the operator accepted the evidence a tester's verdict waited on, and the
+    flow then skipped every tick with "Ask tester again" -- a request the app has no control for.
+    The decision that lifts the hold is the operator's answer, so the held review is asked again."""
+    task_id, run_id = await _held_review(app, auth_headers, builder, bind_runner, tmp_path)
+    assert await evaluate_run_end(run_id) is not None
+    assert (await _diverged_payload(run_id))["outcome"] == "surfaced"
+
+    with patch("hub.turn_scheduler.schedule_agent", _no_schedule):
+        await _decide_the_awaiting_evidence(app, auth_headers, task_id, "accepted")
+
+    [entry] = await _review_entries_for(BETA, task_id)
+    assert entry.divergence_source_run_id == run_id
+    async with async_session_factory() as db:
+        [divergence] = (
+            (await db.execute(select(RunDivergence).where(RunDivergence.run_id == run_id)))
+            .scalars()
+            .all()
+        )
+        assert divergence.outcome == "retried"
+        assert (await db.get(Task, task_id)).assignee == BETA
+
+
+async def test_rejecting_that_evidence_asks_the_reviewer_for_its_send_back(
+    app, auth_headers, builder, bind_runner, tmp_path
+):
+    """A rejection lifts the hold too: the reviewer's verdict (a send-back) can now be recorded,
+    and without it the task would sit under review with nobody acting."""
+    task_id, run_id = await _held_review(app, auth_headers, builder, bind_runner, tmp_path)
+    assert await evaluate_run_end(run_id) is not None
+
+    with patch("hub.turn_scheduler.schedule_agent", _no_schedule):
+        await _decide_the_awaiting_evidence(app, auth_headers, task_id, "rejected", "wrong commit")
+
+    [entry] = await _review_entries_for(BETA, task_id)
+    assert "revision_needed" in entry.content
+
+
+async def test_a_decision_with_no_held_review_on_record_asks_nobody(
+    app, auth_headers, builder, bind_runner, tmp_path
+):
+    """Control: the review never ended on the hold (no divergence recorded), so nothing is asked."""
+    task_id, _run_id = await _held_review(app, auth_headers, builder, bind_runner, tmp_path)
+
+    with patch("hub.turn_scheduler.schedule_agent", _no_schedule):
+        await _decide_the_awaiting_evidence(app, auth_headers, task_id, "accepted")
+
+    assert await _review_entries_for(BETA, task_id) == []
+
+
+async def _no_schedule(*_args, **_kwargs):
+    return None
