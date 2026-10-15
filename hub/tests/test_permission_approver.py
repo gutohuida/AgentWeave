@@ -18,6 +18,14 @@ from pathlib import Path
 import pytest
 
 from hub.mcp_server import _decide
+
+
+def quoted(text: str) -> str:
+    """How a refusal quotes a word since F656: single quotes, the text as written (no doubled
+    backslashes), only a character that would not print escaped."""
+    return "'" + "".join(c if c.isprintable() else repr(c)[1:-1] for c in text) + "'"
+
+
 from hub.model_catalog import WORKSPACE_PERMISSION_MODE, get_provider, render_control_args
 from hub.runner_adapters import build_command
 from hub.runner_commands import (
@@ -206,7 +214,7 @@ _UNCHECKED = ("unchecked",)
 
 
 def _outside(word: str) -> tuple:
-    return ("outside", repr(word))
+    return ("outside", quoted(word))
 
 
 def _row(label, command, allow, reason=None, *, tool="Bash", marks=()):
@@ -719,7 +727,7 @@ def test_another_existing_drive_is_outside(workspace, other_drive, command, show
     decision = _decide("PowerShell", {"command": command.replace("<other>", other_drive)})
     assert decision["allow"] is False, decision["reason"]
     assert "is outside your workspace" in decision["reason"]
-    assert repr(shown.replace("<other>", other_drive)) in decision["reason"]
+    assert quoted(shown.replace("<other>", other_drive)) in decision["reason"]
 
 
 # Task 1.3 (F402, design D1, R6): `Temp:` is a drive of PowerShell's FileSystem provider, naming
@@ -737,7 +745,7 @@ def test_temp_is_a_drive_in_powershell_only(workspace, monkeypatch):
     refused = _decide("PowerShell", {"command": "Copy-Item x Temp:"})
     assert refused["allow"] is False, refused["reason"]
     assert "is outside your workspace" in refused["reason"]
-    assert repr("Temp:") in refused["reason"]
+    assert quoted("Temp:") in refused["reason"]
 
     # In the bash reading `temp:` stays an ordinary word: a heredoc line is text, not a drive.
     heredoc = _decide("Bash", {"command": "cat <<'EOF'\ntemp: 5\nEOF"})
@@ -759,7 +767,7 @@ def test_bash_reads_another_existing_drive_as_outside(workspace, other_drive, co
     decision = _decide("Bash", {"command": command.replace("<other>", other_drive)})
     assert decision["allow"] is False, decision["reason"]
     assert "is outside your workspace" in decision["reason"]
-    assert repr(other_drive + ":") in decision["reason"]
+    assert quoted(other_drive + ":") in decision["reason"]
 
 
 # Its control: the workspace's own drive names its current directory, which is inside.
@@ -849,7 +857,7 @@ def test_an_existing_drive_is_judged_by_the_real_probe(workspace, other_drive, t
     decision = _decide(tool, {"command": command.replace("<other>", other_drive)})
     assert decision["allow"] is False, decision["reason"]
     assert "is outside your workspace" in decision["reason"]
-    assert repr(other_drive + ":") in decision["reason"]
+    assert quoted(other_drive + ":") in decision["reason"]
 
 
 # An inside answer for the workspace's own drive does not end rule 4: the variable after the colon
@@ -876,7 +884,7 @@ def _link(link: Path, target: Path) -> None:
 def _assert_through_the_link(decision, outside: Path) -> None:
     assert decision["allow"] is False, decision["reason"]
     assert "is outside your workspace" in decision["reason"]
-    assert repr(os.path.realpath(outside)) in decision["reason"]
+    assert quoted(os.path.realpath(outside)) in decision["reason"]
 
 
 # Task 1.4f (R4, D10): rule 4's premise -- a word with no separator names an entry of the

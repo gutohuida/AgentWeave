@@ -489,7 +489,7 @@ def test_the_default_posture_refuses_the_same_path(layout, monkeypatch):
     for destination in (layout.stray_file, layout.neighbour_file):
         decision = _decide("Write", {"file_path": str(destination)})
         assert decision["allow"] is False, f"{destination} was allowed under the default posture"
-        assert repr(str(destination)) in decision["reason"]
+        assert f"'{destination}'" in decision["reason"]
         assert "outside your workspace" in decision["reason"]
 
     # The control: the same tool, inside the run's own checkout, is allowed. Without it the two

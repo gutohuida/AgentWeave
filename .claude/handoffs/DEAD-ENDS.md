@@ -2405,3 +2405,10 @@ disappears is indistinguishable from one that was forgotten.
 - **The `copilot` runner's `permission_mode` is `acceptEdits | bypassPermissions | manual | workspace`;** `full` answers 400. (2026-10-12)
 - **On Copilot, a refused tool call ends the turn silently** (WPC-1 in handoff 0162). A Workspace-posture drive that hits a refusal looks like a completed turn with no reply. Drive tasks with `bypassPermissions`, or expect it. Drive agents also have no Python on PATH, so give them the venv path. (2026-10-12)
 - **PowerShell 5: `python -c` with nested quotes mangles the code.** Pipe a here-string (`@'...'@ | & $py -`) instead. (2026-10-12)
+
+## 2026-10-15 (interactive fix session)
+
+- **This environment's Bash tool collapses backslash escapes even inside a quoted heredoc (`<<'EOF'`)** when the text is Python source: `'\'` arrived as `'\'` (SyntaxError), and `"'..\\x'"` written into a test arrived halved. For any edit whose text holds backslashes, use the Edit/Write tools, never a heredoc or an inline `py -3.11 -` script. (2026-10-15)
+- **`hub/tests/fixtures/runner_adapters/capture_goldens.py` is stale** (imports `build_command` from `hub.runner_commands`; it now lives in `hub.runner_adapters`). Rebuild changed golden cases with the same `build_command` call `test_runner_adapters_argv.py` makes, and assert the diff is only the intended flags. (2026-10-15)
+- **With `hub/.env` removed, a bare `import hub.main` refuses** (`HubNotToldWhichDatabase`): pass a throwaway `DATABASE_URL=sqlite+aiosqlite:///<tmp>/x.db` for an import check. The pytest suite sets its own. (2026-10-15)
+- **A Haiku agent refuses to echo credential-shaped text on request** ("matches prompt injection techniques"). A redaction drive must have the value reach the reply the way real work does: quoted from a committed file. (2026-10-15)

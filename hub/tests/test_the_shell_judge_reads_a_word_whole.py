@@ -413,7 +413,7 @@ def test_the_glob_dotdot_rows_quote_the_whole_piece(workspace, monkeypatch, tool
     monkeypatch.setenv("HUB_URL", _HUB)
     decision = _decide(tool, {"command": command})
     assert decision["allow"] is False
-    assert decision["reason"] == f"{shown!r} is outside your workspace"
+    assert decision["reason"] == f"'{shown}' is outside your workspace"
 
 
 # 1.5 (R5, R7): an allow-only check would not catch a wrong quote -- the refusal for the
@@ -1707,19 +1707,19 @@ def test_the_1_7b_rows_name_the_claimed_reason(workspace, monkeypatch):
         quoted = _decide("Bash", {"command": r"python w.py 'Z:foo\bar'"})
         assert quoted["allow"] is False
         assert quoted["reason"] == (
-            "'Z:foo\\\\bar' is outside your workspace: it resolves to 'Z:foo\\\\bar'"
+            "'Z:foo\\bar' is outside your workspace: it resolves to 'Z:foo\\bar'"
         )
 
         forward_slash = _decide("Bash", {"command": r"python w.py Z:foo/bar"})
         assert forward_slash["allow"] is False
         assert forward_slash["reason"] == (
-            "'Z:foo/bar' is outside your workspace: it resolves to 'Z:foo\\\\bar'"
+            "'Z:foo/bar' is outside your workspace: it resolves to 'Z:foo\\bar'"
         )
 
         inner_powershell = _decide("Bash", {"command": r'powershell -c "Copy-Item x Z:foo\bar"'})
         assert inner_powershell["allow"] is False
         assert inner_powershell["reason"] == (
-            "'Z:foo\\\\bar' is outside your workspace: it resolves to 'Z:foo\\\\bar'"
+            "'Z:foo\\bar' is outside your workspace: it resolves to 'Z:foo\\bar'"
         )
 
     dd_target = _decide("Bash", {"command": r"dd if=x of=c:~/y"})
@@ -1762,7 +1762,7 @@ def test_the_1_7c_independent_rows_name_the_claimed_reason(workspace, monkeypatc
     grep_dotdot = _decide("Bash", {"command": r"grep -rn '\.\./' src"})
     assert grep_dotdot["allow"] is False
     if _WINDOWS:
-        assert grep_dotdot["reason"] == "'\\\\.\\\\./' is outside your workspace"
+        assert grep_dotdot["reason"] == "'\\.\\./' is outside your workspace"
     else:
         # Not a drive-letter host: the word itself does not refuse, so D7's escape-removed-level
         # reading runs and reports the backslash-reduced level (`\.\./ ` -> `../`) instead.
@@ -1774,4 +1774,4 @@ def test_the_1_7c_independent_rows_name_the_claimed_reason(workspace, monkeypatc
             {"command": r"Copy-Item x Microsoft.PowerShell.Core\FileSystem::..\x"},
         )
         assert doublecolon_dotdot["allow"] is False
-        assert doublecolon_dotdot["reason"] == "'..\\\\x' is outside your workspace"
+        assert doublecolon_dotdot["reason"] == "'..\\x' is outside your workspace"

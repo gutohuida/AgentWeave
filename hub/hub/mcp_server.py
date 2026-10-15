@@ -1431,8 +1431,11 @@ _UNCHECKED = (
 
 
 def _quote(text: str) -> str:
-    """`text` as a refusal quotes it: rendered by `repr`, then cut to `_QUOTATION_MAX`."""
-    shown = repr(text.replace(_LITERAL_DOLLAR, "$"))
+    """`text` as a refusal quotes it: in single quotes, as written -- a backslash is shown once, as
+    the agent typed it, not doubled the way `repr` shows it (F656) -- with only a character that
+    would not print (a newline, a NUL) escaped, then cut to `_QUOTATION_MAX`."""
+    plain = text.replace(_LITERAL_DOLLAR, "$")
+    shown = "'" + "".join(char if char.isprintable() else repr(char)[1:-1] for char in plain) + "'"
     return shown if len(shown) <= _QUOTATION_MAX else shown[: _QUOTATION_MAX - 1] + "…"
 
 

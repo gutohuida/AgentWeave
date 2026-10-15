@@ -36077,7 +36077,7 @@ Seam: Jobs & loops (stop_at x job read). Tier guess: 0.
 
 ## F656 (D) -- legibility of permission refusal reasons: doubled backslashes, path fragments, an event with no agent, and a stop refusal that hides an unknown name
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox, Logs; scratch Hub `:8037`).
+**Status:** partly fixed 2026-10-15 (Tier 0). Fixed: a refusal quotes its word as written (`mcp_server._quote`: single quotes, only a non-printing character escaped, no `repr` doubling; 47 judge tests re-spelled, a new test pins the form), and every `permission_denied` event carries `agent` in its data, so the Activity line names who was refused (three emitters; new test). Provider-drive fragments are fixed by F601 (the word is quoted whole). Not fixed here: the `('.'+'.')` and `${HOME` fragments (cosmetic), and `stop` on a never-created name answering "has no run in progress" -- that name was known because an earlier probe minted it as a phantom agent, which is F618's root (S4). Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox, Logs; scratch Hub `:8037`).
 
 - On Windows the workspace verdict quotes paths through `repr`, so the operator's card reads `'..\\aw-sweep-1015-g7-outside\\outside.txt' is outside your workspace`, with doubled backslashes the agent never wrote (`_quote`, `mcp_server.py:1426`).
 - Provider paths are quoted as fragments: `Get-Content Env:\PATH` gives `'\\PATH' is outside`, `('.'+'.')\x` gives `'\\x'`, and `${HOME}` gives `'${HOME'`.

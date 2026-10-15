@@ -4111,6 +4111,7 @@ async def _execute_rpc_run(
                     data=run_secrets.scrub(
                         run_id,
                         {
+                            "agent": agent,
                             "tool_name": label,
                             "reason": reason or (f"outside {agent}'s workspace" if detail else ""),
                             "detail": (

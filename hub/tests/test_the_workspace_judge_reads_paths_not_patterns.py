@@ -29,8 +29,8 @@ def ps(command):
 
 
 def shown(text):
-    """How a refusal quotes a word: each backslash doubled (F656 is the legibility finding)."""
-    return text.replace("\\", "\\\\")
+    """How a refusal quotes a word: as written, since F656 stopped doubling backslashes."""
+    return text
 
 
 # --- F601: provider drives ----------------------------------------------------------------------
@@ -184,3 +184,47 @@ def test_a_quoted_operator_is_not_an_operator(workspace):
 def test_the_bash_reading_of_a_pattern_is_unchanged(workspace):
     """Row 1.7c1's shape: a bash pattern holding a traversal stays refused."""
     assert _decide("Bash", {"command": r"grep -rn '\.\./' src"})["allow"] is False
+
+
+def test_a_refusal_quotes_a_path_as_written(workspace):
+    """F656: `repr` doubled every backslash, so the card showed two for each one the agent wrote.
+    The path is quoted as written; only a character that would not print is escaped."""
+    from hub.mcp_server import _quote
+
+    decision = ps(r"Remove-Item ..\aw-outside\outside.txt")
+    assert decision["allow"] is False
+    assert decision["reason"].startswith(r"'..\aw-outside\outside.txt' ")
+    assert _quote("a\nb") == r"'a\nb'"
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_event_names_the_agent_it_refused(app):
+    """F656: the Activity line read "an agent was refused PowerShell": the event's data carried no
+    agent, though the run knows who it is."""
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import EventLog
+
+    from .test_a_late_answer_is_delivered import make_agent, make_run
+
+    await make_agent()
+    headers = await make_run()
+    reported = await app.post(
+        "/api/v1/agent-actions/permission-decisions",
+        json={
+            "tool_name": "PowerShell",
+            "tool_use_id": "toolu_656",
+            "allowed": False,
+            "reason": "outside",
+        },
+        headers=headers,
+    )
+    assert reported.status_code == 202, reported.text
+    async with async_session_factory() as db:
+        event = (
+            (await db.execute(select(EventLog).where(EventLog.event_type == "permission_denied")))
+            .scalars()
+            .one()
+        )
+    assert event.data["agent"] == "asker"

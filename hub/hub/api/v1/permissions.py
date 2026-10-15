@@ -119,6 +119,7 @@ async def decide_permission_request(
             event_type="permission_denied",
             agent=row.agent,
             data={
+                "agent": row.agent,
                 "tool_name": row.tool_name,
                 "tool_use_id": row.tool_use_id,
                 "reason": "the operator refused this action",

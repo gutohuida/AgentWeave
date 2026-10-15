@@ -1167,6 +1167,8 @@ async def record_permission_decision(
             event_type="permission_denied",
             agent=actor.agent,
             data={
+                # In the data too (F656): the Activity line names who was refused from here.
+                "agent": actor.agent,
                 "tool_name": body.tool_name,
                 "tool_use_id": body.tool_use_id,
                 "reason": body.reason,
