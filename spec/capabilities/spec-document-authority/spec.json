@@ -1785,6 +1785,33 @@
       "requirement": "a-change-is-reconciled-with-its-code-before-it-is-defects-report",
       "then": "they can tell which step catches most defects per change",
       "when": "they read the defects section"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch project's change document at contract rigor",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f611_operator_edit_applies.py <project> (written first: fails before the build)",
+      "key": "the-operators-own-edit-applies-at-any-rigor-drive",
+      "requirement": "the-operator-can-write-a-document-s-content",
+      "then": "the write answers with no proposals, the criterion is in the document, and the approved document keeps it",
+      "when": "the operator writes its content with one more criterion, proposes and approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document at contract rigor",
+      "how_to_check": "pytest hub/tests/test_operator_authored_documents.py",
+      "key": "the-operators-own-edit-applies-at-any-rigor-unit-operator",
+      "requirement": "the-operator-can-write-a-document-s-content",
+      "then": "the file changes and no proposal is recorded",
+      "when": "the operator PUTs its content"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document at contract rigor",
+      "how_to_check": "pytest hub/tests/test_operator_authored_documents.py hub/tests/test_spec_edit_proposals.py",
+      "key": "the-operators-own-edit-applies-at-any-rigor-unit-agent",
+      "requirement": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
+      "then": "the live document is unchanged and proposals are recorded",
+      "when": "an agent submits changed content"
     }
   ],
   "algorithms": [
@@ -1916,7 +1943,7 @@
       "FR-64": "fa1745c65bb4e58c29dcbcfaaddd85c22b904d406ba692f1581464dc5f9d5741",
       "FR-65": "d2343f902c348eeffd094f1cb610fd5d39fe15b41a10e138b3756c479f59d24c",
       "FR-66": "c553e806bd3087531d6cb1cfb9cb68962649ca52864559008fa2640147229947",
-      "FR-67": "a5d60bfc5b410fc4ad51f80b303386ba6ffa6d62a6aabfb4ef5cb5a68abe9b4f",
+      "FR-67": "d460546c426038486e6fc1adece2c4a0225929ced3685925afa752ba28a500c0",
       "FR-68": "05d6d78163774ae105038535e50cffa2516ea715847b7efe65f0130457817684",
       "FR-69": "9ac03218393973d4754bef59191949038935d9a3d0af2476e1273df854a09ca6",
       "FR-70": "705bea4db55b7a6ef3255a030ce3dc19057d98099b7313aba0455b1d08a4461c",
@@ -1928,7 +1955,7 @@
       "FR-76": "db1936d0543c81d190f1268f38b83a2e5bb802c9086ce7056b83e00f9b3c4ac3",
       "FR-77": "a84b3ad983b1b0290fda0382645e9595d63372812b05efc428de640139e0eeb5",
       "FR-78": "e85ba060abb4d715234b577c00ed35348841004a326dec62f62bcedb6131518a",
-      "FR-79": "d39a19dd2ea81e53599ac2460728b9dfb962804b80f2fdad285d557e048666e0",
+      "FR-79": "c440e5f4de8323bec64a4c5eaaea808443136c5c79de47f388b36f77ca42cbad",
       "FR-80": "12e7c7dd0b1e358e4da81fc5a56e6a4503466837b55b52dbfdff59e0ea276039",
       "FR-81": "9bfe24681628fbf22dee1b97d49329c41278d112f2d12bca7627e3bd59fca56b",
       "FR-82": "7f5fdfc2dadbc6f932b13155703cf247f5110c77816dc817f8deb0d09139d137",
@@ -2394,8 +2421,8 @@
       "key": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
       "modal": "SHALL",
       "party": null,
-      "rationale": "Whether an edit applies or waits is the document's property, never the caller's choice; one tool and one payload shape serve both.",
-      "statement": "At `contract` or `gate` rigor a submission SHALL NOT change the live document; the Hub SHALL diff it against the stored payload and record one pending proposal per added, modified or removed requirement (matched by key) and one for all non-requirement content, recording nothing for an unchanged submission; at `sketch` a submission applies immediately."
+      "rationale": "The gate is on agents; the operator is the one who reviews.",
+      "statement": "At contract or gate rigor an agent's submission SHALL NOT change the live document; the Hub SHALL diff it against the stored payload and record one pending proposal per added, modified or removed requirement (matched by key) and one for all non-requirement content, recording nothing for an unchanged submission; at sketch an agent's submission applies immediately."
     },
     {
       "key": "a-pending-proposal-is-discoverable-in-position-and-is-indivi",
@@ -2485,8 +2512,8 @@
       "key": "the-operator-can-write-a-document-s-content",
       "modal": "SHALL",
       "party": null,
-      "rationale": "The operator's own authority over a document needs a route, not an in-process call.",
-      "statement": "The operator SHALL be able to write the content of any document other than a capability directly, under the same payload contract, validation and refusals as an agent's submission, with a `contract` or `gate` document recording pending proposals instead."
+      "rationale": "fix-D8: the operator's own edit applies directly; proposals are for agents.",
+      "statement": "The operator SHALL be able to write the content of any document other than a capability directly, at any rigor, under the same payload contract, validation and refusals as an agent's submission; the write applies immediately and records no proposal."
     },
     {
       "key": "a-finished-change-is-folded-into-its-capability-write-via-merge",
