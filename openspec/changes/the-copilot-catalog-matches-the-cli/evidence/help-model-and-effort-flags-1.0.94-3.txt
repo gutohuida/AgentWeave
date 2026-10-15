@@ -1,0 +1,15 @@
+﻿
+>       --model <model>
+            Set the AI model to use (use 'auto' to let Copilot pick
+            automatically)
+>       --reasoning-effort <level>
+            Set the reasoning effort level [possible values: none, minimal, low, medium, high, xhigh, max]
+        --context <tier>
+            Set the context window tier (overrides persisted setting) [possible values: default, long_context]
+>   $ copilot --model gpt-5.4
+  
+    # Resume the most recent session
+    $ copilot --continue
+
+
+
