@@ -33452,7 +33452,7 @@ Nineteen coverage rows driven by five parallel operators plus row 19 by the orch
 
 ## F454 (B) — a Hub-launched agent can load the operator's personal Claude Code skills; a loop firing ran `e2e-loop` and started new loops and commits nobody asked for
 
-**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 11.
+**Status:** fixed 2026-10-15 (Tier 2, `spec/changes/a-hub-agent-runs-with-the-projects-settings`). Every Claude agent argv passes `--setting-sources project,local` (`runner_commands._build_claude_command`), and a runner's flags may not carry it (`runner_flag_rules`). Hand-measured first: the flag drops the operator's ~/.claude skills and plugin skills and keeps the project's CLAUDE.md and .claude/skills. Acceptance drive `scripts/drive/d1015_f454_user_skills.py` committed failing (the agent listed e2e-loop, handoff, resume) and passes after; the 52 Claude argv goldens differ by the flag pair alone. Codex and Copilot user configuration are not covered. Opened before: Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 11.
 **Source:** drive
 **Theme:** Agents & runners
 
@@ -35720,7 +35720,7 @@ Seam: Worktrees & integration (gate refusal text x check state). Tier guess: 0 (
 
 ## F614 (B) -- `agent_wrote_outside_workspace` records a write that was refused and never happened
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox, Logs; scratch Hub `:8037`).
+**Status:** fixed 2026-10-15 (Tier 1 in substance: it moves design D5's notice). A declared write whose call the Hub can pair is on `Run.outside_workspace_writes` from first sight as `"status": "requested"` (still durable, D5), and becomes `written` with its `agent_wrote_outside_workspace` Warn only when its `tool_result` succeeds; a refused or failed call takes back what it added and is never announced. A killed run keeps `requested` entries, not announced (outcome unknown; footprints still count them, the conservative reading). An unpairable call (no `call_id`) is taken at its word as before. `test_outside_write_record.py`: 3 new tests, 2 failing on the old recorder; 13 tests updated to feed the result a runner emits (subagent-written, verified). Driven with `scripts/drive/d1015_f614_f669.py` (Haiku, acceptEdits): Write refused (`tool failed`), file absent, column `[]`, 0 events. Opened before: Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox, Logs; scratch Hub `:8037`).
 
 Under `acceptEdits`, alpha's `Write` to `C:\Users\huida\Documents\aw-sweep-1015-g7-outside\written.txt` was refused by Claude itself (`tool failed`), and the file does not exist. Even so, `run-e399f409512c` has `outside_workspace_writes = [{"kind": "outside", "tool": "Write", "path": "C:\\Users\\...\\written.txt", "calls": 1}]`, and the Activity feed shows a Warn: **"alpha wrote outside its workspace: Write → C:\Users\huida\Documents\aw-sweep-1015-g7-outside\written.txt"**. Its tool_result is `"Claude requested permissions to write to C:\\...\\written.txt, but you haven't granted it yet."`, `is_error: true`; `ls` of the outside dir shows `outside.txt` only. The recorder classifies the declared `tool_use`, not its result. A false accusation in the durable record. Not covered: F281/F282 cover shell writes not recorded and junction paths. F599 is the opposite error (a real write recorded clean). F628 is the same run's missing card.
 
@@ -36173,7 +36173,7 @@ Seen in the stop-race retry. Seam: Runs x Conversations (timeline). Recommended 
 
 ## F669 (C) -- an explicit `work_dir` can point into another agent's isolated workspace
 
-**Status:** open 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Raised as `wpc4-e` by the F663 change's R3 round; not driven live. Recommended: refuse a `work_dir` under `.agentweave/`. Seam: Worktrees & integration x Permissions & sandbox. Tier guess: 0.
+**Status:** fixed 2026-10-15 (Tier 0). Both work_dir doors (the route and `trigger_agent_directly`) refuse a work_dir that resolves to the project's `.agentweave/` or inside it (case-normalised), naming why. `test_work_dir_cannot_point_into_the_hubs_own_directory` failed before (the run started). Driven: a read-only agent's `.agentweave` and `.agentweave/worktrees/alpha` answer 400; an ordinary directory still starts. Opened before: Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Raised as `wpc4-e` by the F663 change's R3 round; not driven live. Recommended: refuse a `work_dir` under `.agentweave/`. Seam: Worktrees & integration x Permissions & sandbox. Tier guess: 0.
 
 ## F670 (C) -- `PATCH /budget` commits before reading totals, so an overflow answers 500 and skips rescheduling
 

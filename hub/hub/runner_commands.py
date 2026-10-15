@@ -258,6 +258,11 @@ def _build_claude_command(
     # must not inherit them either. A runner's own `--mcp-config` flag still loads.
     if "--strict-mcp-config" not in (extra_flags or []):
         cmd += ["--strict-mcp-config"]
+    # The project's settings, CLAUDE.md and skills, not the operator's (F454): with the user source
+    # an agent loaded every skill in ~/.claude/skills -- a loop firing ran the operator's e2e-loop
+    # and started loops nobody asked for -- and their personal plugins and hooks. `project,local`
+    # rather than "": an empty value also drops the project's CLAUDE.md (F195's titler note).
+    cmd += ["--setting-sources", "project,local"]
     mcp_args = _claude_mcp_args(mcp_command, yolo=yolo)
     cmd += mcp_args
     if not yolo:

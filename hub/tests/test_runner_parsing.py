@@ -29,6 +29,9 @@ class TestBuildCommandClaude:
             "--verbose",
             # F531: only the servers this command line names, even when it names none.
             "--strict-mcp-config",
+            # F454: the project's settings and skills, not the operator's personal ones.
+            "--setting-sources",
+            "project,local",
             # `a-run-reaches-the-hub-without-mcp` D13: the call command is pre-allowed on every
             # non-yolo run, MCP or not.
             "--allowedTools",

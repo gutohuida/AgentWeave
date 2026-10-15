@@ -171,3 +171,19 @@ async def test_add_agent_binds_only_a_plain_runner(app, auth_headers):
             (await db.execute(select(Runner).where(Runner.model == "haiku"))).scalars().all()
         )
     assert count == 2
+
+
+def test_a_runner_cannot_bring_back_the_operators_setting_sources():
+    """F454: the Hub passes `--setting-sources project,local`; a runner flag after it would win."""
+    problem = posture_flags_problem("claude", ["--setting-sources", "user,project,local"])
+    assert problem is not None and "--setting-sources" in problem
+
+
+def test_every_claude_agent_run_loads_only_the_projects_setting_sources():
+    """F454, at the builder: one occurrence, project and local only, in every Claude argv."""
+    from hub.runner_adapters import build_command
+
+    for kwargs in ({}, {"yolo": True}, {"session_id": "s-1"}):
+        cmd = build_command(runner="claude", cli="claude", prompt="hi", **kwargs)
+        assert cmd.count("--setting-sources") == 1
+        assert cmd[cmd.index("--setting-sources") + 1] == "project,local"

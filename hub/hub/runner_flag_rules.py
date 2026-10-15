@@ -30,6 +30,8 @@ _OWNED: Dict[str, Dict[str, str]] = {
         "--permission-prompt-tool": _POSTURE,
         "--add-dir": _POSTURE,
         "--settings": _POSTURE,
+        # F454: the Hub loads only the project's sources; a runner flag after it would win.
+        "--setting-sources": _POSTURE,
     },
     "codex": {
         "--model": _MODEL,
