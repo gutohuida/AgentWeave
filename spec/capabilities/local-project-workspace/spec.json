@@ -440,7 +440,7 @@
       "how_to_check": "py -3.11 scripts/drive/d1015_f592_deleted_project_stays_deleted.py (written first: fails before the build)",
       "key": "a-deleted-project-stays-deleted-drive",
       "requirement": "n2-an-orphaned-marker-is-adopted-under-its-own-id",
-      "then": "the private folder is gone, the reopened project has a new id, the marker names it, and the vault lists no private source",
+      "then": "the private folder is gone, the reopened project has a new id, the marker names it, and the deleted private source's text is not served (its tracked stub stays, a project file)",
       "when": "it is deleted with remove_private=true and its folder is reopened"
     },
     {
@@ -487,7 +487,7 @@
       "FR-39": "c9a99f295b6f2f241dfe6b1f0f62442cb39c7837ea8385611b9c7d1aceae3e3a",
       "FR-40": "636b3fb1313bf81d2c80e3bba678b73ca5d23d8bb4f9a64f169453c652f69cf5",
       "FR-41": "987353a723002c5f9f0dd6edd2387eb34591aca2a7b39f2b20e1425e555e881b",
-      "FR-42": "5996c208c03acb689c38832d4755eb99a7155210b7057002617c55f6130a236a",
+      "FR-42": "f50b799805154504f953c8b4cddf58982471cf62728a6d68ec69d48261fee5a0",
       "FR-43": "a869b67c9652553f6f332c7e66a09b63ea15d990df7c65731b32fb1e9e989040",
       "FR-44": "bb41a05ca1a46f5d70d2517139f6dd2859dee5544a2d5614e2cc2f991f4b8e53",
       "FR-45": "bcce20ff07decb236d8405cad38c62b4064efe5e1a1df200d07e93f35240462a",
