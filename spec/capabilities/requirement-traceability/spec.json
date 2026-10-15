@@ -813,6 +813,33 @@
       "requirement": "a-tester-drives-the-built-product-and-keeps-the-spe-relax-blocks",
       "then": "it is amendment_unreviewed before and verified after; an add_criterion amendment alone never makes it amendment_unreviewed",
       "when": "coverage is read before and after the operator marks the amendment reviewed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch project with a capability and a change whose requirement has accepted evidence and a landed task",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f593_fold_keeps_verification.py <project> (written first: fails before the build)",
+      "key": "a-folded-requirement-keeps-its-verification-drive",
+      "requirement": "a-folded-requirement-keeps-its-verification-folded-served",
+      "then": "the capability's folded requirement is verified, naming the change requirement as served_by",
+      "when": "the operator folds the change into the capability and reads the project's coverage"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same folded project",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f593_fold_keeps_verification.py <project>",
+      "key": "a-folded-requirement-keeps-its-verification-drive-totals",
+      "requirement": "a-folded-requirement-keeps-its-verification-archived-out",
+      "then": "the project totals count the requirement once; the change's own coverage still lists it",
+      "when": "the operator reads the project's coverage and the archived change's own"
+    },
+    {
+      "checked_by": "agent",
+      "given": "requirement rows, merges and evidence",
+      "how_to_check": "pytest hub/tests/test_a_folded_requirement_keeps_its_verification.py",
+      "key": "a-folded-requirement-keeps-its-verification-unit",
+      "requirement": "a-folded-requirement-keeps-its-verification-folded-served",
+      "then": "only the unchanged one inherits; one with its own evidence keeps its own",
+      "when": "coverage is computed for a reworded folded requirement and an unchanged one"
     }
   ],
   "algorithms": [
@@ -890,15 +917,19 @@
       "FR-55": "d3f730102892c55da148d56d393997c8d129dfcd9e55c344d88c1bdaeccb6cde",
       "FR-56": "c5a1fac12b5a350dcbf7e7f2505e66bb487fc8ebcdc3664fae5542e2a7ffa13f",
       "FR-57": "9342c0f5200146de894696b56a8b5c00f32810d87b540571440629b8c0759249",
+      "FR-58": "346ffd27b8618fa7ccb94c04f9f588570279cf3339c1b2b741dbb2e3f78e594d",
+      "FR-59": "166393b3b02cb94ff34cfb68c2daa02acf0434471af20697b937af0ddc030cbc",
       "FR-7": "822fa2cbcc9ee98f412a7040d2bd7738941a2c762b8af112c3c1ff28d0a26c47",
       "FR-8": "e320eebf6045fc12d206c38c7d6e54299432f7f6fe1c4948faddb267d400fea3",
       "FR-9": "da908b42a1d65c2b719f110fe3b3f6d9af59a64cde27ad8f1118a0164cdc9ee3"
     },
-    "high_water": 57,
+    "high_water": 59,
     "requirements": {
       "a-changed-implementation-raises-a-candidate-never-an-edit": "FR-11",
       "a-committed-turn-s-footprints-are-repointed-at-its-commit": "FR-55",
       "a-decision-is-answered-as-recorded-even-when-the-merge-it-tr": "FR-15",
+      "a-folded-requirement-keeps-its-verification-archived-out": "FR-59",
+      "a-folded-requirement-keeps-its-verification-folded-served": "FR-58",
       "a-footprint-s-branch-names-its-line-of-work": "FR-56",
       "a-footprint-watches-the-files-its-evidence-is-about": "FR-19",
       "a-requirement-and-its-work-are-navigable-in-both-directions": "FR-12",
@@ -1330,6 +1361,20 @@
       "party": null,
       "rationale": "Marking alone is not enough: a relaxing amendment cannot satisfy until a human has looked (research).",
       "statement": "A requirement with a not-reviewed change_criterion, remove_criterion or cannot_satisfy amendment MUST NOT be verified, whatever evidence it holds, and MUST report the state amendment_unreviewed; once the operator marks the amendment reviewed its evidence MUST count again."
+    },
+    {
+      "key": "a-folded-requirement-keeps-its-verification-folded-served",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The fold carries the requirement's text unchanged; what demonstrated it still demonstrates it.",
+      "statement": "A capability requirement with no evidence of its own SHALL take its coverage state and integration from the requirement of a change merged into that capability that carries the same digest, and its coverage entry SHALL name that requirement as served_by."
+    },
+    {
+      "key": "a-folded-requirement-keeps-its-verification-archived-out",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An archived change is history; counting it beside the capability that holds its requirements counts them twice.",
+      "statement": "The project's coverage rollup SHALL leave out the requirements of archived documents; a document's own coverage SHALL still list them."
     }
   ],
   "schema_version": 1,
