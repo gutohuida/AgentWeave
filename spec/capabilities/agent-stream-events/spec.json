@@ -769,6 +769,33 @@
       "requirement": "a-stream-subscriber-that-falls-behind-is-told-what-it-lost",
       "then": "It invalidates all server state, runs its reconnect reconciliation, and Activity shows that events were not delivered whichever project is selected.",
       "when": "It receives a `stream_gap` frame"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fresh scratch project whose committed BUILD-NOTES.txt holds fake aw_live_, aw_run_ and sk- values, and a Haiku agent",
+      "how_to_check": "py -3.11 scripts/drive/d1015_f602_text_redaction.py <project> (written first: all three values and the route's two stored verbatim on HEAD)",
+      "key": "a-secret-in-reply-text-is-redacted-drive",
+      "requirement": "a-secret-in-reply-text-is-redacted-text-rows",
+      "then": "no value is stored verbatim and the rows carry <redacted>",
+      "when": "the agent quotes the file in its reply, and the operator posts an sk- value and an api_key field to the output route"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a run with nothing registered",
+      "how_to_check": "pytest hub/tests/test_a_secret_in_reply_text_is_redacted.py",
+      "key": "a-secret-in-reply-text-is-redacted-unit",
+      "requirement": "a-secret-in-reply-text-is-redacted-split",
+      "then": "the later event carries <redacted> where the rest of the token was",
+      "when": "an aw_live_ key arrives split across two text events, and a field value split at its '='"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a reply naming a 40-hex SHA, a path and 'token budget: 500'",
+      "how_to_check": "pytest hub/tests/test_a_secret_in_reply_text_is_redacted.py",
+      "key": "a-secret-in-reply-text-is-redacted-kept",
+      "requirement": "a-secret-in-reply-text-is-redacted-prose-kept",
+      "then": "it is stored unchanged",
+      "when": "it is recorded"
     }
   ],
   "algorithms": [],
@@ -809,14 +836,22 @@
       "FR-52": "118ba482be3a6857a5a5aa49b1f261fb5b7c7d0b344b40ef0a10b0c24c804461",
       "FR-53": "484da1db54bfc967b32fdca1990bd2c88ae537edd6c9b69cb3bcbc628c977058",
       "FR-54": "c9a99f295b6f2f241dfe6b1f0f62442cb39c7837ea8385611b9c7d1aceae3e3a",
-      "FR-55": "636b3fb1313bf81d2c80e3bba678b73ca5d23d8bb4f9a64f169453c652f69cf5"
+      "FR-55": "636b3fb1313bf81d2c80e3bba678b73ca5d23d8bb4f9a64f169453c652f69cf5",
+      "FR-56": "1b8f25be891f19b9495c5f811992c51b243d7b594bcd172829a60e4038c8cf5b",
+      "FR-57": "e0e094a2604d46fc27bc1cb57c1929889640eb98fa3c9544113ebdaa08d2bb6c",
+      "FR-58": "65f447fe46d89821482167a85c3bd8cc536c62125dcb0f7341dc7dfc0333c6fe",
+      "FR-59": "8eca1d66be909e66c59ab09b00b485df383ace8e48ee1cef0a6367a6202f9c76"
     },
-    "high_water": 55,
+    "high_water": 59,
     "requirements": {
       "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st": "FR-50",
       "a-resumed-copilot-session-s-history-is-not-rendered-again": "FR-48",
       "a-run-s-registered-value-is-removed-even-when-its-events-spl": "FR-49",
       "a-run-s-terminal-status-line-is-persisted": "FR-42",
+      "a-secret-in-reply-text-is-redacted-operator-route": "FR-58",
+      "a-secret-in-reply-text-is-redacted-prose-kept": "FR-59",
+      "a-secret-in-reply-text-is-redacted-split": "FR-57",
+      "a-secret-in-reply-text-is-redacted-text-rows": "FR-56",
       "a-stream-subscriber-that-falls-behind-is-told-what-it-lost": "FR-55",
       "a-tool-call-is-formatted-by-what-kind-of-tool-it-was": "FR-53",
       "a-turn-renders-in-execution-order": "FR-37",
@@ -1093,6 +1128,34 @@
       "party": null,
       "rationale": "Dropping for a slow reader keeps other broadcasters moving, but a silent drop leaves the app showing stale state as current.",
       "statement": "When the Hub drops events for a subscriber whose queue is full, that stream SHALL send one `stream_gap` frame with the number dropped and no `project_id` as soon as it is sending again, and the app SHALL refresh all server state as on a reconnect and show in Activity that events were not delivered."
+    },
+    {
+      "key": "a-secret-in-reply-text-is-redacted-text-rows",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Prose is where a quoted key lands; the tool row being redacted does not help when the reply repeats it.",
+      "statement": "Before a text or thinking event is stored or broadcast, every aw_live_, aw_run_ and sk- token, and the value of an api_key, api-key, apikey, secret_key, access_token, auth_token or password field written as name=value or name: value (quoted or not), MUST be replaced with <redacted> in both its content and its payload."
+    },
+    {
+      "key": "a-secret-in-reply-text-is-redacted-split",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A runner emits prose in pieces; F488 showed a value split over a boundary passes a per-event check.",
+      "statement": "A token of those patterns whose characters fall on both sides of an event boundary MUST still be redacted in the later event, for every run, whether or not it registered values of its own."
+    },
+    {
+      "key": "a-secret-in-reply-text-is-redacted-operator-route",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "POST /agents/{name}/output MUST apply the same patterns to the content and payload it stores."
+    },
+    {
+      "key": "a-secret-in-reply-text-is-redacted-prose-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents write commit SHAs, paths and long identifiers in replies; the tool events' high-entropy catch-all would eat them.",
+      "statement": "Text rows MUST NOT get the high-entropy catch-all of tool events: a 40-character commit SHA, a path and ordinary prose are stored as written."
     }
   ],
   "schema_version": 1,

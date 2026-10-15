@@ -57,6 +57,8 @@ HELD_TESTS = "hub/tests/test_a_held_successor_waits_for_continue.py"
 HELD_DRIVE = "scripts/drive/d1015_f598_held_successor.py"
 JUDGE_TESTS = "hub/tests/test_the_workspace_judge_reads_paths_not_patterns.py"
 JUDGE_DRIVE = "scripts/drive/d1015_judge_wire.py"
+TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
+TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1114,6 +1116,28 @@ CHANGES = {
              "and unquoted operands stay judged; 938 existing judge tests unchanged."),
         ],
     },
+    "f602": {
+        "document": "spec/changes/a-secret-in-reply-text-is-redacted/spec.json",
+        "commit": "96e7f36",
+        "tasks": ["task-d65ee8871b0f", "task-6e8510461c2c"],
+        "evidence": [
+            ("FR-1", "task-6e8510461c2c", "test_result", TEXT_SECRET_TESTS,
+             "aw_live_, aw_run_, sk- tokens and credential-field values are redacted in text, "
+             "payload strings and payload keys."),
+            ("FR-1", "task-d65ee8871b0f", "manual_observation", TEXT_SECRET_DRIVE,
+             "A Haiku agent quoting a committed notes file: written first, all three fake values "
+             "stored verbatim on HEAD; after, the text row reads '<redacted>' for each (9/9)."),
+            ("FR-2", "task-6e8510461c2c", "test_result", TEXT_SECRET_TESTS,
+             "A key split across two text events, a field value split at its '=', and a split "
+             "across a tool row are redacted in the later event; forget clears the tail."),
+            ("FR-3", "task-6e8510461c2c", "test_result", TEXT_SECRET_TESTS,
+             "POST /agents/{name}/output stores '<redacted>' for an sk- value and an api_key "
+             "field in content and payload; also driven in d1015_f602 (checks 8-9)."),
+            ("FR-4", "task-6e8510461c2c", "test_result", TEXT_SECRET_TESTS,
+             "A commit SHA, paths, a long identifier and prose naming 'token' or 'password' are "
+             "stored as written."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1132,6 +1156,7 @@ CHANGE_FOLDS = {
     "faccess": 'knowledge-vault',
     "f598": 'inbound-queue-delivery',
     "fjudge": 'agent-run-sandboxing',
+    "f602": 'agent-stream-events',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
