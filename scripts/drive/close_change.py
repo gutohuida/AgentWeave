@@ -69,6 +69,9 @@ CARRY_TESTS = "hub/tests/test_mid_turn_task_work_is_carried.py"
 CARRY_DRIVE = "scripts/drive/d1015_f603_mid_turn_claim.py"
 PREEXISTING_TESTS = "hub/tests/test_project_checks_gate.py"
 PREEXISTING_DRIVE = "scripts/drive/d1015_f605_preexisting_checks.py"
+OPERATOR_EDIT_TESTS = "hub/tests/test_operator_authored_documents.py"
+AGENT_PROPOSAL_TESTS = "hub/tests/test_spec_edit_proposals.py"
+OPERATOR_EDIT_DRIVE = "scripts/drive/d1015_f611_operator_edit_applies.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1260,6 +1263,29 @@ CHANGES = {
              "records the reason (refused 409 on HEAD)."),
         ],
     },
+    "f611": {
+        "document": "spec/changes/the-operators-own-edit-applies-at-any-rigor/spec.json",
+        "tasks": ["task-aa07b757ed8c"],
+        "evidence": [
+            ("FR-1", "task-aa07b757ed8c", "test_result", OPERATOR_EDIT_TESTS,
+             "The operator's PUT at contract rigor rewrites the file, answers with identifiers and "
+             "records no proposal."),
+            ("FR-1", "task-aa07b757ed8c", "manual_observation", OPERATOR_EDIT_DRIVE,
+             "Written first: on HEAD the write became a proposal and the approved document lacked "
+             "the edit; after, the edit applies, survives approval and nothing is left pending."),
+            ("FR-2", "task-aa07b757ed8c", "test_result", AGENT_PROPOSAL_TESTS,
+             "An agent's submission at contract rigor still leaves the live document unchanged "
+             "and records one proposal per changed unit."),
+        ],
+    },
+}
+
+# Folds that rewrite existing capability requirements: change key -> the key it replaces.
+REPLACE_FOLDS = {
+    "f611": ("spec-document-authority", {
+        "operator-writes": "the-operator-can-write-a-document-s-content",
+        "agents-propose": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
+    }),
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -1348,7 +1374,23 @@ def fold_split(name: str, split: dict) -> None:
             raise SystemExit(1)
 
 
-if sys.argv[1:2] == ["--fold"]:
+def fold_replace(name: str) -> None:
+    """Fold a change whose requirements rewrite existing capability requirements, then archive it."""
+    capability, replaced = REPLACE_FOLDS[name]
+    body = {
+        "into": f"spec/capabilities/{capability}/spec.json",
+        "requirements": [{"key": key, "replaces": old} for key, old in replaced.items()],
+    }
+    path = CHANGES[name]["document"]
+    code, res = api("POST", f"/projects/{P}/project/documents/{path}/fold", body)
+    print(name, "fold", capability, code, res.get("phase") if code == 200 else json.dumps(res)[:400])
+    if code != 200:
+        raise SystemExit(1)
+
+
+if sys.argv[1:2] == ["--fold-replace"]:
+    fold_replace(sys.argv[2])
+elif sys.argv[1:2] == ["--fold"]:
     fold(sys.argv[2], sys.argv[3])
 elif sys.argv[1:] == ["--fold-journey"]:
     fold_split("fjourney", JOURNEY_FOLD)

@@ -138,7 +138,7 @@ async def save_document(
     actor: spec_lifecycle.Actor,
     via: str = "write",
 ) -> Any:
-    """Store a submission against an existing document — or, at `contract`/`gate` rigor, propose it.
+    """Store a submission against an existing document — or, an agent's at `contract`/`gate` rigor, propose it.
 
     `via` names the path a capability write came by: `"merge"` (`merge_document`) or `"create"`
     (the creation scaffold). A capability's content changes only through a merge, so a direct
@@ -216,7 +216,9 @@ async def save_document(
     existing_content = spec_documents.read_document(workspace, document.path)
     stored_before = spec_documents.parse_stored(existing_content)
 
-    if document.rigor in (spec_rigor.CONTRACT, spec_rigor.GATE):
+    # Proposals gate an agent's edit; the operator, who reviews them, writes directly at any rigor
+    # (fix-D8). Their own write used to become a proposal that approval never listed (F611).
+    if document.rigor in (spec_rigor.CONTRACT, spec_rigor.GATE) and actor.kind != "operator":
         return await propose_edit(session, document, payload, stored_before, actor=actor)
 
     return await _apply_and_write(
@@ -820,11 +822,11 @@ async def merge_document(
     `spec_document_merges` already answers "what did this change's merge do" by querying
     `change_document_id`).
 
-    At `contract`/`gate` rigor `save_document` proposes instead of writing (a `ProposeResult`, not
-    a `SaveResult`) — nothing folded yet, only recorded for the operator to accept or reject. No
-    `SpecDocumentMerge` row is written for that outcome: the table's job is to audit folds that
-    actually happened, and a pending proposal is not one. The caller distinguishes the two return
-    types the same way `agent_actions.py:1155` already does for a plain `save_document` call.
+    For a non-operator actor at `contract`/`gate` rigor `save_document` proposes instead of writing
+    (a `ProposeResult`, not a `SaveResult`); the operator's merge writes at any rigor (fix-D8,
+    F611). No `SpecDocumentMerge` row is written for a proposal: the table's job is to audit folds
+    that actually happened, and a pending proposal is not one. The caller distinguishes the two
+    return types the same way `agent_actions.py:1155` already does for a plain `save_document`.
 
     Committing and broadcasting `spec_updated` is the caller's job too, the same way it is for
     every other route in `spec.py` — this function only prepares the session.
@@ -1072,8 +1074,9 @@ async def fold(
     """Fold a finished change into a capability through the merge, then archive the change.
 
     Every refusal is decided before the merge writes anything. Returns the merge's result and
-    whether the change was archived: at `contract`/`gate` rigor the merge only proposes, nothing
-    was folded yet, and the change stays approved for the archive guard to keep honest.
+    whether the change was archived: where the merge only proposes (a non-operator actor at
+    `contract`/`gate` rigor; the operator's writes since fix-D8), nothing was folded yet, and the
+    change stays approved for the archive guard to keep honest.
     """
     _require_approved_change(change)
     open_tasks = await spec_lifecycle.open_task_ids(session, change)

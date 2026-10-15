@@ -224,15 +224,14 @@ async def test_two_merges_from_different_changes_accumulate_two_rows(
 
 
 @pytest.mark.asyncio
-async def test_a_merge_into_a_gated_capability_document_proposes_instead_of_500ing(
+async def test_an_operator_merge_into_a_gated_capability_document_writes(
     app, auth_headers, run_headers, tmp_path
 ):
-    """The regression from `2026-08-18-the-first-real-capability-merge.md` Finding 2.
+    """F611, fix-D8: the operator's own edit applies at any rigor, and a merge is the operator's.
 
-    `save_document` returns a `ProposeResult` (no `.blocking`) once the capability document's rigor
-    is `contract`/`gate`. The route used to assume `SaveResult` unconditionally and 500 on the
-    attribute access — after already committing the proposal. This asserts the fixed shape: a 200
-    carrying `proposals`/`unchanged`, not a crash.
+    It used to become a pending proposal at `contract`/`gate` (after the 500 of
+    `2026-08-18-the-first-real-capability-merge.md` Finding 2 was fixed), which left the fold
+    unarchived and the merged content waiting on a proposal no screen listed.
     """
     await _capability(app, auth_headers)
     await _approve(app, auth_headers, run_headers, CHANGE_PATH)
@@ -262,25 +261,23 @@ async def test_a_merge_into_a_gated_capability_document_proposes_instead_of_500i
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert "proposals" in body and "unchanged" in body
-    assert "blocking" not in body
-    assert body["merged"] == 0
+    assert not body.get("proposals")
+    assert body["merged"] == 1
+    assert "Demo capability, revised" in (tmp_path / CAP_PATH).read_text(encoding="utf-8")
 
     async with async_session_factory() as session:
         proposals = (await session.execute(select(SpecEditProposal))).scalars().all()
-        assert len(proposals) == 1
-        assert proposals[0].status == "pending"
+        assert proposals == []
 
 
 @pytest.mark.asyncio
-async def test_a_merge_into_a_gated_capability_document_writes_no_merge_row(
+async def test_a_merge_into_a_gated_capability_document_records_its_merge_row(
     app, auth_headers, run_headers, tmp_path
 ):
-    """Finding 3's mutation-check: `spec_document_merges` audits folds that happened.
+    """Finding 3's audit: `spec_document_merges` records folds that happened, one row each.
 
-    A gate/contract merge attempt proposes, it does not fold — nothing was written to the
-    document. Recording a `SpecDocumentMerge` row for it would claim a merge that has not
-    happened, which is exactly the false-provenance defect the failed 500s exposed.
+    Since fix-D8 (F611) the operator's merge at `gate` writes, so it is recorded like any other;
+    before, it only proposed and rightly recorded nothing.
     """
     await _capability(app, auth_headers)
     await _approve(app, auth_headers, run_headers, CHANGE_PATH)
@@ -305,9 +302,7 @@ async def test_a_merge_into_a_gated_capability_document_writes_no_merge_row(
 
     async with async_session_factory() as session:
         rows = (await session.execute(select(SpecDocumentMerge))).scalars().all()
-        # One row survives from the first, real (sketch-rigor) merge — the second,
-        # gated attempt must not add a second row for a fold that never happened.
-        assert len(rows) == 1
+        assert len(rows) == 2
 
         events = (
             (
@@ -318,9 +313,7 @@ async def test_a_merge_into_a_gated_capability_document_writes_no_merge_row(
             .scalars()
             .all()
         )
-        # Same story as the row count: one real "merged" event, from the sketch-rigor
-        # merge, and none from the gated attempt that only proposed.
-        assert len(events) == 1
+        assert len(events) == 2
 
 
 @pytest.mark.asyncio
