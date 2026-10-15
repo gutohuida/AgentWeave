@@ -36,6 +36,7 @@ from .spec_manifest import (
     SpecPathError,
     build_manifest,
     compute_intrinsic_conflicts,
+    describe_diagnostic,
     dump_manifest,
     json_path_for,
     load_manifest,
@@ -82,6 +83,10 @@ def _diag(code: str, **kwargs: Any) -> Dict[str, Any]:
         "source_ids": None,
     }
     base.update(kwargs)
+    base.setdefault(
+        "message",
+        describe_diagnostic(code, base["path"], base["field"], base["expected"], base["actual"]),
+    )
     return base
 
 

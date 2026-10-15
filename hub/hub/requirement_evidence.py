@@ -1738,7 +1738,12 @@ async def resolve_drift(
         "implementation_corrected",
         "no_change_required",
     ):
-        raise EvidenceRefusedError(f"unknown resolution {resolution!r}", code="unknown_resolution")
+        raise EvidenceRefusedError(
+            f"unknown resolution {resolution!r}: answer with specification_updated (the "
+            "specification was wrong and has been reworded), implementation_corrected (the code "
+            "went back), or no_change_required (the change is fine)",
+            code="unknown_resolution",
+        )
     if candidate.state != "candidate":
         raise EvidenceRefusedError(
             f"this candidate was already answered: {candidate.resolution}, by "

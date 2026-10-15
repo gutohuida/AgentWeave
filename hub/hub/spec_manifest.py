@@ -144,7 +144,46 @@ class ManifestDiagnostic:
             "field": self.field,
             "expected": self.expected,
             "actual": self.actual,
+            "message": describe_diagnostic(
+                self.code, self.path, self.field, self.expected, self.actual
+            ),
         }
+
+
+#: What a diagnostic means, for a person (F643). The code stays beside it for callers that branch.
+_DIAGNOSTIC_SENTENCES = {
+    "unfiled_document": ("{path} is not in the index yet. Rebuilding the index files it."),
+    "missing_document": (
+        "The index lists {path}, but there is no file there: it was deleted, renamed, or never "
+        "written."
+    ),
+    "intrinsic_metadata_conflict": (
+        "{path}: the index records {field} '{expected}', but the document says '{actual}'. "
+        "Rebuilding the index takes the document's value."
+    ),
+    "manifest_self_parent": "{path} cannot be its own parent.",
+    "manifest_parent_cycle": (
+        "That placement would make a cycle: {path} would end up beneath itself."
+    ),
+    "manifest_unknown_parent": "{path} names a parent that is not in the index.",
+    "manifest_duplicate_path": "The index lists {path} more than once.",
+    "unsafe_document_path": "{path} is not a path inside spec/ that a document may have.",
+}
+
+
+def describe_diagnostic(
+    code: str,
+    path: Optional[str] = None,
+    field: Optional[str] = None,
+    expected: Optional[str] = None,
+    actual: Optional[str] = None,
+) -> str:
+    """One sentence for a corpus diagnostic; a code with no sentence yet still reads as one."""
+    template = _DIAGNOSTIC_SENTENCES.get(code)
+    where = path or "the index"
+    if template is None:
+        return f"{code.replace('_', ' ').capitalize()}: {where}."
+    return template.format(path=where, field=field, expected=expected, actual=actual)
 
 
 def permitted_phases(kind: str) -> Set[str]:

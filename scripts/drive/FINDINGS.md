@@ -35968,7 +35968,7 @@ Seam: Tasks (assignee validation) x Agents. Tier guess: 0.
 
 ## F643 (C) -- refusals and diagnostics that give a code instead of a sentence (drift resolve, arrange, the manifest-drift strip)
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Corpus & folding, Drift; scratch Hub `:8034`).
+**Status:** fixed 2026-10-15 (Tier 0). Every corpus diagnostic (`ManifestDiagnostic.to_dict` and `spec_documents._diag`) carries a `message` sentence beside its code (`spec_manifest.describe_diagnostic`); the arrange refusal reads "this placement is not allowed: <why>"; an unknown drift resolution names the three accepted and what each means. `test_a_diagnostic_is_a_sentence.py` and two `test_spec_index_writer.py` assertions failed before. Driven on a scratch Hub: an unfiled document's message, and a self-parent arrange answering "… cannot be its own parent." **Left for the UI batch:** the Spec page's drift strip still prints `code — path`; it should print `message`. The "every new document is unfiled until Rebuild" observation is unchanged (a new document is not added to the index on create). Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Corpus & folding, Drift; scratch Hub `:8034`).
 
 - `POST /spec/drift/{id}/resolve {"resolution":"whatever"}` -> 422 "unknown resolution 'whatever'", naming none of `specification_updated` / `implementation_corrected` / `no_change_required` (`hub/hub/requirement_evidence.py:1736-1741`); the evidence decision route's equivalent names its permitted words.
 - `POST /spec/documents/arrange` cycle / self-parent -> 422 "this placement is not allowed" with only `manifest_parent_cycle` / `manifest_self_parent` codes.

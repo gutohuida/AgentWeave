@@ -2032,7 +2032,9 @@ async def arrange_document(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
-                "message": "this placement is not allowed",
+                # The first diagnostic's sentence, not only its code (F643).
+                "message": "this placement is not allowed: "
+                + " ".join(d.to_dict()["message"] for d in validation_diagnostics[:1]),
                 "diagnostics": [d.to_dict() for d in validation_diagnostics],
             },
         )

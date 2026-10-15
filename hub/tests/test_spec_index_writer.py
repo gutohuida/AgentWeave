@@ -793,6 +793,8 @@ class TestArrangeRoute:
         assert response.status_code == 422, response.text
         codes = {d["code"] for d in response.json()["detail"]["diagnostics"]}
         assert "manifest_self_parent" in codes
+        # F643: the refusal says why, not only a code.
+        assert "its own parent" in response.json()["detail"]["message"]
 
     async def test_a_cycle_is_refused(self, app, auth_headers, tmp_path):
         await self._seed(app, auth_headers, tmp_path, "home", "area", "leaf")
@@ -817,6 +819,7 @@ class TestArrangeRoute:
         assert response.status_code == 422, response.text
         codes = {d["code"] for d in response.json()["detail"]["diagnostics"]}
         assert "manifest_parent_cycle" in codes
+        assert "cycle" in response.json()["detail"]["message"]
 
         index_path = tmp_path / "spec" / "index.json"
         manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
