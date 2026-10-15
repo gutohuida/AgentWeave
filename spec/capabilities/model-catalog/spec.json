@@ -139,6 +139,42 @@
       "requirement": "every-model-the-catalog-offers-declares-a-context-window-or-",
       "then": "it is unknown and no other model's window is used",
       "when": "a reading is recorded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub",
+      "how_to_check": "py -3.11 scripts/drive/d1016_f662_copilot_catalog.py (written first: fails before the build)",
+      "key": "the-copilot-catalog-tracks-the-cli-drive",
+      "requirement": "the-copilot-catalog-tracks-the-cli-tracks-newest-cli",
+      "then": "the first two are created and the third is refused naming the catalog",
+      "when": "Copilot runners are created on claude-haiku-5.5, grok-4.7 and claude-opus-4.7"
+    },
+    {
+      "checked_by": "agent",
+      "given": "tests/fixtures/copilot/help-config-1.0.94-3.txt",
+      "how_to_check": "pytest tests/test_model_catalog_drift.py",
+      "key": "the-copilot-catalog-tracks-the-cli-unit-pin",
+      "requirement": "the-copilot-catalog-tracks-the-cli-tracks-newest-cli",
+      "then": "no drift",
+      "when": "the drift test compares the catalog with it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation and a manager job stored on a model since removed",
+      "how_to_check": "pytest hub/tests/test_a_stored_model_outlives_the_catalog.py",
+      "key": "the-copilot-catalog-tracks-the-cli-unit-stored",
+      "requirement": "the-copilot-catalog-tracks-the-cli-stored-model-tolerated",
+      "then": "the stored one is accepted, the new one refused, the worker spawns",
+      "when": "the operator sends with the stored override, a different undeclared one, and the job's worker runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation stored on a removed model",
+      "how_to_check": "pytest hub/tests/test_a_stored_model_outlives_the_catalog.py",
+      "key": "the-copilot-catalog-tracks-the-cli-unit-flag",
+      "requirement": "the-copilot-catalog-tracks-the-cli-flagged",
+      "then": "model_unrecognised is true; on a declared model it is false",
+      "when": "it is read"
     }
   ],
   "algorithms": [
@@ -164,12 +200,15 @@
       "FR-14": "324705bea90b597c67f7c550e5fa4bf912441d594963750c0afcabf9193894ad",
       "FR-15": "36320d193347df26f127e030941be43895805469978a0b8147c616254553d24b",
       "FR-16": "c4c2e676e5cb995ab4f00bc33a6bf3b85e9f8b76ad90bc6850a396ee890d5a10",
+      "FR-17": "de375818a809a8e66acbf60823a95e876c08ec81e14b2a554e9bea29ed92d41e",
+      "FR-18": "da79cac217ee0269096f55ada0f7556b84f54042a33dadc950cb0cb9b29eb05a",
+      "FR-19": "4de2cc582a82750a9dfad966e4b7fde231c8d6b567cad1578b28e3af26973793",
       "FR-6": "6a2fdb944d895892d0dad07627f38fcd924a8fde75f34a17c27e707e53155711",
       "FR-7": "9047e03610e2fdbd69ca2f2125cb9264902a3a998fab70aa487b042d92a72ce2",
       "FR-8": "aad2676bf09290ddc5df9495ce5e2947f46357cfef71ca48fc13351e12a552da",
       "FR-9": "91011339b5deb80a608a2056b348f2b2f32cf4deaac3b0c8d0a164ef56902722"
     },
-    "high_water": 16,
+    "high_water": 19,
     "requirements": {
       "a-declared-alias-is-accepted-wherever-a-model-is-and-kept-as": "FR-11",
       "a-provider-that-publishes-its-own-catalog-is-described-from-": "FR-12",
@@ -180,6 +219,9 @@
       "runtime-controls-are-declared-not-coded": "FR-7",
       "the-catalog-is-served-to-the-operator-interface": "FR-9",
       "the-copilot-catalog-offers-auto-and-validates-what-copilot-w": "FR-13",
+      "the-copilot-catalog-tracks-the-cli-flagged": "FR-19",
+      "the-copilot-catalog-tracks-the-cli-stored-model-tolerated": "FR-18",
+      "the-copilot-catalog-tracks-the-cli-tracks-newest-cli": "FR-17",
       "the-hub-declares-a-model-catalog-for-every-supported-provide": "FR-6",
       "the-hub-validates-overrides-before-spawning": "FR-10"
     },
@@ -285,6 +327,27 @@
       "party": null,
       "rationale": "An absent window must degrade to unknown rather than to a borrowed value.",
       "statement": "A model the catalog offers without a declared window SHALL produce readings reported as unknown unless its provider reports a window, and SHALL NOT take another model's window."
+    },
+    {
+      "key": "the-copilot-catalog-tracks-the-cli-tracks-newest-cli",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The model list is the service's; every model the Hub's older build offers live is in the newest help (wpc3-c).",
+      "statement": "CATALOG['copilot'] MUST declare exactly the model ids of copilot help config 1.0.94-3, in that build's order after auto, and its pinning test MUST compare against that build's captured help text."
+    },
+    {
+      "key": "the-copilot-catalog-tracks-the-cli-stored-model-tolerated",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A refresh must not stop work already configured (wpc3-b, wpc3-f).",
+      "statement": "A model the catalog no longer declares MUST keep working where it is already stored: a trigger override equal to the conversation's stored model is accepted, and a one-shot worker runs a stored model with a logged warning instead of refusing it as unknown_model; a newly chosen undeclared model (a different override, a runner, a manager job, or a newly set checkpoint_model) MUST still be refused naming the catalog."
+    },
+    {
+      "key": "the-copilot-catalog-tracks-the-cli-flagged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The runner already says '— unrecognised'; a conversation must not present a removed model as current.",
+      "statement": "A conversation's response MUST carry model_unrecognised, true when its stored runtime_overrides model is one its runner's catalog does not declare."
     }
   ],
   "schema_version": 1,
