@@ -99,7 +99,12 @@ class ProposalRefusedError(RuntimeError):  # noqa: N818 - "refused" is the outco
 
 
 async def mint_document_path(
-    session: AsyncSession, project_id: str, workspace: ProjectWorkspace
+    session: AsyncSession,
+    project_id: str,
+    workspace: ProjectWorkspace,
+    *,
+    kind: Optional[str] = None,
+    title: Optional[str] = None,
 ) -> str:
     """A free placeholder path, free against both the records and the disk.
 
@@ -118,6 +123,9 @@ async def mint_document_path(
     def is_taken(candidate: str) -> bool:
         return candidate in recorded or spec_documents.document_exists(workspace, candidate)
 
+    if kind == "capability":
+        # Under the corpus's capability root, named from the title (F644).
+        return spec_naming.mint_capability_path(title, is_taken)
     return spec_naming.mint_placeholder_path(is_taken)
 
 

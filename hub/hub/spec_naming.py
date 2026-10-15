@@ -27,6 +27,8 @@ from .spec_manifest import SPEC_PATH_MAX_LENGTH, validate_spec_path
 
 #: Where explorations live. Matches `EXPLORATION_ROOT` in the UI.
 EXPLORATION_ROOT = "spec/changes"
+#: Where a capability document lives, by the corpus convention (F644).
+CAPABILITY_ROOT = "spec/capabilities"
 DOCUMENT_FILENAME = "spec.json"
 
 #: How many distinct placeholders to try before falling back to a suffix. The
@@ -131,6 +133,30 @@ def document_path_for(subject: str) -> Optional[str]:
     if not slug:
         return None
     return validate_spec_path(path_for_slug(slug))
+
+
+def mint_capability_path(title: Optional[str], is_taken: Callable[[str], bool]) -> str:
+    """A free `spec/capabilities/<name>/spec.json` path, named from *title* (F644).
+
+    A capability is current behaviour that people look up by name, unlike an exploration whose
+    name must say nothing about it. A taken name gets the first free `-2`, `-3`, …; a title that
+    yields no slug gets a placeholder name, still under the capability root.
+    """
+    base = slugify(title or "")[: MAX_SLUG_LENGTH - 4] or ""
+
+    def path(slug: str) -> str:
+        return f"{CAPABILITY_ROOT}/{slug}/{DOCUMENT_FILENAME}"
+
+    if base:
+        for suffix in range(1, _MINT_ATTEMPTS + 1):
+            candidate = path(base if suffix == 1 else f"{base}-{suffix}")
+            if not is_taken(candidate):
+                return validate_spec_path(candidate)
+    for _ in range(_MINT_ATTEMPTS):
+        candidate = path(f"{_placeholder_slug()}-{secrets.token_hex(3)}")
+        if not is_taken(candidate):
+            return validate_spec_path(candidate)
+    raise NamingExhaustedError("could not mint a free capability name")
 
 
 def _placeholder_slug() -> str:

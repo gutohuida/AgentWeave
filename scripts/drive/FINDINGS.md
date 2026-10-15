@@ -35978,7 +35978,7 @@ Seam: Corpus & folding / Drift (refusal wording, Step 4 rule 6). Tier guess: 0.
 
 ## F644 (C) -- a capability created from the app lands under `spec/changes/<random-name>/`
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Spec documents, Corpus & folding; scratch Hub `:8034`).
+**Status:** fixed 2026-10-15 (Tier 0). `mint_document_path` takes the kind and title: a capability created with no path goes to `spec/capabilities/<slug-of-title>/spec.json` (`spec_naming.mint_capability_path`; a taken name gets `-2`, `-3`…; a title with no slug a placeholder name under the same root). A change keeps its placeholder name. `test_a_capability_is_created_under_capabilities.py` failed before. Driven on a scratch Hub: two "Temperature conversion" capabilities -> `temperature-conversion`, `temperature-conversion-2`; a change -> `spec/changes/emerald-minotaur`. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Spec documents, Corpus & folding; scratch Hub `:8034`).
 
 `POST /project/documents {"title":"Temperature conversion","kind":"capability"}` -> `spec/changes/magenta-sylph/spec.json`. `mint_document_path` ignores the kind (`hub/hub/api/v1/spec.py:2099-2101`), so the corpus convention (`spec/capabilities/<name>/`, as this repository's own `spec/` has it) is reachable only by passing an explicit `path`. The name is random, not from the title.
 

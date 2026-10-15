@@ -2112,7 +2112,9 @@ async def create_document(
 
     if body.path is None:
         try:
-            path = await spec_service.mint_document_path(session, project_id, workspace)
+            path = await spec_service.mint_document_path(
+                session, project_id, workspace, kind=body.kind, title=body.title
+            )
         except spec_naming.NamingExhaustedError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
