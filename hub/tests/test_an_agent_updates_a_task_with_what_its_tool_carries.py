@@ -279,7 +279,10 @@ async def test_linking_a_requirement_on_a_blocked_task_leaves_it_blocked(app, au
 
 
 @pytest.mark.asyncio
-async def test_operator_can_still_set_assignee_priority_and_description(app, auth_headers):
+async def test_operator_can_still_set_assignee_priority_and_description(
+    app, auth_headers, add_agent
+):
+    await add_agent("someone")
     await _make_task("task-tc-7")
 
     response = await app.patch(

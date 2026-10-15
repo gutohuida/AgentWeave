@@ -13,6 +13,8 @@ beyond the roster matter for a second reason: session sync deletes the roster ro
 session no longer declares and keeps its history. A name with none of these is a mistake.
 """
 
+from typing import Optional
+
 from fastapi import HTTPException, status
 from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -82,3 +84,25 @@ async def require_agent_row(session: AsyncSession, project_id: str, agent: str) 
     )
     if not found:
         raise _not_an_agent(agent)
+
+
+async def assignee_refusal(session: AsyncSession, project_id: str, assignee: str) -> Optional[str]:
+    """Why *assignee* cannot hold a task of this project, or None when it is an open agent.
+
+    A task's holder is who its turns run as and who the roster counts it against; a name with no
+    row was stored as given, and an archived agent is one nothing will run (F642).
+    """
+    lifecycle = await session.scalar(
+        select(Agent.lifecycle).where(Agent.project_id == project_id, Agent.name == assignee)
+    )
+    if lifecycle is None:
+        return (
+            f"'{assignee}' is not an agent in this project, so it cannot hold a task. Assign one "
+            f"of the project's agents, or create '{assignee}' in the Hub UI first."
+        )
+    if lifecycle == "archived":
+        return (
+            f"'{assignee}' is archived, so it cannot hold a task. Unarchive it, or assign one of "
+            "the project's open agents."
+        )
+    return None

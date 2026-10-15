@@ -303,7 +303,7 @@ async def test_a_wedged_review_is_restaffed_to_a_real_reviewer(
 
 
 async def test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted(
-    app, auth_headers
+    app, auth_headers, add_agent
 ):
     """The remedy the refusal names has to work in one call, or the guard is a papercut.
 
@@ -312,6 +312,7 @@ async def test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accept
     discover that two calls were needed. The fields are now applied in the order the guard reads
     them, which is the same ordering fix `enter_selected_task` needed.
     """
+    await add_agent(REVIEWER)
     async with async_session_factory() as session:
         await _completed_task(session, "task-f70-patch", by=AUTHOR, assignee=AUTHOR)
 

@@ -35960,7 +35960,7 @@ Seam: Manager jobs (firing outcome label) x Knowledge vault (upload limit). Tier
 
 ## F642 (C) -- a task's assignee accepts an agent that does not exist
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Tasks; scratch Hub `:8033`).
+**Status:** fixed 2026-10-15 (Tier 0). Task create (`check_task_create`, so `create_job`'s initial tasks and the agent plane too) and PATCH refuse an assignee that is not an open agent of the project with 422 naming why (`agent_roster.assignee_refusal`: no row, or archived); a PATCH repeating the current holder is not refused. `test_a_task_is_held_by_an_open_agent.py` failed before. Driven with `scripts/drive/d1015_s4_names.py`: create and PATCH to `ghost` 422, holder kept. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Tasks; scratch Hub `:8033`).
 
 `PATCH /tasks/{A} {"assignee": "ghost"}` -> 200, and `assignee: "ghost"` was stored. The Agents row requires an unknown agent name to be refused on every agent-keyed route (F618 is the same rule on the agent routes). Not tried: the same value on create.
 

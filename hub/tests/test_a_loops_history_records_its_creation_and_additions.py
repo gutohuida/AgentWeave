@@ -81,7 +81,8 @@ async def test_a_job_that_opens_a_loop_records_its_creation_and_its_initial_task
 
 
 @pytest.mark.asyncio
-async def test_a_task_created_with_the_loops_id_adds_one_entry(app, auth_headers):
+async def test_a_task_created_with_the_loops_id_adds_one_entry(app, auth_headers, add_agent):
+    await add_agent("kimi")
     job = (await app.post(JOBS, json=_loop_body(), headers=auth_headers)).json()
     loop_id = job["loop"]["id"]
 
@@ -207,7 +208,10 @@ async def test_a_move_out_of_an_archived_loop_is_adopted_not_added(
 
 
 @pytest.mark.asyncio
-async def test_the_detail_keeps_the_creation_entry_beside_the_ten_newest(app, auth_headers):
+async def test_the_detail_keeps_the_creation_entry_beside_the_ten_newest(
+    app, auth_headers, add_agent
+):
+    await add_agent("kimi")
     job = (await app.post(JOBS, json=_loop_body(), headers=auth_headers)).json()
     loop_id = job["loop"]["id"]
     for n in range(12):

@@ -116,9 +116,10 @@ async def move(app, auth_headers, task_id, *statuses):
 
 
 @pytest.mark.asyncio
-async def test_an_open_task_follows_the_amended_document(app, auth_headers, author):
+async def test_an_open_task_follows_the_amended_document(app, auth_headers, author, add_agent):
     """refresh-open: text and this document's links follow; progress, assignee, priority and the
     other document's link stay."""
+    await add_agent("someone")
     await create(app, auth_headers, OTHER)
     await submit(
         app,

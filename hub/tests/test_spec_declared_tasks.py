@@ -194,12 +194,13 @@ async def test_re_approving_creates_no_duplicates(app, auth_headers, author):
 
 
 @pytest.mark.asyncio
-async def test_work_already_under_way_is_left_alone(app, auth_headers, author):
+async def test_work_already_under_way_is_left_alone(app, auth_headers, author, add_agent):
     """The document declares that work exists, not what has happened to it since.
 
     An approval that reset a task in progress, or reassigned it, would make re-approving a document
     something an operator learns to fear.
     """
+    await add_agent("someone")
     await make_document(app, auth_headers, author)
     await approve(app, auth_headers)
 

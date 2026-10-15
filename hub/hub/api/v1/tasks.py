@@ -21,6 +21,7 @@ from ... import (
     task_dependency_writer,
 )
 from ...agent_activity import latest_activity_by_agent
+from ...agent_roster import assignee_refusal
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...db.engine import get_session
@@ -770,6 +771,11 @@ async def check_task_create(
             detail=f"Task id '{body.id}' already exists",
         )
     await _check_prerequisites(session, project_id, body)
+    # Only an open agent of the project holds a task (F642).
+    if body.assignee:
+        refusal = await assignee_refusal(session, project_id, body.assignee)
+        if refusal is not None:
+            raise HTTPException(status_code=422, detail=refusal)
     # A read-only agent holds no task's work (F425). The dispatch refuses its turn regardless; this
     # says so where the task is being made, rather than at a turn nobody here started.
     if body.assignee and await is_read_only_agent(project_id, body.assignee, session):
@@ -1571,6 +1577,12 @@ async def update_task_for_actor(
         #
         # A read-only agent may hold a task only as its reviewer (F425): handing a task to one in
         # the same PATCH that moves it to `under_review` is the review handover above, and stays.
+        # Only an open agent takes a task (F642). Keeping the current holder is not a handover,
+        # so a PATCH that repeats it is not refused for an agent archived since.
+        if body.assignee and body.assignee != task.assignee:
+            refusal = await assignee_refusal(session, project_id, body.assignee)
+            if refusal is not None:
+                raise HTTPException(status_code=422, detail=refusal)
         if (
             body.assignee
             and (body.status or task.status) not in WITH_REVIEWER_STATUSES

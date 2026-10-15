@@ -468,7 +468,7 @@ async def test_a_project_where_integration_cannot_be_attempted_is_refused_the_sa
 
 @pytest.mark.asyncio
 async def test_a_reviewer_approves_from_inside_its_own_review_turn(
-    app, auth_headers, turn, tmp_path, request
+    app, auth_headers, turn, tmp_path, request, add_agent
 ):
     """Task 3.8 — the change's largest regression risk, in the populated shape.
 
@@ -477,6 +477,8 @@ async def test_a_reviewer_approves_from_inside_its_own_review_turn(
     ever observed carrying a flow's work to a main branch. Driven through the agent surface rather
     than the service, because that is the door a reviewer actually comes through.
     """
+    # The reviewer's row, before the review is handed to it (F642).
+    await add_agent("reviewer")
     make_repo(tmp_path)
     await set_main_branch("main")
     builder_headers = {"Authorization": "Bearer aw_run_window-secret"}
@@ -503,7 +505,6 @@ async def test_a_reviewer_approves_from_inside_its_own_review_turn(
 
     # The reviewer's own turn, bound to the task it is reviewing and live at this moment.
     async with async_session_factory() as session:
-        session.add(Agent(id="ag-reviewer", project_id="proj-test", name="reviewer"))
         session.add(
             Run(
                 id="run-reviewer",

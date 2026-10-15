@@ -106,7 +106,8 @@ async def test_message_to_unknown_recipient_is_rejected_and_recorded_on_senders_
 
 
 @pytest.mark.asyncio
-async def test_agent_task_crud_retains_create_and_latest_update_runs(app):
+async def test_agent_task_crud_retains_create_and_latest_update_runs(app, add_agent):
+    await add_agent("updater")
     creator_headers, _ = await _active_run("run-task-create", "creator")
     updater_headers, _ = await _active_run("run-task-update", "updater")
 

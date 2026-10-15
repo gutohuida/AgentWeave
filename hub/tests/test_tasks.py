@@ -11,7 +11,8 @@ from hub.db.models import Agent, AIJob, Loop, Run, SpecDocument, Task
 
 
 @pytest.mark.asyncio
-async def test_create_and_list_task(app, auth_headers):
+async def test_create_and_list_task(app, auth_headers, add_agent):
+    await add_agent("kimi")
     resp = await app.post(
         "/api/v1/projects/proj-test/tasks",
         json={"title": "Build feature X", "assignee": "kimi", "priority": "high"},
@@ -95,7 +96,8 @@ async def test_task_responses_include_assignee_runtime_status(app, auth_headers,
 
 
 @pytest.mark.asyncio
-async def test_assigned_task_without_heartbeat_reports_idle(app, auth_headers):
+async def test_assigned_task_without_heartbeat_reports_idle(app, auth_headers, add_agent):
+    await add_agent("claude")
     resp = await app.post(
         "/api/v1/projects/proj-test/tasks",
         json={"title": "No heartbeat task", "assignee": "claude"},
@@ -128,7 +130,8 @@ async def test_agent_list_counts_an_agents_active_tasks(app, auth_headers, add_a
 
 
 @pytest.mark.asyncio
-async def test_create_task_accepts_assigned_to_alias(app, auth_headers):
+async def test_create_task_accepts_assigned_to_alias(app, auth_headers, add_agent):
+    await add_agent("kimi")
     resp = await app.post(
         "/api/v1/projects/proj-test/tasks",
         json={"title": "Alias assignment task", "assigned_to": "kimi"},
@@ -512,13 +515,14 @@ async def test_d15_an_archived_creators_run_no_longer_controls_its_loop(app):
 
 
 @pytest.mark.asyncio
-async def test_a_tasks_transition_history_is_readable_on_both_planes(app, auth_headers):
+async def test_a_tasks_transition_history_is_readable_on_both_planes(app, auth_headers, add_agent):
     """F203: `task_transitions` was append-only, complete, and readable by nothing.
 
     The table records who moved a task and under what policy; `history_for` existed to read it,
     with no route and no tool on top. This repository's own drives opened the sqlite file to say
     anything about attribution.
     """
+    await add_agent("kimi")
     created = await app.post(
         "/api/v1/projects/proj-test/tasks",
         json={"title": "Has a history", "assignee": "kimi"},

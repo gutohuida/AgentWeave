@@ -406,7 +406,7 @@ async def test_unaccepted_evidence_still_names_its_author(app, review_state):
 # ---------------------------------------------------------------------------
 
 
-async def test_the_evidence_author_cannot_be_entered_as_the_reviewer(app, auth_headers):
+async def test_the_evidence_author_cannot_be_entered_as_the_reviewer(app, auth_headers, add_agent):
     """4.6a, design D14. One `PATCH` making the evidence author the assignee and sending the task
     to review — what an operator does to "have it review this".
 
@@ -420,6 +420,8 @@ async def test_the_evidence_author_cannot_be_entered_as_the_reviewer(app, auth_h
     The permissive half is the flow's own path and must not be refused: the same move with a
     different agent as the assignee. Must fail with the §3.4 fallback changed to the union.
     """
+    await add_agent(AUTHOR)
+    await add_agent(OTHER)
     async with async_session_factory() as db:
         _loop, task = await _f306(db, suffix="entry")
         before = await _transition_count(db, task.id)

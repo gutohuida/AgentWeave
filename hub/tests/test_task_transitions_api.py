@@ -179,7 +179,8 @@ async def test_an_agent_cannot_skip_review_over_http(app, auth_headers):
     assert response.status_code == 409, response.text
 
 
-async def test_an_agent_cannot_approve_its_own_completion_over_http(app, auth_headers):
+async def test_an_agent_cannot_approve_its_own_completion_over_http(app, auth_headers, add_agent):
+    await add_agent("reviewer")
     task_id = (await _create(app, auth_headers, "self approval")).json()["id"]
     headers = await _active_run("run-author")
 
