@@ -20,7 +20,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, NamedTuple, Optional, Tuple
 
 # Call mode (`a-run-reaches-the-hub-without-mcp`, design D3/D4): the same file, spawned as
 # `<python> -I -S <this file> --call <tool> [<args.json>]` by the `aw-tool` launcher, calls one
@@ -1210,6 +1210,13 @@ _WORD_TRIM = "\"'`{}[]()<>|;&:"
 _WORD_TRIM_KEEP_COLON = _WORD_TRIM.replace(":", "")
 _PS_DRIVE_RE = re.compile(r"[A-Za-z]:[^:\\/]*")
 _PS_TEMP_DRIVE_RE = re.compile(r"(?i)temp:[^:\\/]*")
+# F601: PowerShell's built-in drives of providers other than FileSystem. A word on one names the
+# registry, the environment, the session's functions/variables/aliases, the certificate store or
+# WS-Management -- never a file in the workspace -- so in the PowerShell reading it is outside,
+# with or without a separator after its colon (`Env:PATH`, `HKCU:Software\X`, `HKCU:\Software`).
+# The built-in set, not "any name with a colon", which would refuse `git show HEAD:README.md`; a
+# drive `New-PSDrive` creates needs a `-Root`, which is judged as a path already.
+_PS_PROVIDER_DRIVE_RE = re.compile(r"(?i)(?:alias|cert|env|function|hkcu|hklm|variable|wsman):")
 _ARGUMENT_ENDS = "|;&<>()"
 
 # D4: the null device and standard streams a bash-spawned msys maps, as a whole word only (the-
@@ -2335,6 +2342,10 @@ def _judge_word(
         return _refuse(word, _NETWORK)
     if trailing_colon and _SCP_ADDRESS_RE.match(word + ":"):  # D5, R5: the colon `_words` trimmed
         return _refuse(word + ":", _NETWORK)
+    if dialect == "powershell":  # F601: a provider drive names no file in the workspace
+        joined = _COLON_OPTION_RE.match(word)
+        if _PS_PROVIDER_DRIVE_RE.match(word[joined.end() :] if joined else word):
+            return _refuse(word, _OUTSIDE)
     has_separator = any(separator in word for separator in _SEPARATORS)
     if has_separator and _expands(word):  # 3: where it points is decided when the shell runs
         return _refuse(word, _UNCHECKED)
@@ -2983,7 +2994,26 @@ def _mark_inner_brace_sentinels(text: str) -> str:
     return "".join(marked)
 
 
-def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
+class _ArgumentShape(NamedTuple):
+    """What `_lex` saw of one argument's spelling, for the PowerShell pattern exemption (F661).
+
+    `literal`: the argument was one quoted literal and nothing else, single-quoted, or
+    double-quoted with no `$` and no backtick (wpc2-b); unquoted closing braces after it are
+    allowed, since a script block often ends glued to its last operand. `starts`: it is the first
+    argument of a pipeline element. `unquoted`: it held no quote at all.
+    """
+
+    literal: bool
+    starts: bool
+    unquoted: bool
+
+
+def _lex(
+    command: str,
+    bash: bool,
+    reading: str,
+    meta: Optional[List[_ArgumentShape]] = None,
+) -> Tuple[List[str], List[str]]:
     """The arguments the shell will produce from `command`, and its substitutions' command texts.
 
     Bash: single quotes are literal; inside double quotes a backslash escapes only `$`, a
@@ -3001,6 +3031,24 @@ def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
     started = False
     quote: Optional[str] = None
     index = 0
+    # F661: how each argument is spelled, recorded into `meta` when a caller asks (`_ArgumentShape`).
+    opens = 0  # quotes this argument opened
+    outside: List[str] = []  # what it holds outside any quote
+    dirty = False  # a `$` or an escape inside its double quotes
+    element = True  # the next argument is the first of a pipeline element
+
+    def close() -> None:
+        nonlocal opens, dirty, element
+        arguments.append("".join(current))
+        bare = "".join(outside)
+        if meta is not None:
+            literal = opens == 1 and not bare.strip("}") and not dirty
+            meta.append(_ArgumentShape(literal, element or bare.startswith("{"), opens == 0))
+        # An unquoted brace at its end opens or closes a script block: what follows starts afresh.
+        element = bare[-1:] in ("{", "}")
+        opens, dirty = 0, False
+        outside.clear()
+
     while index < len(command):
         char, following = command[index], command[index + 1 : index + 2]
         if quote == "'":
@@ -3019,14 +3067,23 @@ def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
             nested.append(text)
             current.append(_SUBSTITUTION)
             started = True
+            if quote == '"':
+                dirty = True
+            else:
+                outside.append("$")
             continue
         if bash and char == "`":
             text, index = _substitution(command, index + 1, "`")
             nested.append(text)
             current.append(_SUBSTITUTION)
             started = True
+            outside.append(char)
             continue
         if char == escape:
+            if quote == '"':
+                dirty = True
+            else:
+                outside.append(char)
             if bash and quote == '"' and following not in ("$", "`", '"', "\\", "\n"):
                 current.append(char)
                 index += 1
@@ -3045,11 +3102,14 @@ def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
                 quote = None
             else:
                 current.append(char)
+                if char == "$":
+                    dirty = True
             index += 1
             continue
         if bash and char == "$" and following == "'":  # quote is None here (design D1)
             text, index = _ansi_c_string(command, index + 2, reading)
             current.append(text)
+            outside.append(char)
             started = True
             continue
         if bash and char == "$" and following == "{":  # quote is None here (design D1)
@@ -3057,10 +3117,12 @@ def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
             # its contents up to the matching `}` are literal, never marked as brace sentinels.
             text, index = _substitution(command, index + 2, "}")
             current.append("${" + text + "}")
+            outside.append(char)
             started = True
             continue
         if bash and char in _BRACE_SENTINELS:  # quote is None here (design D1)
             current.append(_BRACE_SENTINELS[char])
+            outside.append(char)
             started = True
             index += 1
             continue
@@ -3073,24 +3135,29 @@ def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
             end = _extglob_span_at(command, index)
             if end is not None:
                 current.append(command[index:end])
+                outside.append(char)
                 started = True
                 index = end
                 continue
         if char in "'\"":
             quote, started = char, True
+            opens += 1
             index += 1
             continue
         if char.isspace() or char in _ARGUMENT_ENDS:
             if started:
-                arguments.append("".join(current))
+                close()
+            if char in _ARGUMENT_ENDS or char == "\n":
+                element = True
             current, started = [], False
             index += 1
             continue
         current.append(char)
+        outside.append(char)
         started = True
         index += 1
     if started:
-        arguments.append("".join(current))
+        close()
     return arguments, nested
 
 
@@ -3134,6 +3201,8 @@ def _drive_word(piece: str, dialect: str) -> Optional[str]:
         return word
     if dialect == "powershell" and _PS_TEMP_DRIVE_RE.fullmatch(value):
         return word
+    if dialect == "powershell" and _PS_PROVIDER_DRIVE_RE.match(value):
+        return word  # F601: kept whole, so `HKCU:` reaches the judge with its colon
     return None
 
 
@@ -3178,6 +3247,67 @@ def _words(arguments: List[str], dialect: str) -> List[Tuple[str, str, bool, boo
     return words
 
 
+# F661 (decision wpc2-a, narrowed): the comparison operators whose right operand is a pattern
+# matched against a value, never something the command acts on. `-replace` counts only when its
+# operand is one literal: `'pat','repl'` carries a replacement too, and is judged as before.
+_PS_PATTERN_OPERATOR_RE = re.compile(r"(?i)-[ci]?(?:match|notmatch|like|notlike|replace|split)")
+_PS_ASSIGNMENT_RE = re.compile(r"(?:\?\?|[-+*/%])?=")
+# A number literal, which PowerShell reads in expression mode -- not `7z.exe`, a command whose name
+# merely starts with a digit.
+_PS_NUMBER_RE = re.compile(r"(?i)[-+]?(?:0x[0-9a-f]+|\d+(?:\.\d+)?(?:e[-+]?\d+)?)(?:[kmgtp]b)?")
+
+
+def _ps_expression_head(head: str) -> bool:
+    """Whether an unquoted first token puts its pipeline element in expression mode: a variable
+    (`$x`, `$_.Name`, `$(…)`) or a number literal. Anything else -- a command name, `&`, `.`, a
+    splat -- is command mode, where an operator is just an argument."""
+    return head[:1] == "$" or bool(_PS_NUMBER_RE.fullmatch(head))
+
+
+def _ps_pattern_operands(arguments: List[str], shapes: List[_ArgumentShape]) -> "set[int]":
+    """The indexes of PowerShell arguments that are a comparison operator's pattern (F661).
+
+    Exempt only in an expression-mode pipeline element -- the way PowerShell reads an element whose
+    first token is a variable, a quoted string, a number or a subexpression. In command mode
+    (`Write-Output $x -match 'C:\\out'`) `-match` is just an argument and the word after it reaches
+    the command, so it is judged as before. Only a qualifying quoted literal (`_ArgumentShape`)
+    directly after an unquoted operator, inside the same element, is exempt.
+    """
+    exempt: "set[int]" = set()
+    expression = False
+    assigned = False  # the argument before was an assignment operator: a new element starts here
+    for index, (argument, shape) in enumerate(zip(arguments, shapes, strict=True)):
+        starts = shape.starts or assigned
+        assigned = False
+        if starts:
+            head = argument.lstrip("{") if shape.unquoted else argument
+            if head == "" and shape.unquoted:
+                # A lone `{`: the element begins with the next argument, which `_lex` marks.
+                expression = False
+                continue
+            expression = shape.literal or _ps_expression_head(head)
+        if shape.unquoted and _PS_ASSIGNMENT_RE.fullmatch(argument):
+            # The right side of an assignment is a pipeline of its own: `$null = robocopy a -match
+            # 'C:\o'` hands `C:\o` to a command. What follows is judged as its own element.
+            assigned = True
+            continue
+        if shape.unquoted and "=" in argument:
+            # Glued (`$x=Copy-Item`), first in its element or not: the right side's mode is read
+            # from what follows the `=`.
+            expression = _ps_expression_head(argument.rpartition("=")[2])
+            continue
+        if (
+            expression
+            and index > 0
+            and shape.literal
+            and not shape.starts
+            and shapes[index - 1].unquoted
+            and _PS_PATTERN_OPERATOR_RE.fullmatch(arguments[index - 1])
+        ):
+            exempt.add(index)
+    return exempt
+
+
 def _read_command(
     command: str,
     root: str,
@@ -3206,7 +3336,12 @@ def _read_command(
             if refusal:
                 return refusal
         return None
-    arguments, nested = _lex(command, dialect == "bash", reading)
+    shapes: List[_ArgumentShape] = []
+    arguments, nested = _lex(command, dialect == "bash", reading, shapes)
+    if dialect == "powershell":
+        # F661: a comparison operator's pattern is not a path in the command, so it is not judged.
+        patterns = _ps_pattern_operands(arguments, shapes)
+        arguments = [argument for index, argument in enumerate(arguments) if index not in patterns]
     if dialect == "bash":
         # D1: each alternative a brace argument expands to is handed on to `_words` as its own
         # argument, the way bash hands each alternative on as its own word. Most arguments carry
