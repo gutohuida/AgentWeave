@@ -345,11 +345,6 @@ implementing code, and look at the page. `scripts/drive/d1_aturn_browser.py` is 
 
 ## Ending the window
 
-**Until 2026-10-14 (operator away, `DECISIONS.md` `away-1011`): a queue that empties before 05:00
-is refilled, not ended.** Compose the next batch from the backlog the same way iteration 1 did
-(Tier-0 findings by severity, ready ones only, none the build window's log says it holds), append
-them to the queue, and carry on. The night of 2026-10-10 ended at 23:40 with seven hours unused.
-
 At `stop_at`, or when the queue empties, write a final log entry that makes the morning easy:
 
 - **What changed** — commits, marking which carry product code and which are only documentation, so
