@@ -708,6 +708,83 @@ def catch_up_agent_worktree(repo_root: Path, worktree: Path, base: str) -> Optio
     return None
 
 
+def head_of(checkout: Path) -> Optional[str]:
+    """The commit *checkout* is at, or None when it cannot be read. Never raises."""
+    try:
+        result = _run_git(checkout, "rev-parse", "HEAD", check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def carry_turn_work_to_task(
+    repo_root: Path,
+    worktree: Path,
+    start_head: str,
+    task_id: str,
+    base: str,
+    prerequisites: Sequence[str] = (),
+    approved: Sequence[Tuple[str, str]] = (),
+) -> Optional[str]:
+    """Cherry-pick the commits a turn made in an agent's own *worktree* onto *task_id*'s branch.
+
+    F603 (`work-from-a-mid-turn-claim-reaches-the-task`): a turn that claimed its task mid-turn
+    worked in the agent's checkout, while the review and Land read the task's branch. The range is
+    the turn's own -- *start_head* (its HEAD at spawn) to HEAD now -- without merges (a catch-up
+    merge from main precedes the spawn). A cherry-pick, not a merge of the agent's branch, which
+    would carry the agent's other work along with it (F58).
+
+    The task checkout is provisioned as any task turn's would be. A dirty task checkout or a
+    conflicting pick leaves both branches as they were and returns why; None when carried or when
+    there was nothing to carry.
+    """
+    end = head_of(worktree)
+    if end is None or end == start_head:
+        return None
+    listed = _run_git(
+        worktree, "rev-list", "--reverse", "--no-merges", f"{start_head}..{end}", check=False
+    )
+    commits = listed.stdout.split() if listed.returncode == 0 else []
+    if not commits:
+        return None
+    task_checkout = ensure_task_worktree(repo_root, task_id, base, prerequisites, approved)
+    if _has_uncommitted_changes(task_checkout):
+        return (
+            f"{task_id}'s checkout at {task_checkout} has uncommitted changes, so the "
+            f"{len(commits)} commit(s) this turn made in {worktree} were not carried onto it"
+        )
+    before = head_of(task_checkout)
+    for sha in commits:
+        if (
+            _run_git(
+                task_checkout, "merge-base", "--is-ancestor", sha, "HEAD", check=False
+            ).returncode
+            == 0
+        ):
+            continue
+        picked = _run_git(
+            task_checkout,
+            "-c",
+            f"user.name={COMMIT_IDENTITY[0]}",
+            "-c",
+            f"user.email={COMMIT_IDENTITY[1]}",
+            "cherry-pick",
+            "--keep-redundant-commits",
+            sha,
+            check=False,
+        )
+        if picked.returncode != 0:
+            with contextlib.suppress(OSError, subprocess.SubprocessError):
+                _run_git(task_checkout, "cherry-pick", "--abort", check=False)
+            if before:
+                _run_git(task_checkout, "reset", "--hard", before, check=False)
+            return (
+                f"commit {sha[:12]} of this turn conflicts with {task_id}'s branch, so its work "
+                f"stayed in {worktree}; nothing was changed on the task's branch"
+            )
+    return None
+
+
 def _unwind_task_worktree(repo_root: Path, path: Path, branch: str) -> None:
     """Undo a half-provisioned task checkout, in the order git forces (design D1).
 

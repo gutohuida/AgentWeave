@@ -251,6 +251,75 @@ def prepend_run_path(env: Dict[str, str], directory: Path) -> None:
     env[key] = str(directory) + (os.pathsep + existing if existing else "")
 
 
+#: Each live run's checkout HEAD at spawn (F603), read once at its finalize; cleared when it ends.
+_turn_start_heads: Dict[str, str] = {}
+
+
+async def _carry_mid_turn_claim(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    run: Run,
+    agent: str,
+    worktree: Optional[Path],
+    repo_root: Optional[str],
+) -> None:
+    """Carry a turn's commits onto the task it claimed mid-turn (F603). Best-effort, never raises.
+
+    Reached at finalize for every run; acts only when the run ran in an agent's own checkout and
+    ended bound to a task that takes its own. The review and Land read the task's branch, so work
+    left on the agent's branch was reviewed as missing and never merged.
+    """
+    start_head = _turn_start_heads.pop(run.id, None)
+    if (
+        worktree is None
+        or repo_root is None
+        or start_head is None
+        or run.task_id is None
+        or worktrees.task_id_of(worktree) is not None
+    ):
+        return
+    try:
+        task = await db.get(Task, run.task_id)
+        if task is None or not task_workspace.takes_own_checkout(task):
+            return
+        holder = (await tasks_held_by_a_running_turn(db, project_id)).get(task.id)
+        root = Path(repo_root)
+        if holder is not None and holder != agent:
+            problem: Optional[str] = (
+                f"{holder}'s turn holds {task.id}'s checkout, so this turn's work stayed in "
+                f"{worktree}"
+            )
+        else:
+            inputs = await task_workspace.resolve_turn_workspace_inputs(
+                db, project_id=project_id, repo_root=root, task=task
+            )
+            problem = await asyncio.to_thread(
+                worktrees.carry_turn_work_to_task,
+                root,
+                worktree,
+                start_head,
+                task.id,
+                inputs.base or "HEAD",
+                inputs.prerequisites,
+                inputs.approved,
+            )
+    except Exception as exc:  # noqa: BLE001 -- the run has ended either way
+        logger.warning("could not carry run %s's work onto its task", run.id, exc_info=True)
+        problem = f"carrying it failed: {exc}"
+    if problem is None:
+        return
+    await persist_event(
+        db,
+        project_id=project_id,
+        event_type="task_work_not_carried",
+        agent=agent,
+        data={"run_id": run.id, "task_id": run.task_id, "agent": agent, "reason": problem},
+        severity="warn",
+        commit=False,
+    )
+
+
 WORK_DIR_IN_HUB_DIRECTORY = (
     "Invalid work_dir: it is inside .agentweave/, which holds the Hub's own state and every "
     "agent's isolated workspace, so a turn there would run in another agent's checkout. Choose a "
@@ -1788,6 +1857,12 @@ async def _trigger_agent_directly(
     # from everything the run records (slice 5 D7, review finding 2). Registered just before the
     # task exists and forgotten when it ends, however it ends.
     run_secrets.register(run_id, [env.get("COPILOT_PROVIDER_API_KEY")])
+    # F603: where the turn started, so its commits can be carried onto a task it claims mid-turn.
+    # Only an author's isolated checkout: a review turn's is not its work.
+    if isolated_workspace is not None and review_context is None:
+        start_head = await asyncio.to_thread(worktrees.head_of, isolated_workspace)
+        if start_head is not None:
+            _turn_start_heads[run_id] = start_head
     # Register execution immediately after the atomic Run + delivery commit. Event rows are
     # observability; a transient failure while writing one must never strand a running Run
     # whose queue entries are already marked delivered but which has no process task.
@@ -1846,6 +1921,7 @@ async def _trigger_agent_directly(
     _background_runs.add(task)
     task.add_done_callback(_background_runs.discard)
     task.add_done_callback(lambda _task: run_secrets.forget(run_id))
+    task.add_done_callback(lambda _task: _turn_start_heads.pop(run_id, None))
     # The run owns the review checkout now; nothing after this is a refusal of it (F326).
     review_claim.handed_off = True
 
@@ -3229,6 +3305,14 @@ async def _execute_run(
                 # NULL when the turn changed nothing — `snapshot_worktree` commits only a dirty
                 # tree. A checkpoint reads these to say what its conversation changed.
                 run.snapshot_commit_sha = snapshot_sha
+                await _carry_mid_turn_claim(
+                    db,
+                    project_id=project_id,
+                    run=run,
+                    agent=agent,
+                    worktree=worktree,
+                    repo_root=repo_root,
+                )
                 # Evidence this run recorded named the commit the turn *started* from, because the
                 # work was still uncommitted then. The commit above is the one that holds it.
                 await _restamp_evidence_footprints(
@@ -4249,6 +4333,14 @@ async def _execute_rpc_run(
                 run.ended_at = datetime.now(timezone.utc)
                 # NULL when the turn changed nothing — see `_execute_run`.
                 run.snapshot_commit_sha = snapshot_sha
+                await _carry_mid_turn_claim(
+                    db,
+                    project_id=project_id,
+                    run=run,
+                    agent=agent,
+                    worktree=worktree,
+                    repo_root=repo_root,
+                )
                 # See `_execute_run`.
                 await _restamp_evidence_footprints(
                     db,
