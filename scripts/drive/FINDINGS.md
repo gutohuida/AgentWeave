@@ -35944,7 +35944,7 @@ Seam: Capability plane (settings copy x refusal). Tier guess: 0.
 
 ## F640 (C) -- a resolved contradiction keeps marking the overruled fact "presumed"
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
+**Status:** fixed 2026-10-15 (Tier 0). The contradictions list answers a resolved contradiction with `presumed: null` and no side marked presumed (`vault._listed_contradiction`); the record on disk keeps what was presumed, and the card and spec-check texts already spoke of presumption only while open. `test_resolving_writes_a_decision_and_supersedes_the_other_fact` asserts it and failed before. Not driven live: a contradiction needs two sources distilled by a real worker; the route-level test drives the real list with a fake distiller. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
 
 After the resolve, `GET /vault/contradictions` still has `"presumed": "fct-186c668439d9"`, and that side carries `"presumed": true`. The card shows `25 kilograms … · 2026-04-20 presumed` above "Resolved: … 40 kilograms … stands." (see F617 for the same card after a re-distil).
 

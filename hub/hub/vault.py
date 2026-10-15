@@ -1098,6 +1098,11 @@ def _listed_contradiction(
 ) -> Dict[str, Any]:
     """A contradiction as the list answers it: the record, with each side's claim and date."""
     listed = {"status": None, "presumed": None, "resolution": None, **record}
+    # A presumption holds only while the question is open: once decided, the decision says what
+    # stands, and the overruled side kept reading "presumed" on its card (F640). The record keeps
+    # what was presumed; the answer does not claim it.
+    if listed["status"] == "resolved":
+        listed["presumed"] = None
     sides = []
     for fact_id in record["facts"]:
         fact = facts.get(fact_id)
@@ -1110,7 +1115,7 @@ def _listed_contradiction(
                 "claim": fact.claim if fact is not None else None,
                 "source": source,
                 "date": _fact_order(fact, records)[0] if fact is not None else None,
-                "presumed": record.get("presumed") == fact_id,
+                "presumed": listed["presumed"] == fact_id,
             }
         )
     listed["sides"] = sides

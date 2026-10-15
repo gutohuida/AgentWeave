@@ -552,6 +552,10 @@ async def test_resolving_writes_a_decision_and_supersedes_the_other_fact(
     assert "superseded" in card["content"].lower() and decision["id"] in card["content"]
     # The decision restates facts the vault holds: it is not distilled.
     assert len(fake.calls) == calls
+    # F640: once decided, nothing is presumed any more, on the record the list answers or its sides.
+    after = next(c for c in await _contradictions(app, auth_headers) if c["id"] == ctr)
+    assert after["presumed"] is None
+    assert not any(side["presumed"] for side in after["sides"])
 
     again = await _resolve(app, auth_headers, ctr, stands=fact300, note=note)
     assert again.status_code == 409, again.text
