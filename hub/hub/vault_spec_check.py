@@ -348,6 +348,7 @@ async def check(plan: Plan, *, trigger: str) -> Optional[str]:
             detail=detail,
             duration_ms=result.duration_ms or 0,
             usage=manager.usage_record(result.usage),
+            answer=manager.answer_record(result),
             extra={"conflicts": kept},
         )
     return outcome

@@ -270,6 +270,7 @@ async def review(plan: Plan) -> str:
             detail=detail,
             duration_ms=result.duration_ms or 0,
             usage=manager.usage_record(result.usage),
+            answer=manager.answer_record(result),
         )
     return outcome
 

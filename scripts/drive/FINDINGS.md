@@ -35388,7 +35388,7 @@ The build playbook's close step ends "mark the slice done in the roadmap documen
 
 ## F581 (C) -- a worker's model answer is not kept, so a wrong judgement cannot be read after the fact
 
-**Status:** open 2026-10-11. Measured 2026-10-11 (build window iteration 7, d1025 run `testbed/drive1025-specs-vault/095027/`).
+**Status:** fixed 2026-10-15 (Tier 1, change `spec/changes/a-workers-answer-is-kept`). Every manager firing that spawned a model keeps the model's answer as `answer` on its `manager_job_fired` event, and so in `GET /manager/activity`. That covers distillation's read, distil and check, vault reports, spec-vault-check and titles. The answer is the raw text, else the parsed answer as JSON, cut at 8,000 characters with a marker; a firing whose spawn returned nothing keeps null. No migration (the event's data is JSON). Showing it in the Manager panel is in the UI batch. Acceptance drive `scripts/drive/d1015_f581_answer_kept.py` committed failing first (ff44cbc), ALL PASS after. Tests: `test_a_workers_answer_is_kept.py`. Opened 2026-10-11. Measured 2026-10-11 (build window iteration 7, d1025 run `testbed/drive1025-specs-vault/095027/`).
 
 The spec-vault-check firing recorded `outcome empty`, `0 conflicts kept, 0 dropped` and 1,373 output tokens, but neither `worker_invocations` (`hub/hub/worker.py`, `_record`; columns are usage and outcome only) nor the `manager_job_fired` event keeps what the model answered, so *why* it found nothing was unreadable. It took re-sending the same prompt by hand (`claude -p`) to see Haiku's reasoning (it read "300 euros or less need no approval" as silent beyond 300). The same holds for every vault job (distillation, contradictions, reports): an operator who doubts a judgement has only the count.
 

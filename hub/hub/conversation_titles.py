@@ -326,6 +326,7 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
             detail=detail,
             duration_ms=duration_ms,
             usage=usage,
+            answer=manager.cut_answer(output),
         )
 
     if not title:

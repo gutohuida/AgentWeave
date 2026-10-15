@@ -401,6 +401,7 @@ async def _transcribe(plan: Plan, *, trigger: str) -> Optional[str]:
             detail=detail,
             duration_ms=result.duration_ms or 0,
             usage=manager.usage_record(result.usage),
+            answer=manager.answer_record(result),
             extra={"step": "read"},
         )
     return stored
@@ -477,6 +478,7 @@ async def _check(plan: Plan, stored_ids: List[str]) -> None:
             detail=detail,
             duration_ms=result.duration_ms or 0,
             usage=manager.usage_record(result.usage),
+            answer=manager.answer_record(result),
         )
 
 
@@ -586,6 +588,7 @@ async def _distil_piece(
             detail=detail,
             duration_ms=result.duration_ms or 0,
             usage=manager.usage_record(result.usage),
+            answer=manager.answer_record(result),
         )
     return stored
 

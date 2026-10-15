@@ -155,6 +155,29 @@ def usage_record(usage: Optional[WorkerUsage]) -> Optional[Dict[str, Any]]:
     return reported or None
 
 
+#: How much of a model's answer a firing keeps (`a-workers-answer-is-kept` D3).
+ANSWER_CHARS = 8000
+ANSWER_CUT = "\n[... cut: the answer was longer than 8,000 characters]"
+
+
+def answer_record(result: Any) -> Optional[str]:
+    """What a worker answered, as a firing keeps it (F581): its raw text, else its parsed answer as
+    JSON, cut to `ANSWER_CHARS` with a marker; None when the spawn returned nothing. *result* is a
+    `worker.WorkerResult` (not imported here: the worker module reads this one)."""
+    text = getattr(result, "answer_text", None)
+    if not text:
+        parsed = getattr(result, "parsed", None)
+        text = parsed.model_dump_json() if parsed is not None else None
+    return cut_answer(text)
+
+
+def cut_answer(text: Optional[str]) -> Optional[str]:
+    """*text* as a firing keeps it: None when empty, cut to `ANSWER_CHARS` with a marker."""
+    if not text:
+        return None
+    return text if len(text) <= ANSWER_CHARS else text[:ANSWER_CHARS] + ANSWER_CUT
+
+
 async def record_firing(
     db: AsyncSession,
     project_id: str,
@@ -171,11 +194,13 @@ async def record_firing(
     usage: Optional[Dict[str, Any]],
     extra: Optional[Dict[str, Any]] = None,
     commit: bool = True,
+    answer: Optional[str] = None,
 ) -> None:
     """One manager spawn. Deliberately no `agent`, in the payload or the event's column.
 
     *extra* is what a job keeps on its firing beside the standard fields (spec-vault-check: its
-    conflicts); it never overrides one of them."""
+    conflicts); it never overrides one of them. *answer* is what the model answered
+    (`answer_record`), kept so a judgement can be read afterwards (F581)."""
     await persist_event(
         db,
         project_id,
@@ -192,6 +217,7 @@ async def record_firing(
             "detail": detail,
             "duration_ms": duration_ms,
             "usage": usage,
+            "answer": answer,
         },
         commit=commit,
     )

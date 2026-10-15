@@ -80,6 +80,8 @@ REDISTIL_TESTS = "hub/tests/test_a_redistilled_fact_keeps_its_id.py"
 REDISTIL_DRIVE = "scripts/drive/d1015_f587_redistil_keeps_ids.py"
 NEWS_TESTS = "hub/tests/test_vault_reports.py"
 NEWS_DRIVE = "scripts/drive/d1015_f615_outside_news_referred.py"
+ANSWER_TESTS = "hub/tests/test_a_workers_answer_is_kept.py"
+ANSWER_DRIVE = "scripts/drive/d1015_f581_answer_kept.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
 READING_TESTS = "hub/tests/test_vault_file_reading.py"
@@ -1340,6 +1342,15 @@ CHANGES = {
              "stays answered."),
         ],
     },
+    "f581": {
+        "document": "spec/changes/a-workers-answer-is-kept/spec.json",
+        "tasks": ["task-d676c331e43b"],
+        "evidence": [
+            ("FR-1", "task-d676c331e43b", "manual_observation", ANSWER_DRIVE,
+             "Written first: on HEAD a Haiku distillation's firing carried no answer; after, it "
+             "carries the model's JSON with the claim and quote."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1384,6 +1395,7 @@ CHANGE_FOLDS = {
     "f605": 'project-checks',
     "f593": 'requirement-traceability',
     "f615": 'knowledge-vault',
+    "f581": 'project-environment-settings',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
