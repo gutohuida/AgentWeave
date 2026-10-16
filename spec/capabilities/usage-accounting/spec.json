@@ -266,6 +266,42 @@
       "requirement": "worker-spend-counts-against-the-budget-existing-rows-backfilled",
       "then": "47,690 / 1,050 / null; a budget_exhausted insert is admitted; the downgrade keeps every row",
       "when": "it is upgraded to 0129 and downgraded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the work-PC drive's figures: turns charging 19.0 premium requests and 154,000,145,000 nano-AIU with no reading or cost, plus a Copilot checkpoint (1,102,140,000; 1.0) and probe (822,390,000; 1.0) with no tokens",
+      "how_to_check": "pytest hub/tests/test_copilot_spend_in_its_own_units.py",
+      "key": "copilot-spend-is-counted-in-its-own-units-route",
+      "requirement": "copilot-spend-is-counted-in-its-project-credits-include-workers",
+      "then": "project credits 155,924,675,000 and 21.0; two worker lines with credited_calls 1 and unmeasured 0; preferred_display credits; agents unchanged (written first: fails before the build)",
+      "when": "GET /accounting is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with a cost, one with an allowance, a pure Claude one, and a turn whose allowance is the JSON null",
+      "how_to_check": "pytest hub/tests/test_copilot_spend_in_its_own_units.py",
+      "key": "copilot-spend-is-counted-in-its-own-units-unit-display",
+      "requirement": "copilot-spend-is-counted-in-its-own-units-credits-display-kind",
+      "then": "the cost and the allowance still lead; the pure Claude project keeps tokens; the JSON null is never an allowance",
+      "when": "GET /accounting is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a credited Copilot worker line and a credits preferred_display",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/accountingPresentation.test.tsx",
+      "key": "copilot-spend-is-counted-in-its-own-units-unit-ui",
+      "requirement": "copilot-spend-is-counted-in-its-own-units-worker-line-credits",
+      "then": "the line shows its AI credits and premium requests, not unavailable; the label reads Copilot AI credits",
+      "when": "the Budgets section renders"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a project whose checkpoint runner is Copilot",
+      "how_to_check": "a live Copilot checkpoint (spends premium requests; not run at home without asking)",
+      "key": "copilot-spend-is-counted-in-its-own-units-operator-live",
+      "requirement": "copilot-spend-is-counted-in-its-own-units-worker-line-credits",
+      "then": "the Budgets section shows a checkpoint line with its credits and the project credits rise by it",
+      "when": "Checkpoint is pressed"
     }
   ],
   "algorithms": [],
@@ -286,16 +322,22 @@
       "FR-22": "a3e02c974ee8982d336b06979c8bae75507f713640c96521fd7c9ac641403924",
       "FR-23": "2ac4892527bf810d82d691529ee69ed3db9e2ec99618dbba917966340a7fe39d",
       "FR-24": "8bb8809fc604dfbbf1d6ad694767df0a038e31089c24e7b3ba1575add9d99564",
+      "FR-25": "97ec205010ff7c9a6b5b8a88d96a5176c6e1af2139677d3121f3bde3ede8f3ec",
+      "FR-26": "1d4dce7682e6f6e40a160fce8044a36b0d1df3b16fb24fcb6dfe1c1fe2fad4da",
+      "FR-27": "a37390c5a36e52cd80cc8f2b900eeb7ca88542a6dd52f78a9f0fdace5591bd5d",
       "FR-7": "0243dcae0b94bec3d8557b1d6fbe37b827f6ac81370c20aac02c926ddd800868",
       "FR-8": "a47401808ab90b647f8f27c6cfb33aa0b068daa8f6f20a22c5e66cc07a4af6e1",
       "FR-9": "f9b839718a1d5e35d1d0b3306acbf14f7d2ac72c331553511beb93cb06c0b0f4"
     },
-    "high_water": 24,
+    "high_water": 27,
     "requirements": {
       "a-copilot-one-shot-call-records-the-credits-its-session-repo": "FR-14",
       "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde": "FR-13",
       "a-project-token-budget-pauses-autonomy-but-not-the-operator": "FR-11",
       "allowance-and-currency-presentation-cannot-imply-billing": "FR-10",
+      "copilot-spend-is-counted-in-its-own-units-credits-display-kind": "FR-27",
+      "copilot-spend-is-counted-in-its-own-units-worker-line-credits": "FR-25",
+      "copilot-spend-is-counted-in-its-project-credits-include-workers": "FR-26",
       "every-hub-owned-turn-has-a-durable-accounting-outcome": "FR-7",
       "n1-a-copilot-run-records-the-larger-lower-bound-of-its-tokens": "FR-15",
       "n2-a-conversation-has-its-own-usage-rollup": "FR-16",
@@ -459,6 +501,27 @@
       "party": null,
       "rationale": "The operator's existing worker spend (962,599 tokens on :8000) must count from the upgrade, not only from new calls.",
       "statement": "The migration MUST fill total_tokens for existing worker rows by the same rule, leave a row with no input and no output count null, and admit the budget_exhausted outcome; its downgrade MUST drop the column and turn budget_exhausted rows into spawn_failed."
+    },
+    {
+      "key": "copilot-spend-is-counted-in-its-own-units-worker-line-credits",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A Copilot worker call spends credits, not tokens; calling it unmeasured hides what it cost.",
+      "statement": "Each `workers` line MUST carry the sum of its kind's AI credits and premium requests (null when no call reported one) and a count of credited calls, those that ran and reported credits but no token count; such a call MUST NOT be counted as unmeasured."
+    },
+    {
+      "key": "copilot-spend-is-counted-in-its-project-credits-include-workers",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The project's spend in Copilot's units must equal what its turns and worker calls charged.",
+      "statement": "The project's AI credits and premium requests MUST be its turns' sums plus its worker lines' sums, while the per-agent and per-conversation figures stay turns only and no credit figure counts toward the token budget."
+    },
+    {
+      "key": "copilot-spend-is-counted-in-its-own-units-credits-display-kind",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The headline should name the unit the project's data is in (wpc6-c: follow the data, not the dominant runner).",
+      "statement": "When the project has no allowance reading among its recent turns and no reported cost, but has AI credits or premium requests (from turns or worker calls), preferred_display MUST be the kind `credits`, naming runner copilot and carrying both figures; a project with neither keeps its previous kind."
     }
   ],
   "schema_version": 1,

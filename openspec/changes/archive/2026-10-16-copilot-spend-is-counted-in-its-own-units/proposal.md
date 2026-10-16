@@ -1,3 +1,5 @@
+> **Moved to the app 2026-10-16, archived.** Successor: `spec/changes/copilot-spend-is-counted-in-its-own-units/spec.json` (built f6701ef; folded into `usage-accounting`). D1-D3 and D6 were built as written on wpc6-a..c; wpc6-d and wpc6-f were taken as recommended and stay open; D5 is the control test. Not driven live: a Copilot worker call spends premium requests.
+
 # Proposal — Copilot spend is counted in its own units
 
 **Round 1, 2026-10-12** (finding **WPC-6 (low)**, from the work-PC Copilot drive, handoff

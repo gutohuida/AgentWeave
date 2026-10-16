@@ -92,6 +92,8 @@ STOP_TESTS = "hub/tests/test_stop_closes_open_tool_calls.py"
 STOP_UI_TESTS = "hub/ui/src/__tests__/stopClosesToolCard.test.tsx"
 SPEND_DRIVE = "scripts/drive/d1016_f240_worker_spend.py"
 SPEND_TESTS = "hub/tests/test_worker_spend_counts_against_the_budget.py"
+CREDIT_TESTS = "hub/tests/test_copilot_spend_in_its_own_units.py"
+CREDIT_UI_TESTS = "hub/ui/src/__tests__/accountingPresentation.test.tsx"
 CATALOG_PIN = "tests/test_model_catalog_drift.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
@@ -1461,6 +1463,25 @@ CHANGES = {
              "with 32 rows totalling 962,599."),
         ],
     },
+    "f665": {
+        "document": "spec/changes/copilot-spend-is-counted-in-its-own-units/spec.json",
+        "commit": "f6701ef",
+        "tasks": ["task-d1c1ed4a1bee"],
+        "evidence": [
+            ("FR-1", "task-d1c1ed4a1bee", "test_result", CREDIT_TESTS,
+             "Written first (d4c9252): the drive's Copilot checkpoint and probe lines carry "
+             "1,102,140,000 / 822,390,000 nano-AIU and 1.0 each, credited 1, unmeasured 0; a call "
+             "that reported neither stays unmeasured. UI: the chip reads '1.10 AI credits · 1 "
+             "premium request'."),
+            ("FR-2", "task-d1c1ed4a1bee", "test_result", CREDIT_TESTS,
+             "Project credits 155,924,675,000 and 21.0 (turns 154.000145 / 19.0 plus the workers); "
+             "the agent stays turns only; the budget's used tokens are unchanged."),
+            ("FR-3", "task-d1c1ed4a1bee", "test_result", CREDIT_TESTS,
+             "preferred_display is credits (runner copilot, both figures) with no reading and no "
+             "cost, also from worker credits alone; a cost or an allowance still leads; a pure "
+             "Claude project keeps tokens; the JSON null allowance is never a reading."),
+        ],
+    },
     "fcatalog": {
         "document": "spec/changes/the-model-catalog-tracks-the-newest-clis/spec.json",
         "commit": "da1c4b9",
@@ -1527,6 +1548,7 @@ CHANGE_FOLDS = {
     "f581": 'project-environment-settings',
     "f662": 'model-catalog',
     "f662b": 'model-catalog',
+    "f665": 'usage-accounting',
     "f240": {
         'usage-accounting': [
             'worker-call-recorded-with-total', 'worker-tokens-count', 'autonomous-worker-paused',
