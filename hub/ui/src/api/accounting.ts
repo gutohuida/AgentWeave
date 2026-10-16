@@ -40,6 +40,14 @@ export type AccountingDisplay =
       usd_micros: number
       unpriced_turns: number
     }
+  | {
+      kind: 'credits'
+      label: 'AI credits'
+      /** Always `"copilot"` today: the only runner that reports credits. */
+      runner: string
+      ai_nano_aiu: number | null
+      premium_requests: number | null
+    }
   | { kind: 'tokens'; label: 'Tokens'; total_tokens: number }
   | { kind: 'unavailable'; label: 'Usage unavailable' }
 
@@ -73,9 +81,13 @@ export interface WorkerUsageLine {
   total_tokens: number | null
   /** Calls that reported a token count. */
   measured_calls: number
-  /** Calls that ran and reported none. A call that never ran is neither. */
+  /** Calls that ran and reported Copilot credits but no tokens (F665). */
+  credited_calls?: number
+  /** Calls that ran and reported neither. A call that never ran is none of these. */
   unmeasured_calls: number
   api_equivalent_usd_micros: number | null
+  ai_nano_aiu?: number | null
+  premium_requests?: number | null
 }
 
 export interface AccountingSnapshot {

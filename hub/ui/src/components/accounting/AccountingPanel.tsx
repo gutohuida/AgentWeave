@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useAccounting, useUpdateTokenBudget } from '@/api/accounting'
+import { useAccounting, useUpdateTokenBudget, type WorkerUsageLine } from '@/api/accounting'
 import { readableApiError } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/common/Icon'
@@ -34,6 +34,20 @@ const WORKER_LABELS: Record<string, string> = {
 
 function workerLabel(kind: string): string {
   return WORKER_LABELS[kind] ?? kind
+}
+
+/** A worker line's spend in the units it was reported in: tokens when known, Copilot's credits
+ *  when reported (F665), "Unavailable" only when neither is. */
+function workerSpend(line: WorkerUsageLine): string {
+  const premium = line.premium_requests
+  const parts = [
+    line.total_tokens !== null ? formatTokens(line.total_tokens) : null,
+    formatAiCredits(line.ai_nano_aiu ?? null),
+    typeof premium === 'number' && Number.isFinite(premium)
+      ? `${premium.toLocaleString(undefined, { maximumFractionDigits: 2 })} premium request${premium === 1 ? '' : 's'}`
+      : null,
+  ].filter((part): part is string => part !== null)
+  return parts.length > 0 ? parts.join(' · ') : formatTokens(null)
 }
 
 function PreferredDisplay() {
@@ -98,7 +112,10 @@ export function AccountingPanel() {
   const workers = data.workers ?? []
   // The headline includes the worker calls (F240), so the caption says so; without them it would
   // read as if the measured turns alone made the total.
-  const workerCalls = workers.reduce((sum, line) => sum + line.measured_calls, 0)
+  const workerCalls = workers.reduce(
+    (sum, line) => sum + line.measured_calls + (line.credited_calls ?? 0) + line.unmeasured_calls,
+    0,
+  )
 
   return (
     <SettingsSection title="Budgets" description="Token usage for this project and its agents, and the limit that pauses autonomous turns.">
@@ -145,7 +162,7 @@ export function AccountingPanel() {
                 className="aw-chip tabular-nums"
                 style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}
               >
-                {workerLabel(line.kind)}: {formatTokens(line.total_tokens)}
+                {workerLabel(line.kind)}: {workerSpend(line)}
                 {line.unmeasured_calls > 0 ? ` · ${line.unmeasured_calls} unavailable` : ''}
               </span>
             ))}

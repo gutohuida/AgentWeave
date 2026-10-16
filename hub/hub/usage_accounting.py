@@ -316,9 +316,9 @@ MAX_TOKEN_BUDGET = 2**63 - 1
 _SPAWNED_WORKER_OUTCOMES = ("ok", "nonzero_exit", "timeout", "unparseable", "schema_invalid")
 
 
-def _plus(*values: Optional[int]) -> Optional[int]:
+def _plus(*values: Any) -> Any:
     """The sum of the known values; None only when none is known (unknown is never zero)."""
-    known = [int(value) for value in values if value is not None]
+    known = [value for value in values if value is not None]
     return sum(known) if known else None
 
 
@@ -327,12 +327,19 @@ async def _worker_lines(db: AsyncSession, project_id: str) -> List[Dict[str, Any
 
     `input_tokens` is normalised as a turn's is (the total less the output, so a Claude worker's
     cache counts as input), and only a call with a total contributes tokens. A *measured* call has
-    a total; an *unmeasured* one spawned and reported none; a call that never spawned is neither.
+    a total; a *credited* one spawned and reported Copilot credits but no tokens, which is all a
+    Copilot one-shot call reports (F665); an *unmeasured* one spawned and reported neither. A call
+    that never spawned is none of the three.
     """
     measured = WorkerInvocation.total_tokens.is_not(None)
-    unmeasured = WorkerInvocation.total_tokens.is_(None) & WorkerInvocation.outcome.in_(
+    spawned_without_tokens = WorkerInvocation.total_tokens.is_(None) & WorkerInvocation.outcome.in_(
         _SPAWNED_WORKER_OUTCOMES
     )
+    reported_credits = WorkerInvocation.ai_nano_aiu.is_not(
+        None
+    ) | WorkerInvocation.premium_requests.is_not(None)
+    credited = spawned_without_tokens & reported_credits
+    unmeasured = spawned_without_tokens & ~reported_credits
     rows = await db.execute(
         select(
             WorkerInvocation.kind,
@@ -351,8 +358,11 @@ async def _worker_lines(db: AsyncSession, project_id: str) -> List[Dict[str, Any
             ),
             func.sum(WorkerInvocation.total_tokens).label("total_tokens"),
             func.sum(case((measured, 1), else_=0)).label("measured_calls"),
+            func.sum(case((credited, 1), else_=0)).label("credited_calls"),
             func.sum(case((unmeasured, 1), else_=0)).label("unmeasured_calls"),
             func.sum(WorkerInvocation.cost_usd_micros).label("api_equivalent_usd_micros"),
+            func.sum(WorkerInvocation.ai_nano_aiu).label("ai_nano_aiu"),
+            func.sum(WorkerInvocation.premium_requests).label("premium_requests"),
         )
         .where(WorkerInvocation.project_id == project_id)
         .group_by(WorkerInvocation.kind)
@@ -365,11 +375,17 @@ async def _worker_lines(db: AsyncSession, project_id: str) -> List[Dict[str, Any
             "output_tokens": int(row.output_tokens) if row.output_tokens is not None else None,
             "total_tokens": int(row.total_tokens) if row.total_tokens is not None else None,
             "measured_calls": int(row.measured_calls or 0),
+            "credited_calls": int(row.credited_calls or 0),
             "unmeasured_calls": int(row.unmeasured_calls or 0),
             "api_equivalent_usd_micros": (
                 int(row.api_equivalent_usd_micros)
                 if row.api_equivalent_usd_micros is not None
                 else None
+            ),
+            # Copilot's own units (F665): null where no call of the kind reported one.
+            "ai_nano_aiu": int(row.ai_nano_aiu) if row.ai_nano_aiu is not None else None,
+            "premium_requests": (
+                float(row.premium_requests) if row.premium_requests is not None else None
             ),
         }
         for row in rows.all()
@@ -421,7 +437,15 @@ async def accounting_snapshot(
     # The project's figures include what the Hub spent outside the turns (F240); the agents' and a
     # conversation's stay turns only. `measured_turns` and `unavailable_turns` stay turn counts.
     workers = await _worker_lines(db, project_id)
-    for figure in ("input_tokens", "output_tokens", "total_tokens", "api_equivalent_usd_micros"):
+    # Copilot's credits too (F665): `project` = the agents + the worker lines, by construction.
+    for figure in (
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "api_equivalent_usd_micros",
+        "ai_nano_aiu",
+        "premium_requests",
+    ):
         project_summary[figure] = _plus(
             project_summary[figure], *(line[figure] for line in workers)
         )
@@ -485,6 +509,20 @@ async def accounting_snapshot(
             "label": "API-equivalent estimate",
             "usd_micros": cost,
             "unpriced_turns": project_summary["unpriced_turns"],
+        }
+    elif (
+        project_summary["ai_nano_aiu"] is not None
+        or project_summary["premium_requests"] is not None
+    ):
+        # After a reported cost, before tokens (F665, D3): with no reading and no cost, Copilot's
+        # credits are the unit this project's spend is known in. It follows the data, not the
+        # dominant runner (wpc6-c), so worker credits alone count (wpc6-f).
+        preferred_display = {
+            "kind": "credits",
+            "label": "AI credits",
+            "runner": "copilot",
+            "ai_nano_aiu": project_summary["ai_nano_aiu"],
+            "premium_requests": project_summary["premium_requests"],
         }
     elif total is not None:
         preferred_display = {"kind": "tokens", "label": "Tokens", "total_tokens": total}

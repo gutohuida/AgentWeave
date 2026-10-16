@@ -53,8 +53,9 @@ export function accountingDisplayLabel(display: AccountingDisplay): string {
         : status === 'allowed' || status === 'accepted'
           ? 'allowance available'
           : 'allowance reported'
-    // A non-Claude reading names its provider: Copilot writes one on every run, so a mixed
-    // project's headline would otherwise switch providers silently (design D6).
+    // A non-Claude reading names its provider: Copilot writes one only when it reports a
+    // qualifying quota, so a mixed project's headline could otherwise switch providers silently
+    // (design D6).
     const provider = display.runner ? RUNNER_NAMES[display.runner] : undefined
     if (provider) {
       const remaining = allowance.remainingPercentage
@@ -72,6 +73,12 @@ export function accountingDisplayLabel(display: AccountingDisplay): string {
       return `${base} — excludes ${display.unpriced_turns} ${noun} with no reported cost`
     }
     return base
+  }
+  if (display.kind === 'credits') {
+    // A unit and a reason, not a number (F665, D3): the Budgets credits line and the Overview's
+    // AI-credits row already print the figure, and a third copy could only disagree with them.
+    const provider = RUNNER_NAMES[display.runner] ?? display.runner
+    return `${provider} AI credits · no allowance reported`
   }
   return display.label
 }

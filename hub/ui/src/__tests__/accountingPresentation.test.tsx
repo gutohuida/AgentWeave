@@ -168,7 +168,8 @@ describe('accounting presentation', () => {
     ]
     render(<AccountingPanel />)
 
-    expect(screen.getByText(/2 measured turns · 3 worker calls · 1 usage unavailable/)).toBeInTheDocument()
+    // Every worker call that ran: measured, credited or not (F665, D1).
+    expect(screen.getByText(/2 measured turns · 4 worker calls · 1 usage unavailable/)).toBeInTheDocument()
     const lines = screen.getByLabelText('Usage by worker').querySelectorAll('.aw-chip')
     expect([...lines].map((line) => line.textContent)).toEqual([
       'Checkpoints: 500 tokens',
