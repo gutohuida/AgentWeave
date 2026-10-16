@@ -37,7 +37,7 @@ interface JobsPageProps {
 
 export function JobsPage({ onOpenTasks }: JobsPageProps) {
   const { data: jobs, isLoading } = useJobs()
-  const { data: archivedJobs } = useArchivedJobs()
+  const { data: archivedJobs, error: archivedError } = useArchivedJobs()
   const archivedCount = archivedJobs?.length ?? 0
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState<'all' | 'active' | 'paused' | 'archived'>('all')
@@ -152,7 +152,14 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
       {/* Content */}
       <div className="flex-1 overflow-auto p-4">
         {filter === 'archived' ? (
-          <ArchivedJobs jobs={archivedJobs ?? []} />
+          archivedError ? (
+            // Not "No archived jobs": a list that could not be read is not an empty one.
+            <p className="text-xs" role="alert" style={{ color: 'var(--amber)' }}>
+              Could not read the archived jobs: {errorDetail(archivedError, 'the Hub did not answer.')}
+            </p>
+          ) : (
+            <ArchivedJobs jobs={archivedJobs ?? []} />
+          )
         ) : (!jobs || jobs.length === 0) && archivedCount > 0 ? (
           // F637: archiving every job is not having none. Say what is archived, and where.
           <div className="flex flex-col items-center">
