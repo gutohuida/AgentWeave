@@ -1,0 +1,148 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub, a Haiku agent in call mode (hub_client cli) in its own worktree, stale 1-3.json planted after a first turn",
+      "how_to_check": "py -3.11 scripts/drive/d1016_f663_calls_dir_clean.py <name> (written first: fails before the build)",
+      "key": "drive",
+      "requirement": "isolated-starts-empty",
+      "then": "no tool call fails and no stale file survives the turn's start",
+      "when": "a second turn in a new conversation creates a task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a calls directory holding a file, a subdirectory and a junction/symlink to a directory outside",
+      "how_to_check": "pytest hub/tests/test_calls_dir_starts_clean.py",
+      "key": "unit-empty",
+      "requirement": "isolated-starts-empty",
+      "then": "the directory is empty and the link's target still holds its file",
+      "when": "prepare_calls_dir(empty=True) runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a read-only agent (project directory) with a file in calls",
+      "how_to_check": "pytest hub/tests/test_calls_dir_starts_clean.py",
+      "key": "unit-shared",
+      "requirement": "shared-not-emptied",
+      "then": "the file is still there; an agent with its own worktree finds its directory empty",
+      "when": "its turn starts through the trigger"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a removal that raises OSError",
+      "how_to_check": "pytest hub/tests/test_calls_dir_starts_clean.py",
+      "key": "unit-best-effort",
+      "requirement": "emptying-best-effort",
+      "then": "a warning names the path, the other entries are removed, nothing raises",
+      "when": "prepare_calls_dir(empty=True) runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the shim notice and the shim tool-surface preamble",
+      "how_to_check": "pytest hub/tests/test_calls_dir_starts_clean.py",
+      "key": "unit-text",
+      "requirement": "new-name-per-call",
+      "then": "each asks for a new file name per call",
+      "when": "they are rendered"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "2fb2f444e9f4586f04d76c53d8f36fe2c63c1bd3599ed62f37af28f44c1e5e87",
+      "FR-2": "718582d19e927f894d291f3643d8db84ee75560693daa74e65a8310704b53688",
+      "FR-3": "039eb493526fe849b7d5bf42021b9b96bab673bf03835bd5ce8a4f630a62808f",
+      "FR-4": "f5a3ba8ef5644a60b5ca121c582397533918d2a92fecf01a721056fd979ae7db"
+    },
+    "high_water": 4,
+    "requirements": {
+      "emptying-best-effort": "FR-3",
+      "isolated-starts-empty": "FR-1",
+      "new-name-per-call": "FR-4",
+      "shared-not-emptied": "FR-2"
+    },
+    "retired": {}
+  },
+  "design": "Tier 1, no migration. D1: prepare_calls_dir(work_dir, *, empty) with no default; the call site passes isolated_workspace is not None. Emptying runs after the existing link handling: an entry that is a link or junction (normcase(realpath) differs) is removed as a link (rmdir on nt for a directory link, else unlink), a file is unlinked, a real subdirectory is rmtree'd. A shared workspace (project directory, explicit work_dir) is never emptied: another agent's file may be in flight there. D2: one sentence in launchability.access_path_notice and agents._tool_surface_lines' shim preamble asks for a new file name per call and a new file for corrected arguments. D3: each removal is best effort (OSError logged as a warning, the turn proceeds); failing to make the directory is still refused 409. D4: Copilot's spec-turn exclusions stay (create is kept). This reverses D14 of a-run-reaches-the-hub-without-mcp ('the agent may reuse them').",
+  "evidence": {
+    "checked": [
+      "prepare_calls_dir ends with makedirs(exist_ok=True) and removes no file",
+      "home drive on a scratch Hub (f663before2): Haiku Write refused the previous turn's create_task.json ('File has not been read yet')"
+    ],
+    "limits": [
+      "No Copilot turn at home; Copilot's create refusal is the work-PC record"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "prepare_calls_dir makes the calls directory but never removes a file, and both shim texts give the example name 1.json. A new conversation cannot know a file is already there; Copilot's create and Claude Haiku 4.5's Write refuse to overwrite an unread file. Work PC: the second shim turn's create failed twice and cost 151k tokens instead of ~75k (F663); the Copilot spec turn's failed write (F664) was the same leftover, since create is kept on spec turns. Reproduced at home on a scratch Hub: a Haiku shim turn in a new conversation chose the previous turn's create_task.json, Write answered 'File has not been read yet', and the turn fell back to Set-Content.",
+  "requirements": [
+    {
+      "key": "isolated-starts-empty",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A new conversation cannot know an earlier file exists, and write tools refuse to overwrite an unread file.",
+      "statement": "When a turn's workspace is isolated (the agent's own worktree, a task checkout or a review checkout), its .agentweave/calls/ directory MUST hold no entry from an earlier turn when the run starts; a link or junction inside it MUST be removed as a link without touching its target."
+    },
+    {
+      "key": "shared-not-emptied",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Another agent's arguments file may be in flight there.",
+      "statement": "A calls directory in a workspace that is not isolated (the project directory, an explicit work_dir) MUST NOT be emptied at turn start."
+    },
+    {
+      "key": "emptying-best-effort",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A leftover costs a retry; a blocked agent costs the turn.",
+      "statement": "An entry that cannot be removed MUST be logged as a warning and the turn MUST start; failing to make the directory itself MUST still refuse the turn as before."
+    },
+    {
+      "key": "new-name-per-call",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Covers a name reused within one turn and any shared workspace.",
+      "statement": "Both texts that tell a run the call command (the turn-start notice and the tool-surface preamble) MUST ask it to use a new file name for each call and to write corrected arguments to a new file rather than editing an old one."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "prepare_calls_dir empties the directory in an isolated workspace, links removed as links",
+      "the trigger passes empty for isolated workspaces only",
+      "both call-mode texts ask for a new file name per call",
+      "an emptying failure warns and the turn proceeds"
+    ],
+    "non_goals": [
+      "The shared project-directory race between two read-only agents (wpc4-c)",
+      "A per-agent or per-run calls subdirectory",
+      "Giving Copilot spec turns a replace tool (wpc5-a: edit stays excluded)"
+    ]
+  },
+  "summary": "At turn start the Hub empties .agentweave/calls/ when the turn's workspace is isolated (the agent's own worktree, a task checkout, a review checkout), and both call-mode texts ask for a new arguments file name per call, so a new conversation no longer collides with an earlier turn's file (F663, F664; decision fix-D6 / wpc4-a (a2)). Re-authored from openspec a-call-file-turn-starts-clean-and-can-write-its-file.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "agent_trigger.prepare_calls_dir(empty=), its call site, launchability and agents shim texts, test_calls_dir_starts_clean.py.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "isolated-starts-empty",
+        "shared-not-emptied",
+        "emptying-best-effort",
+        "new-name-per-call"
+      ],
+      "reviewer": null,
+      "title": "Empty an isolated calls directory at turn start; ask for a new name per call"
+    }
+  ],
+  "title": "A call-mode turn starts with an empty calls directory"
+}
