@@ -66,6 +66,13 @@ describe('Gap 6 — OverviewPage agent health grid', () => {
   })
 
   // the-settings-that-gate-collaboration-are-on-the-project-page FR-1, FR-4.
+  it('reaches questions and permission decisions with no question open (F636)', () => {
+    const onNavigate = vi.fn()
+    render(<OverviewPage onNavigate={onNavigate} />)
+    fireEvent.click(screen.getByTestId('overview-questions-link'))
+    expect(onNavigate).toHaveBeenCalledWith('questions')
+  })
+
   it('mounts the Collaboration block above Attention', () => {
     render(<OverviewPage onNavigate={vi.fn()} />)
     const block = screen.getByTestId('collab-summary-stub')

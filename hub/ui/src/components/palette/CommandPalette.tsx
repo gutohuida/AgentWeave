@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Command } from 'cmdk'
 import * as Dialog from '@radix-ui/react-dialog'
 import { formatDistanceToNow } from 'date-fns'
@@ -49,13 +49,38 @@ export function CommandPalette({
 }: CommandPaletteProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  // F635: opened by a global key, so the dialog has no trigger to give focus back to; it is
+  // remembered here and restored on every close, Escape and a chosen item alike.
+  const openerRef = useRef<HTMLElement | null>(null)
+  const wasOpen = useRef(false)
+
+  useEffect(() => {
+    if (open) {
+      wasOpen.current = true
+      return
+    }
+    if (!wasOpen.current) return
+    wasOpen.current = false
+    const opener = openerRef.current
+    openerRef.current = null
+    // After the dialog's own close handling, which otherwise leaves focus on <body>.
+    const timer = window.setTimeout(() => {
+      if (opener && opener.isConnected) opener.focus()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [open])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return
       if (event.key.toLowerCase() !== 'k') return
       event.preventDefault()
-      setOpen((value) => !value)
+      setOpen((value) => {
+        if (!value && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+          openerRef.current = document.activeElement
+        }
+        return !value
+      })
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)

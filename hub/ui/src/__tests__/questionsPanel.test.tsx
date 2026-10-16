@@ -310,4 +310,18 @@ describe('permission decisions on the Questions page (F231)', () => {
     expect(screen.getByTestId('permission-decision-perm-2')).toHaveTextContent('denied')
     expect(screen.queryByTestId('permission-decision-perm-3')).toBeNull()
   })
+
+  it('says what each decision was about, and when an expired one was asked (F636)', () => {
+    decisions = [
+      { id: 'perm-1', agent: 'codex-1', tool_name: 'PowerShell', status: 'allowed', decided_by: 'operator', decided_at: new Date().toISOString(), tool_input: { command: 'Get-ChildItem C:/Python*' }, created_at: new Date().toISOString() },
+      { id: 'perm-2', agent: 'codex-1', tool_name: 'Write', status: 'expired', decided_by: null, decided_at: null, tool_input: { file_path: 'notes/plan.md' }, created_at: new Date(Date.now() - 3_600_000).toISOString() },
+    ]
+    render(<QuestionsPanel />)
+    const details = screen.getByTestId('permission-decisions') as HTMLDetailsElement
+    details.open = true
+    fireEvent(details, new Event('toggle'))
+    expect(screen.getByTestId('permission-decision-perm-1')).toHaveTextContent('Get-ChildItem C:/Python*')
+    expect(screen.getByTestId('permission-decision-perm-2')).toHaveTextContent('notes/plan.md')
+    expect(screen.getByTestId('permission-decision-perm-2')).toHaveTextContent(/asked about 1 hour ago/)
+  })
 })

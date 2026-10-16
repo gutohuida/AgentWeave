@@ -87,6 +87,26 @@ describe('command palette — open and close', () => {
     await waitFor(() => expect(screen.queryByPlaceholderText(PLACEHOLDER)).not.toBeInTheDocument())
   })
 
+  it('returns focus to what had it, on Escape and after choosing (F635)', async () => {
+    const callbacks = renderPalette()
+    const opener = document.createElement('button')
+    opener.textContent = 'Jobs tab'
+    document.body.appendChild(opener)
+    opener.focus()
+
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    await waitFor(() => expect(screen.getByPlaceholderText(PLACEHOLDER)).toBeInTheDocument())
+    fireEvent.keyDown(document.activeElement ?? document, { key: 'Escape' })
+    await waitFor(() => expect(document.activeElement).toBe(opener))
+
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    await waitFor(() => expect(screen.getByPlaceholderText(PLACEHOLDER)).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/^claude$/))
+    expect(callbacks.onOpenAgent).toHaveBeenCalled()
+    await waitFor(() => expect(document.activeElement).toBe(opener))
+    opener.remove()
+  })
+
   it('also opens on Cmd+K (metaKey)', async () => {
     renderPalette()
     fireEvent.keyDown(document, { key: 'k', metaKey: true })

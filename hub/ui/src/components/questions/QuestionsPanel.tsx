@@ -270,6 +270,20 @@ export function QuestionsPanel() {
  * F231: what the operator allowed and refused, from the rows the Hub keeps. A refusal already
  * reaches the activity feed; an approval reached nothing. Collapsed, and fetched only when opened.
  */
+/** What a permission request was about, from its own input (F636): three "PowerShell" rows
+ *  could not be told apart. The command, else the file or path it named; nothing when neither. */
+function decisionSubject(input: Record<string, unknown> | undefined): string | null {
+  if (!input) return null
+  for (const key of ['command', 'file_path', 'path', 'url']) {
+    const value = input[key]
+    if (typeof value === 'string' && value.trim()) {
+      const line = value.trim().split('\n')[0]
+      return line.length > 120 ? `${line.slice(0, 120)}…` : line
+    }
+  }
+  return null
+}
+
 function PermissionDecisions() {
   const [open, setOpen] = useState(false)
   const { data, error, isLoading } = usePermissionDecisions(open)
@@ -300,11 +314,22 @@ function PermissionDecisions() {
               {request.status}
             </Badge>{' '}
             <span style={{ color: 'var(--text)' }}>{request.agent}</span> · {request.tool_name}
-            {request.decided_at && (
+            {decisionSubject(request.tool_input) && (
+              <>
+                {' · '}
+                <code className="font-mono" style={{ color: 'var(--text-2)' }}>{decisionSubject(request.tool_input)}</code>
+              </>
+            )}
+            {request.decided_at ? (
               <span style={{ color: 'var(--text-3)' }}>
                 {' '}· {request.decided_by ?? 'decided'} {formatDistanceToNow(hubDate(request.decided_at), { addSuffix: true })}
               </span>
-            )}
+            ) : request.created_at ? (
+              // An expired request was never decided; when it was asked is what is known (F636).
+              <span style={{ color: 'var(--text-3)' }}>
+                {' '}· asked {formatDistanceToNow(hubDate(request.created_at), { addSuffix: true })}
+              </span>
+            ) : null}
           </p>
         ))}
       </div>

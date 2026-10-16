@@ -152,10 +152,22 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
         {/* A blocked run is the only thing on this page that requires the operator to act, so it
             leads the group that says so. It used to render inside Navigate, below the Tasks/Spec/
             Jobs shortcuts, which left "Attention" holding nothing but idle agent cards. */}
-        {unanswered > 0 && (
+        {unanswered > 0 ? (
           <div className="mb-3">
             <QuestionInterruptCard questions={questions} onNavigateToQuestions={() => onNavigate('questions')} />
           </div>
+        ) : (
+          // F636: the questions page also holds the permission decision history, which used to be
+          // reachable only while a question was open.
+          <button
+            type="button"
+            data-testid="overview-questions-link"
+            className="mb-3 text-xs underline"
+            style={{ color: 'var(--text-3)' }}
+            onClick={() => onNavigate('questions')}
+          >
+            No open questions · answered questions and permission decisions
+          </button>
         )}
         {agents.length > 0 ? (
           <div className="overview-agent-grid">
