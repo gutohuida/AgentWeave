@@ -1,0 +1,176 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the fake ACP harness replaying a refused root call then end_turn (judge refusal under acceptEdits; operator Deny under manual; subagent refusal; refusal then text; Stop; parallel calls)",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_copilot_acp_refusal_continuation.py",
+      "key": "unit-continuation",
+      "requirement": "refused-turn-continued-once",
+      "then": "exactly one continuation session/prompt naming the label and reason (operator: 'did not approve'), only where the refusal was last and parent-level; none after a Stop, text, a later root call or a subagent refusal (written first: fails before the build)",
+      "when": "run_turn runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a continuation that also ends on a refusal, one that fails before output, one that fails after output, a quota error, a cancelled task",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_copilot_acp_refusal_continuation.py",
+      "key": "unit-says-so",
+      "requirement": "refused-turn-says-so",
+      "then": "turn_ended_on_refusal with continuations 1; the first outcome stands with refusal_continuation_failed and a forced close; failed after output; quota fails; CancelledError propagates (written first)",
+      "when": "run_turn runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Copilot TurnOutcome with stop_reason end_turn, ended_on_refusal and one continuation, and a Codex outcome",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_failure_reporting.py hub/tests/test_copilot_acp_refusal_continuation.py",
+      "key": "unit-stop-reason",
+      "requirement": "stop-reason-recorded",
+      "then": "the Copilot payload carries all three; the Codex one carries none (written first)",
+      "when": "the terminal lifecycle fields are built"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task run that did not move its task and recorded copilot.turn_ended_on_refusal",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_copilot_acp_refusal_continuation.py; cd hub/ui && npx vitest run src/__tests__/eventSummary.test.ts",
+      "key": "unit-divergence",
+      "requirement": "divergence-names-refusal",
+      "then": "run_diverged carries refusal.label and refusal.reason and the summary names them; without the row the payload is unchanged (written first)",
+      "when": "evaluate_run_end runs and the event summary renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub with a Copilot agent in acceptEdits (fix-D16 allows the premium requests)",
+      "how_to_check": "py -3.11 scripts/drive/d1016_f660_refusal_continues.py",
+      "key": "live-drive",
+      "requirement": "refused-turn-continued-once",
+      "then": "one copilot.refusal_continued row, agent text after it, run_completed carrying stop_reason end_turn and refusal_continuations 1 (fails before the build: no text after the refusal)",
+      "when": "it is asked to list C:\\Python* (outside its workspace), then in manual the operator denies `echo hi`"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a turn whose agent writes a question in prose after a refusal, and a turn with no refusal that ends on a question",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_copilot_acp_refusal_continuation.py; py -3.11 -m pytest hub/tests/test_copilot_home_has_no_deciding_hook.py",
+      "key": "unit-no-prose",
+      "requirement": "no-hook-decides-carve-out",
+      "then": "no follow-up is sent in either: only the Hub's own refusal record opens the gate",
+      "when": "run_turn runs"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "ad8f2cc8548ac6625b2676f306d321b07580fb230e6bf2b610d4e08864e53ea7",
+      "FR-2": "feb2cdbb62a5496c198a820f1587d169a6e4b1782b486872c16cd8797438a029",
+      "FR-3": "bd80198f2c53b624a0e0146ff93b5e0ebfa1cd5797b3280fe8805d02a659a426",
+      "FR-4": "a3428a4c9a4931b7e4a7a9a014f4a0a068d7e67d7c26f8242456e84e7184fa1f",
+      "FR-5": "300338649875a2c453ce86350dd533edc558fea61e5f5114d30fdb666b0ac3f9"
+    },
+    "high_water": 5,
+    "requirements": {
+      "divergence-names-refusal": "FR-4",
+      "no-hook-decides-carve-out": "FR-5",
+      "refused-turn-continued-once": "FR-2",
+      "refused-turn-says-so": "FR-3",
+      "stop-reason-recorded": "FR-1"
+    },
+    "retired": {}
+  },
+  "design": "Tier 2 (amends the no-backstop contract), no migration. D1: TurnOutcome gains stop_reason (the last prompt's), ended_on_refusal, refusal_continuations; _runtime_turn_fields (getattr, omits empties) is merged into the terminal broadcast and the closing status row; the 14 TurnOutcome equality asserts name the field (wpc1-g: keep). D2: answer_permission records state.last_refusal {tool_call_id, label, reason, decided_by} for a refusal of a call not flagged subagent (CallFacts.subagent from data.parentToolCallId or the envelope agentId; a call with no start counts as parent); decided_by operator only when a card was shown, else hub ('no operator channel'). Cleared only by a root agent_message_chunk the mapper keeps (non-blank, not an error echo) or a root tool.execution_start with another id; a later refusal overwrites. D3: _await_prompt splits into _send_and_wait and one tail; the gate (end_turn, a record, no interrupt/cancel/forced failure/failure/root error/quota) runs check_interrupt, emits copilot.refusal_continued, clears the record and sends one follow-up within the remaining deadline. The follow-up's failure feeds close_forced, not the status, unless root activity followed it (wpc1-h: failed); quota and root errors still fail; mapper.finish() runs once; only Exception is caught, so CancelledError propagates. D4: copilot.turn_ended_on_refusal when the record survives and nothing more is sent; evaluate_run_end reads either diagnostic row for run_diverged.refusal. D5: usage is unchanged (one ledger per turn; prompt result last-wins). Rejected: a Copilot hook (forbidden); Copilot's native autopilot continuation (unbounded, no reason); reading the agent's text.",
+  "evidence": {
+    "checked": [
+      "copilot_acp.py at 75315b9: answer_permission records nothing; _await_prompt reads stopReason only for cancelled; no continuation exists",
+      "openspec draft rounds R1-R3 (work PC, 2026-10-12) on the wire order and the fake harness"
+    ],
+    "limits": [
+      "The ACP-level order of a refused call's complete and update is uncaptured; the fixture order comes from Copilot's events.jsonl"
+    ]
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [
+    {
+      "question": "wpc1-d (the continuation is counted on the same usage row, prompt result last-wins) and wpc1-g (keep stop_reason on the payload) are built as recommended; their DECISIONS rows stay open.",
+      "resolved": false
+    }
+  ],
+  "problem": "Work-PC drive 2026-10-12 (handoff 0162), three runs out of three: run-047359204292 (operator Deny of `echo hi`), run-b175c9ffa621 (judge refusal) and run-b1f5b4bedc18 (judge refusal of `Get-ChildItem 'C:\\Python*'`, a task run) each end with a tool_use, a tool_result 'The user rejected this tool call.' and 'Run completed (exit 0).' with no agent text after the refusal. ACP's reject_once carries no reason, and Copilot's runtime ends the turn on a rejected root call; a Claude agent refused through the Hub's approval tool gets the reason inline and continues. The task run was left in_progress with a bare divergence; run-0473 was charged a premium request for nothing. The stop reason Copilot returns (end_turn) is read only to detect cancellation and kept nowhere.",
+  "requirements": [
+    {
+      "key": "stop-reason-recorded",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A turn a refusal stopped and a turn the agent finished both read completed, exit 0; the record could not say which.",
+      "statement": "The Hub SHALL log the stop reason Copilot returns for every prompt of a Copilot turn, and SHALL carry the turn's last stop reason, whether it ended on a refusal, and how many follow-up prompts it sent on the run's terminal lifecycle event and its closing status row, omitting each field the run's runner did not report rather than sending it empty."
+    },
+    {
+      "key": "refused-turn-continued-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "ACP's reject carries no reason and Copilot's runtime ends the turn on it; the follow-up prompt is the only place the Hub controls where Copilot accepts the reason. Parity with Claude, which is told the reason and continues.",
+      "statement": "When the last parent-level thing in a Copilot prompt, before its result, is the Hub's or the operator's refusal of a tool call, and the prompt returns end_turn with no stop, cancel, forced failure, prompt failure, root session error or quota refusal, the Hub MUST first check for a stop and then send at most one follow-up session/prompt in the same session, within what is left of the turn's deadline, naming the refused call and the refusal's reason (\"The operator did not approve\" for an operator's refusal, since a card's refusal is also its expiry) and telling the agent to continue another way or call ask_user; agent text the Hub keeps, or a parent-level tool call started after the refusal, means the refusal was not last; a subagent's refusal is never recorded; the decision MUST NOT read the agent's text."
+    },
+    {
+      "key": "refused-turn-says-so",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "When the Hub does not or cannot continue, the operator must see that the turn ended on a refusal rather than read a clean completion; a step the Hub added must not fail a turn that had not produced anything since.",
+      "statement": "When a turn ends on a recorded refusal and no follow-up is sent, or the follow-up also ends on one, the run MUST show a warning diagnostic copilot.turn_ended_on_refusal naming the call, the reason and who refused, and stay completed; a follow-up that fails before producing agent output MUST leave the first prompt's outcome with a copilot.refusal_continuation_failed warning and a forced close, and one that fails after producing output MUST fail the run (wpc1-h); a stop, a root session error or a quota refusal during the follow-up gives the outcome it gives any prompt, and a cancellation of the run's task propagates unabsorbed."
+    },
+    {
+      "key": "divergence-names-refusal",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A task left in_progress after a refused call should say why, not only that it was dropped.",
+      "statement": "When a task run ends without moving its task and the run recorded copilot.turn_ended_on_refusal or copilot.refusal_continuation_failed, the run_diverged event MUST carry that refusal's label and reason and its summary MUST name them; a run with neither, or a read that fails, keeps today's event."
+    },
+    {
+      "key": "no-hook-decides-carve-out",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A hook that answers a permission pre-empts the approval protocol, taking the decision from the Hub's judge, the operator's cards and the record. A hook that forces continuation is a backstop, which the operator-in-the-loop design deliberately lacks. A turn Copilot's runtime ended on a refusal whose reason the protocol dropped was not ended by the agent; delivering that reason once is not a backstop. Trusting the folder would load the repository's own hooks and servers. The sweep is reported as `copilot.home_repaired`.",
+      "statement": "The Hub SHALL NOT install a Copilot hook that allows, denies or rewrites a tool call or forces a turn to continue, SHALL remove from the agent's Copilot home before every spawn any hook or permission-granting setting it did not write, and SHALL NOT trust the agent's workspace folder on Copilot's behalf; the one turn the Hub continues is one whose last parent-level event was a refusal the Hub itself recorded, with one bounded follow-up prompt carrying its reason, and no reading of the agent's text decides whether any turn continues."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "TurnOutcome.stop_reason, ended_on_refusal, refusal_continuations; the stop reason logged per prompt",
+      "the refusal record in answer_permission (parent-level only; CallFacts.subagent) and its clearing rule",
+      "one continuation session/prompt in the same session within the remaining deadline; its failure handling (wpc1-h)",
+      "copilot.refusal_continued, copilot.turn_ended_on_refusal and copilot.refusal_continuation_failed diagnostics",
+      "_runtime_turn_fields on the terminal lifecycle event and the closing status row",
+      "run_diverged carries the refusal; its event summary names it",
+      "the no-backstop requirement gains the bounded carve-out"
+    ],
+    "non_goals": [
+      "Any Copilot hook (still forbidden)",
+      "Reading the agent's text to decide anything",
+      "Summing prompt-result usage (process-cumulative; last wins, wpc1-d)",
+      "Claude and Codex runs (Claude already gets the reason; Codex payloads are unchanged)"
+    ]
+  },
+  "summary": "When the Hub's judge or the operator refuses a parent-level Copilot tool call and Copilot's runtime then ends the prompt with nothing after the refusal, the Hub sends one bounded follow-up prompt in the same session carrying the refused call and the reason, which ACP's reject cannot carry; a turn that still ends on a refusal says so on the timeline and in the task's divergence; every Copilot turn records its stop reason (F660 / WPC-1; decision fix-D3, wpc1-a..c, e, f, h; wpc1-d and wpc1-g built as recommended, still open). Tier 2: it amends the no-backstop contract (No Copilot hook decides a call or a turn). Re-authored from openspec a-refused-copilot-call-does-not-end-the-turn.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "copilot_acp: CallFacts.subagent, the refusal record, _send_and_wait + one tail, the gate, the three diagnostics, TurnOutcome fields; agent_trigger: _runtime_turn_fields; run_divergence: refusal on run_diverged; eventSummary.ts; tests; the 1.12 pinned tests; bundle.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "stop-reason-recorded",
+        "refused-turn-continued-once",
+        "refused-turn-says-so",
+        "divergence-names-refusal",
+        "no-hook-decides-carve-out"
+      ],
+      "reviewer": null,
+      "title": "Continue a Copilot turn a refusal ended, once, with its reason"
+    }
+  ],
+  "title": "A refused Copilot call does not end the turn"
+}

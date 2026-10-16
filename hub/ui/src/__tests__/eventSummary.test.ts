@@ -314,4 +314,17 @@ describe('summaryForEvent', () => {
       })
     ).toBe('alice wrote outside its workspace: Edit → /tmp/stray.txt')
   })
+  // F660: a Copilot task run whose turn ended on a refused call says which call and why.
+  it('names the refused call when a run diverged on a refusal', () => {
+    const base = { agent: 'copilot1', task_id: 'task-1', task_status: 'in_progress', outcome: 'surfaced' }
+    expect(summaryForEvent('run_diverged', base)).toBe('copilot1 ended without moving task-1 (in_progress)')
+    expect(
+      summaryForEvent('run_diverged', {
+        ...base,
+        refusal: { label: 'a command', reason: 'outside the workspace' },
+      }),
+    ).toBe(
+      'copilot1 ended without moving task-1 (in_progress) — the turn ended on a refused call: a command — outside the workspace',
+    )
+  })
 })
