@@ -21,16 +21,15 @@ import pytest
 
 from hub import copilot_acp
 from hub.copilot_acp import TurnOutcome, run_turn
-
 from tests.test_copilot_acp_run_turn import (
+    _LOADED_HUB,
+    _MCP_START,
+    _OPTIONS,
     AGENT_NAME,
     SESSION_ID,
     WORK,
-    _OPTIONS,
     _collector,
     _FakeACPSession,
-    _LOADED_HUB,
-    _MCP_START,
     _mcp_permission,
     _new_with,
     _patch_spawn,
@@ -260,11 +259,7 @@ async def test_an_operator_deny_that_ends_the_turn_is_continued_with_the_operato
 
 
 async def test_with_no_operator_channel_the_refusal_is_the_hubs(monkeypatch):
-    script = (
-        _new_with()
-        + _refused_root(command="echo hi")
-        + [END_TURN, _chunk("Fine."), END_TURN]
-    )
+    script = _new_with() + _refused_root(command="echo hi") + [END_TURN, _chunk("Fine."), END_TURN]
     fake, _events, _outcome = await _drive(
         monkeypatch, script, permission_mode="manual", request_approval=None
     )
@@ -286,7 +281,11 @@ async def test_a_subagent_refusal_is_not_continued_by_the_hub(monkeypatch):
         _permission(call),
         _rejected(call, subagent=True),
         _update(
-            {"sessionUpdate": "tool_call_update", "toolCallId": "call_task_root", "status": "completed"}
+            {
+                "sessionUpdate": "tool_call_update",
+                "toolCallId": "call_task_root",
+                "status": "completed",
+            }
         ),
         _chunk("The subagent could not list it; here is what I found."),
         END_TURN,
@@ -333,7 +332,9 @@ async def test_a_turn_that_ends_on_a_question_without_a_refusal_is_not_continued
 
 async def test_a_blank_chunk_after_a_refusal_is_not_agent_text(monkeypatch):
     script = (
-        _new_with() + _refused_root() + [_chunk("  \n"), END_TURN, _chunk("Done another way."), END_TURN]
+        _new_with()
+        + _refused_root()
+        + [_chunk("  \n"), END_TURN, _chunk("Done another way."), END_TURN]
     )
     fake, _events, _outcome = await _drive(monkeypatch, script)
     assert len(_continuations(fake)) == 1
@@ -341,11 +342,7 @@ async def test_a_blank_chunk_after_a_refusal_is_not_agent_text(monkeypatch):
 
 async def test_a_later_allowed_root_call_clears_the_refusal(monkeypatch):
     """The Hub's own MCP call is allowed under Edit files; its start comes after the refusal."""
-    script = (
-        _new_with(_LOADED_HUB)
-        + _refused_root()
-        + [_MCP_START, _mcp_permission(8), END_TURN]
-    )
+    script = _new_with(_LOADED_HUB) + _refused_root() + [_MCP_START, _mcp_permission(8), END_TURN]
     fake, _events, _outcome = await _drive(monkeypatch, script)
     assert [a["outcome"]["optionId"] for _, a in fake.sent_responses] == [
         "reject_once",
@@ -537,9 +534,7 @@ async def test_a_continuation_that_fails_after_output_fails_the_run(monkeypatch)
 
 async def test_the_continuation_uses_the_remaining_deadline(monkeypatch):
     hang = asyncio.Event()
-    script = (
-        _new_with() + [{"sleep": 0.6}] + _refused_root() + [END_TURN, {"hang": hang}]
-    )
+    script = _new_with() + [{"sleep": 0.6}] + _refused_root() + [END_TURN, {"hang": hang}]
     started = time.monotonic()
     fake, events, outcome = await _drive(monkeypatch, script, turn_timeout=1.0)
     elapsed = time.monotonic() - started

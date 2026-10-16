@@ -28,6 +28,7 @@ from .conversations import get_conversation_by_id, name_conversation, new_conver
 from .db.engine import async_session_factory
 from .db.models import (
     Agent,
+    AgentOutput,
     InboundQueueEntry,
     Question,
     Run,
@@ -864,6 +865,37 @@ async def note_turn_that_produced_nothing(session: AsyncSession, run: Run) -> bo
     return True
 
 
+#: The run's own record that its turn ended on a refusal nothing answered (F660 D4).
+REFUSAL_END_CODES = ("copilot.turn_ended_on_refusal", "copilot.refusal_continuation_failed")
+
+
+async def refusal_that_ended_the_turn(session: AsyncSession, run_id: str) -> Optional[dict]:
+    """The label and reason of the refusal a run's turn ended on, read from the diagnostic the turn
+    wrote for it -- not from `permission_denied`, which a refusal the agent answered also leaves
+    (F660 D4, R3). None when there is none, or when the read fails."""
+    try:
+        rows = (
+            (
+                await session.execute(
+                    select(AgentOutput.payload)
+                    .where(AgentOutput.run_id == run_id)
+                    .where(AgentOutput.kind == "diagnostic")
+                    .order_by(AgentOutput.timestamp.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+    except Exception:  # noqa: BLE001 - the divergence is raised without the context
+        logger.warning("reading the refusal that ended run %s failed", run_id, exc_info=True)
+        return None
+    for payload in rows:
+        if isinstance(payload, dict) and payload.get("code") in REFUSAL_END_CODES:
+            facts = payload.get("facts") if isinstance(payload.get("facts"), dict) else {}
+            return {"label": facts.get("label"), "reason": facts.get("reason")}
+    return None
+
+
 async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Optional[str]:
     """The run boundary check. Returns the divergence id when one was recorded.
 
@@ -1035,6 +1067,9 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
             payload["was_review"] = True
             if reason:
                 payload["reason"] = reason
+        refusal = await refusal_that_ended_the_turn(session, run.id)
+        if refusal is not None:
+            payload["refusal"] = refusal
         # Derived, not hardcoded (design D6). `warn` is still right for everything this comment
         # used to describe in full — the work is not lost and nothing is broken, but it is the
         # operator's attention this needs. `info` is for the one case that comment predates: a

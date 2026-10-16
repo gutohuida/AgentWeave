@@ -2580,6 +2580,23 @@ def _runtime_failure_fields(outcome, lifecycle_event: str) -> dict:
     return fields
 
 
+def _runtime_turn_fields(outcome) -> dict:
+    """How a turn ended, from the facts its runner reports (F660 D1): Copilot's last stop reason,
+    whether a refusal ended the turn, and how many follow-ups the Hub sent. Read by `getattr`, so
+    an outcome without them (Codex) adds nothing; empty values are omitted, as
+    `_runtime_failure_fields` omits its own."""
+    fields = {}
+    stop_reason = getattr(outcome, "stop_reason", None)
+    if isinstance(stop_reason, str) and stop_reason:
+        fields["stop_reason"] = stop_reason
+    if getattr(outcome, "ended_on_refusal", False) is True:
+        fields["ended_on_refusal"] = True
+    continuations = getattr(outcome, "refusal_continuations", 0)
+    if isinstance(continuations, int) and continuations > 0:
+        fields["refusal_continuations"] = continuations
+    return fields
+
+
 _RUN_LIFECYCLE_EVENTS = ("run_started", "run_completed", "run_failed", "run_stopped")
 
 
@@ -4551,6 +4568,7 @@ async def _execute_rpc_run(
                 session_id=session_id,
                 exit_code=exit_code,
                 **_runtime_failure_fields(outcome, lifecycle_event),
+                **_runtime_turn_fields(outcome),
             )
             for entry_id in returned:
                 payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
@@ -4575,7 +4593,11 @@ async def _execute_rpc_run(
                     session_id=session_id,
                     conversation_id=conversation_id,
                     kind="status",
-                    payload={"phase": "completed", "exit_code": exit_code},
+                    payload={
+                        "phase": "completed",
+                        "exit_code": exit_code,
+                        **_runtime_turn_fields(outcome),
+                    },
                     run_id=run_id,
                     sequence=sequence + 1,
                 ),

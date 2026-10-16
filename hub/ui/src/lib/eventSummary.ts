@@ -139,11 +139,13 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     case 'task_save_failed': return `FAILED to save task ${data.task_id}: "${data.title}"`
     // A run ended holding work nobody moved. The outcome is what the operator actually needs —
     // whether the Hub did something about it, or is telling them so they can.
-    case 'run_diverged': return data.outcome === 'retried'
+    // F660: when the turn ended on a refused call nothing answered, the summary says which and why.
+    case 'run_diverged': return (data.outcome === 'retried'
       ? `${data.agent} ended without moving ${data.task_id} — trying again once`
       : data.outcome === 'escalated'
         ? `${data.agent} ended without moving ${data.task_id} — handed to ${data.response_agent}`
-        : `${data.agent} ended without moving ${data.task_id} (${data.task_status})`
+        : `${data.agent} ended without moving ${data.task_id} (${data.task_status})`)
+      + refusalClause(data.refusal)
     // The opposite of the above, and worded so it cannot be mistaken for it: the agent asked
     // rather than guessed, and the work is waiting on the operator, not on nobody.
     case 'task_blocked': return `${data.agent} is waiting on you before continuing "${data.task_title ?? data.task_id}"`
@@ -171,4 +173,12 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
       return val ? String(val).slice(0, 120) : type
     }
   }
+}
+
+// F660: the refused call a Copilot turn ended on, as `run_diverged.refusal` carries it.
+function refusalClause(refusal: unknown): string {
+  if (!refusal || typeof refusal !== 'object') return ''
+  const { label, reason } = refusal as { label?: unknown; reason?: unknown }
+  if (typeof label !== 'string' || !label) return ''
+  return ` — the turn ended on a refused call: ${label}${typeof reason === 'string' && reason ? ` — ${reason}` : ''}`
 }

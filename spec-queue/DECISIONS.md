@@ -40,7 +40,7 @@ Put to the operator in an interactive session, each with background, stakes and 
 - DECIDED   fix-D14  F659: once the blocked task is approved, its "Decided without you" block collapses to a one-line history entry (nothing is lost). Amends D7's "permanent". (operator, 2026-10-16)
 - DECIDED   fix-D15  F652: Explore in an existing conversation arms and creates its document at send, as a new conversation does. Amends D4's "one press creates". (operator, 2026-10-16)
 - DECIDED   fix-D16  Copilot premium requests may be spent on F660's live drive and one live check of F665's worker credits. (operator, 2026-10-16)
-- DECIDED   fix-hk1  `AgentWeaveResearch` stays enabled. (operator, 2026-10-16)
+- DECIDED   fix-hk1  `AgentWeaveResearch` stays enabled. (operator, 2026-10-15)
 - DECIDED   fix-hk2  The stray untracked `hub/.env` and `hub/data/` are removed (G1-12): moved out of the checkout 2026-10-15. (operator, 2026-10-15)
 - DECIDED   fix-hk3  `.claude/work-pc/` stays tracked permanently so a pull carries the work-PC handoffs; noted in CLAUDE.md. (operator, 2026-10-15)
 - DECIDED   fix-D13  F605: a task's failing check that also fails on main is labelled pre-existing; reviewers do not send the task back for it, and approval is held for the operator, who lifts it with an override-with-reason control in the app. Never charged silently, never hidden: checks report one exit code per command, so a new failure inside an already-failing suite cannot be told apart. Rejected: let it through (hides regressions); re-word only. (operator, 2026-10-15)

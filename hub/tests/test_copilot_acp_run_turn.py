@@ -442,7 +442,9 @@ class TestNewSessionSequence:
         ), "the operator's message must reach the wire byte-identical"
 
         assert sessions_bound == [SESSION_ID], "on_session must bind before run_turn returns"
-        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+        assert outcome == TurnOutcome(
+            session_id=SESSION_ID, status="completed", error=None, stop_reason="end_turn"
+        )
         assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
 
     async def test_reversing_new_and_agent_selection_breaks_the_ordering_assertion(self):
@@ -587,7 +589,9 @@ class TestResumedSessionSequence:
         self._assert_load_not_new(fake)
         assert events == [], "replayed history chunks before the prompt must produce no event"
         assert sessions_bound == [RESUME_ID], "on_session must bind the resumed id before return"
-        assert outcome == TurnOutcome(session_id=RESUME_ID, status="completed", error=None)
+        assert outcome == TurnOutcome(
+            session_id=RESUME_ID, status="completed", error=None, stop_reason="end_turn"
+        )
 
     async def test_replayed_chunks_after_load_response_before_prompt_produce_no_event(
         self, monkeypatch
@@ -624,7 +628,9 @@ class TestResumedSessionSequence:
         self._assert_load_not_new(fake)
         assert events == [], "replayed history chunks before the prompt must produce no event"
         assert sessions_bound == [RESUME_ID], "on_session must bind the resumed id before return"
-        assert outcome == TurnOutcome(session_id=RESUME_ID, status="completed", error=None)
+        assert outcome == TurnOutcome(
+            session_id=RESUME_ID, status="completed", error=None, stop_reason="end_turn"
+        )
 
 
 class TestSessionLoadNotFoundRebinds:
@@ -738,7 +744,9 @@ class TestSessionLoadNotFoundRebinds:
 
         assert sessions_missing == [RESUME_ID], "on_session_missing must name the dead old id"
         assert sessions_bound == [SESSION_ID], "on_session must bind the new id, once, not the old"
-        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+        assert outcome == TurnOutcome(
+            session_id=SESSION_ID, status="completed", error=None, stop_reason="end_turn"
+        )
 
 
 class TestVersionGateFailsBeforeAnySessionRequest:
@@ -915,6 +923,7 @@ class TestFullAccessWithNoAllowAllOption:
                     "usage": {"inputTokens": 1, "outputTokens": 1},
                 }
             },  # session/prompt
+            *_CONTINUATION_ANSWERED,  # F660: the Hub's follow-up
         ]
         fake = _FakeACPSession(script)
         _patch_spawn(monkeypatch, fake)
@@ -949,6 +958,9 @@ class TestFullAccessWithNoAllowAllOption:
         ), "an absent allow_all option must not be set -- there is nothing there to set"
 
         diagnostics = [e for e in events if e.kind == "diagnostic"]
+        # F660: the refusal ended the prompt, so the Hub's follow-up is announced too.
+        assert [d.payload["code"] for d in diagnostics[1:]] == ["copilot.refusal_continued"]
+        diagnostics = diagnostics[:1]
         assert len(diagnostics) == 1, events
         payload = diagnostics[0].payload
         assert payload["code"] == "copilot.full_access_withdrawn", payload
@@ -963,7 +975,14 @@ class TestFullAccessWithNoAllowAllOption:
         ], "an edit outside the workspace must be REJECTed once judged as workspace, not ALLOWed"
 
         assert sessions_bound == [SESSION_ID]
-        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+        assert outcome == TurnOutcome(
+            session_id=SESSION_ID,
+            status="completed",
+            error=None,
+            stop_reason="end_turn",
+            refusal_continuations=1,
+        )
+        assert len(_prompts_sent(fake)) == 2, "F660: one follow-up after the refusal"
         assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
 
 
@@ -1111,7 +1130,9 @@ class TestAgentMarkerMismatchFallsBackToResourceBlock:
         ), "the operator's message must still reach the wire byte-identical"
 
         assert sessions_bound == [SESSION_ID]
-        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+        assert outcome == TurnOutcome(
+            session_id=SESSION_ID, status="completed", error=None, stop_reason="end_turn"
+        )
         assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
 
 
@@ -1241,7 +1262,9 @@ class TestStopSendsSessionCancelAndInterrupts:
         ) not in fake.sent_requests, "session/cancel is a notification (D17), not a request"
 
         assert sessions_bound == [SESSION_ID]
-        assert outcome == TurnOutcome(session_id=SESSION_ID, status="interrupted", error=None)
+        assert outcome == TurnOutcome(
+            session_id=SESSION_ID, status="interrupted", error=None, stop_reason="cancelled"
+        )
         assert fake.closed_with_force is True, "D17: terminate_process_tree(force=True) on a stop"
 
 
@@ -1332,6 +1355,7 @@ class TestEveryRequestPermissionAnsweredExactlyOnce:
                     "usage": {"inputTokens": 1, "outputTokens": 1},
                 }
             },  # session/prompt
+            *_CONTINUATION_ANSWERED,  # F660: the Hub's follow-up
         ]
         fake = _FakeACPSession(script)
         _patch_spawn(monkeypatch, fake)
@@ -1367,7 +1391,14 @@ class TestEveryRequestPermissionAnsweredExactlyOnce:
         ], "an edit inside the workspace and one outside must not be answered the same way"
 
         assert sessions_bound == [SESSION_ID]
-        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+        assert outcome == TurnOutcome(
+            session_id=SESSION_ID,
+            status="completed",
+            error=None,
+            stop_reason="end_turn",
+            refusal_continuations=1,
+        )
+        assert len(_prompts_sent(fake)) == 2, "F660: one follow-up after the refusal"
         assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
 
 
@@ -1505,7 +1536,9 @@ class TestUsageUpdateProducesMeasuredSampleWithResolvedModel:
         )
 
         assert sessions_bound == [SESSION_ID]
-        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+        assert outcome == TurnOutcome(
+            session_id=SESSION_ID, status="completed", error=None, stop_reason="end_turn"
+        )
 
     async def test_falls_back_to_the_requested_model_when_nothing_has_resolved_one_yet(
         self, monkeypatch
@@ -1557,7 +1590,9 @@ class TestUsageUpdateProducesMeasuredSampleWithResolvedModel:
         assert usages[0].limit_tokens == 128000
 
         assert sessions_bound == [SESSION_ID]
-        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+        assert outcome == TurnOutcome(
+            session_id=SESSION_ID, status="completed", error=None, stop_reason="end_turn"
+        )
 
 
 class TestSpecTurnRestrictsWritesAndAllowAll:
@@ -1709,6 +1744,7 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
                     "usage": {"inputTokens": 1, "outputTokens": 1},
                 }
             },  # session/prompt
+            *_CONTINUATION_ANSWERED,  # F660: the Hub's follow-up
         ]
         fake = _FakeACPSession(script)
         _patch_spawn(monkeypatch, fake)
@@ -1748,7 +1784,14 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
         ], "an outside-workspace execute must be REJECTed once judged as workspace, not ALLOWed"
 
         assert sessions_bound == [SESSION_ID]
-        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+        assert outcome == TurnOutcome(
+            session_id=SESSION_ID,
+            status="completed",
+            error=None,
+            stop_reason="end_turn",
+            refusal_continuations=1,
+        )
+        assert len(_prompts_sent(fake)) == 2, "F660: one follow-up after the refusal"
 
     async def test_create_edit_is_rejected_and_recorded_through_on_refusal(self, monkeypatch):
         """D9 item 1a (design.md:896-908): until slice 3 lands there is no step-3 allow, so every
@@ -1813,6 +1856,7 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
                     "usage": {"inputTokens": 1, "outputTokens": 1},
                 }
             },  # session/prompt
+            *_CONTINUATION_ANSWERED,  # F660: the Hub's follow-up
         ]
         fake = _FakeACPSession(script)
         _patch_spawn(monkeypatch, fake)
@@ -1853,7 +1897,14 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
         ), f"the recorded subject must identify which request was refused; got {subject!r}"
 
         assert sessions_bound == [SESSION_ID]
-        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+        assert outcome == TurnOutcome(
+            session_id=SESSION_ID,
+            status="completed",
+            error=None,
+            stop_reason="end_turn",
+            refusal_continuations=1,
+        )
+        assert len(_prompts_sent(fake)) == 2, "F660: one follow-up after the refusal"
 
     async def test_plan_mode_set_mode_carries_the_full_plan_uri_before_the_prompt(
         self, monkeypatch
@@ -2320,7 +2371,7 @@ class TestPostPromptFailuresReturnFailedOutcomeNotRaise:
     `Optional[str] = None` with a doc-comment reason ("the only route by which the child's own
     complaint reaches the operator") that applies identically here, so this file's own
     `TurnOutcome` is read the same way: a field with a default, not a required one, consistent
-    with every earlier `TurnOutcome(session_id=.., status="completed", error=None)` equality
+    with every earlier `TurnOutcome(session_id=.., status="completed", error=None, stop_reason="end_turn")` equality
     check in this file never having had to pass it.
 
     Scenario 2 -- "a process that exits after the prompt is written" -- had no way to be
@@ -2570,7 +2621,9 @@ class TestArmedSessionErrorFailsUnlessStopWins:
             on_session=_collector(sessions_bound),
         )
 
-        assert outcome == TurnOutcome(session_id=SESSION_ID, status="interrupted", error=None), (
+        assert outcome == TurnOutcome(
+            session_id=SESSION_ID, status="interrupted", error=None, stop_reason="cancelled"
+        ), (
             "design.md:1043, 1209-1210: 'a stop wins' -- stopReason cancelled must give "
             f"interrupted even with an armed session.error pending, got {outcome!r}"
         )
@@ -3003,7 +3056,9 @@ class TestPostureStepEveryTurn:
             f"got {methods}"
         )
         assert sessions_bound == [RESUME_ID]
-        assert outcome == TurnOutcome(session_id=RESUME_ID, status="completed", error=None)
+        assert outcome == TurnOutcome(
+            session_id=RESUME_ID, status="completed", error=None, stop_reason="end_turn"
+        )
 
     async def test_allow_all_reading_back_on_raises_and_sends_no_prompt(self, monkeypatch):
         script = self._load_prefix(current_mode_id=AGENT_MODE_URI, allow_all_current="on") + [
@@ -3992,6 +4047,27 @@ def _new_with(*early):
 
 _END_TURN = {"response": {"stopReason": "end_turn", "usage": {"inputTokens": 1}}}
 
+#: F660: a refused root call that ended the prompt gets one Hub follow-up `session/prompt`; this
+#: is the agent's answer to it. A pinned test that refuses and then ends scripts it deliberately,
+#: rather than letting the fake's exhausted script fail the follow-up unnoticed (task 1.12).
+_CONTINUATION_ANSWERED = [
+    {
+        "notification": "session/update",
+        "params": {
+            "sessionId": SESSION_ID,
+            "update": {
+                "sessionUpdate": "agent_message_chunk",
+                "content": {"type": "text", "text": "Understood; I will do it another way."},
+            },
+        },
+    },
+    _END_TURN,
+]
+
+
+def _prompts_sent(fake):
+    return [params for method, params in fake.sent_requests if method == "session/prompt"]
+
 
 async def _drive(monkeypatch, script, *, captured_cmds=None, **overrides):
     events = []
@@ -4046,6 +4122,7 @@ class TestHubOwnCallIdentifiedFromRawEvents:
             _MCP_START,
             _mcp_permission(9),
             _END_TURN,
+            *_CONTINUATION_ANSWERED,  # F660: the second refusal ended the prompt
         ]
         fake, events, _outcome = await _drive(monkeypatch, script)
 
@@ -4059,13 +4136,16 @@ class TestHubOwnCallIdentifiedFromRawEvents:
             if e.kind == "diagnostic" and e.payload["code"] == "copilot.hub_server_unverified"
         ]
         assert len(unverified) == 1, "one diagnostic per turn, not one per call"
+        assert len(_prompts_sent(fake)) == 2, "F660: one follow-up after the refusal"
 
     async def test_without_the_start_event_the_title_does_not_identify_it(self, monkeypatch):
         """R3: the request's `title` is model-written; with no raw report the call is
         unidentified and refused, whatever the title says."""
-        script = _new_with(_LOADED_HUB) + [_mcp_permission(), _END_TURN]
+        script = _new_with(_LOADED_HUB) + [_mcp_permission(), _END_TURN, *_CONTINUATION_ANSWERED]
         fake, _events, _outcome = await _drive(monkeypatch, script)
         assert fake.sent_responses[0][1]["outcome"]["optionId"] == "reject_once"
+        # F660 D2: with no start in `calls` the call counts as root, so the Hub follows up.
+        assert len(_prompts_sent(fake)) == 2
 
 
 class TestOperatorCardWiring:
@@ -4112,11 +4192,15 @@ class TestOperatorCardWiring:
             "tool.execution_start",
             {"toolCallId": "call_ps_1", "toolName": "powershell", "arguments": {}},
         )
-        script = _new_with() + [
-            start,
-            self._execute_request("Remove-Item ../../x"),
-            _END_TURN,
-        ]
+        script = (
+            _new_with()
+            + [
+                start,
+                self._execute_request("Remove-Item ../../x"),
+                _END_TURN,
+            ]
+            + ([] if operator_allows else _CONTINUATION_ANSWERED)
+        )
         fake, _events, _outcome = await _drive(
             monkeypatch,
             script,
@@ -4138,6 +4222,8 @@ class TestOperatorCardWiring:
         ]
         assert refusals == [], "the operator's own refusal is recorded by the card, not here"
         assert decisions == [operator_allows]
+        # F660: an operator's refusal that ended the prompt gets the Hub's one follow-up.
+        assert len(_prompts_sent(fake)) == (1 if operator_allows else 2)
 
 
 class TestArgvCarriesTheMcpConfigForTheMcpForm:

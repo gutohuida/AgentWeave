@@ -360,17 +360,25 @@ class CallFacts:
     mcp_tool: Optional[str]
     mcp_source: Optional[str] = None
     mcp_transport: Optional[str] = None
+    #: Made inside a subagent (`_is_subagent` on the start event and its envelope). A refusal of
+    #: such a call ends only the subagent, so the Hub never continues a turn for it (F660 D2).
+    subagent: bool = False
 
 
 def _str_or_none(value: Any) -> Optional[str]:
     return value if isinstance(value, str) and value else None
 
 
-def track_call(calls: Dict[str, CallFacts], event_type: str, data: Any) -> None:
+def track_call(
+    calls: Dict[str, CallFacts],
+    event_type: str,
+    data: Any,
+    params: Optional[Mapping[str, Any]] = None,
+) -> None:
     """Feed one raw event into `calls` (D8, *Identifying the MCP server*). Idempotent, so the turn
     and the mapper may both feed the same map. An event whose data was blanked (`{omitted:
     "too-large"}`) carries no id and changes nothing, which lands a later request on the refuse
-    side."""
+    side. `params` is the raw event's envelope, whose `agentId` marks a subagent's call."""
     if not isinstance(data, dict):
         return
     if event_type == "tool.execution_start":
@@ -382,6 +390,7 @@ def track_call(calls: Dict[str, CallFacts], event_type: str, data: Any) -> None:
                 mcp_tool=_str_or_none(data.get("mcpToolName")),
                 mcp_source=_str_or_none(data.get("mcpConfigSource")),
                 mcp_transport=_str_or_none(data.get("mcpTransport")),
+                subagent=_is_subagent(params or {}, data),
             )
     elif event_type == "permission.requested":
         request = data.get("permissionRequest")
@@ -1294,7 +1303,7 @@ class CopilotEventMapper:
     ) -> List[RunEvent]:
         data = data if isinstance(data, dict) else {}
         params = params if isinstance(params, Mapping) else {}
-        track_call(self.calls, event_type, data)
+        track_call(self.calls, event_type, data, params)
         if event_type == "session.error":
             return self._after_open_blocks(self._session_error(data, params))
         if event_type in _NOTICE_PREFIXES:
@@ -2063,6 +2072,14 @@ class TurnOutcome:
     retryable: Optional[bool] = None
     #: The root `session.error`'s `errorType` that failed the turn, where one did.
     error_kind: Optional[str] = None
+    #: The last prompt's `stopReason` that returned a result (F660 D1); None if none returned.
+    stop_reason: Optional[str] = None
+    #: The turn ended with the Hub's or the operator's refusal as its last root event, and no
+    #: follow-up answered it (F660 D4).
+    ended_on_refusal: bool = False
+    #: Follow-up prompts sent after a refusal ended a prompt (F660 D3; at most
+    #: `REFUSAL_CONTINUATIONS_PER_TURN`).
+    refusal_continuations: int = 0
 
 
 def _options_of(response: Mapping[str, Any]) -> Optional[List[Dict[str, Any]]]:
@@ -2310,6 +2327,12 @@ async def run_turn(
         "forced_failure": None,
         "judged_posture": posture,
         "unverified_reported": False,
+        # F660 D2: the Hub's or the operator's latest refusal of a root call, cleared by later
+        # root activity. Set only from the Hub's own answers, never from the agent's text.
+        "last_refusal": None,
+        # Kept root text chunks and root tool starts seen, so a follow-up can tell whether it
+        # produced anything before it failed (wpc1-h).
+        "root_activity": 0,
     }
 
     async def emit(events: List[RunEvent]) -> None:
@@ -2408,8 +2431,17 @@ async def run_turn(
             data = params.get("data") if isinstance(params.get("data"), dict) else {}
             # Fed unarmed, from spawn on: a permission request can only follow the prompt, so
             # nothing replayed can reach a decision.
-            track_call(calls, event_type, data)
+            track_call(calls, event_type, data, params)
             track_servers(servers, event_type, data)
+            if (
+                state["armed"]
+                and event_type == "tool.execution_start"
+                and not _is_subagent(params, data)
+            ):
+                state["root_activity"] += 1
+                refusal = state["last_refusal"]
+                if refusal is not None and data.get("toolCallId") != refusal["tool_call_id"]:
+                    state["last_refusal"] = None
             # Copilot's own report about the Hub's server is a harness report
             # (`a-run-reaches-the-hub-without-mcp` D1), armed or not: `session.mcp_servers_loaded`
             # arrives with the first model prompt. Only for a run given the server.
@@ -2444,6 +2476,14 @@ async def run_turn(
             update = params.get("update")
             if not isinstance(update, dict):
                 return
+            if update.get("sessionUpdate") == "agent_message_chunk":
+                # Text the mapper keeps answers a refusal; a blank chunk or an echo of a
+                # `session.error` it drops does not (F660 D2). Read before the mapper takes the
+                # echo.
+                text = mapper._chunk_text(update)
+                if text.strip() and text not in mapper._error_echoes:
+                    state["root_activity"] += 1
+                    state["last_refusal"] = None
             if update.get("sessionUpdate") == "usage_update":
                 sample = usage_sample(
                     update, model=mapper.resolved_model or mapper.substituted_model or model
@@ -2467,6 +2507,28 @@ async def run_turn(
             servers={k: [dict(e) for e in v] for k, v in servers.items()},
             github_mcp=github_mcp,
         )
+
+    def record_refusal(subject: Mapping[str, Any], *, operator: bool, no_channel: bool) -> None:
+        """F660 D2: remember a refusal of a root call as the turn's latest. A subagent's refusal
+        ends only the subagent, so it is never recorded; a call with no start counts as root.
+        The operator's card returns one bool for a Deny, an expiry and a timeout alike, so its
+        refusal carries no reason of its own."""
+        call_id = subject.get("tool_call_id")
+        facts = calls.get(call_id) if isinstance(call_id, str) else None
+        if facts is not None and facts.subagent:
+            return
+        if operator:
+            reason = None
+        elif no_channel:
+            reason = "no operator channel was available to approve it"
+        else:
+            reason = subject.get("reason") or "the Hub could not decide it"
+        state["last_refusal"] = {
+            "tool_call_id": call_id,
+            "label": subject.get("tool_name") or "a tool call",
+            "reason": reason,
+            "decided_by": "operator" if operator else "hub",
+        }
 
     async def answer_permission(params: Dict[str, Any]) -> Dict[str, Any]:
         """D8 step 5: every request gets exactly one answer, whichever step decided it, and every
@@ -2511,6 +2573,13 @@ async def run_turn(
             logger.warning("answering a Copilot permission request failed", exc_info=True)
             allowed = False
         result = permission_answer(params, allowed)
+        if not allowed:
+            # Written before the recorders, which may raise (F660 D7).
+            record_refusal(
+                subject,
+                operator=asked_operator and request_approval is not None,
+                no_channel=asked_operator and request_approval is None,
+            )
         if on_decision is not None:
             with contextlib.suppress(Exception):
                 await on_decision(PERMISSION_METHOD, subject, allowed)
@@ -2838,6 +2907,7 @@ async def run_turn(
             check_interrupt=check_interrupt,
             send_cancel=send_cancel,
             turn_timeout=turn_timeout,
+            run_id=(env or {}).get("AW_RUN_ID"),
         )
         return await deliver_accounting(outcome, session_was_new)
     finally:
@@ -2846,26 +2916,52 @@ async def run_turn(
         await session.close(force=close_forced)
 
 
-async def _await_prompt(
+#: Follow-up prompts the Hub may send in one turn after a refusal ended a prompt (F660 D3, wpc1-c).
+REFUSAL_CONTINUATIONS_PER_TURN = 1
+
+
+def refusal_continuation_text(refusal: Mapping[str, Any]) -> str:
+    """The follow-up prompt, in the Hub's voice: the reason ACP's reject could not carry (F660
+    D3). An operator's refusal says "did not approve": the card cannot tell a Deny from expiry."""
+    label = refusal.get("label") or "a tool call"
+    if refusal.get("decided_by") == "operator":
+        head = f"The operator did not approve your last tool call ({label})."
+    else:
+        reason = str(refusal.get("reason") or "no reason was given").rstrip(". ")
+        head = f"The Hub refused your last tool call ({label}): {reason}."
+    return head + " It did not run. Continue the task another way, or call ask_user if you cannot."
+
+
+def _refusal_facts(refusal: Mapping[str, Any], continuations: int) -> Dict[str, Any]:
+    return {
+        "tool_call_id": refusal.get("tool_call_id"),
+        "label": refusal.get("label"),
+        "reason": refusal.get("reason") or "the operator did not approve it",
+        "decided_by": refusal.get("decided_by"),
+        "continuations": continuations,
+    }
+
+
+async def _send_and_wait(
     session: Any,
     session_id: str,
     blocks: List[Dict[str, Any]],
     *,
     state: Dict[str, Any],
-    mapper: CopilotEventMapper,
     ledger: CopilotUsageLedger,
-    emit: Callable[[List[RunEvent]], Awaitable[None]],
     check_interrupt: Callable[[], Awaitable[None]],
     send_cancel: Callable[[], Awaitable[None]],
+    deadline: float,
     turn_timeout: float,
-) -> TurnOutcome:
-    """Send the prompt and wait for its response while its notifications are delivered. Every
-    failure from here on is returned, not raised (D12, R3)."""
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Send one prompt and wait for its result while its notifications are delivered, until the
+    turn's `deadline`. Returns the result (None when there was none) and the failure, if any; the
+    result's `usage` and a quota error's fields go to the ledger (D2, D3, D8). Raises nothing but
+    the cancellation of the run's task."""
     loop = asyncio.get_running_loop()
     prompt_task = asyncio.ensure_future(
         session.request("session/prompt", {"sessionId": session_id, "prompt": blocks}, timeout=None)
     )
-    deadline = loop.time() + turn_timeout
     timed_out = False
     try:
         while True:
@@ -2907,17 +3003,144 @@ async def _await_prompt(
             with contextlib.suppress(Exception):
                 ledger.observe_prompt_error(exc.data)
     if isinstance(prompt_result, dict):
+        # Cumulative within the process, so a follow-up's result replaces the first's (wpc1-d).
         with contextlib.suppress(Exception):
             ledger.observe_prompt_result(prompt_result.get("usage"))
+    return prompt_result, failure
 
-    await emit(mapper.finish())
 
+async def _await_prompt(
+    session: Any,
+    session_id: str,
+    blocks: List[Dict[str, Any]],
+    *,
+    state: Dict[str, Any],
+    mapper: CopilotEventMapper,
+    ledger: CopilotUsageLedger,
+    emit: Callable[[List[RunEvent]], Awaitable[None]],
+    check_interrupt: Callable[[], Awaitable[None]],
+    send_cancel: Callable[[], Awaitable[None]],
+    turn_timeout: float,
+    run_id: Optional[str] = None,
+) -> TurnOutcome:
+    """Send the prompt, plus at most `REFUSAL_CONTINUATIONS_PER_TURN` follow-ups when a refusal
+    ended it (F660 D3), and return how the turn ended. Every failure from here on is returned, not
+    raised (D12, R3); the cancellation of the run's task is never absorbed (F660 D7)."""
+    deadline = asyncio.get_running_loop().time() + turn_timeout
+
+    async def send(
+        prompt_blocks: List[Dict[str, Any]], ordinal: int
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        result, failed = await _send_and_wait(
+            session,
+            session_id,
+            prompt_blocks,
+            state=state,
+            ledger=ledger,
+            check_interrupt=check_interrupt,
+            send_cancel=send_cancel,
+            deadline=deadline,
+            turn_timeout=turn_timeout,
+        )
+        logger.info(
+            "Copilot prompt %d of run %s ended: stopReason=%r",
+            ordinal,
+            run_id,
+            (result or {}).get("stopReason"),
+        )
+        return result, failed
+
+    async def say(code: str, severity: str, summary: str, facts: Dict[str, Any]) -> None:
+        # Flushed first, so the notice sits after what the agent wrote before it.
+        with contextlib.suppress(Exception):
+            await emit(
+                mapper.flush()
+                + [
+                    diagnostic_event(
+                        stream="copilot", severity=severity, summary=summary, code=code, facts=facts
+                    )
+                ]
+            )
+
+    prompt_result, failure = await send(blocks, 1)
     stop_reason = (prompt_result or {}).get("stopReason")
     # A stop sent, a timeout, or a prompt that failed after it was written: a shell may still be
     # running, so the process tree is ended forcibly (D17).
-    state["close_forced"] = bool(
+    close_forced = bool(
         state["cancel_sent_at"] is not None or failure is not None or prompt_result is None
     )
+    continuations = 0
+    ended_on_refusal = False
+    #: A follow-up that failed after it produced output: the turn's failure (wpc1-h).
+    continuation_failure: Optional[str] = None
+    while True:
+        refusal = state["last_refusal"]
+        if not (
+            refusal is not None
+            and stop_reason == "end_turn"
+            and failure is None
+            and not state["interrupted"]
+            and state["cancel_sent_at"] is None
+            and state["forced_failure"] is None
+            and mapper.root_error is None
+            and not ledger.refused
+        ):
+            break
+        # A stop that landed after the last poll and before the result (F660 D3, R3).
+        await check_interrupt()
+        if state["interrupted"]:
+            close_forced = True
+            break
+        facts = _refusal_facts(refusal, continuations)
+        text: Optional[str] = None
+        if continuations < REFUSAL_CONTINUATIONS_PER_TURN:
+            try:
+                text = refusal_continuation_text(refusal)
+            except Exception:  # noqa: BLE001 - no follow-up; the turn says it ended on a refusal
+                logger.warning("building a Copilot refusal follow-up failed", exc_info=True)
+        if text is None:
+            ended_on_refusal = True
+            await say(
+                "copilot.turn_ended_on_refusal",
+                "warning",
+                f"The turn ended on a refused call ({facts['label']}): {facts['reason']}.",
+                facts,
+            )
+            break
+        await say(
+            "copilot.refusal_continued",
+            "info",
+            f"Copilot ended the turn on a refused call ({facts['label']}); the Hub told it why "
+            "and asked it to continue another way.",
+            facts,
+        )
+        state["last_refusal"] = None
+        continuations += 1
+        activity_before = state["root_activity"]
+        result, failed = await send([{"type": "text", "text": text}], continuations + 1)
+        if state["cancel_sent_at"] is not None or result is None:
+            close_forced = True
+        if state["interrupted"]:
+            break
+        if failed is not None or result is None:
+            failed = failed or "Copilot's follow-up prompt returned no result"
+            if state["root_activity"] > activity_before:
+                continuation_failure = failed
+            elif mapper.root_error is None and not ledger.refused:
+                ended_on_refusal = True
+                await say(
+                    "copilot.refusal_continuation_failed",
+                    "warning",
+                    f"The Hub's follow-up after a refused call ({facts['label']}) failed "
+                    f"({failed}); the turn ended on the refusal.",
+                    {**facts, "error": failed},
+                )
+            break
+        stop_reason = result.get("stopReason")
+
+    await emit(mapper.finish())
+
+    state["close_forced"] = close_forced
     error_kind: Optional[str] = None
     if state["forced_failure"] is not None:
         status, error = "failed", state["forced_failure"]
@@ -2925,6 +3148,8 @@ async def _await_prompt(
         status, error = "interrupted", None
     elif failure is not None:
         status, error = "failed", failure
+    elif continuation_failure is not None:
+        status, error = "failed", continuation_failure
     elif mapper.root_error is not None:
         status, error = "failed", mapper.root_error
         error_kind = mapper.root_error_kind
@@ -2941,4 +3166,7 @@ async def _await_prompt(
         stderr_tail=session.stderr_tail() or None,
         retryable=False if error_kind in UNRETRYABLE_ERROR_KINDS else None,
         error_kind=error_kind,
+        stop_reason=stop_reason,
+        ended_on_refusal=ended_on_refusal,
+        refusal_continuations=continuations,
     )
