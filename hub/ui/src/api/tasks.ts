@@ -484,8 +484,13 @@ export function useLandTask() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: ({ id }: { id: string }) =>
-      postJson<Task>(`/api/v1/projects/${projectId}/tasks/${id}/land`),
+    // *override_checks_reason*: land over failing checks, saying why (F605). Only checks can be
+    // overridden; every other refusal still stands.
+    mutationFn: ({ id, override_checks_reason }: { id: string; override_checks_reason?: string }) =>
+      postJson<Task>(
+        `/api/v1/projects/${projectId}/tasks/${id}/land`,
+        override_checks_reason ? { override_checks_reason } : undefined,
+      ),
     onSuccess: (_task, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
       // The merge is the point of the action, and the note that reports it reads a different key.

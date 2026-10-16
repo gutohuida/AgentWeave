@@ -124,6 +124,38 @@ describe('the landing action', () => {
     })
   })
 
+  it('offers Land anyway, with a reason, when only failing checks refuse it (F605)', async () => {
+    const checksOnly = new ApiError(
+      409,
+      JSON.stringify({
+        detail: {
+          code: 'gate_unsatisfied',
+          message: "This task's checks failed on the work approval would merge.",
+          checks: [{ name: 'pytest', status: 'failed', on_main: true }],
+          blocking: [], diagnostics: [], unmergeable: [], unaccepted: [], unfinished: [], reported: [],
+        },
+      }),
+    )
+    land.mockImplementationOnce((_vars, options) => options.onError(checksOnly))
+    const user = await openDrawer('completed')
+    await user.click(screen.getByTestId('task-land-task-completed'))
+
+    const anyway = await screen.findByTestId('task-land-anyway-task-completed')
+    expect(anyway).toBeDisabled()
+    await user.type(screen.getByLabelText('Why land over the failing checks'), 'fails on main too')
+    expect(anyway).toBeEnabled()
+    await user.click(anyway)
+    expect(land.mock.calls[1][0]).toEqual({ id: 'task-completed', override_checks_reason: 'fails on main too' })
+  })
+
+  it('offers no override when something other than checks refuses it', async () => {
+    land.mockImplementation((_vars, options) => options.onError(liveTurnRefusal()))
+    const user = await openDrawer('completed')
+    await user.click(screen.getByTestId('task-land-task-completed'))
+    await screen.findByTestId('task-status-refusal-task-completed')
+    expect(screen.queryByTestId('task-land-anyway-task-completed')).toBeNull()
+  })
+
   it('does not fall back to a generic sentence when the refusal is structured', async () => {
     // The whole point of `readableApiError`'s object branch: a gate refusal carries its sentence
     // inside `detail.message`, and a caller that read only `detail` as a string would show its own

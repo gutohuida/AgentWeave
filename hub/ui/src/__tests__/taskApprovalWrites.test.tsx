@@ -127,6 +127,21 @@ describe('the approve control states what approving writes (F9)', () => {
     expect(screen.queryByTestId('task-approval-writes-task-1')).toBeNull()
   })
 
+  it('is shown on a completed task, where Land approves it (F629)', () => {
+    transitions = { completed: ['rejected', 'under_review'] }
+    preview = {
+      data: {
+        task_id: 'task-1',
+        main_branch: 'master',
+        targets: [{ commit_sha: 'cecbc88751ea', source_branch: 'agentweave/builder' }],
+        will_attempt_merge: true,
+        reason: 'approval will merge one commit into master',
+      },
+    }
+    renderDrawer(makeTask({ status: 'completed' }))
+    expect(screen.getByTestId('task-approval-writes-task-1')).toHaveTextContent('into master')
+  })
+
   it('renders nothing until the preview has arrived, rather than guessing', () => {
     transitions = { under_review: ['approved'] }
     renderDrawer(makeTask())

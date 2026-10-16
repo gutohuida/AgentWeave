@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { PriorityBadge, StatusBadge } from '@/components/common/Badge'
-import { readableApiError } from '@/api/client'
+import { ApiError, readableApiError } from '@/api/client'
 import {
   ApprovalReportEntry,
   DIVERGENCE_POLICY_LABELS,
@@ -39,6 +39,25 @@ import { hubDate } from '@/lib/hubTime'
  * Rendered only where approval is actually reachable from here, so a pending card carries no
  * warning about a merge that is several transitions away.
  */
+/** True when a refused landing was refused by failing checks and nothing else: the one refusal the
+ *  operator may override, with a reason (F605). A live turn, an unmergeable commit or unverified
+ *  requirements still stand, so no override is offered for them. */
+function onlyChecksRefuse(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 409) return false
+  let detail: Record<string, unknown> | undefined
+  try {
+    detail = (JSON.parse(error.message) as { detail?: Record<string, unknown> }).detail
+  } catch {
+    return false
+  }
+  if (!detail || detail.code !== 'gate_unsatisfied') return false
+  const filled = (key: string) => Array.isArray(detail?.[key]) && (detail?.[key] as unknown[]).length > 0
+  return (
+    filled('checks') &&
+    !['blocking', 'diagnostics', 'unmergeable', 'unaccepted', 'unfinished'].some(filled)
+  )
+}
+
 function ApprovalWritesNote({ taskId, canApprove }: { taskId: string; canApprove: boolean }) {
   const { data } = useTaskIntegrationPreview(taskId, canApprove)
   if (!canApprove || !data) return null
@@ -207,6 +226,9 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const panelRef = useRef<HTMLDivElement>(null)
   const open = task !== null
   const [refusal, setRefusal] = useState<string | null>(null)
+  // Set when Land was refused by failing checks alone: the operator may land anyway, saying why.
+  const [checksOverride, setChecksOverride] = useState(false)
+  const [overrideReason, setOverrideReason] = useState('')
   // F169: what the Hub reported instead of refusing when this task was approved. It arrives on the
   // approving response and nowhere else — a refetch answers `[]` — so it is held here for as long
   // as the drawer is open, which is the only copy there will ever be.
@@ -520,12 +542,15 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                   }}
                   onClick={() => {
                     setRefusal(null)
+                    setChecksOverride(false)
                     landTask.mutate(
                       { id: task.id },
                       {
                         onSuccess: (landed) => setApprovalReport(landed.approval_report ?? []),
-                        onError: (error: unknown) =>
-                          setRefusal(readableApiError(error, 'The Hub refused this landing.')),
+                        onError: (error: unknown) => {
+                          setRefusal(readableApiError(error, 'The Hub refused this landing.'))
+                          setChecksOverride(onlyChecksRefuse(error))
+                        },
                       },
                     )
                   }}
@@ -545,7 +570,12 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                 Delete
               </button>
             </div>
-            <ApprovalWritesNote taskId={task.id} canApprove={moves.includes('approved')} />
+            {/* F629: Land approves a completed task, so what approving writes is said before
+                that press too, not only where `approved` is the next move. */}
+            <ApprovalWritesNote
+              taskId={task.id}
+              canApprove={moves.includes('approved') || task.status === 'completed'}
+            />
           </Field>
 
           <Field label="Priority">
@@ -723,6 +753,42 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
           >
             {refusal}
           </p>
+        )}
+        {refusal && checksOverride && task.status === 'completed' && (
+          <div className="flex items-center gap-2 text-[11px]">
+            <input
+              aria-label="Why land over the failing checks"
+              value={overrideReason}
+              onChange={(event) => setOverrideReason(event.target.value)}
+              placeholder="Why land anyway (recorded with the approval)"
+              className="control-field flex-1 px-2 py-1"
+            />
+            <button
+              type="button"
+              data-testid={`task-land-anyway-${task.id}`}
+              disabled={!overrideReason.trim() || landTask.isPending}
+              className="px-2 py-0.5 rounded"
+              style={{ color: 'var(--amber)', border: '1px solid color-mix(in srgb, var(--amber) 35%, transparent)' }}
+              onClick={() =>
+                landTask.mutate(
+                  { id: task.id, override_checks_reason: overrideReason.trim() },
+                  {
+                    onSuccess: (landed) => {
+                      setRefusal(null)
+                      setChecksOverride(false)
+                      setApprovalReport(landed.approval_report ?? [])
+                    },
+                    onError: (error: unknown) => {
+                      setRefusal(readableApiError(error, 'The Hub refused this landing.'))
+                      setChecksOverride(onlyChecksRefuse(error))
+                    },
+                  },
+                )
+              }
+            >
+              Land anyway
+            </button>
+          </div>
         )}
 
         {approvalReport.length > 0 && (
