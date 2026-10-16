@@ -12,7 +12,15 @@ from types import SimpleNamespace
 from hub import worker
 
 REFUSAL = 'Error: Model "claude-haiku-5.5" from --model flag is not available.\n'
-CMD = ["C:\\copilot.exe", "-p", "Summarise.", "--output-format", "json", "--model", "claude-haiku-5.5"]
+CMD = [
+    "C:\\copilot.exe",
+    "-p",
+    "Summarise.",
+    "--output-format",
+    "json",
+    "--model",
+    "claude-haiku-5.5",
+]
 
 
 def _fake_run(results, seen):
@@ -49,7 +57,9 @@ def test_any_other_failure_is_not_retried(monkeypatch):
     monkeypatch.setattr(
         worker.subprocess,
         "run",
-        _fake_run([SimpleNamespace(returncode=1, stdout="", stderr="Error: not signed in\n")], seen),
+        _fake_run(
+            [SimpleNamespace(returncode=1, stdout="", stderr="Error: not signed in\n")], seen
+        ),
     )
     spawn = worker._run_worker_process(list(CMD), None, 30)
     assert spawn.outcome == "nonzero_exit"

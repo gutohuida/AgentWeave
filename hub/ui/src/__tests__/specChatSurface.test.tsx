@@ -467,10 +467,12 @@ describe('Explore in an existing conversation arms, and creates at send (fix-D15
           text: async () => JSON.stringify(trigger.body),
         }
       }
-      return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' }
+      // Every other read (loops, coverage) is a list; `{}` crashed the loops memo on CI.
+      return { ok: true, status: 200, json: async () => [], text: async () => '[]' }
     })
 
   it('creates nothing on the press', async () => {
+    respond({ ok: true, status: 200, body: { status: 'running', conversation_id: 'conv-new' } })
     renderChat(null)
     fireEvent.click(screen.getByTestId('composer-start-exploration'))
     expect(screen.getByTestId('composer-start-exploration')).toHaveAttribute('aria-pressed', 'true')

@@ -108,8 +108,7 @@ async def test_a_named_conversation_still_wins(app, auth_headers):
         ],
     )
     assert (
-        await _start_work(app, auth_headers, conversation_id="conv-d13-chosen")
-        == "conv-d13-chosen"
+        await _start_work(app, auth_headers, conversation_id="conv-d13-chosen") == "conv-d13-chosen"
     )
 
 
