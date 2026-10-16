@@ -85,11 +85,11 @@ From the live GHCP drive (findings WPC-1..WPC-7, handoff-0162 in `.claude/work-p
 
 `a-call-file-turn-starts-clean-and-can-write-its-file` (WPC-4/5: a leftover `calls/1.json` makes Copilot's `create` refuse):
 - DECIDED   wpc4-a  KEY. How does a turn start clean? Recommended: (a2) empty the calls dir only in an isolated workspace, plus a prompt telling the agent to use a fresh file name. **Decided by the operator 2026-10-15** (D6 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
-- OPEN      wpc4-b  If emptying fails? Recommended: warn and proceed.
+- DECIDED   wpc4-b  If emptying fails? Recommended: warn and proceed. **Decided by the operator 2026-10-16** ("confirm"): the recommendation, as built in `a-call-mode-turn-starts-with-an-empty-calls-directory` (6fdf5ff).
 - OPEN      wpc4-c  The shared project-dir race between read-only agents. Recommended: file it as a separate finding.
 - OPEN      wpc4-d  (R2) D8 does not serialise two different agents on one task. Recommended: file it as a separate finding.
 - OPEN      wpc4-e  (R3) An explicit `work_dir` can point into another agent's isolated workspace. Recommended: file a finding, and refuse a work_dir under `.agentweave/` later.
-- OPEN      wpc5-a  Copilot spec-turn writes. Recommended: keep `edit` excluded.
+- DECIDED   wpc5-a  Copilot spec-turn writes. Recommended: keep `edit` excluded. **Decided by the operator 2026-10-16** ("confirm"): the recommendation; `create` stays the spec turn's write tool (F664, 6fdf5ff).
 
 `copilot-spend-is-counted-in-its-own-units` (WPC-6: accounting showed 19 premium requests and 154.00 AIU against true figures of 21 and 155.92, because `accounting_snapshot` misses `worker_invocations`). Depends on `worker-spend-counts-against-the-budget` D7:
 - DECIDED   wpc6-a  May a Copilot budget be in premium requests or credits? Recommended: no, tokens only. **Decided by the operator 2026-10-15** (D2 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
