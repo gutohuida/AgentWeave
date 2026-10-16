@@ -131,7 +131,7 @@ from ...runner_adapters import ADAPTERS, build_command, get_adapter, resolve_acc
 from ...runner_adapters.base import RpcCallbacks as TransportRpcCallbacks
 from ...runner_adapters.base import RpcTransport, RpcTurnRequest, RunnerAdapter, StreamTransport
 from ...runner_commands import OPERATOR_PERMISSION_MODES, OPERATOR_POSTURE, UnsupportedRunnerError
-from ...runner_events import AccountingSample, diagnostic_event, status_event
+from ...runner_events import AccountingSample, OpenToolCalls, diagnostic_event, status_event
 from ...runner_provider import has_provider, provider_override_problem, runner_probe_config
 from ...scheduler import (
     REVIEWABLE_LOOP_TASK_STATUSES,
@@ -2664,6 +2664,26 @@ async def _record_observation(write, *, run_id: str, what: str, drop: bool = Tru
             await asyncio.sleep(delay)
 
 
+async def _close_open_calls(open_calls: OpenToolCalls, record, *, final_status: str, run_id: str):
+    """Record a closing `tool_result` for each call a stopped or failed run left open (F666).
+
+    Called by both executors after their status map settles and before the `Run` commit, so the
+    rows take the run's next sequence numbers, the status line still comes last, and `run_stopped`
+    never refetches a run whose card is still open. A completed run is left alone: an open call
+    there is a runner defect worth seeing, and the timeline reads it as "no result" (wpc7-c). A
+    write that raises is logged and skipped; it must not turn a stopped run into a failed one.
+    """
+    if final_status not in ("stopped", "failed"):
+        return
+    for event in open_calls.closing_events():
+        try:
+            await record(event)
+        except Exception:  # noqa: BLE001 - see the docstring
+            logger.warning(
+                "Could not close tool call %s of run %s", event.call_id, run_id, exc_info=True
+            )
+
+
 def _log_abnormal_run_end(exc: BaseException, *, run_id: str, agent: str, label: str) -> None:
     """How a run that ended on an exception is reported, for the two transports (F298).
 
@@ -3154,10 +3174,12 @@ async def _execute_run(
         sequence = 0
         buffer = ""
         plane_event_stored = False
+        open_calls = OpenToolCalls()
 
         async def _record_events(events: Sequence[Any]) -> None:
             nonlocal sequence
             for event in events:
+                open_calls.note(event)
                 sequence += 1
                 # F488: joined across the run's text, beside `sequence` and outside the retried
                 # write, so the carried text follows the timeline's order and takes each event once.
@@ -3335,6 +3357,12 @@ async def _execute_run(
             final_status, lifecycle_event = "completed", "run_completed"
         else:
             final_status, lifecycle_event = "failed", "run_failed"
+        await _close_open_calls(
+            open_calls,
+            lambda event: _record_events([event]),
+            final_status=final_status,
+            run_id=run_id,
+        )
 
         # The provider's refusal on usage grounds, when this run's recorded reading is one
         # (`a-spent-allowance-holds-the-queue`, D2 and D5). `held` is the hold that reading
@@ -4196,8 +4224,11 @@ async def _execute_rpc_run(
                         severity="warn",
                     )
 
+        open_calls = OpenToolCalls()
+
         async def _on_event(event) -> None:
             nonlocal sequence
+            open_calls.note(event)
             sequence += 1
             # F488: in the same synchronous step as `sequence`, so two interleaved calls scrub in
             # the timeline's order; bound to the write, so a retry never scrubs again.
@@ -4382,6 +4413,7 @@ async def _execute_rpc_run(
         # "Run {status} (exit {code})" status line meaningful to the same UI code that reads
         # them for the exec path (AgentOutputPanel's handoff-detection, see below).
         exit_code = 0 if final_status == "completed" else 1
+        await _close_open_calls(open_calls, _on_event, final_status=final_status, run_id=run_id)
 
         # `_execute_run`'s refusal branch, which slice 1 left out of this executor
         # (`a-copilot-run-shows-its-credits` D8, task 5.3). Inert for Codex: no Codex sample

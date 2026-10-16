@@ -73,20 +73,64 @@ export function groupIntoTurns(entries: TimelineEntry[]): GroupedTimeline {
   return { turns, pending }
 }
 
-/** Pairs a tool_use entry with its tool_result (matching call_id within the
- * same turn), so every renderer agrees on "completed" vs "failed" vs
- * "awaiting result". */
-export function findPairedResult(
-  turnEntries: TimelineEntry[],
-  useEntry: TimelineEntry,
-): TimelineEntry | undefined {
-  const callId = (useEntry.payload as Record<string, unknown> | null | undefined)?.call_id
-  if (useEntry.output_kind !== 'tool_use' || !callId) return undefined
-  return turnEntries.find(
-    (e) =>
-      e.output_kind === 'tool_result' &&
-      (e.payload as Record<string, unknown> | null | undefined)?.call_id === callId,
-  )
+/** Which tool_result is drawn at which tool_use, resolved once for a whole turn. */
+export interface TurnPairing {
+  /** tool_use id → the result drawn at it. */
+  resultByUse: Map<string, TimelineEntry>
+  /** result id → the tool_use id it is drawn at. */
+  useByResult: Map<string, string>
+}
+
+function callIdOf(entry: TimelineEntry): string | undefined {
+  const callId = (entry.payload as Record<string, unknown> | null | undefined)?.call_id
+  return typeof callId === 'string' && callId ? callId : undefined
+}
+
+/** Pairs each tool_use with the first tool_result in its turn that shares its call_id
+ * (`stop-closes-the-tool-card-it-interrupted`, wpc7-d). Across the whole turn, not one work
+ * block: a diagnostic or status row between a call and its result (6 of 50 real calls) used to
+ * leave the card "awaiting result" beside an orphan result row. A turn is one run, so this never
+ * crosses runs. A second result for a call, and one whose call is not in the turn, pair with
+ * nothing and render on their own. */
+export function pairTurnResults(turnEntries: TimelineEntry[]): TurnPairing {
+  const firstResultByCall = new Map<string, TimelineEntry>()
+  for (const entry of turnEntries) {
+    const callId = callIdOf(entry)
+    if (entry.output_kind === 'tool_result' && callId && !firstResultByCall.has(callId)) {
+      firstResultByCall.set(callId, entry)
+    }
+  }
+  const resultByUse = new Map<string, TimelineEntry>()
+  const useByResult = new Map<string, string>()
+  for (const entry of turnEntries) {
+    const callId = callIdOf(entry)
+    if (entry.output_kind !== 'tool_use' || !callId) continue
+    const result = firstResultByCall.get(callId)
+    if (result && !useByResult.has(result.id)) {
+      resultByUse.set(entry.id, result)
+      useByResult.set(result.id, entry.id)
+    }
+  }
+  return { resultByUse, useByResult }
+}
+
+/** *blocks* with each result moved to the block of the call it is drawn at: a work block drops a
+ * result whose call sits in another block, and a block left with nothing of its own is dropped. */
+export function placeTurnResults(blocks: TurnBlock[], pairing: TurnPairing): TurnBlock[] {
+  const placed: TurnBlock[] = []
+  for (const block of blocks) {
+    if (block.kind !== 'work') {
+      placed.push(block)
+      continue
+    }
+    const here = new Set(block.entries.map((e) => e.id))
+    const entries = block.entries.filter((e) => {
+      const useId = pairing.useByResult.get(e.id)
+      return useId === undefined || here.has(useId)
+    })
+    if (entries.length > 0) placed.push(entries.length === block.entries.length ? block : { ...block, entries })
+  }
+  return placed
 }
 
 /** A turn's entries, reduced into blocks in execution order — never partitioned into "all

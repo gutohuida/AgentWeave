@@ -15,11 +15,13 @@ import { hubDate } from '@/lib/hubTime'
 import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
 import {
   entryCategory,
-  findPairedResult,
   groupIntoTurns,
   isSuccessCompletionEntry,
+  pairTurnResults,
+  placeTurnResults,
   reduceTurnBlocks,
   usageByRunId,
+  type TurnPairing,
   type TurnUsageFigure,
   type TimelineTurn,
 } from '@/lib/agentTimelineModel'
@@ -325,6 +327,7 @@ export function AgentTimeline({
               usage={turn.runId ? usageByRun[turn.runId] : undefined}
               live={runVisiblyActive && turn === lastTurn}
               hideDiagnostics={diagnosticsHidden}
+              runStatus={runStatus}
             />
             {terminalLabel && (
               <div
@@ -448,6 +451,7 @@ function TurnBody({
   usage,
   live,
   hideDiagnostics,
+  runStatus,
 }: {
   turn: TimelineTurn
   turnKey: string
@@ -463,10 +467,17 @@ function TurnBody({
   /** The operator's "Hide diagnostics" choice: `diagnostic` result cards are not drawn. Errors
    *  are messages and failed tool results live inside work blocks, so neither is affected. */
   hideDiagnostics: boolean
+  /** How this turn's run ended, from its facts; undefined while unknown. A call with no result
+   *  reads from it (F666). */
+  runStatus?: RunLifecycleStatus
 }) {
   // Walked in execution order — a block is never hoisted ahead of the text that
-  // preceded it (2026-08-04-hub-charcoal-visual-refresh).
-  const blocks = useMemo(() => reduceTurnBlocks(turn.entries), [turn.entries])
+  // preceded it (2026-08-04-hub-charcoal-visual-refresh). Results pair across the whole turn
+  // (wpc7-d), so a result recorded behind a notice is drawn at its call, not in a block of its own.
+  const { blocks, pairing } = useMemo(() => {
+    const turnPairing = pairTurnResults(turn.entries)
+    return { blocks: placeTurnResults(reduceTurnBlocks(turn.entries), turnPairing), pairing: turnPairing }
+  }, [turn.entries])
 
   // Where the agent's half of the turn starts — the operator's own message is not something
   // the agent "worked for", so the duration belongs after it, immediately above the response.
@@ -512,6 +523,8 @@ function TurnBody({
               {durationLine}
               <WorkBlockDisclosure
                 entries={block.entries}
+                pairing={pairing}
+                runStatus={runStatus}
                 // Open exactly while the reasoning is the latest thing in a turn that is still
                 // going; a text entry or the run's end after it closes it again.
                 autoOpen={
@@ -556,23 +569,27 @@ function TurnBody({
   )
 }
 
-function WorkBlockDisclosure({ entries, autoOpen }: { entries: TimelineEntry[]; autoOpen: boolean }) {
+function WorkBlockDisclosure({
+  entries,
+  autoOpen,
+  pairing,
+  runStatus,
+}: {
+  entries: TimelineEntry[]
+  autoOpen: boolean
+  pairing: TurnPairing
+  runStatus?: RunLifecycleStatus
+}) {
   // Disclosure state is local to this block: a turn with several work groups
   // tracks each one independently rather than toggling as one. The automatic state is derived
   // on every render and never stored; only a click is, and once the operator has clicked, their
   // choice wins over the rule — the text arriving must not shut what they opened to read.
   const [operatorChoice, setOperatorChoice] = useState<boolean | null>(null)
   const open = operatorChoice ?? autoOpen
-  // A tool_result is rendered inline with its tool_use, never as its own row — pairing is
-  // computed within this block, not across the whole turn, so it can never reach across a
-  // block boundary into a different run of work.
-  const pairedResultIds = new Set(
-    entries
-      .filter((e) => e.output_kind === 'tool_use')
-      .map((e) => findPairedResult(entries, e)?.id)
-      .filter((id): id is string => Boolean(id)),
-  )
-  const workRows = entries.filter((e) => !pairedResultIds.has(e.id))
+  // A paired tool_result is rendered inline with its tool_use, never as its own row. Pairing is
+  // resolved over the turn (`pairTurnResults`), and a result paired with a call in another block
+  // has already been moved out of this one (`placeTurnResults`).
+  const workRows = entries.filter((e) => !pairing.useByResult.has(e.id))
   const duration =
     entries.length > 1
       ? ((hubDate(entries[entries.length - 1].timestamp).getTime() - hubDate(entries[0].timestamp).getTime()) / 1000).toFixed(1)
@@ -586,7 +603,7 @@ function WorkBlockDisclosure({ entries, autoOpen }: { entries: TimelineEntry[]; 
     const filesTouched = new Set<string>()
     let writes = 0
     let failures = 0
-    for (const item of entries) {
+    for (const item of workRows) {
       const payload = item.payload as Record<string, unknown> | null | undefined
       if (item.output_kind === 'tool_use' && typeof payload?.tool === 'string') {
         if (WRITING_TOOLS.has(payload.tool)) {
@@ -598,10 +615,14 @@ function WorkBlockDisclosure({ entries, autoOpen }: { entries: TimelineEntry[]; 
           if (fileName) filesTouched.add(fileName)
         }
       }
-      if (item.output_kind === 'tool_result' && payload?.is_error === true) failures += 1
+      // The results this block renders: each call's own, and any that stand alone. A Hub-written
+      // `interrupted` row carries `is_error: false`, so a Stop is never counted here (wpc7-b).
+      const rendered = item.output_kind === 'tool_use' ? pairing.resultByUse.get(item.id) : item
+      const renderedPayload = rendered?.payload as Record<string, unknown> | null | undefined
+      if (rendered?.output_kind === 'tool_result' && renderedPayload?.is_error === true) failures += 1
     }
     return { files: [...filesTouched], writes, failures }
-  }, [entries])
+  }, [workRows, pairing])
 
   return (
     <details open={open} className="work-disclosure rounded-lg overflow-hidden">
@@ -656,7 +677,8 @@ function WorkBlockDisclosure({ entries, autoOpen }: { entries: TimelineEntry[]; 
             <WorkRow
               key={entry.id}
               entry={entry}
-              paired={findPairedResult(entries, entry)}
+              paired={pairing.resultByUse.get(entry.id)}
+              runStatus={runStatus}
               startExpanded={autoOpen && entry.output_kind === 'thinking'}
             />
           ))}
@@ -770,10 +792,13 @@ function callDetail(payload: unknown): string {
 function WorkRow({
   entry,
   paired,
+  runStatus,
   startExpanded = false,
 }: {
   entry: TimelineEntry
   paired?: TimelineEntry
+  /** The run's status, for a call with no result: once the run has ended it never will (F666). */
+  runStatus?: RunLifecycleStatus
   /** Only the first render reads this: a thought in a block that opened itself shows its text. */
   startExpanded?: boolean
 }) {
@@ -800,11 +825,9 @@ function WorkRow({
   // beside it already says. Repeating it was most of why expanding felt empty.
   const resultBody = paired && paired.content !== entry.content ? paired.content : ''
   const statusSuffix = paired
-    ? (paired.payload as Record<string, unknown> | null | undefined)?.is_error === true
-      ? ' · failed'
-      : ' · completed'
+    ? toolResultSuffix(paired)
     : entry.output_kind === 'tool_use'
-      ? ' · awaiting result'
+      ? unansweredSuffix(runStatus)
       : ''
 
   // A column, not a row. The expanded body used to be the fourth child of a `flex` row, so it
@@ -868,6 +891,25 @@ function WorkRow({
         ))}
     </div>
   )
+}
+
+/** A paired result's label. `interrupted` is the Hub's own closing row, written when the run ended
+ *  in the call: the operator stopped it, nothing failed (wpc7-b). */
+function toolResultSuffix(result: TimelineEntry): string {
+  const payload = result.payload as Record<string, unknown> | null | undefined
+  if (payload?.status === 'interrupted') return ' · interrupted'
+  return payload?.is_error === true ? ' · failed' : ' · completed'
+}
+
+/** A call with no result anywhere in its turn, read from how its run ended (F666): one that
+ *  stopped, failed or was reconciled will never answer it; a completed one answered nothing, which
+ *  is a runner defect worth seeing (wpc7-c); only a run not known to have ended is still waiting. */
+function unansweredSuffix(runStatus: RunLifecycleStatus | undefined): string {
+  if (runStatus === 'completed') return ' · no result'
+  if (runStatus === 'stopped' || runStatus === 'failed' || runStatus === 'interrupted') {
+    return ' · interrupted'
+  }
+  return ' · awaiting result'
 }
 
 function ResultCard({ entry, turnKey }: { entry: TimelineEntry; turnKey: string }) {

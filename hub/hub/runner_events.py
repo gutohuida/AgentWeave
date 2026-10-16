@@ -313,10 +313,16 @@ def tool_result_event(
     call_id: Optional[str] = None,
     summary: Optional[str] = None,
     is_error: bool = False,
+    status: Optional[str] = None,
 ) -> RunEvent:
+    """*status* is set only on a row the Hub writes itself: `"interrupted"` for a call the run
+    ended in (`stop-closes-the-tool-card-it-interrupted`). The key is additive, so `version`
+    stays 1, and a provider's own result never carries it."""
     safe_output = redact_secrets(output)
     output_text, output_truncated = _truncate_utf8(_stringify(safe_output), MAX_TOOL_RESULT_BYTES)
-    readable_summary = summary or (f"{tool} failed" if is_error else f"{tool} completed")
+    readable_summary = summary or (
+        f"{tool} {status}" if status else f"{tool} failed" if is_error else f"{tool} completed"
+    )
     payload: Dict[str, Any] = {
         "version": PAYLOAD_VERSION,
         "call_id": call_id,
@@ -326,7 +332,38 @@ def tool_result_event(
         "is_error": is_error,
         "truncated": output_truncated,
     }
+    if status:
+        payload["status"] = status
     return RunEvent(kind="tool_result", content=readable_summary, payload=payload, call_id=call_id)
+
+
+class OpenToolCalls:
+    """The tool calls a run recorded and nothing has answered yet, in the order they were made.
+
+    F666: no runner closes a call it was stopped or cancelled in -- Copilot's mapper closes one
+    only on a terminal update, a killed Claude process prints nothing more, and ACP gives the close
+    to the client. Each executor notes every event it records here and, when the run ends stopped
+    or failed, records `closing_events()` before its status line. A call with no identifier cannot
+    be paired, so it is not tracked and nothing is invented for it.
+    """
+
+    def __init__(self) -> None:
+        self._open: Dict[str, str] = {}
+
+    def note(self, event: RunEvent) -> None:
+        if not event.call_id:
+            return
+        if event.kind == "tool_use":
+            tool = (event.payload or {}).get("tool")
+            self._open.setdefault(event.call_id, tool if isinstance(tool, str) and tool else "tool")
+        elif event.kind == "tool_result":
+            self._open.pop(event.call_id, None)
+
+    def closing_events(self) -> List[RunEvent]:
+        return [
+            tool_result_event(tool=tool, output="", call_id=call_id, status="interrupted")
+            for call_id, tool in self._open.items()
+        ]
 
 
 def _fact_values(facts: Optional[Dict[str, Any]]) -> Dict[str, Any]:

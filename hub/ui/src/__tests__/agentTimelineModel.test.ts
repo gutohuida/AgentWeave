@@ -3,9 +3,10 @@ import type { TimelineEntry } from '@/api/agentChat'
 import type { TurnUsage } from '@/api/accounting'
 import {
   entryCategory,
-  findPairedResult,
   groupIntoTurns,
   isSuccessCompletionEntry,
+  pairTurnResults,
+  placeTurnResults,
   reduceTurnBlocks,
   usageByRunId as usageByRunIdDirect,
 } from '@/lib/agentTimelineModel'
@@ -154,7 +155,7 @@ describe('groupIntoTurns', () => {
   })
 })
 
-describe('findPairedResult', () => {
+describe('pairTurnResults', () => {
   // F275: the chat routes sort an abandoned entry in by its own time (it arrived before the runs
   // that gave up on it) and append only still-waiting ones. This is that order.
   it('keeps an abandoned entry where it happened, as a turn of its own, not in pending', () => {
@@ -185,12 +186,31 @@ describe('findPairedResult', () => {
       output_kind: 'tool_result',
       payload: { call_id: 'c1' },
     })
-    expect(findPairedResult([use, result], use)?.id).toBe('result-1')
+    expect(pairTurnResults([use, result]).resultByUse.get('use-1')?.id).toBe('result-1')
   })
 
   it('returns undefined when no matching result exists yet', () => {
     const use = entry({ id: 'use-2', output_kind: 'tool_use', payload: { call_id: 'c2' } })
-    expect(findPairedResult([use], use)).toBeUndefined()
+    expect(pairTurnResults([use]).resultByUse.get('use-2')).toBeUndefined()
+  })
+
+  it('pairs the first result only; a second one for the call pairs with nothing', () => {
+    const use = entry({ id: 'u', output_kind: 'tool_use', payload: { call_id: 'c' } })
+    const first = entry({ id: 'r1', output_kind: 'tool_result', payload: { call_id: 'c' } })
+    const second = entry({ id: 'r2', output_kind: 'tool_result', payload: { call_id: 'c' } })
+    const pairing = pairTurnResults([use, first, second])
+    expect(pairing.resultByUse.get('u')?.id).toBe('r1')
+    expect(pairing.useByResult.has('r2')).toBe(false)
+  })
+
+  it('moves a result split off by a notice to its call\'s block and drops the emptied block', () => {
+    const entries = [
+      entry({ id: 'u', output_kind: 'tool_use', payload: { call_id: 'c' } }),
+      entry({ id: 'n', output_kind: 'diagnostic' }),
+      entry({ id: 'r', output_kind: 'tool_result', payload: { call_id: 'c' } }),
+    ]
+    const placed = placeTurnResults(reduceTurnBlocks(entries), pairTurnResults(entries))
+    expect(placed.map((b) => (b.kind === 'work' ? b.entries.map((e) => e.id).join('+') : b.id))).toEqual(['u', 'n'])
   })
 })
 
