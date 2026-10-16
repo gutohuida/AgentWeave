@@ -1,3 +1,5 @@
+> **Moved to the app 2026-10-16, archived.** Successor: `spec/changes/stop-closes-the-tool-card-it-interrupted/spec.json` (built e6d80f2; folded into `agent-stream-events`, replacing `tool-and-diagnostic-presentation` with turn-wide pairing). D1-D5 and D7 were built as written, on wpc7-a (c), wpc7-b (i), wpc7-d (i); wpc7-c was taken as recommended (no close on completed) and stays open. Tasks 3.1-3.4 (real Copilot and Codex cancel captures, work PC) were not done.
+
 # Proposal — Stop closes the tool card it interrupted
 
 **Round 1, 2026-10-12** (finding **WPC-7 (low)**, from the work-PC Copilot drive, handoff 0162).

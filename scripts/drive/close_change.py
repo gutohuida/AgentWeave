@@ -87,6 +87,9 @@ CATALOG_DRIVE = "scripts/drive/d1016_f662_copilot_catalog.py"
 SUBSTITUTED_TESTS = "hub/tests/test_a_substituted_copilot_model_is_reported.py"
 CALLS_DRIVE = "scripts/drive/d1016_f663_calls_dir_clean.py"
 CALLS_TESTS = "hub/tests/test_calls_dir_starts_clean.py"
+STOP_DRIVE = "scripts/drive/d1016_f666_stop_closes_card.py"
+STOP_TESTS = "hub/tests/test_stop_closes_open_tool_calls.py"
+STOP_UI_TESTS = "hub/ui/src/__tests__/stopClosesToolCard.test.tsx"
 CATALOG_PIN = "tests/test_model_catalog_drift.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
@@ -1411,6 +1414,24 @@ CHANGES = {
              "for each call."),
         ],
     },
+    "f666": {
+        "document": "spec/changes/stop-closes-the-tool-card-it-interrupted/spec.json",
+        "commit": "e6d80f2",
+        "tasks": ["task-4ae928b2cc6a"],
+        "evidence": [
+            ("FR-1", "task-4ae928b2cc6a", "manual_observation", STOP_DRIVE,
+             "Written first (5a9d5c8): at HEAD a Haiku run stopped mid-sleep recorded tool_use "
+             "then 'Run stopped (exit 2).' and no result; after, tool_use, 'Bash interrupted' "
+             "(status interrupted, is_error false), then the status row, also via the chat route. "
+             "Unit: test_stop_closes_open_tool_calls.py (Copilot, Codex app-server, PTY; controls)."),
+            ("FR-2", "task-4ae928b2cc6a", "test_result", STOP_UI_TESTS,
+             "The work-PC rows read interrupted for a stopped run, no result for a completed one, "
+             "awaiting result with no facts; a closing row reads interrupted with no failed count."),
+            ("FR-3", "task-4ae928b2cc6a", "test_result", STOP_UI_TESTS,
+             "run-08d33fa23f8e's result behind a notice renders at its call in one block; a second "
+             "result and an orphan render on their own; pairing does not cross runs."),
+        ],
+    },
     "fcatalog": {
         "document": "spec/changes/the-model-catalog-tracks-the-newest-clis/spec.json",
         "commit": "da1c4b9",
@@ -1426,6 +1447,11 @@ CHANGES = {
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
 REPLACE_FOLDS = {
+    "f666": ("agent-stream-events", {
+        "pairing-spans-the-turn": "tool-and-diagnostic-presentation",
+        "end-closes-open-calls": None,
+        "ended-call-reads-ended": None,
+    }),
     "fcatalog": ("model-catalog", {
         "lists-track-newest-cli": "the-copilot-catalog-tracks-the-cli-tracks-newest-cli",
     }),

@@ -796,6 +796,51 @@
       "requirement": "a-secret-in-reply-text-is-redacted-prose-kept",
       "then": "it is stored unchanged",
       "when": "it is recorded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub and a Haiku agent asked to run a 240-second sleep in its shell",
+      "how_to_check": "py -3.11 scripts/drive/d1016_f666_stop_closes_card.py (written first: fails before the build)",
+      "key": "stop-closes-the-tool-card-it-interrupted-drive",
+      "requirement": "stop-closes-the-tool-card-it-interrupted-end-closes-open-calls",
+      "then": "the run is stopped and its outputs read tool_use, a tool_result with the same call id and status interrupted, then 'Run stopped' last; the chat route returns them in that order",
+      "when": "the operator presses Stop while the command runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Copilot, Codex app-server and Claude PTY turns with an open call, driven through the trigger route",
+      "how_to_check": "pytest hub/tests/test_stop_closes_open_tool_calls.py",
+      "key": "stop-closes-the-tool-card-it-interrupted-unit-hub",
+      "requirement": "stop-closes-the-tool-card-it-interrupted-end-closes-open-calls",
+      "then": "the closing row sits after the runner's rows and before the status row only where the requirement says",
+      "when": "the turn ends stopped or failed (and, as controls, completed, provider-closed, no call id, a raising closing write)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the work-PC run's rows and run facts stopped, completed or absent",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/stopClosesToolCard.test.tsx",
+      "key": "stop-closes-the-tool-card-it-interrupted-unit-ui-label",
+      "requirement": "stop-closes-the-tool-card-it-interrupted-ended-call-reads-ended",
+      "then": "the card reads interrupted, no result or awaiting result; a closing row reads interrupted with no failed count",
+      "when": "the timeline renders them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "run-08d33fa23f8e's rows (tool_use, diagnostic, tool_result), a second result for one call, an orphan result, and two runs reusing a call id",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/stopClosesToolCard.test.tsx src/__tests__/agentTimeline.test.tsx",
+      "key": "stop-closes-the-tool-card-it-interrupted-unit-ui-pairing",
+      "requirement": "tool-and-diagnostic-presentation",
+      "then": "the result renders at its call in one work block; the second and the orphan render on their own; no result crosses runs",
+      "when": "the timeline renders them"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a Copilot agent on the work PC",
+      "how_to_check": "work-PC drive (openspec tasks 3.1-3.3)",
+      "key": "stop-closes-the-tool-card-it-interrupted-operator-reload",
+      "requirement": "stop-closes-the-tool-card-it-interrupted-ended-call-reads-ended",
+      "then": "the card reads interrupted both live and after the reload",
+      "when": "Stop is pressed during a long shell command, then the page is reloaded"
     }
   ],
   "algorithms": [],
@@ -815,7 +860,7 @@
       "FR-31": "546ddb567d8e5ab3a32961e4c7b5f62cec4873df11a1c7d2e0297baa48af8e2f",
       "FR-32": "8f1dd77e90045fe31461d9724875a7425448b1431744fe0a0b0ad4c227cf120b",
       "FR-33": "260c8c11322711f873be073a5a480bcc5e1f4819824021d46db4e23a7001c227",
-      "FR-34": "ff170f01b2009fbcef84e983a6fa8fff5020ab7fc8470c59c64823da779b6143",
+      "FR-34": "8cf51098f2aaaa20fc835b1bf6c34de7801ad1adea3ed9a93666c5b01dfcae69",
       "FR-35": "a1707fd0cd8317821c2a3f73013ba8568c87b81b06c996ee1a8bf69b6c3dcf5e",
       "FR-36": "d03359a9c6eb539243605f0cdcb566651f6bc18328920291f29a8bddb74a548d",
       "FR-37": "6399e1e7b31202201245139d5b1e47e509747f2329af2425f23911b70cdfec06",
@@ -840,9 +885,11 @@
       "FR-56": "1b8f25be891f19b9495c5f811992c51b243d7b594bcd172829a60e4038c8cf5b",
       "FR-57": "e0e094a2604d46fc27bc1cb57c1929889640eb98fa3c9544113ebdaa08d2bb6c",
       "FR-58": "65f447fe46d89821482167a85c3bd8cc536c62125dcb0f7341dc7dfc0333c6fe",
-      "FR-59": "8eca1d66be909e66c59ab09b00b485df383ace8e48ee1cef0a6367a6202f9c76"
+      "FR-59": "8eca1d66be909e66c59ab09b00b485df383ace8e48ee1cef0a6367a6202f9c76",
+      "FR-60": "dd8ba7911a7160efd714ac10ffacfef351d63c81f48df86793e9f2bad68f69a4",
+      "FR-61": "4ed4018830e85e3878193b7b061d00f7c4830d7dc0c91327c612478a5a50482e"
     },
-    "high_water": 59,
+    "high_water": 61,
     "requirements": {
       "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st": "FR-50",
       "a-resumed-copilot-session-s-history-is-not-rendered-again": "FR-48",
@@ -869,6 +916,8 @@
       "recent-output-retrieval": "FR-31",
       "run-identity-and-deterministic-ordering": "FR-24",
       "shared-stream-renderer": "FR-32",
+      "stop-closes-the-tool-card-it-interrupted-end-closes-open-calls": "FR-60",
+      "stop-closes-the-tool-card-it-interrupted-ended-call-reads-ended": "FR-61",
       "stream-contract-conformance-tests": "FR-35",
       "structured-payload-safety": "FR-27",
       "supported-runner-normalization": "FR-25",
@@ -1014,8 +1063,8 @@
       "key": "tool-and-diagnostic-presentation",
       "modal": "SHALL",
       "party": null,
-      "rationale": "The operator needs to see what a call did and whether it failed without reading two rows.",
-      "statement": "A tool-use event SHALL render together with the tool result that shares its `call_id` in the same work block, showing whether the call completed, failed or is awaiting a result; diagnostics SHALL be visually distinct from errors and from agent text."
+      "rationale": "The operator needs to see what a call did and whether it failed without reading two rows, even when a notice was recorded between the call and its result.",
+      "statement": "A tool-use event SHALL render together with the first tool result in its turn (the entries of one run) that shares its `call_id`, in the tool use's work block, showing whether the call completed, failed, was interrupted or is awaiting a result; a result rendered at its call SHALL NOT also render on its own, a work block left with nothing of its own SHALL NOT be drawn, and any other result (a second one for a call, or one whose call is not in the turn) SHALL render as its own row; pairing MUST NOT cross runs; diagnostics SHALL be visually distinct from errors and from agent text."
     },
     {
       "key": "stream-contract-conformance-tests",
@@ -1156,6 +1205,20 @@
       "party": null,
       "rationale": "Agents write commit SHAs, paths and long identifiers in replies; the tool events' high-entropy catch-all would eat them.",
       "statement": "Text rows MUST NOT get the high-entropy catch-all of tool events: a 40-character commit SHA, a path and ordinary prose are stored as written."
+    },
+    {
+      "key": "stop-closes-the-tool-card-it-interrupted-end-closes-open-calls",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "ACP assigns the close to the client; no runner closes a call it was killed or cancelled in.",
+      "statement": "When a run ends as stopped or failed on a path that writes the run's terminal status line, the Hub MUST persist, for each tool_use the run recorded with a call identifier and no matching tool_result, one closing tool_result with the same call identifier and tool, is_error false and status \"interrupted\", after every output the runner recorded and before the terminal status line; a call without an identifier, a call the provider already closed, and any call of a completed run get no closing row; a closing row that fails to persist MUST NOT change how the run ended."
+    },
+    {
+      "key": "stop-closes-the-tool-card-it-interrupted-ended-call-reads-ended",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Covers runs written before this change, runs reconciled after a Hub death, and endings with no status line.",
+      "statement": "The timeline MUST present a tool call as interrupted when its result carries status \"interrupted\", or when no result for it exists in its turn and its run's facts report stopped, interrupted or failed; as no result when none exists and the run completed; as awaiting result only when it has no result and its run is not known to have ended; and MUST NOT count an interrupted call as a failure."
     }
   ],
   "schema_version": 1,
