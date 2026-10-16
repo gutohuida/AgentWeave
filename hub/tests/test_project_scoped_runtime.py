@@ -11,6 +11,7 @@ working directory as project identity."
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -325,12 +326,12 @@ async def test_work_dir_cannot_point_into_the_hubs_own_directory(
     assert sync.status_code == 200
     await _bind_runner(app, auth_headers, "proj-test", "reader")
 
-    for bad_work_dir in (
-        ".agentweave",
-        ".agentweave/worktrees/bob",
-        ".AgentWeave/worktrees",
-        "./.agentweave",
-    ):
+    bad_work_dirs = [".agentweave", ".agentweave/worktrees/bob", "./.agentweave"]
+    if os.path.normcase("A") == os.path.normcase("a"):
+        # Only where the filesystem folds case is `.AgentWeave` the Hub's own directory; on
+        # Linux it is a different folder, and CI's ubuntu queued the turn instead.
+        bad_work_dirs.append(".AgentWeave/worktrees")
+    for bad_work_dir in bad_work_dirs:
         with patch("hub.api.v1.agent_trigger.PtySession.spawn") as spawn:
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",

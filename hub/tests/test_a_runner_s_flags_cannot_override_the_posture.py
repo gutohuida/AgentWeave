@@ -149,22 +149,26 @@ async def test_add_agent_binds_only_a_plain_runner(app, auth_headers):
             )
         )
         await db.commit()
-    created = await app.post(
-        f"{BASE}/agents",
-        json={"name": "plain600", "provider": "claude", "model": "haiku"},
-        headers=auth_headers,
-    )
+    # CI's runners have no `claude` on PATH, and creation refuses an absent CLI.
+    on_path = patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude")
+    with on_path:
+        created = await app.post(
+            f"{BASE}/agents",
+            json={"name": "plain600", "provider": "claude", "model": "haiku"},
+            headers=auth_headers,
+        )
     assert created.status_code == 201, created.text
     async with async_session_factory() as db:
         runner = await db.get(Runner, created.json()["runner_id"])
     assert runner.id != "runner-f600-flagged"
     assert not runner.flags
 
-    again = await app.post(
-        f"{BASE}/agents",
-        json={"name": "plain600b", "provider": "claude", "model": "haiku"},
-        headers=auth_headers,
-    )
+    with on_path:
+        again = await app.post(
+            f"{BASE}/agents",
+            json={"name": "plain600b", "provider": "claude", "model": "haiku"},
+            headers=auth_headers,
+        )
     assert again.json()["runner_id"] == runner.id, "the plain runner is reused, not duplicated"
     async with async_session_factory() as db:
         count = len(

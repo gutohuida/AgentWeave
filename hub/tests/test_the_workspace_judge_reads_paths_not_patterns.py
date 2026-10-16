@@ -10,6 +10,8 @@ open.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from hub.mcp_server import _decide
@@ -22,6 +24,19 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setenv("AW_WORKSPACE_DIR", str(ws))
     monkeypatch.delenv("AW_RUN_TOKEN", raising=False)
     return ws
+
+
+#: A path outside every workspace, written as this host writes an absolute one. On Linux
+#: `C:\Windows\x` is a relative file name, so CI (ubuntu) checks the same grammar on `/etc/x`.
+_DRIVE_LETTERS = os.sep == "\\"
+OUT = r"C:\Windows\x" if _DRIVE_LETTERS else "/etc/x"
+OUT_DIR = r"C:\Windows\System32" if _DRIVE_LETTERS else "/etc/system32"
+OUT_ROOT = r"C:\Windows" if _DRIVE_LETTERS else "/etc"
+
+
+def _host(text):
+    """`text` with its Windows outside paths written as this host writes them."""
+    return text.replace(r"C:\Windows\System32", OUT_DIR).replace(r"C:\Windows\x", OUT)
 
 
 def ps(command):
@@ -158,9 +173,9 @@ def test_a_script_block_closed_against_its_pattern_qualifies(workspace):
     ],
 )
 def test_a_path_outside_the_pattern_operand_is_still_judged(workspace, command, path):
-    decision = ps(command)
+    decision = ps(_host(command))
     assert decision["allow"] is False, decision
-    assert shown(path) in decision["reason"]
+    assert shown(_host(path)) in decision["reason"]
 
 
 def test_a_double_quoted_operand_that_expands_does_not_qualify(workspace):
@@ -168,17 +183,20 @@ def test_a_double_quoted_operand_that_expands_does_not_qualify(workspace):
     assert decision["allow"] is False
 
 
+@pytest.mark.skipif(
+    not _DRIVE_LETTERS, reason="the refusal comes from the drive letter inside the word"
+)
 def test_unicode_quotes_do_not_qualify(workspace):
-    decision = ps("$x -match \u2018C:\\Windows\u2019")
+    decision = ps(f"$x -match ‘{OUT_ROOT}’")
     assert decision["allow"] is False
 
 
 def test_an_unquoted_operand_does_not_qualify(workspace):
-    assert ps(r"$x -match C:\Windows\x")["allow"] is False
+    assert ps(f"$x -match {OUT}")["allow"] is False
 
 
 def test_a_quoted_operator_is_not_an_operator(workspace):
-    assert ps(r"$x '-match' 'C:\Windows\x'")["allow"] is False
+    assert ps(f"$x '-match' '{OUT}'")["allow"] is False
 
 
 def test_the_bash_reading_of_a_pattern_is_unchanged(workspace):
@@ -191,9 +209,10 @@ def test_a_refusal_quotes_a_path_as_written(workspace):
     The path is quoted as written; only a character that would not print is escaped."""
     from hub.mcp_server import _quote
 
-    decision = ps(r"Remove-Item ..\aw-outside\outside.txt")
+    outside = os.path.join("..", "aw-outside", "outside.txt")
+    decision = ps(f"Remove-Item {outside}")
     assert decision["allow"] is False
-    assert decision["reason"].startswith(r"'..\aw-outside\outside.txt' ")
+    assert decision["reason"].startswith(f"'{outside}' ")
     assert _quote("a\nb") == r"'a\nb'"
 
 
