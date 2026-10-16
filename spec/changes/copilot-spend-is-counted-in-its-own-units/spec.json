@@ -1,0 +1,134 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the work-PC drive's figures: turns charging 19.0 premium requests and 154,000,145,000 nano-AIU with no reading or cost, plus a Copilot checkpoint (1,102,140,000; 1.0) and probe (822,390,000; 1.0) with no tokens",
+      "how_to_check": "pytest hub/tests/test_copilot_spend_in_its_own_units.py",
+      "key": "route",
+      "requirement": "project-credits-include-workers",
+      "then": "project credits 155,924,675,000 and 21.0; two worker lines with credited_calls 1 and unmeasured 0; preferred_display credits; agents unchanged (written first: fails before the build)",
+      "when": "GET /accounting is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with a cost, one with an allowance, a pure Claude one, and a turn whose allowance is the JSON null",
+      "how_to_check": "pytest hub/tests/test_copilot_spend_in_its_own_units.py",
+      "key": "unit-display",
+      "requirement": "credits-display-kind",
+      "then": "the cost and the allowance still lead; the pure Claude project keeps tokens; the JSON null is never an allowance",
+      "when": "GET /accounting is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a credited Copilot worker line and a credits preferred_display",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/accountingPresentation.test.tsx",
+      "key": "unit-ui",
+      "requirement": "worker-line-credits",
+      "then": "the line shows its AI credits and premium requests, not unavailable; the label reads Copilot AI credits",
+      "when": "the Budgets section renders"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a project whose checkpoint runner is Copilot",
+      "how_to_check": "a live Copilot checkpoint (spends premium requests; not run at home without asking)",
+      "key": "operator-live",
+      "requirement": "worker-line-credits",
+      "then": "the Budgets section shows a checkpoint line with its credits and the project credits rise by it",
+      "when": "Checkpoint is pressed"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "97ec205010ff7c9a6b5b8a88d96a5176c6e1af2139677d3121f3bde3ede8f3ec",
+      "FR-2": "1d4dce7682e6f6e40a160fce8044a36b0d1df3b16fb24fcb6dfe1c1fe2fad4da",
+      "FR-3": "a37390c5a36e52cd80cc8f2b900eeb7ca88542a6dd52f78a9f0fdace5591bd5d"
+    },
+    "high_water": 3,
+    "requirements": {
+      "credits-display-kind": "FR-3",
+      "project-credits-include-workers": "FR-2",
+      "worker-line-credits": "FR-1"
+    },
+    "retired": {}
+  },
+  "design": "Tier 1, no migration (the credit columns exist since 0117). D1: _worker_lines adds ai_nano_aiu and premium_requests sums and credited_calls (spawned, total null, a credit figure set); unmeasured_calls narrows to spawned calls with neither. D2: the project's credit figures add the worker lines' sums in Python (None + n = n), so project = agents + workers by construction; agents and conversation_usage stay turns only; the budget is unchanged (credits are never budgeted). D3: preferred_display order allowance, api_equivalent, credits, tokens, unavailable; credits = {kind, label 'AI credits', runner 'copilot', ai_nano_aiu, premium_requests}. UI: the union gains the kind; accountingDisplayLabel reads 'Copilot AI credits · no allowance reported'; a worker chip shows tokens when known, then credits and premium requests, then unavailable calls; the caption counts measured + credited + unmeasured worker calls. Rejected: credits before api_equivalent (demotes a dollar figure on every mixed project); credits only when every turn is Copilot (flaps on one Claude turn).",
+  "evidence": {
+    "checked": [
+      "trial DB workpc-drive (from the openspec draft's read): 19.0 / 154.000145 on turns, 2.0 / 1.92453 on the two worker rows",
+      "usage_accounting after slice A: worker lines sum tokens and cost only; preferred_display has no credits kind"
+    ],
+    "limits": [
+      "No live Copilot worker call at home (it spends premium requests); the route test uses the drive's recorded figures"
+    ]
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [
+    {
+      "question": "wpc6-d (who carries the worker credit sums: this change) and wpc6-f (worker credits alone switch the headline: yes) are built as recommended; their DECISIONS rows stay open.",
+      "resolved": false
+    }
+  ],
+  "problem": "Work-PC drive (trial DB workpc-drive, proj-d73f8848ee60): 20 Copilot turns charged 19.0 premium requests and 154.00 AI credits; a checkpoint and its probe charged 2.0 and 1.92 more, recorded on worker_invocations and read by nothing, so GET /accounting reported 19 and 154.00 instead of 21 and 155.92. A Copilot one-shot call reports no tokens, so slice A's worker line counts it as an unmeasured call and shows nothing it spent. preferred_display has no credits kind: with no allowance reading and no cost, the all-Copilot project's headline read 'Tokens'.",
+  "requirements": [
+    {
+      "key": "worker-line-credits",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A Copilot worker call spends credits, not tokens; calling it unmeasured hides what it cost.",
+      "statement": "Each `workers` line MUST carry the sum of its kind's AI credits and premium requests (null when no call reported one) and a count of credited calls, those that ran and reported credits but no token count; such a call MUST NOT be counted as unmeasured."
+    },
+    {
+      "key": "project-credits-include-workers",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The project's spend in Copilot's units must equal what its turns and worker calls charged.",
+      "statement": "The project's AI credits and premium requests MUST be its turns' sums plus its worker lines' sums, while the per-agent and per-conversation figures stay turns only and no credit figure counts toward the token budget."
+    },
+    {
+      "key": "credits-display-kind",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The headline should name the unit the project's data is in (wpc6-c: follow the data, not the dominant runner).",
+      "statement": "When the project has no allowance reading among its recent turns and no reported cost, but has AI credits or premium requests (from turns or worker calls), preferred_display MUST be the kind `credits`, naming runner copilot and carrying both figures; a project with neither keeps its previous kind."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "worker lines: ai_nano_aiu, premium_requests, credited_calls; unmeasured narrows to calls that reported neither",
+      "project credit totals include the worker lines (agents and conversations stay turns only)",
+      "preferred_display kind credits between api_equivalent and tokens",
+      "the dashboard label, the worker chips and the caption count"
+    ],
+    "non_goals": [
+      "Budgets in credits or premium requests (wpc6-a: tokens only)",
+      "Estimating tokens for a Copilot one-shot call",
+      "The JSON 'null' allowance text (unchanged; a control test pins that it is never read as an allowance)"
+    ]
+  },
+  "summary": "Each `workers` accounting line carries its kind's Copilot credits and a count of credited calls (credits but no tokens), so a Copilot checkpoint is no longer 'usage unavailable'; the project's AI credits and premium requests include the worker calls; and `preferred_display` gains a `credits` kind, ranked after a reported cost and before tokens, so an all-Copilot project's headline names its real unit (F665 / WPC-6; decision fix-D2, wpc6-a..c; wpc6-d and wpc6-f built as recommended, still open). Slice B of D2; slice A is worker-spend-counts-against-the-budget. Re-authored from openspec copilot-spend-is-counted-in-its-own-units.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "usage_accounting worker lines, project credit totals and the credits display kind; accounting.ts, accountingDisplay.ts, AccountingPanel.tsx; tests; bundle.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "worker-line-credits",
+        "project-credits-include-workers",
+        "credits-display-kind"
+      ],
+      "reviewer": null,
+      "title": "Count Copilot credits on the worker lines and name them in the headline"
+    }
+  ],
+  "title": "Copilot spend is counted in its own units"
+}

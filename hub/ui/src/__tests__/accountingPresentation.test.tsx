@@ -179,6 +179,22 @@ describe('accounting presentation', () => {
     expect(agents.compareDocumentPosition(screen.getByLabelText('Usage by worker')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('shows a Copilot worker line in credits, not as unavailable (F665)', () => {
+    snapshot.workers = [
+      { kind: 'checkpoint', input_tokens: null, output_tokens: null, total_tokens: null, measured_calls: 0, credited_calls: 1, unmeasured_calls: 0, api_equivalent_usd_micros: null, ai_nano_aiu: 1_102_140_000, premium_requests: 1 },
+    ]
+    render(<AccountingPanel />)
+    const [line] = screen.getByLabelText('Usage by worker').querySelectorAll('.aw-chip')
+    expect(line.textContent).toBe('Checkpoints: 1.10 AI credits · 1 premium request')
+    expect(screen.getByText(/2 measured turns · 1 worker call · 1 usage unavailable/)).toBeInTheDocument()
+  })
+
+  it('names Copilot AI credits as the headline unit when they are the only spend reported (F665)', () => {
+    expect(
+      accountingDisplayLabel({ kind: 'credits', label: 'AI credits', runner: 'copilot', ai_nano_aiu: 5, premium_requests: 1 }),
+    ).toBe('Copilot AI credits · no allowance reported')
+  })
+
   it('keeps the turns-only caption when there are no worker calls', () => {
     render(<AccountingPanel />)
     expect(screen.getByText(/2 measured · 1 usage unavailable/)).toBeInTheDocument()
