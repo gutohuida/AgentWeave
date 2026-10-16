@@ -2134,14 +2134,39 @@ async def trigger_agent(
             conversation.provider_session_id = body.session_id
             session.add(conversation)
     else:
-        # This route queues its entry as `origin_type="operator"` below; the conversation it
-        # opens is the same act.
-        # No inheritance here, deliberately. `agent-conversation-workspace` requires that a
-        # conversation the *operator* starts begins clean — they are looking at the composer and
-        # can choose. What this change fixes is the conversation a peer or a job opens, where
-        # nobody was asked.
-        conversation = new_conversation(project_id=project_id, agent=body.agent, origin="operator")
-        session.add(conversation)
+        if body.task_id:
+            # Start work on a task resumes this agent's conversation for it (decision fix-D13): the
+            # newest open one still bound to the task. Opening a new one each time made the agent
+            # re-read the repository from scratch (wpc-obs-2, ~355k tokens). Only Start work sends
+            # a task here; the composer's new conversation does not, and stays clean below.
+            conversation = (
+                (
+                    await session.execute(
+                        select(Conversation)
+                        .where(
+                            Conversation.project_id == project_id,
+                            Conversation.agent == body.agent,
+                            Conversation.task_id == body.task_id,
+                            Conversation.lifecycle == "open",
+                        )
+                        .order_by(Conversation.updated_at.desc(), Conversation.sequence.desc())
+                        .limit(1)
+                    )
+                )
+                .scalars()
+                .first()
+            )
+        if conversation is None:
+            # This route queues its entry as `origin_type="operator"` below; the conversation it
+            # opens is the same act.
+            # No inheritance here, deliberately. `agent-conversation-workspace` requires that a
+            # conversation the *operator* starts begins clean — they are looking at the composer
+            # and can choose. What this change fixes is the conversation a peer or a job opens,
+            # where nobody was asked.
+            conversation = new_conversation(
+                project_id=project_id, agent=body.agent, origin="operator"
+            )
+            session.add(conversation)
 
     if body.task_id:
         # Refused now, while the operator is looking at the response, rather than at spawn — a
