@@ -228,9 +228,40 @@ class _Spawn:
     error: Optional[str] = None
 
 
+def _without_refused_model(cmd: List[str], stderr: str) -> Optional[List[str]]:
+    """*cmd* without its `--model <id>` pair when the CLI refused exactly that id, else None.
+
+    F671: `copilot -p ... --model <id>` exits 1 with `Model "<id>" from --model flag is not
+    available.` for an id the account's plan does not offer, where the same runner's ACP turn lets
+    Copilot choose (Auto). Keyed on the id this call named, so another message never matches.
+    """
+    if "--model" not in cmd:
+        return None
+    at = cmd.index("--model")
+    if at + 1 >= len(cmd):
+        return None
+    model = cmd[at + 1]
+    if f'Model "{model}" from --model flag is not available' not in stderr:
+        return None
+    return cmd[:at] + cmd[at + 2 :]
+
+
 def _run_worker_process(
     cmd: List[str], cwd: Optional[str], timeout: int, env: Optional[Dict[str, str]] = None
 ) -> _Spawn:
+    """Blocking spawn, retried once on Auto when Copilot refuses the named model (F671)."""
+    spawn, stderr = _run_worker_process_once(cmd, cwd, timeout, env)
+    if spawn.outcome == "nonzero_exit":
+        fallback = _without_refused_model(cmd, stderr)
+        if fallback is not None:
+            logger.info("the CLI refused the worker's model; retrying once on its own choice")
+            spawn, _ = _run_worker_process_once(fallback, cwd, timeout, env)
+    return spawn
+
+
+def _run_worker_process_once(
+    cmd: List[str], cwd: Optional[str], timeout: int, env: Optional[Dict[str, str]] = None
+) -> Tuple[_Spawn, str]:
     """Blocking spawn. Classifies its own failure and never raises into the caller.
 
     `stdin=DEVNULL` is not incidental: `codex exec` given an open stdin blocks reading it forever
@@ -252,9 +283,9 @@ def _run_worker_process(
             **no_console_kwargs(),
         )
     except subprocess.TimeoutExpired:
-        return _Spawn("timeout", error=f"worker exceeded {timeout}s")
+        return _Spawn("timeout", error=f"worker exceeded {timeout}s"), ""
     except (OSError, subprocess.SubprocessError) as exc:
-        return _Spawn("spawn_failed", error=f"{type(exc).__name__}: {exc}")
+        return _Spawn("spawn_failed", error=f"{type(exc).__name__}: {exc}"), ""
 
     if completed.returncode != 0:
         stderr_tail = (completed.stderr or "").strip().splitlines()
@@ -264,8 +295,8 @@ def _run_worker_process(
             stdout=completed.stdout or "",
             exit_code=completed.returncode,
             error=f"exited {completed.returncode}: {detail}",
-        )
-    return _Spawn("ok", stdout=completed.stdout or "", exit_code=0)
+        ), (completed.stderr or "")
+    return _Spawn("ok", stdout=completed.stdout or "", exit_code=0), ""
 
 
 #: Who asked for a worker call (F240). An operator's call always runs; an autonomous one is not
