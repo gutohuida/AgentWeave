@@ -15,6 +15,7 @@ its own session.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 from typing import Any, Dict, Optional, Tuple
 
@@ -43,6 +44,7 @@ from .inbound_queue import new_entry
 from .runner_adapters import get_adapter
 from .runner_provider import one_shot_model
 from .sse import sse_manager
+from .usage_accounting import project_budget_state
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +249,28 @@ async def consider(
             _declined(conversation_id, "the conversation is missing or not open")
             return None
 
-        if not policy.automatic and conversation.checkpoint_warning in ("dismissed", "final"):
+        spent: Optional[bool] = None
+
+        async def budget_spent() -> bool:
+            """Whether the project's token budget is spent, read at most once per reading and only
+            where an automatic checkpoint would otherwise be generated (F240, design D3a).
+
+            At exhaustion the automatic policy behaves as `offered` for this reading: warn, do not
+            spend. An `unwritten` checkpoint made here would become the next one's anchor and drop
+            the span it covered from the chain. Fails closed, like the worker's own gate.
+            """
+            nonlocal spent
+            if spent is None:
+                try:
+                    spent = (await project_budget_state(db, project_id))["exhausted"]
+                except Exception:  # noqa: BLE001 — never raises into a caller
+                    logger.warning("could not read %s's token budget", project_id, exc_info=True)
+                    spent = True
+            return spent
+
+        if conversation.checkpoint_warning in ("dismissed", "final") and (
+            not policy.automatic or await budget_spent()
+        ):
             # A dismissed conversation is done with the ordinary path: it has already crossed its
             # threshold, already been offered a checkpoint, and already declined. Notes and
             # generation both have nothing left to say to it.
@@ -273,7 +296,11 @@ async def consider(
                 # `compacted` card is the notice.
                 _declined(conversation_id, "the runner compacted a dismissed conversation")
                 return None
-            if not needs_final_warning(policy, percent=percent):
+            # Reached under `automatic` only with the budget spent, where the reading behaves as
+            # `offered`: the final warning is still owed (F240, design D3a).
+            if not needs_final_warning(
+                dataclasses.replace(policy, mode="offered"), percent=percent
+            ):
                 _declined(
                     conversation_id,
                     "the operator dismissed this conversation's warning and it has not "
@@ -346,7 +373,7 @@ async def consider(
             _declined(conversation_id, "nothing has happened since the last checkpoint")
             return None
 
-        if not policy.automatic:
+        if not policy.automatic or await budget_spent():
             # Warn, do not spend.
             #
             # Generating here billed a model call whether or not the operator wanted one — and at

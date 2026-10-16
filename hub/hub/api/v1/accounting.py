@@ -88,4 +88,4 @@ async def update_budget(
     # `schedule_accepted` never raises, so one agent's locked start cannot skip the rest (D4).
     for agent in queued_result.scalars().all():
         await schedule_accepted(project_id, agent)
-    return budget_state(body.token_budget, snapshot["project"]["total_tokens"])
+    return budget_state(body.token_budget, snapshot["budget"]["used_tokens"])

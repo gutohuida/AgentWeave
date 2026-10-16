@@ -248,6 +248,8 @@ async def review(plan: Plan) -> str:
         cli=plan.cli,
         model=plan.model,
         runner_id=plan.runner_id,
+        # Filed by an agent or the operator, the review that follows is the Hub's own (F240).
+        initiator="autonomous",
     )
     if not result.ok or not isinstance(result.parsed, ReportAnswer):
         outcome, detail = "failed", f"{result.error or result.outcome}; the report stays pending"

@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0128"
+HEAD_REVISION = "0129"
 
 
 # ---------------------------------------------------------------------------
@@ -5345,6 +5345,14 @@ def _database_at_0128_with_workers(tmp_path) -> tuple:
     with sqlite3.connect(db_file) as conn:
         conn.execute("DROP TABLE worker_invocations")
         conn.execute(_WORKER_INVOCATIONS_AT_0128)
+        conn.execute(
+            "CREATE INDEX ix_worker_invocations_project_kind ON worker_invocations "
+            "(project_id, kind)"
+        )
+        conn.execute(
+            "CREATE INDEX ix_worker_invocations_project_created ON worker_invocations "
+            "(project_id, created_at)"
+        )
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0128')")
         conn.execute(
@@ -5387,7 +5395,7 @@ def test_migration_0129_backfills_worker_totals_and_admits_budget_exhausted(tmp_
                 "outcome, error, created_at) VALUES ('w-bad', 'p', 'k', 'v', 'claude', 'nope', "
                 "'x', '2026-10-16T00:00:02Z')"
             )
-        indexes = {r[0] for r in conn.execute("PRAGMA index_list(worker_invocations)")}
+        indexes = {r[1] for r in conn.execute("PRAGMA index_list(worker_invocations)")}
         assert {"ix_worker_invocations_project_kind", "ix_worker_invocations_project_created"} <= (
             indexes
         )

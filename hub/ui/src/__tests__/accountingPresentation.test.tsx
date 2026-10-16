@@ -161,6 +161,30 @@ describe('accounting presentation', () => {
     expect(screen.queryByText(/\{"status"/)).not.toBeInTheDocument()
   })
 
+  it('lists what the Hub spent outside the turns, one line per worker kind, after the agents (F240)', () => {
+    snapshot.workers = [
+      { kind: 'checkpoint', input_tokens: 400, output_tokens: 100, total_tokens: 500, measured_calls: 2, unmeasured_calls: 0, api_equivalent_usd_micros: null },
+      { kind: 'conversation_title', input_tokens: 50, output_tokens: 10, total_tokens: 60, measured_calls: 1, unmeasured_calls: 1, api_equivalent_usd_micros: null },
+    ]
+    render(<AccountingPanel />)
+
+    expect(screen.getByText(/2 measured turns · 3 worker calls · 1 usage unavailable/)).toBeInTheDocument()
+    const lines = screen.getByLabelText('Usage by worker').querySelectorAll('.aw-chip')
+    expect([...lines].map((line) => line.textContent)).toEqual([
+      'Checkpoints: 500 tokens',
+      'Conversation titles: 60 tokens · 1 unavailable',
+    ])
+    // After the agents, never ahead of them.
+    const agents = screen.getByLabelText('Usage by agent')
+    expect(agents.compareDocumentPosition(screen.getByLabelText('Usage by worker')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keeps the turns-only caption when there are no worker calls', () => {
+    render(<AccountingPanel />)
+    expect(screen.getByText(/2 measured · 1 usage unavailable/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Usage by worker')).toBeNull()
+  })
+
   it('updates or disables the project token budget', () => {
     render(<AccountingPanel />)
     const input = screen.getByLabelText('Project token budget')

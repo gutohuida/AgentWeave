@@ -289,6 +289,12 @@ def _cited(piece: str, line_offset: int, source_id: str, draft: FactDraft) -> Op
     return citations
 
 
+def initiator_for(trigger: str) -> str:
+    """Operator work only when the operator pressed Distil; an upload's own distillation and the
+    contradiction check after it are autonomous, and pause on a spent budget (F240)."""
+    return "operator" if trigger == REQUESTED else "autonomous"
+
+
 async def distil(plan: Plan, *, trigger: str) -> int:
     """Distil the planned source, piece by piece. Returns the number of facts stored."""
     source_id = plan.source["id"]
@@ -338,7 +344,11 @@ async def distil(plan: Plan, *, trigger: str) -> int:
             )
             # Only what is new is compared: a kept fact was checked when it was first stored, and
             # checking it again would record its resolved contradictions a second time.
-            await _check(plan, [fact_id for fact_id in stored_ids if fact_id not in kept])
+            await _check(
+                plan,
+                [fact_id for fact_id in stored_ids if fact_id not in kept],
+                initiator=initiator_for(trigger),
+            )
     return len(stored_ids)
 
 
@@ -366,6 +376,7 @@ async def _transcribe(plan: Plan, *, trigger: str) -> Optional[str]:
             runner_id=plan.runner_id,
             cwd=folder,
             reading=True,
+            initiator=initiator_for(trigger),
         )
     if not result.ok or not isinstance(result.parsed, Transcribed):
         outcome, detail = "failed", f"reading the {word}: {result.error or result.outcome}"
@@ -427,7 +438,7 @@ def _lines_of(facts: List[Dict[str, Any]]) -> str:
     return "\n".join(f"{fact['id']}: {' '.join(fact['claim'].split())}" for fact in facts)
 
 
-async def _check(plan: Plan, stored_ids: List[str]) -> None:
+async def _check(plan: Plan, stored_ids: List[str], *, initiator: str) -> None:
     """Compare the facts just stored with other sources' facts, as one spawn and one firing."""
     source_id = plan.source["id"]
     everything = await asyncio.to_thread(
@@ -447,6 +458,7 @@ async def _check(plan: Plan, stored_ids: List[str]) -> None:
         cli=plan.cli,
         model=plan.model,
         runner_id=plan.runner_id,
+        initiator=initiator,
     )
     compared = (
         f"compared with {len(sent)} facts of other sources, {left_out} left out "
@@ -540,6 +552,7 @@ async def _distil_piece(
         cli=plan.cli,
         model=plan.model,
         runner_id=plan.runner_id,
+        initiator=initiator_for(trigger),
     )
     stored: List[str] = []
     dropped = 0

@@ -1975,6 +1975,9 @@ WORKER_OUTCOMES = (
     "timeout",
     "unparseable",
     "schema_invalid",
+    # An autonomous call not spawned because the project's token budget is spent
+    # (`worker-spend-counts-against-the-budget`, F240).
+    "budget_exhausted",
 )
 
 
@@ -2014,6 +2017,9 @@ class WorkerInvocation(Base):
     cache_write_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     reasoning_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     cost_usd_micros: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # The call's tokens normalised as a turn's are (`WorkerUsage.normalised_total`): what joins the
+    # project total and the token budget (F240). Null when the call reported no token count.
+    total_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # A Copilot one-shot call's credit charge (a-copilot-run-shows-its-credits, design D5).
     # Nullable: not every worker call is a Copilot call, and a non-Copilot one reports nothing.
     ai_nano_aiu: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)

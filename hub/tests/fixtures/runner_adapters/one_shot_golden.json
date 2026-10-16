@@ -96,6 +96,8 @@
       "--tools",
       "",
       "--strict-mcp-config",
+      "--output-format",
+      "json",
       "-p",
       "please check \\@notes.md for context"
     ]
@@ -113,6 +115,8 @@
       "--tools",
       "",
       "--strict-mcp-config",
+      "--output-format",
+      "json",
       "--model",
       "test-model-x",
       "-p",
@@ -219,6 +223,7 @@
       "codex",
       "exec",
       "--skip-git-repo-check",
+      "--json",
       "--sandbox",
       "read-only",
       "please check \\@notes.md for context"
@@ -236,6 +241,7 @@
       "codex",
       "exec",
       "--skip-git-repo-check",
+      "--json",
       "--sandbox",
       "read-only",
       "--model",

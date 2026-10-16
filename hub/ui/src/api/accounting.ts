@@ -63,9 +63,26 @@ export interface TurnUsage {
   premium_requests?: number | null
 }
 
+/** What the Hub spent for the project outside the turns, one line per worker kind (F240):
+ *  checkpoints, their probes, conversation titles, the vault jobs. Its tokens are already in
+ *  `project` and `budget`; the agents' figures stay turns only. */
+export interface WorkerUsageLine {
+  kind: string
+  input_tokens: number | null
+  output_tokens: number | null
+  total_tokens: number | null
+  /** Calls that reported a token count. */
+  measured_calls: number
+  /** Calls that ran and reported none. A call that never ran is neither. */
+  unmeasured_calls: number
+  api_equivalent_usd_micros: number | null
+}
+
 export interface AccountingSnapshot {
   project: UsageSummary
   agents: AgentUsageSummary[]
+  /** Absent from a Hub older than F240. */
+  workers?: WorkerUsageLine[]
   budget: TokenBudgetState
   preferred_display: AccountingDisplay
   recent_turns: TurnUsage[]

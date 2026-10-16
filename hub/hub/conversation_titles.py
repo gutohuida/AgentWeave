@@ -22,7 +22,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-import subprocess
 import time
 from typing import Dict, List, Optional
 
@@ -41,10 +40,8 @@ from .db.models import (
     Runner,
 )
 from .file_mentions import restore_file_mentions
-from .pty_runner import resolve_executable
 from .runner_adapters import get_adapter
 from .runner_provider import damaged_provider, runner_probe_config
-from .subprocess_windows import no_console_kwargs
 from .utils import persist_event
 
 logger = logging.getLogger(__name__)
@@ -52,6 +49,11 @@ logger = logging.getLogger(__name__)
 # How long a title is worth waiting for. It runs after the agent's response has already landed,
 # so nothing is blocked on it; running out just leaves the truncated title in place.
 TITLE_TIMEOUT_SECONDS = 45
+
+#: How a title call is recorded among the worker calls (F240). `worker_invocations.prompt_version`
+#: is required, and the titler's prompt had no version until its calls were counted.
+TITLE_KIND = "conversation_title"
+TITLE_PROMPT_VERSION = "conversation-title/1"
 
 # Many conversations can start at once — a fan-out of delegations, a restored session. Without a
 # bound, each one spawns a process. Two at a time keeps a burst from becoming a fork bomb while
@@ -111,31 +113,14 @@ def title_from_output(output: str) -> str:
     return title_from_message(candidate)
 
 
-def _run_titler(cmd: List[str], cwd: str, env: Optional[Dict[str, str]] = None) -> Optional[str]:
-    """Blocking spawn. Returns None on any failure — this never raises into the caller.
+def _run_titler(cmd: List[str], cwd: str, env: Optional[Dict[str, str]] = None):
+    """Blocking spawn, classified as a worker's is (`worker._Spawn`); never raises into the caller.
 
-    None rather than "": the firing it is recorded as tells a failed spawn from one that printed
-    nothing usable."""
-    try:
-        completed = subprocess.run(  # noqa: S603 — argv list, no shell
-            resolve_executable(cmd),
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=TITLE_TIMEOUT_SECONDS,
-            stdin=subprocess.DEVNULL,
-            env=env,
-            **no_console_kwargs(),
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.debug("conversation titling spawn failed: %s", exc)
-        return None
-    if completed.returncode != 0:
-        logger.debug("conversation titling exited %s", completed.returncode)
-        return None
-    return completed.stdout or ""
+    The worker's own runner since F240, so a title call's outcome (spawn failure, non-zero exit,
+    timeout) is recorded in the same words as every other worker call's."""
+    from .worker import _run_worker_process
+
+    return _run_worker_process(cmd, cwd, TITLE_TIMEOUT_SECONDS, env)
 
 
 async def _excerpt(db, conversation: Conversation) -> str:
@@ -280,7 +265,28 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
             return None
         cwd = str(workspace.root)
 
-    from .worker import one_shot_env, parse_copilot_envelope
+    from .worker import WorkerResult, budget_blocks_autonomy, one_shot_env, record_invocation
+
+    async def _recorded(result) -> None:
+        # Every title call is a worker call, so its tokens join the project total and the budget
+        # like a checkpoint's (F240); the manager firing below stays its job record.
+        await record_invocation(
+            project_id=project_id,
+            kind=TITLE_KIND,
+            prompt_version=TITLE_PROMPT_VERSION,
+            runner_id=runner.id,
+            cli=runner.cli,
+            model=model,
+            conversation_id=conversation_id,
+            result=result,
+        )
+
+    # Always autonomous: nobody asked for this title. At a spent budget it is not spawned and the
+    # truncated title stays, which is already the titler's floor.
+    gated = await budget_blocks_autonomy(project_id)
+    if gated is not None:
+        await _recorded(gated)
+        return None
 
     try:
         cmd = build_title_command(
@@ -297,18 +303,30 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
 
     async with _gate:
         started = time.monotonic()
-        output = await asyncio.to_thread(_run_titler, cmd, cwd, env)
+        spawn = await asyncio.to_thread(_run_titler, cmd, cwd, env)
         duration_ms = int((time.monotonic() - started) * 1000)
-    usage = None
+    output: Optional[str] = None
+    if spawn.outcome == "ok":
+        # Every CLI answers in JSON since F240, so its usage is read like any worker's; titled
+        # from the raw stream, a conversation would be named after a fragment of JSON (R2). An
+        # unparseable envelope titles nothing, the titler's existing floor.
+        answer, envelope_usage, error = get_adapter(runner.cli).parse_one_shot(spawn.stdout)
+        result = WorkerResult(
+            "unparseable" if error is not None else "ok",
+            answer_text=answer,
+            usage=envelope_usage,
+            exit_code=spawn.exit_code,
+            duration_ms=duration_ms,
+            error=error,
+        )
+        output = answer if error is None else None
+    else:
+        result = WorkerResult(
+            spawn.outcome, exit_code=spawn.exit_code, duration_ms=duration_ms, error=spawn.error
+        )
+    await _recorded(result)
+    usage = manager.usage_record(result.usage)
     failed = output is None
-    if runner.cli == "copilot" and output is not None:
-        # `--output-format json` prints JSONL; titled from its last line, every Copilot
-        # conversation would be named after a fragment of JSON (R2). An unparseable envelope
-        # titles nothing, the titler's existing floor.
-        answer, envelope_usage, error = parse_copilot_envelope(output)
-        usage = manager.usage_record(envelope_usage)
-        failed = error is not None
-        output = answer or ""
 
     title = "" if failed else title_from_output(restore_file_mentions(output or ""))
 

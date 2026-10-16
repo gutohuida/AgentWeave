@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import case, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import Project, Run, TurnUsage
+from .db.models import Project, Run, TurnUsage, WorkerInvocation
 from .runner_events import AccountingSample
 from .utils import short_id
 
@@ -311,6 +311,91 @@ def _aggregate_columns() -> tuple[Any, ...]:
 MAX_TOKEN_BUDGET = 2**63 - 1
 
 
+#: Worker outcomes for a call that spawned, so it cost something whether or not it reported usage.
+#: The others (`unsupported_cli`, `unknown_model`, `spawn_failed`, `budget_exhausted`) never ran.
+_SPAWNED_WORKER_OUTCOMES = ("ok", "nonzero_exit", "timeout", "unparseable", "schema_invalid")
+
+
+def _plus(*values: Optional[int]) -> Optional[int]:
+    """The sum of the known values; None only when none is known (unknown is never zero)."""
+    known = [int(value) for value in values if value is not None]
+    return sum(known) if known else None
+
+
+async def _worker_lines(db: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+    """One line per worker kind, ordered by kind (F240): what the Hub spent outside the turns.
+
+    `input_tokens` is normalised as a turn's is (the total less the output, so a Claude worker's
+    cache counts as input), and only a call with a total contributes tokens. A *measured* call has
+    a total; an *unmeasured* one spawned and reported none; a call that never spawned is neither.
+    """
+    measured = WorkerInvocation.total_tokens.is_not(None)
+    unmeasured = WorkerInvocation.total_tokens.is_(None) & WorkerInvocation.outcome.in_(
+        _SPAWNED_WORKER_OUTCOMES
+    )
+    rows = await db.execute(
+        select(
+            WorkerInvocation.kind,
+            func.sum(
+                case(
+                    (
+                        measured,
+                        WorkerInvocation.total_tokens
+                        - func.coalesce(WorkerInvocation.output_tokens, 0),
+                    ),
+                    else_=None,
+                )
+            ).label("input_tokens"),
+            func.sum(case((measured, WorkerInvocation.output_tokens), else_=None)).label(
+                "output_tokens"
+            ),
+            func.sum(WorkerInvocation.total_tokens).label("total_tokens"),
+            func.sum(case((measured, 1), else_=0)).label("measured_calls"),
+            func.sum(case((unmeasured, 1), else_=0)).label("unmeasured_calls"),
+            func.sum(WorkerInvocation.cost_usd_micros).label("api_equivalent_usd_micros"),
+        )
+        .where(WorkerInvocation.project_id == project_id)
+        .group_by(WorkerInvocation.kind)
+        .order_by(WorkerInvocation.kind)
+    )
+    return [
+        {
+            "kind": row.kind,
+            "input_tokens": int(row.input_tokens) if row.input_tokens is not None else None,
+            "output_tokens": int(row.output_tokens) if row.output_tokens is not None else None,
+            "total_tokens": int(row.total_tokens) if row.total_tokens is not None else None,
+            "measured_calls": int(row.measured_calls or 0),
+            "unmeasured_calls": int(row.unmeasured_calls or 0),
+            "api_equivalent_usd_micros": (
+                int(row.api_equivalent_usd_micros)
+                if row.api_equivalent_usd_micros is not None
+                else None
+            ),
+        }
+        for row in rows.all()
+    ]
+
+
+async def used_tokens(db: AsyncSession, project_id: str) -> Optional[int]:
+    """Every token the Hub has spent for the project: measured turns plus worker calls (F240).
+
+    The one figure the budget is held against, read the same by the scheduling hot path, the
+    accounting snapshot and the budget update.
+    """
+    turns = await db.scalar(
+        select(func.sum(TurnUsage.total_tokens)).where(
+            TurnUsage.project_id == project_id,
+            TurnUsage.status == "measured",
+        )
+    )
+    workers = await db.scalar(
+        select(func.sum(WorkerInvocation.total_tokens)).where(
+            WorkerInvocation.project_id == project_id
+        )
+    )
+    return _plus(turns, workers)
+
+
 def budget_state(limit_tokens: Optional[int], used_tokens: Optional[int]) -> Dict[str, Any]:
     used = used_tokens or 0
     return {
@@ -333,6 +418,13 @@ async def accounting_snapshot(
         select(*_aggregate_columns()).where(TurnUsage.project_id == project_id)
     )
     project_summary = _summary_from_row(project_result.one())
+    # The project's figures include what the Hub spent outside the turns (F240); the agents' and a
+    # conversation's stay turns only. `measured_turns` and `unavailable_turns` stay turn counts.
+    workers = await _worker_lines(db, project_id)
+    for figure in ("input_tokens", "output_tokens", "total_tokens", "api_equivalent_usd_micros"):
+        project_summary[figure] = _plus(
+            project_summary[figure], *(line[figure] for line in workers)
+        )
 
     agent_result = await db.execute(
         select(TurnUsage.agent, *_aggregate_columns())
@@ -402,6 +494,7 @@ async def accounting_snapshot(
     return {
         "project": project_summary,
         "agents": agents,
+        "workers": workers,
         "budget": budget_state(project.token_budget, total),
         "preferred_display": preferred_display,
         "recent_turns": recent_turns,
@@ -431,10 +524,4 @@ async def project_budget_state(db: AsyncSession, project_id: str) -> Dict[str, A
     project = await db.get(Project, project_id)
     if project is None:
         raise ValueError(f"project {project_id!r} does not exist")
-    used = await db.scalar(
-        select(func.sum(TurnUsage.total_tokens)).where(
-            TurnUsage.project_id == project_id,
-            TurnUsage.status == "measured",
-        )
-    )
-    return budget_state(project.token_budget, int(used) if used is not None else None)
+    return budget_state(project.token_budget, await used_tokens(db, project_id))

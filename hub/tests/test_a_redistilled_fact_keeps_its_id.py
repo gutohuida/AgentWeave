@@ -123,7 +123,7 @@ async def test_only_new_facts_are_checked_against_the_vault(
 ) -> None:
     checked: list = []
 
-    async def record(_plan, ids) -> None:
+    async def record(_plan, ids, **_kwargs) -> None:
         checked.append(list(ids))
 
     monkeypatch.setattr(distillation, "_check", record)

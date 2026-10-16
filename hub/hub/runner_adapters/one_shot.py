@@ -33,6 +33,29 @@ class WorkerUsage:
     ai_nano_aiu: Optional[int] = None
     premium_requests: Optional[float] = None
 
+    def normalised_total(self, cli: str) -> Optional[int]:
+        """The call's tokens counted as a turn of *cli* counts them (F240), or None when it
+        reported neither input nor output.
+
+        A Claude envelope's `input_tokens` excludes cache (2 input against 47,091 cache reads),
+        and a Claude turn counts cache as input (`runner_parsing`, `cache_is_separate_input`), so
+        a worker does too. Codex already reports its cached input inside `input_tokens`. A Copilot
+        one-shot call reports no tokens at all, only credits. Migration 0129 backfills by this
+        same rule.
+        """
+        if self.input_tokens is None and self.output_tokens is None:
+            return None
+        if cli == "claude":
+            return (
+                (self.input_tokens or 0)
+                + (self.cache_read_tokens or 0)
+                + (self.cache_write_tokens or 0)
+                + (self.output_tokens or 0)
+            )
+        if cli == "codex":
+            return (self.input_tokens or 0) + (self.output_tokens or 0)
+        return None
+
 
 def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
     """The last balanced **top-level** JSON object in *text*, or None.

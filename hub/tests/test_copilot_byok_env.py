@@ -560,11 +560,13 @@ def _capture_worker(monkeypatch) -> list:
 
 
 def _capture_titler(monkeypatch) -> list:
+    from hub.worker import _Spawn
+
     spawns: list = []
 
     def _spawn(cmd, cwd, env=None):
         spawns.append((list(cmd), dict(env or {})))
-        return _copilot_answer("Fix the checkout flake")
+        return _Spawn("ok", stdout=_copilot_answer("Fix the checkout flake"))
 
     monkeypatch.setattr("hub.conversation_titles._run_titler", _spawn)
     return spawns
@@ -835,6 +837,7 @@ async def test_the_worker_refuses_a_model_the_provider_would_not_take(
             cli="copilot",
             model=model,
             runner_id=seat,
+            initiator="operator",
         )
 
     refused = await _work("auto")

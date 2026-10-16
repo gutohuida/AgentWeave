@@ -306,6 +306,12 @@ def _kept(plan: Plan, answer: CheckAnswer) -> List[Dict[str, Any]]:
     return list(kept.values())
 
 
+def initiator_for(trigger: str) -> str:
+    """Operator work only when the operator asked for the check; the check a proposal starts is
+    autonomous, and pauses on a spent budget (F240)."""
+    return "operator" if trigger == REQUESTED else "autonomous"
+
+
 async def check(plan: Plan, *, trigger: str) -> Optional[str]:
     """Spawn the model once on the planned document and record the firing. Answers the outcome,
     or None when there is nothing to compare (no requirement or no fact) and nothing spawned."""
@@ -320,6 +326,7 @@ async def check(plan: Plan, *, trigger: str) -> Optional[str]:
         cli=plan.cli,
         model=plan.model,
         runner_id=plan.runner_id,
+        initiator=initiator_for(trigger),
     )
     compared = f"{len(plan.requirements)} requirements against {len(plan.facts)} facts"
     kept: List[Dict[str, Any]] = []

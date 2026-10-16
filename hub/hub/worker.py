@@ -40,7 +40,7 @@ import os
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 
 from pydantic import BaseModel, ValidationError
 
@@ -68,6 +68,7 @@ from .runner_provider import (
     runner_probe_config,
 )
 from .subprocess_windows import no_console_kwargs
+from .usage_accounting import project_budget_state
 from .utils import short_id
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,7 @@ OUTCOMES = (
     "timeout",
     "unparseable",
     "schema_invalid",
+    "budget_exhausted",
 )
 
 
@@ -266,7 +268,30 @@ def _run_worker_process(
     return _Spawn("ok", stdout=completed.stdout or "", exit_code=0)
 
 
-async def _record(
+#: Who asked for a worker call (F240). An operator's call always runs; an autonomous one is not
+#: spawned while the project's token budget is spent, as an autonomous turn is not.
+Initiator = Literal["operator", "autonomous"]
+
+BUDGET_EXHAUSTED_REASON = (
+    "the project's token budget is exhausted; autonomous spending is paused until it is raised"
+)
+
+
+async def budget_blocks_autonomy(project_id: str) -> Optional[WorkerResult]:
+    """The result an autonomous call ends with instead of spawning, or None when it may spawn.
+
+    Fails closed: a budget that cannot be read does not authorise autonomous spend, since that
+    spend is exactly what F240 found escaping the budget, and the operator's path is never gated.
+    """
+    try:
+        async with async_session_factory() as db:
+            exhausted = (await project_budget_state(db, project_id))["exhausted"]
+    except Exception as exc:  # noqa: BLE001 — callers never raise; the row says why
+        return WorkerResult("spawn_failed", error=f"could not read the project's budget: {exc}")
+    return WorkerResult("budget_exhausted", error=BUDGET_EXHAUSTED_REASON) if exhausted else None
+
+
+async def record_invocation(
     *,
     project_id: str,
     kind: str,
@@ -300,6 +325,7 @@ async def _record(
                     cache_write_tokens=result.usage.cache_write_tokens,
                     reasoning_tokens=result.usage.reasoning_tokens,
                     cost_usd_micros=result.usage.cost_usd_micros,
+                    total_tokens=result.usage.normalised_total(cli),
                     ai_nano_aiu=result.usage.ai_nano_aiu,
                     premium_requests=result.usage.premium_requests,
                     error=result.error,
@@ -326,6 +352,7 @@ async def run_worker(
     timeout_seconds: int = WORKER_TIMEOUT_SECONDS,
     cwd: Optional[str] = None,
     reading: bool = False,
+    initiator: Initiator,
 ) -> WorkerResult:
     """Run one worker invocation and record it. Returns an outcome; never raises.
 
@@ -336,14 +363,20 @@ async def run_worker(
 
     *reading* spawns the adapter's `read_one_shot`, which may Read files in *cwd* and nothing
     else; the caller puts the one file to read there (`distillation.transcribe`).
+
+    *initiator* has no default, so that no caller inherits a choice it did not make: an
+    `"autonomous"` call is not spawned while the project's token budget is spent (F240).
     """
+    gated = await budget_blocks_autonomy(project_id) if initiator == "autonomous" else None
     try:
         config: Optional[Dict[str, Any]] = await _runner_config(runner_id, model)
     except Exception:  # noqa: BLE001 — this function never raises; the row decides the env
         logger.warning("worker could not read runner %s", runner_id, exc_info=True)
         config = None
     provider_config = (config or {}).get("provider_config")
-    if config is None:
+    if gated is not None:
+        result = gated
+    elif config is None:
         result = WorkerResult("spawn_failed", error="the runner's record could not be read")
     elif damaged_provider(provider_config):
         # No launchability check precedes a one-shot, so this is it: a damaged provider is not
@@ -402,7 +435,7 @@ async def run_worker(
             result = _interpret(spawn, cli, output_model, duration_ms)
         worker_dir_context.cleanup()
 
-    invocation_id = await _record(
+    invocation_id = await record_invocation(
         project_id=project_id,
         kind=kind,
         prompt_version=prompt_version,

@@ -14,6 +14,9 @@ import hub.conversation_titles as conversation_titles
 from hub import manager
 from hub.db.engine import async_session_factory
 from hub.db.models import EventLog, Run
+from hub.worker import _Spawn
+
+from .test_title_generation import _answered
 
 BASE = "/api/v1/projects/proj-test"
 JOB = "conversation-titles"
@@ -270,7 +273,7 @@ def _fake_spawn(monkeypatch, outputs: dict, calls: list) -> None:
     def _run(cmd, cwd, env=None):
         calls.append(cmd)
         prompt = cmd[-1]
-        return next(out for word, out in outputs.items() if word in prompt)
+        return _answered(next(out for word, out in outputs.items() if word in prompt))
 
     monkeypatch.setattr(conversation_titles, "_run_titler", _run)
 
@@ -291,7 +294,9 @@ async def test_each_spawn_records_one_firing_and_no_run(
         headers=auth_headers,
     )
     calls: list = []
-    _fake_spawn(monkeypatch, {"checkout": "Checkout flake investigation", "Silent": ""}, calls)
+    # "Empty" is an answer with nothing usable in it; an answer with no text at all is an
+    # unparseable envelope since the title call answers in JSON (F240), and fails.
+    _fake_spawn(monkeypatch, {"checkout": "Checkout flake investigation", "Silent": '""'}, calls)
 
     async with async_session_factory() as session:
         runs_before = len((await session.execute(select(Run.id))).scalars().all())
@@ -331,7 +336,8 @@ async def test_each_spawn_records_one_firing_and_no_run(
         assert data["cli"] == "claude"
         assert data["model"] == "claude-haiku-4-5-20251001"
         assert isinstance(data["duration_ms"], int)
-        assert data["usage"] is None
+        # A Claude title call answers in JSON since F240, so its usage is known and counted.
+        assert data["usage"] == {"input_tokens": 3, "output_tokens": 5}
     assert firings[0][1]["subject"] == {"conversation_id": written}
     assert firings[0][1]["detail"] == "Checkout flake investigation"
     assert firings[1][1]["subject"] == {"conversation_id": empty}
@@ -349,7 +355,11 @@ async def test_a_failed_spawn_is_recorded_as_failed(
     conversation_id = await _conversation(app, auth_headers)
     await bind_runner("offline", cli="claude")
     await app.patch(f"{BASE}/manager/jobs/{JOB}", json={"enabled": True}, headers=auth_headers)
-    monkeypatch.setattr(conversation_titles, "_run_titler", lambda cmd, cwd, env=None: None)
+    monkeypatch.setattr(
+        conversation_titles,
+        "_run_titler",
+        lambda cmd, cwd, env=None: _Spawn("nonzero_exit", exit_code=1, error="exit 1"),
+    )
 
     await conversation_titles.generate_conversation_title(
         project_id="proj-test", conversation_id=conversation_id

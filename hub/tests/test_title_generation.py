@@ -5,6 +5,8 @@ and what happens when it doesn't work. That a real `claude`/`codex` invocation p
 title is a live check (tasks 11.9), not something a mock can establish.
 """
 
+import json
+
 import pytest
 
 import hub.conversation_titles as conversation_titles
@@ -13,6 +15,7 @@ from hub.conversation_titles import build_title_command, title_from_output
 from hub.conversations import get_conversation_by_id
 from hub.db.engine import async_session_factory
 from hub.runner_adapters import get_adapter
+from hub.worker import _Spawn
 
 # ---------------------------------------------------------------------------
 # The pure pieces
@@ -28,20 +31,31 @@ def test_claude_command_is_a_one_shot_prompt() -> None:
         "--tools",
         "",
         "--strict-mcp-config",
+        "--output-format",
+        "json",
         "--model",
         "claude-opus-5",
         "-p",
         "P",
     ]
-    # None of an agent turn's apparatus: no streaming JSON, no MCP server, no permission mode.
-    assert "--output-format" not in cmd
+    # One JSON envelope, so the call's usage is counted (F240); none of an agent turn's
+    # apparatus: no streaming JSON, no MCP server, no permission mode.
+    assert "stream-json" not in cmd
     assert "--mcp-config" not in cmd
     assert "--permission-mode" not in cmd
 
 
 def test_codex_command_is_a_one_shot_prompt() -> None:
     cmd = build_title_command(cli="codex", model=None, prompt="P")
-    assert cmd == ["codex", "exec", "--skip-git-repo-check", "--sandbox", "read-only", "P"]
+    assert cmd == [
+        "codex",
+        "exec",
+        "--skip-git-repo-check",
+        "--json",
+        "--sandbox",
+        "read-only",
+        "P",
+    ]
 
 
 def test_an_unsupported_cli_builds_nothing() -> None:
@@ -122,11 +136,27 @@ async def _title(conversation_id: str):
         return conversation.title, conversation.title_set_by_operator
 
 
+def _answered(text: str) -> _Spawn:
+    """What a Claude title call prints since F240: one JSON envelope carrying the answer."""
+    envelope = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": text,
+        "usage": {"input_tokens": 3, "output_tokens": 5},
+    }
+    return _Spawn("ok", stdout=json.dumps(envelope))
+
+
 def _fake_spawn(monkeypatch, output: str, calls=None):
+    """*output* is the answer the model gives, or None for a crash, non-zero exit or timeout."""
+
     def _run(cmd, cwd, env=None):
         if calls is not None:
             calls.append(cmd)
-        return output
+        if output is None:
+            return _Spawn("nonzero_exit", exit_code=1, error="exit 1: no stderr")
+        return _answered(output)
 
     monkeypatch.setattr(conversation_titles, "_run_titler", _run)
 
@@ -260,7 +290,7 @@ async def test_a_rename_during_generation_wins(app, auth_headers, bind_runner, m
                 await session.commit()
 
         asyncio.run(_rename())
-        return "Something the model preferred"
+        return _answered("Something the model preferred")
 
     monkeypatch.setattr(conversation_titles, "_run_titler", _run_and_rename)
 
@@ -392,7 +422,7 @@ async def test_the_titler_runs_in_the_projects_own_directory(
 
     def _run(cmd, cwd, env=None):
         directories.append(cwd)
-        return "Checkout flake investigation"
+        return _answered("Checkout flake investigation")
 
     monkeypatch.setattr(conversation_titles, "_run_titler", _run)
     await conversation_titles.generate_conversation_title(
@@ -473,7 +503,7 @@ async def test_a_first_reply_arriving_later_is_worth_one_more_title(
 
     def _run(cmd, cwd, env=None):
         prompts.append(cmd[-1])
-        return f"Title {len(prompts)}"
+        return _answered(f"Title {len(prompts)}")
 
     monkeypatch.setattr(conversation_titles, "_run_titler", _run)
 
@@ -520,7 +550,7 @@ async def test_a_later_runs_text_does_not_become_the_first_reply(
 
     def _run(cmd, cwd, env=None):
         prompts.append(cmd[-1])
-        return f"Title {len(prompts)}"
+        return _answered(f"Title {len(prompts)}")
 
     monkeypatch.setattr(conversation_titles, "_run_titler", _run)
 
@@ -577,7 +607,7 @@ async def test_a_failed_generation_is_retried_on_the_next_turn(
 
     def _run(cmd, cwd, env=None):
         calls.append(cmd)
-        return next(outputs)
+        return _answered(next(outputs))
 
     monkeypatch.setattr(conversation_titles, "_run_titler", _run)
 
@@ -689,7 +719,7 @@ async def test_a_copilot_conversation_is_titled_from_the_answer_not_the_json(
 
     def _run(cmd, cwd, env=None):
         seen["env"] = env
-        return _ONESHOT.read_text(encoding="utf-8")
+        return _Spawn("ok", stdout=_ONESHOT.read_text(encoding="utf-8"))
 
     monkeypatch.setattr(conversation_titles, "_run_titler", _run)
     result = await conversation_titles.generate_conversation_title(

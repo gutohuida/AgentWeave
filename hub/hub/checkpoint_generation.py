@@ -49,7 +49,7 @@ from .db.models import (
     Conversation,
     InboundQueueEntry,
 )
-from .worker import run_worker
+from .worker import Initiator, run_worker
 
 logger = logging.getLogger(__name__)
 
@@ -529,7 +529,11 @@ async def generate_checkpoint(
     in every checkpoint this product has ever produced. The unit tests passed a worktree straight
     into `compute_envelope` and so could not see it. Resolving in the one place that always has a
     conversation removes the way to forget: a caller cannot omit an argument that no longer exists.
+
+    Only the operator's own press is operator work; a context-pressure or task-completion
+    checkpoint is autonomous, and so is its probe, so neither spends past a spent budget (F240).
     """
+    initiator: Initiator = "operator" if trigger == "operator" else "autonomous"
     anchor = await latest_checkpoint(db, conversation.id)
     loop = await loop_for_conversation(db, conversation.id)
     repo_root = await _repo_root_for(db, conversation)
@@ -575,6 +579,7 @@ async def generate_checkpoint(
         model=model,
         runner_id=runner_id,
         conversation_id=conversation.id,
+        initiator=initiator,
     )
 
     body = (
@@ -622,6 +627,7 @@ async def generate_checkpoint(
             cli=cli,
             model=model,
             runner_id=runner_id,
+            initiator=initiator,
         )
     return checkpoint
 
@@ -634,6 +640,7 @@ async def probe_checkpoint(
     cli: str,
     model: Optional[str] = None,
     runner_id: Optional[str] = None,
+    initiator: Initiator,
 ) -> Checkpoint:
     """Read the checkpoint blind, answer what the Hub can already verify, and grade it.
 
@@ -659,6 +666,7 @@ async def probe_checkpoint(
         model=model,
         runner_id=runner_id,
         conversation_id=checkpoint.conversation_id,
+        initiator=initiator,
     )
 
     if not result.ok or result.parsed is None:

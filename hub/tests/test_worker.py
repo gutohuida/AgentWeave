@@ -284,6 +284,8 @@ async def _run(**overrides):
         "model": "claude-haiku-4-5-20251001",
         "runner_id": "run-abc",
         "conversation_id": "conv-1",
+        # The operator's call: never gated, so these tests see the spawn (F240's gate has its own).
+        "initiator": "operator",
     }
     kwargs.update(overrides)
     return await run_worker(**kwargs)

@@ -296,7 +296,8 @@ class CodexAdapter(RunnerAdapter):
             if model:
                 cmd += ["--model", model]
             return cmd + [neutralise_file_mentions(prompt)]
-        cmd = [self.binary, "exec", "--skip-git-repo-check", "--sandbox", "read-only"]
+        # JSON too, so the title call's usage is read and counted (F240).
+        cmd = [self.binary, "exec", "--skip-git-repo-check", "--json", "--sandbox", "read-only"]
         if model:
             cmd += ["--model", model]
         return cmd + [neutralise_file_mentions(prompt)]

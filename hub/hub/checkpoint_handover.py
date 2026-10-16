@@ -54,6 +54,7 @@ from .db.models import (
 )
 from .runner_provider import one_shot_model
 from .sse import sse_manager
+from .usage_accounting import project_budget_state
 
 logger = logging.getLogger(__name__)
 
@@ -250,6 +251,18 @@ async def consider_handover(run_id: str) -> Optional[str]:
         # turned checkpointing off for an agent did not mean "except at handovers".
         if not resolve_policy(agent, project).enabled:
             _declined(run_id, "checkpointing is off for this agent and project")
+            return None
+
+        # A handover is autonomous spend, so a spent budget declines it here, before anything is
+        # generated or consumed (F240, design D3a): the author's note stays pending rather than
+        # being folded into an `unwritten` checkpoint with no body. Fails closed.
+        try:
+            spent = (await project_budget_state(db, run.project_id))["exhausted"]
+        except Exception:  # noqa: BLE001 — never raises into a caller
+            logger.warning("could not read %s's token budget", run.project_id, exc_info=True)
+            spent = True
+        if spent:
+            _declined(run_id, "the project's token budget is exhausted")
             return None
 
         cli, model, runner_id = await _resolve_runner(db, project)

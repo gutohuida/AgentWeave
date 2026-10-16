@@ -22,6 +22,20 @@ function creditsLine(nano: number | null | undefined, premium: number | null | u
   return `${credits}${requests} (Copilot) — not counted against the budget`
 }
 
+/** A worker kind as the operator knows it; an unknown kind (a future job) shows as recorded. */
+const WORKER_LABELS: Record<string, string> = {
+  checkpoint: 'Checkpoints',
+  checkpoint_probe: 'Checkpoint probes',
+  conversation_title: 'Conversation titles',
+  'vault-distillation': 'Vault distillation',
+  'vault-reports': 'Vault reports',
+  'spec-vault-check': 'Spec checks',
+}
+
+function workerLabel(kind: string): string {
+  return WORKER_LABELS[kind] ?? kind
+}
+
 function PreferredDisplay() {
   const { data } = useAccounting()
   if (!data) return null
@@ -81,6 +95,10 @@ export function AccountingPanel() {
     : null
 
   const projectCredits = creditsLine(data.project.ai_nano_aiu, data.project.premium_requests)
+  const workers = data.workers ?? []
+  // The headline includes the worker calls (F240), so the caption says so; without them it would
+  // read as if the measured turns alone made the total.
+  const workerCalls = workers.reduce((sum, line) => sum + line.measured_calls, 0)
 
   return (
     <SettingsSection title="Budgets" description="Token usage for this project and its agents, and the limit that pauses autonomous turns.">
@@ -88,7 +106,9 @@ export function AccountingPanel() {
         <div className="elevation-resting rounded-lg p-4">
         <div className="flex items-center gap-2 text-xl font-semibold tabular-nums"><Icon name="bar_chart" size={18} style={{ color: 'var(--text-3)' }} />{formatTokens(data.project.total_tokens)}</div>
         <div style={{ color: 'var(--text-3)', fontSize: 11, marginTop: 2 }}>
-          {data.project.measured_turns} measured · {data.project.unavailable_turns} usage unavailable
+          {workerCalls > 0
+            ? `${data.project.measured_turns} measured turns · ${workerCalls} worker call${workerCalls === 1 ? '' : 's'} · ${data.project.unavailable_turns} usage unavailable`
+            : `${data.project.measured_turns} measured · ${data.project.unavailable_turns} usage unavailable`}
         </div>
         {projectCredits && (
           <div style={{ color: 'var(--text-3)', fontSize: 11, marginTop: 2 }}>{projectCredits}</div>
@@ -112,6 +132,21 @@ export function AccountingPanel() {
                 {agent.agent}: {formatTokens(agent.total_tokens)}
                 {formatAiCredits(agent.ai_nano_aiu) ? ` · ${formatAiCredits(agent.ai_nano_aiu)}` : ''}
                 {agent.unavailable_turns > 0 ? ` · ${agent.unavailable_turns} unavailable` : ''}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {workers.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2" aria-label="Usage by worker">
+            {workers.map((line) => (
+              <span
+                key={line.kind}
+                className="aw-chip tabular-nums"
+                style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}
+              >
+                {workerLabel(line.kind)}: {formatTokens(line.total_tokens)}
+                {line.unmeasured_calls > 0 ? ` · ${line.unmeasured_calls} unavailable` : ''}
               </span>
             ))}
           </div>

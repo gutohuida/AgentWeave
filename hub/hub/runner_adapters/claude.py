@@ -168,7 +168,8 @@ class ClaudeAdapter(RunnerAdapter):
         if purpose == "worker":
             cmd = [self.binary, "--tools", "", "--strict-mcp-config", "--output-format", "json"]
         else:
-            cmd = [self.binary, "--tools", "", "--strict-mcp-config"]
+            # JSON too, so the title call's usage is read and counted (F240).
+            cmd = [self.binary, "--tools", "", "--strict-mcp-config", "--output-format", "json"]
         if model:
             cmd += ["--model", model]
         return cmd + ["-p", neutralise_file_mentions(prompt)]
