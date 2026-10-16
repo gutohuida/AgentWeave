@@ -346,7 +346,8 @@ async def test_each_report_is_one_firing_and_a_disabled_job_spawns_nothing(
     assert first["prompt_version"] == "vault-reports-4"
 
     firings = await _firings()
-    assert [f["outcome"] for f in firings] == ["written", "empty", "written", "failed"]
+    # F641: a report the model answered is "answered", not "empty" -- the model produced a verdict.
+    assert [f["outcome"] for f in firings] == ["written", "answered", "written", "failed"]
     assert all(f["trigger"] == "report_filed" for f in firings)
     for firing, report, fact in zip(firings, reports, facts, strict=True):
         assert firing["subject"] == {"report": report["id"], "entry": fact}

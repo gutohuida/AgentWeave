@@ -642,3 +642,29 @@ async def test_redistilling_drops_open_contradictions_and_keeps_resolved_ones(
     assert limit["id"] not in remaining
     assert remaining[returns["id"]]["status"] == "resolved"
     assert newer["id"]
+
+
+def test_a_side_whose_fact_is_gone_says_so_and_a_private_stub_does_not():
+    """F617: a fact replaced by a re-distil and a private fact held elsewhere both have no claim
+    here, and the card called both "A private fact, held on another machine". Only the Hub knows
+    which is which, so it says so."""
+    from hub.vault import _Fact, _listed_contradiction
+
+    stub = _Fact(
+        {
+            "id": "fct-stubstubstub",
+            "visibility": "private",
+            "sources": [],
+            "created_at": "2026-10-15T00:00:00Z",
+        },
+        "tracked",
+    )
+    listed = _listed_contradiction(
+        {"id": "ctr-gonegonegone", "facts": ["fct-gonegonegone", "fct-stubstubstub"]},
+        {"fct-stubstubstub": stub},
+        {},
+    )
+    sides = {side["id"]: side for side in listed["sides"]}
+    assert sides["fct-gonegonegone"]["missing"] is True
+    assert sides["fct-stubstubstub"]["missing"] is False
+    assert sides["fct-stubstubstub"]["claim"] is None

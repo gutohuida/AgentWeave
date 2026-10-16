@@ -186,6 +186,12 @@ export function VaultPage() {
 /** What the list says for a source with no text here. A tracked file is in the repository, so its
  *  text is missing because it has not been transcribed yet or the reading failed, not because
  *  another machine holds it (F591). */
+/** A tracked PDF or image: its file is in the repository whether or not its text has been read,
+ *  so it can be previewed and distilled before it has a transcription (F616). */
+function hasTrackedFile(entry: VaultEntry): boolean {
+  return Boolean(fileKindOf(entry.media_type)) && entry.visibility === 'tracked'
+}
+
 function withoutText(entry: VaultEntry): string {
   if (fileKindOf(entry.media_type) && entry.visibility === 'tracked') {
     return 'No text yet: the file has not been read, or reading it failed'
@@ -326,7 +332,7 @@ function EntryView({
 /** An uploaded PDF in the browser's viewer, or an image, from an object URL; nothing while it loads
  *  or when the Hub has no file to give (the transcription below says what there is). */
 function FileViewer({ entry, kind }: { entry: VaultEntry; kind: 'pdf' | 'image' }) {
-  const file = useVaultFile(entry.id, entry.available)
+  const file = useVaultFile(entry.id, entry.available || hasTrackedFile(entry))
   if (file.error) {
     return (
       <p className="text-xs" style={{ color: 'var(--amber)' }} role="alert">
@@ -362,7 +368,7 @@ function DistilButton({ entry, onDistilling }: { entry: VaultEntry; onDistilling
         size="sm"
         variant="ghost"
         data-testid="vault-distil"
-        disabled={distil.isPending || !entry.available}
+        disabled={distil.isPending || !(entry.available || hasTrackedFile(entry))}
         title="Ask the manager to read this source and write the facts it states"
         onClick={() => distil.mutate(entry.id, { onSuccess: onDistilling })}
       >
@@ -755,7 +761,10 @@ function ContradictionCard({ contradiction }: { contradiction: VaultContradictio
       <ul className="flex flex-col gap-1">
         {sides.map((side) => (
           <li key={side.id} data-testid={`vault-contradiction-side-${side.id}`} className="text-xs">
-            {side.claim ?? `A private fact, held on ${contradiction.holder ?? 'another machine'}`}
+            {side.claim ??
+              (side.missing
+                ? 'A fact no longer in the vault (it was deleted, or replaced when its source was distilled again)'
+                : `A private fact, held on ${contradiction.holder ?? 'another machine'}`)}
             {side.date && <span style={{ color: 'var(--text-3)' }}> · {side.date}</span>}
             {side.presumed && (
               <>

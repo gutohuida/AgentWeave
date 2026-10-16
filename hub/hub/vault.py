@@ -1207,6 +1207,9 @@ def _listed_contradiction(
                 "source": source,
                 "date": _fact_order(fact, records)[0] if fact is not None else None,
                 "presumed": listed["presumed"] == fact_id,
+                # No record and no stub: deleted, or replaced when its source was distilled again
+                # (F617). A private fact held elsewhere has a stub, so it is never "missing".
+                "missing": fact is None,
             }
         )
     listed["sides"] = sides

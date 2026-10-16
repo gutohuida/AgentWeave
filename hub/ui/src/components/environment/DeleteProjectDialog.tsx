@@ -20,6 +20,8 @@ export function DeleteProjectDialog({
   onDeleted: () => void
 }) {
   const [typed, setTyped] = useState('')
+  // On by default (fix-D1): a deleted project's private notes are not left behind unseen.
+  const [removePrivate, setRemovePrivate] = useState(true)
   const panelRef = useRef<HTMLDivElement>(null)
   const deleteProject = useDeleteProject(project?.id ?? '')
   const open = !!project
@@ -27,6 +29,7 @@ export function DeleteProjectDialog({
   useEffect(() => {
     if (!open) return
     setTyped('')
+    setRemovePrivate(true)
     deleteProject.reset()
     // The mutation object changes identity as its state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -41,7 +44,7 @@ export function DeleteProjectDialog({
 
   const submit = () => {
     if (!canDelete) return
-    deleteProject.mutate(undefined, { onSuccess: onDeleted })
+    deleteProject.mutate(removePrivate, { onSuccess: onDeleted })
   }
 
   return (
@@ -74,6 +77,19 @@ export function DeleteProjectDialog({
             className="mt-1 block w-full rounded-md px-3 py-2"
             style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
           />
+        </label>
+
+        <label className="mt-3 flex items-start gap-2 text-xs" style={{ color: 'var(--text-2)' }}>
+          <input
+            type="checkbox"
+            checked={removePrivate}
+            onChange={(event) => setRemovePrivate(event.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            Also remove this project&apos;s private vault entries. They are kept on this machine
+            outside the project folder; untick to keep them.
+          </span>
         </label>
 
         {deleteProject.error && (

@@ -117,6 +117,25 @@ describe('Environment > Manager', () => {
     expect(within(second).getByText(/written/i)).toBeInTheDocument()
   })
 
+  it('badges an answered report and opens what the model answered (F641, F581)', async () => {
+    const answered = {
+      ...FIRINGS[1], id: 'evt-3', job: 'vault-reports', trigger: 'report_filed', subject: { report: 'r-1' },
+      outcome: 'answered', detail: 'answered: the entry stands',
+      answer: '{"outcome": "answered", "answer": "The source says 437 euros."}',
+    }
+    manager = (url) => {
+      if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [JOB] } }
+      if (url.includes('/manager/activity')) return { status: 200, body: { firings: [answered] } }
+      return undefined
+    }
+    render(<ManagerPanel />, { wrapper })
+    const row = await screen.findByTestId('manager-firing-0')
+    expect(within(row).getByText('answered')).toBeInTheDocument()
+    const reply = within(row).getByText('What the model answered')
+    expect(reply.closest('details')).not.toHaveAttribute('open')
+    expect(within(row).getByText(/The source says 437 euros/)).toBeInTheDocument()
+  })
+
   it('words the empty runner choice by what the job does with none (F590)', async () => {
     const vault = {
       ...JOB, key: 'vault-distillation', title: 'Vault distillation', needs_runner: true,

@@ -112,6 +112,21 @@ describe('the Vault tab, image and PDF sources', () => {
     expect(screen.getByTestId('vault-entry-src-privprivpriv')).toHaveTextContent('Held on colleague-pc')
   })
 
+  it('offers Distil and the preview for a tracked file with no text yet (F616)', async () => {
+    const unread = { ...PDF, available: false, opening: null }
+    const base = vault
+    vault = (url, init) =>
+      url.endsWith('/vault/map')
+        ? { status: 200, body: { entries: [unread] } }
+        : url.includes('/vault/entries/src-pdfpdfpdfpdf')
+          ? page(unread, null, 'This PDF has not been read yet.')
+          : base(url, init)
+    render(<VaultPage />, { wrapper })
+    fireEvent.click(await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf'))
+    expect(await screen.findByTestId('vault-distil')).toBeEnabled()
+    expect(await screen.findByTestId('vault-file-pdf')).toBeInTheDocument()
+  })
+
   it('shows a PDF in an embedded viewer from a blob URL, above its transcription', async () => {
     render(<VaultPage />, { wrapper })
     fireEvent.click(await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf'))

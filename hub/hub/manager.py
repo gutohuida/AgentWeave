@@ -29,9 +29,10 @@ logger = logging.getLogger(__name__)
 
 FIRED_EVENT = "manager_job_fired"
 
-# The outcomes a firing can record: the job's product was stored, the model produced nothing
-# usable, or the spawn itself failed (a non-zero exit, a timeout, an error the CLI reported).
-OUTCOMES = ("written", "empty", "failed")
+# The outcomes a firing can record: the job's product was stored, the model answered and nothing
+# needed storing (a report whose entry stands, F641), the model produced nothing usable, or the
+# spawn itself failed (a non-zero exit, a timeout, an error the CLI reported).
+OUTCOMES = ("written", "answered", "empty", "failed")
 
 TITLES = "conversation-titles"
 DISTILLATION = "vault-distillation"

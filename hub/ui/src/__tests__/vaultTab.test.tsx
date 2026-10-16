@@ -252,6 +252,22 @@ describe('the Vault tab', () => {
     }
   }
 
+  it('says a side whose fact is gone is gone, not held on another machine (F617)', async () => {
+    vault = withContradictions([
+      {
+        ...RESOLVED_CTR,
+        sides: [
+          RESOLVED_CTR.sides[0],
+          { id: 'fct-gonegonegone', claim: null, source: null, date: null, presumed: false, missing: true },
+        ],
+      },
+    ])
+    render(<VaultPage />, { wrapper })
+    const side = await screen.findByTestId('vault-contradiction-side-fct-gonegonegone')
+    expect(side).toHaveTextContent('no longer in the vault')
+    expect(side).not.toHaveTextContent('another machine')
+  })
+
   it('lists an open contradiction with both claims, their dates, and the presumed side', async () => {
     vault = withContradictions([OPEN_CTR, RESOLVED_CTR])
     render(<VaultPage />, { wrapper })

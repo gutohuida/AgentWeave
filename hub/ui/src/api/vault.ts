@@ -121,11 +121,13 @@ export interface VaultSourceInput {
 /** One side of a contradiction, with the claim and date the Hub found for it. */
 export interface ContradictionSide {
   id: string
-  /** Null when the fact's record is held on another machine. */
+  /** Null when the fact's record is held on another machine, or the fact is gone. */
   claim: string | null
   source: string | null
   date: string | null
   presumed: boolean
+  /** The fact is no longer in the vault: deleted, or replaced by a re-distil (F617). */
+  missing?: boolean
 }
 
 /** One contradiction as `GET /vault/contradictions` lists it, open ones first. */

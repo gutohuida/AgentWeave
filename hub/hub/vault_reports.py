@@ -198,7 +198,7 @@ def _apply(plan: Plan, answer: ReportAnswer) -> Tuple[str, str]:
 
     if answer.outcome == "answered":
         settle("answered")
-        return "empty", "answered: the entry stands"
+        return "answered", "answered: the entry stands"
     if answer.outcome == "disputed":
         settle("referred")
         return "written", "referred to the operator: the model could not settle it"

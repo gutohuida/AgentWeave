@@ -36,7 +36,19 @@ describe('DeleteProjectDialog — 5.1 type-to-confirm gating', () => {
 
     fireEvent.click(deleteButton)
     expect(mutate).toHaveBeenCalledTimes(1)
-    expect(mutate).toHaveBeenCalledWith(undefined, { onSuccess: onDeleted })
+    // Private vault entries go with the project unless the operator unticks it (fix-D1).
+    expect(mutate).toHaveBeenCalledWith(true, { onSuccess: onDeleted })
+  })
+
+  it('keeps the private vault entries when the operator unticks the box (fix-D1)', () => {
+    const onDeleted = vi.fn()
+    render(<DeleteProjectDialog project={project} onClose={vi.fn()} onDeleted={onDeleted} />)
+    const box = screen.getByLabelText(/Also remove this project's private vault entries/)
+    expect(box).toBeChecked()
+    fireEvent.click(box)
+    fireEvent.change(screen.getByLabelText('Project name to confirm'), { target: { value: 'Website' } })
+    fireEvent.click(screen.getByText('Delete project'))
+    expect(mutate).toHaveBeenCalledWith(false, { onSuccess: onDeleted })
   })
 
   it('rejects a partial or case-mismatched name — D7 is case-sensitive', () => {

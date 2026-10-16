@@ -190,7 +190,12 @@ export function useRelocateProject(projectId: string) {
 export function useDeleteProject(projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => fetchWithAuth(`/api/v1/projects/${projectId}`, { method: 'DELETE' }).then(() => undefined),
+    // *removePrivate*: also delete this project's private vault entries, held outside its folder
+    // (fix-D1). The folder itself is never touched.
+    mutationFn: (removePrivate: boolean = false) =>
+      fetchWithAuth(`/api/v1/projects/${projectId}?remove_private=${removePrivate}`, {
+        method: 'DELETE',
+      }).then(() => undefined),
     onSuccess: () => {
       let remaining: ProjectSummary[] = []
       queryClient.setQueryData<ProjectSummary[]>(['projects'], (current = []) => {

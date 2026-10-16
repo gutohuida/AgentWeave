@@ -30,10 +30,12 @@ export interface ManagerFiring {
   runner_id: string
   cli: string
   model: string | null
-  outcome: 'written' | 'empty' | 'failed'
+  outcome: 'written' | 'answered' | 'empty' | 'failed'
   detail: string | null
   duration_ms: number
   usage: Record<string, number> | null
+  /** What the model answered, cut at 8,000 characters (F581); absent on an older Hub. */
+  answer?: string | null
 }
 
 /** True when the Hub predates the manager. A committed bundle reaches the operator's app before

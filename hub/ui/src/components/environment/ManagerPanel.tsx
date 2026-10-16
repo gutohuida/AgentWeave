@@ -179,6 +179,8 @@ function JobRow({
 
 const OUTCOME_VARIANT: Record<ManagerFiring['outcome'], BadgeVariant> = {
   written: 'success',
+  // A verdict, not a failure and not nothing: the report was answered and its entry stands (F641).
+  answered: 'success',
   empty: 'default',
   failed: 'danger',
 }
@@ -242,6 +244,20 @@ function Activity({
             )}
             {firing.detail && (
               <span className="basis-full" style={{ color: 'var(--text)' }}>{firing.detail}</span>
+            )}
+            {firing.answer && (
+              // Kept so a judgement can be read afterwards (F581); closed, since it runs long.
+              <details className="basis-full">
+                <summary className="cursor-pointer" style={{ color: 'var(--text-3)' }}>
+                  What the model answered
+                </summary>
+                <pre
+                  className="mt-1 whitespace-pre-wrap break-words rounded px-2 py-1 font-mono text-[11px]"
+                  style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+                >
+                  {firing.answer}
+                </pre>
+              </details>
             )}
           </li>
         )
