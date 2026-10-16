@@ -39,7 +39,7 @@ let specListResult: {
   data: {
     specs: { path: string; state?: string; title?: string; kind?: string }[]
     home: string | null
-    diagnostics: { code: string; path?: string | null; field?: string | null }[]
+    diagnostics: { code: string; path?: string | null; field?: string | null; message?: string | null }[]
     missing: { path: string }[]
   }
   isLoading: boolean
@@ -156,6 +156,16 @@ describe('the document panel — manifest drift report', () => {
     expect(screen.queryByText(/unfiled_document/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('1 spec manifest drift item'))
     expect(screen.getByText(/unfiled_document — spec\/extra.json/)).toBeInTheDocument()
+  })
+
+  it('prints the diagnostic as the Hub words it, not as a code (F643)', () => {
+    specListResult.data.diagnostics = [
+      { code: 'unfiled_document', path: 'spec/extra.json', message: 'spec/extra.json is on disk but not in the index.' },
+    ]
+    renderPanel()
+    fireEvent.click(screen.getByText('1 spec manifest drift item'))
+    expect(screen.getByText('spec/extra.json is on disk but not in the index.')).toBeInTheDocument()
+    expect(screen.queryByText(/unfiled_document/)).not.toBeInTheDocument()
   })
 
   it('reports drift without offering to repair it', () => {

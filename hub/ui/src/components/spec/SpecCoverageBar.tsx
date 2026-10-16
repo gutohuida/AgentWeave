@@ -166,6 +166,13 @@ export function SpecCoverageBar({ path, onOpenTasks }: SpecCoverageBarProps) {
                 </a>{' '}
                 — {state?.label ?? entry.state}
                 {integration ? ` · ${integration}` : ''}
+                {/* Verified by the change folded into this capability, not by evidence of its own
+                    (F593): say which, or the state reads as if this requirement were driven. */}
+                {entry.served_by
+                  ? ` · served by ${entry.served_by.identifier}${
+                      entry.served_by.document_path ? ` of ${entry.served_by.document_path}` : ' of a folded change'
+                    }`
+                  : ''}
                 {entry.linked_task_ids.length > 0 && (
                   <>
                     {' · '}
@@ -220,7 +227,11 @@ export function SpecCoverageBar({ path, onOpenTasks }: SpecCoverageBarProps) {
                 {state ? <div style={{ paddingLeft: 12 }}>{state.why}</div> : null}
                 {evidenceOpen === entry.requirement_id && (
                   <div style={{ paddingLeft: 12 }}>
-                    <EvidencePieces path={path} identifier={entry.identifier} />
+                    {/* A served row's evidence is the serving change's, recorded against it. */}
+                    <EvidencePieces
+                      path={entry.served_by?.document_path ?? path}
+                      identifier={entry.served_by?.document_path ? entry.served_by.identifier : entry.identifier}
+                    />
                   </div>
                 )}
               </li>

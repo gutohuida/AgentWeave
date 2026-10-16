@@ -136,6 +136,8 @@ async def test_an_unchanged_folded_requirement_is_served_by_the_change_and_names
         "requirement_id": "req-chg-1",
         "identifier": "FR-1",
         "document_id": "doc-chg",
+        # So the app can say which change serves it and read that change's evidence (F593).
+        "document_path": "spec/changes/sub/spec.json",
     }
     assert capability["FR-4"].to_dict()["served_by"]["identifier"] == "FR-1"
 

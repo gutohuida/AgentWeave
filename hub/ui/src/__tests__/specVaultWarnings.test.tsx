@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
@@ -80,17 +80,19 @@ describe('SpecVaultWarnings', () => {
     ])
   })
 
-  it('renders nothing when the Hub has no route (404) or no warnings', () => {
+  it('renders nothing when the Hub has no route (404)', () => {
     warnings = undefined
     warningsError = new ApiError(404, 'Not Found')
-    const { container, unmount } = renderPanel()
+    const { container } = renderPanel()
     expect(container).toBeEmptyDOMElement()
-    unmount()
+  })
 
-    warningsError = null
+  it('still offers Check now when the document has no warnings (F658)', () => {
     warnings = []
-    const second = renderPanel()
-    expect(second.container).toBeEmptyDOMElement()
+    renderPanel()
+    expect(screen.getByText('No vault warnings')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('spec-vault-warnings-check'))
+    expect(check).toHaveBeenCalledWith(PATH)
   })
 
   it('asks the Hub to check the document again, for this path', async () => {

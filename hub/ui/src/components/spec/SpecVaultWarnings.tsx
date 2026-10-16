@@ -8,15 +8,16 @@ import { useCheckVaultWarnings, useVaultWarnings } from '@/api/vault'
  * disputed, superseded, reported or missing, and the conflicts the spec-vault-check job kept.
  *
  * These are warnings, never a refusal, and the same ones appear as gaps when the document is
- * proposed or approved. A Hub without the route (404) and a document with nothing against it both
- * render nothing, so the panel appears only when there is something to read.
+ * proposed or approved. A Hub without the route (404) renders nothing. A document with nothing
+ * against it gets one quiet line that still offers Check now, since a check is how a conflict is
+ * found in the first place (F658).
  */
 export function SpecVaultWarnings({ path }: { path: string }) {
   const { data } = useVaultWarnings(path)
   const check = useCheckVaultWarnings()
 
-  const warnings = data ?? []
-  if (warnings.length === 0) return null
+  if (data === undefined) return null
+  const warnings = data
 
   return (
     <section
@@ -25,8 +26,14 @@ export function SpecVaultWarnings({ path }: { path: string }) {
       style={{ borderTop: '1px solid var(--border)' }}
     >
       <div className="flex items-center gap-2">
-        <span style={{ color: 'var(--text-2)', fontWeight: 600 }}>Vault warnings</span>
-        <span style={{ color: 'var(--amber)' }}>{warnings.length}</span>
+        {warnings.length > 0 ? (
+          <>
+            <span style={{ color: 'var(--text-2)', fontWeight: 600 }}>Vault warnings</span>
+            <span style={{ color: 'var(--amber)' }}>{warnings.length}</span>
+          </>
+        ) : (
+          <span style={{ color: 'var(--text-3)' }}>No vault warnings</span>
+        )}
         <div className="flex-1" />
         <Button
           variant="ghost"

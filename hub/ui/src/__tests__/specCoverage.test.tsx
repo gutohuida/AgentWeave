@@ -86,6 +86,36 @@ describe('coverage on the spec view', () => {
     expect(screen.queryByTestId('coverage-evidence-toggle-FR-2')).toBeNull()
   })
 
+  it('says which folded change serves a requirement, and reads its evidence there (F593)', async () => {
+    const fetched: string[] = []
+    mount({
+      requirements: [
+        entry({
+          identifier: 'FR-4',
+          evidence_count: 1,
+          served_by: { requirement_id: 'req-chg-1', identifier: 'FR-1', document_id: 'doc-chg', document_path: 'spec/changes/sub/spec.json' },
+        }),
+      ],
+      diagnostics: [],
+      totals: { verified: 1 },
+      integration: { integrated: 1 },
+      unserved: [],
+    })
+    const stub = globalThis.fetch as unknown as { mock: { calls: unknown[][] } }
+    fireEvent.click(await screen.findByTestId('coverage-count-verified'))
+    expect(await screen.findByTestId('coverage-row-FR-4')).toHaveTextContent(
+      'served by FR-1 of spec/changes/sub/spec.json',
+    )
+    fireEvent.click(screen.getByTestId('coverage-evidence-toggle-FR-4'))
+    await waitFor(() => {
+      fetched.splice(0, fetched.length, ...stub.mock.calls.map((call) => String(call[0])))
+      expect(fetched.some((url) => url.includes('/spec/evidence?'))).toBe(true)
+    })
+    const evidence = fetched.find((url) => url.includes('/spec/evidence?')) ?? ''
+    expect(evidence).toContain('identifier=FR-1')
+    expect(evidence).toContain(`document=${encodeURIComponent('spec/changes/sub/spec.json')}`)
+  })
+
   it('counts each state the document is actually in', async () => {
     mount({
       requirements: [entry(), entry({ identifier: 'FR-2', requirement_id: 'spreq-2', state: 'unserved', integration: 'not_applicable', evidence_count: 0, accepted_count: 0, linked_task_ids: [] })],

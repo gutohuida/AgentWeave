@@ -270,6 +270,18 @@ async def requirement_coverage(
     # reworded one inherits nothing. Read through the rows the Hub already records: merges and
     # digests, no new link.
     sources = await _folded_sources(session, project_id, requirements)
+    # Where each serving change lives, so a surface can name it and read its evidence (F593).
+    source_paths: Dict[str, str] = {}
+    if sources:
+        source_paths = dict(
+            (
+                await session.execute(
+                    select(SpecDocument.id, SpecDocument.path).where(
+                        SpecDocument.id.in_({source.document_id for source in sources.values()})
+                    )
+                )
+            ).all()
+        )
     ids = [requirement.id for requirement in requirements]
     ids += [source.id for source in sources.values() if source.id not in ids]
 
@@ -343,6 +355,7 @@ async def requirement_coverage(
                 "requirement_id": source.id,
                 "identifier": source.identifier,
                 "document_id": source.document_id,
+                "document_path": source_paths.get(source.document_id),
             }
         state = _state(
             drifting=requirement.id in drifting,

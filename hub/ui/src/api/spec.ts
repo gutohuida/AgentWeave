@@ -261,6 +261,8 @@ export interface SpecManifestSummary {
 
 export interface SpecDiagnostic {
   code: string
+  /** The Hub's own sentence for it (`spec_manifest.describe_diagnostic`); absent on an older Hub. */
+  message?: string | null
   path?: string | null
   field?: string | null
   expected?: string | null
@@ -331,6 +333,13 @@ export interface CoverageEntry {
   evidence_count: number
   accepted_count: number
   linked_task_ids: string[]
+  /** The folded change requirement whose verification this one carries (F593), or null. */
+  served_by?: {
+    requirement_id: string
+    identifier: string
+    document_id: string
+    document_path?: string | null
+  } | null
 }
 
 /** A requirement that could not be given a state at all — broken, not unserved. */

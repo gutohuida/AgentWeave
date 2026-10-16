@@ -108,7 +108,7 @@ export function SpecPlaceUnder({ path, parent, specList }: SpecPlaceUnderProps) 
           </p>
           {(refusal.diagnostics ?? []).map((d, i) => (
             <p key={i} style={{ margin: 0, color: 'var(--text-3)' }}>
-              {d.path ? `${d.code} — ${d.path}` : d.code}
+              {d.message ?? (d.path ? `${d.code} — ${d.path}` : d.code)}
             </p>
           ))}
         </div>

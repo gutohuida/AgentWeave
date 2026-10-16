@@ -37,7 +37,8 @@ function totals(result: ReindexResult) {
 }
 
 function diagnosticLine(d: SpecDiagnostic): string {
-  return d.path ? `${d.code} — ${d.path}` : d.code
+  // The Hub's sentence when it sends one (F643); the code is for an older Hub.
+  return d.message ?? (d.path ? `${d.code} — ${d.path}` : d.code)
 }
 
 /**

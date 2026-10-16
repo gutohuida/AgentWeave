@@ -295,9 +295,14 @@ export function SpecDocumentPanel({
             <ul className="flex flex-col gap-0.5 pl-5" style={{ color: 'var(--text-3)' }}>
               {diagnostics.map((d, i) => (
                 <li key={`d-${i}`}>
-                  {d.code}
-                  {d.path ? ` — ${d.path}` : ''}
-                  {d.field ? ` (${d.field}: ${d.expected} → ${d.actual})` : ''}
+                  {/* The Hub's sentence when it sends one (F643); the code is for an older Hub. */}
+                  {d.message ?? (
+                    <>
+                      {d.code}
+                      {d.path ? ` — ${d.path}` : ''}
+                      {d.field ? ` (${d.field}: ${d.expected} → ${d.actual})` : ''}
+                    </>
+                  )}
                 </li>
               ))}
               {missing.map((m) => (
