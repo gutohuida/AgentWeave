@@ -197,6 +197,11 @@ jobs:
       run: |
         pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread
 
+    # F663: a junction in the calls directory is no link to `islink` and `rmtree` refuses one.
+    - name: Test the calls directory's junction case on Windows
+      run: |
+        pytest tests/test_calls_dir_starts_clean.py -v --timeout=300 --timeout-method=thread
+
   ui-test:
     runs-on: ubuntu-latest
     defaults:

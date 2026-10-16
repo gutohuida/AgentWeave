@@ -3610,7 +3610,8 @@ def _link_dir(link: Path, target: Path) -> None:
         link.symlink_to(target, target_is_directory=True)
 
 
-def test_a_linked_calls_directory_is_replaced_and_its_target_kept(tmp_path):
+@pytest.mark.parametrize("empty", [False, True])
+def test_a_linked_calls_directory_is_replaced_and_its_target_kept(empty, tmp_path):
     """D14 / review fix 1: `calls` is the Hub's own; a link there is removed (the link, never its
     target's contents) and a real directory made in its place."""
     import os
@@ -3622,7 +3623,7 @@ def test_a_linked_calls_directory_is_replaced_and_its_target_kept(tmp_path):
     (work / ".agentweave").mkdir(parents=True)
     _link_dir(work / ".agentweave" / "calls", target)
 
-    agent_trigger.prepare_calls_dir(str(work))
+    agent_trigger.prepare_calls_dir(str(work), empty=empty)
 
     calls = work / ".agentweave" / "calls"
     assert calls.is_dir()
@@ -3630,7 +3631,8 @@ def test_a_linked_calls_directory_is_replaced_and_its_target_kept(tmp_path):
     assert (target / "keep.json").is_file()
 
 
-def test_a_linked_agentweave_directory_is_left_alone_with_a_warning(tmp_path, caplog):
+@pytest.mark.parametrize("empty", [False, True])
+def test_a_linked_agentweave_directory_is_left_alone_with_a_warning(empty, tmp_path, caplog):
     """D14: `.agentweave` may hold the project binding; the Hub creates nothing through a link
     there, says so, and the turn proceeds (the calls-root rule then never matches)."""
     work = tmp_path / "work"
@@ -3640,18 +3642,19 @@ def test_a_linked_agentweave_directory_is_left_alone_with_a_warning(tmp_path, ca
     _link_dir(work / ".agentweave", real)
 
     with caplog.at_level("WARNING"):
-        agent_trigger.prepare_calls_dir(str(work))
+        agent_trigger.prepare_calls_dir(str(work), empty=empty)
 
     assert not (real / "calls").exists()
     assert any(".agentweave" in rec.getMessage() for rec in caplog.records)
 
 
-def test_a_plain_file_where_calls_belongs_is_replaced(tmp_path):
+@pytest.mark.parametrize("empty", [False, True])
+def test_a_plain_file_where_calls_belongs_is_replaced(empty, tmp_path):
     work = tmp_path / "work"
     (work / ".agentweave").mkdir(parents=True)
     (work / ".agentweave" / "calls").write_text("not a directory")
 
-    agent_trigger.prepare_calls_dir(str(work))
+    agent_trigger.prepare_calls_dir(str(work), empty=empty)
 
     assert (work / ".agentweave" / "calls").is_dir()
 

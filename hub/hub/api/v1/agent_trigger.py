@@ -24,6 +24,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import shutil
 import sys
 import weakref
 from dataclasses import dataclass, field
@@ -346,7 +347,7 @@ def work_dir_in_hub_directory(root: Path, resolved: Path) -> bool:
     return target == hub_directory or target.startswith(hub_directory + os.sep)
 
 
-def prepare_calls_dir(work_dir: str) -> None:
+def prepare_calls_dir(work_dir: str, *, empty: bool) -> None:
     """Make `<work_dir>/.agentweave/calls/` a real directory for this turn (design D14).
 
     The call command reads its arguments files only from there, and the approver gives standing
@@ -355,6 +356,12 @@ def prepare_calls_dir(work_dir: str) -> None:
     directory made. A `.agentweave` that is itself a link is left alone (it may hold the project
     binding), nothing is created through it, and the turn proceeds: the calls-root rule then
     never matches for this workspace, which is the safe direction. Raises `OSError`.
+
+    `empty` is for a workspace only this turn stands in (`a-call-mode-turn-starts-with-an-empty-
+    calls-directory`): an earlier turn's files are removed, because a new conversation cannot know
+    they exist and a write tool may refuse to overwrite one (F663). This reverses D14's "the agent
+    may reuse them". A shared workspace is never emptied: another agent's file may be in flight.
+    Each removal is best effort -- a leftover costs a retry, a refusal would cost the turn.
     """
     root = os.path.realpath(work_dir)
     agentweave = os.path.join(root, ".agentweave")
@@ -376,6 +383,23 @@ def prepare_calls_dir(work_dir: str) -> None:
             else:
                 os.unlink(calls)
     os.makedirs(calls, exist_ok=True)
+    if not empty:
+        return
+    for name in os.listdir(calls):
+        entry = os.path.join(calls, name)
+        try:
+            # A junction is no link to `islink`, and `rmtree` refuses one: compare real paths.
+            if os.path.normcase(os.path.realpath(entry)) != os.path.normcase(entry):
+                if os.path.isdir(entry) and os.name == "nt":
+                    os.rmdir(entry)  # the link only
+                else:
+                    os.unlink(entry)
+            elif os.path.isdir(entry):
+                shutil.rmtree(entry)
+            else:
+                os.unlink(entry)
+        except OSError as exc:
+            logger.warning("could not remove %s from the calls directory: %s", entry, exc)
 
 
 router = APIRouter(prefix="/agent", tags=["agent-trigger"])
@@ -1596,9 +1620,10 @@ async def _trigger_agent_directly(
             f"Could not materialize canonical context for {agent}: {exc}",
         ) from exc
     # Where the call command's arguments files go (`a-run-reaches-the-hub-without-mcp`, D14),
-    # made fresh beside the context, and refused the same way when it cannot be.
+    # made beside the context, and refused the same way when it cannot be. Emptied only where
+    # this turn alone stands (F663): a shared directory may hold another agent's file in flight.
     try:
-        prepare_calls_dir(effective_work_dir)
+        prepare_calls_dir(effective_work_dir, empty=isolated_workspace is not None)
     except (OSError, ValueError) as exc:
         raise TriggerAgentError(
             status.HTTP_409_CONFLICT,
