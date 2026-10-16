@@ -650,6 +650,15 @@
       "requirement": "n6",
       "then": "it runs exec with a read-only sandbox outside the project directory",
       "when": "a Codex worker command is built"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an automatic policy at exhaustion; a flow handover with a pending note",
+      "how_to_check": "pytest hub/tests/test_worker_spend_counts_against_the_budget.py",
+      "key": "worker-spend-counts-against-the-budget-unit-triggers",
+      "requirement": "worker-spend-counts-aga-automatic-checkpoint-warns-at-exhaustion",
+      "then": "no checkpoint row, warning due (dismissal and final warning honoured); the note stays unconsumed",
+      "when": "a reading crosses the threshold; the handover is considered"
     }
   ],
   "algorithms": [],
@@ -678,9 +687,10 @@
       "FR-33": "4301933aeb898257782df5dd4247c8d6b10e04c06e31b0a72e8b7c4b2d279873",
       "FR-34": "aaf187123a2eca27ac53bc4806831272d35248ccc2a27b0079bfed644077bc68",
       "FR-35": "1eccd6170bd3bae70eb1eada60a8790f262d37ea8e000659025f892656da09b2",
-      "FR-36": "d1a07c35c666563a295143673dde06a4a35947607a299fff992a9693102f3223"
+      "FR-36": "d1a07c35c666563a295143673dde06a4a35947607a299fff992a9693102f3223",
+      "FR-37": "fe7552644a58e21f5c93cf6af29969d0fa17766bdf2cbdf100e165a832011127"
     },
-    "high_water": 36,
+    "high_water": 37,
     "requirements": {
       "a-checkpoint-cites-observations-that-remain-exactly-recovera": "FR-19",
       "a-checkpoint-is-a-durable-hub-record-not-a-file-an-agent-is-": "FR-13",
@@ -703,7 +713,8 @@
       "n6": "FR-35",
       "reading-a-checkpoint-and-recalling-raw-observations-are-sepa": "FR-20",
       "the-agent-contributes-notes-that-the-hub-treats-as-input-rat": "FR-17",
-      "the-threshold-the-notes-point-and-the-final-warning-are-plac": "FR-28"
+      "the-threshold-the-notes-point-and-the-final-warning-are-plac": "FR-28",
+      "worker-spend-counts-aga-automatic-checkpoint-warns-at-exhaustion": "FR-37"
     },
     "retired": {
       "a-flow-s-checkpoint-lineage-is-shared-across-the-agents-it-f": "FR-25",
@@ -889,6 +900,13 @@
       "party": null,
       "rationale": "The worker reads transcript text the Hub did not write; anything it can act with is a tool a prompt injection could use. Its Codex part: not driven since 2026-08-29 (Codex plan cancelled).",
       "statement": "A worker invocation SHALL run in a temporary directory outside the project, with no project tool server, and offered no tools its runner can withhold: Claude with an empty tool set and strict MCP config, Codex in a read-only sandbox."
+    },
+    {
+      "key": "worker-spend-counts-aga-automatic-checkpoint-warns-at-exhaustion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An unwritten checkpoint made at exhaustion would become the next checkpoint's anchor and consume a handover's notes.",
+      "statement": "At exhaustion (or an unreadable budget) an automatic context-pressure checkpoint MUST NOT be generated: that reading MUST behave as under the offered policy (the due warning, a dismissal honoured, the final warning near the window); and a flow handover MUST decline without creating a checkpoint, leaving the author's note unconsumed."
     }
   ],
   "schema_version": 1,

@@ -90,6 +90,8 @@ CALLS_TESTS = "hub/tests/test_calls_dir_starts_clean.py"
 STOP_DRIVE = "scripts/drive/d1016_f666_stop_closes_card.py"
 STOP_TESTS = "hub/tests/test_stop_closes_open_tool_calls.py"
 STOP_UI_TESTS = "hub/ui/src/__tests__/stopClosesToolCard.test.tsx"
+SPEND_DRIVE = "scripts/drive/d1016_f240_worker_spend.py"
+SPEND_TESTS = "hub/tests/test_worker_spend_counts_against_the_budget.py"
 CATALOG_PIN = "tests/test_model_catalog_drift.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
@@ -1432,6 +1434,33 @@ CHANGES = {
              "result and an orphan render on their own; pairing does not cross runs."),
         ],
     },
+    "f240": {
+        "document": "spec/changes/worker-spend-counts-against-the-budget/spec.json",
+        "commit": "d01eb0d",
+        "tasks": ["task-352dba739144"],
+        "evidence": [
+            ("FR-1", "task-352dba739144", "test_result", SPEND_TESTS,
+             "Claude envelope 2 in + 47,091 cache read + 100 cache write + 497 out records 47,690; "
+             "Codex 1,000 in (800 cached) + 50 out records 1,050; a title call records a "
+             "conversation_title row with its total."),
+            ("FR-2", "task-352dba739144", "manual_observation", SPEND_DRIVE,
+             "Written first (13f77d8, 5 of 11 failed): on a scratch Hub with Haiku, workers lines "
+             "checkpoint, checkpoint_probe, conversation_title in kind order and project total = "
+             "turns + workers (56,681), the budget reading the same; ALL PASS after."),
+            ("FR-3", "task-352dba739144", "test_result", SPEND_TESTS,
+             "Autonomous at exhaustion: no spawn, budget_exhausted; unreadable budget: spawn_failed "
+             "naming it; operator: spawns and counts. Drive: the titler gated, the operator's "
+             "checkpoint run and counted at exhaustion."),
+            ("FR-4", "task-352dba739144", "test_result", SPEND_TESTS,
+             "Automatic policy at exhaustion: no checkpoint row, warning due, a dismissal honoured, "
+             "the final warning at 99%; a handover declines and leaves its note unconsumed; no "
+             "budget read below the threshold."),
+            ("FR-5", "task-352dba739144", "test_result", "hub/tests/test_migrations.py",
+             "0129 backfills 47,690 / 1,050 / null / null, admits budget_exhausted, keeps the "
+             "indexes, and its downgrade keeps every row; a copy of :8000 (0109) upgraded to 0129 "
+             "with 32 rows totalling 962,599."),
+        ],
+    },
     "fcatalog": {
         "document": "spec/changes/the-model-catalog-tracks-the-newest-clis/spec.json",
         "commit": "da1c4b9",
@@ -1498,6 +1527,13 @@ CHANGE_FOLDS = {
     "f581": 'project-environment-settings',
     "f662": 'model-catalog',
     "f662b": 'model-catalog',
+    "f240": {
+        'usage-accounting': [
+            'worker-call-recorded-with-total', 'worker-tokens-count', 'autonomous-worker-paused',
+            'existing-rows-backfilled',
+        ],
+        'conversation-checkpoint': ['automatic-checkpoint-warns-at-exhaustion'],
+    },
     "f663": {
         'agent-run-sandboxing': ['isolated-starts-empty', 'shared-not-emptied', 'emptying-best-effort'],
         'agent-tool-surface': ['new-name-per-call'],

@@ -18678,7 +18678,7 @@ render a zero. It is only ever asked about the open conversation's id.
 
 ## F240 (B) — with the budget exhausted and "spending is paused" on screen, the Hub spent $0.042 that reaches no total and no budget
 
-**Status:** open. Filed by the row-14 drive (`d68f39a`) and carried into the 2026-09-06 and
+**Status:** fixed 2026-10-16 (Tier 2, decision fix-D2 option C; slice A of D2, change `spec/changes/worker-spend-counts-against-the-budget`, re-authored from the openspec draft of the same name, folded into `usage-accounting` and `conversation-checkpoint`, archived). Migration 0129 gives every worker row a normalised `total_tokens` (backfilled) and the outcome `budget_exhausted`; worker totals join the project total and the budget as per-kind `workers` lines; an autonomous worker call is not spawned at exhaustion while an operator one runs; the automatic checkpoint triggers warn instead of generating; the titler answers in JSON and records a `conversation_title` row. Driven with `scripts/drive/d1016_f240_worker_spend.py` (Haiku): 5 of 11 failed at 13f77d8, ALL PASS after d01eb0d. Copilot credits on the worker lines (F665) are slice B. Opened before: open. Filed by the row-14 drive (`d68f39a`) and carried into the 2026-09-06 and
 2026-09-07 research pages. F92 recorded the `worker_invocations` half as an operator question
 rather than a defect; neither half has been repaired. [classified 2026-09-09, D-2]
 

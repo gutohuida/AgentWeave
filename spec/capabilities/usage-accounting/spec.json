@@ -230,6 +230,42 @@
       "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
       "then": "Both figures are unknown and its output is not read.",
       "when": "It is recorded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub, a Haiku agent, the titles job and the checkpoint runner on Haiku",
+      "how_to_check": "py -3.11 scripts/drive/d1016_f240_worker_spend.py <name> (written first: fails before the build)",
+      "key": "worker-spend-counts-against-the-budget-drive",
+      "requirement": "worker-spend-counts-against-the-budget-worker-tokens-count",
+      "then": "GET /accounting has workers lines checkpoint, checkpoint_probe and conversation_title; project.total_tokens equals the turn sum plus the worker sum (read mode=ro); after exhaustion the title is not spawned (a budget_exhausted row) and the operator's checkpoint runs and is counted",
+      "when": "one turn runs, the operator presses Checkpoint, then the budget is set below usage and another operator turn runs and Checkpoint is pressed again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Claude envelope (2 in, 47,091 cache read, 100 cache write, 497 out) and a Codex one (1,000 in, 800 cached, 50 out)",
+      "how_to_check": "pytest hub/tests/test_worker_spend_counts_against_the_budget.py",
+      "key": "worker-spend-counts-against-the-budget-unit-normalised",
+      "requirement": "worker-spend-counts-against-the-worker-call-recorded-with-total",
+      "then": "total_tokens 47,690 and 1,050; a conversation_title row with its total",
+      "when": "run_worker records them; the titler records its call"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an exhausted project, and one whose budget read raises",
+      "how_to_check": "pytest hub/tests/test_worker_spend_counts_against_the_budget.py",
+      "key": "worker-spend-counts-against-the-budget-unit-gate",
+      "requirement": "worker-spend-counts-against-the-budget-autonomous-worker-paused",
+      "then": "autonomous: no spawn, budget_exhausted (or spawn_failed); operator: spawns and counts",
+      "when": "autonomous and operator worker calls are made, including each caller's derived initiator"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a 0128 database with a Claude, a Codex and a usage-less worker row",
+      "how_to_check": "pytest hub/tests/test_migrations.py -k 0129",
+      "key": "worker-spend-counts-against-the-budget-unit-migration",
+      "requirement": "worker-spend-counts-against-the-budget-existing-rows-backfilled",
+      "then": "47,690 / 1,050 / null; a budget_exhausted insert is admitted; the downgrade keeps every row",
+      "when": "it is upgraded to 0129 and downgraded"
     }
   ],
   "algorithms": [],
@@ -246,11 +282,15 @@
       "FR-18": "bf00834e25b7fb2b680ef98d91d19fb19d7a4d9464417915b6b27ff96b6bcd4f",
       "FR-19": "e16eb779c460f2ebf2473c3fb14cb63266b255e13afd56e005008d223817b5dd",
       "FR-20": "a5e3a57a886560ddd02239bbdb130430ed317d50f2def4ecb182216f0e2c753c",
+      "FR-21": "9bc962829c3182447452d274a99026e8b2d06059ebb632d92c6af390b9a27cd8",
+      "FR-22": "a3e02c974ee8982d336b06979c8bae75507f713640c96521fd7c9ac641403924",
+      "FR-23": "2ac4892527bf810d82d691529ee69ed3db9e2ec99618dbba917966340a7fe39d",
+      "FR-24": "8bb8809fc604dfbbf1d6ad694767df0a038e31089c24e7b3ba1575add9d99564",
       "FR-7": "0243dcae0b94bec3d8557b1d6fbe37b827f6ac81370c20aac02c926ddd800868",
       "FR-8": "a47401808ab90b647f8f27c6cfb33aa0b068daa8f6f20a22c5e66cc07a4af6e1",
       "FR-9": "f9b839718a1d5e35d1d0b3306acbf14f7d2ac72c331553511beb93cb06c0b0f4"
     },
-    "high_water": 20,
+    "high_water": 24,
     "requirements": {
       "a-copilot-one-shot-call-records-the-credits-its-session-repo": "FR-14",
       "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde": "FR-13",
@@ -265,7 +305,11 @@
       "n6-credits-are-never-money-or-budget": "FR-20",
       "supported-runner-telemetry-normalizes-to-one-accounting-shap": "FR-8",
       "the-operator-can-see-accounting-and-exhaustion-state": "FR-12",
-      "usage-aggregates-by-agent-and-project": "FR-9"
+      "usage-aggregates-by-agent-and-project": "FR-9",
+      "worker-spend-counts-against-the-budget-autonomous-worker-paused": "FR-23",
+      "worker-spend-counts-against-the-budget-existing-rows-backfilled": "FR-24",
+      "worker-spend-counts-against-the-budget-worker-tokens-count": "FR-22",
+      "worker-spend-counts-against-the-worker-call-recorded-with-total": "FR-21"
     },
     "retired": {}
   },
@@ -387,6 +431,34 @@
       "party": null,
       "rationale": "A one-shot call opens one session, so its last cumulative checkpoint is its whole charge; checkpoints must not be summed.",
       "statement": "A Copilot one-shot call (checkpoint, probe, or other Hub-owned `copilot -p` call with an invocation record) that exits successfully SHALL record the credits and premium requests of the last session usage checkpoint in its output, applying the same malformed-figure rule per figure; with no checkpoint, or when the process failed, timed out or did not start, both SHALL be unknown, never zero."
+    },
+    {
+      "key": "worker-spend-counts-against-the-worker-call-recorded-with-total",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A worker's cost must be recoverable and counted on the same basis as a turn's.",
+      "statement": "Every model call the Hub makes for a project outside an agent turn, the conversation titler included, MUST be recorded as a worker invocation whose total_tokens is the call's tokens normalised as a turn's are (Claude: input plus cache reads and writes plus output; Codex: input plus output, cache already inside input), and null when the call reported no token count."
+    },
+    {
+      "key": "worker-spend-counts-against-the-budget-worker-tokens-count",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One meaning for the budget: everything the Hub spends for the project.",
+      "statement": "A project's used tokens MUST be its measured turn tokens plus its worker totals, read the same by the budget, the accounting snapshot and the budget update; the snapshot MUST carry one `workers` line per worker kind, ordered by kind, with its tokens, measured and unmeasured calls and cost, and the project totals MUST include them while the per-agent and per-conversation figures stay turns only."
+    },
+    {
+      "key": "worker-spend-counts-against-the-budget-autonomous-worker-paused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The rule the budget already applies to turns: autonomy pauses, the operator keeps control.",
+      "statement": "When the project's token budget is exhausted, or cannot be read, a worker call the operator did not request MUST NOT be spawned and MUST be recorded with outcome budget_exhausted (or spawn_failed naming the unreadable budget), while a call the operator requested (the Checkpoint button, Distil, a requested spec check) MUST still run and be counted."
+    },
+    {
+      "key": "worker-spend-counts-against-the-budget-existing-rows-backfilled",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's existing worker spend (962,599 tokens on :8000) must count from the upgrade, not only from new calls.",
+      "statement": "The migration MUST fill total_tokens for existing worker rows by the same rule, leave a row with no input and no output count null, and admit the budget_exhausted outcome; its downgrade MUST drop the column and turn budget_exhausted rows into spawn_failed."
     }
   ],
   "schema_version": 1,

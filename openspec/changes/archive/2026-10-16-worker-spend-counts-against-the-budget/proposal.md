@@ -1,3 +1,5 @@
+> **Moved to the app 2026-10-16, archived.** Successor: `spec/changes/worker-spend-counts-against-the-budget/spec.json` (built d01eb0d; folded into `usage-accounting` and `conversation-checkpoint`). Built on D7 option C (fix-D2). Changed from this draft: the migration is `0129`, not `0106`; the titler had become a manager job, so it keeps its firing and also records a worker row; the vault jobs (distillation, reports, spec check) got initiators too. The Copilot credit half is `copilot-spend-is-counted-in-its-own-units` (slice B).
+
 # Proposal — worker spend counts against the budget
 
 Finding: **F240 (B)**, which also carries the question F92 left for the operator. Bundle B7 (models
