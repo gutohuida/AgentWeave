@@ -175,6 +175,60 @@
       "requirement": "the-copilot-catalog-tracks-the-cli-flagged",
       "then": "model_unrecognised is true; on a declared model it is false",
       "when": "it is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "run_turn fed the 1.0.91 session/new and agent-selection answers recorded without a prompt (grok-4.7, effort max, reported auto)",
+      "how_to_check": "pytest hub/tests/test_a_substituted_copilot_model_is_reported.py (written first: fails before the build)",
+      "key": "a-substituted-copilot-model-is-reported-seam-captured",
+      "requirement": "a-substituted-copilot-model-is-reported-model-reported-at-start",
+      "then": "one copilot.model_substituted naming grok-4.7 and Copilot choosing itself is posted before session/prompt is sent; no effort notice (no option)",
+      "when": "the turn runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a session/new shaped as the 1.0.89-1 claude-opus-4.7 capture (keys models, configOptions, modes, sessionId; model claude-sonnet-5) and an agent answer whose model option reports another value, or none",
+      "how_to_check": "pytest hub/tests/test_a_substituted_copilot_model_is_reported.py",
+      "key": "a-substituted-copilot-model-is-reported-seam-concrete",
+      "requirement": "a-substituted-copilot-model-is-reported-model-reported-at-start",
+      "then": "exactly one diagnostic, naming the agent answer's value (else currentModelId); the offered list has no auto",
+      "when": "the turn runs, then a mid-turn tools_updated names the same model"
+    },
+    {
+      "checked_by": "agent",
+      "given": "requested effort max and a reasoning_effort option at medium; a control at high/high",
+      "how_to_check": "pytest hub/tests/test_a_substituted_copilot_model_is_reported.py",
+      "key": "a-substituted-copilot-model-is-reported-seam-effort",
+      "requirement": "a-substituted-copilot-model-is-reported-effort-reported-at-start",
+      "then": "one copilot.effort_substituted with requested max, resolved medium and the offered values; none for the control",
+      "when": "the turn runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a concrete substitute reported at start",
+      "how_to_check": "pytest hub/tests/test_a_substituted_copilot_model_is_reported.py",
+      "key": "a-substituted-copilot-model-is-reported-seam-usage",
+      "requirement": "a-substituted-copilot-model-is-re-usage-names-the-model-that-ran",
+      "then": "the sample names the substitute, not the request",
+      "when": "a usage_update arrives"
+    },
+    {
+      "checked_by": "agent",
+      "given": "requested auto; a matching model; a session answer with no models and no model option (1.0.88 shape); a mistyped models block",
+      "how_to_check": "pytest hub/tests/test_a_substituted_copilot_model_is_reported.py",
+      "key": "a-substituted-copilot-model-is-reported-seam-controls",
+      "requirement": "a-substituted-copilot-model-is-reported-never-fails-the-turn",
+      "then": "no diagnostic, and the turn completes",
+      "when": "each turn runs"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the work PC, a Copilot agent whose runner model is claude-opus-4.7",
+      "how_to_check": "work-PC drive (no prompt is sent on the home account in this change)",
+      "key": "a-substituted-copilot-model-is-reported-work-pc",
+      "requirement": "a-substituted-copilot-model-is-reported-model-reported-at-start",
+      "then": "the conversation shows the substitution notice before the reply, naming claude-sonnet-5, and the context meter names claude-sonnet-5",
+      "when": "the operator sends it a message"
     }
   ],
   "algorithms": [
@@ -203,15 +257,23 @@
       "FR-17": "de375818a809a8e66acbf60823a95e876c08ec81e14b2a554e9bea29ed92d41e",
       "FR-18": "da79cac217ee0269096f55ada0f7556b84f54042a33dadc950cb0cb9b29eb05a",
       "FR-19": "4de2cc582a82750a9dfad966e4b7fde231c8d6b567cad1578b28e3af26973793",
+      "FR-20": "de25963e54a3c801269ebeb9a775f85f1733a5d9fc479a84194a3b7bacc4cca9",
+      "FR-21": "4c42f721164050ec9540d862e0b9fd9107f17541a87c8c67e4bfd92d931a8342",
+      "FR-22": "208fc07a57ddaafcdc82ebee7f67a04a63b9d367fc5eab3e15f3c44526662494",
+      "FR-23": "02474d788b5a5aef48999ece75af69b492fcf227861e8d077eb7fe65ef4cec51",
       "FR-6": "6a2fdb944d895892d0dad07627f38fcd924a8fde75f34a17c27e707e53155711",
       "FR-7": "9047e03610e2fdbd69ca2f2125cb9264902a3a998fab70aa487b042d92a72ce2",
       "FR-8": "aad2676bf09290ddc5df9495ce5e2947f46357cfef71ca48fc13351e12a552da",
       "FR-9": "91011339b5deb80a608a2056b348f2b2f32cf4deaac3b0c8d0a164ef56902722"
     },
-    "high_water": 19,
+    "high_water": 23,
     "requirements": {
       "a-declared-alias-is-accepted-wherever-a-model-is-and-kept-as": "FR-11",
       "a-provider-that-publishes-its-own-catalog-is-described-from-": "FR-12",
+      "a-substituted-copilot-model-is-re-usage-names-the-model-that-ran": "FR-22",
+      "a-substituted-copilot-model-is-reported-effort-reported-at-start": "FR-21",
+      "a-substituted-copilot-model-is-reported-model-reported-at-start": "FR-20",
+      "a-substituted-copilot-model-is-reported-never-fails-the-turn": "FR-23",
       "control-values-are-per-provider": "FR-8",
       "every-model-the-catalog-offers-declares-a-context-window-or-": "FR-16",
       "n1": "FR-14",
@@ -348,6 +410,34 @@
       "party": null,
       "rationale": "The runner already says '— unrecognised'; a conversation must not present a removed model as current.",
       "statement": "A conversation's response MUST carry model_unrecognised, true when its stored runtime_overrides model is one its runner's catalog does not declare."
+    },
+    {
+      "key": "a-substituted-copilot-model-is-reported-model-reported-at-start",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A model the operator chose and did not get must be visible from the start of the turn, not only if a mid-turn event happens to name it.",
+      "statement": "When a Copilot turn requested a concrete model and the session reports a different one before the first prompt (the latest model config option after agent selection, else models.currentModelId), the turn MUST carry exactly one copilot.model_substituted info diagnostic, posted before the prompt, with facts requested and resolved, naming the models the session offers other than auto; a reported auto MUST be worded as Copilot choosing the model itself."
+    },
+    {
+      "key": "a-substituted-copilot-model-is-reported-effort-reported-at-start",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Copilot runs an effort a model does not support as medium, silently.",
+      "statement": "When a Copilot turn requested an effort and the session's reasoning_effort config option reports a different current value before the first prompt, the turn MUST carry exactly one copilot.effort_substituted info diagnostic with facts requested, resolved and offered."
+    },
+    {
+      "key": "a-substituted-copilot-model-is-re-usage-names-the-model-that-ran",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The meter and the conversation must agree on what ran, and one substitution is one notice.",
+      "statement": "A Copilot turn's context-usage samples MUST name the concrete model the session reported at start when it differs from the requested one, and a substitution reported at start MUST NOT be reported again by a mid-turn event of the same turn."
+    },
+    {
+      "key": "a-substituted-copilot-model-is-reported-never-fails-the-turn",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Copilot was ready to run the turn; an older CLI (the 1.0.88 captures) has none of these fields.",
+      "statement": "The session-start check MUST leave a turn running: it never raises: a requested auto, a matching model or effort, or a session answer missing or mistyping the fields it reads MUST produce no diagnostic and leave the turn as it runs today."
     }
   ],
   "schema_version": 1,
