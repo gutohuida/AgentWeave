@@ -84,6 +84,7 @@ ANSWER_TESTS = "hub/tests/test_a_workers_answer_is_kept.py"
 ANSWER_DRIVE = "scripts/drive/d1015_f581_answer_kept.py"
 CATALOG_TESTS = "hub/tests/test_a_stored_model_outlives_the_catalog.py"
 CATALOG_DRIVE = "scripts/drive/d1016_f662_copilot_catalog.py"
+SUBSTITUTED_TESTS = "hub/tests/test_a_substituted_copilot_model_is_reported.py"
 CATALOG_PIN = "tests/test_model_catalog_drift.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
@@ -1368,6 +1369,26 @@ CHANGES = {
              "A conversation stored on a dropped model lists model_unrecognised true."),
         ],
     },
+    "f662b": {
+        "document": "spec/changes/a-substituted-copilot-model-is-reported/spec.json",
+        "commit": "22bc1e7",
+        "tasks": ["task-4f08b6f6b3a4"],
+        "evidence": [
+            ("FR-1", "task-4f08b6f6b3a4", "test_result", SUBSTITUTED_TESTS,
+             "Written first (58288f6, 4 of 11 failed): run_turn fed the 1.0.91 answers recorded "
+             "without a prompt posts one model_substituted (grok-4.7 -> Auto) before the prompt; "
+             "a concrete substitute names the agent answer's model, else currentModelId."),
+            ("FR-2", "task-4f08b6f6b3a4", "test_result", SUBSTITUTED_TESTS,
+             "Effort max reported as medium posts one effort_substituted with the offered values; "
+             "a matching effort posts none."),
+            ("FR-3", "task-4f08b6f6b3a4", "test_result", SUBSTITUTED_TESTS,
+             "Usage names the substitute (or auto until Auto chooses); the mid-turn event does not "
+             "report a second time."),
+            ("FR-4", "task-4f08b6f6b3a4", "test_result", SUBSTITUTED_TESTS,
+             "Requested auto or none, a match, the 1.0.88 shape and mistyped fields: no "
+             "diagnostic, the turn completes."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1414,6 +1435,7 @@ CHANGE_FOLDS = {
     "f615": 'knowledge-vault',
     "f581": 'project-environment-settings',
     "f662": 'model-catalog',
+    "f662b": 'model-catalog',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
