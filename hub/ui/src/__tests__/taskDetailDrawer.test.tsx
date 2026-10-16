@@ -418,3 +418,19 @@ describe('deleting a task (F532)', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 })
+
+describe('an approved task keeps the decided-without-you record as history (fix-D14)', () => {
+  it('shows one line, not the amber block', () => {
+    renderDrawer(
+      makeTask({
+        status: 'approved',
+        proceeded_without_answer_reason: 'Proceeded without your answer: which colour?',
+      }),
+      vi.fn(),
+    )
+    expect(screen.queryByTestId('task-proceeded-detail-task-1')).toBeNull()
+    expect(screen.getByTestId('task-proceeded-history-detail-task-1').textContent).toContain(
+      'which colour?',
+    )
+  })
+})

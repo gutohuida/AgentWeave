@@ -27,7 +27,7 @@ import {
   dismissCheckpointWarning,
   useCheckpoints,
 } from '@/api/checkpoints'
-import { ApiError, readableRefusal } from '@/api/client'
+import { ApiError, deleteJson, readableRefusal } from '@/api/client'
 import { useAccounting, useConversationAccounting } from '@/api/accounting'
 import { formatAiCredits } from '@/components/accounting/accountingDisplay'
 import { useConfigStore } from '@/store/configStore'
@@ -72,6 +72,12 @@ interface AgentOutputPanelProps {
   onOpenSpecPicker?: () => void
   onStartExploration?: () => void
   onStopExploring?: () => void
+  /** fix-D15 (F652): Explore was pressed and no document exists yet. Set only while armed: the
+   *  next send creates the document through it first, names it on the turn, and withdraws it if
+   *  the turn is refused, as a new conversation does. */
+  createExploration?: (message: string) => Promise<string>
+  /** The document `createExploration` made, once its turn was accepted. */
+  onExplorationStarted?: (path: string) => void
   /** Reopen a document not currently attached to this conversation. See Composer's prop of the
    *  same name for why this is distinct from `onOpenSpecPicker`. */
   onOpenExistingSpec?: () => void
@@ -175,6 +181,8 @@ export function AgentOutputPanel({
   onOpenSpecPicker,
   onStartExploration,
   onStopExploring,
+  createExploration,
+  onExplorationStarted,
   onOpenExistingSpec,
   specBusy = false,
   insertPathRequest = null,
@@ -824,6 +832,7 @@ export function AgentOutputPanel({
     conversationId?: string,
     agentName: string = agent.name,
     overrides?: Record<string, string>,
+    specDocument?: string,
   ): Promise<TriggerResult> => {
     const response = await fetch(`/api/v1/projects/${projectId}/agent/trigger`, {
       method: 'POST',
@@ -839,7 +848,7 @@ export function AgentOutputPanel({
         // Where the operator is looking, not what they said. The Hub renders it into the turn
         // context and never into the stored message. Omitted entirely when there is nothing
         // open, so the Hub is told "no document" rather than an empty string to interpret.
-        spec_document: specDocumentPath ?? undefined,
+        spec_document: specDocument ?? specDocumentPath ?? undefined,
       }),
     })
     if (!response.ok) {
@@ -1046,13 +1055,24 @@ export function AgentOutputPanel({
     // with instructions to go and find two files that were never written.
     const outgoingMessage = typedMessage
     if (startsFresh) setSessionNotice('Starting new conversation…')
+    // fix-D15 (F652): an armed Explore creates its document now, before the turn, so the first
+    // message reaches the agent with the document attached. A failed create still sends: losing
+    // the operator's message is the worse loss.
+    let explorationPath: string | undefined
+    if (createExploration) {
+      explorationPath = await createExploration(outgoingMessage).catch(() => undefined)
+    }
+    let accepted = false
     try {
       const result = await postTrigger(
         outgoingMessage,
         currentConversationId,
         agent.name,
         emptyToUndefined(overridesForRunner(pendingOverrides, targetRunnerRow)),
+        explorationPath,
       )
+      accepted = true
+      if (explorationPath) onExplorationStarted?.(explorationPath)
       if (result.conversation_id !== currentConversationId) moveTo(result.conversation_id)
       if (startsFresh) {
         // The fresh conversation exists now, so the panel stops overriding the destination —
@@ -1065,6 +1085,13 @@ export function AgentOutputPanel({
         setSessionNotice(`Queued — ${notice}`)
       }
     } catch (err) {
+      // A turn that never started leaves no document behind (F330, F652). Best effort: the
+      // refusal is what the operator needs to read.
+      if (explorationPath && !accepted) {
+        void deleteJson(`/api/v1/projects/${projectId}/project/documents/${explorationPath}`).catch(
+          () => undefined,
+        )
+      }
       console.error('Failed to send message:', err)
       // The server's own sentence where there is one. "Failed to send message" is accurate and
       // useless; the refusal says which task, who holds it, and what to do instead — and before
@@ -1376,6 +1403,7 @@ export function AgentOutputPanel({
               onOpenSpecPicker={onOpenSpecPicker}
               onStartExploration={onStartExploration}
               onStopExploring={onStopExploring}
+              specArmed={Boolean(createExploration)}
               onOpenExistingSpec={onOpenExistingSpec}
               specBusy={specBusy}
               specDocumentLabel={specDocumentLabel}

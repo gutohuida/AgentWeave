@@ -381,7 +381,19 @@ export function TaskCard({
         {/* A decision taken without the operator. Below the waiting treatment rather than instead
             of it: a task can be waiting on a second question while carrying the record of a first
             one nobody answered, and those are two different things to say. */}
-        {proceededWithoutAnswer && (
+        {/* fix-D14 (F659): once the task is approved the decision is history, kept as one quiet
+            line rather than an amber block that still asks for attention. */}
+        {proceededWithoutAnswer && task.status === 'approved' && (
+          <p
+            data-testid={`task-proceeded-history-${task.id}`}
+            className="mt-2 text-[11px] truncate"
+            style={{ color: 'var(--text-3)' }}
+            title={proceededWithoutAnswer}
+          >
+            Earlier, decided without you: {proceededWithoutAnswer.replace(/^Proceeded without your answer:\s*/, '')}
+          </p>
+        )}
+        {proceededWithoutAnswer && task.status !== 'approved' && (
           <div
             data-testid={`task-proceeded-${task.id}`}
             className="mt-2 flex items-start gap-2 rounded px-2 py-1.5"

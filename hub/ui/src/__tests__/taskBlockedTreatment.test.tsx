@@ -240,3 +240,32 @@ describe('a task that went ahead without your answer says so, permanently', () =
     expect(screen.getByTestId('task-proceeded-task-1')).toBeTruthy()
   })
 })
+
+describe('an approved task keeps the record as one line of history (fix-D14, F659)', () => {
+  it('collapses the block once the task is approved', () => {
+    renderCard(
+      makeTask({
+        status: 'approved',
+        proceeded_without_answer_reason: 'Proceeded without your answer: which colour?',
+      }),
+    )
+
+    expect(screen.queryByTestId('task-proceeded-task-1')).toBeNull()
+    expect(screen.queryByText('Decided without you')).toBeNull()
+    const line = screen.getByTestId('task-proceeded-history-task-1')
+    expect(line.textContent).toContain('Earlier, decided without you')
+    expect(line.textContent).toContain('which colour?')
+  })
+
+  it('keeps the block on a task not yet approved', () => {
+    renderCard(
+      makeTask({
+        status: 'in_progress',
+        proceeded_without_answer_reason: 'Proceeded without your answer: which colour?',
+      }),
+    )
+
+    expect(screen.getByTestId('task-proceeded-task-1')).toBeTruthy()
+    expect(screen.queryByTestId('task-proceeded-history-task-1')).toBeNull()
+  })
+})

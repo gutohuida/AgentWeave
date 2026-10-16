@@ -797,7 +797,18 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
 
         {/* F60: the record that this work went ahead without an answer. Above the description
             because it changes how everything below it should be read. */}
-        {task.proceeded_without_answer_reason && (
+        {/* fix-D14 (F659): on an approved task the decision is history: one line. */}
+        {task.proceeded_without_answer_reason && task.status === 'approved' && (
+          <p
+            data-testid={`task-proceeded-history-detail-${task.id}`}
+            className="text-[11px]"
+            style={{ color: 'var(--text-3)' }}
+          >
+            Earlier, decided without you:{' '}
+            {task.proceeded_without_answer_reason.replace(/^Proceeded without your answer:\s*/, '')}
+          </p>
+        )}
+        {task.proceeded_without_answer_reason && task.status !== 'approved' && (
           <div
             data-testid={`task-proceeded-detail-${task.id}`}
             className="text-[11px] p-2 rounded"

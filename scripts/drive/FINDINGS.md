@@ -36047,7 +36047,7 @@ Seam: Questions (late answer x in-run `get_answer`). Tier guess: 0 (design gap; 
 
 ## F652 (D) -- Explore in an existing conversation creates its document on the press; a refused or never-made send leaves an empty `exploring` document
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Conversations & composer; scratch Hub `:8032`).
+**Status:** fixed 2026-10-16 (Tier 0, decision fix-D15, amending D4's "one press creates"). In an existing conversation Explore now arms, as in a new one: the document is created at send, before the turn, attached to it, and withdrawn if the turn is refused. Unit tests in `specChatSurface.test.tsx` (3 failed first); driven with `scripts/drive/d1016_d14_d15_screens.py`: the press created nothing, a 10,050-character send was refused and left nothing, the next send created `maroon-yeti` and attached it. The composer still has no length counter (side note above, not built). Opened before: open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Conversations & composer; scratch Hub `:8032`).
 
 In an existing conversation, pressing Explore POSTs `/project/documents` at once (201, `teal-pegasus`). A 10,050-character send was then refused with 422 (the UI showed "String should have at most 10000 characters" and kept the draft), but **the document stayed**. A second press in another browser session left `coral-kirin` behind with no send at all. In a *new* conversation the requirement (`spec-chat-session` n1) holds: the document is created at send, the 422 follows, and the DELETE answers 200 (`amber-hydra` gone). n1 is scoped to new conversations, and D4 says one press creates. Side note: the 422 text is pydantic's ("String should have…"); it names the limit, but the composer has no counter.
 
@@ -36111,7 +36111,7 @@ Seam: Knowledge vault (spec-vault-check x Spec page). Tier guess: 0 (design gap)
 
 ## F659 (D) -- a stale "Decided without you" card stays on a task after its cause is gone
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Tasks, noted for the Questions row; scratch Hub `:8033`).
+**Status:** fixed as decided 2026-10-16 (Tier 0, decision fix-D14, amending D7's "permanent"). Once the task carrying it is approved, the "Decided without you" block collapses to one muted history line on the card and in the drawer ("Earlier, decided without you: ...", full text on hover); before that it stays. Driven with `scripts/drive/d1016_d14_d15_screens.py` (13/13). Not covered: this finding's literal case, a *dependency* (A) approved while the card's own task (B) is still in progress, keeps B's block until B is approved, because the Hub cannot tell which task a question was about without reading its prose. Opened before: open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Tasks, noted for the Questions row; scratch Hub `:8033`).
 
 B's board card kept the yellow "Decided without you" block, with dev2's timed-out question *"Can you either change Task A's status to 'approved'…"*, after A was approved. It also showed "Stalled".
 

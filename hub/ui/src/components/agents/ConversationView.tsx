@@ -453,6 +453,21 @@ export function ConversationView({
     [conversationTitle, createDocument, onOpenDocument],
   )
 
+  /* fix-D15 (F652): in a conversation, Explore arms and the document is created at send, as in a
+   * new conversation. Creating on the press left an empty `exploring` document behind whenever
+   * the send was refused or never made. Amends D4's "one press creates". */
+  const [exploreArmed, setExploreArmed] = useState(false)
+  useEffect(() => setExploreArmed(false), [conversationId])
+  const armedWithoutDocument = exploreArmed && !document
+  const createExploration = useCallback(
+    async (message: string) => {
+      const chosen = (conversationTitle ?? '').trim() || message.trim().slice(0, 120)
+      const created = await createDocument.mutateAsync({ title: chosen || undefined })
+      return created.path
+    },
+    [conversationTitle, createDocument],
+  )
+
   const conversation = (
     <AgentOutputPanel
       agent={agent}
@@ -464,7 +479,12 @@ export function ConversationView({
       specDocumentLabel={document ? documentNode?.title ?? document : null}
       onOpenSpecPicker={openPicker}
       onOpenExistingSpec={openPicker}
-      onStartExploration={() => startExploration()}
+      onStartExploration={() => setExploreArmed(true)}
+      createExploration={armedWithoutDocument ? createExploration : undefined}
+      onExplorationStarted={(path) => {
+        setExploreArmed(false)
+        onOpenDocument(path)
+      }}
       /* Detach, never delete. An exploration leaves an artifact; a toggle that discarded it on
        * the way back would be a trap dressed as a switch.
        *
@@ -475,6 +495,10 @@ export function ConversationView({
        * `hub/tests/browser/test_panel_shell.py::test_the_composers_own_close_control_also_closes_
        * the_shell` asserts it). */
       onStopExploring={() => {
+        if (armedWithoutDocument) {
+          setExploreArmed(false)
+          return
+        }
         onOpenDocument(null)
         setShellOpen(projectId, false)
       }}

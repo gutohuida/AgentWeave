@@ -448,3 +448,62 @@ describe('the specification is reached from the composer', () => {
     expect(screen.queryByTestId('spec-document-panel')).not.toBeInTheDocument()
   })
 })
+
+describe('Explore in an existing conversation arms, and creates at send (fix-D15, F652)', () => {
+  const CREATED = 'spec/changes/teal-pegasus/spec.json'
+  const calls = () => fetchMock.mock.calls as [string, RequestInit | undefined][]
+  const documentPosts = () =>
+    calls().filter(([path, init]) => String(path).endsWith('/project/documents') && init?.method === 'POST')
+  const respond = (trigger: { ok: boolean; status: number; body: unknown }) =>
+    fetchMock.mockImplementation(async (path: string) => {
+      if (String(path).endsWith('/project/documents')) {
+        return { ok: true, status: 201, json: async () => ({ path: CREATED }) }
+      }
+      if (String(path).includes('/agent/trigger')) {
+        return {
+          ok: trigger.ok,
+          status: trigger.status,
+          json: async () => trigger.body,
+          text: async () => JSON.stringify(trigger.body),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' }
+    })
+
+  it('creates nothing on the press', async () => {
+    renderChat(null)
+    fireEvent.click(screen.getByTestId('composer-start-exploration'))
+    expect(screen.getByTestId('composer-start-exploration')).toHaveAttribute('aria-pressed', 'true')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(documentPosts()).toHaveLength(0)
+  })
+
+  it('creates the document at send, before the turn, and names it on the turn', async () => {
+    respond({ ok: true, status: 200, body: { status: 'running', conversation_id: 'conv-new' } })
+    const { onOpenDocument } = renderChat(null)
+    fireEvent.click(screen.getByTestId('composer-start-exploration'))
+    await send('Let us explore caching')
+    await waitFor(() => expect(triggerBody().spec_document).toBe(CREATED))
+    expect(documentPosts()).toHaveLength(1)
+    const order = calls().map(([path]) => String(path))
+    expect(order.findIndex((p) => p.endsWith('/project/documents'))).toBeLessThan(
+      order.findIndex((p) => p.includes('/agent/trigger')),
+    )
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith(CREATED))
+  })
+
+  it('withdraws the document when the send is refused', async () => {
+    respond({ ok: false, status: 422, body: { detail: 'message is too long' } })
+    const { onOpenDocument } = renderChat(null)
+    fireEvent.click(screen.getByTestId('composer-start-exploration'))
+    await send('x')
+    await waitFor(() =>
+      expect(
+        calls().some(
+          ([path, init]) => init?.method === 'DELETE' && String(path).endsWith(`/project/documents/${CREATED}`),
+        ),
+      ).toBe(true),
+    )
+    expect(onOpenDocument).not.toHaveBeenCalledWith(CREATED)
+  })
+})
