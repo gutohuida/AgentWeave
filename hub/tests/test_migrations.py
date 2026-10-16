@@ -5312,3 +5312,105 @@ def test_migration_0128_adds_deleted_projects_and_its_downgrade_drops_only_it(tm
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert conn.execute("SELECT id FROM projects").fetchall() == [("p",)]
     assert tables == (before - {"deleted_projects"}) | {"alembic_version"}
+
+
+# ---------------------------------------------------------------------------------------------
+# 0129 -- worker_invocations.total_tokens and the outcome `budget_exhausted`
+# (`worker-spend-counts-against-the-budget`, F240). Existing rows are backfilled by the rule a new
+# row is written by: Claude counts cache as input, Codex already has it inside input.
+# ---------------------------------------------------------------------------------------------
+
+_WORKER_INVOCATIONS_AT_0128 = """
+CREATE TABLE worker_invocations (
+    id VARCHAR(64) NOT NULL, project_id VARCHAR(64) NOT NULL, kind VARCHAR(32) NOT NULL,
+    prompt_version VARCHAR(64) NOT NULL, runner_id VARCHAR(64), cli VARCHAR(16) NOT NULL,
+    model VARCHAR(256), conversation_id VARCHAR(64), outcome VARCHAR(32) NOT NULL,
+    exit_code INTEGER, duration_ms INTEGER, input_tokens INTEGER, output_tokens INTEGER,
+    cache_read_tokens INTEGER, cache_write_tokens INTEGER, reasoning_tokens INTEGER,
+    cost_usd_micros INTEGER, ai_nano_aiu BIGINT, premium_requests FLOAT, error TEXT,
+    created_at DATETIME NOT NULL, PRIMARY KEY (id),
+    CONSTRAINT ck_worker_invocations_outcome CHECK (outcome IN ('ok', 'unsupported_cli',
+        'unknown_model', 'spawn_failed', 'nonzero_exit', 'timeout', 'unparseable',
+        'schema_invalid')),
+    CONSTRAINT ck_worker_invocations_failure_explained CHECK (error IS NOT NULL OR outcome = 'ok'),
+    FOREIGN KEY(project_id) REFERENCES projects (id)
+)
+"""
+
+
+def _database_at_0128_with_workers(tmp_path) -> tuple:
+    db_file = tmp_path / "workers.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("DROP TABLE worker_invocations")
+        conn.execute(_WORKER_INVOCATIONS_AT_0128)
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0128')")
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p', 'p', '2026-01-01T00:00:00Z')"
+        )
+        rows = [
+            ("w-claude", "claude", "ok", 2, 497, 47091, 100, None),
+            ("w-codex", "codex", "ok", 1000, 50, 800, None, None),
+            ("w-none", "claude", "nonzero_exit", None, None, None, None, "exit 1"),
+            ("w-copilot", "copilot", "ok", None, None, None, None, None),
+        ]
+        conn.executemany(
+            "INSERT INTO worker_invocations (id, project_id, kind, prompt_version, cli, outcome, "
+            "input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, error, "
+            "created_at) VALUES (?, 'p', 'checkpoint', 'checkpoint/1', ?, ?, ?, ?, ?, ?, ?, "
+            "'2026-10-16T00:00:00Z')",
+            rows,
+        )
+        conn.commit()
+    return db_file, db_url
+
+
+def test_migration_0129_backfills_worker_totals_and_admits_budget_exhausted(tmp_path) -> None:
+    db_file, db_url = _database_at_0128_with_workers(tmp_path)
+
+    _upgrade_to(db_url, "0129")
+
+    with sqlite3.connect(db_file) as conn:
+        totals = dict(conn.execute("SELECT id, total_tokens FROM worker_invocations"))
+        assert totals == {"w-claude": 47690, "w-codex": 1050, "w-none": None, "w-copilot": None}
+        conn.execute(
+            "INSERT INTO worker_invocations (id, project_id, kind, prompt_version, cli, outcome, "
+            "error, created_at) VALUES ('w-gated', 'p', 'conversation_title', "
+            "'conversation-title/1', 'claude', 'budget_exhausted', 'paused', "
+            "'2026-10-16T00:00:01Z')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO worker_invocations (id, project_id, kind, prompt_version, cli, "
+                "outcome, error, created_at) VALUES ('w-bad', 'p', 'k', 'v', 'claude', 'nope', "
+                "'x', '2026-10-16T00:00:02Z')"
+            )
+        indexes = {r[0] for r in conn.execute("PRAGMA index_list(worker_invocations)")}
+        assert {"ix_worker_invocations_project_kind", "ix_worker_invocations_project_created"} <= (
+            indexes
+        )
+        conn.commit()
+
+    _downgrade_to(db_url, "0128")
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(worker_invocations)")}
+        outcomes = dict(conn.execute("SELECT id, outcome FROM worker_invocations"))
+    assert "total_tokens" not in columns
+    assert outcomes["w-gated"] == "spawn_failed"
+    assert len(outcomes) == 5
+
+
+def test_migration_0129_is_a_no_op_without_the_table(tmp_path) -> None:
+    db_file = tmp_path / "bare.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("DROP TABLE worker_invocations")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0128')")
+        conn.commit()
+    _upgrade_to(db_url, "0129")
+    _downgrade_to(db_url, "0128")

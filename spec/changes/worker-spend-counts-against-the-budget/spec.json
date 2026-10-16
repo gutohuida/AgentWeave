@@ -1,0 +1,162 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub, a Haiku agent, the titles job and the checkpoint runner on Haiku",
+      "how_to_check": "py -3.11 scripts/drive/d1016_f240_worker_spend.py <name> (written first: fails before the build)",
+      "key": "drive",
+      "requirement": "worker-tokens-count",
+      "then": "GET /accounting has workers lines checkpoint, checkpoint_probe and conversation_title; project.total_tokens equals the turn sum plus the worker sum (read mode=ro); after exhaustion the title is not spawned (a budget_exhausted row) and the operator's checkpoint runs and is counted",
+      "when": "one turn runs, the operator presses Checkpoint, then the budget is set below usage and another operator turn runs and Checkpoint is pressed again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Claude envelope (2 in, 47,091 cache read, 100 cache write, 497 out) and a Codex one (1,000 in, 800 cached, 50 out)",
+      "how_to_check": "pytest hub/tests/test_worker_spend_counts_against_the_budget.py",
+      "key": "unit-normalised",
+      "requirement": "worker-call-recorded-with-total",
+      "then": "total_tokens 47,690 and 1,050; a conversation_title row with its total",
+      "when": "run_worker records them; the titler records its call"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an exhausted project, and one whose budget read raises",
+      "how_to_check": "pytest hub/tests/test_worker_spend_counts_against_the_budget.py",
+      "key": "unit-gate",
+      "requirement": "autonomous-worker-paused",
+      "then": "autonomous: no spawn, budget_exhausted (or spawn_failed); operator: spawns and counts",
+      "when": "autonomous and operator worker calls are made, including each caller's derived initiator"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an automatic policy at exhaustion; a flow handover with a pending note",
+      "how_to_check": "pytest hub/tests/test_worker_spend_counts_against_the_budget.py",
+      "key": "unit-triggers",
+      "requirement": "automatic-checkpoint-warns-at-exhaustion",
+      "then": "no checkpoint row, warning due (dismissal and final warning honoured); the note stays unconsumed",
+      "when": "a reading crosses the threshold; the handover is considered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a 0128 database with a Claude, a Codex and a usage-less worker row",
+      "how_to_check": "pytest hub/tests/test_migrations.py -k 0129",
+      "key": "unit-migration",
+      "requirement": "existing-rows-backfilled",
+      "then": "47,690 / 1,050 / null; a budget_exhausted insert is admitted; the downgrade keeps every row",
+      "when": "it is upgraded to 0129 and downgraded"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "9bc962829c3182447452d274a99026e8b2d06059ebb632d92c6af390b9a27cd8",
+      "FR-2": "a3e02c974ee8982d336b06979c8bae75507f713640c96521fd7c9ac641403924",
+      "FR-3": "2ac4892527bf810d82d691529ee69ed3db9e2ec99618dbba917966340a7fe39d",
+      "FR-4": "fe7552644a58e21f5c93cf6af29969d0fa17766bdf2cbdf100e165a832011127",
+      "FR-5": "8bb8809fc604dfbbf1d6ad694767df0a038e31089c24e7b3ba1575add9d99564"
+    },
+    "high_water": 5,
+    "requirements": {
+      "automatic-checkpoint-warns-at-exhaustion": "FR-4",
+      "autonomous-worker-paused": "FR-3",
+      "existing-rows-backfilled": "FR-5",
+      "worker-call-recorded-with-total": "FR-1",
+      "worker-tokens-count": "FR-2"
+    },
+    "retired": {}
+  },
+  "design": "Tier 2: migration 0129 reaches the operator's :8000 on its next restart (that database is at 0109 today, so it will run 20 migrations then). Measured mode=ro 2026-10-16: 32 ok Claude worker rows (16 checkpoint 490,179 + 16 probe 472,420 = 962,599 tokens, $1.17) and no project with a token_budget, so the backfill raises totals and pauses nothing. Rollback: downgrade drops total_tokens and rewrites budget_exhausted rows as spawn_failed (error is already set), then restores the old CHECK. D1: WorkerUsage gains normalised_total(cli); worker._record (made public as record_invocation) writes it; the migration backfills by the same rule in SQL. D2: usage_accounting.used_tokens = measured turn sum + worker sum (None when both None); project_budget_state, accounting_snapshot['budget'] and the PATCH answer read it; accounting_snapshot gains workers lines (kind, input, output, total, measured_calls, unmeasured_calls, api_equivalent_usd_micros), ordered by kind; a measured call has a total, an unmeasured one spawned (ok, nonzero_exit, timeout, unparseable, schema_invalid) with none; non-spawning outcomes are neither. D3: run_worker(initiator=) is keyword-only with no default; an autonomous call reads project_budget_state first, fail-closed. Initiators: checkpoint operator iff trigger operator, probe inherits; distillation operator iff distil_requested (its transcription, pieces and contradiction check alike); spec-vault-check operator iff requested; report reviews and titles autonomous. D3a: consider() reads the budget lazily (memoised, only under the automatic policy) at both 'not policy.automatic' tests; consider_handover declines after its enabled check, before resolving the runner, so the note is not consumed. D4: the titler's one_shot('title') gains the JSON flag (claude --output-format json, codex --json), spawns through worker._run_worker_process, parses with the adapter's parse_one_shot, is gated as autonomous, and records a conversation_title row (prompt_version conversation-title/1) besides its manager firing. UI: the Budgets section lists the worker lines; the headline caption names worker calls.",
+  "evidence": {
+    "checked": [
+      ":8000 mode=ro 2026-10-16: alembic 0109; worker rows 16 checkpoint + 16 probe, all Claude ok, 962,599 tokens; no token_budget set",
+      "project_budget_state and accounting_snapshot sum TurnUsage only (usage_accounting.py)",
+      "seven run_worker callers (checkpoint, probe, distillation x3, reports, spec check), none budget-aware",
+      "the titler records only a manager firing; its Claude and Codex commands print plain text, so no usage"
+    ],
+    "limits": [
+      "Codex and Copilot workers are not driven at home beyond unit tests"
+    ]
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "The budget reads turns only: project_budget_state and accounting_snapshot sum TurnUsage.total_tokens, and worker_invocations is joined to no aggregate. No worker consults the budget: run_worker checks the CLI and model, then spawns, and five callers spend autonomously (automatic checkpoints and handovers, distillation on upload, contradiction checks, report reviews, spec-vault checks). The titler records no worker row at all (Claude and Codex titles run in plain-text mode, so their usage is unrecoverable). F240 drove it: token_budget below usage, 'Autonomous turns are paused' on screen, and a checkpoint plus its probe spent $0.042 that reached no total and no budget. A Claude worker's input_tokens excludes cache (2 input against 47,091 cache reads), so input + output would under-count a worker ~100x against how a turn is counted.",
+  "requirements": [
+    {
+      "key": "worker-call-recorded-with-total",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A worker's cost must be recoverable and counted on the same basis as a turn's.",
+      "statement": "Every model call the Hub makes for a project outside an agent turn, the conversation titler included, MUST be recorded as a worker invocation whose total_tokens is the call's tokens normalised as a turn's are (Claude: input plus cache reads and writes plus output; Codex: input plus output, cache already inside input), and null when the call reported no token count."
+    },
+    {
+      "key": "worker-tokens-count",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One meaning for the budget: everything the Hub spends for the project.",
+      "statement": "A project's used tokens MUST be its measured turn tokens plus its worker totals, read the same by the budget, the accounting snapshot and the budget update; the snapshot MUST carry one `workers` line per worker kind, ordered by kind, with its tokens, measured and unmeasured calls and cost, and the project totals MUST include them while the per-agent and per-conversation figures stay turns only."
+    },
+    {
+      "key": "autonomous-worker-paused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The rule the budget already applies to turns: autonomy pauses, the operator keeps control.",
+      "statement": "When the project's token budget is exhausted, or cannot be read, a worker call the operator did not request MUST NOT be spawned and MUST be recorded with outcome budget_exhausted (or spawn_failed naming the unreadable budget), while a call the operator requested (the Checkpoint button, Distil, a requested spec check) MUST still run and be counted."
+    },
+    {
+      "key": "automatic-checkpoint-warns-at-exhaustion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An unwritten checkpoint made at exhaustion would become the next checkpoint's anchor and consume a handover's notes.",
+      "statement": "At exhaustion (or an unreadable budget) an automatic context-pressure checkpoint MUST NOT be generated: that reading MUST behave as under the offered policy (the due warning, a dismissal honoured, the final warning near the window); and a flow handover MUST decline without creating a checkpoint, leaving the author's note unconsumed."
+    },
+    {
+      "key": "existing-rows-backfilled",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's existing worker spend (962,599 tokens on :8000) must count from the upgrade, not only from new calls.",
+      "statement": "The migration MUST fill total_tokens for existing worker rows by the same rule, leave a row with no input and no output count null, and admit the budget_exhausted outcome; its downgrade MUST drop the column and turn budget_exhausted rows into spawn_failed."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "migration 0129: worker_invocations.total_tokens (backfilled) and the outcome budget_exhausted",
+      "the normalised total written for every worker row (Claude: input + cache read + cache write + output; Codex: input + output; Copilot one-shot: none)",
+      "run_worker's required initiator and its budget gate (fail-closed); every caller names its initiator",
+      "checkpoint_trigger.consider and checkpoint_handover.consider_handover read the budget before generating",
+      "the titler runs in JSON mode, is gated, and records a conversation_title worker row",
+      "accounting: used tokens = turns + workers; `workers` lines; project totals and budget include them; the Budgets section and headline caption show them"
+    ],
+    "non_goals": [
+      "Copilot credits on the worker lines, the project credit totals, and the `credits` display kind (slice B, F665)",
+      "Worker calls in a conversation's own usage rollup (it stays that conversation's turns)",
+      "Re-running a handover declined at exhaustion once the budget is raised"
+    ]
+  },
+  "summary": "Every model call the Hub makes for a project outside a turn (checkpoint, probe, conversation title, the vault jobs) is recorded with one normalised token total; those totals join the project total and the token budget as per-kind `workers` lines; at exhaustion an autonomous worker call is not spawned (recorded `budget_exhausted`) while an operator-requested one runs, and the automatic checkpoint triggers warn instead of generating (F240; decision fix-D2, option C of D7). Slice A of D2: Copilot credits on the worker lines and the `credits` display kind (F665) are slice B. Re-authored from openspec worker-spend-counts-against-the-budget.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Migration 0129 and the model; WorkerUsage.normalised_total and record_invocation; run_worker(initiator) and its gate; every caller's initiator; the trigger and handover pre-checks; the titler; used_tokens and workers lines; the Budgets section; tests and the drive.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "worker-call-recorded-with-total",
+        "worker-tokens-count",
+        "autonomous-worker-paused",
+        "automatic-checkpoint-warns-at-exhaustion",
+        "existing-rows-backfilled"
+      ],
+      "reviewer": null,
+      "title": "Count and gate worker spend"
+    }
+  ],
+  "title": "Worker spend counts against the budget"
+}
