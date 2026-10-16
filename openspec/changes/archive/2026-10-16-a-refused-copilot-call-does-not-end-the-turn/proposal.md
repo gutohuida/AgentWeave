@@ -1,3 +1,5 @@
+> **Moved to the app 2026-10-16, archived.** Successor: `spec/changes/a-refused-copilot-call-does-not-end-the-turn/spec.json` (built 33017ac; folded into `agent-run-sandboxing`, whose no-hook requirement gains the carve-out, and `turn-outcome-visibility`). D1-D4 and D6-D7 were built as written on fix-D3 (wpc1-a..c, e, f, h); wpc1-d and wpc1-g were taken as recommended and stay open; D5 is the existing last-wins control. Driven live at home (Copilot 1.0.98): judge refusal and operator Deny, ALL PASS.
+
 # Proposal — A refused Copilot call does not end the turn
 
 **Round 1, 2026-10-12** (finding **WPC-1 (high)**, from the work-PC Copilot drive, handoff 0162).

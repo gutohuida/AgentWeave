@@ -132,22 +132,44 @@
       "requirement": "a-run-ending-refreshes-the-conversation-that-renders-it",
       "then": "the conversation presents the terminal label as a consequence of the run reaching a terminal status, not as a consequence of some later unrelated event",
       "when": "the operator stops a turn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Copilot TurnOutcome with stop_reason end_turn, ended_on_refusal and one continuation, and a Codex outcome",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_failure_reporting.py hub/tests/test_copilot_acp_refusal_continuation.py",
+      "key": "a-refused-copilot-call-does-not-end-the-turn-unit-stop-reason",
+      "requirement": "a-refused-copilot-call-does-not-end-the-tur-stop-reason-recorded",
+      "then": "the Copilot payload carries all three; the Codex one carries none (written first)",
+      "when": "the terminal lifecycle fields are built"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task run that did not move its task and recorded copilot.turn_ended_on_refusal",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_copilot_acp_refusal_continuation.py; cd hub/ui && npx vitest run src/__tests__/eventSummary.test.ts",
+      "key": "a-refused-copilot-call-does-not-end-the-turn-unit-divergence",
+      "requirement": "a-refused-copilot-call-does-not-end-the-divergence-names-refusal",
+      "then": "run_diverged carries refusal.label and refusal.reason and the summary names them; without the row the payload is unchanged (written first)",
+      "when": "evaluate_run_end runs and the event summary renders"
     }
   ],
   "algorithms": [],
   "aw_identity": {
     "digests": {
       "FR-1": "165f1bc0e0545485467b2f8fc18390d65feeb0bd63d85bd8dbfdcca44cad2824",
+      "FR-10": "a3428a4c9a4931b7e4a7a9a014f4a0a068d7e67d7c26f8242456e84e7184fa1f",
       "FR-2": "ed5ce00a8ebeeab473efd3a4473590c3b95cc1333503244495bf09c0c9b57c4a",
       "FR-3": "61eac8204190d56b937494cc89d26b8eb370ebffa61bfcbfb7ec9a2749331d5f",
       "FR-4": "6a1859d81108fbdca0249be35a11c23e304f2edae9d9b1e75dfbab59a45f81dd",
       "FR-5": "ac87c583bf207bec47920518eaab467de240513839d741afa60934dc49b397bd",
       "FR-6": "827428569e013392149028f09fa643474b5e6b46adc17a0df78ebd668d77e5a3",
       "FR-7": "ddba5e831a3d4951c75bad798002efec0292778cfe8846828bbfd2f705b31a1e",
-      "FR-8": "cf438babd5f4db3e3d4604f1c8c3e2567c25c9b284c6de3152f4c33e21bc9d46"
+      "FR-8": "cf438babd5f4db3e3d4604f1c8c3e2567c25c9b284c6de3152f4c33e21bc9d46",
+      "FR-9": "ad8f2cc8548ac6625b2676f306d321b07580fb230e6bf2b610d4e08864e53ea7"
     },
-    "high_water": 8,
+    "high_water": 10,
     "requirements": {
+      "a-refused-copilot-call-does-not-end-the-divergence-names-refusal": "FR-10",
+      "a-refused-copilot-call-does-not-end-the-tur-stop-reason-recorded": "FR-9",
       "a-run-ending-refreshes-the-conversation-that-renders-it": "FR-8",
       "a-run-s-terminal-outcome-is-visible": "FR-7",
       "a-turn-that-produced-nothing-and-asked-nothing-is-recorded-a": "FR-1",
@@ -230,6 +252,20 @@
       "party": null,
       "rationale": "A run that ends with no further output, or while the client is disconnected, must still show how it ended.",
       "statement": "A client displaying a conversation SHALL refresh its run facts when a run for that agent reaches a terminal status (`run_completed`, `run_failed`, `run_stopped`, `run_interrupted`) and when its event stream reconnects, not only when new conversation content arrives."
+    },
+    {
+      "key": "a-refused-copilot-call-does-not-end-the-tur-stop-reason-recorded",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A turn a refusal stopped and a turn the agent finished both read completed, exit 0; the record could not say which.",
+      "statement": "The Hub SHALL log the stop reason Copilot returns for every prompt of a Copilot turn, and SHALL carry the turn's last stop reason, whether it ended on a refusal, and how many follow-up prompts it sent on the run's terminal lifecycle event and its closing status row, omitting each field the run's runner did not report rather than sending it empty."
+    },
+    {
+      "key": "a-refused-copilot-call-does-not-end-the-divergence-names-refusal",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A task left in_progress after a refused call should say why, not only that it was dropped.",
+      "statement": "When a task run ends without moving its task and the run recorded copilot.turn_ended_on_refusal or copilot.refusal_continuation_failed, the run_diverged event MUST carry that refusal's label and reason and its summary MUST name them; a run with neither, or a read that fails, keeps today's event."
     }
   ],
   "schema_version": 1,

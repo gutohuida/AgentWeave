@@ -1203,6 +1203,42 @@
       "requirement": "a-call-mode-turn-starts-with-an-empty-calls-emptying-best-effort",
       "then": "a warning names the path, the other entries are removed, nothing raises",
       "when": "prepare_calls_dir(empty=True) runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the fake ACP harness replaying a refused root call then end_turn (judge refusal under acceptEdits; operator Deny under manual; subagent refusal; refusal then text; Stop; parallel calls)",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_copilot_acp_refusal_continuation.py",
+      "key": "a-refused-copilot-call-does-not-end-the-turn-unit-continuation",
+      "requirement": "a-refused-copilot-call-does-not-end-refused-turn-continued-once",
+      "then": "exactly one continuation session/prompt naming the label and reason (operator: 'did not approve'), only where the refusal was last and parent-level; none after a Stop, text, a later root call or a subagent refusal (written first: fails before the build)",
+      "when": "run_turn runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a continuation that also ends on a refusal, one that fails before output, one that fails after output, a quota error, a cancelled task",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_copilot_acp_refusal_continuation.py",
+      "key": "a-refused-copilot-call-does-not-end-the-turn-unit-says-so",
+      "requirement": "a-refused-copilot-call-does-not-end-the-tur-refused-turn-says-so",
+      "then": "turn_ended_on_refusal with continuations 1; the first outcome stands with refusal_continuation_failed and a forced close; failed after output; quota fails; CancelledError propagates (written first)",
+      "when": "run_turn runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub with a Copilot agent in acceptEdits (fix-D16 allows the premium requests)",
+      "how_to_check": "py -3.11 scripts/drive/d1016_f660_refusal_continues.py",
+      "key": "a-refused-copilot-call-does-not-end-the-turn-live-drive",
+      "requirement": "a-refused-copilot-call-does-not-end-refused-turn-continued-once",
+      "then": "one copilot.refusal_continued row, agent text after it, run_completed carrying stop_reason end_turn and refusal_continuations 1 (fails before the build: no text after the refusal)",
+      "when": "it is asked to list C:\\Python* (outside its workspace), then in manual the operator denies `echo hi`"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a turn whose agent writes a question in prose after a refusal, and a turn with no refusal that ends on a question",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_copilot_acp_refusal_continuation.py; py -3.11 -m pytest hub/tests/test_copilot_home_has_no_deciding_hook.py",
+      "key": "a-refused-copilot-call-does-not-end-the-turn-unit-no-prose",
+      "requirement": "no-copilot-hook-decides-a-call-or-a-turn",
+      "then": "no follow-up is sent in either: only the Hub's own refusal record opens the gate",
+      "when": "run_turn runs"
     }
   ],
   "algorithms": [
@@ -1255,7 +1291,7 @@
       "FR-37": "c3272682c81ab6635d5468e3b900a071684e9a5640834abf4ab4a5ec23b5b953",
       "FR-38": "4b4e7939ba4d975eb9cc031d49fd8a12c16a0087d5b0f608ea5646b927f3e4af",
       "FR-39": "7fd160cd6c58755971ec538e0e58b33990fa68d509311e01ba6b03178a026ef2",
-      "FR-40": "7802ecac2dda88d68b43422f5b01f3aa23f842156b91396735a06408c7f34dc9",
+      "FR-40": "ee0d8e591548d37dfd4e2c0bb408ed7178e5fa8b839ecfc823093bbdee304b9f",
       "FR-41": "9b3f5409248511de197716d8ab8a1c75cc182376449a1cde1cc5f94a745f69d7",
       "FR-42": "034a2fd300caa6a123bbdd4620b7d200bff1ac1c00cd3d68d2c1ecbbe38dd356",
       "FR-43": "38c5110e055c9f15b520aa872b9cb745f6b5326cf9967010b5b16e4d389ae9e6",
@@ -1273,9 +1309,11 @@
       "FR-55": "2fb2f444e9f4586f04d76c53d8f36fe2c63c1bd3599ed62f37af28f44c1e5e87",
       "FR-56": "718582d19e927f894d291f3643d8db84ee75560693daa74e65a8310704b53688",
       "FR-57": "039eb493526fe849b7d5bf42021b9b96bab673bf03835bd5ce8a4f630a62808f",
+      "FR-58": "feb2cdbb62a5496c198a820f1587d169a6e4b1782b486872c16cd8797438a029",
+      "FR-59": "bd80198f2c53b624a0e0146ff93b5e0ebfa1cd5797b3280fe8805d02a659a426",
       "FR-8": "8cfbe18bf3d8194ee817d7c2752711d6c5a3e8e6fc3922082df2174afb6c9b6b"
     },
-    "high_water": 57,
+    "high_water": 59,
     "requirements": {
       "a-brace-pattern-is-judged-as-the-words-it-expands-to": "FR-39",
       "a-call-mode-turn-starts-with-an-empty-call-isolated-starts-empty": "FR-55",
@@ -1297,6 +1335,8 @@
       "a-posture-exists-in-which-the-workspace-boundary-is-enforced": "FR-18",
       "a-refusal-is-recorded-wherever-it-is-decided": "FR-25",
       "a-refusal-s-reason-fits-the-record-that-carries-it": "FR-31",
+      "a-refused-copilot-call-does-not-end-refused-turn-continued-once": "FR-58",
+      "a-refused-copilot-call-does-not-end-the-tur-refused-turn-says-so": "FR-59",
       "a-sandboxed-non-yolo-claude-agent-can-still-use-the-hub-s-ow": "FR-15",
       "a-word-with-no-path-separator-is-still-judged-when-it-names-": "FR-30",
       "an-operator-asked-to-decide-a-call-is-shown-what-the-workspa": "FR-36",
@@ -1547,8 +1587,8 @@
       "key": "no-copilot-hook-decides-a-call-or-a-turn",
       "modal": "SHALL",
       "party": null,
-      "rationale": "A hook that answers a permission pre-empts the approval protocol, taking the decision from the Hub's judge, the operator's cards and the record. A hook that forces continuation is a backstop, which the operator-in-the-loop design deliberately lacks. Trusting the folder would load the repository's own hooks and servers. The sweep is reported as `copilot.home_repaired`.",
-      "statement": "The Hub SHALL NOT install a Copilot hook that allows, denies or rewrites a tool call or forces a turn to continue, SHALL remove from the agent's Copilot home before every spawn any hook or permission-granting setting it did not write, and SHALL NOT trust the agent's workspace folder on Copilot's behalf."
+      "rationale": "A hook that answers a permission pre-empts the approval protocol, taking the decision from the Hub's judge, the operator's cards and the record. A hook that forces continuation is a backstop, which the operator-in-the-loop design deliberately lacks. A turn Copilot's runtime ended on a refusal whose reason the protocol dropped was not ended by the agent; delivering that reason once is not a backstop. Trusting the folder would load the repository's own hooks and servers. The sweep is reported as `copilot.home_repaired`.",
+      "statement": "The Hub SHALL NOT install a Copilot hook that allows, denies or rewrites a tool call or forces a turn to continue, SHALL remove from the agent's Copilot home before every spawn any hook or permission-granting setting it did not write, and SHALL NOT trust the agent's workspace folder on Copilot's behalf; the one turn the Hub continues is one whose last parent-level event was a refusal the Hub itself recorded, with one bounded follow-up prompt carrying its reason, and no reading of the agent's text decides whether any turn continues."
     },
     {
       "key": "n2",
@@ -1654,6 +1694,20 @@
       "party": null,
       "rationale": "A leftover costs a retry; a blocked agent costs the turn.",
       "statement": "An entry that cannot be removed MUST be logged as a warning and the turn MUST start; failing to make the directory itself MUST still refuse the turn as before."
+    },
+    {
+      "key": "a-refused-copilot-call-does-not-end-refused-turn-continued-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "ACP's reject carries no reason and Copilot's runtime ends the turn on it; the follow-up prompt is the only place the Hub controls where Copilot accepts the reason. Parity with Claude, which is told the reason and continues.",
+      "statement": "When the last parent-level thing in a Copilot prompt, before its result, is the Hub's or the operator's refusal of a tool call, and the prompt returns end_turn with no stop, cancel, forced failure, prompt failure, root session error or quota refusal, the Hub MUST first check for a stop and then send at most one follow-up session/prompt in the same session, within what is left of the turn's deadline, naming the refused call and the refusal's reason (\"The operator did not approve\" for an operator's refusal, since a card's refusal is also its expiry) and telling the agent to continue another way or call ask_user; agent text the Hub keeps, or a parent-level tool call started after the refusal, means the refusal was not last; a subagent's refusal is never recorded; the decision MUST NOT read the agent's text."
+    },
+    {
+      "key": "a-refused-copilot-call-does-not-end-the-tur-refused-turn-says-so",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "When the Hub does not or cannot continue, the operator must see that the turn ended on a refusal rather than read a clean completion; a step the Hub added must not fail a turn that had not produced anything since.",
+      "statement": "When a turn ends on a recorded refusal and no follow-up is sent, or the follow-up also ends on one, the run MUST show a warning diagnostic copilot.turn_ended_on_refusal naming the call, the reason and who refused, and stay completed; a follow-up that fails before producing agent output MUST leave the first prompt's outcome with a copilot.refusal_continuation_failed warning and a forced close, and one that fails after producing output MUST fail the run (wpc1-h); a stop, a root session error or a quota refusal during the follow-up gives the outcome it gives any prompt, and a cancellation of the run's task propagates unabsorbed."
     }
   ],
   "schema_version": 1,

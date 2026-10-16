@@ -93,6 +93,8 @@ STOP_UI_TESTS = "hub/ui/src/__tests__/stopClosesToolCard.test.tsx"
 SPEND_DRIVE = "scripts/drive/d1016_f240_worker_spend.py"
 SPEND_TESTS = "hub/tests/test_worker_spend_counts_against_the_budget.py"
 CREDIT_TESTS = "hub/tests/test_copilot_spend_in_its_own_units.py"
+REFUSAL_TESTS = "hub/tests/test_copilot_acp_refusal_continuation.py"
+REFUSAL_DRIVE = "scripts/drive/d1016_f660_refusal_continues.py"
 CREDIT_UI_TESTS = "hub/ui/src/__tests__/accountingPresentation.test.tsx"
 CATALOG_PIN = "tests/test_model_catalog_drift.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
@@ -1482,6 +1484,34 @@ CHANGES = {
              "Claude project keeps tokens; the JSON null allowance is never a reading."),
         ],
     },
+    "f660": {
+        "document": "spec/changes/a-refused-copilot-call-does-not-end-the-turn/spec.json",
+        "commit": "33017ac",
+        "tasks": ["task-20439c841edb"],
+        "evidence": [
+            ("FR-1", "task-20439c841edb", "test_result", REFUSAL_TESTS,
+             "Written first (0909d30): TurnOutcome.stop_reason, the per-prompt log line and "
+             "_runtime_turn_fields (Codex adds nothing). Drive: run_completed and the closing status "
+             "row carry stop_reason end_turn and refusal_continuations 1 (8 FAILED before)."),
+            ("FR-2", "task-20439c841edb", "test_result", REFUSAL_DRIVE,
+             "Copilot 1.0.98 on a scratch Hub: a judge refusal (acceptEdits, C:\Python*) and an "
+             "operator Deny (manual, echo hi) each got one copilot.refusal_continued and agent text "
+             "after it; before the build both ended 'Run completed' right after the refusal. Unit: "
+             "subagent, text, a later root call, Stop and parallel-call orders."),
+            ("FR-3", "task-20439c841edb", "test_result", REFUSAL_TESTS,
+             "turn_ended_on_refusal at the bound and with no follow-up; a follow-up failing before "
+             "output keeps completed with refusal_continuation_failed and a forced close, after "
+             "output fails; quota and root errors fail; the remaining deadline; CancelledError "
+             "propagates."),
+            ("FR-4", "task-20439c841edb", "test_result", REFUSAL_TESTS,
+             "run_diverged.refusal {label, reason} from either diagnostic row; absent without one. "
+             "UI: eventSummary.test.ts names the refused call."),
+            ("FR-5", "task-20439c841edb", "test_result", REFUSAL_TESTS,
+             "A question in prose after a refusal, or with no refusal, is not continued; only the "
+             "Hub's own refusal record opens the gate. test_copilot_home_has_no_deciding_hook.py "
+             "still passes (no hook)."),
+        ],
+    },
     "fcatalog": {
         "document": "spec/changes/the-model-catalog-tracks-the-newest-clis/spec.json",
         "commit": "da1c4b9",
@@ -1549,6 +1579,13 @@ CHANGE_FOLDS = {
     "f662": 'model-catalog',
     "f662b": 'model-catalog',
     "f665": 'usage-accounting',
+    "f660": {
+        'turn-outcome-visibility': ['stop-reason-recorded', 'divergence-names-refusal'],
+        'agent-run-sandboxing': [
+            'refused-turn-continued-once', 'refused-turn-says-so',
+            ('no-hook-decides-carve-out', 'no-copilot-hook-decides-a-call-or-a-turn'),
+        ],
+    },
     "f240": {
         'usage-accounting': [
             'worker-call-recorded-with-total', 'worker-tokens-count', 'autonomous-worker-paused',
@@ -1614,7 +1651,10 @@ def fold_split(name: str, split: dict) -> None:
     for index, (capability, keys) in enumerate(targets):
         body = {
             "into": capability,
-            "requirements": [{"key": key} for key in keys],
+            # A (key, replaced key) pair folds the key in place of the capability's requirement.
+            "requirements": [
+                {"key": k} if isinstance(k, str) else {"key": k[0], "replaces": k[1]} for k in keys
+            ],
             "archive": index == len(targets) - 1,
         }
         code, res = api("POST", f"/projects/{P}/project/documents/{path}/fold", body)
