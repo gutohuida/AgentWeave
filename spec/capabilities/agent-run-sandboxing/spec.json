@@ -1167,6 +1167,42 @@
       "requirement": "edit-files-asks-the-operator-for-everything-else-edits-free",
       "then": "--permission-mode acceptEdits is kept, so inside edits stay auto-approved by Claude",
       "when": "the argv is built"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub, a Haiku agent in call mode (hub_client cli) in its own worktree, stale 1-3.json planted after a first turn",
+      "how_to_check": "py -3.11 scripts/drive/d1016_f663_calls_dir_clean.py <name> (written first: fails before the build)",
+      "key": "a-call-mode-turn-starts-with-an-empty-calls-directory-drive",
+      "requirement": "a-call-mode-turn-starts-with-an-empty-call-isolated-starts-empty",
+      "then": "no tool call fails and no stale file survives the turn's start",
+      "when": "a second turn in a new conversation creates a task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a calls directory holding a file, a subdirectory and a junction/symlink to a directory outside",
+      "how_to_check": "pytest hub/tests/test_calls_dir_starts_clean.py",
+      "key": "a-call-mode-turn-starts-with-an-empty-calls-directory-unit-empty",
+      "requirement": "a-call-mode-turn-starts-with-an-empty-call-isolated-starts-empty",
+      "then": "the directory is empty and the link's target still holds its file",
+      "when": "prepare_calls_dir(empty=True) runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a read-only agent (project directory) with a file in calls",
+      "how_to_check": "pytest hub/tests/test_calls_dir_starts_clean.py",
+      "key": "a-call-mode-turn-starts-with-an-empty-calls-director-unit-shared",
+      "requirement": "a-call-mode-turn-starts-with-an-empty-calls-d-shared-not-emptied",
+      "then": "the file is still there; an agent with its own worktree finds its directory empty",
+      "when": "its turn starts through the trigger"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a removal that raises OSError",
+      "how_to_check": "pytest hub/tests/test_calls_dir_starts_clean.py",
+      "key": "a-call-mode-turn-starts-with-an-empty-calls-dir-unit-best-effort",
+      "requirement": "a-call-mode-turn-starts-with-an-empty-calls-emptying-best-effort",
+      "then": "a warning names the path, the other entries are removed, nothing raises",
+      "when": "prepare_calls_dir(empty=True) runs"
     }
   ],
   "algorithms": [
@@ -1234,11 +1270,17 @@
       "FR-52": "1e131a36315939c805df8d38891f14a9bc2bc07c38aa2154f2b270216b18e325",
       "FR-53": "050ef73f8906d9ebe5c5e8adf27f373d2581b53081e671ad591feb431913ee4a",
       "FR-54": "c9340f730a4cddbb33c12f972b3c582fc1e316daafbf7a12a4dee0162231f1ea",
+      "FR-55": "2fb2f444e9f4586f04d76c53d8f36fe2c63c1bd3599ed62f37af28f44c1e5e87",
+      "FR-56": "718582d19e927f894d291f3643d8db84ee75560693daa74e65a8310704b53688",
+      "FR-57": "039eb493526fe849b7d5bf42021b9b96bab673bf03835bd5ce8a4f630a62808f",
       "FR-8": "8cfbe18bf3d8194ee817d7c2752711d6c5a3e8e6fc3922082df2174afb6c9b6b"
     },
-    "high_water": 54,
+    "high_water": 57,
     "requirements": {
       "a-brace-pattern-is-judged-as-the-words-it-expands-to": "FR-39",
+      "a-call-mode-turn-starts-with-an-empty-call-isolated-starts-empty": "FR-55",
+      "a-call-mode-turn-starts-with-an-empty-calls-d-shared-not-emptied": "FR-56",
+      "a-call-mode-turn-starts-with-an-empty-calls-emptying-best-effort": "FR-57",
       "a-claude-run-pre-allows-the-hub-s-call-command": "FR-38",
       "a-copilot-run-receives-no-github-token-or-permission-overrid": "FR-34",
       "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp": "FR-33",
@@ -1591,6 +1633,27 @@
       "party": null,
       "rationale": null,
       "statement": "Edits Claude Code auto-approves under acceptEdits MUST still run without a card."
+    },
+    {
+      "key": "a-call-mode-turn-starts-with-an-empty-call-isolated-starts-empty",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A new conversation cannot know an earlier file exists, and write tools refuse to overwrite an unread file.",
+      "statement": "When a turn's workspace is isolated (the agent's own worktree, a task checkout or a review checkout), its .agentweave/calls/ directory MUST hold no entry from an earlier turn when the run starts; a link or junction inside it MUST be removed as a link without touching its target."
+    },
+    {
+      "key": "a-call-mode-turn-starts-with-an-empty-calls-d-shared-not-emptied",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Another agent's arguments file may be in flight there.",
+      "statement": "A calls directory in a workspace that is not isolated (the project directory, an explicit work_dir) MUST NOT be emptied at turn start."
+    },
+    {
+      "key": "a-call-mode-turn-starts-with-an-empty-calls-emptying-best-effort",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A leftover costs a retry; a blocked agent costs the turn.",
+      "statement": "An entry that cannot be removed MUST be logged as a warning and the turn MUST start; failing to make the directory itself MUST still refuse the turn as before."
     }
   ],
   "schema_version": 1,

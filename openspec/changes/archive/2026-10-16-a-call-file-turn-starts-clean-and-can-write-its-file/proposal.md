@@ -1,3 +1,5 @@
+> **Moved to the app 2026-10-16, archived.** Successor: `spec/changes/a-call-mode-turn-starts-with-an-empty-calls-directory/spec.json` (built 6fdf5ff; folded into `agent-run-sandboxing` and `agent-tool-surface`). D1-D4 were built as written. wpc4-b (warn and proceed) was taken as recommended; wpc4-c and wpc4-e stay open.
+
 # Proposal — A call-mode turn starts with an empty calls directory and is told to name each file afresh
 
 Round 1, 2026-10-12; verified by Round 2 the same day. Findings WPC-4 and WPC-5 from `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`.

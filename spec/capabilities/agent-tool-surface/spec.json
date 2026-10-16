@@ -314,6 +314,15 @@
       "requirement": "an-agent-is-told-what-its-tools-accept",
       "then": "every callable tool is described, with the accepted values of each constrained parameter",
       "when": "they are compared with the tools its context describes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the shim notice and the shim tool-surface preamble",
+      "how_to_check": "pytest hub/tests/test_calls_dir_starts_clean.py",
+      "key": "a-call-mode-turn-starts-with-an-empty-calls-directory-unit-text",
+      "requirement": "a-call-mode-turn-starts-with-an-empty-calls-di-new-name-per-call",
+      "then": "each asks for a new file name per call",
+      "when": "they are rendered"
     }
   ],
   "algorithms": [],
@@ -346,10 +355,12 @@
       "FR-36": "77fc56dd6cce24e0d1afe06691be717423c12fb74dc3fa0e7454b27d76e6b245",
       "FR-37": "f34ef4682a0379a1b75ee47d973b45775d872dca98cf8ab9fc2315e1fe7bbe27",
       "FR-38": "d71be73d3d67bb2e2a5ac402dffdece56909a2fc57f3b063eb049841ed84b082",
-      "FR-39": "ba48b6d88fd82d5063682a1fc02a208d59bb16634fde0629fed70f278937200a"
+      "FR-39": "ba48b6d88fd82d5063682a1fc02a208d59bb16634fde0629fed70f278937200a",
+      "FR-40": "f5a3ba8ef5644a60b5ca121c582397533918d2a92fecf01a721056fd979ae7db"
     },
-    "high_water": 39,
+    "high_water": 40,
     "requirements": {
+      "a-call-mode-turn-starts-with-an-empty-calls-di-new-name-per-call": "FR-40",
       "a-constrained-tool-parameter-declares-its-valid-values": "FR-20",
       "a-copilot-run-s-mcp-tool-calls-outlast-the-hub-s-longest-wai": "FR-30",
       "a-failed-tool-call-is-reported-not-silently-absorbed": "FR-18",
@@ -569,6 +580,13 @@
       "party": null,
       "rationale": "A tool never mentioned cannot be used deliberately, and a description kept separately from the definitions drifts.",
       "statement": "The context SHALL describe every tool the agent can call, with each parameter and the accepted values of a constrained one, derived from the same source as the tool definitions and written in the idiom of the run's access path."
+    },
+    {
+      "key": "a-call-mode-turn-starts-with-an-empty-calls-di-new-name-per-call",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Covers a name reused within one turn and any shared workspace.",
+      "statement": "Both texts that tell a run the call command (the turn-start notice and the tool-surface preamble) MUST ask it to use a new file name for each call and to write corrected arguments to a new file rather than editing an old one."
     }
   ],
   "schema_version": 1,
