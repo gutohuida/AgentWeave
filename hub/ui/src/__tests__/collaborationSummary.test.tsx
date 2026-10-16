@@ -116,6 +116,11 @@ describe('Overview Collaboration block', () => {
     expect(mutate.mock.calls[0][0]).toEqual({ allow_agent_jobs: true })
   })
 
+  it('names jobs as well as flows and loops, as the refusal does (F639)', () => {
+    render(<CollaborationSummary onNavigate={vi.fn()} />)
+    expect(row('flows')).toHaveTextContent('create_job, create_flow and create_loop')
+  })
+
   it('shows a refused save and keeps showing the stored value', () => {
     // The shape `fetchWithAuth` raises: the route's own JSON body as the message.
     updateError = new ApiError(422, JSON.stringify({ detail: 'The Hub refused it' }))

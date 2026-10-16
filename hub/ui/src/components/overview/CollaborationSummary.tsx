@@ -57,7 +57,7 @@ export function CollaborationSummary({ onNavigate }: { onNavigate: (page: string
       </h2>
       <div className="mt-2 grid gap-x-6 md:grid-cols-2">
         <div className="collab-row" data-testid="collab-row-flows">
-          <RowText label="Agents may start flows" hint="Needed for create_flow and create_loop" />
+          <RowText label="Agents may start flows" hint="Needed for create_job, create_flow and create_loop" />
           <button
             type="button"
             role="switch"

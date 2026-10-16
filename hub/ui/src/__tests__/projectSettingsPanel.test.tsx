@@ -126,6 +126,11 @@ describe('phase 5 project settings and locate repair', () => {
    * control existed that was a closed loop: told what to do, given no way to do it, and the only
    * way to set the branch was a hand-written PUT.
    */
+  it('says Allow agent jobs covers jobs too, as the refusal does (F639)', () => {
+    render(<ProjectSettingsPanel />)
+    expect(screen.getByText(/create_job, create_flow, create_loop/)).toBeInTheDocument()
+  })
+
   it('offers the branch approval merges into, where the integration note sends you', () => {
     render(<ProjectSettingsPanel />)
     fireEvent.change(screen.getByLabelText('Main branch'), { target: { value: 'trunk' } })

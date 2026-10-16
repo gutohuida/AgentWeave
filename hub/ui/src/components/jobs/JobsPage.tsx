@@ -6,6 +6,7 @@ import { tint } from '@/lib/colorTint'
 import { JobCard } from './JobCard'
 import { JobForm } from './JobForm'
 import {
+  useArchivedJobs,
   useJobs,
   useRunJob,
   usePauseJob,
@@ -13,7 +14,9 @@ import {
   useArchiveJob,
   useCreateJob,
   JobCreate,
+  type Job,
 } from '@/api/jobs'
+import { hubDate } from '@/lib/hubTime'
 
 /** The Hub's own sentence for a refused request: its `detail` when the body carries one, else the
  *  raw message. `fallback` covers a rejection that is not an Error at all. */
@@ -34,8 +37,10 @@ interface JobsPageProps {
 
 export function JobsPage({ onOpenTasks }: JobsPageProps) {
   const { data: jobs, isLoading } = useJobs()
+  const { data: archivedJobs } = useArchivedJobs()
+  const archivedCount = archivedJobs?.length ?? 0
   const [showForm, setShowForm] = useState(false)
-  const [filter, setFilter] = useState<'all' | 'active' | 'paused'>('all')
+  const [filter, setFilter] = useState<'all' | 'active' | 'paused' | 'archived'>('all')
   const [actionError, setActionError] = useState<string | null>(null)
 
   const runJob = useRunJob()
@@ -121,9 +126,10 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
 
       {/* Filter tabs */}
       <div className="flex items-center gap-1 px-4 py-2" style={{ borderBottom: '1px solid var(--border)' }}>
-        {(['all', 'active', 'paused'] as const).map((f) => (
+        {(['all', 'active', 'paused', ...(archivedCount > 0 ? (['archived'] as const) : [])] as const).map((f) => (
           <button
             key={f}
+            data-testid={`jobs-filter-${f}`}
             onClick={() => setFilter(f)}
             data-active={filter === f ? 'true' : 'false'}
             className="row-item aw-chip w-auto px-3 py-1.5 text-[11px] font-medium capitalize"
@@ -132,7 +138,11 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
             {f}
             {f !== 'all' && jobs && (
               <span className="ml-1.5 opacity-70">
-                {f === 'active' ? jobs.filter(j => j.enabled).length : jobs.filter(j => !j.enabled).length}
+                {f === 'active'
+                  ? jobs.filter(j => j.enabled).length
+                  : f === 'archived'
+                    ? archivedCount
+                    : jobs.filter(j => !j.enabled).length}
               </span>
             )}
           </button>
@@ -141,7 +151,27 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4">
-        {!jobs || jobs.length === 0 ? (
+        {filter === 'archived' ? (
+          <ArchivedJobs jobs={archivedJobs ?? []} />
+        ) : (!jobs || jobs.length === 0) && archivedCount > 0 ? (
+          // F637: archiving every job is not having none. Say what is archived, and where.
+          <div className="flex flex-col items-center">
+            <EmptyState
+              icon="schedule"
+              title="No active or paused jobs"
+              description={`${archivedCount} archived ${archivedCount === 1 ? 'job is' : 'jobs are'} kept with their history.`}
+            />
+            <div className="mt-4 flex gap-2">
+              <Button variant="outline" size="md" onClick={() => setFilter('archived')}>
+                Show archived
+              </Button>
+              <Button variant="primary" size="md" onClick={() => setShowForm(true)}>
+                <Icon name="add" size={18} />
+                Create Job
+              </Button>
+            </div>
+          </div>
+        ) : !jobs || jobs.length === 0 ? (
           <div className="flex flex-col items-center">
             <EmptyState
               icon="schedule"
@@ -208,5 +238,29 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
         />
       )}
     </div>
+  )
+}
+
+/** Archived jobs, read-only (F637): nothing is deleted on archive, so they are listed with when they
+ *  were archived and how often they fired, and offer no controls. */
+function ArchivedJobs({ jobs }: { jobs: Job[] }) {
+  if (jobs.length === 0) {
+    return <EmptyState icon="schedule" title="No archived jobs" description="Archived jobs are listed here." />
+  }
+  return (
+    <ul className="grid max-w-3xl gap-2">
+      {jobs.map((job) => (
+        <li
+          key={job.id}
+          data-testid={`archived-job-${job.id}`}
+          className="rounded-md px-3 py-2 text-xs"
+          style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+        >
+          <span className="font-medium" style={{ color: 'var(--text)' }}>{job.name}</span>
+          {' · '}@{job.agent} · fired {job.run_count} time{job.run_count === 1 ? '' : 's'}
+          {job.archived_at ? ` · archived ${hubDate(job.archived_at).toLocaleString()}` : ''}
+        </li>
+      ))}
+    </ul>
   )
 }

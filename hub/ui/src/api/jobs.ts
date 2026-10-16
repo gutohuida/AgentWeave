@@ -174,6 +174,20 @@ export function useJobs() {
   })
 }
 
+/** Archived jobs only (F637): the list route leaves them out unless asked, and the Jobs page lists
+ *  them on their own so a project whose jobs were all archived does not read as empty. */
+export function useArchivedJobs() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<Job[]>({
+    queryKey: ['project', projectId, 'jobs', 'archived'],
+    queryFn: async () =>
+      (await getJson<Job[]>(`/api/v1/projects/${projectId}/jobs?include_archived=true`)).filter(
+        (job) => job.archived_at,
+      ),
+    enabled: isConfigured && !!projectId,
+  })
+}
+
 export function useJob(jobId: string | null) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<Job>({

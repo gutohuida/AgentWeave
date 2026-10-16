@@ -180,7 +180,7 @@ export function ProjectSettingsPanel({ onNavigate }: { onNavigate?: (page: strin
     >
       <form id="project-settings-form" onSubmit={handleSave}>
       <GroupHeading>Collaboration</GroupHeading>
-      <SettingsRow label="Allow agent jobs" description="Agents may create flows and loops (create_flow, create_loop). Off, an agent asking for one is refused and you are asked.">
+      <SettingsRow label="Allow agent jobs" description="Agents may create jobs, flows and loops (create_job, create_flow, create_loop). Off, an agent asking for one is refused and you are asked.">
         <input className="control-choice" aria-label="Allow agent jobs" type="checkbox" checked={form.allow_agent_jobs} onChange={(event) => set('allow_agent_jobs', event.target.checked)} />
       </SettingsRow>
       <SettingsRow label="Hop budget" description="How many agent-to-agent hops a chain may take before it pauses for you.">

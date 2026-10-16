@@ -198,6 +198,32 @@ describe('JobCard loop block', () => {
     ).toBeInstanceOf(SVGElement)
   })
 
+  it('reads Stopping, with no next run, once a loop is past its stop time (F655)', async () => {
+    const user = userEvent.setup()
+    loopTasks = []
+    renderCard(
+      baseJob({
+        next_run: new Date(Date.now() + 60_000).toISOString(),
+        loop: {
+          id: 'loop-1',
+          label: 'Nightly scan job',
+          purpose: 'Nightly scan',
+          stop_when_queue_empties: false,
+          stop_at: new Date(Date.now() - 60_000).toISOString(),
+          queue: {},
+          current_tasks: [],
+          open_questions: 0,
+          firing_active: false,
+        },
+      }),
+    )
+    expect(screen.queryByText(/^Next:/)).toBeNull()
+    await user.click(screen.getByLabelText('Expand job details'))
+    const block = screen.getByTestId('job-loop-block')
+    expect(within(block).getByText('Stopping')).toBeInTheDocument()
+    expect(within(block).queryByText('Active')).toBeNull()
+  })
+
   it('shows the stop reason and a Stopped badge once the loop has stopped', async () => {
     const user = userEvent.setup()
     loopTasks = []

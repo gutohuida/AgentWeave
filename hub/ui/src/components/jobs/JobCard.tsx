@@ -246,6 +246,13 @@ function RunHistory({ runs, isLoading }: { runs?: JobRun[]; isLoading?: boolean 
  * so the `useTasks({ loopId })` fetch — needed only to build the task-id list `onOpenTasks`
  * expects — only ever runs for a job that actually has a loop.
  */
+/** A loop past its stop time that the scheduler has not yet recorded as stopped (F655): the next
+ *  tick stops it without firing, so it is neither active nor due to run again. */
+export function loopPastStop(job: Job): boolean {
+  const loop = job.loop
+  return Boolean(loop && !loop.stop_reason && loop.stop_at && hubDate(loop.stop_at).getTime() <= Date.now())
+}
+
 function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: string[]) => void }) {
   const loop = job.loop
   const { data: loopTaskPage } = useTasks(loop ? { loopId: loop.id } : undefined)
@@ -283,8 +290,11 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
         <span className="text-[11px] font-medium" style={{ color: 'var(--text-2)' }}>
           Loop
         </span>
-        <Badge variant={loop.stop_reason ? 'secondary' : 'success'} className="text-[10px]">
-          {loop.stop_reason ? 'Stopped' : 'Active'}
+        <Badge
+          variant={loop.stop_reason || loopPastStop(job) ? 'secondary' : 'success'}
+          className="text-[10px]"
+        >
+          {loop.stop_reason ? 'Stopped' : loopPastStop(job) ? 'Stopping' : 'Active'}
         </Badge>
       </div>
 
@@ -469,7 +479,8 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
             </p>
           ) : (
             job.next_run &&
-            job.enabled && (
+            job.enabled &&
+            !loopPastStop(job) && (
               <p className="text-[11px]" style={{ color: 'var(--blue)' }}>
                 Next: {formatDistanceToNow(hubDate(job.next_run), { addSuffix: true })}
               </p>
