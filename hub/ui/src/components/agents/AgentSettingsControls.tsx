@@ -217,6 +217,14 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
         Used when a conversation has not chosen one — including runs a peer or a schedule starts,
         where there is no composer to choose in.
       </p>
+      {agent.default_permission_mode === 'manual' && agent.runner === 'claude' && (
+        // F453: measured twice on Claude. Its CLI approves commands it judges read-only before the
+        // Hub is asked, so "Ask me" is not every command. Said here, since the Hub cannot change it.
+        <p data-testid="ask-me-readonly-note" className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+          Claude Code still runs commands it treats as read-only (such as <code>echo</code> or{' '}
+          <code>git status</code>) without asking; writes and other commands come to you.
+        </p>
+      )}
       {update.isError && (
         <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
           Could not update the default posture.

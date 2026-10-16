@@ -117,6 +117,16 @@ describe('an agent has a default permission posture', () => {
     expect(control()).toHaveValue('manual')
   })
 
+  it('says Claude Code still runs read-only commands without asking under Ask me (F453)', () => {
+    renderExecution(agent({ default_permission_mode: 'manual', runner: 'claude' }))
+    expect(screen.getByText(/Claude Code still runs commands it treats as read-only/)).toBeInTheDocument()
+  })
+
+  it('says nothing of it for another posture', () => {
+    renderExecution(agent({ default_permission_mode: 'acceptEdits', runner: 'claude' }))
+    expect(screen.queryByText(/treats as read-only/)).toBeNull()
+  })
+
   it('saves a chosen posture', () => {
     renderExecution(agent())
     fireEvent.change(control(), { target: { value: 'bypassPermissions' } })
