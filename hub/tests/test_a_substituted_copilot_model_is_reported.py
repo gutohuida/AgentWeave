@@ -194,6 +194,14 @@ class TestTheCapturedAutoOnlyPlan:
         assert [u.model for u in usages] == ["claude-sonnet-5"]
         assert outcome.status == "completed"
 
+    async def test_usage_before_auto_chooses_names_auto_not_the_request(self, monkeypatch):
+        new_result, selected_result = _captured()
+        script = _script(new_result, selected_result, _usage())
+        _fake, _events, _stamped, usages, _outcome = await _run_turn(
+            monkeypatch, script, model="grok-4.7"
+        )
+        assert [u.model for u in usages] == ["auto"]
+
 
 class TestAConcreteSubstitute:
     async def test_the_agent_answers_model_is_the_one_reported(self, monkeypatch):

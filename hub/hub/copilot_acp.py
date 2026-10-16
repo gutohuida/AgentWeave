@@ -1028,8 +1028,13 @@ class CopilotEventMapper:
         self.calls: Dict[str, CallFacts] = calls if calls is not None else {}
         #: The agent's own GitHub-tools toggle (D9): arms the GitHub-server-unavailable diagnostic.
         self.github_mcp = github_mcp
-        #: The model Copilot actually ran, from the first raw event naming one.
+        #: The model Copilot actually ran, from the session's start or the first raw event naming
+        #: one.
         self.resolved_model: Optional[str] = None
+        #: A substitution of the requested model was reported at session start.
+        self._substitution_reported = False
+        #: What the session reported running instead of the request (`auto` until Auto chooses).
+        self.substituted_model: Optional[str] = None
         #: The root agent's first `session.error` message this turn; it fails the turn (D10, R3).
         self.root_error: Optional[str] = None
         #: That error's `errorType`, normalized as its `copilot.<kind>` event code is (F489).
@@ -1578,6 +1583,9 @@ class CopilotEventMapper:
         requested = self.requested_model
         if not requested or requested == "auto" or requested == model:
             return []
+        if self._substitution_reported:
+            # Reported at session start, as Auto; this event only names the model Auto chose.
+            return []
         summary = f"Copilot ran {model} instead of the requested {requested}"
         if self._available_models:
             summary += f"; this plan allows: [{', '.join(self._available_models)}]"
@@ -1590,6 +1598,86 @@ class CopilotEventMapper:
                 facts={"requested": requested, "resolved": model},
             )
         ]
+
+    def session_started(
+        self,
+        options: Optional[List[Dict[str, Any]]],
+        session_response: Mapping[str, Any],
+        requested_effort: Optional[str],
+    ) -> List[RunEvent]:
+        """The model and effort the session reports before the first prompt, against the ones
+        requested (`a-substituted-copilot-model-is-reported`). *options* are the latest config
+        options, the agent selection's answer included. Anything missing or mistyped reports
+        nothing: an older CLI sends none of it, and Copilot was ready to run the turn."""
+        events: List[RunEvent] = []
+        requested = self.requested_model
+        reported = _current_value(options, "model")
+        models = session_response.get("models") if isinstance(session_response, Mapping) else None
+        models = models if isinstance(models, Mapping) else {}
+        if reported is None:
+            current = models.get("currentModelId")
+            reported = current if isinstance(current, str) and current else None
+        # With Auto requested, `currentModelId` is the default model, not Auto's choice.
+        if requested and requested != "auto" and reported and reported != requested:
+            available = models.get("availableModels")
+            offered = list(
+                dict.fromkeys(
+                    m.get("modelId")
+                    for m in (available if isinstance(available, list) else [])
+                    if isinstance(m, dict)
+                    and isinstance(m.get("modelId"), str)
+                    and m.get("modelId") not in ("", "auto")
+                )
+            )
+            if reported == "auto":
+                summary = (
+                    f"Copilot did not run the requested {requested}; it chooses the model itself "
+                    "(Auto)"
+                )
+            else:
+                summary = f"Copilot ran {reported} instead of the requested {requested}"
+                # The mid-turn path then neither repeats it nor credits usage to the request.
+                self.resolved_model = reported
+            if offered:
+                summary += f"; this plan allows: [{', '.join(offered)}]"
+            elif isinstance(available, list):
+                summary += "; this plan offers only Auto"
+            self._substitution_reported = True
+            self.substituted_model = reported
+            events.append(
+                diagnostic_event(
+                    stream="copilot",
+                    severity="info",
+                    summary=summary + ".",
+                    code="copilot.model_substituted",
+                    facts={"requested": requested, "resolved": reported},
+                )
+            )
+        effort = _current_value(options, "reasoning_effort")
+        if requested_effort and effort and effort != requested_effort:
+            choices = (_option(options, "reasoning_effort") or {}).get("options")
+            offered_efforts = [
+                c["value"]
+                for c in (choices if isinstance(choices, list) else [])
+                if isinstance(c, dict) and isinstance(c.get("value"), str)
+            ]
+            summary = f"Copilot ran effort {effort} instead of the requested {requested_effort}"
+            if offered_efforts:
+                summary += f"; this model offers: [{', '.join(offered_efforts)}]"
+            events.append(
+                diagnostic_event(
+                    stream="copilot",
+                    severity="info",
+                    summary=summary + ".",
+                    code="copilot.effort_substituted",
+                    facts={
+                        "requested": requested_effort,
+                        "resolved": effort,
+                        "offered": offered_efforts,
+                    },
+                )
+            )
+        return events
 
 
 def usage_sample(
@@ -1989,6 +2077,11 @@ def _option(options: Optional[List[Dict[str, Any]]], option_id: str) -> Optional
     return None
 
 
+def _current_value(options: Optional[List[Dict[str, Any]]], option_id: str) -> Optional[str]:
+    current = (_option(options, option_id) or {}).get("currentValue")
+    return current if isinstance(current, str) and current else None
+
+
 def _selected_description(option: Mapping[str, Any]) -> Optional[str]:
     current = option.get("currentValue")
     for value in option.get("options") or []:
@@ -2352,7 +2445,9 @@ async def run_turn(
             if not isinstance(update, dict):
                 return
             if update.get("sessionUpdate") == "usage_update":
-                sample = usage_sample(update, model=mapper.resolved_model or model)
+                sample = usage_sample(
+                    update, model=mapper.resolved_model or mapper.substituted_model or model
+                )
                 if sample is not None and on_usage is not None:
                     await on_usage(sample)
             else:
@@ -2585,6 +2680,18 @@ async def run_turn(
                     code="copilot.agent_not_selected",
                 )
             )
+
+        # `a-substituted-copilot-model-is-reported`: the agent's selection can move the model, so
+        # the session's own report is read after it, from the latest options.
+        try:
+            started = mapper.session_started(
+                options, session_response, (control_overrides or {}).get("effort")
+            )
+        except Exception:  # noqa: BLE001 - a report never stops a turn Copilot is ready to run
+            logger.warning("reading the Copilot session's model and effort failed", exc_info=True)
+            started = []
+        for notice in started:
+            await on_event(notice)
 
         # `a-run-reaches-the-hub-without-mcp` D9: the run tests itself before its first prompt.
         # Copilot started the servers it was given inside `session/new`, so the announce is due
