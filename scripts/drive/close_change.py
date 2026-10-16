@@ -1411,10 +1411,24 @@ CHANGES = {
              "for each call."),
         ],
     },
+    "fcatalog": {
+        "document": "spec/changes/the-model-catalog-tracks-the-newest-clis/spec.json",
+        "commit": "da1c4b9",
+        "tasks": ["task-978e57dd0795"],
+        "evidence": [
+            ("FR-1", "task-978e57dd0795", "test_result", CATALOG_TESTS,
+             "The pin test compares Copilot's list with the 1.0.98 capture (31 models, no drift); "
+             "check_model_catalog.py finds no drift against codex 0.163's debug models; Claude "
+             "2.1.301 ran haiku and claude-haiku-5-5 as claude-haiku-5-5 at 1,000,000."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
 REPLACE_FOLDS = {
+    "fcatalog": ("model-catalog", {
+        "lists-track-newest-cli": "the-copilot-catalog-tracks-the-cli-tracks-newest-cli",
+    }),
     "f587": ("knowledge-vault", {
         "same-lines-same-id": "the-manager-distils-vault-sources-into-cited-facts-distil-route",
         "gone-is-gone": "a-requirement-is-checked-against-what-the-va-cited-fact-warnings",
