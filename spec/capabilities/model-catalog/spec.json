@@ -229,6 +229,24 @@
       "requirement": "a-substituted-copilot-model-is-reported-model-reported-at-start",
       "then": "the conversation shows the substitution notice before the reply, naming claude-sonnet-5, and the context meter names claude-sonnet-5",
       "when": "the operator sends it a message"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the 1.0.98 capture and codex 0.163's debug models output",
+      "how_to_check": "pytest tests/test_model_catalog_drift.py; py -3.11 scripts/check_model_catalog.py --cache <0.163 catalog>",
+      "key": "the-model-catalog-tracks-the-newest-clis-drift",
+      "requirement": "the-copilot-catalog-tracks-the-cli-tracks-newest-cli",
+      "then": "no drift for either",
+      "when": "scripts/check_model_catalog.py compares each with the catalog"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Claude Code 2.1.301",
+      "how_to_check": "claude -p 'Reply with the word ok.' --model haiku --output-format json (modelUsage)",
+      "key": "the-model-catalog-tracks-the-newest-clis-haiku",
+      "requirement": "the-copilot-catalog-tracks-the-cli-tracks-newest-cli",
+      "then": "both run as claude-haiku-5-5 with a 1,000,000 window",
+      "when": "a one-word turn runs on claude-haiku-5-5 and on haiku"
     }
   ],
   "algorithms": [
@@ -254,7 +272,7 @@
       "FR-14": "324705bea90b597c67f7c550e5fa4bf912441d594963750c0afcabf9193894ad",
       "FR-15": "36320d193347df26f127e030941be43895805469978a0b8147c616254553d24b",
       "FR-16": "c4c2e676e5cb995ab4f00bc33a6bf3b85e9f8b76ad90bc6850a396ee890d5a10",
-      "FR-17": "de375818a809a8e66acbf60823a95e876c08ec81e14b2a554e9bea29ed92d41e",
+      "FR-17": "c84d8b1bec546e6f686ed5651010a2bc7585dfd4b0be0d43994e71dd7b47ee3d",
       "FR-18": "da79cac217ee0269096f55ada0f7556b84f54042a33dadc950cb0cb9b29eb05a",
       "FR-19": "4de2cc582a82750a9dfad966e4b7fde231c8d6b567cad1578b28e3af26973793",
       "FR-20": "de25963e54a3c801269ebeb9a775f85f1733a5d9fc479a84194a3b7bacc4cca9",
@@ -394,8 +412,8 @@
       "key": "the-copilot-catalog-tracks-the-cli-tracks-newest-cli",
       "modal": "MUST",
       "party": null,
-      "rationale": "The model list is the service's; every model the Hub's older build offers live is in the newest help (wpc3-c).",
-      "statement": "CATALOG['copilot'] MUST declare exactly the model ids of copilot help config 1.0.94-3, in that build's order after auto, and its pinning test MUST compare against that build's captured help text."
+      "rationale": "A requirement that names a build goes stale with the first refresh.",
+      "statement": "Each provider's declared models MUST be the ones the newest published build of its CLI offers, read from that CLI itself (Copilot's help config, Codex's own model catalog, the Claude CLI's resolution of a model id): Copilot's in that build's printed order after auto, compared by its pinning test against that build's captured help text kept in the repository, and Codex's fallback as the listed entries in priority order; a model a refresh removes keeps working where it is stored."
     },
     {
       "key": "the-copilot-catalog-tracks-the-cli-stored-model-tolerated",
