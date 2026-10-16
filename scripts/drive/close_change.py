@@ -85,6 +85,8 @@ ANSWER_DRIVE = "scripts/drive/d1015_f581_answer_kept.py"
 CATALOG_TESTS = "hub/tests/test_a_stored_model_outlives_the_catalog.py"
 CATALOG_DRIVE = "scripts/drive/d1016_f662_copilot_catalog.py"
 SUBSTITUTED_TESTS = "hub/tests/test_a_substituted_copilot_model_is_reported.py"
+CALLS_DRIVE = "scripts/drive/d1016_f663_calls_dir_clean.py"
+CALLS_TESTS = "hub/tests/test_calls_dir_starts_clean.py"
 CATALOG_PIN = "tests/test_model_catalog_drift.py"
 ACCESS_UI = "hub/ui/src/__tests__/vaultAccess.test.tsx"
 ACCESS_DRIVE = "scripts/drive/d1027_access_tuning.py"
@@ -1389,6 +1391,26 @@ CHANGES = {
              "diagnostic, the turn completes."),
         ],
     },
+    "f663": {
+        "document": "spec/changes/a-call-mode-turn-starts-with-an-empty-calls-directory/spec.json",
+        "commit": "6fdf5ff",
+        "tasks": ["task-1566b81c3884"],
+        "evidence": [
+            ("FR-1", "task-1566b81c3884", "manual_observation", CALLS_DRIVE,
+             "Written first (53b447a): at HEAD a Haiku call-mode turn in a new conversation had "
+             "Write refused on the earlier turn's create_task.json and the planted 1-3.json "
+             "survived; after, no tool call failed and the worktree's calls started empty."),
+            ("FR-2", "task-1566b81c3884", "test_result", CALLS_TESTS,
+             "Through the trigger, a read-only agent's file in the project directory survives its "
+             "turn while the writer's own worktree is emptied; empty=False keeps every entry."),
+            ("FR-3", "task-1566b81c3884", "test_result", CALLS_TESTS,
+             "An entry whose removal raises is logged and kept; the others are removed and the "
+             "call does not raise."),
+            ("FR-4", "task-1566b81c3884", "test_result", CALLS_TESTS,
+             "The shim notice and the shim tool-surface preamble both ask for a new file name "
+             "for each call."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1436,6 +1458,10 @@ CHANGE_FOLDS = {
     "f581": 'project-environment-settings',
     "f662": 'model-catalog',
     "f662b": 'model-catalog',
+    "f663": {
+        'agent-run-sandboxing': ['isolated-starts-empty', 'shared-not-emptied', 'emptying-best-effort'],
+        'agent-tool-surface': ['new-name-per-call'],
+    },
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
