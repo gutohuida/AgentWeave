@@ -1,4 +1,4 @@
-﻿Configuration Settings:
+Configuration Settings:
 
   Change these settings with `copilot config`, using dot notation for nested keys:
     $ copilot config footer.showQuota off
@@ -154,6 +154,7 @@
     - "gpt-5.3-codex"
     - "gpt-5-mini"
     - "mai-code-1.1-flash"
+    - "gemini-4-argon"
     - "gemini-3.8-flash"
     - "gemini-3.7-flash"
     - "grok-4.7"
@@ -189,7 +190,6 @@
   `renderMarkdown`: whether to render markdown in the terminal; defaults to `true`.
 
   `inlineImages`: whether to render images inline using the Kitty graphics protocol; defaults to `true`.
-    - Requires the experimental `INLINE_IMAGES` feature (staff or experimental mode); otherwise image attachments show a text placeholder
     - Only takes effect on terminals that support Kitty graphics (e.g. Ghostty, kitty, WezTerm), and inside tmux with passthrough enabled
     - In a herdr pane, images are off by default: herdr draws them itself rather than passing them through, which additionally requires `experimental.kitty_graphics = true` in herdr's own config and cannot be detected from inside a pane. Set `COPILOT_INLINE_IMAGES_HERDR=1` to opt in once that setting is on
     - When disabled, image attachments show a text placeholder instead

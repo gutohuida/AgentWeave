@@ -183,8 +183,8 @@ WORKSPACE_PERMISSION_MODE = "workspace"
 # per-run override the composer sends.
 FULL_ACCESS_PERMISSION_MODE = "bypassPermissions"
 
-# The model ids `copilot help config` printed under `model` (build 1.0.94-3, 2026-10-12, the
-# work-PC drive; `the-copilot-catalog-tracks-the-cli`), in its order. The newest help, not the
+# The model ids `copilot help config` printed under `model` (build 1.0.98, 2026-10-16; first
+# refreshed from 1.0.94-3 in `the-copilot-catalog-tracks-the-cli`), in its order. The newest help, not the
 # build the Hub spawns: the list is the service's, and every model an older build offers live
 # is in it (fix-D5, wpc3-c). A model that leaves it keeps working where it is stored (wpc3-b).
 _COPILOT_MODEL_IDS: Tuple[str, ...] = (
@@ -212,6 +212,7 @@ _COPILOT_MODEL_IDS: Tuple[str, ...] = (
     "gpt-5.3-codex",
     "gpt-5-mini",
     "mai-code-1.1-flash",
+    "gemini-4-argon",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
     "grok-4.7",
@@ -251,10 +252,20 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                 context_window=1_000_000,
                 default=True,
             ),
+            # Verified 2026-10-16 (CLI 2.1.301): `--model haiku` and `--model claude-haiku-5-5`
+            # both ran as `claude-haiku-5-5` with `modelUsage.contextWindow` 1,000,000. CLI
+            # 2.1.291 does not know it (`unrecognized_model`) and still resolves `haiku` to 4.5.
+            ModelDescriptor(
+                id="claude-haiku-5-5",
+                label="Haiku 5.5",
+                aliases=("haiku",),
+                context_window=1_000_000,
+            ),
+            # The alias moved on with 2.1.301; the full name still resolves (Haiku 4.5 has one
+            # 200,000 window and no long-context form, above).
             ModelDescriptor(
                 id="claude-haiku-4-5-20251001",
                 label="Haiku 4.5",
-                aliases=("haiku",),
                 context_window=200_000,
             ),
             ModelDescriptor(
@@ -313,12 +324,17 @@ CATALOG: Dict[str, ProviderDescriptor] = {
     "codex": ProviderDescriptor(
         provider="codex",
         label="Codex CLI",
+        # The fallback: `codex debug models` of CLI 0.163.0 (2026-10-16, an empty CODEX_HOME), its
+        # `visibility: "list"` entries in `priority` order, the first as default (module docstring).
         models=(
+            ModelDescriptor(
+                id="gpt-6.1-sol", label="GPT-6.1-Sol", context_window=272_000, default=True
+            ),
+            ModelDescriptor(id="gpt-6-astra", label="GPT-6-Astra", context_window=272_000),
             ModelDescriptor(id="gpt-6-sol", label="GPT-6-Sol", context_window=272_000),
             ModelDescriptor(id="gpt-6-luna", label="GPT-6-Luna", context_window=272_000),
-            ModelDescriptor(
-                id="gpt-5.6-terra", label="GPT-5.6-Terra", context_window=272_000, default=True
-            ),
+            ModelDescriptor(id="gpt-5.6-sol", label="GPT-5.6-Sol", context_window=272_000),
+            ModelDescriptor(id="gpt-5.6-terra", label="GPT-5.6-Terra", context_window=272_000),
             ModelDescriptor(id="gpt-5.6-luna", label="GPT-5.6-Luna", context_window=272_000),
             ModelDescriptor(id="gpt-5.5", label="GPT-5.5", context_window=272_000),
         ),
@@ -351,8 +367,8 @@ CATALOG: Dict[str, ProviderDescriptor] = {
         ),
     ),
     # `a-copilot-agent-runs-over-acp` design D13. The model list is the one `copilot help config`
-    # prints (build 1.0.94-3 since `the-copilot-catalog-tracks-the-cli`; first 1.0.88), captured in
-    # `tests/fixtures/copilot/help-config-1.0.94-3.txt`. It is a literal,
+    # prints (build 1.0.98 since 2026-10-16; 1.0.94-3 in `the-copilot-catalog-tracks-the-cli`;
+    # first 1.0.88), captured in `tests/fixtures/copilot/help-config-1.0.98.txt`. It is a literal,
     # not a runtime read: Copilot keeps no model file to read, and printing the list costs a
     # spawn, which a read route must not do. Drift is checked by
     # `scripts/check_model_catalog.py --provider copilot`. Every window is `None` because Copilot

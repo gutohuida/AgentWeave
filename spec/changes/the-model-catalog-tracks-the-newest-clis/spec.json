@@ -1,0 +1,91 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the 1.0.98 capture and codex 0.163's debug models output",
+      "how_to_check": "pytest tests/test_model_catalog_drift.py; py -3.11 scripts/check_model_catalog.py --cache <0.163 catalog>",
+      "key": "drift",
+      "requirement": "lists-track-newest-cli",
+      "then": "no drift for either",
+      "when": "scripts/check_model_catalog.py compares each with the catalog"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Claude Code 2.1.301",
+      "how_to_check": "claude -p 'Reply with the word ok.' --model haiku --output-format json (modelUsage)",
+      "key": "haiku",
+      "requirement": "lists-track-newest-cli",
+      "then": "both run as claude-haiku-5-5 with a 1,000,000 window",
+      "when": "a one-word turn runs on claude-haiku-5-5 and on haiku"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "2b75da056baeab050857b0cbfa96268a6b1ccf8a674aac45a6b0b1f4de083cc5"
+    },
+    "high_water": 1,
+    "requirements": {
+      "lists-track-newest-cli": "FR-1"
+    },
+    "retired": {}
+  },
+  "design": "Tier 0 data refresh plus one requirement rewrite, no migration. Each list is read from the CLI itself, installed into a scratch prefix (not over the operator's): copilot --no-auto-update help config; codex debug models with an empty CODEX_HOME (the real cache is left alone, since the Hub reads it at runtime); Claude ids from a live one-word turn on claude-haiku-5-5 and on the haiku alias (modelUsage.contextWindow). Superseded models stay declared (fix-D5's stored-model rule covers removals; nothing was removed). The haiku alias moves to Haiku 5.5 with the CLI; on an installed CLI older than 2.1.301 the alias still resolves to 4.5 and claude-haiku-5-5 is unrecognised, so the operator should update the CLIs.",
+  "evidence": {
+    "checked": [
+      "copilot 1.0.98 help config prints 31 models: the 30 of 1.0.94-3 plus gemini-4-argon",
+      "codex 0.163.0 debug models lists 8 models",
+      "claude 2.1.301: haiku resolves to claude-haiku-5-5, window 1,000,000; 2.1.291: unrecognized_model"
+    ],
+    "limits": [
+      "The installed CLIs here are older (Claude 2.1.291, Codex 0.146.0, Copilot 1.0.94)"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "The operator reported the model lists out of date (2026-10-16). Newer CLIs offer models the catalog lacked: Copilot 1.0.98 adds gemini-4-argon; Codex 0.163's own catalog lists gpt-6.1-sol (first, so the default), gpt-6-astra and gpt-5.6-sol beside the fallback's five; Claude Code 2.1.301 runs claude-haiku-5-5 (1,000,000 window) and resolves the haiku alias to it. The model-catalog requirement named Copilot build 1.0.94-3 literally, so it went stale with the first refresh.",
+  "requirements": [
+    {
+      "key": "lists-track-newest-cli",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A requirement that names a build goes stale with the first refresh.",
+      "statement": "Each provider's declared models MUST be the ones the newest published build of its CLI offers, read from that CLI itself (Copilot's help config, Codex's own model catalog, the Claude CLI's resolution of a model id): Copilot's in that build's printed order after auto, compared by its pinning test against that build's captured help text kept in the repository, and Codex's fallback as the listed entries in priority order; a model a refresh removes keeps working where it is stored."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Copilot list = help config 1.0.98, fixture help-config-1.0.98.txt",
+      "Codex fallback = codex debug models 0.163.0, listed entries in priority order",
+      "Claude adds Haiku 5.5 (alias haiku, 1,000,000); Haiku 4.5 keeps its full name",
+      "the model-catalog requirement no longer names a build"
+    ],
+    "non_goals": [
+      "Updating the operator's installed CLIs",
+      "Per-model effort values (wpc3-d)"
+    ]
+  },
+  "summary": "Refresh every harness's model list to the newest published CLI (Claude Code 2.1.301, Codex 0.163.0, Copilot 1.0.98) and replace the requirement that pinned Copilot's list to build 1.0.94-3 with one that names no build, so a refresh no longer leaves the spec stale.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "model_catalog.py, tests/fixtures/copilot/help-config-1.0.98.txt, tests/test_model_catalog_drift.py.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "lists-track-newest-cli"
+      ],
+      "reviewer": null,
+      "title": "Refresh the three model lists"
+    }
+  ],
+  "title": "The model catalog tracks the newest CLIs"
+}
