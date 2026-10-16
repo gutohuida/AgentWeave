@@ -55,10 +55,16 @@ export function ModelPicker({ provider, effectiveModel, onChangeModel, openReque
   const rootRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  const current =
-    resolveCatalogModel(provider, effectiveModel) ?? provider.models.find((m) => m.default)
-  const currentLabel =
-    current && effectiveModel ? catalogModelLabel(current, effectiveModel) : current?.label
+  const resolved = resolveCatalogModel(provider, effectiveModel)
+  // F662: a stored model the catalog does not know runs as stored. Showing the default's name in
+  // its place said the conversation runs a model it does not.
+  const unrecognised = Boolean(effectiveModel) && !resolved
+  const current = resolved ?? (unrecognised ? undefined : provider.models.find((m) => m.default))
+  const currentLabel = unrecognised
+    ? `${effectiveModel} — unrecognised`
+    : current && effectiveModel
+      ? catalogModelLabel(current, effectiveModel)
+      : current?.label
 
   useEffect(() => {
     if (openRequest > 0) setOpen(true)

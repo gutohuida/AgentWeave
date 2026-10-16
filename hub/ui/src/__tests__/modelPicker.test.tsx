@@ -25,6 +25,13 @@ describe('ModelPicker — search, grouping, favourites (composer/chrome refineme
     window.localStorage.clear()
   })
 
+  it('names a stored model the catalog does not know, not the default in its place (F662)', () => {
+    render(<ModelPicker provider={PROVIDER} effectiveModel="claude-sonnet-9-x" onChangeModel={vi.fn()} />)
+    const defaultModel = PROVIDER.models.find((model) => model.default)
+    expect(screen.getByText('claude-sonnet-9-x — unrecognised')).toBeInTheDocument()
+    if (defaultModel) expect(screen.queryByText(defaultModel.label)).toBeNull()
+  })
+
   it('finds a model by a non-prefix substring match', () => {
     render(<ModelPicker provider={PROVIDER} effectiveModel={null} onChangeModel={vi.fn()} />)
     open()

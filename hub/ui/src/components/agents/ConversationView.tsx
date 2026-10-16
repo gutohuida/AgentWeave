@@ -480,7 +480,13 @@ export function ConversationView({
       }}
       specBusy={createDocument.isPending}
       insertPathRequest={insertPathRequest}
-      onTogglePanel={() => setShellOpen(projectId, !shellIsOpen)}
+      onTogglePanel={() => {
+        const opening = !shellIsOpen
+        setShellOpen(projectId, opening)
+        // F634: in a narrow window the panel is a drawer, so showing it means opening the drawer;
+        // the toggle used to flip to "Hide panel" with nothing on screen.
+        if (!fitsAsColumn) setOverlayOpen(opening)
+      }}
       panelOpen={shellIsOpen}
     />
   )

@@ -47,7 +47,12 @@ vi.mock('@/api/spec', async (importOriginal) => ({
 }))
 
 vi.mock('@/components/agents/AgentOutputPanel', () => ({
-  AgentOutputPanel: () => <div data-testid="conversation-surface" />,
+  // The panel toggle lives in the conversation's header; kept so the narrow layout can be driven.
+  AgentOutputPanel: ({ onTogglePanel }: { onTogglePanel?: () => void }) => (
+    <div data-testid="conversation-surface">
+      <button type="button" data-testid="conversation-toggle-panel" onClick={onTogglePanel} />
+    </div>
+  ),
 }))
 
 import { ConversationView, DOCUMENT_COLUMN_BREAKPOINT } from '@/components/agents/ConversationView'
@@ -278,6 +283,14 @@ describe('conversation workspace — the overlay below the fit threshold', () =>
     await waitFor(() => expect(trigger).toHaveFocus())
 
     await user.click(trigger)
+    expect(await screen.findByTestId('workspace-drawer')).toBeInTheDocument()
+  })
+
+  it('opens the panel drawer from the toggle in a narrow window (F634)', async () => {
+    renderView(null)
+    reportWidth(DOCUMENT_COLUMN_BREAKPOINT - 1)
+    expect(screen.queryByTestId('workspace-drawer')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('conversation-toggle-panel'))
     expect(await screen.findByTestId('workspace-drawer')).toBeInTheDocument()
   })
 
