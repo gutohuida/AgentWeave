@@ -375,6 +375,20 @@ describe('AgentTimeline', () => {
     expect(onDeliverNow).toHaveBeenCalled()
   })
 
+  it('says the waiting work is in another conversation when none of it is here (F633)', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[entry({ id: 'said', kind: 'agent_output', content: 'done', run_id: 'run-1' })]}
+        roster={[agent]}
+        runs={{}}
+        isRunning={false}
+        queueStatus={{ agent: 'claude', waiting_count: 1, running: false, waiting_reason: 'hop budget exhausted' }}
+      />,
+    )
+    expect(screen.getByText(/1 waiting in another conversation — hop budget exhausted/)).toBeInTheDocument()
+  })
+
   it('offers Continue and Discard on a held entry, and calls back with its id', () => {
     const onRelease = vi.fn()
     const onWithdraw = vi.fn()

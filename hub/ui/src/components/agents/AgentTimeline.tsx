@@ -248,6 +248,8 @@ export function AgentTimeline({
     return groups
   }, [pending])
 
+  const heldCount = [...suspendedByParticipant.values()].reduce((sum, count) => sum + count, 0)
+
   if (turns.length === 0 && pending.length === 0) {
     return (
       <div
@@ -408,7 +410,9 @@ export function AgentTimeline({
             reached the hop budget. Continue to deliver them and restart the count from here,
             or discard them individually below.
           </div>
-          {onDeliverNow && (
+          {/* F653: one held entry already has its own Continue; a second one here, for the same
+              entry, was one of three. With several held, this is the one that releases them all. */}
+          {onDeliverNow && !(onRelease && heldCount === 1) && (
             <button
               onClick={onDeliverNow}
               className="shrink-0 text-[12px] font-medium px-2 py-1 rounded"
@@ -422,7 +426,11 @@ export function AgentTimeline({
 
       {!isRunning && queueStatus && queueStatus.waiting_count > 0 && suspendedByParticipant.size === 0 && (
         <p className="text-[11.5px] text-center" style={{ color: 'var(--text-3)' }}>
-          {queueStatus.waiting_count} waiting{queueStatus.waiting_reason ? ` — ${queueStatus.waiting_reason}` : ''}
+          {/* F633: the count is the agent's, not this conversation's; with nothing queued here it
+              must not read as if this conversation were the one waiting. */}
+          {queueStatus.waiting_count} waiting
+          {pending.length === 0 ? ' in another conversation' : ''}
+          {queueStatus.waiting_reason ? ` — ${queueStatus.waiting_reason}` : ''}
         </p>
       )}
     </div>

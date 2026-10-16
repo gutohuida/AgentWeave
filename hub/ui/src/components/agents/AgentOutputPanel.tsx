@@ -409,6 +409,9 @@ export function AgentOutputPanel({
   const recentChat = useAgentRecentChat(agent.name)
   const chat = currentConversationId ? conversationChat : recentChat
   const timelineEntries = chat.data?.entries ?? []
+  const hasHopHeld = timelineEntries.some(
+    (entry) => entry.hop_budget_exceeded && entry.delivery_state === 'queued',
+  )
   // This panel reads neither half; it is the only thing that can carry them. Both come off the
   // SAME response, which is the point: `runs` is keyed to the runs `entries` names, so a turn
   // rendered here always has its run's row. Taking it from `useAgentTimeline` instead keyed it
@@ -803,16 +806,9 @@ export function AgentOutputPanel({
     sseConnectionState === 'reconnecting'
       ? { id: 'stream-loss', message: 'Live updates are disconnected — reconnecting…' }
       : null,
-    timelineEntries.some((entry) => entry.hop_budget_exceeded)
-      ? {
-          id: 'blocked-queue',
-          // Names the remedy, not the rule. The bound is deliberate; what the operator needs
-          // to know is that nothing will move it except them.
-          message:
-            'Queued messages reached the hop limit and will not be delivered on their own — '
-            + 'Continue to deliver them, or discard them.',
-        }
-      : null,
+    // F653: no banner for hop-held entries. The timeline's own note above them says why they
+    // wait and what releases them, and each carries Continue and Discard; a red band here was a
+    // third explanation, styled as a failure.
   ]
   const banners: ConversationBanner[] = bannerCandidates.filter(
     (banner): banner is ConversationBanner => banner !== null,
@@ -1297,7 +1293,8 @@ export function AgentOutputPanel({
               the only way to start it was to type a message, which is a strange thing to invent
               when the work is already described. Shown only when there is queued work and no run
               — otherwise the composer is the right control. */}
-          {hasQueuedWork && !isRunning && (
+          {/* Not for hop-held work (F653): that has its own Continue on the entry. */}
+          {hasQueuedWork && !isRunning && !hasHopHeld && (
             <div className="flex items-center gap-2">
               <Button
                 variant="primary"
