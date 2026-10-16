@@ -248,7 +248,7 @@ function RunHistory({ runs, isLoading }: { runs?: JobRun[]; isLoading?: boolean 
  */
 /** A loop past its stop time that the scheduler has not yet recorded as stopped (F655): the next
  *  tick stops it without firing, so it is neither active nor due to run again. */
-export function loopPastStop(job: Job): boolean {
+function loopPastStop(job: Job): boolean {
   const loop = job.loop
   return Boolean(loop && !loop.stop_reason && loop.stop_at && hubDate(loop.stop_at).getTime() <= Date.now())
 }
