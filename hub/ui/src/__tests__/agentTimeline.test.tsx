@@ -843,7 +843,7 @@ describe('AgentTimeline — execution-order work blocks (2026-08-04-hub-charcoal
     expect(screen.getByText('Edit')).toBeInTheDocument()
   })
 
-  it('does not pair a tool_use with a tool_result across a block boundary', () => {
+  it('pairs a tool_use with its tool_result across a block boundary in the same turn', () => {
     render(
       <AgentTimeline
         agent={agent}
@@ -857,11 +857,12 @@ describe('AgentTimeline — execution-order work blocks (2026-08-04-hub-charcoal
         isRunning={false}
       />,
     )
-    // Two separate work blocks (the tool_use, then — after intervening text — the
-    // tool_result). Opening the first must show "awaiting result", not "completed",
-    // proving the pairing lookup did not reach into the second block.
-    fireEvent.click(screen.getAllByText('Work · 1 step')[0])
-    expect(screen.getByText('awaiting result')).toBeInTheDocument()
+    // F666 / wpc7-d: pairing spans the turn. The result recorded after the text is drawn at its
+    // call, so the call reads "completed" and the result's own block is not drawn at all.
+    expect(screen.getAllByText('Work · 1 step')).toHaveLength(1)
+    fireEvent.click(screen.getByText('Work · 1 step'))
+    expect(screen.getByText('completed')).toBeInTheDocument()
+    expect(screen.queryByText('awaiting result')).toBeNull()
   })
 })
 

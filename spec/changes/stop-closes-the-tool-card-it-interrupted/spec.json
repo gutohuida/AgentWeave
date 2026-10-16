@@ -1,0 +1,144 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub and a Haiku agent asked to run a 240-second sleep in its shell",
+      "how_to_check": "py -3.11 scripts/drive/d1016_f666_stop_closes_card.py (written first: fails before the build)",
+      "key": "drive",
+      "requirement": "end-closes-open-calls",
+      "then": "the run is stopped and its outputs read tool_use, a tool_result with the same call id and status interrupted, then 'Run stopped' last; the chat route returns them in that order",
+      "when": "the operator presses Stop while the command runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Copilot, Codex app-server and Claude PTY turns with an open call, driven through the trigger route",
+      "how_to_check": "pytest hub/tests/test_stop_closes_open_tool_calls.py",
+      "key": "unit-hub",
+      "requirement": "end-closes-open-calls",
+      "then": "the closing row sits after the runner's rows and before the status row only where the requirement says",
+      "when": "the turn ends stopped or failed (and, as controls, completed, provider-closed, no call id, a raising closing write)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the work-PC run's rows and run facts stopped, completed or absent",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/stopClosesToolCard.test.tsx",
+      "key": "unit-ui-label",
+      "requirement": "ended-call-reads-ended",
+      "then": "the card reads interrupted, no result or awaiting result; a closing row reads interrupted with no failed count",
+      "when": "the timeline renders them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "run-08d33fa23f8e's rows (tool_use, diagnostic, tool_result), a second result for one call, an orphan result, and two runs reusing a call id",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/stopClosesToolCard.test.tsx src/__tests__/agentTimeline.test.tsx",
+      "key": "unit-ui-pairing",
+      "requirement": "pairing-spans-the-turn",
+      "then": "the result renders at its call in one work block; the second and the orphan render on their own; no result crosses runs",
+      "when": "the timeline renders them"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a Copilot agent on the work PC",
+      "how_to_check": "work-PC drive (openspec tasks 3.1-3.3)",
+      "key": "operator-reload",
+      "requirement": "ended-call-reads-ended",
+      "then": "the card reads interrupted both live and after the reload",
+      "when": "Stop is pressed during a long shell command, then the page is reloaded"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "dd8ba7911a7160efd714ac10ffacfef351d63c81f48df86793e9f2bad68f69a4",
+      "FR-2": "4ed4018830e85e3878193b7b061d00f7c4830d7dc0c91327c612478a5a50482e",
+      "FR-3": "73d4c0383a530ff7db1a9bbcc4f479170852e5c51ca8f71cfd4386c952b1e9ea"
+    },
+    "high_water": 3,
+    "requirements": {
+      "end-closes-open-calls": "FR-1",
+      "ended-call-reads-ended": "FR-2",
+      "pairing-spans-the-turn": "FR-3"
+    },
+    "retired": {}
+  },
+  "design": "Tier 1, no migration. D1: each executor keeps an OpenToolCalls tracker (runner_events) fed by every event it records; after the status map settles stopped or failed and before the Run commit, it records the closing rows through the same writer, so they take the next sequence numbers and run_stopped is broadcast only after they exist. Each closing write is wrapped: an exception is logged and the run's ending and status row go ahead. Paths that raise before the status map (start_turn raising, shutdown cancellation) are not swept; D3 covers them. D2: the row is tool_result_event(status='interrupted'), output '', summary '<tool> interrupted', is_error false; the payload key is additive, version stays 1. D3: the UI reads an unanswered call from the run facts (TERMINAL_STATUSES already held by AgentTimeline), so history and reconciled runs need no rows. D4: pairing is resolved once per turn (pairTurnResults): the first result per call id pairs with the first tool_use carrying it; a work block drops results drawn at a call in another block and is not drawn when emptied; a block's failure count counts the results it renders. Rejected: a mapper-level finish(interrupted) (Copilot only); a read-time sweep in the chat route (other readers still see an open call).",
+  "evidence": {
+    "checked": [
+      "trial DB workpc-drive run-e183cc3e1acd: thinking, tool_use, status; no tool_result",
+      "trial DB: 6 of 50 tool_use rows in 5 completed runs have their result after a non-work row (R2, R3 recount)",
+      "test_stop_closes_open_tool_calls.py: 5 of 9 fail at HEAD; stopClosesToolCard.test.tsx: 5 of 9 fail at HEAD, and the old cross-block test is inverted"
+    ],
+    "limits": [
+      "No Copilot or Codex cancel capture: whether either sends a terminal update for an in-flight call after a cancel is unmeasured (openspec tasks 3.2, 3.4)"
+    ]
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [
+    {
+      "question": "wpc7-c: close open calls on a completed run too? Built as recommended (no: the card reads 'no result', marking a mapper defect); DECISIONS row still open.",
+      "resolved": false
+    }
+  ],
+  "problem": "Work PC, 2026-10-12, run run-e183cc3e1acd (Copilot 1.0.94-3): Stop during `Start-Sleep -Seconds 240` left rows thinking, tool_use, status and no tool_result, so the card read 'awaiting result' for ever, live and after reload. No executor closes open calls on any ending (Copilot's finish() never sweeps its open tools; ACP gives the close to the client), and the UI decides the label from pairing alone, inside one work block. Pairing per block is itself wrong: 6 of 50 real tool_use rows in the trial DB have their result after a diagnostic or status row, so their cards read 'awaiting result' beside an orphan result row.",
+  "requirements": [
+    {
+      "key": "end-closes-open-calls",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "ACP assigns the close to the client; no runner closes a call it was killed or cancelled in.",
+      "statement": "When a run ends as stopped or failed on a path that writes the run's terminal status line, the Hub MUST persist, for each tool_use the run recorded with a call identifier and no matching tool_result, one closing tool_result with the same call identifier and tool, is_error false and status \"interrupted\", after every output the runner recorded and before the terminal status line; a call without an identifier, a call the provider already closed, and any call of a completed run get no closing row; a closing row that fails to persist MUST NOT change how the run ended."
+    },
+    {
+      "key": "ended-call-reads-ended",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Covers runs written before this change, runs reconciled after a Hub death, and endings with no status line.",
+      "statement": "The timeline MUST present a tool call as interrupted when its result carries status \"interrupted\", or when no result for it exists in its turn and its run's facts report stopped, interrupted or failed; as no result when none exists and the run completed; as awaiting result only when it has no result and its run is not known to have ended; and MUST NOT count an interrupted call as a failure."
+    },
+    {
+      "key": "pairing-spans-the-turn",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator needs to see what a call did and whether it failed without reading two rows, even when a notice was recorded between the call and its result.",
+      "statement": "A tool-use event SHALL render together with the first tool result in its turn (the entries of one run) that shares its `call_id`, in the tool use's work block, showing whether the call completed, failed, was interrupted or is awaiting a result; a result rendered at its call SHALL NOT also render on its own, a work block left with nothing of its own SHALL NOT be drawn, and any other result (a second one for a call, or one whose call is not in the turn) SHALL render as its own row; pairing MUST NOT cross runs; diagnostics SHALL be visually distinct from errors and from agent text."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "both executors (_execute_rpc_run for Copilot and Codex app-server, _execute_run for the PTY runners) close open calls on stopped or failed, before the Run commit",
+      "tool_result_event takes an optional status, written to the payload only when given",
+      "the timeline pairs results across the turn, drops a work block left empty, and labels an unanswered call from its run's facts",
+      "the UI bundle refresh"
+    ],
+    "non_goals": [
+      "Closing calls on a completed run (wpc7-c, recommended no; still open)",
+      "Writing rows for runs that end without a status line (start_turn raising, Hub shutdown, reconcile): the UI derivation covers them",
+      "Measuring what real Copilot or Codex send after a cancel (openspec tasks 3.2, 3.4: work-PC follow-ups)"
+    ]
+  },
+  "summary": "When a run ends stopped or failed with a tool call still open, the Hub records one closing tool_result per open call (status interrupted, not an error) before the run's status line; the timeline pairs a call with its result anywhere in the turn and, when a call has none, reads it from the run's facts: interrupted for a stopped/failed/interrupted run, no result for a completed one, awaiting result only while the run is not known to have ended (F666; decisions fix-D6, wpc7-a (c), wpc7-b (i), wpc7-d (i); wpc7-c built as recommended, still open). Re-authored from openspec stop-closes-the-tool-card-it-interrupted.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "runner_events.tool_result_event(status=) and OpenToolCalls; both executors' sweep; agentTimelineModel.pairTurnResults and AgentTimeline (TurnBody, WorkBlockDisclosure, WorkRow); bundle refresh; tests and the drive.",
+      "from": null,
+      "key": "t1",
+      "requirements": [
+        "end-closes-open-calls",
+        "ended-call-reads-ended",
+        "pairing-spans-the-turn"
+      ],
+      "reviewer": null,
+      "title": "Close open calls at a stopped or failed run's end; pair results across the turn and label ended calls"
+    }
+  ],
+  "title": "Stop closes the tool card it interrupted"
+}
