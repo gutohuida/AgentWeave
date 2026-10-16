@@ -33441,7 +33441,7 @@ Nineteen coverage rows driven by five parallel operators plus row 19 by the orch
 
 ## F453 (C) — under `manual` posture, commands Claude Code pre-approves as trivial never reach the operator, and nothing says so
 
-**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 14.
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, f78419e): "Ask me" on a Claude runner says Claude Code still runs read-only commands unasked; with a test that failed before. Earlier status: open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 14.
 **Source:** drive
 **Theme:** Workspace & permissions
 
@@ -35388,7 +35388,7 @@ The build playbook's close step ends "mark the slice done in the roadmap documen
 
 ## F581 (C) -- a worker's model answer is not kept, so a wrong judgement cannot be read after the fact
 
-**Status:** fixed 2026-10-15 (Tier 1, change `spec/changes/a-workers-answer-is-kept`). Every manager firing that spawned a model keeps the model's answer as `answer` on its `manager_job_fired` event, and so in `GET /manager/activity`. That covers distillation's read, distil and check, vault reports, spec-vault-check and titles. The answer is the raw text, else the parsed answer as JSON, cut at 8,000 characters with a marker; a firing whose spawn returned nothing keeps null. No migration (the event's data is JSON). Showing it in the Manager panel is in the UI batch. Acceptance drive `scripts/drive/d1015_f581_answer_kept.py` committed failing first (ff44cbc), ALL PASS after. Tests: `test_a_workers_answer_is_kept.py`. Opened 2026-10-11. Measured 2026-10-11 (build window iteration 7, d1025 run `testbed/drive1025-specs-vault/095027/`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, 93ea888): the Manager panel shows each firing's `answer` under a closed "What the model answered"; with a test that failed before. Earlier status: fixed 2026-10-15 (Tier 1, change `spec/changes/a-workers-answer-is-kept`). Every manager firing that spawned a model keeps the model's answer as `answer` on its `manager_job_fired` event, and so in `GET /manager/activity`. That covers distillation's read, distil and check, vault reports, spec-vault-check and titles. The answer is the raw text, else the parsed answer as JSON, cut at 8,000 characters with a marker; a firing whose spawn returned nothing keeps null. No migration (the event's data is JSON). Showing it in the Manager panel is in the UI batch. Acceptance drive `scripts/drive/d1015_f581_answer_kept.py` committed failing first (ff44cbc), ALL PASS after. Tests: `test_a_workers_answer_is_kept.py`. Opened 2026-10-11. Measured 2026-10-11 (build window iteration 7, d1025 run `testbed/drive1025-specs-vault/095027/`).
 
 The spec-vault-check firing recorded `outcome empty`, `0 conflicts kept, 0 dropped` and 1,373 output tokens, but neither `worker_invocations` (`hub/hub/worker.py`, `_record`; columns are usage and outcome only) nor the `manager_job_fired` event keeps what the model answered, so *why* it found nothing was unreadable. It took re-sending the same prompt by hand (`claude -p`) to see Haiku's reasoning (it read "300 euros or less need no approval" as silent beyond 300). The same holds for every vault job (distillation, contradictions, reports): an operator who doubts a judgement has only the count.
 
@@ -35492,7 +35492,7 @@ A tracked GIF whose reading failed (firing `failed`, "reading the image: 1 schem
 
 ## F593 (B) -- folding a verified change leaves its requirements "unserved" in the capability, while the archived change keeps counting as verified
 
-**Status:** fixed 2026-10-15 (Tier 1, change `spec/changes/a-folded-requirement-keeps-its-verification`). Option (a) of the fix shape, without copying evidence: a capability requirement with no evidence of its own takes its coverage from the same-digest requirement of a change merged into it (`spec_document_merges` + the semantic digest, which a verbatim fold keeps and a rewording changes), and its entry names it as `served_by`; the project rollup leaves archived documents out of its totals and of `unserved` (a document's own coverage still lists its history). Acceptance drive `scripts/drive/d1015_f593_fold_keeps_verification.py` committed failing first (858da57: 3 of 9 on HEAD), ALL PASS after. Tests: `test_a_folded_requirement_keeps_its_verification.py`. The app's showing of `served_by` is in the UI batch. The side symptom (a later commit broke the capability's `add`) is drift's job, not this. Opened 2026-10-13. Measured in driving sweep 2 (spec-flow), scratch Hub `:8110`, `scripts/drive/s1013_spec_flow_sweep.py`.
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, e94b128): a served capability requirement reads "served by FR-n of <change path>" and its Evidence reads the serving change (the Hub adds `served_by.document_path`); with a test that failed before. Earlier status: fixed 2026-10-15 (Tier 1, change `spec/changes/a-folded-requirement-keeps-its-verification`). Option (a) of the fix shape, without copying evidence: a capability requirement with no evidence of its own takes its coverage from the same-digest requirement of a change merged into it (`spec_document_merges` + the semantic digest, which a verbatim fold keeps and a rewording changes), and its entry names it as `served_by`; the project rollup leaves archived documents out of its totals and of `unserved` (a document's own coverage still lists its history). Acceptance drive `scripts/drive/d1015_f593_fold_keeps_verification.py` committed failing first (858da57: 3 of 9 on HEAD), ALL PASS after. Tests: `test_a_folded_requirement_keeps_its_verification.py`. The app's showing of `served_by` is in the UI batch. The side symptom (a later commit broke the capability's `add`) is drift's job, not this. Opened 2026-10-13. Measured in driving sweep 2 (spec-flow), scratch Hub `:8110`, `scripts/drive/s1013_spec_flow_sweep.py`.
 
 A change `indigo-kirin` (FR-1 `subtract`, FR-2 `help`) was built by a Haiku agent, both pieces of evidence were accepted, both tasks were landed (the commit is on `main`), and coverage read FR-1 and FR-2 `verified` / `integrated`. Folding it into `spec/capabilities/calculator/spec.json` answered 200 and archived the change. Straight afterwards, `GET /project/spec/coverage` listed five rows: the capability's `indigo-kirin-subtract` (FR-2) and `indigo-kirin-help` (FR-3) were `unserved` with `evidence_count` 0, although their digests are the ones the change's verified requirements carry (`3ecd5489…` and `a70d4279…`, recorded in the capability's `aw_identity.digests`). The archived change's FR-1 and FR-2 still appeared as `verified`, and they still counted in `totals`. So the project's coverage says that the shipped behaviour is unserved, and it counts as verified a document that is only history. `requirement_coverage` (`hub/hub/requirement_coverage.py:228`) does not filter on phase, and `spec_service.fold` (`hub/hub/spec_service.py:1010`) carries no evidence or links into the capability. No capability requirement in `spec-document-authority` says what verification a folded requirement keeps.
 
@@ -35644,7 +35644,7 @@ Seam: Checkpoints (summary snapshot taken mid-turn; cutover after the turn). Tie
 
 ## F605 (B) -- the checks gate charges a task with failures already on main; the reviewer is told to send correct work back, and the override has no control in the app
 
-**Status:** fixed 2026-10-15 (Tier 1, change `a-check-that-fails-on-main-too-is-not-the-tasks`, decision fix-D13). A failing check is re-run on the main tip and its result records `on_main` and `preexisting`; a refusal whose only failures are pre-existing says they fail on main too, drops the reviewer's send-back line and is an operator-only hold (flow, divergence and briefing say approval waits on the operator); a new failure beside one stays the author's, the old one labelled. `POST /tasks/{id}/land` takes `override_checks_reason` (the sweep's exit took four PATCHes). 4 new tests; the shared FAIL fixture now fails only where the task's work is. Acceptance drive `scripts/drive/d1015_f605_preexisting_checks.py`, committed failing (5 checks) before the build, ALL PASS after. The app's override control is left to the UI batch. Opened before: open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Worktrees & integration, project checks; scratch Hub `:8033`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, afad0be): a Land refused by failing checks alone offers "Land anyway" with a required reason (`override_checks_reason`); with a test that failed before. Earlier status: fixed 2026-10-15 (Tier 1, change `a-check-that-fails-on-main-too-is-not-the-tasks`, decision fix-D13). A failing check is re-run on the main tip and its result records `on_main` and `preexisting`; a refusal whose only failures are pre-existing says they fail on main too, drops the reviewer's send-back line and is an operator-only hold (flow, divergence and briefing say approval waits on the operator); a new failure beside one stays the author's, the old one labelled. `POST /tasks/{id}/land` takes `override_checks_reason` (the sweep's exit took four PATCHes). 4 new tests; the shared FAIL fixture now fails only where the task's work is. Acceptance drive `scripts/drive/d1015_f605_preexisting_checks.py`, committed failing (5 checks) before the build, ALL PASS after. The app's override control is left to the UI batch. Opened before: open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Worktrees & integration, project checks; scratch Hub `:8033`).
 
 `master` carried the `word_count` defect, because task A was approved but never merged (F622). Every check run on later work failed on `test_double_space` and `test_newline` (e.g. `chk-6ce5e2f71a26`, `main_sha 200d5ee`), though neither t-char nor t-slug touches `word_count`. The reviewer briefing did what it said: tester sent t-slug back, its notes *"the full test suite has pre-existing failures … These failures existed before this task's changes … Returning to author"*. `POST /tasks/{id}/land` answered 409 `gate_unsatisfied`, *"approving would land work that breaks the project"* (it would not), then *"If you are reviewing this task, fixing what the checks found is its author's work"*; nothing in it is addressed to the operator. The only exit took four PATCHes: under_review refused (author holder) "Land it"; `assignee: null`; `under_review`; `approved` with `override_checks_reason`. `grep override_checks_reason hub/ui/src` returns nothing.
 
@@ -35736,7 +35736,7 @@ Seam: Knowledge vault (reports) x Manager jobs (`vault-reports`). **Fix shape (n
 
 ## F616 (B) -- Distil is disabled on exactly the file sources that need it: a PDF or image uploaded while distillation was off never gets its facts from the app
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, 93ea888): a tracked PDF or image with no text yet can be distilled and previewed; with a test that failed before. Earlier status: open 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
 
 `exact.pdf` and `mismatch` (the real `contract.pdf` bytes) were uploaded before the job had a runner. Their entries read "No text yet: the file has not been read, or reading it failed". `vault-distil` is **disabled** on both (`distil_disabled=True`, from `disabled={distil.isPending || !entry.available}`, `VaultPage.tsx:366`). The inline preview is absent too (`vault-file-pdf` count 0), although `GET /vault/sources/src-912e2171d796/file` answers 200. The API path works: `POST /vault/sources/src-912e2171d796/distil` answered `202 {"queued": true}`, then `distil_requested … written … read the PDF: 6 lines transcribed` and `… 1 fact stored`. The button is disabled in the one state where the route would help; the operator's only recourse is the API. F591 changed only this state's wording.
 
@@ -35744,7 +35744,7 @@ Seam: Knowledge vault (Vault tab x file-source availability). **Fix shape:** gat
 
 ## F617 (B) -- after a re-distil, a resolved contradiction calls the standing fact "A private fact, held on another machine", and an approved spec says its cited fact "is not in the vault on this machine"
 
-**Status:** fixed 2026-10-15 for the Hub's words (Tier 1, with F587). The churn itself is gone (F587). A fact in no record or stub is now warned of as "no longer in the vault (it was deleted, or replaced when its source was distilled again)". A private entry, file or source whose holder is this machine says its text "is not at this machine's private location (it was removed, or the private location changed)" (`vault.private_text_is`). The Vault tab's card text "A private fact, held on another machine" for a fact that is gone is in the UI batch. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, 93ea888): a contradiction side whose fact is gone carries `missing` and reads "no longer in the vault"; with a test that failed before. Earlier status: fixed 2026-10-15 for the Hub's words (Tier 1, with F587). The churn itself is gone (F587). A fact in no record or stub is now warned of as "no longer in the vault (it was deleted, or replaced when its source was distilled again)". A private entry, file or source whose holder is this machine says its text "is not at this machine's private location (it was removed, or the private location changed)" (`vault.private_text_is`). The Vault tab's card text "A private fact, held on another machine" for a fact that is gone is in the UI batch. Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Knowledge vault; scratch Hub `:8035`).
 
 **Also (2026-10-15, F609's drive):** after a project is deleted with its private entries removed and its folder reopened, a private source's tracked stub reads "its text is held on TITAN, not on this machine" on TITAN itself. The same wording problem from another cause: the text is gone, not elsewhere. Fix with F617's honest wording.
 
@@ -35854,7 +35854,7 @@ Seam: Permissions & sandbox (acceptEdits refusal x operator surface). Tier guess
 
 ## F629 (C) -- Land is the approval control on a completed task, but the merge-verdict note renders only under review
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Worktrees & integration (UI); scratch Hub `:8033`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, afad0be): a completed task shows what approving writes before Land; with a test that failed before. Earlier status: open 2026-10-15. Measured in the 2026-10-15 full sweep (G3: Worktrees & integration (UI); scratch Hub `:8033`).
 
 On t-slug (`completed`, conflict with master), the drawer offers **Land it** but no `task-approval-writes-*` note: `ApprovalWritesNote` renders only when `canApprove`, i.e. under review. The operator sees the conflict only after pressing Land, as a 409 (Chromium logged `Failed to load resource: 409`). `GET /integration-preview` already knew: *"approval will be refused: wordlib/shared.py in commit c7f46c47706f conflict with master"*.
 
@@ -35886,7 +35886,7 @@ Seam: Spec documents (payload schema text x propose warnings). Tier guess: 0.
 
 ## F633 (C) -- "1 waiting — hop budget exhausted" shows in a conversation that has nothing waiting, with no Continue and no pointer
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Inbound queue & messages; scratch Hub `:8032`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, 8087723): the agent-level waiting line says "in another conversation" when nothing is queued here; with a test that failed before. Earlier status: open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Inbound queue & messages; scratch Hub `:8032`).
 
 After beta's hop-held entry (`conv-1cd110c03f20`), a *fresh* beta conversation (`conv-0dca16415b1e`) showed "1 waiting — hop budget exhausted" under its transcript, with no Continue button and no word of which conversation holds the entry (screenshot `g2-stopped.png`). Not covered: F131 (fixed) was about Continue reporting another conversation's entry.
 
@@ -35894,7 +35894,7 @@ Seam: Inbound queue & messages (agent-level queue status x conversation view). T
 
 ## F634 (C) -- in a narrow window the panel toggle flips to "Hide panel" but opens nothing; a separate "Panel" button opens the drawer
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Conversations & composer; scratch Hub `:8032`, Playwright Chromium).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, 973aee3): the narrow-window panel toggle opens the drawer; with a test that failed before. Earlier status: open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Conversations & composer; scratch Hub `:8032`, Playwright Chromium).
 
 At 700 px, clicking `conversation-toggle-panel` ("Show panel") sets `aria-pressed=true` with no visible change and no dialog. The drawer opens only from the `conversation-open-document` "Panel" button at the top of the page (`ConversationView.tsx:570-580`, where the drawer needs both `shellVisible` and `overlayOpen`). Once open, the drawer takes focus ("Close Panel"), one Escape closes it, and focus returns to the opener: all held.
 
@@ -35902,7 +35902,7 @@ Seam: Conversations & composer (narrow layout). Tier guess: 0 (dead click; no fi
 
 ## F635 (C) -- the Ctrl+K palette drops focus to `<body>` on Escape and after choosing an item
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Keyboard & dialogs; scratch Hub `:8037`, Playwright, keyboard only).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, 613ca3b): Ctrl+K gives focus back to its opener on Escape and after choosing; with a test that failed before. Earlier status: open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Keyboard & dialogs; scratch Hub `:8037`, Playwright, keyboard only).
 
 Before: `BUTTON|project-tab-jobs`; open: `INPUT`; after Escape: `BODY`. After typing "alpha" and Enter: `BODY`. Every Radix dialog opened from a button returns focus correctly; the palette (`cmdk` `Command.Dialog`, opened by a global key handler) does not. Not covered.
 
@@ -35910,7 +35910,7 @@ Seam: Keyboard & dialogs (palette focus return). Tier guess: 0.
 
 ## F636 (C) -- the "Permission decisions" history is reachable only while a question is open, and its rows do not say what was decided
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox; scratch Hub `:8037`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, 613ca3b): the Overview links to questions and decisions when none is open; decision rows name their command and an expired one when it was asked; with a test that failed before. Earlier status: open 2026-10-15. Measured in the 2026-10-15 full sweep (G7: Permissions & sandbox; scratch Hub `:8037`).
 
 `QuestionsPanel` holds `PermissionDecisions` (`QuestionsPanel.tsx:273`). The only way into the panel is `QuestionInterruptCard` on the Overview, rendered when `unanswered > 0` (`OverviewPage.tsx:155`); the palette has no "questions" entry. With no open question, no screen shows past decisions. The rows show `status · agent · tool · who · when`, not the command, so three "PowerShell" rows cannot be told apart; expired rows show no time. F231's fix (2026-09-23) added the list, but its reachability was not driven.
 
@@ -35918,7 +35918,7 @@ Seam: Permissions & sandbox (decision history) x Questions (panel entry point). 
 
 ## F637 (C) -- the Jobs page says "No jobs yet / Create First Job" after six jobs have fired, because archived jobs and loops have no view
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops; scratch Hub `:8036`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, 3c9dd5c): the Jobs page lists archived jobs and an all-archived project reads "No active or paused jobs · N archived"; with a test that failed before. Earlier status: open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops; scratch Hub `:8036`).
 
 After archiving every job, the Jobs page rendered:
 
@@ -35938,7 +35938,7 @@ Seam: Capability plane (MCP `create_job` x operator job route). Tier guess: 0.
 
 ## F639 (C) -- the settings copy for `allow_agent_jobs` names only flows and loops, but the setting refuses `create_job` too
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Capability plane; scratch Hub `:8036`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, 3c9dd5c): the settings row and Overview hint name create_job too; with a test that failed before. Earlier status: open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Capability plane; scratch Hub `:8036`).
 
 Settings page: *"Agents may create flows and loops (create_flow, create_loop)."* Overview: *"Agents may start flows — Needed for create_flow and create_loop."* The actual refusal was for `create_job`, and the refused-capability question itself says "loops, flows and jobs".
 
@@ -35954,7 +35954,7 @@ Seam: Knowledge vault (contradiction resolution x card). Tier guess: 0.
 
 ## F641 (C) -- the Manager page reads "empty" for a firing that answered a report, and the upload 413 does not name the limit
 
-**Status:** partly fixed 2026-10-15 (Tier 0). The 413 names the limit it applied, which differs by route: "Request body too large: this route takes at most 10 MiB (10485760 bytes)." for a vault file, 1 MiB elsewhere (`main` body-size middleware). `test_vault_files.py` asserts both and failed before. Driven: a 2 MiB JSON source -> 413 naming 1 MiB. **Left for the UI batch:** the reports firing's `empty` -> `answered` (a new outcome; the Manager page types its outcome badges, so the backend and UI change land together). Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Manager jobs, Knowledge vault; scratch Hub `:8035`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, 93ea888): the reports firing that answered records `answered` (manager.OUTCOMES), badged in the Manager panel; with a test that failed before. Earlier status: partly fixed 2026-10-15 (Tier 0). The 413 names the limit it applied, which differs by route: "Request body too large: this route takes at most 10 MiB (10485760 bytes)." for a vault file, 1 MiB elsewhere (`main` body-size middleware). `test_vault_files.py` asserts both and failed before. Driven: a 2 MiB JSON source -> 413 naming 1 MiB. **Left for the UI batch:** the reports firing's `empty` -> `answered` (a new outcome; the Manager page types its outcome badges, so the backend and UI change land together). Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G5: Manager jobs, Knowledge vault; scratch Hub `:8035`).
 
 The Manager page lists the `vault-reports` firing that answered a report as `Vault reports · empty · … answered: the entry stands`; an operator reads "empty" as "did nothing". Separately, a PDF of 10 MiB + 19 bytes answers `413 {"detail": "Request body too large"}`, which never says the limit is 10 MiB; one at exactly 10 MiB is accepted (201).
 
@@ -35970,7 +35970,7 @@ Seam: Tasks (assignee validation) x Agents. Tier guess: 0.
 
 ## F643 (C) -- refusals and diagnostics that give a code instead of a sentence (drift resolve, arrange, the manifest-drift strip)
 
-**Status:** fixed 2026-10-15 (Tier 0). Every corpus diagnostic (`ManifestDiagnostic.to_dict` and `spec_documents._diag`) carries a `message` sentence beside its code (`spec_manifest.describe_diagnostic`); the arrange refusal reads "this placement is not allowed: <why>"; an unknown drift resolution names the three accepted and what each means. `test_a_diagnostic_is_a_sentence.py` and two `test_spec_index_writer.py` assertions failed before. Driven on a scratch Hub: an unfiled document's message, and a self-parent arrange answering "… cannot be its own parent." **Left for the UI batch:** the Spec page's drift strip still prints `code — path`; it should print `message`. The "every new document is unfiled until Rebuild" observation is unchanged (a new document is not added to the index on create). Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Corpus & folding, Drift; scratch Hub `:8034`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, e94b128): the drift strip, corpus strip and place-under refusal print each diagnostic's `message`; with a test that failed before. Earlier status: fixed 2026-10-15 (Tier 0). Every corpus diagnostic (`ManifestDiagnostic.to_dict` and `spec_documents._diag`) carries a `message` sentence beside its code (`spec_manifest.describe_diagnostic`); the arrange refusal reads "this placement is not allowed: <why>"; an unknown drift resolution names the three accepted and what each means. `test_a_diagnostic_is_a_sentence.py` and two `test_spec_index_writer.py` assertions failed before. Driven on a scratch Hub: an unfiled document's message, and a self-parent arrange answering "… cannot be its own parent." **Left for the UI batch:** the Spec page's drift strip still prints `code — path`; it should print `message`. The "every new document is unfiled until Rebuild" observation is unchanged (a new document is not added to the index on create). Opened 2026-10-15. Measured in the 2026-10-15 full sweep (G4: Corpus & folding, Drift; scratch Hub `:8034`).
 
 - `POST /spec/drift/{id}/resolve {"resolution":"whatever"}` -> 422 "unknown resolution 'whatever'", naming none of `specification_updated` / `implementation_corrected` / `no_change_required` (`hub/hub/requirement_evidence.py:1736-1741`); the evidence decision route's equivalent names its permitted words.
 - `POST /spec/documents/arrange` cycle / self-parent -> 422 "this placement is not allowed" with only `manifest_parent_cycle` / `manifest_self_parent` codes.
@@ -36055,7 +36055,7 @@ Seam: Conversations & composer (Explore x refused send). Tier guess: 0 (design g
 
 ## F653 (D) -- one hop-held entry gets three Continue controls and two explanations
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Inbound queue & messages; scratch Hub `:8032`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, 8087723): one held entry gets one Continue (its own); the red band and the composer Continue are gone for hop-held work; with a test that failed before. Earlier status: open 2026-10-15. Measured in the 2026-10-15 full sweep (G2: Inbound queue & messages; scratch Hub `:8032`).
 
 For a single held entry, beta's conversation shows the entry's own `Continue` / `Discard`; an amber banner "Autonomous continuation paused — … Continue"; a red band "Queued messages reached the hop limit … Continue to deliver them, or discard them"; and the composer's `Continue` "beta has work waiting". The red error styling also reads as a failure (screenshot `g2-beta-held.png`).
 
@@ -36071,7 +36071,7 @@ Seam: Flows & review (review-dispatch refusal wording). Tier guess: 0.
 
 ## F655 (D) -- a loop past its `stop_at` still shows as enabled with a next run until the next tick records the stop
 
-**Status:** open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops; scratch Hub `:8036`).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, 3c9dd5c): a loop past stop_at with no stop_reason reads "Stopping" and shows no next run; with a test that failed before. Earlier status: open 2026-10-15. Measured in the 2026-10-15 full sweep (G6: Jobs & loops; scratch Hub `:8036`).
 
 `stop_at` was 10:50:00.8. At 10:51:23 the job read `enabled: true, next_run: 10:52:00Z, stop_reason: null`. The 10:52 tick recorded `job_run_skipped` and `loop_stopped` "loop stop time reached". Nothing fired late, so this is display only.
 
@@ -36103,7 +36103,7 @@ Seam: Spec documents x Requirements, evidence & coverage (route echoes). Tier gu
 
 ## F658 (D) -- Check now is unreachable for a document with no vault warnings
 
-**Status:** open 2026-10-15. Found by reading code in the 2026-10-15 full sweep (G5: Knowledge vault; not driven: no clean document was opened in the browser).
+**Status:** fixed 2026-10-16 (Tier 0, UI batch, e94b128): a document with no vault warnings shows "No vault warnings" with Check now; with a test that failed before. Earlier status: open 2026-10-15. Found by reading code in the 2026-10-15 full sweep (G5: Knowledge vault; not driven: no clean document was opened in the browser).
 
 `SpecVaultWarnings.tsx` returns `null` when the list is empty. A document that cites nothing and has no conflict yet therefore has no **Check now**, even when a new vault fact contradicts it later; only the next propose checks it.
 
@@ -36135,7 +36135,7 @@ Seam: Permissions & sandbox. Recommended (wpc2-a): exempt a quoted literal on th
 
 ## F662 (B) -- the Copilot model catalog has drifted from the CLI: `claude-haiku-5.5` and `grok-4.7` are refused (400) though the CLI runs them, and four retired models are still offered
 
-**Status:** fixed 2026-10-16 (Tier 1, decision fix-D5, change `spec/changes/the-copilot-catalog-tracks-the-cli`, re-authored from openspec `the-copilot-catalog-matches-the-cli` items 1, 2 and 4). `CATALOG["copilot"]` is the 30 models of `copilot help config` 1.0.94-3; the pin fixture is `tests/fixtures/copilot/help-config-1.0.94-3.txt`, and the drift script prints the build it compared against. A stored model the catalog dropped keeps working: an override equal to the conversation's stored model is accepted, and `run_worker` runs a stored one with a warning instead of `unknown_model`. A newly chosen one is refused, now including a newly set `checkpoint_model`. Conversations carry `model_unrecognised`; the pill label is in the UI batch. Item 3 of the draft (a substitution reported at session start) was built 2026-10-16 as the successor change `a-substituted-copilot-model-is-reported` (Tier 1, 22bc1e7; acceptance test committed failing first, 58288f6, 4 of 11; folded into `model-catalog`): `run_turn` reads the session's model and effort after agent selection and posts one `copilot.model_substituted` / `copilot.effort_substituted` before the prompt. Grounded on a no-prompt 1.0.91 capture at home (the agent answer carries the `model` option; an Auto-only plan answers a concrete model with `auto`). Not driven with a prompt: the work-PC check (runner on claude-opus-4.7 shows the notice and the meter names claude-sonnet-5) is the operator's. Per-model effort (wpc3-d) and the catalog scenario wording (wpc3-g) stay open. Acceptance drive `scripts/drive/d1016_f662_copilot_catalog.py` committed failing first (dcaef3c: 3 of 3), ALL PASS after. Opened 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Draft change: `openspec/changes/the-copilot-catalog-matches-the-cli` (with probe evidence); decisions `wpc3-a..g` OPEN (wpc3-b, c, f KEY).
+**Status:** (2026-10-16, 973aee3: the composer pill now reads "<model> — unrecognised" instead of the default model's name.) fixed 2026-10-16 (Tier 1, decision fix-D5, change `spec/changes/the-copilot-catalog-tracks-the-cli`, re-authored from openspec `the-copilot-catalog-matches-the-cli` items 1, 2 and 4). `CATALOG["copilot"]` is the 30 models of `copilot help config` 1.0.94-3; the pin fixture is `tests/fixtures/copilot/help-config-1.0.94-3.txt`, and the drift script prints the build it compared against. A stored model the catalog dropped keeps working: an override equal to the conversation's stored model is accepted, and `run_worker` runs a stored one with a warning instead of `unknown_model`. A newly chosen one is refused, now including a newly set `checkpoint_model`. Conversations carry `model_unrecognised`; the pill label is in the UI batch. Item 3 of the draft (a substitution reported at session start) was built 2026-10-16 as the successor change `a-substituted-copilot-model-is-reported` (Tier 1, 22bc1e7; acceptance test committed failing first, 58288f6, 4 of 11; folded into `model-catalog`): `run_turn` reads the session's model and effort after agent selection and posts one `copilot.model_substituted` / `copilot.effort_substituted` before the prompt. Grounded on a no-prompt 1.0.91 capture at home (the agent answer carries the `model` option; an Auto-only plan answers a concrete model with `auto`). Not driven with a prompt: the work-PC check (runner on claude-opus-4.7 shows the notice and the meter names claude-sonnet-5) is the operator's. Per-model effort (wpc3-d) and the catalog scenario wording (wpc3-g) stay open. Acceptance drive `scripts/drive/d1016_f662_copilot_catalog.py` committed failing first (dcaef3c: 3 of 3), ALL PASS after. Opened 2026-10-15. Measured in the work-PC Copilot drive of 2026-10-12 (Copilot CLI 1.0.94-3, source Hub, `proj-d73f8848ee60`; handoff `.claude/work-pc/handoff-0162-2026-10-12-copilot-drive.md`), filed at home 2026-10-15. Draft change: `openspec/changes/the-copilot-catalog-matches-the-cli` (with probe evidence); decisions `wpc3-a..g` OPEN (wpc3-b, c, f KEY).
 
 `hub/hub/model_catalog.py` `CATALOG["copilot"]` against `copilot help config` 1.0.94-3: missing `claude-haiku-5.5`, `grok-4.7` (a trigger override with `claude-haiku-5.5` gets 400 "not a model 'copilot' declares"); still listed but no longer offered: `claude-opus-4.7`, `gemini-3.6-flash`, `gemini-3.5-flash`, `kimi-k2.7-code`. R3 also found `worker.py:348-349` refuses a stored model that left the catalog as `unknown_model`, which would stop checkpoints, handovers and distillation (wpc3-f).
 
