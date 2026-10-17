@@ -1283,17 +1283,32 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="record_evidence",
-            args="identifier, summary, kind=test_result, locator, document, task_id",
+            args=(
+                "identifier, summary, kind=test_result, locator, document, task_id, command, "
+                "output, covers"
+            ),
             method="POST",
             path="/spec/evidence",
-            fields=("identifier", "summary", "kind", "locator", "document", "task_id"),
+            fields=(
+                "identifier",
+                "summary",
+                "kind",
+                "locator",
+                "document",
+                "task_id",
+                "command",
+                "output",
+                "covers",
+            ),
             required=("identifier",),
             text=(
                 "record what demonstrates that a requirement is satisfied, as `FR-1`. **This is "
                 "what lets approved work merge**: approving a task integrates nothing until "
-                "evidence for its requirements has been accepted, and the operator is simply told "
-                "there is nothing to merge. It enters `awaiting` — what you record is a claim "
-                "until somebody else decides on it."
+                "evidence for its requirements has been accepted. It enters `awaiting` — a claim "
+                "until the agent reviewing the task decides it with its verdict. Give that "
+                "reviewer what it needs to judge: `command` (what you ran), `output` (what it "
+                "printed, as it came) and `covers` (`full`, or `partial` with the missing part "
+                "named in the summary)."
             ),
         ),
         _Operation(

@@ -1331,6 +1331,11 @@ class EvidenceRecord(RequestModel):
     summary: str = Field(default="", max_length=10000)
     document: Optional[str] = Field(default=None, max_length=255)
     task_id: Optional[str] = Field(default=None, max_length=64)
+    # What it takes to judge the piece (vis-D5): the command run, its output (kept as its last 4000
+    # characters) and whether it covers the requirement `full`y or only `partial`ly.
+    command: Optional[str] = Field(default=None, max_length=2000)
+    output: Optional[str] = Field(default=None, max_length=200000)
+    covers: Optional[str] = Field(default=None, max_length=16)
 
 
 class EvidenceDecision(RequestModel):
@@ -1414,10 +1419,13 @@ async def record_evidence(
             workspace=workspace,
             actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
             main_branch=(project_row.main_branch if project_row else None),
+            command=body.command,
+            output=body.output,
+            covers=body.covers,
         )
     except requirement_evidence.EvidenceRefusedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=exc.http_status or status.HTTP_409_CONFLICT,
             detail={"message": str(exc), "code": exc.code},
         ) from exc
 
@@ -1472,7 +1480,7 @@ async def list_evidence_for_agent(
     """
     from ... import spec_lifecycle
     from ...db.models import RequirementEvidence, SpecRequirement
-    from .spec import _evidence_view, _footprints_for, _latest_reviews_for
+    from .spec import _evidence_views
 
     if identifier:
         requirement = await _resolve_requirement(
@@ -1510,8 +1518,6 @@ async def list_evidence_for_agent(
     rows = list(
         (await session.execute(query.order_by(RequirementEvidence.produced_at))).scalars().all()
     )
-    prints = await _footprints_for(session, [row.id for row in rows])
-    reviews = await _latest_reviews_for(session, [row.id for row in rows])
 
     # The `FR-n` the agent actually reasons in. `_evidence_view` carries `requirement_id`, which is
     # a database id and names nothing an agent has ever seen.
@@ -1524,13 +1530,11 @@ async def list_evidence_for_agent(
             )
         ).all()
     )
+    views = await _evidence_views(session, actor.project_id, rows)
     return {
         "evidence": [
-            {
-                **_evidence_view(row, prints.get(row.id), reviews.get(row.id)),
-                "identifier": identifiers.get(row.requirement_id),
-            }
-            for row in rows
+            {**view, "identifier": identifiers.get(row.requirement_id)}
+            for row, view in zip(rows, views, strict=True)
         ]
     }
 

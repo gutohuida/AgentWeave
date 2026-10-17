@@ -2634,6 +2634,12 @@ class RequirementEvidence(Base):
     # is gone rather than pretending it is still there.
     artifact_removed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     produced_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    # What it takes to judge the piece (`evidence-carries-what-it-takes-to-judge-it`, vis-D5), as
+    # the recorder supplied it: the command run, the tail of its output, and whether it covers the
+    # requirement fully or partly. Null where none was given -- unknown, never invented.
+    command: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    covers: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
     __table_args__ = (
         CheckConstraint(

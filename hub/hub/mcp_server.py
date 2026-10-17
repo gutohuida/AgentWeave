@@ -4297,6 +4297,9 @@ def record_evidence(
     locator: str = "",
     document: str = "",
     task_id: str = "",
+    command: str = "",
+    output: str = "",
+    covers: str = "",
 ) -> Dict[str, Any]:
     """Record what demonstrates that a requirement is satisfied.
 
@@ -4305,8 +4308,10 @@ def record_evidence(
     nothing to merge, and you are the one who could have prevented that.
 
     Evidence enters `awaiting`, never `accepted`. A careful agent and a careless one report success
-    in the same words with the same authority, so what you record is a claim until somebody else
-    decides on it.
+    in the same words with the same authority, so what you record is a claim until the agent
+    reviewing the task decides on it: its verdict accepts your evidence when it approves the task
+    and rejects it when it sends the task back. Give it what it needs to judge: the command you
+    ran, what it printed, and whether the piece covers the whole requirement.
 
     Args:
         identifier: The requirement this demonstrates, as `FR-1`. Read the document if you are not
@@ -4318,6 +4323,11 @@ def record_evidence(
         locator: Where the artifact lives, if it has one — a path, a command, a run id.
         document: Only needed when the same identifier exists in more than one document.
         task_id: The task this came out of, when there is one.
+        command: The command you ran to demonstrate it, as you ran it (`npm test`, `pytest -k x`).
+        output: What that command printed. Paste it as it came; the Hub keeps its last 4000
+            characters, so the verdict line at the end is never lost.
+        covers: `full` when this demonstrates the whole requirement, `partial` when only part of it
+            (say which part in the summary). Leave it empty only if you cannot tell.
 
     Recording the same requirement again in the same turn, on the same task, **revises** your
     undecided row rather than adding a second: the answer carries the same `id` and
@@ -4339,6 +4349,9 @@ def record_evidence(
             "locator": locator,
             **({"document": document} if document else {}),
             **({"task_id": task_id} if task_id else {}),
+            **({"command": command} if command else {}),
+            **({"output": output} if output else {}),
+            **({"covers": covers} if covers else {}),
         },
     )
 

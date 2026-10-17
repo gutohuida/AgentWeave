@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0129"
+HEAD_REVISION = "0130"
 
 
 # ---------------------------------------------------------------------------
@@ -5422,3 +5422,54 @@ def test_migration_0129_is_a_no_op_without_the_table(tmp_path) -> None:
         conn.commit()
     _upgrade_to(db_url, "0129")
     _downgrade_to(db_url, "0128")
+
+
+# ---------------------------------------------------------------------------
+# 0130 -- requirement_evidence.command, output and covers (`evidence-carries-what-it-takes-to-judge-it`)
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0130_adds_nullable_evidence_output_columns(tmp_path) -> None:
+    db_file = tmp_path / "evidence.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        # The 0129 shape: the table as it stood before this revision.
+        for name in ("command", "output", "covers"):
+            conn.execute(f"ALTER TABLE requirement_evidence DROP COLUMN {name}")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0129')")
+        conn.commit()
+        before = {r[1] for r in conn.execute("PRAGMA table_info(requirement_evidence)")}
+    assert not {"command", "output", "covers"} & before
+
+    _upgrade_to(db_url, "0130")
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {r[1]: r for r in conn.execute("PRAGMA table_info(requirement_evidence)")}
+    for name in ("command", "output", "covers"):
+        assert name in columns
+        assert columns[name][3] == 0  # nullable: old rows read null, never invented
+
+    _downgrade_to(db_url, "0129")
+
+    with sqlite3.connect(db_file) as conn:
+        after = {r[1] for r in conn.execute("PRAGMA table_info(requirement_evidence)")}
+    assert after == before
+
+
+def test_migration_0130_is_a_no_op_without_the_table(tmp_path) -> None:
+    db_file = tmp_path / "bare.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("DROP TABLE evidence_footprints")
+        conn.execute("DROP TABLE evidence_reviews")
+        conn.execute("DROP TABLE requirement_drift")
+        conn.execute("DROP TABLE requirement_evidence")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0129')")
+        conn.commit()
+    _upgrade_to(db_url, "0130")
+    _downgrade_to(db_url, "0129")

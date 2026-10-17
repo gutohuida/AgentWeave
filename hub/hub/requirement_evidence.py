@@ -120,6 +120,38 @@ async def _refuse_a_reviewer_recording(
     )
 
 
+#: What `covers` may say (vis-D5): the piece demonstrates the requirement wholly, or only part of it.
+COVERS = ("full", "partial")
+#: The output is kept as its tail: a run's verdict is at its end (design D2).
+OUTPUT_TAIL = 4000
+OUTPUT_CUT_MARKER = "[earlier output cut]\n"
+COMMAND_MAX = 2000
+
+
+def check_covers(covers: Optional[str]) -> Optional[str]:
+    """`covers` normalised, or a refusal naming what is permitted."""
+    value = (covers or "").strip().lower()
+    if not value:
+        return None
+    if value not in COVERS:
+        raise EvidenceRefusedError(
+            f"covers {covers!r} is not permitted (permitted: {', '.join(COVERS)}); say `partial` "
+            "when the piece demonstrates only part of the requirement",
+            code="unknown_covers",
+            http_status=422,
+        )
+    return value
+
+
+def output_tail(output: Optional[str]) -> Optional[str]:
+    """The last `OUTPUT_TAIL` characters of *output*, marked when anything before them was cut."""
+    if output is None or not output.strip():
+        return None
+    if len(output) <= OUTPUT_TAIL:
+        return output
+    return OUTPUT_CUT_MARKER + output[-OUTPUT_TAIL:]
+
+
 async def record(
     session: AsyncSession,
     requirement: SpecRequirement,
@@ -132,8 +164,14 @@ async def record(
     workspace: Optional[ProjectWorkspace] = None,
     main_branch: Optional[str] = None,
     commit: Optional[str] = None,
+    command: Optional[str] = None,
+    output: Optional[str] = None,
+    covers: Optional[str] = None,
 ) -> RequirementEvidence:
     """Store one piece of evidence against the requirement's *current* digest.
+
+    *command*, *output* and *covers* are what it takes to judge the piece (vis-D5): the output is
+    kept as its tail (`output_tail`), and *covers* is `full`, `partial` or absent (`check_covers`).
 
     *commit* is an operator naming the commit that did the work while the locator names a file
     (F529); it outranks a commit the locator names, and is verified the same way.
@@ -156,6 +194,9 @@ async def record(
             f"{requirement.identifier} is retired; there is nothing left to demonstrate",
             code="requirement_retired",
         )
+    covers = check_covers(covers)
+    command = (command or "").strip()[:COMMAND_MAX] or None
+    output = output_tail(output)
 
     if task_id is None:
         # The run already knows its task, so an agent that did not repeat it is not ambiguous --
@@ -199,6 +240,9 @@ async def record(
             own.kind = kind
             own.locator = locator
             own.summary = summary
+            own.command = command
+            own.output = output
+            own.covers = covers
             own.produced_at = datetime.now(timezone.utc)
             footprint = (
                 (
@@ -271,6 +315,9 @@ async def record(
         run_id=actor.run_id,
         task_id=task_id,
         review_state=ACCEPTED if actor.kind == "operator" else AWAITING,
+        command=command,
+        output=output,
+        covers=covers,
     )
     session.add(evidence)
     await session.flush()
@@ -755,6 +802,73 @@ def _main_ref(root: Path, main_branch: Optional[str]) -> Optional[str]:
         if name and _git(root, "rev-parse", "--verify", name):
             return name
     return None
+
+
+#: The diff route's cap (`diff-of-the-work`): a vendored tree must not stall the route or the page.
+DIFF_MAX_BYTES = 400_000
+#: How many merges on main's first-parent chain are searched for the one that brought a commit in.
+DIFF_MERGE_SEARCH = 300
+
+
+def _line_of_work_base(root: Path, commit: str, main: str) -> Optional[str]:
+    """Where *commit*'s line of work left *main* (design D3 of `evidence-carries-...`).
+
+    Unmerged, that is their merge base. Merged, the merge base is the commit itself, so the base is
+    found from the first merge on main's first-parent chain whose second parent reaches the commit:
+    its first parent is main as it stood before the work came in. A fast-forward leaves no such
+    merge, and the commit's own parent stands in.
+    """
+    if _git(root, "merge-base", "--is-ancestor", commit, main) is None:
+        return _git(root, "merge-base", main, commit)
+    merges = (_git(root, "rev-list", "--first-parent", "--merges", "--reverse", main) or "").split()
+    for merge in merges[-DIFF_MERGE_SEARCH:]:
+        second = _git(root, "rev-parse", "--verify", f"{merge}^2")
+        brought_in = (
+            second
+            and _git(root, "merge-base", "--is-ancestor", commit, second) is not None
+            and _git(root, "merge-base", "--is-ancestor", commit, f"{merge}^1") is None
+        )
+        if brought_in:
+            return _git(root, "merge-base", f"{merge}^1", commit)
+    return _git(root, "rev-parse", "--verify", f"{commit}^")
+
+
+def work_diff(root: Path, commit: Optional[str], main_branch: Optional[str]) -> Dict[str, Any]:
+    """`{files: [{path, status, patch}], base, commit, truncated, reason}` for the work *commit*
+    carries on its line of work. Never raises: a missing commit or repository is a `reason`."""
+    empty: Dict[str, Any] = {"files": [], "base": None, "commit": commit, "truncated": False}
+    if not commit:
+        return {**empty, "reason": "this piece names no commit, so there is no work to diff"}
+    if _git(root, "rev-parse", "--verify", f"{commit}^{{commit}}") is None:
+        return {**empty, "reason": f"commit {commit[:12]} is not in this repository"}
+    main = _main_ref(root, main_branch)
+    base = _line_of_work_base(root, commit, main) if main else None
+    if base is None:
+        base = _git(root, "rev-parse", "--verify", f"{commit}^")
+    if base is None:
+        return {**empty, "reason": "the commit has no parent to compare against"}
+    names = _git(root, "diff", "--name-status", "--no-renames", base, commit) or ""
+    patch = _git(root, "diff", "--no-color", "--no-renames", "-U3", base, commit) or ""
+    truncated = len(patch.encode("utf-8")) > DIFF_MAX_BYTES
+    if truncated:
+        patch = patch.encode("utf-8")[:DIFF_MAX_BYTES].decode("utf-8", "ignore")
+    patches: Dict[str, str] = {}
+    for chunk in re.split(r"(?m)^(?=diff --git )", patch):
+        match = re.match(r"diff --git a/(.+?) b/(.+)$", chunk.split("\n", 1)[0])
+        if match:
+            patches[match.group(2)] = chunk.rstrip("\n")
+    files = []
+    for line in names.splitlines():
+        status, _, path = line.partition("\t")
+        if path:
+            files.append({"path": path, "status": status[:1], "patch": patches.get(path, "")})
+    return {
+        "files": files,
+        "base": base,
+        "commit": commit,
+        "truncated": truncated,
+        "reason": None if files else "the work changed no files against its base",
+    }
 
 
 def _commit_paths(root: Path, commit: str) -> List[str]:

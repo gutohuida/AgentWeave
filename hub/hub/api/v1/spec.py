@@ -622,6 +622,11 @@ class EvidenceRecord(RequestModel):
     # The commit that did the work (F529), when the locator names a file instead. Verified like a
     # locator-named commit (F71): refused, never replaced by HEAD, when the repository lacks it.
     commit: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{7,40}$")
+    # What it takes to judge the piece (vis-D5): the command run, its output (kept as its last 4000
+    # characters) and whether it covers the requirement `full`y or only `partial`ly.
+    command: Optional[str] = Field(default=None, max_length=2000)
+    output: Optional[str] = Field(default=None, max_length=200000)
+    covers: Optional[str] = Field(default=None, max_length=16)
 
 
 class EvidenceDecision(RequestModel):
@@ -1303,8 +1308,7 @@ async def requirement_detail(
     coverage = next(
         (entry for entry in report.requirements if entry.requirement_id == requirement.id), None
     )
-    prints = await _footprints_for(session, [row.id for row in evidence])
-    reviews = await _latest_reviews_for(session, [row.id for row in evidence])
+    views = await _evidence_views(session, project_id, evidence)
     return {
         "requirement": {
             "id": requirement.id,
@@ -1319,9 +1323,7 @@ async def requirement_detail(
             {"id": task.id, "title": task.title, "status": task.status, "assignee": task.assignee}
             for task in tasks
         ],
-        "evidence": [
-            _evidence_view(row, prints.get(row.id), reviews.get(row.id)) for row in evidence
-        ],
+        "evidence": views,
         # Never omitted, and never without its integration answer.
         "coverage": coverage.to_dict() if coverage else None,
     }
@@ -1349,10 +1351,13 @@ async def record_evidence(
             workspace=workspace,
             actor=spec_lifecycle.Actor(kind="operator", name="operator"),
             main_branch=await _main_branch(session, project_id),
+            command=body.command,
+            output=body.output,
+            covers=body.covers,
         )
     except requirement_evidence.EvidenceRefusedError as exc:
         raise HTTPException(
-            status_code=409, detail={"message": str(exc), "code": exc.code}
+            status_code=exc.http_status or 409, detail={"message": str(exc), "code": exc.code}
         ) from exc
     await session.commit()
     # **With its footprint** (finding F71). Every sibling call site in this file passes one; this
@@ -1360,13 +1365,12 @@ async def record_evidence(
     # and this is the one moment the operator is looking. The field exists precisely so a reader can
     # tell whether the evidence describes the work they think it does, as this view's own comment on
     # it says; withholding it here hid a wrong commit at the only point where noticing was cheap.
-    prints = await _footprints_for(session, [evidence.id])
     # **With its review** (F218). `record()` auto-accepts operator-recorded evidence and writes the
     # `EvidenceReview` row in the same transaction just committed above, but this handler stopped at
     # the footprint fix and never fetched it — so this 201 read `latest_review: null` for a row the
     # very next GET already shows accepted. Same fetch-and-pass shape as `list_evidence` uses.
-    reviews = await _latest_reviews_for(session, [evidence.id])
-    return _evidence_view(evidence, prints.get(evidence.id), reviews.get(evidence.id))
+    [view] = await _evidence_views(session, project_id, [evidence])
+    return view
 
 
 @router.get("/spec/evidence")
@@ -1396,11 +1400,7 @@ async def list_evidence(
         rows = list(
             (await session.execute(query.order_by(RequirementEvidence.produced_at))).scalars().all()
         )
-    prints = await _footprints_for(session, [row.id for row in rows])
-    reviews = await _latest_reviews_for(session, [row.id for row in rows])
-    return {
-        "evidence": [_evidence_view(row, prints.get(row.id), reviews.get(row.id)) for row in rows]
-    }
+    return {"evidence": await _evidence_views(session, project_id, rows)}
 
 
 async def _reopen_an_approved_task(
@@ -1473,8 +1473,9 @@ async def decide_evidence(
     # Built before the integration below, which rolls back when it fails and expires every loaded
     # row: the decision has committed, and the answer must not depend on what the merge did (F426).
     # With its footprint, as every other evidence answer here has (F657, after F71).
-    prints = await _footprints_for(session, [evidence.id])
-    view = _evidence_view(evidence, prints.get(evidence.id), latest_review=review)
+    [view] = await _evidence_views(
+        session, project_id, [evidence], latest_reviews={evidence.id: review}
+    )
     # Captured here for the same reason: the broadcast below goes after the integration, and reading
     # `evidence.id` then is the 500 F426 fixed.
     announced = await _decision_announcement(session, evidence)
@@ -1492,6 +1493,42 @@ async def decide_evidence(
     # After the integration, so a view refetching on it sees any merge the decision caused.
     await sse_manager.broadcast(project_id, "spec_updated", announced)
     return view
+
+
+@router.get("/spec/evidence/{evidence_id}/diff")
+async def evidence_diff(
+    evidence_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The work a piece's commit carries on its line of work (`diff-of-the-work`, vis-D5).
+
+    Measured from where that line left the main branch, so it reads the same before and after the
+    work merged. 404 for an unknown piece; 200 with no files and a `reason` where there is no
+    commit, no repository or nothing changed. The git calls run off the event loop.
+    """
+    import asyncio
+
+    project_id, _ = project
+    evidence = await session.get(RequirementEvidence, evidence_id)
+    if evidence is None or evidence.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    footprint = (await _footprints_for(session, [evidence.id])).get(evidence.id)
+    commit = footprint.commit_sha if footprint is not None and footprint.kind == "git" else None
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, project_id)
+    except project_workspace.ProjectWorkspaceError as exc:
+        return {
+            "files": [],
+            "base": None,
+            "commit": commit,
+            "truncated": False,
+            "reason": f"the project's directory cannot be read: {exc}",
+        }
+    main_branch = await _main_branch(session, project_id)
+    return await asyncio.to_thread(
+        requirement_evidence.work_diff, workspace.root, commit, main_branch
+    )
 
 
 @router.get("/spec/evidence/{evidence_id}/reviews")
@@ -1744,7 +1781,9 @@ async def resolve_drift(
     return {"id": candidate.id, "state": candidate.state, "resolution": candidate.resolution}
 
 
-def _evidence_view(evidence, footprint=None, latest_review=None) -> dict:
+def _evidence_view(
+    evidence, footprint=None, latest_review=None, *, requirement=None, superseded_by=None
+) -> dict:
     return {
         # Still being recorded: the run that recorded it is running, so its commit is about to be
         # replaced and a decision is held (`recording_run_live`). A registry lookup, no query.
@@ -1783,7 +1822,107 @@ def _evidence_view(evidence, footprint=None, latest_review=None) -> dict:
         # builder's evidence would have caught the 2026-08-13 defect by eye, months before any test
         # was written for it. Null where no footprint was captured.
         "footprint": footprint_view(footprint),
+        # What it takes to judge the piece (vis-D5), as its recorder supplied it; null when none.
+        "command": evidence.command,
+        "output": evidence.output,
+        "covers": evidence.covers,
+        # What it demonstrates, in the document's own words, and whether a later piece replaced it
+        # (`says-what-it-demonstrates`). Built by `_evidence_views`; null where it was not asked.
+        "requirement": requirement,
+        "superseded_by": superseded_by,
     }
+
+
+async def _evidence_views(
+    session: AsyncSession, project_id: str, rows, *, latest_reviews=None
+) -> List[dict]:
+    """Every evidence answer's views, each with its footprint, latest review, the requirement's
+    identifier and statement, and `superseded_by`. One place, so no surface carries less.
+
+    The statement is read from the document's payload (`spec_reading`); a project whose directory
+    cannot be resolved still answers, with the statement null. `superseded_by` is the newest later
+    piece recorded for the same requirement and task (design D4), whether or not it is listed.
+    """
+    from ... import spec_reading
+
+    rows = list(rows)
+    if not rows:
+        return []
+    ids = [row.id for row in rows]
+    prints = await _footprints_for(session, ids)
+    reviews = (
+        latest_reviews if latest_reviews is not None else await _latest_reviews_for(session, ids)
+    )
+    requirements = {
+        row.id: row
+        for row in (
+            await session.execute(
+                select(SpecRequirement).where(
+                    SpecRequirement.id.in_({row.requirement_id for row in rows})
+                )
+            )
+        )
+        .scalars()
+        .all()
+    }
+    wording: Dict[str, Dict[str, Any]] = {}
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, project_id)
+        payloads = await spec_reading.payloads_for_documents(
+            session, workspace, [r.document_id for r in requirements.values()]
+        )
+        wording = {
+            document_id: spec_reading.statements_by_key(payload)
+            for document_id, payload in payloads.items()
+        }
+    except Exception:  # noqa: BLE001 - the wording is an addition; its absence is not a failure
+        wording = {}
+    newest: Dict[tuple, Any] = {}
+    pairs = {(row.requirement_id, row.task_id) for row in rows if row.task_id}
+    if pairs:
+        siblings = (
+            (
+                await session.execute(
+                    select(RequirementEvidence).where(
+                        RequirementEvidence.requirement_id.in_({pair[0] for pair in pairs}),
+                        RequirementEvidence.task_id.in_({pair[1] for pair in pairs}),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for sibling in siblings:
+            pair = (sibling.requirement_id, sibling.task_id)
+            current = newest.get(pair)
+            if current is None or (sibling.produced_at, sibling.id) > (
+                current.produced_at,
+                current.id,
+            ):
+                newest[pair] = sibling
+    views = []
+    for row in rows:
+        requirement = requirements.get(row.requirement_id)
+        latest = newest.get((row.requirement_id, row.task_id)) if row.task_id else None
+        views.append(
+            _evidence_view(
+                row,
+                prints.get(row.id),
+                reviews.get(row.id),
+                requirement=(
+                    {
+                        "identifier": requirement.identifier,
+                        "statement": wording.get(requirement.document_id, {})
+                        .get(requirement.key, {})
+                        .get("statement"),
+                    }
+                    if requirement is not None
+                    else None
+                ),
+                superseded_by=latest.id if latest is not None and latest.id != row.id else None,
+            )
+        )
+    return views
 
 
 async def _main_branch(session: AsyncSession, project_id: str) -> Optional[str]:
