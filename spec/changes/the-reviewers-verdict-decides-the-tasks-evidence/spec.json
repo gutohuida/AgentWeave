@@ -133,6 +133,10 @@
       "statement": "When the operator rejects an accepted piece of evidence whose task is approved, the task MUST move to revision_needed with the operator as actor."
     }
   ],
+  "roadmap": {
+    "document": "spec/changes/evidence-goes-agentic-and-the-project-becomes-visible-roadmap/spec.json",
+    "slice": "agentic-evidence"
+  },
   "schema_version": 1,
   "scope": {
     "in_scope": [

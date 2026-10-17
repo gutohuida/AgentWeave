@@ -125,6 +125,10 @@
       "statement": "The spec proposals panel MUST list resolved proposals with their outcome, who resolved them, when and the reason."
     }
   ],
+  "roadmap": {
+    "document": "spec/changes/evidence-goes-agentic-and-the-project-becomes-visible-roadmap/spec.json",
+    "slice": "remaining-hidden-data"
+  },
   "schema_version": 1,
   "scope": {
     "in_scope": [

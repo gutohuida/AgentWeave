@@ -95,6 +95,10 @@
       "statement": "Migration 0131 MUST add only a nullable column, leave existing rows unchanged, and downgrade by dropping that column."
     }
   ],
+  "roadmap": {
+    "document": "spec/changes/evidence-goes-agentic-and-the-project-becomes-visible-roadmap/spec.json",
+    "slice": "requirement-story"
+  },
   "schema_version": 1,
   "scope": {
     "in_scope": [

@@ -107,6 +107,10 @@
       "statement": "The coverage row of a requirement with evidence, the task story's evidence summary, the approval report's awaiting-evidence entry and a job firing whose reason mentions evidence MUST each link to the evidence view focused on what they mean."
     }
   ],
+  "roadmap": {
+    "document": "spec/changes/evidence-goes-agentic-and-the-project-becomes-visible-roadmap/spec.json",
+    "slice": "evidence-browser"
+  },
   "schema_version": 1,
   "scope": {
     "in_scope": [

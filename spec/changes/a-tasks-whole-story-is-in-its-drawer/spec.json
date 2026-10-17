@@ -115,6 +115,10 @@
       "statement": "Every animation of the story MUST be absent under prefers-reduced-motion, with every event visible in the first rendered frame."
     }
   ],
+  "roadmap": {
+    "document": "spec/changes/evidence-goes-agentic-and-the-project-becomes-visible-roadmap/spec.json",
+    "slice": "task-story"
+  },
   "schema_version": 1,
   "scope": {
     "in_scope": [

@@ -125,6 +125,10 @@
       "statement": "The record_evidence tool MUST describe command, output and covers, and MUST say that the reviewing agent's verdict decides the evidence."
     }
   ],
+  "roadmap": {
+    "document": "spec/changes/evidence-goes-agentic-and-the-project-becomes-visible-roadmap/spec.json",
+    "slice": "evidence-worth-reading"
+  },
   "schema_version": 1,
   "scope": {
     "in_scope": [
