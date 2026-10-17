@@ -40,7 +40,7 @@ export function SpecRailNav({
   // Same query key as the Spec screen's, so standing in for the project tree costs no request.
   const { data: specList } = useSpecList()
   const inventory = useMemo(() => buildInventory(specList), [specList])
-  const { data: evidence } = useProjectEvidence(!!onOpenEvidence)
+  const { data: evidence, isError: evidenceError } = useProjectEvidence(!!onOpenEvidence)
   const pieces = evidence?.evidence?.length ?? null
 
   return (
@@ -78,7 +78,11 @@ export function SpecRailNav({
         >
           <Icon name="fact_check" size={15} />
           Evidence
-          {pieces !== null ? <span className="aw-rail-count">{pieces}</span> : null}
+          {evidenceError ? (
+            <span className="aw-rail-count" title="The evidence count could not be read">—</span>
+          ) : pieces !== null ? (
+            <span className="aw-rail-count">{pieces}</span>
+          ) : null}
         </button>
       ) : null}
       <nav

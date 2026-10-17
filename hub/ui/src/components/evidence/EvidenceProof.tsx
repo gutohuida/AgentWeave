@@ -89,6 +89,8 @@ export function EvidenceProof({ piece, open }: { piece: EvidencePiece; open: boo
             <div className="aw-skeleton" style={{ width: '60%' }} />
             <div className="aw-skeleton" style={{ width: '85%' }} />
           </div>
+        ) : diff.isError ? (
+          <p className="aw-tl-meta">The diff of this work could not be read.</p>
         ) : diff.data && diff.data.files.length > 0 ? (
           <>
             <DiffView files={diff.data.files} testId={`evidence-diff-${piece.id}`} />

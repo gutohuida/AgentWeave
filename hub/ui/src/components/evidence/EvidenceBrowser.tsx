@@ -113,6 +113,9 @@ function PieceRow({
       </div>
       <Expander open={open}>
         <div className="aw-evidence-body">
+          {history.isError ? (
+            <p className="aw-tl-meta">This piece’s review history could not be read.</p>
+          ) : null}
           <EvidenceReviews reviews={reviews} />
           <EvidenceProof piece={piece} open={open} />
         </div>
@@ -131,7 +134,7 @@ export function EvidenceBrowser({
   onOpenTask: (taskId: string) => void
 }) {
   const { data, isLoading, isError } = useProjectEvidence()
-  const { data: taskPage } = useTasks()
+  const { data: taskPage, error: tasksError } = useTasks()
   const [state, setState] = useState<StateFilter>('all')
   const [grouping, setGrouping] = useState<Grouping>(focus?.startsWith('task-') ? 'task' : 'requirement')
   const [agent, setAgent] = useState('')
@@ -281,6 +284,9 @@ export function EvidenceBrowser({
         </div>
       </div>
 
+      {tasksError ? (
+        <p className="aw-tl-meta">Task names could not be read, so tasks are shown by id.</p>
+      ) : null}
       {isLoading ? (
         <div className="grid gap-3" aria-label="Loading evidence">
           {[80, 65, 72, 50].map((width, index) => (

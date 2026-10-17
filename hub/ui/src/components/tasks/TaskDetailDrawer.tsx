@@ -269,7 +269,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   // Offered only while the story is loading or has loaded: an error (a Hub before `/story`) or a
   // query that cannot run leaves the details view, with no switch that leads nowhere.
   const story = useTaskStory(task?.id ?? '', task !== null)
-  const storyAvailable = Array.isArray(story.data?.events) || story.fetchStatus === 'fetching'
+  const storyAvailable =
+    !story.isError && (Array.isArray(story.data?.events) || story.fetchStatus === 'fetching')
   const panelRef = useRef<HTMLDivElement>(null)
   const open = task !== null
   const [refusal, setRefusal] = useState<string | null>(null)
