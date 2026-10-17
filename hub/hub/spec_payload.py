@@ -240,6 +240,10 @@ class OpenQuestion(_Part):
         default=False,
         description="Whether it has been answered. Proposing or approving with an unresolved question is allowed but warns (`unresolved_question`) — a guess written in the voice of a requirement is indistinguishable from a decision, so answer it first where you can.",
     )
+    slice: Optional[str] = Field(
+        default=None,
+        description="On a roadmap only: the key of the slice whose change document answers this question. It then waits for that slice instead of warning here, and the slice's document is asked to carry it into its own open questions.",
+    )
 
 
 class Slice(_Part):
@@ -634,6 +638,11 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
     # delivery either.
     if isinstance(data.get("delivery"), dict) and data["delivery"].get("tester") is None:
         data["delivery"].pop("tester", None)
+    # An open question's slice (F573) is set only on a roadmap's deferred questions: an unset one
+    # must not change the bytes of every stored question.
+    for question in data.get("open_questions") or []:
+        if isinstance(question, dict) and question.get("slice") is None:
+            question.pop("slice", None)
     if not data.get("slices"):
         data.pop("slices", None)
     # An undeclared `files` is dropped for the same reason: it must not change the bytes of every

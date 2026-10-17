@@ -22,7 +22,7 @@ is the whole point of asking.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import AbstractSet, Dict, List, Mapping, Optional, Tuple
 
 from .spec_payload import SpecPayload
@@ -77,6 +77,8 @@ class RoadmapState:
     phase: str
     title: str
     slice_keys: Tuple[str, ...]
+    # The roadmap's unresolved questions that wait for a slice, by slice key (F573).
+    slice_questions: Mapping[str, Tuple[str, ...]] = field(default_factory=dict)
 
 
 def _text_fields(payload: SpecPayload) -> List[tuple]:
@@ -261,7 +263,26 @@ def check(
                 )
             )
 
+    slice_keys = {item.key for item in payload.slices or []}
     for index, question in enumerate(payload.open_questions):
+        if question.slice is not None and (
+            payload.kind != "roadmap" or question.slice not in slice_keys
+        ):
+            findings.append(
+                Finding(
+                    "question_slice_unknown",
+                    f"open_questions[{index}].slice",
+                    f"names slice {question.slice!r}, which "
+                    + (
+                        "only a roadmap's question can name"
+                        if payload.kind != "roadmap"
+                        else f"this roadmap does not hold (its slices: {', '.join(sorted(slice_keys)) or 'none'})"
+                    ),
+                )
+            )
+        elif question.slice is not None:
+            # It waits for its slice's change document (F573): the roadmap's answer is "later".
+            continue
         if not question.resolved:
             findings.append(
                 Finding(
@@ -619,4 +640,20 @@ def _roadmap_link_findings(
                 f"{', '.join(state.slice_keys) or 'none'})",
             )
         ]
-    return []
+    # The roadmap's questions waiting for this slice, until this document restates them (F573).
+    carried = {_question_text(q.question) for q in payload.open_questions}
+    return [
+        Finding(
+            "roadmap_question_for_slice",
+            "open_questions",
+            f"roadmap {path!r} left this question for slice {key!r}: {question!r}. Carry it into "
+            "this document's open questions, and answer it there",
+        )
+        for question in state.slice_questions.get(key, ())
+        if _question_text(question) not in carried
+    ]
+
+
+def _question_text(text: str) -> str:
+    """A question's text for matching: a question has no key, so its words are its identity."""
+    return " ".join(text.split()).casefold()

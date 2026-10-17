@@ -1269,7 +1269,19 @@ async def roadmap_states(
     if row is None or row.kind != "roadmap":
         return {}
     keys = tuple(str(item["key"]) for item in roadmap_slices(workspace, row.path))
-    return {row.path: spec_completeness.RoadmapState(row.phase, row.title, keys)}
+    waiting: Dict[str, List[str]] = {}
+    stored = spec_documents.read_payload(workspace, row.path) or {}
+    for question in stored.get("open_questions") or []:
+        if isinstance(question, dict) and question.get("slice") and not question.get("resolved"):
+            waiting.setdefault(str(question["slice"]), []).append(str(question.get("question", "")))
+    return {
+        row.path: spec_completeness.RoadmapState(
+            row.phase,
+            row.title,
+            keys,
+            slice_questions={k: tuple(v) for k, v in waiting.items()},
+        )
+    }
 
 
 #: How far a slice's change document has come; where several name one slice, the furthest wins.

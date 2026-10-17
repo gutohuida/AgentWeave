@@ -37,8 +37,12 @@ async def test_a_sliced_question_waits_and_an_unsliced_one_still_warns(app, auth
     )
     refused = await _approve(app, auth_headers, ROADMAP, anyway=False)
     assert refused.status_code == 409, refused.text
-    assert refused.text.count("unresolved_question") == 1
-    assert "open_questions[1]" in refused.text and "open_questions[0]" not in refused.text
+    unresolved = [
+        gap["where"]
+        for gap in refused.json()["detail"]["warnings"]
+        if gap["code"] == "unresolved_question"
+    ]
+    assert unresolved == ["open_questions[1]"]
 
 
 async def test_a_question_naming_an_unknown_slice_is_a_gap(app, auth_headers, tmp_path):
