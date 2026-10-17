@@ -21,13 +21,17 @@ from hub.scheduler import _compose_loop_briefing
 
 from .test_approval_refuses_unaccepted_evidence import (
     a_task_with_awaiting_evidence,
+    a_task_with_unbound_awaiting_evidence,
     accept,
     reject,
 )
 from .test_task_integration import make_document, make_repo, set_main_branch
 
 PROJECT = "proj-test"
-GATE = "This task's evidence is still waiting for a decision"
+# Since vis-D4 the gate sentence is about evidence the verdict does not decide (another task's, or
+# an unbound run's); the task's own evidence gets VERDICT instead.
+GATE = "Evidence your verdict does not decide is waiting for a decision"
+VERDICT = "**Your verdict decides this task's evidence**"
 
 
 @pytest.fixture
@@ -130,6 +134,17 @@ async def _gated_task(app, auth_headers, builder, tmp_path):
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
+    task, evidence, _work = await a_task_with_unbound_awaiting_evidence(
+        app, auth_headers, builder, tmp_path
+    )
+    await _flow(task)
+    return task, evidence
+
+
+async def _own_evidence_task(app, auth_headers, builder, tmp_path):
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
     task, evidence, _work = await a_task_with_awaiting_evidence(
         app, auth_headers, builder, tmp_path
     )
@@ -151,18 +166,36 @@ async def test_an_ungranted_reviewer_is_told_the_approval_can_be_refused_and_wha
     for rendered in (briefing, context):
         assert GATE in rendered
         assert "`FR-1`" in rendered
-        assert "Deciding evidence is the operator's, not yours" in rendered
-        # F563: no question is asked. Nobody in a flow watches for it, the reviewer's turn waited
-        # on it until the timeout, and a turn that ends with the approval refused is already
+        assert "recorded outside any task" in rendered
+        # F563: no question is asked; a turn that ends with the approval refused is already
         # surfaced to the operator with the gate's sentence (`F374-fix`).
         assert "ask the operator with" not in rendered
-        assert "Do not wait on a question" in rendered
         assert "end your turn" in rendered
-        assert "shows the operator" in rendered
         assert "Do not tell anyone the task is approved" in rendered
         # `decide_evidence` takes the evidence id, so the sentence names it.
         assert "`ev-" in rendered
-        assert "You can decide evidence: if the work is right" not in rendered
+        assert "You can decide evidence" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_a_reviewer_is_told_its_verdict_decides_the_tasks_own_evidence(
+    app, auth_headers, builder, tmp_path
+):
+    """vis-D4: granted or not, the reviewer's verdict decides the evidence recorded for the task, and
+    nothing in either channel hands it to the operator."""
+    task, _evidence = await _own_evidence_task(app, auth_headers, builder, tmp_path)
+    await _reviewer("checker", granted=False)
+
+    briefing = await _review_briefing(task, "checker")
+    context = await _review_context(task, "checker", tmp_path)
+
+    for rendered in (briefing, context):
+        assert VERDICT in rendered
+        assert "`FR-1`" in rendered and "`ev-" in rendered
+        assert "notes" in rendered
+        assert "Deciding evidence is the operator's" not in rendered
+        assert "requirement evidence is the operator's" not in rendered
+        assert GATE not in rendered
 
 
 @pytest.mark.asyncio

@@ -691,8 +691,13 @@ async def apply_transition(
     origin: str = ORIGIN_ACTOR,
     job_id: Optional[str] = None,
     override_checks_reason: Optional[str] = None,
+    verdict_reason: Optional[str] = None,
 ) -> Optional[TaskTransition]:
     """Move `task` to `to_status` as `actor`, recording it. Returns None when nothing changed.
+
+    A verdict decides the task's evidence (`the-reviewers-verdict-decides-the-tasks-evidence`):
+    `approved` accepts the pieces recorded for it, `revision_needed` and `rejected` reject them, with
+    *verdict_reason* (the verdict's notes) as the review's reason.
 
     Raises `TransitionRefusedError` (or a subclass) instead of mutating when the move is not permitted.
     The caller commits; this function stages the change and the history row together so a refusal
@@ -795,15 +800,21 @@ async def apply_transition(
                 "Only the operator can approve over failing checks; send the task back to its "
                 "author with revision_needed instead."
             )
-        refusal, policy = await evaluate_approval(
-            session,
-            task,
-            acting_run_id=actor.run_id,
-            start_checks=True,
-            override_checks_reason=reason,
-        )
-        if refusal.refuses:
-            raise GateUnsatisfiedError(refusal)
+        # The approval accepts the task's evidence in the same savepoint the gate reads it in
+        # (design D1): the gate judges the state it will merge from, and a refusal for any other
+        # reason -- a conflict, failing checks -- rolls the acceptances back with it, so nothing is
+        # recorded as accepted by an approval that did not happen.
+        async with session.begin_nested():
+            await _decide_evidence_with_verdict(session, task, actor, "approved", verdict_reason)
+            refusal, policy = await evaluate_approval(
+                session,
+                task,
+                acting_run_id=actor.run_id,
+                start_checks=True,
+                override_checks_reason=reason,
+            )
+            if refusal.refuses:
+                raise GateUnsatisfiedError(refusal)
         overridden = reason if refusal.checks_overridden else None
         # `contract` never refuses, so its unmet and rejected requirements have nowhere to surface
         # unless this call carries them out. Not persisted — a transient attribute on the returned
@@ -826,6 +837,8 @@ async def apply_transition(
         author = await agent_that_completed(session, task.id)
         if author is not None:
             task.assignee = author
+    if to_status in ("revision_needed", "rejected"):
+        await _decide_evidence_with_verdict(session, task, actor, to_status, verdict_reason)
 
     task.status = to_status
     transition = TaskTransition(
@@ -893,6 +906,35 @@ async def apply_transition(
         await on_task_closed(session, task)
 
     return transition
+
+
+async def _decide_evidence_with_verdict(
+    session: AsyncSession,
+    task: Task,
+    actor: Actor,
+    to_status: str,
+    verdict_reason: Optional[str],
+) -> None:
+    """The verdict on *task* decides the evidence recorded for it (vis-D4)."""
+    from . import requirement_evidence
+    from .spec_lifecycle import Actor as EvidenceActor
+
+    deciding = (
+        EvidenceActor(kind="operator", name="operator")
+        if actor.is_operator
+        else EvidenceActor(kind="agent", name=actor.agent or "", run_id=actor.run_id)
+    )
+    await requirement_evidence.decide_with_verdict(
+        session,
+        task,
+        actor=deciding,
+        decision=(
+            requirement_evidence.ACCEPTED
+            if to_status == "approved"
+            else requirement_evidence.REJECTED
+        ),
+        reason=verdict_reason or "",
+    )
 
 
 #: The statuses at which a task stops being worked, and so stops needing a checkout on disk. Neither

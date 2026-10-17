@@ -1488,6 +1488,21 @@ async def get_task(
     return responses[0]
 
 
+def _verdict_text(notes) -> Optional[str]:
+    """A task's notes as one line of text, for the evidence decision its verdict records.
+
+    `notes` is free-form (a string from MCP, sometimes a list or an object from a script), so a
+    string is taken as written and anything else is serialised rather than dropped.
+    """
+    if notes is None:
+        return None
+    if isinstance(notes, str):
+        return notes.strip() or None
+    import json
+
+    return json.dumps(notes, ensure_ascii=False)[:2000]
+
+
 async def update_task_for_actor(
     task_id: str,
     body: TaskUpdate,
@@ -1661,6 +1676,8 @@ async def update_task_for_actor(
             body.status,
             actor,
             override_checks_reason=body.override_checks_reason,
+            # The verdict's notes are the reason its evidence decision records (vis-D4).
+            verdict_reason=_verdict_text(body.notes),
         )
         approval_report = list(getattr(transition, "reported_advisories", None) or [])
         # Every exit from the waiting status drops the text, whichever exit it was — released,

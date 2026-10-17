@@ -2466,10 +2466,12 @@ async def _render_hub_agent_context(
         # Saying where the verdict goes instead is not politeness. Unable to record it, that
         # reviewer wrote the review to a file inside its own worktree, which is isolated by design
         # — so its actual conclusion, "ship it", landed on a branch nobody reads.
-        lines.append("### You cannot decide evidence")
+        lines.append("### Evidence is decided by verdicts")
         lines.append(
-            "- Accepting or rejecting requirement evidence is the operator's here. "
-            "`decide_evidence` will refuse you, so do not spend a turn planning around it."
+            "- When you review a task, your verdict decides the evidence recorded for it: "
+            "approving accepts it, sending the task back rejects it, with your `notes` as the "
+            "reason. Outside a verdict, `decide_evidence` will refuse you, so do not spend a turn "
+            "planning around it."
         )
         lines.append(
             "- `list_evidence` still works, and showing you the queue is not an invitation to "

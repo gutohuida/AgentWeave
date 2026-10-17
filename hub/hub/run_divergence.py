@@ -657,7 +657,28 @@ async def held_review_before_a_decision(session: AsyncSession, evidence) -> Opti
     """`review_held_on_the_operator` for *evidence*'s task; never raises, so it cannot refuse the
     decision it is asked beside."""
     try:
-        return await review_held_on_the_operator(session, getattr(evidence, "task_id", None))
+        # Since vis-D4 a task's own evidence is decided by its verdict and never holds its review, so
+        # the review a decision can release belongs to a task *serving the piece's requirement*: the
+        # piece was recorded by another task or by a run bound to none.
+        from .db.models import TaskRequirementLink
+
+        candidates = [getattr(evidence, "task_id", None)]
+        candidates += (
+            (
+                await session.execute(
+                    select(TaskRequirementLink.task_id).where(
+                        TaskRequirementLink.requirement_id == evidence.requirement_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for task_id in dict.fromkeys(candidate for candidate in candidates if candidate):
+            held = await review_held_on_the_operator(session, task_id)
+            if held is not None:
+                return held
+        return None
     except Exception:  # noqa: BLE001 - a diagnostic, never a reason to refuse a decision
         logger.warning("Could not read a held review for %s", evidence.id, exc_info=True)
         await session.rollback()

@@ -146,7 +146,9 @@ async def test_approving_without_notes_names_the_approval(
     )
     await under_review(app, auth_headers, task)
 
-    approved = await app.patch(f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer)
+    approved = await app.patch(
+        f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer
+    )
 
     assert approved.status_code == 200, approved.text
     [(decision, _kind, actor, reason)] = await reviews_of(evidence)
@@ -233,7 +235,9 @@ async def test_a_refused_approval_keeps_no_acceptance(
     git(tmp_path, "commit", "-q", "-am", "main moves")
     await under_review(app, auth_headers, task)
 
-    refused = await app.patch(f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer)
+    refused = await app.patch(
+        f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer
+    )
 
     assert refused.status_code == 409, refused.text
     detail = refused.json()["detail"]
@@ -302,9 +306,7 @@ async def test_no_operator_hold_for_the_tasks_own_evidence(app, auth_headers, bu
 
     async with async_session_factory() as session:
         row = await session.get(Task, task)
-        hold = await requirement_gate.approval_held_for_operator(
-            session, row, candidate="reviewer"
-        )
+        hold = await requirement_gate.approval_held_for_operator(session, row, candidate="reviewer")
         sentence = await review_turn.verdict_evidence_sentence(session, row, may_decide=False)
 
     assert hold is None, hold
@@ -323,7 +325,9 @@ async def test_the_operator_rejecting_an_accepted_piece_reopens_the_task(
         app, auth_headers, builder, tmp_path
     )
     await under_review(app, auth_headers, task)
-    approved = await app.patch(f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer)
+    approved = await app.patch(
+        f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer
+    )
     assert approved.status_code == 200, approved.text
 
     rejected = await app.post(

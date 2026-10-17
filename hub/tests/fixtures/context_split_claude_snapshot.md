@@ -23,8 +23,8 @@ Address a peer by the exact name above when sending a message or assigning a tas
 - attribution_tag: `false`
 - dependency_check: `false`
 
-### You cannot decide evidence
-- Accepting or rejecting requirement evidence is the operator's here. `decide_evidence` will refuse you, so do not spend a turn planning around it.
+### Evidence is decided by verdicts
+- When you review a task, your verdict decides the evidence recorded for it: approving accepts it, sending the task back rejects it, with your `notes` as the reason. Outside a verdict, `decide_evidence` will refuse you, so do not spend a turn planning around it.
 - `list_evidence` still works, and showing you the queue is not an invitation to answer it — you can see what is waiting on somebody without being that somebody.
 - If you reviewed something, put the verdict where it will be read: send it as a message, or record it on the task. A review written only into your worktree is on a branch nobody reads.
 

@@ -190,9 +190,11 @@ async def test_a_flow_review_briefing_reads_the_reviewers_own_grant(
 
     entry = await _queued_entry_for(REVIEWER)
     assert entry is not None and entry.review_task_id == "task-1"
-    assert "This task's evidence is still waiting for a decision" in entry.content
-    assert "`decide_evidence` first" in entry.content
-    assert "Deciding evidence is the operator's, not yours" not in entry.content
+    # Since vis-D4 the task's own evidence is decided by the reviewer's verdict whatever its grant,
+    # so the briefing composed for `critic` says so; the grant-keyed wording now covers only
+    # evidence the verdict does not decide (`test_review_briefing_names_the_evidence_gate.py`).
+    assert "Your verdict decides this task's evidence" in entry.content
+    assert "Deciding evidence is the operator's" not in entry.content
 
 
 # ---------------------------------------------------------------------------

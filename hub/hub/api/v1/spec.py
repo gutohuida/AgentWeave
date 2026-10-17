@@ -1403,6 +1403,35 @@ async def list_evidence(
     }
 
 
+async def _reopen_an_approved_task(
+    session: AsyncSession, project_id: str, evidence_id: str, decision: str
+) -> None:
+    """Send an approved task back when the operator rejects a piece of its evidence (vis-D1).
+
+    Read fresh: the integration above may have rolled back and expired every loaded row. The
+    rejection has committed either way; a refused reopen is logged, never raised, because the
+    operator's judgement about the evidence stands whatever the task's state allows.
+    """
+    from ...task_transition_service import TransitionRefusedError, apply_transition
+
+    if decision != requirement_evidence.REJECTED:
+        return
+    evidence = await session.get(RequirementEvidence, evidence_id)
+    task = await session.get(Task, evidence.task_id) if evidence and evidence.task_id else None
+    if task is None or task.project_id != project_id or task.status != "approved":
+        return
+    try:
+        await apply_transition(session, task, "revision_needed", task_transitions.operator())
+        await session.commit()
+    except TransitionRefusedError:
+        await session.rollback()
+        logging.getLogger(__name__).warning(
+            "rejecting %s could not reopen task %s", evidence_id, task.id, exc_info=True
+        )
+        return
+    await sse_manager.broadcast(project_id, "task_updated", {"id": task.id, "status": task.status})
+
+
 async def _decision_announcement(session: AsyncSession, evidence) -> Dict[str, Any]:
     """The `spec_updated` payload for a decided piece: the shape the record route already sends."""
     requirement = await session.get(SpecRequirement, evidence.requirement_id)
@@ -1457,6 +1486,9 @@ async def decide_evidence(
         session, evidence, task_transitions.operator()
     )
     await run_divergence.release_held_review(session, held_review)
+    # vis-D1: the operator left the evidence gate and kept the last word. Rejecting a piece whose
+    # task an agent's verdict approved reopens that task (`operator-overturns`).
+    await _reopen_an_approved_task(session, project_id, evidence_id, body.decision)
     # After the integration, so a view refetching on it sees any merge the decision caused.
     await sse_manager.broadcast(project_id, "spec_updated", announced)
     return view

@@ -47,6 +47,7 @@ from .db.models import (
     RequirementEvidence,
     Run,
     SpecRequirement,
+    Task,
 )
 from .project_workspace import ProjectWorkspace
 from .spec_lifecycle import Actor
@@ -1144,6 +1145,75 @@ async def decide(
     # subquery. `evidence_reviews` is what governs; this follows it.
     evidence.review_state = decision
     return review
+
+
+async def decide_with_verdict(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    decision: str,
+    reason: str,
+) -> List[EvidenceReview]:
+    """Decide the evidence recorded for *task* with the verdict on it
+    (`the-reviewers-verdict-decides-the-tasks-evidence`, vis-D4).
+
+    Approving a task accepts every piece recorded for it that is still awaiting; sending it back
+    rejects them. The verdict is the judgement, so the `can_accept_evidence` grant is not asked:
+    the reviewer has just judged the work the evidence demonstrates, and a second decision by
+    someone else is what stalled F672. Two pieces are left as they are, for `decide`'s own reasons:
+    one the acting agent recorded itself, and one whose recording run is still live (its commit is
+    about to be re-pointed). Only the task's own pieces (D2): another task serving the same
+    requirement keeps its evidence for its own reviewer.
+
+    Stages the reviews in the caller's transaction; the caller commits, or rolls back with it.
+    """
+    if decision not in (ACCEPTED, REJECTED):
+        raise ValueError(f"decision must be {ACCEPTED!r} or {REJECTED!r}, got {decision!r}")
+    reason = reason.strip()
+    if not reason:
+        verdict = "approval" if decision == ACCEPTED else "sending back"
+        reason = (
+            f"{'Accepted' if decision == ACCEPTED else 'Rejected'} with the {verdict} of {task.id}"
+        )
+    pieces = (
+        (
+            await session.execute(
+                select(RequirementEvidence)
+                .where(
+                    RequirementEvidence.task_id == task.id,
+                    RequirementEvidence.review_state == AWAITING,
+                )
+                .order_by(RequirementEvidence.produced_at, RequirementEvidence.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    reviews: List[EvidenceReview] = []
+    for evidence in pieces:
+        if (
+            actor.kind == "agent"
+            and evidence.actor_kind == "agent"
+            and actor.name == evidence.actor
+        ):
+            continue
+        if evidence.run_id and run_liveness.run_is_live(evidence.run_id):
+            continue
+        review = EvidenceReview(
+            id=f"evr-{short_id()}",
+            project_id=evidence.project_id,
+            evidence_id=evidence.id,
+            decision=decision,
+            actor_kind=actor.kind,
+            actor=actor.name or "",
+            run_id=actor.run_id,
+            reason=reason,
+        )
+        session.add(review)
+        evidence.review_state = decision
+        reviews.append(review)
+    return reviews
 
 
 async def reviews_for(session: AsyncSession, evidence_id: str) -> List[EvidenceReview]:

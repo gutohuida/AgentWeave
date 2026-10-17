@@ -227,6 +227,29 @@ async def a_task_with_awaiting_evidence(app, auth_headers, builder, tmp_path, ti
     return task, evidence, work
 
 
+async def a_task_with_unbound_awaiting_evidence(app, auth_headers, builder, tmp_path):
+    """The refusal's shape since `the-reviewers-verdict-decides-the-tasks-evidence` (vis-D4).
+
+    The verdict on a task decides the evidence recorded *for that task*, so a task's own awaiting
+    piece no longer refuses its approval -- it is accepted by it. What still refuses is evidence the
+    verdict does not decide: a piece recorded by a run bound to no task (the product's real shape
+    for an unbound run, `record_evidence_for`'s docstring) against a requirement this task serves.
+    Returns `(task_id, evidence_id, commit_sha)`, the checkout left on `main`.
+    """
+    task = await linked_task(app, auth_headers)
+    work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n")
+    evidence = await record_evidence(app, builder)
+    git(tmp_path, "checkout", "-q", "main")
+    async with async_session_factory() as session:
+        row = await session.get(RequirementEvidence, evidence)
+        assert row.review_state == "awaiting" and row.task_id is None, (
+            row.review_state,
+            row.task_id,
+        )
+    assert work not in commits_on(tmp_path, "main")
+    return task, evidence, work
+
+
 # ---------------------------------------------------------------------------
 # The scoping constraint. Both of these passed before this change and must still pass after it —
 # if either fails, the change is wrong rather than the test. (The two reproductions that used to
@@ -507,7 +530,7 @@ async def test_awaiting_evidence_refuses_approval(app, auth_headers, builder, tm
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
 
-    task, _evidence, work = await a_task_with_awaiting_evidence(
+    task, _evidence, work = await a_task_with_unbound_awaiting_evidence(
         app, auth_headers, builder, tmp_path
     )
 
@@ -531,7 +554,7 @@ async def test_the_refusal_names_the_requirement_and_both_remedies(
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
 
-    task, _evidence, work = await a_task_with_awaiting_evidence(
+    task, _evidence, work = await a_task_with_unbound_awaiting_evidence(
         app, auth_headers, builder, tmp_path
     )
 
@@ -547,7 +570,7 @@ async def test_the_refusal_names_the_requirement_and_both_remedies(
 
     assert [entry["identifier"] for entry in detail["unaccepted"]] == ["FR-1"]
     assert detail["unaccepted"][0]["commit_sha"] == work
-    assert detail["unaccepted"][0]["recorded_by_task"] == task
+    assert detail["unaccepted"][0]["recorded_by_task"] is None
     assert detail["unaccepted"][0]["recorded_by_another_task"] is False
 
 
@@ -618,9 +641,9 @@ async def test_the_refusal_names_both_waiting_commits_on_one_branch(
 
     task = await linked_task_for(app, auth_headers, ["FR-1", "FR-2"])
     first = commit_on_branch(tmp_path, AGENT_BRANCH, "one.py", "1\n")
-    await record_evidence_for(app, builder, "FR-1", task_id=task)
+    await record_evidence_for(app, builder, "FR-1")
     second = commit_on_branch(tmp_path, AGENT_BRANCH, "two.py", "2\n", create=False)
-    await record_evidence_for(app, builder, "FR-2", task_id=task)
+    await record_evidence_for(app, builder, "FR-2")
     git(tmp_path, "checkout", "-q", "main")
 
     refused = await approve(app, auth_headers, task)
@@ -643,7 +666,7 @@ async def test_the_refusal_fires_at_sketch_rigor(app, auth_headers, builder, tmp
     rigors = {row["path"]: row.get("rigor") for row in documents.json()["documents"]}
     assert rigors[PATH] in (None, "sketch"), rigors
 
-    task, _evidence, _work = await a_task_with_awaiting_evidence(
+    task, _evidence, _work = await a_task_with_unbound_awaiting_evidence(
         app, auth_headers, builder, tmp_path
     )
     refused = await approve(app, auth_headers, task)
@@ -870,7 +893,9 @@ async def a_mixed_task(app, auth_headers, builder, tmp_path, *, second_branch=No
         second = commit_on_branch(tmp_path, second_branch, "two.py", "2\n")
     else:
         second = commit_on_branch(tmp_path, AGENT_BRANCH, "two.py", "2\n", create=False)
-    awaiting = await record_evidence_for(app, builder, "FR-2", task_id=task)
+    # Unbound (vis-D4): the task's own piece would be accepted by its approval, so the piece still
+    # waiting after approval is one the verdict does not decide.
+    awaiting = await record_evidence_for(app, builder, "FR-2")
     git(tmp_path, "checkout", "-q", "main")
 
     return task, first, second, awaiting
@@ -985,12 +1010,11 @@ async def test_another_tasks_merged_commit_does_not_stand_in_for_this_tasks_wait
     await record_evidence_for(app, builder, "FR-2", task_id=second_task)
     git(tmp_path, "checkout", "-q", "main")
 
-    refused = await approve(app, auth_headers, second_task)
-    assert refused.status_code == 409, refused.text
-    assert refused.json()["detail"]["code"] == "gate_unsatisfied", refused.text
-    assert second not in commits_on(tmp_path, "main")
-    fetched = await app.get(f"{TASKS}/{second_task}", headers=auth_headers)
-    assert fetched.json()["status"] != "approved"
+    # Since vis-D4 the second task's approval accepts its own waiting evidence, so its work lands
+    # rather than being refused: the stronger form of what F499 asked for.
+    approved = await approve(app, auth_headers, second_task)
+    assert approved.status_code == 200, approved.text
+    assert second in commits_on(tmp_path, "main")
 
 
 # ---------------------------------------------------------------------------
@@ -1014,7 +1038,7 @@ async def test_the_agent_plane_sees_the_refusal(app, auth_headers, builder, revi
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
 
-    task, _evidence, _work = await a_task_with_awaiting_evidence(
+    task, _evidence, _work = await a_task_with_unbound_awaiting_evidence(
         app, auth_headers, builder, tmp_path
     )
     walked = await drive_to(

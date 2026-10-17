@@ -181,7 +181,7 @@ async def test_an_ungranted_agent_is_told_it_cannot_decide(app, auth_headers, re
     assert rendered.status_code == 200, rendered.text
     context = rendered.json()["context"]
 
-    assert "### You cannot decide evidence" in context
+    assert "### Evidence is decided by verdicts" in context
     # Named, so the agent does not plan a turn around reaching for it.
     assert "decide_evidence" in context
     # Reading the queue is not an invitation to answer it — the exact trap `rev` fell into.
@@ -219,7 +219,7 @@ async def test_a_granted_agent_is_not_told_it_cannot(app, auth_headers, reviewer
     assert "You can decide evidence" in context
     # The granted branch already contains the sentence "You cannot decide evidence you produced
     # yourself", so the heading is what distinguishes the two branches.
-    assert "### You cannot decide evidence" not in context
+    assert "### Evidence is decided by verdicts" not in context
 
 
 # ---------------------------------------------------------------------------

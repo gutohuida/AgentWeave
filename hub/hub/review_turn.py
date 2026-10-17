@@ -294,33 +294,51 @@ async def verdict_evidence_sentence(
     if not awaiting or not await task_integration.evidence_governs(session, task):
         return rejected
     identifiers = await _identifiers_for(session, [row.requirement_id for row in awaiting])
-    pieces = []
-    for row in awaiting:
+
+    def named(row) -> str:
         identifier = identifiers.get(row.requirement_id or "", "") or "a requirement"
         commit = (row.commit_sha or "")[:12] or "an unnamed commit"
-        piece = f"`{row.evidence_id}` for `{identifier}` at `{commit}`"
-        if row.task_id and row.task_id != task.id:
-            piece += f", recorded by task `{row.task_id}`"
-        pieces.append(piece)
-    sentence = (
-        f"**This task's evidence is still waiting for a decision** ({'; '.join(pieces)}). Until "
-        "it is accepted, `approved` can be refused: approving would merge none of it. "
-        "`revision_needed` is not affected."
-    )
-    if rejected:
-        sentence = rejected + " " + sentence
-    if may_decide:
-        return sentence + (
-            " You can decide evidence: if the work is right, accept what it demonstrates with "
-            "`decide_evidence` first (not any you recorded yourself), then approve."
+        return f"`{row.evidence_id}` for `{identifier}` at `{commit}`"
+
+    # vis-D4: the verdict decides the evidence recorded for this task; only a piece another task
+    # recorded waits for that task's own review.
+    own = [row for row in awaiting if row.task_id == task.id]
+    foreign = [row for row in awaiting if row.task_id != task.id]
+    parts = [rejected] if rejected else []
+    if own:
+        parts.append(
+            f"**Your verdict decides this task's evidence** ({'; '.join(named(r) for r in own)}). "
+            "Approving accepts it and merges the work; sending the task back with "
+            "`revision_needed` rejects it. Judge what each piece claims as part of the review, and "
+            "say in `notes` what you checked: your notes are the reason recorded on each piece."
         )
-    return sentence + (
-        " Deciding evidence is the operator's, not yours. If the work is right and `approved` is "
-        "refused, your verdict was not recorded: end your turn, saying which evidence named above "
-        "is waiting. Do not wait on a question; the Hub shows the operator that the approval is "
-        "held and why, and they decide the evidence. Do not tell anyone the task is approved "
-        "until `update_task` has succeeded."
-    )
+    if foreign:
+        recorded = "; ".join(
+            (
+                f"{named(r)}, recorded by task `{r.task_id}`"
+                if r.task_id
+                else f"{named(r)}, recorded " "outside any task"
+            )
+            for r in foreign
+        )
+        sentence = (
+            f"Evidence your verdict does not decide is waiting for a decision ({recorded}): it was "
+            "recorded by another task serving the same requirement, or by a run bound to no task. "
+            "If nothing of this task's would merge without it, `approved` can be refused."
+        )
+        if may_decide:
+            sentence += (
+                " You can decide evidence: if that work is right, accept it with "
+                "`decide_evidence` first (not any you recorded yourself), then approve."
+            )
+        else:
+            sentence += (
+                " If `approved` is refused for it, your verdict was not recorded: end your turn, "
+                "saying which evidence is waiting. Do not tell anyone the task is approved until "
+                "`update_task` has succeeded."
+            )
+        parts.append(sentence)
+    return " ".join(parts) if parts else None
 
 
 async def _dependencies_sentence(session: AsyncSession, task: Task) -> Optional[str]:

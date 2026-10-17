@@ -1045,7 +1045,7 @@ def _could_not_ask_git(reason: str) -> ApprovalHold:
     )
 
 
-def _operator_only_remedy(refusal: GateRefusal, *, may_accept: bool) -> Optional[str]:
+def _operator_only_remedy(refusal: GateRefusal, *, may_accept: bool, task_id: str) -> Optional[str]:
     """The remedy of the first category of *refusal* the candidate cannot remove, else `None`."""
     if refusal.diagnostics:
         return DIAGNOSTIC_HOLD_REMEDY
@@ -1056,11 +1056,10 @@ def _operator_only_remedy(refusal: GateRefusal, *, may_accept: bool) -> Optional
         return PREEXISTING_CHECKS_HOLD_REMEDY
     if may_accept:
         return None
-    if refusal.unaccepted:
+    # The task's own evidence is decided by the verdict on it (vis-D4), so it is never the
+    # operator's to hold; a piece another task or an unbound run recorded still is.
+    if any(entry.get("recorded_by_task") != task_id for entry in refusal.unaccepted):
         return EVIDENCE_HOLD_REMEDY
-    for entry in refusal.blocking:
-        if entry.get("state") == requirement_coverage.AWAITING_REVIEW:
-            return EVIDENCE_HOLD_REMEDY
     return None
 
 
@@ -1119,7 +1118,7 @@ async def approval_held_for_operator(
     granted = bool(candidate) and await requirement_evidence.may_accept(
         session, task.project_id, Actor(kind="agent", name=candidate or "")
     )
-    remedy = _operator_only_remedy(refusal, may_accept=granted)
+    remedy = _operator_only_remedy(refusal, may_accept=granted, task_id=task.id)
     if remedy is None:
         return None
     return ApprovalHold(detail=refusal.detail(), remedy=remedy, refusal=refusal)

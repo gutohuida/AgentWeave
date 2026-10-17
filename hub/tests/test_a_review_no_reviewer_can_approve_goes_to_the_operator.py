@@ -42,7 +42,9 @@ pytestmark = pytest.mark.asyncio
 
 # Re-exported by assignment: importing the fixture by name would trip F811 in every signature.
 builder = _unaccepted.builder
-a_task_with_awaiting_evidence = _unaccepted.a_task_with_awaiting_evidence
+# Unbound evidence since vis-D4: a task's own awaiting piece is decided by the verdict on it and
+# never holds its review, so the hold is staged with evidence the verdict does not decide.
+a_task_with_awaiting_evidence = _unaccepted.a_task_with_unbound_awaiting_evidence
 
 BETA = "beta"
 GAMMA = "gamma"
@@ -314,11 +316,15 @@ async def test_a_wedged_review_with_nothing_to_hold_never_reaches_the_gate(
 
 
 async def _decide_the_awaiting_evidence(app, auth_headers, task_id, decision, reason=""):
+    # The held review's evidence is unbound (vis-D4), so it is found by its state, not its task.
     async with async_session_factory() as db:
         [evidence] = (
             (
                 await db.execute(
-                    select(RequirementEvidence).where(RequirementEvidence.task_id == task_id)
+                    select(RequirementEvidence).where(
+                        RequirementEvidence.project_id == "proj-test",
+                        RequirementEvidence.review_state == "awaiting",
+                    )
                 )
             )
             .scalars()
