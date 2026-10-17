@@ -2,8 +2,8 @@
 (`a-copilot-agent-runs-over-acp`, design D2 and D15).
 
 **D2: `copilot.exe`, never the npm shim.** npm installs `copilot.cmd`/`copilot.ps1`/`copilot`, a
-*JS* shim (`node npm-loader.js`) that `pty_runner.resolve_executable` deliberately does not unwrap.
-Running it costs two processes and orphans the real one when only `node` is killed, so the platform
+*JS* shim (`node npm-loader.js`), which `pty_runner.resolve_executable` unwraps only as far as `node`
+and that script (F549). Running it costs two processes and orphans the real one when only `node` is killed, so the platform
 package's binary is used instead. Only the Windows layout is VERIFIED; the others are INFERRED.
 
 **D15: launchability.** `probe_agent` is synchronous and runs on list routes, so it cannot spawn.

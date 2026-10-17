@@ -11,6 +11,7 @@ tests are written to run meaningfully on whichever platform executes them.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -108,15 +109,64 @@ class TestCmdShimUnwrapping:
         # Arguments are untouched — only argv[0] is rewritten.
         assert resolved[1:] == ["-p", "line one\nline two"]
 
-    def test_shim_that_bakes_in_its_own_arguments_is_left_alone(self, tmp_path, monkeypatch):
-        """A JS shim runs `node.exe script.js %*`; dropping the script would break the launch."""
+    def test_a_js_shim_resolves_to_node_and_its_script(self, tmp_path, monkeypatch):
+        """F549: a JS shim runs `node.exe script.js %*`. It is unwrapped to both, so the script is
+        kept and a multi-line argument never passes through cmd.exe."""
         monkeypatch.setattr("hub.pty_runner.IS_WINDOWS", True)
         (tmp_path / "node.exe").write_text("")
-        shim = self._shim(
-            tmp_path,
-            '@ECHO off\r\n"%dp0%\\node.exe" "%dp0%\\..\\cli.js" %*\r\n',
+        (tmp_path / "cli.js").write_text("")
+        shim = self._shim(tmp_path, '@ECHO off\r\n"%dp0%\\node.exe" "%dp0%\\cli.js" %*\r\n')
+        resolved = resolve_executable([str(shim), "-p", "a\nb"])
+        assert resolved == [
+            str((tmp_path / "node.exe").resolve()),
+            str((tmp_path / "cli.js").resolve()),
+            "-p",
+            "a\nb",
+        ]
+
+    def test_the_npm_cmd_shim_resolves_to_node_on_path_without_a_bundled_node(
+        self, tmp_path, monkeypatch
+    ):
+        """npm's own cmd-shim: `%_prog%` is the shim's node.exe when present, else `node`."""
+        monkeypatch.setattr("hub.pty_runner.IS_WINDOWS", True)
+        node = tmp_path / "bin" / "node.exe"
+        node.parent.mkdir()
+        node.write_text("")
+        monkeypatch.setattr(
+            "hub.pty_runner.shutil.which", lambda name: str(node) if name == "node" else None
         )
-        assert resolve_executable([str(shim)])[0] == str(shim)
+        script = tmp_path / "node_modules" / "pkg" / "loader.js"
+        script.parent.mkdir(parents=True)
+        script.write_text("")
+        shim = self._shim(tmp_path, NPM_JS_SHIM.replace("{script}", "node_modules\\pkg\\loader.js"))
+        assert resolve_executable([str(shim), "x"]) == [str(node), str(script.resolve()), "x"]
+
+    def test_a_js_shim_whose_script_is_missing_is_left_alone(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("hub.pty_runner.IS_WINDOWS", True)
+        (tmp_path / "node.exe").write_text("")
+        shim = self._shim(tmp_path, '@ECHO off\r\n"%dp0%\\node.exe" "%dp0%\\gone.js" %*\r\n')
+        assert resolve_executable([str(shim)]) == [str(shim)]
+
+    @pytest.mark.skipif(not IS_WINDOWS, reason="cmd.exe truncation is Windows-only")
+    def test_a_multiline_argument_survives_a_js_shim(self, tmp_path):
+        """F549 end to end: npm's JS shim, the real `node` on PATH, a real spawn."""
+        if shutil.which("node") is None:
+            pytest.skip("node is not on PATH")
+        (tmp_path / "echo.js").write_text(
+            "console.log('START' + JSON.stringify(process.argv.slice(2)) + 'END')\n",
+            encoding="utf-8",
+        )
+        shim = self._shim(tmp_path, NPM_JS_SHIM.replace("{script}", "echo.js"))
+        session = PtySession.spawn([str(shim), "-p", "first line\nSECOND_LINE_MARKER"])
+        out = ""
+        for _ in range(400):
+            chunk = session.read()
+            if chunk:
+                out += chunk
+            if "END" in out:
+                break
+            time.sleep(0.05)
+        assert "SECOND_LINE_MARKER" in out, f"prompt was truncated: {out[:400]!r}"
 
     def test_shim_whose_target_is_missing_is_left_alone(self, tmp_path, monkeypatch):
         monkeypatch.setattr("hub.pty_runner.IS_WINDOWS", True)
@@ -151,6 +201,15 @@ class TestCmdShimUnwrapping:
                 break
             time.sleep(0.05)
         assert "SECOND_LINE_MARKER" in out, f"prompt was truncated: {out[:400]!r}"
+
+
+#: npm's generated `.cmd` for a package whose bin is a JS file (cmd-shim), as copilot's is.
+NPM_JS_SHIM = (
+    "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\n"
+    'CALL :find_dp0\r\n\r\nIF EXIST "%dp0%\\node.exe" (\r\n  SET "_prog=%dp0%\\node.exe"\r\n'
+    ') ELSE (\r\n  SET "_prog=node"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\n'
+    'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\{script}" %*\r\n'
+)
 
 
 class TestPtySessionSpawn:

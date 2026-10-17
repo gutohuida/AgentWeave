@@ -65,8 +65,48 @@ _CMD_SHIM_PAYLOAD_RE = re.compile(
 )
 
 
-def _unwrap_cmd_shim(resolved: str) -> str:
-    """Resolve a Windows `.cmd`/`.bat` shim to the real `.exe` it delegates to.
+# A JS shim's payload line: node, then one script, then `%*` (F549). Node is either quoted outright
+# (`"%dp0%\node.exe"`) or npm cmd-shim's `"%_prog%"`, which that shim sets to its own `node.exe`
+# when one sits beside it and to `node` on PATH otherwise.
+_JS_SHIM_PAYLOAD_RE = re.compile(
+    r'"((?:%~?dp0%\\?)?[^"]*?node\.exe|%_prog%)"\s+"(%~?dp0%\\?)?([^"]+?\.[cm]?js)"\s*%\*\s*$',
+    re.IGNORECASE | re.MULTILINE,
+)
+_NPM_PROG_RE = re.compile(r'SET\s+"_prog=node"', re.IGNORECASE)
+
+
+def _unwrap_js_shim(resolved: str, content: str) -> Optional[List[str]]:
+    """`[node, script]` for a JS shim, or None when it is not exactly one (F549).
+
+    The script stays: `node.exe script.js %*` without its script would launch a REPL. Spawning
+    both directly keeps cmd.exe, which cuts an argument at its first newline, out of the launch.
+    """
+    matches = {m.groups() for m in _JS_SHIM_PAYLOAD_RE.finditer(content)}
+    if len(matches) != 1:
+        return None
+    node_spec, script_prefix, script_target = matches.pop()
+    shim_dir = Path(resolved).parent
+    node: Optional[str]
+    if node_spec.lower() == "%_prog%":
+        if not _NPM_PROG_RE.search(content):
+            return None
+        bundled = shim_dir / "node.exe"
+        node = str(bundled.resolve()) if bundled.is_file() else shutil.which("node")
+    else:
+        stripped = re.sub(r"^%~?dp0%\\?", "", node_spec, flags=re.IGNORECASE)
+        candidate = shim_dir / stripped if stripped != node_spec else Path(node_spec)
+        node = str(candidate.resolve()) if candidate.is_file() else None
+    script = shim_dir / script_target if script_prefix else Path(script_target)
+    try:
+        if node and script.is_file():
+            return [node, str(script.resolve())]
+    except OSError:
+        pass
+    return None
+
+
+def _unwrap_cmd_shim(resolved: str) -> List[str]:
+    """Resolve a Windows `.cmd`/`.bat` shim to the argv prefix it delegates to.
 
     This is a correctness fix, not an optimisation. A `.cmd` is executed *by cmd.exe*, and
     cmd.exe parses its command line before the target ever sees it — so a raw newline inside
@@ -81,27 +121,28 @@ def _unwrap_cmd_shim(resolved: str) -> str:
     (`2026-08-06-hub-collaboration-and-conversation-fixes`). Spawning the `.exe` directly
     bypasses cmd.exe entirely, and argv (newlines included) arrives intact.
 
-    Conservative by design: only a shim that forwards *all* of its arguments to one executable
-    and adds none of its own is rewritten — a JS shim running `node.exe some-script.js %*`
-    would lose the script path, so it is left alone, as is a shim whose target does not exist
-    or that names more than one payload. Worst case is today's behaviour, never a wrong command.
+    Conservative by design: a shim that forwards *all* of its arguments to one executable and
+    adds none of its own becomes that executable; a JS shim running `node.exe some-script.js %*`
+    becomes `[node, script]`, keeping the script (F549: a multi-line prompt through it was cut);
+    anything else — a target that does not exist, more than one payload — is left alone. Worst
+    case is today's behaviour, never a wrong command.
     """
     try:
         content = Path(resolved).read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return resolved
+        return [resolved]
     matches = {(m.group(1) or "", m.group(2)) for m in _CMD_SHIM_PAYLOAD_RE.finditer(content)}
     if len(matches) != 1:
-        return resolved
+        return _unwrap_js_shim(resolved, content) or [resolved]
     prefix, target = matches.pop()
     # `%dp0%` is the shim's own directory; without it the payload is already a full path.
     candidate = Path(resolved).parent / target if prefix else Path(target)
     try:
         if candidate.is_file():
-            return str(candidate.resolve())
+            return [str(candidate.resolve())]
     except OSError:
         pass
-    return resolved
+    return [resolved]
 
 
 def resolve_executable(cmd: List[str]) -> List[str]:
@@ -113,8 +154,9 @@ def resolve_executable(cmd: List[str]) -> List[str]:
     ``shutil.which`` (and ``cmd.exe``) do. Resolving first also avoids ever needing
     ``shell=True``, and the shell-injection surface that comes with it.
 
-    A resolved `.cmd`/`.bat` shim is then unwrapped to the executable it delegates to, so
-    arguments containing newlines survive — see ``_unwrap_cmd_shim``.
+    A resolved `.cmd`/`.bat` shim is then unwrapped to the executable it delegates to (for a JS
+    shim, node and its script), so arguments containing newlines survive — see
+    ``_unwrap_cmd_shim``.
 
     Raises ``FileNotFoundError`` with a clear message if ``cmd[0]`` cannot be found.
     """
@@ -127,7 +169,7 @@ def resolve_executable(cmd: List[str]) -> List[str]:
     if not resolved:
         raise FileNotFoundError(f"{cmd[0]!r} was not found in PATH")
     if IS_WINDOWS and Path(resolved).suffix.lower() in (".cmd", ".bat"):
-        resolved = _unwrap_cmd_shim(resolved)
+        return [*_unwrap_cmd_shim(resolved), *cmd[1:]]
     return [resolved, *cmd[1:]]
 
 

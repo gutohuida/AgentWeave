@@ -35126,7 +35126,8 @@ A run bound to a task that another actor approves still has a divergence recorde
 
 ## F549 (C) -- a multi-line prompt through a .cmd shim that adds its own arguments is cut, yet marked delivered
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** fixed 2026-10-17 (Tier 0): `resolve_executable` unwraps a JS shim (`"%dp0%
+ode.exe" "%dp0%\script.js" %*`, and npm cmd-shim's `"%_prog%"` form, node beside the shim or on PATH) to `[node, script]`, so cmd.exe never sees the argv. `test_a_multiline_argument_survives_a_js_shim` spawned npm's real shim shape through real `node` and lost the second line before the fix; the installed `copilot.cmd` now resolves to `node npm-loader.js` and runs. No CLI on this machine took that path with a multi-line prompt (Copilot uses its platform exe, Claude's shim unwraps to an exe, Codex is an exe), so the exposure was npm JS-shim installs elsewhere. Earlier: open. Filed 2026-10-08 (spec overhaul audit, reading code).
 
 `pty_runner.py:57-102` unwraps npm `.cmd` shims but deliberately leaves one that adds its own arguments
 (`node script %*`) to cmd.exe (`test_pty_runner.py:111` asserts it). cmd.exe cuts a multi-line prompt at its first
