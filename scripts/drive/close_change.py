@@ -59,6 +59,8 @@ JUDGE_TESTS = "hub/tests/test_the_workspace_judge_reads_paths_not_patterns.py"
 JUDGE_DRIVE = "scripts/drive/d1015_judge_wire.py"
 VERDICT_TESTS = "hub/tests/test_the_reviewers_verdict_decides_the_tasks_evidence.py"
 VERDICT_DRIVE = "scripts/drive/d1017_agentic_evidence.py"
+WORTH_TESTS = "hub/tests/test_evidence_carries_what_it_takes_to_judge_it.py"
+WORTH_DRIVE = "scripts/drive/d1017_evidence_worth_reading.py"
 TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
 TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
@@ -1548,6 +1550,26 @@ CHANGES = {
              "revision_needed as the operator."),
         ],
     },
+    "fworth": {
+        "document": "spec/changes/evidence-carries-what-it-takes-to-judge-it/spec.json",
+        "commit": "41397d6",
+        "tasks": ["task-0e648d42db5b", "task-163c620db409", "task-9b01683b875b"],
+        "evidence": [
+            ("FR-1", "task-163c620db409", "test_result", WORTH_DRIVE,
+             "A Haiku builder recorded command 'python hello.py', its output and covers full; the "
+             "view returns them. Tests: the 4000-character tail with its marker, 422 naming full "
+             "and partial, null for none, a same-run re-record revising the output."),
+            ("FR-2", "task-163c620db409", "test_result", WORTH_TESTS,
+             "Every evidence view carries requirement {identifier, statement} and superseded_by "
+             "(the newest later piece for the same requirement and task)."),
+            ("FR-3", "task-163c620db409", "test_result", WORTH_DRIVE,
+             "GET /spec/evidence/{id}/diff returned hello.py and its added line for the drive's "
+             "piece; tests: unmerged, after the merge, no commit (reason), unknown piece 404."),
+            ("FR-4", "task-163c620db409", "test_result", WORTH_TESTS,
+             "The tool's signature and docstring name command, output and covers and the verdict; "
+             "test_tool_surface_matches_server passes with the catalog updated."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1605,6 +1627,7 @@ CHANGE_FOLDS = {
     "f662b": 'model-catalog',
     "f665": 'usage-accounting',
     "fverdict": 'approval-integration',
+    "fworth": 'requirement-traceability',
     "f660": {
         'turn-outcome-visibility': ['stop-reason-recorded', 'divergence-names-refusal'],
         'agent-run-sandboxing': [

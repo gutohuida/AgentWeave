@@ -840,6 +840,62 @@
       "requirement": "a-folded-requirement-keeps-its-verification-folded-served",
       "then": "only the unchanged one inherits; one with its own evidence keeps its own",
       "when": "coverage is computed for a reworded folded requirement and an unchanged one"
+    },
+    {
+      "given": "an agent run",
+      "key": "evidence-carries-what-it-takes-to-judge-it-output",
+      "requirement": "evidence-carries-what-it-takes-to-judge-it-carries-output",
+      "then": "the view returns the command, the last 4000 characters marked as cut, and covers partial",
+      "when": "it records evidence with a command, a 6000-character output and covers partial"
+    },
+    {
+      "given": "an agent run",
+      "key": "evidence-carries-what-it-takes-to-judge-it-covers-refused",
+      "requirement": "evidence-carries-what-it-takes-to-judge-it-carries-output",
+      "then": "422 naming full and partial",
+      "when": "it records covers 'mostly'"
+    },
+    {
+      "given": "an undecided piece of this run",
+      "key": "evidence-carries-what-it-takes-to-judge-it-revise",
+      "requirement": "evidence-carries-what-it-takes-to-judge-it-carries-output",
+      "then": "the piece is revised in place with the new output",
+      "when": "the run records the same requirement with a new output"
+    },
+    {
+      "given": "two pieces for one requirement and task",
+      "key": "evidence-carries-what-it-takes-to-judge-it-statement",
+      "requirement": "evidence-carries-what-it-takes-to-judg-says-what-it-demonstrates",
+      "then": "both carry the identifier and statement, and the older one's superseded_by names the newer",
+      "when": "evidence is listed"
+    },
+    {
+      "given": "a piece footprinted at a branch commit that adds a file",
+      "key": "evidence-carries-what-it-takes-to-judge-it-diff",
+      "requirement": "evidence-carries-what-it-takes-to-judge-it-diff-of-the-work",
+      "then": "the file and its added lines are returned",
+      "when": "its diff is asked for"
+    },
+    {
+      "given": "the same piece after its branch merged into main",
+      "key": "evidence-carries-what-it-takes-to-judge-it-diff-merged",
+      "requirement": "evidence-carries-what-it-takes-to-judge-it-diff-of-the-work",
+      "then": "the same file and lines are returned",
+      "when": "its diff is asked for"
+    },
+    {
+      "given": "a piece with no commit",
+      "key": "evidence-carries-what-it-takes-to-judge-it-diff-none",
+      "requirement": "evidence-carries-what-it-takes-to-judge-it-diff-of-the-work",
+      "then": "200 with no files and a reason",
+      "when": "its diff is asked for"
+    },
+    {
+      "given": "a scratch Hub and a Haiku builder",
+      "key": "evidence-carries-what-it-takes-to-judge-it-drive",
+      "requirement": "evidence-carries-what-it-takes-to-judge-it-carries-output",
+      "then": "the builder's evidence carries its command and output, and the routes return the statement and the diff",
+      "when": "scripts/drive/d1017_evidence_worth_reading.py runs"
     }
   ],
   "algorithms": [
@@ -919,11 +975,15 @@
       "FR-57": "9342c0f5200146de894696b56a8b5c00f32810d87b540571440629b8c0759249",
       "FR-58": "346ffd27b8618fa7ccb94c04f9f588570279cf3339c1b2b741dbb2e3f78e594d",
       "FR-59": "166393b3b02cb94ff34cfb68c2daa02acf0434471af20697b937af0ddc030cbc",
+      "FR-60": "51dac94e49f60d5a65bb4c32ed0a6cf83b011f8649266f73625f7beac0c9eb16",
+      "FR-61": "4a8b8d2f6634aa65c918aefc2d7bdf2e3df04022a846c08e6f0064acc1f1f09d",
+      "FR-62": "6edaa3f3f297e30d4e1b3be2e6db0ccedd3ab91e9a254eb72c5eff1aa16e99d7",
+      "FR-63": "b60b4876c82b7b94c3adcca2d4e0a1b04705a70931c777e84079b00f31b794b7",
       "FR-7": "822fa2cbcc9ee98f412a7040d2bd7738941a2c762b8af112c3c1ff28d0a26c47",
       "FR-8": "e320eebf6045fc12d206c38c7d6e54299432f7f6fe1c4948faddb267d400fea3",
       "FR-9": "da908b42a1d65c2b719f110fe3b3f6d9af59a64cde27ad8f1118a0164cdc9ee3"
     },
-    "high_water": 59,
+    "high_water": 63,
     "requirements": {
       "a-changed-implementation-raises-a-candidate-never-an-edit": "FR-11",
       "a-committed-turn-s-footprints-are-repointed-at-its-commit": "FR-55",
@@ -943,6 +1003,10 @@
       "coverage-is-one-computation-with-one-precedence": "FR-10",
       "drift-is-assessed-against-the-line-of-work-a-footprint-names": "FR-54",
       "drift-is-raised-and-answered-where-the-operator-reads-the-re": "FR-20",
+      "evidence-carries-what-it-takes-to-judg-says-what-it-demonstrates": "FR-61",
+      "evidence-carries-what-it-takes-to-judge-it-carries-output": "FR-60",
+      "evidence-carries-what-it-takes-to-judge-it-diff-of-the-work": "FR-62",
+      "evidence-carries-what-it-takes-to-judge-it-tool-says-so": "FR-63",
       "evidence-is-decided-only-after-the-run-that-recorded-it-has-": "FR-13",
       "evidence-is-footprinted-against-the-work-it-describes": "FR-52",
       "evidence-names-what-produced-it-and-what-it-was-produced-aga": "FR-9",
@@ -1375,6 +1439,34 @@
       "party": null,
       "rationale": "An archived change is history; counting it beside the capability that holds its requirements counts them twice.",
       "statement": "The project's coverage rollup SHALL leave out the requirements of archived documents; a document's own coverage SHALL still list them."
+    },
+    {
+      "key": "evidence-carries-what-it-takes-to-judge-it-carries-output",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A claim with its output can be judged; a sentence cannot.",
+      "statement": "Recording evidence MUST accept an optional command, an optional output and an optional covers of full or partial, store the output's last 4000 characters with a marker when it was cut, refuse any other covers value naming the permitted ones, and return all three on every evidence view, null where none was given."
+    },
+    {
+      "key": "evidence-carries-what-it-takes-to-judg-says-what-it-demonstrates",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every evidence view MUST carry the requirement's identifier and its current statement, and superseded_by naming the newest later piece recorded for the same requirement and task, or null."
+    },
+    {
+      "key": "evidence-carries-what-it-takes-to-judge-it-diff-of-the-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The footprint names a commit; the reviewer and the operator need what it changed.",
+      "statement": "GET /spec/evidence/{id}/diff MUST return the files and unified diff of the work the piece's commit carries on its line of work, measured from where that line left the main branch, capped at 400 KB with truncated true when cut, and MUST answer 404 for an unknown piece and 200 with an empty file list and a reason where no commit or repository can be read."
+    },
+    {
+      "key": "evidence-carries-what-it-takes-to-judge-it-tool-says-so",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The record_evidence tool MUST describe command, output and covers, and MUST say that the reviewing agent's verdict decides the evidence."
     }
   ],
   "schema_version": 1,
