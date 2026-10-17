@@ -924,6 +924,34 @@
       "requirement": "every-piece-of-evidence-in-one-place-cross-links",
       "then": "the browser lists Terra's 44 pieces, the rejected chip narrows to 3, a task focus to 10, the story's See all opens that task's pieces, the coverage link for FR-15 focuses its durable id with one group and the document in the chip, and there is no console error",
       "when": "scripts/drive/d1017_evidence_browser_screens.py runs"
+    },
+    {
+      "given": "a scratch Hub and a document whose FR-1 the operator words three times",
+      "key": "how-a-requirement-changed-and-what-proved-it-drive",
+      "requirement": "how-a-requirement-changed-and-what-proved-it-detail-history",
+      "then": "the detail lists created, reworded, reworded with the three wordings, operator as actor, ids equal to spec_requirement_revisions, the current statement and document, and a drift list",
+      "when": "scripts/drive/d1017_requirement_story.py runs"
+    },
+    {
+      "given": "a requirement reworded and then retired",
+      "key": "how-a-requirement-changed-and-what-proved-it-recorded",
+      "requirement": "how-a-requirement-changed-and-what-proved-it-wording-recorded",
+      "then": "the rewording carries the new statement and the retirement carries null",
+      "when": "its revisions are read"
+    },
+    {
+      "given": "a database at 0130 with revisions",
+      "key": "how-a-requirement-changed-and-what-proved-it-migration",
+      "requirement": "how-a-requirement-changed-and-what-proved-it-migration-safe",
+      "then": "the rows survive with a null statement and the column is gone after the downgrade",
+      "when": "it upgrades to 0131 and downgrades back"
+    },
+    {
+      "given": "the Terra replica",
+      "key": "how-a-requirement-changed-and-what-proved-it-replica",
+      "requirement": "how-a-requirement-changed-and-what-proved-it-story-view",
+      "then": "every revision is listed with its actor, unrecorded wordings say so, and there is no console error",
+      "when": "the story of a reworded requirement is opened from its coverage row"
     }
   ],
   "algorithms": [
@@ -1012,11 +1040,15 @@
       "FR-66": "283cff47099d4931872eac8430dec4a2a9ddc80372dcd257ad1ba2e5ae98e72f",
       "FR-67": "76ce2282fea4abea7fbafc739f5343b32454b53a8f6651410c9827ac704e4065",
       "FR-68": "d4cf5ffefec298b02f79b411b80302996c024fdd87d3d29fe50144030162e906",
+      "FR-69": "4e052a7ff65e26a76d91337a234894003c54f06ad74f9cd0fc2fadf068cc60e8",
       "FR-7": "822fa2cbcc9ee98f412a7040d2bd7738941a2c762b8af112c3c1ff28d0a26c47",
+      "FR-70": "1519d9f8e4b8837e11509c10dd34cd98198af817e2c50316446030ce8a150291",
+      "FR-71": "bb6c506097d310cd93074e04d039f0c4f40245a4c984576a3334659d8cf51991",
+      "FR-72": "2f4ded375338b84576353999610d25edc712286b5f703e7b06fc9467d5c11302",
       "FR-8": "e320eebf6045fc12d206c38c7d6e54299432f7f6fe1c4948faddb267d400fea3",
       "FR-9": "da908b42a1d65c2b719f110fe3b3f6d9af59a64cde27ad8f1118a0164cdc9ee3"
     },
-    "high_water": 68,
+    "high_water": 72,
     "requirements": {
       "a-changed-implementation-raises-a-candidate-never-an-edit": "FR-11",
       "a-committed-turn-s-footprints-are-repointed-at-its-commit": "FR-55",
@@ -1048,6 +1080,10 @@
       "evidence-is-decided-only-after-the-run-that-recorded-it-has-": "FR-13",
       "evidence-is-footprinted-against-the-work-it-describes": "FR-52",
       "evidence-names-what-produced-it-and-what-it-was-produced-aga": "FR-9",
+      "how-a-requirement-changed-and-what-proved-it-detail-history": "FR-70",
+      "how-a-requirement-changed-and-what-proved-it-migration-safe": "FR-72",
+      "how-a-requirement-changed-and-what-proved-it-story-view": "FR-71",
+      "how-a-requirement-changed-and-what-proved-it-wording-recorded": "FR-69",
       "n1": "FR-21",
       "n10": "FR-30",
       "n11": "FR-31",
@@ -1540,6 +1576,34 @@
       "party": null,
       "rationale": "Every place that says evidence should show it.",
       "statement": "The coverage row of a requirement with evidence, the task story's evidence summary, the approval report's awaiting-evidence entry and a job firing whose reason mentions evidence MUST each link to the evidence view focused on what they mean."
+    },
+    {
+      "key": "how-a-requirement-changed-and-what-proved-it-wording-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A digest records that the meaning moved, not what it said.",
+      "statement": "Every requirement revision recorded from migration 0131 on MUST store the statement the requirement had after the revision, or null for a retirement."
+    },
+    {
+      "key": "how-a-requirement-changed-and-what-proved-it-detail-history",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "GET /spec/requirements/{identifier} MUST return the requirement's current statement and document, its revisions oldest first each with classification, actor, run, time and statement (null where it was not recorded), and every drift row with its state and resolution."
+    },
+    {
+      "key": "how-a-requirement-changed-and-what-proved-it-story-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "How a requirement changed is the question a drifted or superseded piece of evidence raises.",
+      "statement": "The app MUST show a requirement's story, reachable from its coverage row and from its group in the evidence browser, with each recorded wording as a word diff from the previous one, who changed it and when, an explicit note where a wording was not recorded, and its tasks, evidence and drift."
+    },
+    {
+      "key": "how-a-requirement-changed-and-what-proved-it-migration-safe",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's :8000 applies it on restart.",
+      "statement": "Migration 0131 MUST add only a nullable column, leave existing rows unchanged, and downgrade by dropping that column."
     }
   ],
   "schema_version": 1,
