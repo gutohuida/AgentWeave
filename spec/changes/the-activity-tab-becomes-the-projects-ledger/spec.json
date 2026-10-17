@@ -1,0 +1,123 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the Terra replica",
+      "key": "replica",
+      "requirement": "ledger-route",
+      "then": "integrations, merged count, divergences, total spend, spend per agent, origins and the context_warning count equal the database's, merges newest first, and spend by day sums to the total",
+      "when": "scripts/drive/d1017_project_ledger.py runs"
+    },
+    {
+      "given": "seeded integrations, usage, workers, a divergence, messages and warnings",
+      "key": "order",
+      "requirement": "ledger-route",
+      "then": "each lane is in the documented order and operator messages are left out",
+      "when": "the ledger is read"
+    },
+    {
+      "given": "the Terra replica",
+      "key": "view",
+      "requirement": "ledger-view",
+      "then": "the ledger shows the lanes with the route's totals and no console error",
+      "when": "the Activity tab is opened in a browser"
+    },
+    {
+      "given": "several context_warning events in the live log",
+      "key": "folded",
+      "requirement": "notices-folded",
+      "then": "they are one row naming the count",
+      "when": "it renders"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "66ec4fe5d8291cd3f9d1583bc29347ff16f186def0c3916a31066ab318b9cce0",
+      "FR-2": "6ec5e5e6566794d842453fac2692ecb5b8c70e0f59d5eb17393a0e4cdc59de35",
+      "FR-3": "56c8531eda5ea8157afee2da45f86a3aa667c37a6d6cbab3da9be6dfc4e0821c"
+    },
+    "high_water": 3,
+    "requirements": {
+      "ledger-route": "FR-1",
+      "ledger-view": "FR-2",
+      "notices-folded": "FR-3"
+    },
+    "retired": {}
+  },
+  "design": "D1 One read, many lanes: the ledger is assembled server-side from tables that already exist, so the totals have one definition and the drive can compare them with the database. D2 Spend is API-equivalent dollars from turn_usage plus worker_invocations; a turn's task is its run's task. D3 Messages to or from the operator are conversation, not ledger, and are left out. D4 Notices fold by kind; the list of folded kinds is a constant so the next noisy kind is one line.",
+  "evidence": {
+    "checked": [
+      "event_logs counts on the replica",
+      "hub/ui/src/components/activity/ActivityLog.tsx",
+      "hub/hub/task_story.py cost aggregation"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "The visibility map of 2026-10-17 found merges, spend over time, divergences (useDivergences unused), agent messages and task origins recorded and shown nowhere, while context_warning filled half the live log (589 of 1172 rows on Terra). Slice project-ledger of roadmap spdoc-d882f76795b3.",
+  "requirements": [
+    {
+      "key": "ledger-route",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "GET /projects/{id}/ledger MUST return the project's integrations newest first with their outcome and task, spend in total and by day oldest first, by agent and by task, the Hub's own worker spend, divergences and agent-to-agent messages newest first, the count of tasks by origin, and each folded notice kind with its count, first and last time and count per agent."
+    },
+    {
+      "key": "ledger-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "These records existed and nothing showed them.",
+      "statement": "The Activity tab MUST open on a ledger view showing those lanes, with totals that match the route, and refresh it when tasks, runs or integrations change."
+    },
+    {
+      "key": "notices-folded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap decision 4: half the log was one repeated notice.",
+      "statement": "The live activity log MUST show context_warning events as one row counting them, not one row each."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "GET /projects/{id}/ledger: merges and skipped integrations, spend (total, by day, by agent, by task, the Hub's own workers), divergences, agent-to-agent messages, task origins, folded notices with their counts",
+      "The Activity tab opens on a Ledger view of those lanes, refreshed live; the live log and Logs stay beside it",
+      "The live log folds context_warning into one counted row"
+    ],
+    "non_goals": [
+      "Budgets or limits (usage-accounting owns them)",
+      "Changing what any of these records holds"
+    ]
+  },
+  "summary": "One ledger read of what the Hub records about a project, in lanes: merges into main, spend over time by agent and task, divergences, agent-to-agent messages, where work came from, and repeated notices folded into a counted row, shown as the Activity tab's default view.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "hub/hub/project_ledger.py and /ledger; ProjectLedger in the Activity tab; the live log folding context_warning; tests and the drives.",
+      "files": [
+        "hub/hub/project_ledger.py",
+        "hub/hub/api/v1/ledger.py",
+        "hub/ui/src/components/activity/ProjectLedger.tsx"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "ledger-route",
+        "ledger-view",
+        "notices-folded"
+      ],
+      "reviewer": null,
+      "title": "Ledger route, the Activity tab's Ledger view, folded notices"
+    }
+  ],
+  "title": "The Activity tab becomes the project's ledger"
+}
