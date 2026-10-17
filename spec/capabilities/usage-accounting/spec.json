@@ -302,6 +302,34 @@
       "requirement": "copilot-spend-is-counted-in-its-own-units-worker-line-credits",
       "then": "the Budgets section shows a checkpoint line with its credits and the project credits rise by it",
       "when": "Checkpoint is pressed"
+    },
+    {
+      "given": "the Terra replica",
+      "key": "the-activity-tab-becomes-the-projects-ledger-replica",
+      "requirement": "the-activity-tab-becomes-the-projects-ledger-ledger-route",
+      "then": "integrations, merged count, divergences, total spend, spend per agent, origins and the context_warning count equal the database's, merges newest first, and spend by day sums to the total",
+      "when": "scripts/drive/d1017_project_ledger.py runs"
+    },
+    {
+      "given": "seeded integrations, usage, workers, a divergence, messages and warnings",
+      "key": "the-activity-tab-becomes-the-projects-ledger-order",
+      "requirement": "the-activity-tab-becomes-the-projects-ledger-ledger-route",
+      "then": "each lane is in the documented order and operator messages are left out",
+      "when": "the ledger is read"
+    },
+    {
+      "given": "the Terra replica",
+      "key": "the-activity-tab-becomes-the-projects-ledger-view",
+      "requirement": "the-activity-tab-becomes-the-projects-ledger-ledger-view",
+      "then": "the ledger shows the lanes with the route's totals and no console error",
+      "when": "the Activity tab is opened in a browser"
+    },
+    {
+      "given": "several context_warning events in the live log",
+      "key": "the-activity-tab-becomes-the-projects-ledger-folded",
+      "requirement": "the-activity-tab-becomes-the-projects-ledger-notices-folded",
+      "then": "they are one row naming the count",
+      "when": "it renders"
     }
   ],
   "algorithms": [],
@@ -325,11 +353,14 @@
       "FR-25": "97ec205010ff7c9a6b5b8a88d96a5176c6e1af2139677d3121f3bde3ede8f3ec",
       "FR-26": "1d4dce7682e6f6e40a160fce8044a36b0d1df3b16fb24fcb6dfe1c1fe2fad4da",
       "FR-27": "a37390c5a36e52cd80cc8f2b900eeb7ca88542a6dd52f78a9f0fdace5591bd5d",
+      "FR-28": "66ec4fe5d8291cd3f9d1583bc29347ff16f186def0c3916a31066ab318b9cce0",
+      "FR-29": "6ec5e5e6566794d842453fac2692ecb5b8c70e0f59d5eb17393a0e4cdc59de35",
+      "FR-30": "56c8531eda5ea8157afee2da45f86a3aa667c37a6d6cbab3da9be6dfc4e0821c",
       "FR-7": "0243dcae0b94bec3d8557b1d6fbe37b827f6ac81370c20aac02c926ddd800868",
       "FR-8": "a47401808ab90b647f8f27c6cfb33aa0b068daa8f6f20a22c5e66cc07a4af6e1",
       "FR-9": "f9b839718a1d5e35d1d0b3306acbf14f7d2ac72c331553511beb93cb06c0b0f4"
     },
-    "high_water": 27,
+    "high_water": 30,
     "requirements": {
       "a-copilot-one-shot-call-records-the-credits-its-session-repo": "FR-14",
       "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde": "FR-13",
@@ -346,6 +377,9 @@
       "n5-malformed-copilot-figures-are-unknown-not-fatal": "FR-19",
       "n6-credits-are-never-money-or-budget": "FR-20",
       "supported-runner-telemetry-normalizes-to-one-accounting-shap": "FR-8",
+      "the-activity-tab-becomes-the-projects-ledger-ledger-route": "FR-28",
+      "the-activity-tab-becomes-the-projects-ledger-ledger-view": "FR-29",
+      "the-activity-tab-becomes-the-projects-ledger-notices-folded": "FR-30",
       "the-operator-can-see-accounting-and-exhaustion-state": "FR-12",
       "usage-aggregates-by-agent-and-project": "FR-9",
       "worker-spend-counts-against-the-budget-autonomous-worker-paused": "FR-23",
@@ -522,6 +556,27 @@
       "party": null,
       "rationale": "The headline should name the unit the project's data is in (wpc6-c: follow the data, not the dominant runner).",
       "statement": "When the project has no allowance reading among its recent turns and no reported cost, but has AI credits or premium requests (from turns or worker calls), preferred_display MUST be the kind `credits`, naming runner copilot and carrying both figures; a project with neither keeps its previous kind."
+    },
+    {
+      "key": "the-activity-tab-becomes-the-projects-ledger-ledger-route",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "GET /projects/{id}/ledger MUST return the project's integrations newest first with their outcome and task, spend in total and by day oldest first, by agent and by task, the Hub's own worker spend, divergences and agent-to-agent messages newest first, the count of tasks by origin, and each folded notice kind with its count, first and last time and count per agent."
+    },
+    {
+      "key": "the-activity-tab-becomes-the-projects-ledger-ledger-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "These records existed and nothing showed them.",
+      "statement": "The Activity tab MUST open on a ledger view showing those lanes, with totals that match the route, and refresh it when tasks, runs or integrations change."
+    },
+    {
+      "key": "the-activity-tab-becomes-the-projects-ledger-notices-folded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap decision 4: half the log was one repeated notice.",
+      "statement": "The live activity log MUST show context_warning events as one row counting them, not one row each."
     }
   ],
   "schema_version": 1,
