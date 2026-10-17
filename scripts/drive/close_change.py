@@ -66,6 +66,10 @@ STORY_SCREENS = "scripts/drive/d1017_task_story_screens.py"
 STORY_LIVE = "scripts/drive/d1017_task_story_live.py"
 BROWSER_TESTS = "hub/ui/src/__tests__/evidenceBrowser.test.tsx"
 BROWSER_SCREENS = "scripts/drive/d1017_evidence_browser_screens.py"
+REQSTORY_TESTS = "hub/tests/test_how_a_requirement_changed_and_what_proved_it.py"
+REQSTORY_DRIVE = "scripts/drive/d1017_requirement_story.py"
+REQSTORY_SCREENS = "scripts/drive/d1017_requirement_story_screens.py"
+MIGRATION_TESTS = "hub/tests/test_migrations.py"
 TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
 TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
@@ -1625,6 +1629,27 @@ CHANGES = {
              "share EvidenceLink (unit-tested) and were not seen live: the replica has no such state."),
         ],
     },
+    "freqstory": {
+        "document": "spec/changes/how-a-requirement-changed-and-what-proved-it/spec.json",
+        "commit": "9d354a2",
+        "tasks": ["task-782c1856e6f3"],
+        "evidence": [
+            ("FR-1", "task-782c1856e6f3", "test_result", REQSTORY_TESTS,
+             "A rewording records the new statement (operator), the agent's creation its own; a "
+             "retirement records null."),
+            ("FR-2", "task-782c1856e6f3", "test_result", REQSTORY_DRIVE,
+             "Scratch :8126: created/reworded/reworded with the three wordings, operator as actor, "
+             "ids equal to spec_requirement_revisions, current statement and document, drift list. "
+             "3 FAILED on :8125 before the build."),
+            ("FR-3", "task-782c1856e6f3", "test_result", REQSTORY_SCREENS,
+             "Replica: FR-3's coverage history opens its story with its 3 revisions in the table's "
+             "order, each 'wording not recorded'; an evidence group's history opens a story; back "
+             "returns to the document; no console error. Recorded diffs judged on scratch :8126."),
+            ("FR-4", "task-782c1856e6f3", "test_result", MIGRATION_TESTS,
+             "0131 adds a nullable statement; an old revision keeps its digest with statement null; "
+             "downgrade drops the column and keeps the row; a no-op without the table."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1685,6 +1710,7 @@ CHANGE_FOLDS = {
     "fworth": 'requirement-traceability',
     "fstory": 'task-lifecycle-governance',
     "fbrowser": 'requirement-traceability',
+    "freqstory": 'requirement-traceability',
     "f660": {
         'turn-outcome-visibility': ['stop-reason-recorded', 'divergence-names-refusal'],
         'agent-run-sandboxing': [
