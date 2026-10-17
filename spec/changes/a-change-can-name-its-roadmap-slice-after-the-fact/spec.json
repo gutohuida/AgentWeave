@@ -1,0 +1,128 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "an approved roadmap with slice first, and an archived change document with no roadmap link",
+      "key": "archived",
+      "requirement": "link",
+      "then": "200; its stored requirements and aw_identity are byte-identical, its phase is still archived, and the row's content digest is the file's",
+      "when": "the operator PUTs {document: roadmap, slice: first} to its roadmap route"
+    },
+    {
+      "given": "the same project",
+      "key": "refused",
+      "requirement": "valid",
+      "then": "each is a 422 naming its code, and nothing is written",
+      "when": "the link names an unknown slice, a non-roadmap document, targets the roadmap itself, or re-points an already linked document"
+    },
+    {
+      "given": "that link set",
+      "key": "page",
+      "requirement": "shows",
+      "then": "slice first shows archived and names the linked document",
+      "when": "the roadmap page is read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "3b324359c771ffa67460bc6d4f7d7c8d24ce5ed0fbbdcaac1ddb3f23975bf9f1",
+      "FR-2": "c16473649f95b19d567eb4fa5029f8d47251f5fde355bc069f8e2e09df11d77a",
+      "FR-3": "f15eae283892e03b46b0ba843d3dd9b984b240ac1cce635dd172e48a1820d317"
+    },
+    "high_water": 3,
+    "requirements": {
+      "link": "FR-1",
+      "shows": "FR-3",
+      "valid": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 A separate route, not a relaxed content write: save_document's archived/approved refusals stay whole, and the route can only touch one field. D2 Set-once: re-pointing an existing link is refused, since a link that moves would move a slice's state silently; an identical link is a no-op 200. D3 The file is rewritten with serialize(), and content_digest refreshed, as rerender_phase does.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F674: the seven change documents that built the visibility roadmap were archived without a roadmap link, so the roadmap page reads all seven slices as not started. An archived (or approved) document refuses every content write, and the link is the only thing missing. The operator decided (vis-D9, 2026-10-17) that the link may be added afterwards as a metadata write that changes no requirement.",
+  "requirements": [
+    {
+      "key": "link",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "vis-D9: a built slice must read as done.",
+      "statement": "An operator MUST be able to set a change document's roadmap link at any phase, archived included, without changing its requirements, their digests or its phase."
+    },
+    {
+      "key": "valid",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A metadata write must not be a way around the content checks.",
+      "statement": "The link MUST be refused when the target is not a change document, the named document is not a roadmap of the project, the slice is not one of the roadmap's slices, or the document already names a different slice."
+    },
+    {
+      "key": "shows",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F579's slice states are derived from the link, so this is what makes the backfill visible.",
+      "statement": "After the link is set, the roadmap page MUST show the slice at the linked document's phase."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "PUT /projects/{id}/project/documents/{path}/roadmap with {document, slice}: sets a change document's roadmap link at any phase, archived included, as the operator",
+      "The roadmap must be a roadmap document of the project and the slice one of its slices",
+      "Only the roadmap link changes: requirements, their digests and the phase stay as they were; the file's content digest is refreshed so the write is not read as an edit outside the Hub",
+      "A document event records who linked which slice"
+    ],
+    "non_goals": [
+      "Changing or clearing a link through this route on a document that already names a different slice (refused; reopen the document instead)",
+      "A UI control for the link (the operator asked only that it be allowed; the route is driven by the close-change tooling)",
+      "An agent tool for it"
+    ]
+  },
+  "summary": "",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Route and service function, with the document event",
+      "from": null,
+      "key": "route",
+      "requirements": [
+        "link",
+        "valid",
+        "shows"
+      ],
+      "reviewer": null,
+      "title": ""
+    },
+    {
+      "depends_on": [],
+      "description": "Backfill the visibility roadmap's seven archived slice documents on the trial Hub and drive the roadmap page",
+      "from": null,
+      "key": "backfill",
+      "requirements": [
+        "shows"
+      ],
+      "reviewer": null,
+      "title": ""
+    }
+  ],
+  "title": "A change document can name its roadmap slice after the fact"
+}
