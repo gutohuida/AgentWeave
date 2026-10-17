@@ -38,6 +38,9 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     // F9's note. Stubbed here for the same reason the three hooks above are: this file is about the
     // drawer's mechanics, and one of its tests renders outside a QueryClientProvider deliberately.
     useTaskIntegrationPreview: () => ({ data: undefined }),
+    // The story (slice task-story) is a real query too; idle with no data, the drawer keeps its
+    // details view, which is what this file tests. `taskStory.test.tsx` covers the story itself.
+    useTaskStory: () => ({ data: undefined, fetchStatus: 'idle', isLoading: false, isError: false }),
     // F163's landing action, added to the drawer after this file was written. It calls
     // `useQueryClient` unconditionally, so leaving it real threw "No QueryClient set" out of the
     // one test that renders without a provider — the click-outside one, which is about the board

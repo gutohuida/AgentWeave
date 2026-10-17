@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, fetchWithAuth, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { neutraliseFileMentions } from '@/lib/fileMentions'
+import type { EvidencePiece } from './spec'
 
 /**
  * One thing the Hub decided to tell the operator at approval rather than refuse (F169):
@@ -267,6 +268,121 @@ export function useTaskTransitions(taskId: string, enabled: boolean) {
         `/api/v1/projects/${projectId}/tasks/${taskId}/transitions`,
       ),
     enabled: isConfigured && !!projectId && enabled,
+  })
+}
+
+export interface StoryReview {
+  decision: 'accepted' | 'rejected'
+  actor_kind: string
+  actor: string
+  reason: string | null
+  at: string | null
+}
+
+/** One event of a task's story, as `GET /tasks/{id}/story` returns it (`hub/hub/task_story.py`). */
+export type StoryEvent =
+  | { kind: 'created'; id: string; at: string | null; by: string | null }
+  | {
+      kind: 'transition'
+      id: string
+      at: string | null
+      from: string
+      to: string
+      actor_kind: string
+      actor: string | null
+      origin: string
+      job: string | null
+      run_id: string | null
+      override_reason: string | null
+    }
+  | {
+      kind: 'run'
+      id: string
+      at: string | null
+      agent: string
+      status: string
+      ended_at: string | null
+      duration_seconds: number | null
+      model: string | null
+      runner: string | null
+      cost_usd: number | null
+      tokens: number | null
+      premium_requests: number | null
+      conversation_id: string | null
+      error: string | null
+    }
+  | { kind: 'evidence'; id: string; at: string | null; evidence: EvidencePiece; reviews: StoryReview[] }
+  | {
+      kind: 'check'
+      id: string
+      at: string | null
+      state: string
+      ended_at: string | null
+      results: { name?: string; command?: string; exit_code?: number; passed?: boolean }[]
+      error: string | null
+      merged_sha: string | null
+    }
+  | {
+      kind: 'integration'
+      id: string
+      at: string | null
+      outcome: string
+      commit_sha: string | null
+      source_branch: string | null
+      target_branch: string | null
+      reason: string | null
+      mechanism: string
+      actor_kind: string
+      actor: string
+    }
+  | {
+      kind: 'divergence'
+      id: string
+      at: string | null
+      agent: string
+      run_id: string
+      policy: string
+      outcome: string
+      task_status_at_end: string
+      resolved_at: string | null
+    }
+  | {
+      kind: 'question'
+      id: string
+      at: string | null
+      agent: string
+      question: string
+      answered: boolean
+      answer: string | null
+      declined: boolean
+      wait_ended_at: string | null
+    }
+
+export interface TaskStory {
+  task: { id: string; title: string; status: string }
+  summary: {
+    runs: number
+    cost_usd: number | null
+    tokens: number | null
+    premium_requests: number | null
+    evidence: { accepted: number; rejected: number; awaiting: number }
+    merged: string[]
+    overrides: number
+  }
+  /** Oldest first, ties broken cause before effect: the order the route returns and the story reads. */
+  events: StoryEvent[]
+}
+
+/** A task's whole story (slice task-story). Keyed under `tasks`, so `task_updated` refreshes it;
+ *  `useSSE` also refreshes it on evidence and run events. A Hub that predates the route answers
+ *  404, which the drawer reads as "no story here" and keeps its details view. */
+export function useTaskStory(taskId: string, enabled: boolean) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<TaskStory>({
+    queryKey: ['project', projectId, 'tasks', taskId, 'story'],
+    queryFn: () => getJson<TaskStory>(`/api/v1/projects/${projectId}/tasks/${taskId}/story`),
+    enabled: isConfigured && !!projectId && enabled,
+    retry: false,
   })
 }
 

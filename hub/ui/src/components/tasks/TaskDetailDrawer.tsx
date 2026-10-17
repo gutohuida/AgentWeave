@@ -16,6 +16,7 @@ import {
   useRenameTask,
   useSetDivergenceHandling,
   useTaskIntegrationPreview,
+  useTaskStory,
   useTasks,
   useUpdateTask,
 } from '@/api/tasks'
@@ -23,6 +24,7 @@ import { useAgents } from '@/api/agents'
 import { useSpecDocuments } from '@/api/spec'
 import { TaskTransitionHistory } from '@/components/tasks/TaskTransitionHistory'
 import { TaskChecksRow } from '@/components/tasks/TaskChecksRow'
+import { TaskStory } from '@/components/tasks/TaskStory'
 import { RowMenu } from '@/components/layout/RowMenu'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
@@ -165,6 +167,43 @@ function ApprovalReport({ taskId, entries }: { taskId: string; entries: Approval
   )
 }
 
+/** Story | Details, a segmented switch whose thumb slides between the two. */
+function ViewSwitch({
+  view,
+  onChange,
+  taskId,
+}: {
+  view: 'story' | 'details'
+  onChange: (view: 'story' | 'details') => void
+  taskId: string
+}) {
+  const options: { key: 'story' | 'details'; label: string }[] = [
+    { key: 'story', label: 'Story' },
+    { key: 'details', label: 'Details' },
+  ]
+  const active = options.findIndex((option) => option.key === view)
+  return (
+    <div className="aw-segmented" role="group" aria-label="Task view">
+      <span
+        className="aw-segmented-thumb"
+        aria-hidden="true"
+        style={{ width: 'calc(50% - 2px)', transform: `translateX(${active * 100}%)` }}
+      />
+      {options.map((option) => (
+        <button
+          key={option.key}
+          type="button"
+          aria-pressed={view === option.key}
+          data-testid={`task-view-${option.key}-${taskId}`}
+          onClick={() => onChange(option.key)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function statusLabel(status: string): string {
   return status.replace(/_/g, ' ')
 }
@@ -223,6 +262,14 @@ interface TaskDetailDrawerProps {
  * or Escape.
  */
 export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetailDrawerProps) {
+  // The story is the default view (slice task-story): it answers "is this done, and how did it get
+  // here?" before the controls. A Hub that predates `/story` answers 404, and the drawer then keeps
+  // the details view without offering a switch that leads nowhere.
+  const [view, setView] = useState<'story' | 'details'>('story')
+  // Offered only while the story is loading or has loaded: an error (a Hub before `/story`) or a
+  // query that cannot run leaves the details view, with no switch that leads nowhere.
+  const story = useTaskStory(task?.id ?? '', task !== null)
+  const storyAvailable = Array.isArray(story.data?.events) || story.fetchStatus === 'fetching'
   const panelRef = useRef<HTMLDivElement>(null)
   const open = task !== null
   const [refusal, setRefusal] = useState<string | null>(null)
@@ -275,6 +322,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   )
 
   useEffect(() => {
+    setView('story')
     setRefusal(null)
     setBlockingReason(null)
     // The drawer instance outlives the task it shows; an advisory belongs to the task approved.
@@ -455,6 +503,12 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         </button>
       </div>
 
+      {storyAvailable && (
+        <div className="shrink-0 px-6 pt-3" data-testid={`task-drawer-views-${task.id}`}>
+          <ViewSwitch view={view} onChange={setView} taskId={task.id} />
+        </div>
+      )}
+
       {/* The scrolling region. Deliberately the only element in this panel with `overflow: auto` —
           everything above and below it is `shrink-0`, so a long description or many chips scrolls
           the content rather than being cut off by a fixed-height ancestor (`design.md` D8's
@@ -464,9 +518,13 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         // Wider gutters and more air between blocks. At 480px with `p-4 space-y-3` every section
         // ran into the next and the whole thing read as one wall; the width now allows a real
         // line length, and the sections need to be told apart to benefit from it.
-        className="flex-1 px-6 py-5 space-y-5"
+        className={`flex-1 px-6 py-5 space-y-5${storyAvailable ? ' aw-scroll-fade' : ''}`}
         style={{ overflowY: 'auto', minHeight: 0 }}
       >
+        {storyAvailable && view === 'story' ? (
+          <TaskStory taskId={task.id} />
+        ) : (
+        <>
         {/* The ticket's own facts, together. The card carried status, priority, assignee, agent
             state and age; this panel showed none of them and offered only a bare "…" menu, so
             opening a ticket lost information rather than gaining it — exactly backwards for the
@@ -1167,6 +1225,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
       </div>
     </div>

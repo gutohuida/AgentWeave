@@ -388,6 +388,39 @@ export interface EvidencePiece {
     commit_sha: string | null
     outside_workspace_writes: string[] | null
   } | null
+  /** What it takes to judge the piece (vis-D5): absent from a Hub before migration 0130, null where
+   *  the recorder gave none. `output` is the tail, led by "[earlier output cut]" when it was cut. */
+  command?: string | null
+  output?: string | null
+  covers?: 'full' | 'partial' | null
+  /** The requirement in the document's own words; the statement is null when it cannot be read. */
+  requirement?: { identifier: string; statement: string | null } | null
+  /** The newest later piece for the same requirement and task, when one replaced this. */
+  superseded_by?: string | null
+}
+
+export interface EvidenceDiff {
+  files: { path: string; status: string; patch: string }[]
+  base: string | null
+  commit: string | null
+  truncated: boolean
+  reason: string | null
+}
+
+/** The work a piece's commit carries on its line of work (`GET /spec/evidence/{id}/diff`). Fetched
+ *  only when its proof is opened; a commit's diff never changes, so it is cached for the session. */
+export function useEvidenceDiff(evidenceId: string, enabled: boolean) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<EvidenceDiff>({
+    queryKey: ['project', projectId, 'evidenceDiff', evidenceId],
+    queryFn: () =>
+      getJson<EvidenceDiff>(
+        `/api/v1/projects/${projectId}/project/spec/evidence/${encodeURIComponent(evidenceId)}/diff`,
+      ),
+    enabled: isConfigured && !!projectId && enabled,
+    staleTime: Infinity,
+    retry: false,
+  })
 }
 
 /** Oldest first — the order the route returns (`requirement_evidence.for_requirement`). */

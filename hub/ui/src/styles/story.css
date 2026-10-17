@@ -1,0 +1,353 @@
+/* ══════════════════════════════════════════════════════════════
+   Visibility roadmap, slice `foundations` (vis-D8): one motion vocabulary and one state palette for
+   the story views. Colour carries state and nothing else; large surfaces stay neutral and the hue
+   sits on dots, pills and rails. Built on index.css's tokens (--green .. --purple, --dur-*, --ease),
+   so both modes are covered by the tokens themselves. Every animation is off under reduced motion.
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  --dur-enter: 260ms;
+  --dur-expand: 320ms;
+  --stagger: 32ms;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+/* The six state tones, as one custom property each element reads (`--tone`). */
+.tone-green   { --tone: var(--green); }
+.tone-amber   { --tone: var(--amber); }
+.tone-red     { --tone: var(--red); }
+.tone-blue    { --tone: var(--blue); }
+.tone-purple  { --tone: var(--purple); }
+.tone-neutral { --tone: var(--text-3); }
+
+/* StatePill: a dot and a label on a tinted ground. A changed label pops in (it is keyed on it). */
+.aw-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  animation: aw-pill-in var(--dur-base) var(--ease);
+}
+.aw-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.aw-pill[data-live="true"]::before { animation: aw-live 1.6s ease-in-out infinite; }
+@keyframes aw-pill-in { from { opacity: 0; transform: scale(0.94); } }
+@keyframes aw-live {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent); }
+  50%      { box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 0%, transparent); }
+}
+
+/* Timeline: a rail that draws itself down, dots that carry the tone, items that stagger in. */
+.aw-timeline { list-style: none; margin: 0; padding: 0; display: grid; }
+.aw-tl-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  column-gap: 12px;
+  padding-bottom: 16px;
+  animation: aw-tl-in var(--dur-enter) var(--ease) both;
+  animation-delay: calc(min(var(--i, 0), 14) * var(--stagger));
+}
+.aw-tl-item:last-child { padding-bottom: 0; }
+.aw-tl-item::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 24px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--border-hi);
+  transform-origin: top;
+  animation: aw-rail-in var(--dur-expand) var(--ease) both;
+  animation-delay: calc(min(var(--i, 0), 14) * var(--stagger) + 90ms);
+}
+.aw-tl-item:last-child::before { display: none; }
+.aw-tl-dot {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 14%, var(--surface));
+  box-shadow: 0 0 0 3px var(--surface), inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+}
+.aw-tl-dot[data-live="true"] { animation: aw-live 1.6s ease-in-out infinite; }
+.aw-tl-body { min-width: 0; padding: 2px 6px 0; margin: -2px -6px 0; border-radius: 8px; }
+.aw-tl-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  min-height: 20px;
+}
+.aw-tl-head strong { font-weight: 600; }
+.aw-tl-meta {
+  font: 400 11px/1.5 var(--mono);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.aw-tl-aside {
+  margin-left: auto;
+  font: 500 11px/1.45 var(--mono);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.aw-tl-content { display: grid; gap: 8px; margin-top: 6px; }
+/* An event that arrived while the story was open glows once, then settles. */
+.aw-tl-item[data-fresh="true"] .aw-tl-body { animation: aw-fresh 1.6s var(--ease) both; }
+@keyframes aw-tl-in { from { opacity: 0; transform: translateY(6px); } }
+@keyframes aw-rail-in { from { transform: scaleY(0); } }
+@keyframes aw-fresh {
+  from { background: color-mix(in srgb, var(--tone, var(--blue)) 14%, transparent); }
+  to   { background: transparent; }
+}
+
+/* Expander: animates height by grid rows, so content of any size opens without a measured jump. */
+.aw-expander {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows var(--dur-expand) var(--ease), opacity var(--dur-base) var(--ease);
+}
+.aw-expander[data-open="true"] { grid-template-rows: 1fr; opacity: 1; }
+.aw-expander > div { min-height: 0; overflow: hidden; }
+
+.aw-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  border-radius: 4px;
+  transition: color var(--dur-fast) var(--ease);
+}
+.aw-link:hover { color: var(--text); }
+.aw-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.aw-link svg { transition: transform var(--dur-base) var(--ease); }
+.aw-link[aria-expanded="true"] svg { transform: rotate(90deg); }
+
+/* A callout for something the operator should notice: an override, a refusal, a rejection. */
+.aw-callout {
+  border-left: 2px solid var(--tone);
+  background: color-mix(in srgb, var(--tone) 7%, transparent);
+  border-radius: 0 6px 6px 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.aw-callout strong { color: var(--text); font-weight: 600; }
+
+/* The proof panel: the requirement on one side, what demonstrates it on the other. */
+.aw-proof {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.aw-proof > section { padding: 10px 12px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.aw-proof > section + section { border-left: 1px solid var(--border); }
+.aw-proof-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.aw-proof-statement { font-size: 12.5px; line-height: 1.55; color: var(--text); }
+.aw-command {
+  font: 500 11.5px/1.5 var(--mono);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.aw-command::before { content: "$ "; color: var(--text-3); }
+.aw-output {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  font: 400 11.5px/1.55 var(--mono);
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* A quiet review line: an acceptance is the expected end, not news. */
+.aw-review-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.aw-review-line svg { color: var(--tone); flex: none; transform: translateY(1px); }
+.aw-review-line strong { color: var(--text); font-weight: 600; }
+
+/* A scroll region whose content fades in under its top edge instead of clipping hard. */
+.aw-scroll-fade {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+}
+
+/* DiffView */
+.aw-diff { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.aw-diff-file + .aw-diff-file { border-top: 1px solid var(--border); }
+.aw-diff-more {
+  width: 100%;
+  padding: 7px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-align: left;
+  transition: color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+}
+.aw-diff-more:hover { color: var(--text); background: var(--row-hover); }
+.aw-diff-more:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.aw-diff-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font: 500 11.5px/1.4 var(--mono);
+  color: var(--text);
+  background: var(--surface-2);
+  text-align: left;
+}
+.aw-diff-head:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.aw-diff-head svg { transition: transform var(--dur-base) var(--ease); color: var(--text-3); }
+.aw-diff-head[aria-expanded="true"] svg { transform: rotate(90deg); }
+.aw-diff-stat { margin-left: auto; font-weight: 400; font-variant-numeric: tabular-nums; }
+.aw-diff-stat .add { color: var(--green); }
+.aw-diff-stat .del { color: var(--red); margin-left: 6px; }
+.aw-diff-body { overflow-x: auto; }
+.aw-diff-body pre { margin: 0; padding: 6px 0; font: 400 11.5px/1.6 var(--mono); min-width: max-content; }
+.aw-diff-line { display: block; padding: 0 12px; white-space: pre; color: var(--text-2); }
+.aw-diff-line[data-kind="add"] {
+  color: var(--text);
+  background: color-mix(in srgb, var(--green) 11%, transparent);
+  box-shadow: inset 2px 0 0 var(--green);
+}
+.aw-diff-line[data-kind="del"] {
+  color: var(--text);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  box-shadow: inset 2px 0 0 var(--red);
+}
+.aw-diff-line[data-kind="hunk"] { color: var(--blue); background: color-mix(in srgb, var(--blue) 6%, transparent); }
+
+/* The story's summary band: the answer before the detail. */
+.aw-story-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--border);
+}
+.aw-story-summary > div {
+  background: var(--surface);
+  padding: 10px 12px;
+  display: grid;
+  gap: 5px;
+  align-content: start;
+  min-width: 0;
+}
+.aw-story-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.aw-story-value {
+  font: 500 15px/1.2 var(--mono);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aw-story-value small { font-size: 11px; color: var(--text-3); font-weight: 400; }
+.aw-counts { display: flex; gap: 10px; font: 500 13px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+.aw-counts span { display: inline-flex; align-items: center; gap: 4px; color: var(--tone); }
+.aw-counts span::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.aw-counts span[data-zero="true"] { color: var(--text-3); opacity: 0.6; }
+
+/* Segmented view switch (Story | Details) with a sliding thumb. */
+.aw-segmented {
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.aw-segmented button {
+  position: relative;
+  z-index: 1;
+  padding: 4px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  border-radius: 6px;
+  transition: color var(--dur-fast) var(--ease);
+}
+.aw-segmented button[aria-pressed="true"] { color: var(--text); }
+.aw-segmented button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.aw-segmented-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--border);
+  transition: transform var(--dur-base) var(--ease);
+}
+
+/* Skeleton rows while the story loads, instead of a spinner. */
+.aw-skeleton {
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
+  background-size: 200% 100%;
+  animation: aw-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes aw-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .aw-pill, .aw-tl-item, .aw-tl-item::before, .aw-tl-item[data-fresh="true"] .aw-tl-body,
+  .aw-pill[data-live="true"]::before, .aw-tl-dot[data-live="true"], .aw-skeleton { animation: none; }
+  .aw-expander, .aw-segmented-thumb, .aw-segmented button, .aw-link svg, .aw-diff-head svg { transition: none; }
+}

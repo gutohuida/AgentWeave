@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useConfigStore } from '@/store/configStore'
 
 export interface SSEEvent {
@@ -99,6 +99,16 @@ const eventBuffer: SSEEvent[] = []
 
 let connectionState: SSEConnectionState = 'closed'
 const stateListeners = new Set<(state: SSEConnectionState) => void>()
+
+/** Refetch every open task story (`['project', pid, 'tasks', id, 'story']`) of project *pid*. */
+function invalidateTaskStories(queryClient: QueryClient, pid: string | undefined): void {
+  queryClient.invalidateQueries({
+    predicate: (query) => {
+      const key = query.queryKey
+      return key[0] === 'project' && key[1] === pid && key[2] === 'tasks' && key[4] === 'story'
+    },
+  })
+}
 
 function setConnectionState(next: SSEConnectionState): void {
   if (next === connectionState) return
@@ -444,6 +454,11 @@ export function useSSE(onEvent?: SSEListener) {
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
           break
         case 'task_created':
+        case 'spec_updated':
+          // Evidence recorded or decided, and a recording run's end, arrive here: each is part of a
+          // task's story. The spec page's own listener (`useSpecEvents`) covers the spec queries.
+          invalidateTaskStories(queryClient, pid)
+          break
         case 'task_updated':
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
@@ -510,6 +525,8 @@ export function useSSE(onEvent?: SSEListener) {
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'accounting'] })
           queryClient.invalidateQueries({ queryKey: ['projects'] })
+          // A run belongs to a task's story (its cost, its duration); an open drawer refetches it.
+          invalidateTaskStories(queryClient, pid)
           // F250: a turn's checkout is provisioned before `run_started` is sent, and its snapshot
           // commit lands before the terminal event, which is what moves a conflict. Only a mounted
           // Worktrees panel refetches, so the merge-tree check costs nothing while it is closed.

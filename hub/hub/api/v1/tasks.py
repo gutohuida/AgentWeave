@@ -1986,6 +1986,28 @@ def _transition_view(
     }
 
 
+@router.get("/{task_id}/story")
+async def task_story(
+    task_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Everything that happened to this task, oldest first, with a summary on top
+    (`a-tasks-whole-story-is-in-its-drawer`, slice task-story of the visibility roadmap).
+
+    One read for the drawer's timeline: transitions with override reasons, runs with model, duration
+    and cost, evidence with its wording, output, diff pointer and every review, check runs, merges,
+    divergences and the questions it waited on. 404 on an unknown task.
+    """
+    from ... import task_story as story_module
+
+    project_id, _ = project
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return await story_module.story_for(session, task)
+
+
 @router.get("/{task_id}/transitions")
 async def task_transitions(
     task_id: str,
