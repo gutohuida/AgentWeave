@@ -419,6 +419,62 @@
       "requirement": "within-one-line-of-work-the-later-commit-is-the-one-merged",
       "then": "the preview lists the author's commit, not its parent",
       "when": "the operator opens the approval preview for a task whose accepted footprints are an author's commit and a later-recorded reviewer's footprint of its parent, on the same line of work"
+    },
+    {
+      "given": "a completed task under review with two awaiting pieces recorded for it by its builder, and no agent holding the grant",
+      "key": "the-reviewers-verdict-decides-the-tasks-evidence-approve",
+      "requirement": "the-reviewers-verdict-decides-the-tasks-evidence-approve-accepts",
+      "then": "both pieces are accepted by the reviewer with the notes as reason, the task is approved and its commit integrated",
+      "when": "the reviewer approves it with notes"
+    },
+    {
+      "given": "an awaiting piece recorded by the approving agent",
+      "key": "the-reviewers-verdict-decides-the-tasks-evidence-self",
+      "requirement": "the-reviewers-verdict-decides-the-tasks-evidence-approve-accepts",
+      "then": "that piece stays awaiting and the gate decides as before",
+      "when": "that agent approves the task"
+    },
+    {
+      "given": "an awaiting piece recorded for another task serving the same requirement",
+      "key": "the-reviewers-verdict-decides-the-tasks-evidence-other-task",
+      "requirement": "the-reviewers-verdict-decides-the-tasks-evidence-approve-accepts",
+      "then": "that piece stays awaiting",
+      "when": "this task is approved"
+    },
+    {
+      "given": "a task whose work conflicts with main and one awaiting piece",
+      "key": "the-reviewers-verdict-decides-the-tasks-evidence-rollback",
+      "requirement": "the-reviewers-verdict-decides-the-tasks-ev-refusal-keeps-nothing",
+      "then": "the approval is refused naming the conflict and the piece is still awaiting with no review row",
+      "when": "the reviewer approves it"
+    },
+    {
+      "given": "a completed task with one awaiting piece",
+      "key": "the-reviewers-verdict-decides-the-tasks-evidence-sendback",
+      "requirement": "the-reviewers-verdict-decides-the-tasks-evidenc-sendback-rejects",
+      "then": "the piece is rejected by the reviewer with the notes as reason",
+      "when": "the reviewer sends it back with notes"
+    },
+    {
+      "given": "a completed task with awaiting evidence of its own and an ungranted reviewer",
+      "key": "the-reviewers-verdict-decides-the-tasks-evidence-hold",
+      "requirement": "the-reviewers-verdict-decides-the-tasks-evidenc-no-operator-hold",
+      "then": "no hold is returned and the briefing says the verdict decides the evidence",
+      "when": "the hold is asked for and the briefing built"
+    },
+    {
+      "given": "an approved task with accepted evidence",
+      "key": "the-reviewers-verdict-decides-the-tasks-evidence-overturn",
+      "requirement": "the-reviewers-verdict-decides-the-tasks-evide-operator-overturns",
+      "then": "the task is revision_needed, moved by the operator",
+      "when": "the operator rejects a piece with a reason"
+    },
+    {
+      "given": "a scratch Hub, Haiku builder and tester, no grant",
+      "key": "the-reviewers-verdict-decides-the-tasks-evidence-drive",
+      "requirement": "the-reviewers-verdict-decides-the-tasks-evidence-approve-accepts",
+      "then": "the approve leg ends approved, accepted by the tester and merged with nothing surfaced, and the send-back leg ends revision_needed with the evidence rejected by the tester",
+      "when": "scripts/drive/d1017_agentic_evidence.py runs"
     }
   ],
   "algorithms": [],
@@ -431,7 +487,12 @@
       "FR-13": "03a6d83abcaa4ffd5c02c5e0a25399fb75ce0644436c6949405f9f9bffdcf95b",
       "FR-14": "97d51715c724b52b3ad5c9e56482cff95d31a600deebc6bfbccfca3df6b8aaae",
       "FR-15": "d60b4096b6e56a0ff6f7d32a686d005a80f72f0f5b082afe029f554d73291a76",
+      "FR-16": "cbfa83b7211c5571ebb4b032696f3172c811bef2d5b8081d9de9867005c26379",
+      "FR-17": "9597ed85208925ac4963b3bfe338afa0aefcf15dee17137781e2f427362b30bb",
+      "FR-18": "54e794eee8a7e456a8e7fce798950e9cd8956f0543e7dc61d376b4459e6d931d",
+      "FR-19": "09b154b9022300549c07a063879de2dc34a44e18045d5b4f61bd463d8e3038fb",
       "FR-2": "29fcc5dfa17eabebcc5121d3f7d04d71b8b976d99f0471f3a9fab1d4172b4eb7",
+      "FR-20": "b9abb02bf69102d020039af301ffcf8305216a31de651e3d517792133c17ff81",
       "FR-3": "ea10ae2d13ef75727bc347849a7e6b3da5a375f39022387639c3c47473f491da",
       "FR-4": "dedd86d802dec61781970f2c835757f62db654878b4c88a6b804e1553605cdd3",
       "FR-5": "01a4e34bc4cb9b1aa638c304b0ae3bdbcb9d4a6af9be3940c48cd438f0c1de34",
@@ -440,7 +501,7 @@
       "FR-8": "c83866d2addda80b7e8b19a54949421736b865b200977b576eb0272189c4cfb5",
       "FR-9": "6fd53c789afe39be13a8ea2194f05b787e9729d509c1b621a17150e6b4810303"
     },
-    "high_water": 15,
+    "high_water": 20,
     "requirements": {
       "accepting-evidence-attempts-the-integrations-that-wanted-it": "FR-9",
       "an-integration-that-cannot-proceed-does-not-block-approval": "FR-3",
@@ -454,6 +515,11 @@
       "n2": "FR-14",
       "naming-the-main-branch-attempts-the-integrations-that-wanted": "FR-7",
       "the-approval-preview-says-whether-the-work-would-merge-clean": "FR-10",
+      "the-reviewers-verdict-decides-the-tasks-ev-refusal-keeps-nothing": "FR-17",
+      "the-reviewers-verdict-decides-the-tasks-evide-operator-overturns": "FR-20",
+      "the-reviewers-verdict-decides-the-tasks-evidenc-no-operator-hold": "FR-19",
+      "the-reviewers-verdict-decides-the-tasks-evidenc-sendback-rejects": "FR-18",
+      "the-reviewers-verdict-decides-the-tasks-evidence-approve-accepts": "FR-16",
       "within-one-line-of-work-the-later-commit-is-the-one-merged": "FR-15",
       "work-already-in-the-main-line-is-not-reported-as-merged": "FR-5",
       "work-that-no-evidence-governs-is-integrated-from-the-task-s-": "FR-8"
@@ -580,6 +646,41 @@
       "party": null,
       "rationale": "Merging a commit merges its ancestors, so the descendant is the whole of the work; recording order alone would let a review of an earlier commit displace newer work.",
       "statement": "Where two accepted footprints name the same line of work, approval SHALL integrate the one whose commit contains the other, else the later recorded; footprints naming no line of work SHALL each be integrated unless another contains them, with a shared commit integrated once and an undecidable pair both integrated."
+    },
+    {
+      "key": "the-reviewers-verdict-decides-the-tasks-evidence-approve-accepts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The reviewer has judged the work the evidence demonstrates; a second decision by someone else is what stalled Terra.",
+      "statement": "When a task moves to approved, every piece of evidence recorded for that task that is still awaiting MUST be accepted by the approving actor in the same transaction, its review reason being the verdict's notes or, without notes, a sentence naming the approval, except a piece the approving agent recorded itself or whose recording run is still live."
+    },
+    {
+      "key": "the-reviewers-verdict-decides-the-tasks-ev-refusal-keeps-nothing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the approval is refused for any reason, no acceptance made for it MUST persist, and the refusal MUST name the real reason rather than the evidence it would have accepted."
+    },
+    {
+      "key": "the-reviewers-verdict-decides-the-tasks-evidenc-sendback-rejects",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A rejection is the author's signal of what to fix.",
+      "statement": "When a task moves to revision_needed or rejected, every awaiting piece of evidence recorded for that task MUST be rejected by the acting actor, its reason being the verdict's notes or, without notes, a sentence naming the verdict, except a piece the acting agent recorded itself or whose recording run is still live."
+    },
+    {
+      "key": "the-reviewers-verdict-decides-the-tasks-evidenc-no-operator-hold",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An approval MUST NOT be held for the operator, and a review briefing MUST NOT tell the reviewer that deciding evidence is the operator's, because of evidence recorded for the task under review; the briefing MUST say that the verdict decides that evidence."
+    },
+    {
+      "key": "the-reviewers-verdict-decides-the-tasks-evide-operator-overturns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator leaves the gate but keeps the last word.",
+      "statement": "When the operator rejects an accepted piece of evidence whose task is approved, the task MUST move to revision_needed with the operator as actor."
     }
   ],
   "schema_version": 1,

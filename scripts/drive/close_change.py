@@ -57,6 +57,8 @@ HELD_TESTS = "hub/tests/test_a_held_successor_waits_for_continue.py"
 HELD_DRIVE = "scripts/drive/d1015_f598_held_successor.py"
 JUDGE_TESTS = "hub/tests/test_the_workspace_judge_reads_paths_not_patterns.py"
 JUDGE_DRIVE = "scripts/drive/d1015_judge_wire.py"
+VERDICT_TESTS = "hub/tests/test_the_reviewers_verdict_decides_the_tasks_evidence.py"
+VERDICT_DRIVE = "scripts/drive/d1017_agentic_evidence.py"
 TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
 TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
@@ -1523,6 +1525,29 @@ CHANGES = {
              "2.1.301 ran haiku and claude-haiku-5-5 as claude-haiku-5-5 at 1,000,000."),
         ],
     },
+    "fverdict": {
+        "document": "spec/changes/the-reviewers-verdict-decides-the-tasks-evidence/spec.json",
+        "commit": "8f56834",
+        "tasks": ["task-79473df39fa2", "task-efe790484629", "task-800d1c645b4e"],
+        "evidence": [
+            ("FR-1", "task-efe790484629", "test_result", VERDICT_TESTS,
+             "Approving (agent or operator) accepts the task's own awaiting pieces with the notes, "
+             "or a sentence naming the approval; a self-recorded piece and another task's piece are "
+             "left. Drive d1017: the tester's approval accepted with its notes and merged."),
+            ("FR-2", "task-efe790484629", "test_result", VERDICT_TESTS,
+             "A conflict with main refuses naming the conflict; the piece stays awaiting with no "
+             "review row (acceptance inside the gate's savepoint)."),
+            ("FR-3", "task-efe790484629", "test_result", VERDICT_DRIVE,
+             "Sending back rejects with the notes, or a sentence naming the verdict. Drive d1017: "
+             "the send-back leg's evidence rejected by the tester with its notes (FAILED before)."),
+            ("FR-4", "task-efe790484629", "test_result", VERDICT_TESTS,
+             "No hold for the task's own evidence; the briefing says the verdict decides it. Unbound "
+             "and other-task pieces still hold (test_a_review_no_reviewer_can_approve_*: 16 pass)."),
+            ("FR-5", "task-efe790484629", "test_result", VERDICT_TESTS,
+             "The operator rejecting an accepted piece of an approved task moves it to "
+             "revision_needed as the operator."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1579,6 +1604,7 @@ CHANGE_FOLDS = {
     "f662": 'model-catalog',
     "f662b": 'model-catalog',
     "f665": 'usage-accounting',
+    "fverdict": 'approval-integration',
     "f660": {
         'turn-outcome-visibility': ['stop-reason-recorded', 'divergence-names-refusal'],
         'agent-run-sandboxing': [
