@@ -659,6 +659,20 @@
       "requirement": "worker-spend-counts-aga-automatic-checkpoint-warns-at-exhaustion",
       "then": "no checkpoint row, warning due (dismissal and final warning honoured); the note stays unconsumed",
       "when": "a reading crosses the threshold; the handover is considered"
+    },
+    {
+      "given": "notes, one consumed by a checkpoint, and proposals accepted and rejected with reasons",
+      "key": "the-rest-of-what-the-hub-records-becomes-reachable-routes",
+      "requirement": "the-rest-of-what-the-hub-records-becomes-reachable-notes-route",
+      "then": "notes come oldest first naming the consuming checkpoint and resolved proposals carry their reasons, pending stays the default",
+      "when": "the routes are read"
+    },
+    {
+      "given": "the Terra replica and a scratch Hub seeded with check runs and resolved proposals",
+      "key": "the-rest-of-what-the-hub-records-becomes-reachable-drive",
+      "requirement": "the-rest-of-what-the-hub-records-becomes-reach-checkpoints-panel",
+      "then": "a conversation's checkpoints panel shows its notes, the story's transitions and runs open their conversation, the checks row lists the earlier runs with exit codes, and the proposals panel lists the resolved ones with reasons",
+      "when": "scripts/drive/d1017_hidden_data_screens.py runs"
     }
   ],
   "algorithms": [],
@@ -688,9 +702,11 @@
       "FR-34": "aaf187123a2eca27ac53bc4806831272d35248ccc2a27b0079bfed644077bc68",
       "FR-35": "1eccd6170bd3bae70eb1eada60a8790f262d37ea8e000659025f892656da09b2",
       "FR-36": "d1a07c35c666563a295143673dde06a4a35947607a299fff992a9693102f3223",
-      "FR-37": "fe7552644a58e21f5c93cf6af29969d0fa17766bdf2cbdf100e165a832011127"
+      "FR-37": "fe7552644a58e21f5c93cf6af29969d0fa17766bdf2cbdf100e165a832011127",
+      "FR-38": "05b7b9a73bbe3ed1ccc123e5170d48cfbd5be5c1b0e71bdaf3c9ea2b6cf41e63",
+      "FR-39": "51806a4bdb651f67e9df377b81c09e82e8b5bfdf3d7be075af44fc9f0bcf4235"
     },
-    "high_water": 37,
+    "high_water": 39,
     "requirements": {
       "a-checkpoint-cites-observations-that-remain-exactly-recovera": "FR-19",
       "a-checkpoint-is-a-durable-hub-record-not-a-file-an-agent-is-": "FR-13",
@@ -713,6 +729,8 @@
       "n6": "FR-35",
       "reading-a-checkpoint-and-recalling-raw-observations-are-sepa": "FR-20",
       "the-agent-contributes-notes-that-the-hub-treats-as-input-rat": "FR-17",
+      "the-rest-of-what-the-hub-records-becomes-reach-checkpoints-panel": "FR-39",
+      "the-rest-of-what-the-hub-records-becomes-reachable-notes-route": "FR-38",
       "the-threshold-the-notes-point-and-the-final-warning-are-plac": "FR-28",
       "worker-spend-counts-aga-automatic-checkpoint-warns-at-exhaustion": "FR-37"
     },
@@ -907,6 +925,20 @@
       "party": null,
       "rationale": "An unwritten checkpoint made at exhaustion would become the next checkpoint's anchor and consume a handover's notes.",
       "statement": "At exhaustion (or an unreadable budget) an automatic context-pressure checkpoint MUST NOT be generated: that reading MUST behave as under the offered policy (the due warning, a dismissal honoured, the final warning near the window); and a flow handover MUST decline without creating a checkpoint, leaving the author's note unconsumed."
+    },
+    {
+      "key": "the-rest-of-what-the-hub-records-becomes-reachable-notes-route",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Notes had a write route and no read route.",
+      "statement": "GET /conversations/{id}/checkpoint-notes MUST return the conversation's checkpoint notes oldest first with intent, suspicions, warnings, agent, run and the checkpoint that consumed each, and 404 for a conversation of another project."
+    },
+    {
+      "key": "the-rest-of-what-the-hub-records-becomes-reach-checkpoints-panel",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A checkpoint nobody can read is the defect checkpoints exist to remove.",
+      "statement": "A conversation MUST offer its checkpoints and notes, each checkpoint showing its body, files changed, open questions, citations and probe verdict with findings."
     }
   ],
   "schema_version": 1,

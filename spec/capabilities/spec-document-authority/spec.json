@@ -1812,6 +1812,20 @@
       "requirement": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
       "then": "the live document is unchanged and proposals are recorded",
       "when": "an agent submits changed content"
+    },
+    {
+      "given": "a pending, an accepted and a rejected proposal",
+      "key": "the-rest-of-what-the-hub-records-becomes-reachab-proposals-route",
+      "requirement": "the-rest-of-what-the-hub-records-becomes-reac-resolved-proposals",
+      "then": "each answer holds exactly the matching proposals",
+      "when": "each status is asked for"
+    },
+    {
+      "given": "resolved proposals",
+      "key": "the-rest-of-what-the-hub-records-becomes-reachable-history-unit",
+      "requirement": "the-rest-of-what-the-hub-records-becomes-reach-proposals-history",
+      "then": "each shows its outcome, resolver and reason",
+      "when": "the panel renders"
     }
   ],
   "algorithms": [
@@ -1915,6 +1929,8 @@
       "FR-182": "323877dbceab2c6de70f60964ab2dda5f0942e6941b7be852280d3a834f52491",
       "FR-183": "80aef5022cd7a3254a0c5ba9d6080a28afa838c5b86bb27fc46a778d68f8ed8c",
       "FR-184": "7d414dcfe64404c7a0656efd7c503af07fad5fccfe8c0658c6be400d3b5b13fa",
+      "FR-185": "251ed055e03cc1afe843819037b55aeac5c86ec549c72e1303403854d0aa0009",
+      "FR-186": "995c6382e942a35b6741fc5678c3cf7cab6c3f7db4ae73461121eb4c8ade1f68",
       "FR-39": "bbd4e97f468c77548f230f318d682f8d061e41f6cd8ddffd2863264e6715039b",
       "FR-40": "77600ef42b7181d6b33c20ea6a1a12f814e8d6dce4e32d030f372a46c4f58dce",
       "FR-41": "936b6c50917eaa5d2816907e84de1a332baf568b8313a5c9ef2594e7667a2b0a",
@@ -1977,7 +1993,7 @@
       "FR-98": "d60b4096b6e56a0ff6f7d32a686d005a80f72f0f5b082afe029f554d73291a76",
       "FR-99": "e7bbabeed4bb05de59733e94a0b7512c30c5784ba4fa62152dce7263fb048d91"
     },
-    "high_water": 184,
+    "high_water": 186,
     "requirements": {
       "a-capability-can-be-retired-app": "FR-137",
       "a-capability-can-be-retired-frozen": "FR-135",
@@ -2091,6 +2107,8 @@
       "the-payload-contract-is-versioned-and-forward-compatible": "FR-42",
       "the-rendered-document-shares-the-hub-s-theme-not-a-colour-sc": "FR-76",
       "the-rendered-document-visually-distinguishes-requirement-str": "FR-77",
+      "the-rest-of-what-the-hub-records-becomes-reac-resolved-proposals": "FR-185",
+      "the-rest-of-what-the-hub-records-becomes-reach-proposals-history": "FR-186",
       "unordered-tasks-sharing-a-file-are-warned": "FR-108"
     },
     "retired": {
@@ -2948,6 +2966,20 @@
       "party": null,
       "rationale": "A defect found after fold, or by the operator, is otherwise invisible to the report.",
       "statement": "The operator MUST be able to record a defect against a change with a summary and the step that caught it: a step of the project's journey, or build, review, test, reconcile or after-fold."
+    },
+    {
+      "key": "the-rest-of-what-the-hub-records-becomes-reac-resolved-proposals",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "GET /documents/{path}/proposals MUST accept status pending, resolved or all, keep pending as the default, and return resolved proposals with their resolver, time and reason."
+    },
+    {
+      "key": "the-rest-of-what-the-hub-records-becomes-reach-proposals-history",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The spec proposals panel MUST list resolved proposals with their outcome, who resolved them, when and the reason."
     }
   ],
   "schema_version": 1,

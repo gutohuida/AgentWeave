@@ -832,6 +832,13 @@
       "requirement": "a-tasks-whole-story-is-in-its-drawer-live",
       "then": "the run and its evidence appear in the open story without a reload, marked fresh",
       "when": "scripts/drive/d1017_task_story_live.py runs"
+    },
+    {
+      "given": "a story whose transition names a run",
+      "key": "the-rest-of-what-the-hub-records-becomes-reachable-links-unit",
+      "requirement": "the-rest-of-what-the-hub-records-becomes-reachable-run-links",
+      "then": "the transition links to that run's conversation",
+      "when": "it renders"
     }
   ],
   "algorithms": [],
@@ -842,6 +849,7 @@
       "FR-102": "7578738d779b4481679fe8399901b5a4a45c51a1353cc46e48ce37c4fce7cedf",
       "FR-103": "c2ef7d821f2788c1c8ac53019cb98084ab614131b881ee3a08300c8e6a33abf6",
       "FR-104": "628c05eb28859f1abb4325a6f5e8e9db1e40dee645f5652fcd6e17299e2e492c",
+      "FR-105": "2b4698fbad2df2178097dbbc5509df5848f7c69183e8c0104046e19299c224a2",
       "FR-33": "7c740474881186d7a0e928ab0150619be41407ca2768ef98b31ee72ba673aef9",
       "FR-34": "8a8faac0eea8d9531c99a6f9bc479c464c90c9eee149933bce352537b1e5a451",
       "FR-35": "c4e50307b122c0e1381d35e14907fc5c648a211171aaff447c7b90087fb37af2",
@@ -910,7 +918,7 @@
       "FR-98": "6fd361c52514449bab9c7e50f5b55ac9ef41f4d90d4ef7c6ad650e916a947525",
       "FR-99": "cb3b52213f3a9755eb9ffb3befd98e80ea6ea1a871fea4c79ea651c4643fea43"
     },
-    "high_water": 104,
+    "high_water": 105,
     "requirements": {
       "a-move-a-scheduled-firing-makes-is-recorded-as-that-firing-s": "FR-82",
       "a-run-may-only-complete-the-task-it-holds": "FR-72",
@@ -948,6 +956,7 @@
       "the-operator-can-delete-a-document-a-task-or-an-archived-ag-task": "FR-89",
       "the-operator-can-perform-every-transition-reserved-to-them": "FR-35",
       "the-operator-can-rename-a-task": "FR-84",
+      "the-rest-of-what-the-hub-records-becomes-reachable-run-links": "FR-105",
       "the-system-may-cause-a-transition-without-becoming-an-actor": "FR-42",
       "the-task-list-s-default-view-retires-completed-work-from-arc": "FR-62",
       "work-that-proceeded-without-an-answer-says-so-for-good": "FR-76"
@@ -1285,6 +1294,13 @@
       "party": null,
       "rationale": "vis-D8",
       "statement": "Every animation of the story MUST be absent under prefers-reduced-motion, with every event visible in the first rendered frame."
+    },
+    {
+      "key": "the-rest-of-what-the-hub-records-becomes-reachable-run-links",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "run_id was returned and ignored.",
+      "statement": "A transition made by a run, and a run, in the task story MUST link to that run's conversation."
     }
   ],
   "schema_version": 1,

@@ -215,6 +215,13 @@
       "requirement": "a-check-that-fails-on-main-too-is-not-the-tasks-land",
       "then": "the task is approved and its transition records the reason",
       "when": "the operator presses Land with an override reason"
+    },
+    {
+      "given": "three runs in the route's order",
+      "key": "the-rest-of-what-the-hub-records-becomes-reachable-checks-unit",
+      "requirement": "the-rest-of-what-the-hub-records-becomes-reachabl-checks-history",
+      "then": "the newest leads and the two earlier runs are listed with each check's exit code and duration",
+      "when": "the checks row renders and is opened"
     }
   ],
   "algorithms": [],
@@ -228,6 +235,7 @@
       "FR-14": "4cedcefecfbfee5a2acddf8d43ef8ab49daf0c66d69786bd49a45561e13c6c05",
       "FR-15": "1d6e7d8db7c5659f9524c11707ff3e9675365040ba1a7c2b27159642e0921baa",
       "FR-16": "828a14f8104a9fa5f28f5cebbe5e6468ce2093038f449f43d338ab76297f4ab6",
+      "FR-17": "8fe5fca7dfbfb07807f1ddbec601e9b26649e33c8448dc95ed10da16d7817efd",
       "FR-2": "b413f57ebcba36139e13ec83c9178aae38d9e4375281f710036602898530effa",
       "FR-3": "c90e76333fc87d07bd6ceb18b914cf94e00dbc30ede4de0b5209945bc76859f5",
       "FR-4": "b74b03cef2a76c22c2aa71334059cdf8cbe93c4f414646b91be3719f342b8015",
@@ -237,7 +245,7 @@
       "FR-8": "8aea269a27df923c8e3cec427fe2eabafe42d6d7de4cfdeff6eb4cb9980825f9",
       "FR-9": "854991160e82881901ab1fac712c64fd0b2d738ebf6882854911a222d5105cf6"
     },
-    "high_water": 16,
+    "high_water": 17,
     "requirements": {
       "a-check-run-is-never-lost-silently": "FR-3",
       "a-check-runs-with-the-hub-s-environment-minus-the-hub-s-cred": "FR-4",
@@ -254,7 +262,8 @@
       "n5": "FR-9",
       "n6": "FR-10",
       "n7": "FR-11",
-      "the-operator-may-approve-over-failing-checks-with-a-recorded": "FR-13"
+      "the-operator-may-approve-over-failing-checks-with-a-recorded": "FR-13",
+      "the-rest-of-what-the-hub-records-becomes-reachabl-checks-history": "FR-17"
     },
     "retired": {}
   },
@@ -391,6 +400,13 @@
       "party": null,
       "rationale": "The sweep's only exit took four PATCHes.",
       "statement": "POST /tasks/{id}/land MUST accept an optional override_checks_reason and apply it as the approval PATCH does, recording it on the transition."
+    },
+    {
+      "key": "the-rest-of-what-the-hub-records-becomes-reachabl-checks-history",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The task drawer's checks row MUST offer the task's earlier check runs, each with its state, time and every check's exit code and duration."
     }
   ],
   "schema_version": 1,
