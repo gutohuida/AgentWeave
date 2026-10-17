@@ -64,6 +64,8 @@ WORTH_DRIVE = "scripts/drive/d1017_evidence_worth_reading.py"
 STORY_TESTS = "hub/tests/test_a_tasks_whole_story_is_in_its_drawer.py"
 STORY_SCREENS = "scripts/drive/d1017_task_story_screens.py"
 STORY_LIVE = "scripts/drive/d1017_task_story_live.py"
+BROWSER_TESTS = "hub/ui/src/__tests__/evidenceBrowser.test.tsx"
+BROWSER_SCREENS = "scripts/drive/d1017_evidence_browser_screens.py"
 TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
 TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
@@ -1598,6 +1600,31 @@ CHANGES = {
              "Reduced motion on the replica: every event at opacity 1 in the first frame."),
         ],
     },
+    "fbrowser": {
+        "document": "spec/changes/every-piece-of-evidence-in-one-place/spec.json",
+        "commit": "d13db89",
+        "tasks": ["task-5857d47404a4"],
+        "evidence": [
+            ("FR-1", "task-5857d47404a4", "test_result", BROWSER_SCREENS,
+             "On the Terra replica ?tab=spec&view=evidence lists all 44 pieces and the Spec rail "
+             "offers Evidence with the count; rows read newest first (evidenceBrowser.test.tsx "
+             "pins it against the route's oldest-first order)."),
+            ("FR-2", "task-5857d47404a4", "test_result", BROWSER_TESTS,
+             "State chips count 3/1 and the rejected chip narrows to one row; search finds a "
+             "command; the agent filter narrows; grouping by task works. Replica: rejected = 3."),
+            ("FR-3", "task-5857d47404a4", "test_result", BROWSER_TESTS,
+             "Two documents' FR-1 stay separate groups named by document; focus spreq-watch-1 "
+             "shows only that document's pieces, chip 'FR-1 · Folder watching'. Replica: FR-15's "
+             "link focuses spreq-b7b6d65b4e65, one group."),
+            ("FR-4", "task-5857d47404a4", "test_result", WORTH_TESTS,
+             "requirement.document == {path, title} on every listed piece; failed before the "
+             "builder change, passes after."),
+            ("FR-5", "task-5857d47404a4", "test_result", BROWSER_SCREENS,
+             "Replica: the story's See all opens focus=task-87ce01a67b0c with its 10 pieces; the "
+             "coverage row's 'open in Evidence' opens FR-15's. The approval-report and job links "
+             "share EvidenceLink (unit-tested) and were not seen live: the replica has no such state."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1657,6 +1684,7 @@ CHANGE_FOLDS = {
     "fverdict": 'approval-integration',
     "fworth": 'requirement-traceability',
     "fstory": 'task-lifecycle-governance',
+    "fbrowser": 'requirement-traceability',
     "f660": {
         'turn-outcome-visibility': ['stop-reason-recorded', 'divergence-names-refusal'],
         'agent-run-sandboxing': [
