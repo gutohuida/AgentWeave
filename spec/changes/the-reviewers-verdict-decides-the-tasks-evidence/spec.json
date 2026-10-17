@@ -1,0 +1,213 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a completed task under review with two awaiting pieces recorded for it by its builder, and no agent holding the grant",
+      "key": "approve",
+      "requirement": "approve-accepts",
+      "then": "both pieces are accepted by the reviewer with the notes as reason, the task is approved and its commit integrated",
+      "when": "the reviewer approves it with notes"
+    },
+    {
+      "given": "an awaiting piece recorded by the approving agent",
+      "key": "self",
+      "requirement": "approve-accepts",
+      "then": "that piece stays awaiting and the gate decides as before",
+      "when": "that agent approves the task"
+    },
+    {
+      "given": "an awaiting piece recorded for another task serving the same requirement",
+      "key": "other-task",
+      "requirement": "approve-accepts",
+      "then": "that piece stays awaiting",
+      "when": "this task is approved"
+    },
+    {
+      "given": "a task whose work conflicts with main and one awaiting piece",
+      "key": "rollback",
+      "requirement": "refusal-keeps-nothing",
+      "then": "the approval is refused naming the conflict and the piece is still awaiting with no review row",
+      "when": "the reviewer approves it"
+    },
+    {
+      "given": "a completed task with one awaiting piece",
+      "key": "sendback",
+      "requirement": "sendback-rejects",
+      "then": "the piece is rejected by the reviewer with the notes as reason",
+      "when": "the reviewer sends it back with notes"
+    },
+    {
+      "given": "a completed task with awaiting evidence of its own and an ungranted reviewer",
+      "key": "hold",
+      "requirement": "no-operator-hold",
+      "then": "no hold is returned and the briefing says the verdict decides the evidence",
+      "when": "the hold is asked for and the briefing built"
+    },
+    {
+      "given": "an approved task with accepted evidence",
+      "key": "overturn",
+      "requirement": "operator-overturns",
+      "then": "the task is revision_needed, moved by the operator",
+      "when": "the operator rejects a piece with a reason"
+    },
+    {
+      "given": "a scratch Hub, Haiku builder and tester, no grant",
+      "key": "drive",
+      "requirement": "approve-accepts",
+      "then": "the approve leg ends approved, accepted by the tester and merged with nothing surfaced, and the send-back leg ends revision_needed with the evidence rejected by the tester",
+      "when": "scripts/drive/d1017_agentic_evidence.py runs"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "cbfa83b7211c5571ebb4b032696f3172c811bef2d5b8081d9de9867005c26379",
+      "FR-2": "9597ed85208925ac4963b3bfe338afa0aefcf15dee17137781e2f427362b30bb",
+      "FR-3": "54e794eee8a7e456a8e7fce798950e9cd8956f0543e7dc61d376b4459e6d931d",
+      "FR-4": "09b154b9022300549c07a063879de2dc34a44e18045d5b4f61bd463d8e3038fb",
+      "FR-5": "b9abb02bf69102d020039af301ffcf8305216a31de651e3d517792133c17ff81"
+    },
+    "high_water": 5,
+    "requirements": {
+      "approve-accepts": "FR-1",
+      "no-operator-hold": "FR-4",
+      "operator-overturns": "FR-5",
+      "refusal-keeps-nothing": "FR-2",
+      "sendback-rejects": "FR-3"
+    },
+    "retired": {}
+  },
+  "design": "D1 Inside the gate's savepoint. The acceptances are written in a nested transaction that also runs the gate, so a refused approval leaves nothing accepted and the gate reads the accepted state it will merge from. project_checks.schedule keys on the task, so a rollback leaves no dangling check row.\nD2 Only the task's own pieces (task_id equal to the task). Another task's piece serving the same requirement is that task's reviewer's to decide; the gate's mixed case already admits approval when something else merges.\nD3 The grant stays. decide_evidence and can_accept_evidence still work for pieces outside a review; nothing reads the grant on the verdict path.\nD4 Hazard and rollback. This changes what the approval gate admits, so what merges into main: an agent's approval now merges work whose evidence nobody else judged. Mitigation is the operator's overturn (operator-overturns). Rollback is reverting the commit; no migration, no data to undo (the review rows written stay true: they record who decided).",
+  "evidence": {
+    "checked": [
+      "hub/hub/task_transition_service.py:686 apply_transition and its gate call",
+      "hub/hub/requirement_gate.py:625 _check_unaccepted, :1048 _operator_only_remedy, :1067 approval_held_for_operator",
+      "hub/hub/requirement_evidence.py:1035 may_accept, :1053 decide",
+      "hub/hub/review_turn.py:255-330 the waiting-evidence sentence"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F672: on Terra a reviewer judged the work right, its approval was refused because 10 evidence pieces awaited a decision only the operator or a granted agent could make, the loop skipped with that sentence as the only record, and granting the right afterwards did not re-run the reviewer. Evidence is decided by a separate grant (agents.can_accept_evidence, requirement_evidence.may_accept) that nobody had given, while the reviewer already judges the same work. The operator decided (vis-D1, vis-D4, 2026-10-17) to remove themselves from evidence judgment: the reviewing agent's verdict decides the task's evidence. Tier 2: it changes what the approval gate admits and so what merges into main.",
+  "requirements": [
+    {
+      "key": "approve-accepts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The reviewer has judged the work the evidence demonstrates; a second decision by someone else is what stalled Terra.",
+      "statement": "When a task moves to approved, every piece of evidence recorded for that task that is still awaiting MUST be accepted by the approving actor in the same transaction, its review reason being the verdict's notes or, without notes, a sentence naming the approval, except a piece the approving agent recorded itself or whose recording run is still live."
+    },
+    {
+      "key": "refusal-keeps-nothing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the approval is refused for any reason, no acceptance made for it MUST persist, and the refusal MUST name the real reason rather than the evidence it would have accepted."
+    },
+    {
+      "key": "sendback-rejects",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A rejection is the author's signal of what to fix.",
+      "statement": "When a task moves to revision_needed or rejected, every awaiting piece of evidence recorded for that task MUST be rejected by the acting actor, its reason being the verdict's notes or, without notes, a sentence naming the verdict, except a piece the acting agent recorded itself or whose recording run is still live."
+    },
+    {
+      "key": "no-operator-hold",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An approval MUST NOT be held for the operator, and a review briefing MUST NOT tell the reviewer that deciding evidence is the operator's, because of evidence recorded for the task under review; the briefing MUST say that the verdict decides that evidence."
+    },
+    {
+      "key": "operator-overturns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator leaves the gate but keeps the last word.",
+      "statement": "When the operator rejects an accepted piece of evidence whose task is approved, the task MUST move to revision_needed with the operator as actor."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "apply_transition: a move to approved accepts the task's own awaiting evidence inside the gate's savepoint; a move to revision_needed or rejected rejects it",
+      "approval_held_for_operator and the review briefing stop treating the task's own awaiting evidence as the operator's",
+      "The operator rejecting an accepted piece of an approved task reopens the task"
+    ],
+    "non_goals": [
+      "Removing the can_accept_evidence grant or decide_evidence (still usable for evidence outside a review)",
+      "Evidence recorded by another task serving the same requirement (that task's verdict decides it)",
+      "Any migration or new column"
+    ]
+  },
+  "summary": "Approving a task accepts the evidence it recorded and sending it back rejects it, so evidence never waits on the operator and a loop never stalls on it.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "hub/tests/test_the_reviewers_verdict_decides_the_tasks_evidence.py: criteria approve, self, other-task, rollback, sendback, hold, overturn; each fails on HEAD except the controls.",
+      "files": [
+        "hub/tests/test_the_reviewers_verdict_decides_the_tasks_evidence.py"
+      ],
+      "from": null,
+      "key": "tests",
+      "requirements": [
+        "approve-accepts",
+        "refusal-keeps-nothing",
+        "sendback-rejects",
+        "no-operator-hold",
+        "operator-overturns"
+      ],
+      "reviewer": null,
+      "title": "Failing tests for the verdict deciding evidence"
+    },
+    {
+      "depends_on": [
+        "tests"
+      ],
+      "description": "requirement_evidence.decide_with_verdict; apply_transition calls it inside a savepoint around the gate; the update route passes notes; approval_held_for_operator and review_turn's sentence; the decision route reopens an approved task on rejection.",
+      "files": [
+        "hub/hub/requirement_evidence.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/requirement_gate.py",
+        "hub/hub/review_turn.py",
+        "hub/hub/api/v1/spec.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "approve-accepts",
+        "refusal-keeps-nothing",
+        "sendback-rejects",
+        "no-operator-hold",
+        "operator-overturns"
+      ],
+      "reviewer": null,
+      "title": "The verdict decides the evidence"
+    },
+    {
+      "depends_on": [
+        "build"
+      ],
+      "description": "scripts/drive/d1017_agentic_evidence.py fails before the build and passes after.",
+      "files": [
+        "scripts/drive/d1017_agentic_evidence.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "approve-accepts",
+        "sendback-rejects"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive"
+    }
+  ],
+  "title": "The reviewer's verdict decides the task's evidence"
+}
