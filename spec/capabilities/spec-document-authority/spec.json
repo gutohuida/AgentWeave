@@ -1554,11 +1554,11 @@
     },
     {
       "checked_by": "agent",
-      "given": "a change-spec with tasks build then drive (drive depends on build), one with drive then build (build depends on drive), and one with a single task",
+      "given": "change-specs whose first task waits on another (drive depends on build), whose first task no later task waits on (drive and build independent), whose later task waits on the first (build depends on drive), and with a single task",
       "how_to_check": "Hub unit test",
       "key": "approve-lists-what-is-missing-and-can-approve-anyway-drive-first",
       "requirement": "approve-lists-what-is-missing-and-can-approve-anyway-gap-set",
-      "then": "only the first has no_acceptance_drive",
+      "then": "only the first two have no_acceptance_drive",
       "when": "the gaps are computed"
     },
     {
@@ -1911,7 +1911,7 @@
       "FR-164": "31f05e004911affa82d21a091ba2fdc442ceec15e81a201b04460aeed096dfae",
       "FR-165": "fb4385fae80fabd7daebda1bf56a852cf68d2a534a0923f6a62760a90bcbf17e",
       "FR-166": "c00583462d384bcf0d2512162a048cb539b1ffb6cf07673c9ee80ed49f97b375",
-      "FR-167": "8a5350dcb9e6338e7bd7b08068d07d4b4cbb0b57855b18fbfd57e34a39fff638",
+      "FR-167": "d9d7697a48a960bc28c63eb667e55e733037ae4b59f3ca40f717c017df95659d",
       "FR-168": "354d4827ef750d63b281c69a2550482410d84a97927bec6c54f4281c4335f428",
       "FR-169": "0665d2edd7f6f2441b97c007095f776945ae7bc96804dd96013427a855864d26",
       "FR-170": "89ef921afc2a88a24ac1703934b948763a970c2fd920a3fe0409f31ce7a475e9",
