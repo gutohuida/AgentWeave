@@ -1865,6 +1865,19 @@ async def _evidence_views(
         .scalars()
         .all()
     }
+    # FR-n repeats in every document, so a piece names the document its requirement is in.
+    documents = {
+        row.id: {"path": row.path, "title": row.title}
+        for row in (
+            await session.execute(
+                select(SpecDocument).where(
+                    SpecDocument.id.in_({r.document_id for r in requirements.values()})
+                )
+            )
+        )
+        .scalars()
+        .all()
+    }
     wording: Dict[str, Dict[str, Any]] = {}
     try:
         workspace = await project_workspace.resolve_project_workspace(session, project_id)
@@ -1915,6 +1928,7 @@ async def _evidence_views(
                         "statement": wording.get(requirement.document_id, {})
                         .get(requirement.key, {})
                         .get("statement"),
+                        "document": documents.get(requirement.document_id),
                     }
                     if requirement is not None
                     else None

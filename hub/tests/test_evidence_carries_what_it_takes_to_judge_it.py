@@ -18,6 +18,7 @@ from .test_task_integration import (
     AGENT_BRANCH,
     AGENT_EVIDENCE,
     BASE,
+    PATH,
     TASKS,
     commit_on_branch,
     drive_to,
@@ -141,6 +142,8 @@ async def test_a_piece_says_what_it_demonstrates_and_what_replaced_it(
     for row in (rows[older], rows[newer.json()["id"]]):
         assert row["requirement"]["identifier"] == "FR-1"
         assert row["requirement"]["statement"] == "It lists what is due today"
+        # FR-n repeats in every document; the piece names the one it is about (evidence browser).
+        assert row["requirement"]["document"] == {"path": PATH, "title": "Integration demo"}
     assert rows[older]["superseded_by"] == newer.json()["id"]
     assert rows[newer.json()["id"]]["superseded_by"] is None
 

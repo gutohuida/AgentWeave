@@ -102,8 +102,8 @@ export type WorkspaceDestination =
       document?: string | null
       anchor?: string | null
       // The Spec tab's evidence view (slice evidence-browser), and what it is focused on: a task id
-      // (`task-...`) or a requirement identifier (`FR-4`). Linkable, so every mention of evidence
-      // can open the pieces it means.
+      // (`task-...`) or a requirement's durable id (`spreq-...`; a bare `FR-4` still works, but
+      // repeats in every document). Linkable, so every mention of evidence opens the pieces it means.
       view?: 'evidence' | null
       focus?: string | null
     }

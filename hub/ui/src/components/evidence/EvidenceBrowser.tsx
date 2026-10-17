@@ -18,6 +18,18 @@ import { hubDate } from '@/lib/hubTime'
  */
 
 type StateFilter = 'all' | 'awaiting' | 'accepted' | 'rejected'
+
+/** What a focus names: a task (`task-…`), a requirement by its durable id (`spreq-…`, what links
+ *  send, since `FR-n` repeats in every document), or a bare identifier (an older link). */
+function matchesFocus(piece: EvidencePiece, focus: string): boolean {
+  if (focus.startsWith('task-')) return piece.task_id === focus
+  if (focus.startsWith('spreq-')) return piece.requirement_id === focus
+  return piece.requirement?.identifier === focus
+}
+
+function requirementKey(piece: EvidencePiece): string {
+  return piece.requirement_id ?? piece.requirement?.identifier ?? '—'
+}
 type Grouping = 'requirement' | 'task'
 
 const STATE_LABEL: Record<StateFilter, string> = {
@@ -152,9 +164,7 @@ export function EvidenceBrowser({
   const focused = useMemo(
     () =>
       focus
-        ? pieces.filter((p) =>
-            focus.startsWith('task-') ? p.task_id === focus : p.requirement?.identifier === focus,
-          )
+        ? pieces.filter((p) => matchesFocus(p, focus))
         : pieces,
     [pieces, focus],
   )
@@ -181,8 +191,7 @@ export function EvidenceBrowser({
   const groups = useMemo(() => {
     const byKey = new Map<string, EvidencePiece[]>()
     for (const piece of [...visible].reverse()) {
-      const key =
-        grouping === 'task' ? piece.task_id ?? '—' : piece.requirement?.identifier ?? '—'
+      const key = grouping === 'task' ? piece.task_id ?? '—' : requirementKey(piece)
       const list = byKey.get(key) ?? []
       list.push(piece)
       byKey.set(key, list)
@@ -190,10 +199,13 @@ export function EvidenceBrowser({
     return [...byKey.entries()]
   }, [visible, grouping])
 
+  const focusedRequirement = focus && !focus.startsWith('task-') ? focused[0]?.requirement : null
   const focusLabel = focus
     ? focus.startsWith('task-')
       ? tasks.get(focus)?.title ?? focus
-      : focus
+      : focusedRequirement
+        ? `${focusedRequirement.identifier}${focusedRequirement.document?.title ? ` · ${focusedRequirement.document.title}` : ''}`
+        : focus
     : null
   let rowIndex = 0
 
@@ -308,14 +320,20 @@ export function EvidenceBrowser({
         <div className="grid gap-6">
           {groups.map(([key, list]) => {
             const task = grouping === 'task' ? tasks.get(key) : undefined
-            const statement = grouping === 'requirement' ? list[0]?.requirement?.statement : null
+            const requirement = grouping === 'requirement' ? list[0]?.requirement : null
+            const statement = requirement?.statement ?? null
             return (
               <section key={key} className="aw-evidence-group" data-testid={`evidence-group-${key}`}>
                 <div className="aw-evidence-group-head">
                   {grouping === 'requirement' ? (
                     <>
-                      <span className="aw-evidence-req">{key}</span>
+                      <span className="aw-evidence-req">{requirement?.identifier ?? '—'}</span>
                       {statement ? <span className="aw-evidence-statement">{statement}</span> : null}
+                      {requirement?.document?.title ? (
+                        <span className="aw-tl-meta" title={requirement.document.path}>
+                          {requirement.document.title}
+                        </span>
+                      ) : null}
                     </>
                   ) : (
                     <>

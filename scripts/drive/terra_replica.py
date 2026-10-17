@@ -78,6 +78,11 @@ def clone_repositories(projects):
             git("clone", "-q", "--no-hardlinks", directory, str(dest))
             git("fetch", "-q", "origin", "+refs/heads/*:refs/heads/*", "--update-head-ok", cwd=dest)
             git("checkout", "-q", "master", cwd=dest)
+            # The Hub reads spec documents from the working tree, and Terra's has documents git
+            # never saw (an untracked change read "wording could not be read" on the clone).
+            source_spec = pathlib.Path(directory) / "spec"
+            if source_spec.is_dir():
+                shutil.copytree(source_spec, dest / "spec", dirs_exist_ok=True)
         else:
             dest = ROOT / f"empty-{project_id}"
             dest.mkdir()

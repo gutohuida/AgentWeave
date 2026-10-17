@@ -4,6 +4,7 @@ import { StatePill, type Tone } from '@/components/common/StatePill'
 import { Timeline, TimelineItem } from '@/components/common/Timeline'
 import { Expander } from '@/components/common/Expander'
 import { EvidenceProof as Proof, EvidenceReviews as Reviews } from '@/components/evidence/EvidenceProof'
+import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import { useTaskStory, type StoryEvent, type TaskStory as Story } from '@/api/tasks'
 import { hubDate } from '@/lib/hubTime'
 import { evidenceTone, statusTone } from '@/lib/storyTones'
@@ -98,7 +99,14 @@ function Summary({ story }: { story: Story }) {
         <span className="aw-story-value">{summary.runs}</span>
       </div>
       <div>
-        <span className="aw-story-label">Evidence</span>
+        <span className="aw-story-label aw-story-label-row">
+          Evidence
+          {accepted + awaiting + rejected > 0 ? (
+            <EvidenceLink focus={task.id} testId={`task-story-evidence-open-${task.id}`}>
+              See all
+            </EvidenceLink>
+          ) : null}
+        </span>
         <span className="aw-counts">
           {accepted + awaiting + rejected === 0 ? <small className="aw-tl-meta">none yet</small> : null}
           {accepted ? <span className="tone-green">{accepted} accepted</span> : null}

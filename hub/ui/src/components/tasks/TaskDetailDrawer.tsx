@@ -25,6 +25,7 @@ import { useSpecDocuments } from '@/api/spec'
 import { TaskTransitionHistory } from '@/components/tasks/TaskTransitionHistory'
 import { TaskChecksRow } from '@/components/tasks/TaskChecksRow'
 import { TaskStory } from '@/components/tasks/TaskStory'
+import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import { RowMenu } from '@/components/layout/RowMenu'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
@@ -160,6 +161,14 @@ function ApprovalReport({ taskId, entries }: { taskId: string; entries: Approval
             {entry.kind === 'requirement'
               ? `${entry.identifier || 'A requirement'} is ${entry.state.replace(/_/g, ' ')}: ${entry.remedy.replace(/\.+$/, '')}.`
               : `Evidence ${entry.evidence_id}${entry.identifier ? ` for ${entry.identifier}` : ''} is still awaiting review; ${entry.commit_sha ? `its commit ${entry.commit_sha.slice(0, 12)} merges` : 'it merges'}${entry.target_branch ? ` into ${entry.target_branch}` : ''} when it is accepted.`}
+            {entry.kind !== 'requirement' ? (
+              <>
+                {' '}
+                <EvidenceLink focus={taskId} testId={`task-approval-report-evidence-${taskId}-${index}`}>
+                  See it
+                </EvidenceLink>
+              </>
+            ) : null}
           </li>
         ))}
       </ul>

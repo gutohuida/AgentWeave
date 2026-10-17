@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { EvidencePieces } from './EvidencePieces'
+import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import { useSpecCoverage, type CoverageEntry } from '@/api/spec'
 
 /** Order and wording, highest precedence first. The labels say what the state *means* rather than
@@ -222,6 +223,14 @@ export function SpecCoverageBar({ path, onOpenTasks }: SpecCoverageBarProps) {
                     >
                       Evidence ({entry.evidence_count})
                     </button>
+                    {' · '}
+                    <EvidenceLink
+                      inline
+                      focus={entry.served_by?.requirement_id ?? entry.requirement_id}
+                      testId={`coverage-evidence-open-${entry.identifier}`}
+                    >
+                      open in Evidence
+                    </EvidenceLink>
                   </>
                 )}
                 {state ? <div style={{ paddingLeft: 12 }}>{state.why}</div> : null}

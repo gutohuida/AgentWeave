@@ -393,8 +393,15 @@ export interface EvidencePiece {
   command?: string | null
   output?: string | null
   covers?: 'full' | 'partial' | null
-  /** The requirement in the document's own words; the statement is null when it cannot be read. */
-  requirement?: { identifier: string; statement: string | null } | null
+  /** The durable requirement this piece is about; `FR-n` alone repeats in every document. */
+  requirement_id?: string
+  /** The requirement in the document's own words; the statement is null when it cannot be read.
+   *  `document` names which document's `FR-n` it is. */
+  requirement?: {
+    identifier: string
+    statement: string | null
+    document?: { path: string; title: string } | null
+  } | null
   /** The newest later piece for the same requirement and task, when one replaced this. */
   superseded_by?: string | null
 }

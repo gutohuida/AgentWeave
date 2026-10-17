@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Job, JobRun, useJobHistory } from '@/api/jobs'
 import { useTasks } from '@/api/tasks'
 import { hubDate } from '@/lib/hubTime'
+import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import { cronDayAmbiguity, describeCron } from '@/lib/cron'
 
 interface JobCardProps {
@@ -210,6 +211,12 @@ function RunHistory({ runs, isLoading }: { runs?: JobRun[]; isLoading?: boolean 
             >
               {run.error_summary}
             </span>
+          )}
+          {/* A firing held on evidence names it; the link opens what it is waiting on. */}
+          {(run.status === 'failed' || run.status === 'skipped') && /\bevidence\b/i.test(run.error_summary ?? '') && (
+            <EvidenceLink focus={null} testId={`job-run-evidence-${run.id}`}>
+              Evidence
+            </EvidenceLink>
           )}
           {/* The count design D6 records but nothing rendered until now. A continuing stall
               neither appends a row nor moves `fired_at`, which is what stops it burying real

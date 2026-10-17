@@ -1,0 +1,147 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "two documents each with an FR-1 and evidence in the route's order",
+      "key": "unit",
+      "requirement": "durable-focus",
+      "then": "the two FR-1 stay separate groups each named by its document, rows read newest first, and the focus shows only that document's pieces with the document in its label (evidenceBrowser.test.tsx)",
+      "when": "the browser renders unfocused and focused on one requirement id"
+    },
+    {
+      "given": "the same evidence",
+      "key": "filters-unit",
+      "requirement": "filters",
+      "then": "the counts match and the rows narrow accordingly",
+      "when": "a state chip, the agent filter and the search are used"
+    },
+    {
+      "given": "a piece recorded against FR-1 of a document",
+      "key": "route",
+      "requirement": "names-document",
+      "then": "its requirement block carries that document's path and title",
+      "when": "the project's evidence is listed"
+    },
+    {
+      "given": "the Terra replica",
+      "key": "replica",
+      "requirement": "cross-links",
+      "then": "the browser lists Terra's 44 pieces, the rejected chip narrows to 3, a task focus to 10, the story's See all opens that task's pieces, the coverage link for FR-15 focuses its durable id with one group and the document in the chip, and there is no console error",
+      "when": "scripts/drive/d1017_evidence_browser_screens.py runs"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "0b03602f71a4804af5d7d0b4dea02e5b8621f79c1bbe3b7268addef034579e28",
+      "FR-2": "b010488dece9bc8cfa21a106a87d4083e968162738e52c042cb540f1f588a115",
+      "FR-3": "283cff47099d4931872eac8430dec4a2a9ddc80372dcd257ad1ba2e5ae98e72f",
+      "FR-4": "76ce2282fea4abea7fbafc739f5343b32454b53a8f6651410c9827ac704e4065",
+      "FR-5": "d4cf5ffefec298b02f79b411b80302996c024fdd87d3d29fe50144030162e906"
+    },
+    "high_water": 5,
+    "requirements": {
+      "browser-view": "FR-1",
+      "cross-links": "FR-5",
+      "durable-focus": "FR-3",
+      "filters": "FR-2",
+      "names-document": "FR-4"
+    },
+    "retired": {}
+  },
+  "design": "D1 Focus by durable id. FR-n is per document, so links send the requirement id (spreq-...); a bare identifier is still accepted from older links. D2 Navigate without threading callbacks: goTo pushes the destination's URL and fires popstate, which the one navigation hook already handles, so any component can link to evidence. D3 The browser reverses the route's oldest-first order on purpose (what changed last reads first); its test pins that against the route's real order. D4 The job link is shown for a failed or skipped firing whose reason mentions evidence, unfocused, because a firing names no task.",
+  "evidence": {
+    "checked": [
+      "hub/hub/api/v1/spec.py _evidence_views",
+      "hub/ui/src/lib/navigation.ts",
+      "hub/ui/src/components/spec/SpecCoverageBar.tsx"
+    ],
+    "limits": [
+      "Built before this document was written; the acceptance drive was written alongside the build",
+      "The approval-report and job-firing links are unit-typed and rendered conditionally; neither was seen on the replica, which has no such state"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F672/F673: evidence was hard to find and hard to judge. It lived only in a collapsed coverage bar per document, and with vis-D1/vis-D4 the operator now inspects what agents decided rather than deciding it, so they need one place to look. Slice evidence-browser of roadmap spdoc-d882f76795b3. FR-n repeats in every document, so a requirement must be named by its durable id and its document.",
+  "requirements": [
+    {
+      "key": "browser-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Evidence had no place of its own.",
+      "statement": "The Spec tab MUST offer an evidence view listing every piece of the project's evidence, reachable by URL and from a Spec rail entry showing the project's count, newest first within groups ordered by their newest piece."
+    },
+    {
+      "key": "filters",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The evidence view MUST filter by review state with a count per state, by agent, and by a search over summary, locator, command and requirement wording, and MUST group by requirement or by task."
+    },
+    {
+      "key": "durable-focus",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "FR-n repeats in every document; focusing FR-4 gathered every document's FR-4.",
+      "statement": "A focus on a requirement MUST name it by its durable id and narrow to that requirement only, and the view MUST label requirement groups and the focus with the requirement's document."
+    },
+    {
+      "key": "names-document",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every evidence view the Hub returns MUST carry, in its requirement block, the document the requirement belongs to as its path and title."
+    },
+    {
+      "key": "cross-links",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Every place that says evidence should show it.",
+      "statement": "The coverage row of a requirement with evidence, the task story's evidence summary, the approval report's awaiting-evidence entry and a job firing whose reason mentions evidence MUST each link to the evidence view focused on what they mean."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A URL-backed evidence view on the Spec tab (?tab=spec&view=evidence[&focus=...]) and a Spec rail entry with the project's count",
+      "State filter chips with counts, an agent filter, search over summary, locator, command and wording, grouping by requirement or by task, rows opening into review history and proof",
+      "Each evidence view's requirement block names its document (path and title)",
+      "Links from the coverage row, the task story summary, the approval report's awaiting-evidence advisory, and a job firing whose reason mentions evidence"
+    ],
+    "non_goals": [
+      "Deciding evidence from the browser (vis-D1: agents decide, the operator inspects)",
+      "The requirement's revision history (slice requirement-story)"
+    ]
+  },
+  "summary": "A project-wide evidence browser on the Spec tab, filterable and linkable, that every mention of evidence elsewhere in the app opens focused on what it means.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "EvidenceBrowser and the Spec view (5c02b21, 9ceed90); the requirement block's document in _evidence_views; focus and grouping by requirement id; EvidenceLink and its four uses; the vitest file and the replica drive.",
+      "files": [
+        "hub/ui/src/components/evidence/EvidenceBrowser.tsx",
+        "hub/ui/src/components/evidence/EvidenceLink.tsx",
+        "hub/hub/api/v1/spec.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "browser-view",
+        "filters",
+        "durable-focus",
+        "names-document",
+        "cross-links"
+      ],
+      "reviewer": null,
+      "title": "Evidence browser, document-named requirements, and the cross-links"
+    }
+  ],
+  "title": "Every piece of evidence in one place"
+}
