@@ -1,0 +1,204 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "an agent run",
+      "key": "output",
+      "requirement": "carries-output",
+      "then": "the view returns the command, the last 4000 characters marked as cut, and covers partial",
+      "when": "it records evidence with a command, a 6000-character output and covers partial"
+    },
+    {
+      "given": "an agent run",
+      "key": "covers-refused",
+      "requirement": "carries-output",
+      "then": "422 naming full and partial",
+      "when": "it records covers 'mostly'"
+    },
+    {
+      "given": "an undecided piece of this run",
+      "key": "revise",
+      "requirement": "carries-output",
+      "then": "the piece is revised in place with the new output",
+      "when": "the run records the same requirement with a new output"
+    },
+    {
+      "given": "two pieces for one requirement and task",
+      "key": "statement",
+      "requirement": "says-what-it-demonstrates",
+      "then": "both carry the identifier and statement, and the older one's superseded_by names the newer",
+      "when": "evidence is listed"
+    },
+    {
+      "given": "a piece footprinted at a branch commit that adds a file",
+      "key": "diff",
+      "requirement": "diff-of-the-work",
+      "then": "the file and its added lines are returned",
+      "when": "its diff is asked for"
+    },
+    {
+      "given": "the same piece after its branch merged into main",
+      "key": "diff-merged",
+      "requirement": "diff-of-the-work",
+      "then": "the same file and lines are returned",
+      "when": "its diff is asked for"
+    },
+    {
+      "given": "a piece with no commit",
+      "key": "diff-none",
+      "requirement": "diff-of-the-work",
+      "then": "200 with no files and a reason",
+      "when": "its diff is asked for"
+    },
+    {
+      "given": "a scratch Hub and a Haiku builder",
+      "key": "drive",
+      "requirement": "carries-output",
+      "then": "the builder's evidence carries its command and output, and the routes return the statement and the diff",
+      "when": "scripts/drive/d1017_evidence_worth_reading.py runs"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "51dac94e49f60d5a65bb4c32ed0a6cf83b011f8649266f73625f7beac0c9eb16",
+      "FR-2": "4a8b8d2f6634aa65c918aefc2d7bdf2e3df04022a846c08e6f0064acc1f1f09d",
+      "FR-3": "6edaa3f3f297e30d4e1b3be2e6db0ccedd3ab91e9a254eb72c5eff1aa16e99d7",
+      "FR-4": "b60b4876c82b7b94c3adcca2d4e0a1b04705a70931c777e84079b00f31b794b7"
+    },
+    "high_water": 4,
+    "requirements": {
+      "carries-output": "FR-1",
+      "diff-of-the-work": "FR-3",
+      "says-what-it-demonstrates": "FR-2",
+      "tool-says-so": "FR-4"
+    },
+    "retired": {}
+  },
+  "design": "D1 Three nullable columns, no backfill. Old rows read null, which the UI shows as 'no output recorded' rather than inventing one. Rollback: the downgrade drops the three columns; nothing else reads them.\nD2 The tail, not the head. A test run's verdict is at its end; 4000 characters keeps the summary line of every runner this repo drives, and a leading marker says it was cut.\nD3 The diff is measured on the line of work. Unmerged: merge-base(main, commit)..commit. Merged: the first merge on main's first-parent chain whose second parent reaches the commit gives the base (its first parent's merge-base with the commit); a fast-forward falls back to commit^..commit. Capped, so a vendored tree cannot stall the route.\nD4 superseded_by is derived, not stored: the newest later piece for the same requirement and task.",
+  "evidence": {
+    "checked": [
+      "hub/hub/db/models.py:2594 RequirementEvidence",
+      "hub/hub/requirement_evidence.py:122 record",
+      "hub/hub/api/v1/spec.py:1747 _evidence_view",
+      "hub/hub/api/v1/agent_actions.py:1320 EvidenceRecord",
+      "hub/hub/mcp_server.py:4293 record_evidence"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F673: a piece renders as one run-on line holding only the builder's sentence and a path; the row stores no output (hub/hub/db/models.py:2594), the requirement text is a join nobody draws, a superseded piece is not marked, and no route returns the diff at the commit a footprint names. The operator can now inspect evidence after the fact (vis-D1) and needs something to inspect. Decision vis-D5: the agent supplies the command and an output tail now; the Hub re-running it is a later spike. Tier 2: a migration adds three nullable columns to requirement_evidence, which reaches the operator's real database on their next restart.",
+  "requirements": [
+    {
+      "key": "carries-output",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A claim with its output can be judged; a sentence cannot.",
+      "statement": "Recording evidence MUST accept an optional command, an optional output and an optional covers of full or partial, store the output's last 4000 characters with a marker when it was cut, refuse any other covers value naming the permitted ones, and return all three on every evidence view, null where none was given."
+    },
+    {
+      "key": "says-what-it-demonstrates",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every evidence view MUST carry the requirement's identifier and its current statement, and superseded_by naming the newest later piece recorded for the same requirement and task, or null."
+    },
+    {
+      "key": "diff-of-the-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The footprint names a commit; the reviewer and the operator need what it changed.",
+      "statement": "GET /spec/evidence/{id}/diff MUST return the files and unified diff of the work the piece's commit carries on its line of work, measured from where that line left the main branch, capped at 400 KB with truncated true when cut, and MUST answer 404 for an unknown piece and 200 with an empty file list and a reason where no commit or repository can be read."
+    },
+    {
+      "key": "tool-says-so",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The record_evidence tool MUST describe command, output and covers, and MUST say that the reviewing agent's verdict decides the evidence."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "requirement_evidence.command, output (tail) and covers (full or partial), nullable",
+      "record_evidence (MCP, agent REST, operator REST) accepting them; a re-record in the same run revises them",
+      "The evidence view carrying them, the requirement's identifier and statement, and superseded_by",
+      "GET /spec/evidence/{id}/diff: the change the piece's commit made on its line of work"
+    ],
+    "non_goals": [
+      "The Hub running the command (vis-D5 spike)",
+      "Backfilling old rows (they read null: unknown, never invented)",
+      "Any UI (slices task-story and evidence-browser)"
+    ]
+  },
+  "summary": "A piece of evidence can carry the command that was run, the tail of its output and whether it covers the requirement fully or partly, and the Hub returns it with the requirement's wording, what replaced it, and the diff of the work it names.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "hub/tests/test_evidence_carries_what_it_takes_to_judge_it.py: every criterion but drive; each fails on HEAD.",
+      "files": [
+        "hub/tests/test_evidence_carries_what_it_takes_to_judge_it.py"
+      ],
+      "from": null,
+      "key": "tests",
+      "requirements": [
+        "carries-output",
+        "says-what-it-demonstrates",
+        "diff-of-the-work",
+        "tool-says-so"
+      ],
+      "reviewer": null,
+      "title": "Failing tests"
+    },
+    {
+      "depends_on": [
+        "tests"
+      ],
+      "description": "Migration 0130; models; record(); both EvidenceRecord schemas; the MCP tool; _evidence_view; the diff route.",
+      "files": [
+        "hub/hub/migrations/versions/0130_evidence_output.py",
+        "hub/hub/db/models.py",
+        "hub/hub/requirement_evidence.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/mcp_server.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "carries-output",
+        "says-what-it-demonstrates",
+        "diff-of-the-work",
+        "tool-says-so"
+      ],
+      "reviewer": null,
+      "title": "Columns, recording, views and the diff route"
+    },
+    {
+      "depends_on": [
+        "build"
+      ],
+      "description": "scripts/drive/d1017_evidence_worth_reading.py fails before and passes after.",
+      "files": [
+        "scripts/drive/d1017_evidence_worth_reading.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "carries-output",
+        "diff-of-the-work"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive"
+    }
+  ],
+  "title": "Evidence carries what it takes to judge it"
+}
