@@ -1,0 +1,116 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a roadmap with one unresolved question naming a slice and one naming none",
+      "key": "roadmap",
+      "requirement": "deferred",
+      "then": "the 409 lists unresolved_question once, for the unsliced question",
+      "when": "it is approved without approve_anyway"
+    },
+    {
+      "given": "a roadmap question naming a slice the roadmap does not have",
+      "key": "unknown",
+      "requirement": "question-slice",
+      "then": "a question_slice_unknown gap names it",
+      "when": "it is proposed"
+    },
+    {
+      "given": "that roadmap approved, and a change document naming the slice",
+      "key": "slice-doc",
+      "requirement": "carried",
+      "then": "the first 409 lists roadmap_question_for_slice with the question's text; once restated, that gap is gone",
+      "when": "it is approved without approve_anyway, then again after restating the question"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "0a7ca08b44bdc8e73add0d9c234628552c28af410ef90426ae6b7a3e1dd528f5",
+      "FR-2": "869b45c68c7820042507c75abcb016f3d16f1ad4e20d6ab0161ba557080a1b47",
+      "FR-3": "9f35f517d9999f407c8bc9c9a5111bd7ed0b80c5bd94cc84de15d63f13ac759c"
+    },
+    "high_water": 3,
+    "requirements": {
+      "carried": "FR-3",
+      "deferred": "FR-2",
+      "question-slice": "FR-1"
+    },
+    "retired": {}
+  },
+  "design": "D1 Carried by restating, not by reference: the slice document repeats the question in its own open_questions and answers it there, so the roadmap (approved, so not editable without reopening) never has to change for a slice to settle its question. D2 Everything is a gap: approvals are scarce, and a slice that knowingly leaves the question for later approves over it. D3 Matching is by question text, trimmed and case-folded, because a question has no key.",
+  "evidence": {
+    "checked": [
+      "hub/hub/spec_payload.py OpenQuestion",
+      "hub/hub/spec_completeness.py unresolved_question, RoadmapState, REFUSAL_CODES",
+      "hub/hub/spec_service.py roadmap_states"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F573: a question only a later slice's spec can answer is normal for a roadmap, but a question could not say so. Authors answered early as a guess or hid the question in a slice's intent prose, where nothing carried it; once, only a hand-written queue item did. Since unresolved questions became gaps rather than refusals, the blocking half of F573 is gone; the carrying half remains.",
+  "requirements": [
+    {
+      "key": "question-slice",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An open question MAY name a slice; on a roadmap that slice MUST be one of its slices, and on any other document naming one MUST be reported as a gap."
+    },
+    {
+      "key": "deferred",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Deferring to the slice is the answer the roadmap can give.",
+      "statement": "A roadmap's unresolved open question that names one of its slices MUST NOT raise unresolved_question."
+    },
+    {
+      "key": "carried",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F573: nothing carried the question to the slice.",
+      "statement": "Proposing or approving a change document whose roadmap link names a slice MUST list a roadmap_question_for_slice gap for each unresolved roadmap question naming that slice whose text the document does not repeat among its own open questions."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "open_questions[].slice: the key of the roadmap slice a question waits for, valid only on a roadmap and only for one of its slices",
+      "No unresolved_question gap on a roadmap for a question that names a slice",
+      "A roadmap_question_for_slice gap on the slice's change document for each unresolved roadmap question naming that slice that the document does not restate among its own open questions"
+    ],
+    "non_goals": [
+      "Resolving a roadmap's question from the slice document automatically",
+      "Questions on documents other than roadmaps naming slices"
+    ]
+  },
+  "summary": "An open question on a roadmap may name the slice it belongs to; it then raises no gap on the roadmap, and the change document that specifies that slice is asked to carry it into its own open questions, where it is answered.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "OpenQuestion.slice; spec_completeness; RoadmapState carries the roadmap's unresolved sliced questions; tests.",
+      "files": [
+        "hub/hub/spec_payload.py",
+        "hub/hub/spec_completeness.py",
+        "hub/hub/spec_service.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "question-slice",
+        "deferred",
+        "carried"
+      ],
+      "reviewer": null,
+      "title": "Slice-named open questions, deferred on the roadmap, carried to the slice"
+    }
+  ],
+  "title": "A roadmap's open question can wait for the slice that answers it"
+}
