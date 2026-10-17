@@ -82,6 +82,8 @@ RESOLVED_TESTS = "hub/ui/src/__tests__/specResolvedProposals.test.tsx"
 SLICES_TESTS = "hub/tests/test_a_roadmap_shows_which_of_its_slices_are_done.py"
 SLICES_DRIVE = "scripts/drive/d1017_roadmap_slice_states.py"
 QSLICE_TESTS = "hub/tests/test_a_roadmaps_open_question_can_wait_for_its_slice.py"
+BACKFILL_TESTS = "hub/tests/test_a_change_can_name_its_roadmap_slice_after_the_fact.py"
+BACKFILL_DRIVE = "scripts/drive/d1017_roadmap_backfill.py"
 TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
 TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
@@ -1732,6 +1734,22 @@ CHANGES = {
              "restates it (case and spacing differ), the gap is gone. 3 failed before the build."),
         ],
     },
+    "fbackfill": {
+        "document": "spec/changes/a-change-can-name-its-roadmap-slice-after-the-fact/spec.json",
+        "commit": "f8cf5d3",
+        "tasks": ["task-643ef723db5f", "task-7c89892d4c3c"],
+        "evidence": [
+            ("FR-1", "task-643ef723db5f", "test_result", BACKFILL_TESTS,
+             "An archived change gains roadmap {first}; requirements, aw_identity, criteria, tasks "
+             "and hub block are unchanged, and the row's digest is the file's. 405 before the build."),
+            ("FR-2", "task-643ef723db5f", "test_result", BACKFILL_TESTS,
+             "Unknown slice, a non-roadmap document, the roadmap itself and a re-pointed link are "
+             "each a 422 with its code; the file is untouched."),
+            ("FR-3", "task-7c89892d4c3c", "test_result", BACKFILL_DRIVE,
+             "Trial Hub :8010: the visibility roadmap's page went from eight slices 'not started' "
+             "to seven archived, each naming its document; foundations has no document."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1796,6 +1814,7 @@ CHANGE_FOLDS = {
     "fledger": 'usage-accounting',
     "fslices": 'spec-roadmaps',
     "fqslice": 'spec-roadmaps',
+    "fbackfill": 'spec-roadmaps',
     "fhidden": {
         'conversation-checkpoint': ['notes-route', 'checkpoints-panel'],
         'project-checks': ['checks-history'],
