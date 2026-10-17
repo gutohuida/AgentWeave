@@ -38,7 +38,7 @@ from .spec_payload import (
     payload_to_dict,
     validate_payload,
 )
-from .spec_render import SliceOf, render_document
+from .spec_render import SliceOf, SliceState, render_document
 from .utils import short_id
 
 logger = logging.getLogger(__name__)
@@ -1272,6 +1272,98 @@ async def roadmap_states(
     return {row.path: spec_completeness.RoadmapState(row.phase, row.title, keys)}
 
 
+#: How far a slice's change document has come; where several name one slice, the furthest wins.
+_SLICE_PHASE_RANK = {
+    spec_lifecycle.EXPLORING: 1,
+    spec_lifecycle.PROPOSED: 2,
+    spec_lifecycle.APPROVED: 3,
+    spec_lifecycle.ARCHIVED: 4,
+}
+
+
+async def slice_claims(
+    session: AsyncSession, workspace: ProjectWorkspace, project_id: str
+) -> Dict[str, Dict[str, SliceState]]:
+    """`{roadmap path: {slice key: state}}` from every change document's roadmap link (F579).
+
+    The link lives only in the change document's file, so each is read; derived on read, never
+    stored, so archiving a slice's document moves its state with no second write.
+    """
+    from . import spec_reading
+
+    rows = (
+        (
+            await session.execute(
+                select(SpecDocument).where(
+                    SpecDocument.project_id == project_id, SpecDocument.kind == "change-spec"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return {}
+    payloads = await spec_reading.payloads_for_documents(session, workspace, [r.id for r in rows])
+    claims: Dict[str, Dict[str, SliceState]] = {}
+    for row in rows:
+        link = (payloads.get(row.id) or {}).get("roadmap")
+        if not isinstance(link, dict) or not link.get("document") or not link.get("slice"):
+            continue
+        slices = claims.setdefault(str(link["document"]), {})
+        key = str(link["slice"])
+        current = slices.get(key)
+        if current is None or _SLICE_PHASE_RANK.get(row.phase, 0) > _SLICE_PHASE_RANK.get(
+            current.phase, 0
+        ):
+            slices[key] = SliceState(phase=row.phase, path=row.path, title=row.title)
+    return claims
+
+
+async def _unclaimed_slices(
+    session: AsyncSession, workspace: ProjectWorkspace, project_id: str, payload: SpecPayload
+) -> List[spec_completeness.Finding]:
+    """A change document naming no slice, while an approved roadmap has slices nobody claims
+    (F674): a gap, never a refusal, since a change that is no slice approves straight over it."""
+    if payload.kind != "change-spec" or payload.roadmap is not None:
+        return []
+    roadmaps = (
+        (
+            await session.execute(
+                select(SpecDocument).where(
+                    SpecDocument.project_id == project_id,
+                    SpecDocument.kind == "roadmap",
+                    SpecDocument.phase == spec_lifecycle.APPROVED,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not roadmaps:
+        return []
+    claims = await slice_claims(session, workspace, project_id)
+    findings = []
+    for roadmap in roadmaps:
+        claimed = claims.get(roadmap.path, {})
+        open_keys = [
+            str(item["key"])
+            for item in roadmap_slices(workspace, roadmap.path)
+            if str(item["key"]) not in claimed
+        ]
+        if open_keys:
+            findings.append(
+                spec_completeness.Finding(
+                    "roadmap_slice_unclaimed",
+                    "roadmap",
+                    f"the approved roadmap {roadmap.path} ({roadmap.title}) has slices no document "
+                    f"names: {', '.join(open_keys)}. If this document specifies one, name it: "
+                    f'"roadmap": {{"document": "{roadmap.path}", "slice": "<key>"}}',
+                )
+            )
+    return findings
+
+
 @dataclass(frozen=True)
 class PhaseFindings:
     """What a move to proposed or approved finds: refusals, which nothing passes, and gaps, which
@@ -1313,6 +1405,7 @@ async def _completeness(
         approved_document_paths=approved_paths,
         roadmaps=roadmaps,
     )
+    findings += await _unclaimed_slices(session, workspace, document.project_id, payload)
     if to_phase == spec_lifecycle.APPROVED:
         # A document whose import source was reopened after it was proposed is approved anyway and
         # the reference recorded as `document_not_approved` (task-dependencies, settled).
@@ -1529,6 +1622,13 @@ async def render_page(
         rigor=rigor,
         corpus=corpus,
         slice_of=slice_of(workspace, payload),
+        # A roadmap's page says where each slice stands (F579); only a read can, since the state
+        # is the slice documents' phase now.
+        slice_states=(
+            (await slice_claims(session, workspace, document.project_id)).get(path, {})
+            if payload.kind == "roadmap" and document is not None
+            else None
+        ),
     )
 
 

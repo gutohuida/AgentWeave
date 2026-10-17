@@ -431,6 +431,15 @@ class SliceOf:
     roadmap_title: str
 
 
+@dataclass(frozen=True)
+class SliceState:
+    """Where a roadmap slice stands: the change document whose roadmap link names it (F579)."""
+
+    phase: str
+    path: str
+    title: str
+
+
 def _slice_of(slice_of: Optional[SliceOf]) -> str:
     if slice_of is None:
         return ""
@@ -441,13 +450,27 @@ def _slice_of(slice_of: Optional[SliceOf]) -> str:
     )
 
 
-def _slices(payload: SpecPayload) -> str:
-    """A roadmap's slices, in the order they are built. Empty for any other document."""
+def _slice_state(state: Optional[SliceState]) -> str:
+    if state is None:
+        return ' <span class="aw-chip aw-chip-open">not started</span>'
+    return (
+        f' <span class="aw-chip">{_e(state.phase)}</span>'
+        f' <span class="aw-note">in <code>{_e(state.path)}</code></span>'
+    )
+
+
+def _slices(payload: SpecPayload, states: Optional[Dict[str, SliceState]] = None) -> str:
+    """A roadmap's slices, in the order they are built. Empty for any other document.
+
+    With `states` (a read with the Hub's records to hand), each slice says where it stands: the
+    phase of the change document that names it, or not started (F579)."""
     if not payload.slices:
         return ""
     items = []
     for item in payload.slices:
         parts = [f"<strong>{_e(item.key)}</strong> — {_e(item.title)}"]
+        if states is not None:
+            parts.append(_slice_state(states.get(item.key)))
         if item.intent:
             parts.append(f"<br>{_e(item.intent)}")
         if item.done:
@@ -612,6 +635,7 @@ def render_document(
     rigor: str = "sketch",
     corpus: Optional[CorpusContext] = None,
     slice_of: Optional[SliceOf] = None,
+    slice_states: Optional[Dict[str, SliceState]] = None,
 ) -> str:
     """A self-contained document: inline style only, no external resource.
 
@@ -650,7 +674,7 @@ def render_document(
             _section("Summary", "summary", _paragraphs(payload.summary)),
             _section("Problem", "problem", _paragraphs(payload.problem)),
             _section("Scope", "scope", scope_body),
-            _section("Slices", "slices", _slices(payload)),
+            _section("Slices", "slices", _slices(payload, slice_states)),
             _section("Requirements", "requirements", _requirements(payload, identifiers)),
             _section("Acceptance criteria", "acceptance", _acceptance(payload, identifiers)),
             _section("Behaviour", "behaviour", _algorithms(payload)),
