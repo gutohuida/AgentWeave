@@ -70,6 +70,11 @@ REQSTORY_TESTS = "hub/tests/test_how_a_requirement_changed_and_what_proved_it.py
 REQSTORY_DRIVE = "scripts/drive/d1017_requirement_story.py"
 REQSTORY_SCREENS = "scripts/drive/d1017_requirement_story_screens.py"
 MIGRATION_TESTS = "hub/tests/test_migrations.py"
+LEDGER_TESTS = "hub/tests/test_the_activity_tab_is_the_projects_ledger.py"
+LEDGER_DRIVE = "scripts/drive/d1017_project_ledger.py"
+LEDGER_SCREENS = "scripts/drive/d1017_project_ledger_screens.py"
+LEDGER_LIVE = "scripts/drive/d1017_project_ledger_live.py"
+ACTIVITY_TESTS = "hub/ui/src/__tests__/ActivityLog.test.tsx"
 TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
 TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
@@ -1650,6 +1655,23 @@ CHANGES = {
              "downgrade drops the column and keeps the row; a no-op without the table."),
         ],
     },
+    "fledger": {
+        "document": "spec/changes/the-activity-tab-becomes-the-projects-ledger/spec.json",
+        "commit": "1ffaf49",
+        "tasks": ["task-fed933e77f70"],
+        "evidence": [
+            ("FR-1", "task-fed933e77f70", "test_result", LEDGER_DRIVE,
+             "Replica: 19 integrations (12 merged) newest first, 9 divergences, $78.08 = turns + "
+             "workers, per-agent spend, by-day sums to total, 12 tasks by origin, 589 context "
+             "warnings in one row; all equal to the database. 404 FAILED before the build."),
+            ("FR-2", "task-fed933e77f70", "test_result", LEDGER_LIVE,
+             "The Activity tab opens on the ledger with the route's totals (replica judge); on "
+             "scratch :8127 a task landed while the ledger was open and its merge appeared in the "
+             "lane without a reload."),
+            ("FR-3", "task-fed933e77f70", "test_result", ACTIVITY_TESTS,
+             "Three context_warning events render as one row counting them; other events stay rows."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1711,6 +1733,7 @@ CHANGE_FOLDS = {
     "fstory": 'task-lifecycle-governance',
     "fbrowser": 'requirement-traceability',
     "freqstory": 'requirement-traceability',
+    "fledger": 'trace-timeline',
     "f660": {
         'turn-outcome-visibility': ['stop-reason-recorded', 'divergence-names-refusal'],
         'agent-run-sandboxing': [
