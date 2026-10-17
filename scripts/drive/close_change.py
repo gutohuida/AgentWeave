@@ -61,6 +61,9 @@ VERDICT_TESTS = "hub/tests/test_the_reviewers_verdict_decides_the_tasks_evidence
 VERDICT_DRIVE = "scripts/drive/d1017_agentic_evidence.py"
 WORTH_TESTS = "hub/tests/test_evidence_carries_what_it_takes_to_judge_it.py"
 WORTH_DRIVE = "scripts/drive/d1017_evidence_worth_reading.py"
+STORY_TESTS = "hub/tests/test_a_tasks_whole_story_is_in_its_drawer.py"
+STORY_SCREENS = "scripts/drive/d1017_task_story_screens.py"
+STORY_LIVE = "scripts/drive/d1017_task_story_live.py"
 TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
 TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
@@ -1570,6 +1573,31 @@ CHANGES = {
              "test_tool_surface_matches_server passes with the catalog updated."),
         ],
     },
+    "fstory": {
+        "document": "spec/changes/a-tasks-whole-story-is-in-its-drawer/spec.json",
+        "commit": "1143a0f",
+        "tasks": ["task-51c892717fe3"],
+        "evidence": [
+            ("FR-1", "task-51c892717fe3", "test_result", STORY_TESTS,
+             "Every kind present oldest first; the run's model, 660 s and $1.84; evidence with "
+             "wording and reviews; merge and override in the summary; 404 unknown; one-line story."),
+            ("FR-2", "task-51c892717fe3", "test_result", STORY_SCREENS,
+             "On the Terra replica the drawer opens on Story with 29 events in the route's order "
+             "(taskStory.test.tsx pins it); Details keeps the facts; a Hub without /story keeps "
+             "Details (the query idle or failed offers no switch)."),
+            ("FR-3", "task-51c892717fe3", "test_result", STORY_SCREENS,
+             "A proof opened on the replica shows FR-4's wording, the locator and footprint, and "
+             "the diff of the work (16 files, folded after 8)."),
+            ("FR-4", "task-51c892717fe3", "test_result", STORY_TESTS,
+             "An override reason on the approving transition is in the event and the summary; "
+             "the UI calls it out (story-override-*)."),
+            ("FR-5", "task-51c892717fe3", "test_result", STORY_LIVE,
+             "A Haiku turn on scratch :8124: its run and evidence appeared in the open story "
+             "without a reload, 2 arrivals marked fresh."),
+            ("FR-6", "task-51c892717fe3", "test_result", STORY_SCREENS,
+             "Reduced motion on the replica: every event at opacity 1 in the first frame."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1628,6 +1656,7 @@ CHANGE_FOLDS = {
     "f665": 'usage-accounting',
     "fverdict": 'approval-integration',
     "fworth": 'requirement-traceability',
+    "fstory": 'task-lifecycle-governance',
     "f660": {
         'turn-outcome-visibility': ['stop-reason-recorded', 'divergence-names-refusal'],
         'agent-run-sandboxing': [

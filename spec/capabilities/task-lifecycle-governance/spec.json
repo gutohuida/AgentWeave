@@ -804,11 +804,44 @@
       "requirement": "n5",
       "then": "the task still names its earlier holder and no transition is recorded",
       "when": "a later step is refused after the first succeeds"
+    },
+    {
+      "given": "a task with a costed run, evidence, an approval that merged, a divergence and an override",
+      "key": "a-tasks-whole-story-is-in-its-drawer-route",
+      "requirement": "a-tasks-whole-story-is-in-its-drawer-story-route",
+      "then": "every kind is present oldest first, the run carries model, duration and cost, and the summary counts them",
+      "when": "its story is read"
+    },
+    {
+      "given": "a story in the route's order",
+      "key": "a-tasks-whole-story-is-in-its-drawer-order",
+      "requirement": "a-tasks-whole-story-is-in-its-drawer-story-view",
+      "then": "events appear in exactly that order",
+      "when": "it renders"
+    },
+    {
+      "given": "the Terra replica",
+      "key": "a-tasks-whole-story-is-in-its-drawer-replica",
+      "requirement": "a-tasks-whole-story-is-in-its-drawer-proof",
+      "then": "the drawer opens on Story, a proof shows the wording and the diff, Details keeps the facts, reduced motion shows every event, no console error",
+      "when": "scripts/drive/d1017_task_story_screens.py runs"
+    },
+    {
+      "given": "a scratch Hub and a Haiku agent",
+      "key": "a-tasks-whole-story-is-in-its-drawer-live-drive",
+      "requirement": "a-tasks-whole-story-is-in-its-drawer-live",
+      "then": "the run and its evidence appear in the open story without a reload, marked fresh",
+      "when": "scripts/drive/d1017_task_story_live.py runs"
     }
   ],
   "algorithms": [],
   "aw_identity": {
     "digests": {
+      "FR-100": "f07f5ac2d7e866c4401c07c0d1c15a190cbad35d8d3b6bac0ae64333f70fc36f",
+      "FR-101": "d3ca830608cc9b911d5239724176dd397d1d1a1c0014ea724315743873c6fd7d",
+      "FR-102": "7578738d779b4481679fe8399901b5a4a45c51a1353cc46e48ce37c4fce7cedf",
+      "FR-103": "c2ef7d821f2788c1c8ac53019cb98084ab614131b881ee3a08300c8e6a33abf6",
+      "FR-104": "628c05eb28859f1abb4325a6f5e8e9db1e40dee645f5652fcd6e17299e2e492c",
       "FR-33": "7c740474881186d7a0e928ab0150619be41407ca2768ef98b31ee72ba673aef9",
       "FR-34": "8a8faac0eea8d9531c99a6f9bc479c464c90c9eee149933bce352537b1e5a451",
       "FR-35": "c4e50307b122c0e1381d35e14907fc5c648a211171aaff447c7b90087fb37af2",
@@ -874,9 +907,10 @@
       "FR-95": "2656989617ac091e71878662426606cab59f08aa8c64d86727b5003f33d981eb",
       "FR-96": "ca4a685440a460ec85aff1138f2c40d6b84f12363b0bd367a0de7088ecaa19e1",
       "FR-97": "97d51715c724b52b3ad5c9e56482cff95d31a600deebc6bfbccfca3df6b8aaae",
-      "FR-98": "6fd361c52514449bab9c7e50f5b55ac9ef41f4d90d4ef7c6ad650e916a947525"
+      "FR-98": "6fd361c52514449bab9c7e50f5b55ac9ef41f4d90d4ef7c6ad650e916a947525",
+      "FR-99": "cb3b52213f3a9755eb9ffb3befd98e80ea6ea1a871fea4c79ea651c4643fea43"
     },
-    "high_water": 98,
+    "high_water": 104,
     "requirements": {
       "a-move-a-scheduled-firing-makes-is-recorded-as-that-firing-s": "FR-82",
       "a-run-may-only-complete-the-task-it-holds": "FR-72",
@@ -888,6 +922,12 @@
       "a-task-may-only-be-created-in-an-entry-status": "FR-34",
       "a-task-reports-the-requirement-identifiers-it-was-given": "FR-57",
       "a-task-s-full-detail-opens-in-a-view-sized-to-hold-it": "FR-64",
+      "a-tasks-whole-story-is-in-its-drawer-live": "FR-103",
+      "a-tasks-whole-story-is-in-its-drawer-motion": "FR-104",
+      "a-tasks-whole-story-is-in-its-drawer-override-visible": "FR-102",
+      "a-tasks-whole-story-is-in-its-drawer-proof": "FR-101",
+      "a-tasks-whole-story-is-in-its-drawer-story-route": "FR-99",
+      "a-tasks-whole-story-is-in-its-drawer-story-view": "FR-100",
       "a-transition-records-the-policy-that-governed-it": "FR-59",
       "a-wait-that-ends-without-an-answer-returns-the-task-to-its-w": "FR-75",
       "a-waiting-task-names-what-it-is-waiting-for": "FR-46",
@@ -1203,6 +1243,48 @@
       "party": null,
       "rationale": "A task nobody should work is otherwise only ever rejected and stays counted. Deleting is the one path that removes transition and integration rows, because they exist only for the task.",
       "statement": "The operator MUST be able to delete a task (`DELETE /tasks/{id}`), removing its dependencies, requirement links, transitions, integrations, check runs, evidence and queued entries, and clearing the task pointer on rows that only mention it (runs, conversations, messages, questions); the delete MUST be refused (HTTP 409) while a run bound to the task is active. No agent surface deletes a task."
+    },
+    {
+      "key": "a-tasks-whole-story-is-in-its-drawer-story-route",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "GET /tasks/{id}/story MUST return the task, a summary (runs, cost, tokens, evidence counts, merged commits, override count) and every transition, run, evidence piece with its reviews, check run, integration, divergence and question bound to the task, sorted by time with ties ordered cause before effect, and 404 for an unknown task."
+    },
+    {
+      "key": "a-tasks-whole-story-is-in-its-drawer-story-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's question is whether the task is done and how it got there.",
+      "statement": "The task drawer MUST open on the story when it can be loaded, rendering events in the route's order, and MUST fall back to the details view without offering a switch when it cannot."
+    },
+    {
+      "key": "a-tasks-whole-story-is-in-its-drawer-proof",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each evidence event MUST show its state, its reviews with their reasons, and whether a later piece replaced it, and MUST open into the requirement's wording beside the command, output and coverage, with the diff of the work fetched only when opened."
+    },
+    {
+      "key": "a-tasks-whole-story-is-in-its-drawer-override-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An approval over failing checks was recorded and never shown.",
+      "statement": "A transition approved over failing checks MUST show its override reason."
+    },
+    {
+      "key": "a-tasks-whole-story-is-in-its-drawer-live",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An open story MUST add events from task, evidence and run events without a reload, marking each arrival for one highlight."
+    },
+    {
+      "key": "a-tasks-whole-story-is-in-its-drawer-motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "vis-D8",
+      "statement": "Every animation of the story MUST be absent under prefers-reduced-motion, with every event visible in the first rendered frame."
     }
   ],
   "schema_version": 1,
