@@ -79,6 +79,9 @@ def part_b(project):
         "where t.project_id = ? order by t.created_at desc limit 1",
         (project,),
     ).fetchone()
+    # The checks row shows only for a project with checks configured.
+    con.execute("update projects set checks = ? where id = ?",
+                (json.dumps([{"name": "unit", "command": "echo ok"}]), project))
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     runs = []
     for index, state in enumerate(["failed", "failed", "passed"]):

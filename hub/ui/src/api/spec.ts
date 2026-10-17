@@ -1060,6 +1060,24 @@ export function useSpecProposals(path: string | null) {
   })
 }
 
+/** Every decided proposal for a document, newest decision first (slice remaining-hidden-data).
+ *  Under the same key prefix as the pending list, so every decision refreshes it too. A Hub older
+ *  than `?status=` ignores it and answers pending ones; those are filtered out here, never shown
+ *  as decided. */
+export function useSpecResolvedProposals(path: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ proposals: SpecEditProposal[] }>({
+    queryKey: ['project', projectId, 'specProposals', path, 'resolved'],
+    queryFn: async () => {
+      const body = await getJson<{ proposals: SpecEditProposal[] }>(
+        `/api/v1/projects/${projectId}/project/documents/${path}/proposals?status=resolved`,
+      )
+      return { proposals: body.proposals.filter((proposal) => proposal.status !== 'pending') }
+    },
+    enabled: isConfigured && !!projectId && !!path,
+  })
+}
+
 /** A decision on one proposal. Invalidates the document's proposals **on settled**, not only on
  *  success: an accept refused as stale still moves the row out of `pending`, and the pressing tab
  *  must not wait for the broadcast to drop it (F428, F431; `a-pending-proposal-can-be-withdrawn`

@@ -20,7 +20,14 @@ from ...checkpoint_generation import generate_checkpoint, render_checkpoint
 from ...checkpoints import get_checkpoint_by_id
 from ...conversations import get_conversation_by_id
 from ...db.engine import get_session
-from ...db.models import Checkpoint, InboundQueueEntry, Project, Runner, WorkerInvocation
+from ...db.models import (
+    Checkpoint,
+    CheckpointNote,
+    InboundQueueEntry,
+    Project,
+    Runner,
+    WorkerInvocation,
+)
 from ...runner_provider import one_shot_model
 from ...sse import sse_manager
 
@@ -115,6 +122,47 @@ async def list_checkpoints(
         CheckpointSummary.of(row, generation_error=errors.get(row.worker_invocation_id))
         for row in rows
     ]
+
+
+@router.get("/conversations/{conversation_id}/checkpoint-notes")
+async def list_checkpoint_notes(
+    conversation_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """What agents asked the next checkpoint to carry, oldest first, and which checkpoint did
+    (slice remaining-hidden-data: notes had a write route and no read route)."""
+    project_id, _ = project
+    await _conversation_or_404(session, project_id, conversation_id)
+    rows = (
+        (
+            await session.execute(
+                select(CheckpointNote)
+                .where(
+                    CheckpointNote.conversation_id == conversation_id,
+                    CheckpointNote.project_id == project_id,
+                )
+                .order_by(CheckpointNote.created_at, CheckpointNote.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "notes": [
+            {
+                "id": row.id,
+                "agent": row.agent,
+                "run_id": row.run_id,
+                "intent": row.intent,
+                "suspicions": row.suspicions or [],
+                "warnings": row.warnings or [],
+                "consumed_by_checkpoint_id": row.consumed_by_checkpoint_id,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ]
+    }
 
 
 @router.get("/checkpoints/{checkpoint_id}/rendered")

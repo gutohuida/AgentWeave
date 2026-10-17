@@ -670,3 +670,48 @@
 @media (prefers-reduced-motion: reduce) {
   .aw-ledger-bar > span, .aw-ledger-rank-track > span { animation: none; }
 }
+
+/* A conversation's checkpoints sheet (slice remaining-hidden-data). */
+.aw-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: color-mix(in srgb, var(--bg, #000) 35%, transparent);
+  animation: aw-sheet-fade var(--dur-base) var(--ease) both;
+}
+.aw-sheet {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(480px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -12px 0 32px rgb(0 0 0 / 0.18);
+  animation: aw-sheet-in var(--dur-expand, 260ms) var(--ease) both;
+}
+.aw-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.aw-sheet-head h2 { font-size: 14px; font-weight: 600; color: var(--text); }
+.aw-sheet-scroll { overflow-y: auto; padding: 16px 18px 32px; display: grid; gap: 22px; align-content: start; grid-auto-rows: max-content; }
+@keyframes aw-sheet-in { from { transform: translateX(24px); opacity: 0; } }
+@keyframes aw-sheet-fade { from { opacity: 0; } }
+.aw-ckpt-list-outer { display: grid; gap: 8px; }
+.aw-ckpt { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.aw-ckpt-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; text-align: left; font-size: 12.5px; }
+.aw-ckpt-head svg { color: var(--text-3); transition: transform var(--dur-base) var(--ease); }
+.aw-ckpt-head[aria-expanded="true"] svg { transform: rotate(90deg); }
+.aw-ckpt-title { flex: 1; min-width: 0; color: var(--text); text-transform: capitalize; }
+.aw-ckpt-body { display: grid; gap: 10px; padding: 0 12px 12px; font-size: 12.5px; color: var(--text); }
+.aw-ckpt-text { white-space: pre-wrap; font: 12px/1.55 var(--mono); color: var(--text); background: var(--surface-2, transparent); border-radius: 8px; padding: 10px; max-height: 360px; overflow: auto; }
+.aw-ckpt-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 4px; }
+.aw-ckpt-files { display: grid; gap: 2px; font-size: 11.5px; }
+.aw-ckpt-list { display: grid; gap: 4px; padding-left: 14px; list-style: disc; }
+.aw-ckpt-findings { display: grid; gap: 3px; font-size: 12px; color: var(--amber); }
+.aw-ckpt-note { display: grid; gap: 4px; padding: 10px 12px; font-size: 12.5px; color: var(--text); }
+.aw-ckpt-note-head { display: flex; align-items: center; gap: 8px; }
+.aw-ckpt-note-head .aw-tl-meta { flex: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .aw-sheet, .aw-sheet-backdrop, .aw-ckpt-head svg { animation: none; transition: none; }
+}

@@ -5,6 +5,7 @@ import { Timeline, TimelineItem } from '@/components/common/Timeline'
 import { Expander } from '@/components/common/Expander'
 import { EvidenceProof as Proof, EvidenceReviews as Reviews } from '@/components/evidence/EvidenceProof'
 import { EvidenceLink } from '@/components/evidence/EvidenceLink'
+import { ConversationLink } from '@/components/agents/ConversationLink'
 import { useTaskStory, type StoryEvent, type TaskStory as Story } from '@/api/tasks'
 import { hubDate } from '@/lib/hubTime'
 import { evidenceTone, statusTone } from '@/lib/storyTones'
@@ -186,7 +187,10 @@ function EvidenceItem({
   )
 }
 
-function renderEvent(event: StoryEvent, index: number, fresh: boolean) {
+/** Where each of the story's runs happened, so a transition a run made can link to it. */
+type RunPlaces = Map<string, { agent: string; conversation_id: string }>
+
+function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: RunPlaces) {
   const common = { index, fresh, testId: `story-event-${event.id}` }
   switch (event.kind) {
     case 'created':
@@ -226,6 +230,18 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean) {
           meta={
             <>
               from {STATUS_LABEL[event.from] ?? event.from} · <Time value={event.at} />
+              {event.run_id && runs.get(event.run_id) ? (
+                <>
+                  {' · '}
+                  <ConversationLink
+                    agent={runs.get(event.run_id)!.agent}
+                    conversationId={runs.get(event.run_id)!.conversation_id}
+                    testId={`story-transition-run-${event.id}`}
+                  >
+                    in its conversation
+                  </ConversationLink>
+                </>
+              ) : null}
             </>
           }
         >
@@ -260,6 +276,18 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean) {
               {parts.length ? `${parts.join(' · ')} · ` : ''}
               {failed ? `${event.status} · ` : ''}
               <Time value={event.at} />
+              {event.conversation_id ? (
+                <>
+                  {' · '}
+                  <ConversationLink
+                    agent={event.agent}
+                    conversationId={event.conversation_id}
+                    testId={`story-run-conversation-${event.id}`}
+                  >
+                    conversation
+                  </ConversationLink>
+                </>
+              ) : null}
             </>
           }
         >
@@ -415,11 +443,17 @@ export function TaskStory({ taskId }: { taskId: string }) {
   const now = Date.now()
   const firstRender = arrived.current === null
   const times = arrived.current ?? new Map<string, number>()
+  const runs: RunPlaces = new Map()
+  for (const event of data.events) {
+    if (event.kind === 'run' && event.conversation_id) {
+      runs.set(event.id, { agent: event.agent, conversation_id: event.conversation_id })
+    }
+  }
   const items = data.events.map((event, index) => {
     const key = `${event.kind}-${event.id}`
     if (!times.has(key)) times.set(key, firstRender ? 0 : now)
     const fresh = now - (times.get(key) ?? 0) < FRESH_MS
-    return renderEvent(event, fresh ? 0 : index, fresh)
+    return renderEvent(event, fresh ? 0 : index, fresh, runs)
   })
   arrived.current = times
 

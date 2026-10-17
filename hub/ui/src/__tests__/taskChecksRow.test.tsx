@@ -75,3 +75,38 @@ describe('the task drawer shows the latest check run', () => {
     expect(rerun).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('slice remaining-hidden-data — earlier check runs are in the drawer', () => {
+  beforeEach(() => {
+    rerun.mockReset()
+  })
+
+  it('lists the runs after the newest, in the route’s order, with each check’s exit and duration', () => {
+    checks = {
+      configured: true,
+      running: false,
+      runs: [
+        run('passed', { id: 'chk-3' }),
+        run('failed', {
+          id: 'chk-2',
+          results: [{ name: 'tests', exit_code: 1, timed_out: false, duration_seconds: 9.5, output_tail: '' }],
+        }),
+        run('error', { id: 'chk-1', error: 'git worktree failed' }),
+      ],
+    }
+    render(<TaskChecksRow taskId="task-1" />)
+    const toggle = screen.getByTestId('task-checks-history-toggle-task-1')
+    expect(toggle).toHaveTextContent('Earlier runs (2)')
+    fireEvent.click(toggle)
+    const rows = screen.getAllByTestId(/^task-check-run-/).map((row) => row.getAttribute('data-testid'))
+    expect(rows).toEqual(['task-check-run-chk-2', 'task-check-run-chk-1'])
+    expect(screen.getByTestId('task-check-result-chk-2-tests')).toHaveTextContent('tests · exit 1 · 9.5s')
+    expect(screen.getByTestId('task-check-run-chk-1')).toHaveTextContent('git worktree failed')
+  })
+
+  it('offers no history for a single run', () => {
+    checks = { configured: true, running: false, runs: [run('passed')] }
+    render(<TaskChecksRow taskId="task-1" />)
+    expect(screen.queryByTestId('task-checks-history-toggle-task-1')).toBeNull()
+  })
+})

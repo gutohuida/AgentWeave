@@ -130,3 +130,30 @@ export async function dismissCheckpointWarning(
     `/api/v1/projects/${projectId}/conversations/${conversationId}/dismiss-checkpoint-warning`,
   )
 }
+
+/** What an agent asked the next checkpoint to carry (slice remaining-hidden-data). */
+export interface CheckpointNote {
+  id: string
+  agent: string
+  run_id: string | null
+  intent: string
+  suspicions: string[]
+  warnings: string[]
+  /** The checkpoint that carried it; null while it waits for the next one. */
+  consumed_by_checkpoint_id: string | null
+  created_at: string | null
+}
+
+/** A conversation's checkpoint notes, oldest first (`GET /conversations/{id}/checkpoint-notes`).
+ *  Refreshed with the checkpoints: a checkpoint consumes the notes before it. */
+export function useCheckpointNotes(conversationId: string | null, enabled = true) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ notes: CheckpointNote[] }>({
+    queryKey: ['project', projectId, 'checkpoints', conversationId, 'notes'],
+    queryFn: () =>
+      getJson<{ notes: CheckpointNote[] }>(
+        `/api/v1/projects/${projectId}/conversations/${conversationId}/checkpoint-notes`,
+      ),
+    enabled: isConfigured && !!projectId && !!conversationId && enabled,
+  })
+}

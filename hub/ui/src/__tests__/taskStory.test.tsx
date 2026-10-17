@@ -72,9 +72,14 @@ const STORY: Story = {
   ],
 }
 
+const storyOverride = vi.hoisted(() => ({ current: null as unknown }))
+
 vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
-  return { ...actual, useTaskStory: () => ({ data: STORY, isLoading: false, isError: false }) }
+  return {
+    ...actual,
+    useTaskStory: () => ({ data: storyOverride.current ?? STORY, isLoading: false, isError: false }),
+  }
 })
 
 const diffFetches: string[] = []
@@ -154,5 +159,32 @@ describe('the task story', () => {
     expect(proof.textContent).toContain('covers part of it')
     expect(diffFetches).toContain('ev-new')
     expect(screen.getByTestId('evidence-diff-ev-new').textContent).toContain('app/watcher.mjs')
+  })
+})
+
+
+describe('slice remaining-hidden-data — transitions and runs open their conversation', () => {
+  it('links a run, and a transition its run made, to that conversation; a run outside the story gets no link', async () => {
+    const { useConfigStore } = await import('@/store/configStore')
+    useConfigStore.setState({ selectedProjectId: 'proj-1' })
+    const transition = STORY.events.find((e) => e.kind === 'transition')!
+    storyOverride.current = {
+      ...STORY,
+      events: [
+        ...STORY.events,
+        { ...transition, id: 'ttr-own', run_id: 'run-1' },
+      ],
+    }
+    try {
+      render(<TaskStory taskId="task-1" />)
+      expect(screen.getByTestId('story-run-conversation-run-1')).toBeInTheDocument()
+      expect(screen.queryByTestId('story-transition-run-ttr-1')).toBeNull()
+      await userEvent.click(screen.getByTestId('story-transition-run-ttr-own'))
+      const params = new URLSearchParams(window.location.search)
+      expect(params.get('agent')).toBe('Builder')
+      expect(params.get('conversation')).toBe('conv-1')
+    } finally {
+      storyOverride.current = null
+    }
   })
 })

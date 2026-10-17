@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
+import { CheckpointsPanel } from './CheckpointsPanel'
 import { useSSEConnectionState } from '@/hooks/useSSE'
 import {
   AgentSummary,
@@ -624,6 +625,7 @@ export function AgentOutputPanel({
    * (F542).
    */
   const { data: checkpoints = [] } = useCheckpoints(currentConversationId ?? null)
+  const [checkpointsOpen, setCheckpointsOpen] = useState(false)
   const offeredCheckpoint = checkpoints.find(
     (checkpoint) =>
       checkpoint.status === 'ready'
@@ -1131,6 +1133,9 @@ export function AgentOutputPanel({
       style={{ background: 'var(--bg)' }}
       data-testid="conversation-panel"
     >
+      {checkpointsOpen && currentConversationId ? (
+        <CheckpointsPanel conversationId={currentConversationId} onClose={() => setCheckpointsOpen(false)} />
+      ) : null}
       <div
         ref={headerRef}
         className="conversation-header-surface flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5"
@@ -1191,6 +1196,20 @@ export function AgentOutputPanel({
           </span>
         )}
         <div className="min-w-0 flex-1" />
+        {/* The conversation's checkpoints and checkpoint notes (slice remaining-hidden-data). */}
+        {currentConversationId && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0"
+            data-testid="conversation-checkpoints-toggle"
+            onClick={() => setCheckpointsOpen(true)}
+            aria-label="Checkpoints"
+            title={checkpoints.length ? `Checkpoints (${checkpoints.length})` : 'Checkpoints'}
+          >
+            <Icon name="event_note" size={16} />
+          </Button>
+        )}
         {onTogglePanel && (
           <Button
             variant="ghost"

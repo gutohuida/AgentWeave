@@ -7,6 +7,7 @@ import { SpecCoverageBar } from './SpecCoverageBar'
 import { SpecDriftPanel } from './SpecDriftPanel'
 import { SpecVaultWarnings } from './SpecVaultWarnings'
 import { SpecRetiredRequirements } from './SpecRetiredRequirements'
+import { SpecResolvedProposals } from './SpecResolvedProposals'
 import { SpecProposalsPanel } from './SpecProposalsPanel'
 import { SpecDocumentTasksLink } from './SpecDocumentTasksLink'
 import { SpecPlaceUnder } from './SpecPlaceUnder'
@@ -269,6 +270,7 @@ export function SpecDocumentPanel({
           on the document itself. Directly beneath coverage, on the same document view, so a
           pending change stays discoverable without a separate screen. */}
       <SpecProposalsPanel path={path} />
+      <SpecResolvedProposals path={path} />
       <SpecDocumentTasksLink path={path} onOpenTasks={onOpenTasks} />
 
       {/* Drift summary — only rendered when the Hub reports manifest drift. */}

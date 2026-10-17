@@ -1058,17 +1058,27 @@ async def _require_proposal(
 @router.get("/documents/{path:path}/proposals")
 async def list_proposals(
     path: str,
+    status_filter: str = Query("pending", alias="status", pattern="^(pending|resolved|all)$"),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Pending proposals for one document — F2's in-position render reads this per document."""
+    """Proposals for one document, pending by default — F2's in-position render reads this per
+    document. `resolved` lists every decided one (accepted, rejected, withdrawn, stale) with who
+    resolved it, when and why, newest decision first (slice remaining-hidden-data)."""
     project_id, _ = project
     document = await _require_document(session, project_id, path)
-    result = await session.execute(
-        select(SpecEditProposal)
-        .where(SpecEditProposal.document_id == document.id, SpecEditProposal.status == "pending")
-        .order_by(SpecEditProposal.created_at)
-    )
+    query = select(SpecEditProposal).where(SpecEditProposal.document_id == document.id)
+    if status_filter == "pending":
+        query = query.where(SpecEditProposal.status == "pending").order_by(
+            SpecEditProposal.created_at
+        )
+    elif status_filter == "resolved":
+        query = query.where(SpecEditProposal.status != "pending").order_by(
+            SpecEditProposal.resolved_at.desc(), SpecEditProposal.created_at.desc()
+        )
+    else:
+        query = query.order_by(SpecEditProposal.created_at)
+    result = await session.execute(query)
     return {"proposals": [_proposal_view(row) for row in result.scalars().all()]}
 
 
