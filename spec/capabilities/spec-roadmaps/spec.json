@@ -244,6 +244,27 @@
       "requirement": "a-roadmap-shows-which-of-its-slices-are-done-unclaimed-gap",
       "then": "the 409 lists roadmap_slice_unclaimed naming the second slice, and approving anyway succeeds",
       "when": "a change document naming no slice is approved without approve_anyway"
+    },
+    {
+      "given": "a roadmap with one unresolved question naming a slice and one naming none",
+      "key": "a-roadmaps-open-question-can-wait-for-its-slice-roadmap",
+      "requirement": "a-roadmaps-open-question-can-wait-for-its-slice-deferred",
+      "then": "the 409 lists unresolved_question once, for the unsliced question",
+      "when": "it is approved without approve_anyway"
+    },
+    {
+      "given": "a roadmap question naming a slice the roadmap does not have",
+      "key": "a-roadmaps-open-question-can-wait-for-its-slice-unknown",
+      "requirement": "a-roadmaps-open-question-can-wait-for-its-slice-question-slice",
+      "then": "a question_slice_unknown gap names it",
+      "when": "it is proposed"
+    },
+    {
+      "given": "that roadmap approved, and a change document naming the slice",
+      "key": "a-roadmaps-open-question-can-wait-for-its-slice-slice-doc",
+      "requirement": "a-roadmaps-open-question-can-wait-for-its-slice-carried",
+      "then": "the first 409 lists roadmap_question_for_slice with the question's text; once restated, that gap is gone",
+      "when": "it is approved without approve_anyway, then again after restating the question"
     }
   ],
   "algorithms": [
@@ -264,6 +285,9 @@
       "FR-10": "a720214874f84cdbad5bfc7d423da9ec15343001d49ed78a43846e2b8ebabb6a",
       "FR-11": "3243a62cbc09153fcf16d5095a05224f84a9348ce8978b32e67803fbfda00de6",
       "FR-12": "7dcbec931ab91d01cc6ca35ff9bc786bcc4b5ee42c4ae99c08ea66a94be51016",
+      "FR-13": "0a7ca08b44bdc8e73add0d9c234628552c28af410ef90426ae6b7a3e1dd528f5",
+      "FR-14": "869b45c68c7820042507c75abcb016f3d16f1ad4e20d6ab0161ba557080a1b47",
+      "FR-15": "9f35f517d9999f407c8bc9c9a5111bd7ed0b80c5bd94cc84de15d63f13ac759c",
       "FR-2": "1b0ab14431a14ce5ed2ae7d3a9277f7c1a4d5bec75c3b8ce44329e44c8201479",
       "FR-3": "eda11f47a5a82d253c708a076938760db3b76d5a11f85d053c69342e1c2d83f6",
       "FR-4": "80b5efd6d72fe8a30263e3f5df49a6af7525bf4465164d5af101e52ba615fd1b",
@@ -273,12 +297,15 @@
       "FR-8": "4e84810bfb8fde5a2acd6fbeb9292281042c3cbc64a5968f38b7bc5af17bb375",
       "FR-9": "785c4093bccb411caaff07dcc4180cf18568ac10d128ebcb1dff553616bc0b0c"
     },
-    "high_water": 12,
+    "high_water": 15,
     "requirements": {
       "a-change-document-may-name-the-roadmap-slice-it-specifies": "FR-2",
       "a-roadmap-carries-ordered-slices-and-no-requirements-or-task": "FR-1",
       "a-roadmap-shows-which-of-its-slices-are-done-slice-state": "FR-11",
       "a-roadmap-shows-which-of-its-slices-are-done-unclaimed-gap": "FR-12",
+      "a-roadmaps-open-question-can-wait-for-its-slice-carried": "FR-15",
+      "a-roadmaps-open-question-can-wait-for-its-slice-deferred": "FR-14",
+      "a-roadmaps-open-question-can-wait-for-its-slice-question-slice": "FR-13",
       "authoring-guidance-prefers-a-roadmap-and-a-small-slice": "FR-4",
       "n1": "FR-5",
       "n2": "FR-6",
@@ -392,6 +419,27 @@
       "party": null,
       "rationale": "F674; approvals are scarce, so this warns and does not gate.",
       "statement": "Proposing or approving a change document that names no roadmap slice, in a project with an approved roadmap that has slices no document claims, MUST list a roadmap_slice_unclaimed gap naming the roadmap, those slices and the roadmap field, and MUST NOT refuse."
+    },
+    {
+      "key": "a-roadmaps-open-question-can-wait-for-its-slice-question-slice",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An open question MAY name a slice; on a roadmap that slice MUST be one of its slices, and on any other document naming one MUST be reported as a gap."
+    },
+    {
+      "key": "a-roadmaps-open-question-can-wait-for-its-slice-deferred",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Deferring to the slice is the answer the roadmap can give.",
+      "statement": "A roadmap's unresolved open question that names one of its slices MUST NOT raise unresolved_question."
+    },
+    {
+      "key": "a-roadmaps-open-question-can-wait-for-its-slice-carried",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F573: nothing carried the question to the slice.",
+      "statement": "Proposing or approving a change document whose roadmap link names a slice MUST list a roadmap_question_for_slice gap for each unresolved roadmap question naming that slice whose text the document does not repeat among its own open questions."
     }
   ],
   "schema_version": 1,

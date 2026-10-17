@@ -81,6 +81,7 @@ CHECKS_ROW_TESTS = "hub/ui/src/__tests__/taskChecksRow.test.tsx"
 RESOLVED_TESTS = "hub/ui/src/__tests__/specResolvedProposals.test.tsx"
 SLICES_TESTS = "hub/tests/test_a_roadmap_shows_which_of_its_slices_are_done.py"
 SLICES_DRIVE = "scripts/drive/d1017_roadmap_slice_states.py"
+QSLICE_TESTS = "hub/tests/test_a_roadmaps_open_question_can_wait_for_its_slice.py"
 TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
 TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
@@ -1716,6 +1717,21 @@ CHANGES = {
              "only; approving anyway succeeds; no gap without an approved roadmap."),
         ],
     },
+    "fqslice": {
+        "document": "spec/changes/a-roadmaps-open-question-can-wait-for-its-slice/spec.json",
+        "commit": "40fe882",
+        "tasks": ["task-e29016e7fda9"],
+        "evidence": [
+            ("FR-1", "task-e29016e7fda9", "test_result", QSLICE_TESTS,
+             "A roadmap question naming slice 'third' (not held) is a question_slice_unknown gap."),
+            ("FR-2", "task-e29016e7fda9", "test_result", QSLICE_TESTS,
+             "Of a sliced and an unsliced unresolved question, only open_questions[1] is an "
+             "unresolved_question gap."),
+            ("FR-3", "task-e29016e7fda9", "test_result", QSLICE_TESTS,
+             "The slice's document gets roadmap_question_for_slice quoting the question; once it "
+             "restates it (case and spacing differ), the gap is gone. 3 failed before the build."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1779,6 +1795,7 @@ CHANGE_FOLDS = {
     "freqstory": 'requirement-traceability',
     "fledger": 'usage-accounting',
     "fslices": 'spec-roadmaps',
+    "fqslice": 'spec-roadmaps',
     "fhidden": {
         'conversation-checkpoint': ['notes-route', 'checkpoints-panel'],
         'project-checks': ['checks-history'],

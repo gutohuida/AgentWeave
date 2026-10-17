@@ -35315,7 +35315,7 @@ Specified earlier and never built (the specs now say so): a live thinking sectio
 
 ## F573 (C) -- a roadmap cannot leave a question for a later slice: every open question blocks proposing it
 
-**Status:** open 2026-10-09. Found while authoring `spec/changes/the-knowledge-vault-and-its-manager-roadmap/` (trial Hub `spdoc-7c75066d6403`), interactive.
+**Status:** fixed 2026-10-17 (Tier 1, `a-roadmaps-open-question-can-wait-for-its-slice`, `spdoc-1e3378cb827a`): an open question on a roadmap may name its `slice`; it then raises no gap on the roadmap, and the slice's change document gets a `roadmap_question_for_slice` gap until it restates the question among its own open questions. The blocking half had already gone: unresolved questions became gaps, not refusals. Earlier: open 2026-10-09. Found while authoring `spec/changes/the-knowledge-vault-and-its-manager-roadmap/` (trial Hub `spdoc-7c75066d6403`), interactive.
 
 A roadmap's slices are specified later, one at a time, in their own change documents (`spec_payload.py` `_check_kind_shape`). So a question that only that slice's spec can answer is a normal thing for a roadmap to carry. One example is "is the map rendered into every turn?", which belongs to the vault slice. `spec_completeness.py:264-272` blocks proposing any document with an unresolved question, roadmaps included. The author then has two bad choices: answer early, as a guess, or hide the question in a slice's `intent` prose, where nothing tracks it. That second choice is the workaround used here.
 
