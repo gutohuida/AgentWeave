@@ -1,0 +1,168 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "notes, one consumed by a checkpoint, and proposals accepted and rejected with reasons",
+      "key": "routes",
+      "requirement": "notes-route",
+      "then": "notes come oldest first naming the consuming checkpoint and resolved proposals carry their reasons, pending stays the default",
+      "when": "the routes are read"
+    },
+    {
+      "given": "a pending, an accepted and a rejected proposal",
+      "key": "proposals-route",
+      "requirement": "resolved-proposals",
+      "then": "each answer holds exactly the matching proposals",
+      "when": "each status is asked for"
+    },
+    {
+      "given": "the Terra replica and a scratch Hub seeded with check runs and resolved proposals",
+      "key": "drive",
+      "requirement": "checkpoints-panel",
+      "then": "a conversation's checkpoints panel shows its notes, the story's transitions and runs open their conversation, the checks row lists the earlier runs with exit codes, and the proposals panel lists the resolved ones with reasons",
+      "when": "scripts/drive/d1017_hidden_data_screens.py runs"
+    },
+    {
+      "given": "three runs in the route's order",
+      "key": "checks-unit",
+      "requirement": "checks-history",
+      "then": "the newest leads and the two earlier runs are listed with each check's exit code and duration",
+      "when": "the checks row renders and is opened"
+    },
+    {
+      "given": "a story whose transition names a run",
+      "key": "links-unit",
+      "requirement": "run-links",
+      "then": "the transition links to that run's conversation",
+      "when": "it renders"
+    },
+    {
+      "given": "resolved proposals",
+      "key": "history-unit",
+      "requirement": "proposals-history",
+      "then": "each shows its outcome, resolver and reason",
+      "when": "the panel renders"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "05b7b9a73bbe3ed1ccc123e5170d48cfbd5be5c1b0e71bdaf3c9ea2b6cf41e63",
+      "FR-2": "251ed055e03cc1afe843819037b55aeac5c86ec549c72e1303403854d0aa0009",
+      "FR-3": "51806a4bdb651f67e9df377b81c09e82e8b5bfdf3d7be075af44fc9f0bcf4235",
+      "FR-4": "8fe5fca7dfbfb07807f1ddbec601e9b26649e33c8448dc95ed10da16d7817efd",
+      "FR-5": "2b4698fbad2df2178097dbbc5509df5848f7c69183e8c0104046e19299c224a2",
+      "FR-6": "995c6382e942a35b6741fc5678c3cf7cab6c3f7db4ae73461121eb4c8ade1f68"
+    },
+    "high_water": 6,
+    "requirements": {
+      "checkpoints-panel": "FR-3",
+      "checks-history": "FR-4",
+      "notes-route": "FR-1",
+      "proposals-history": "FR-6",
+      "resolved-proposals": "FR-2",
+      "run-links": "FR-5"
+    },
+    "retired": {}
+  },
+  "design": "D1 Read what exists: every field shown is already recorded; the only new routes are reads. D2 Pending stays the proposals route's default so the in-position render and every older caller are unchanged. D3 A run link resolves the run's conversation from the story's own run events, so no extra request per transition. D4 The replica judges what it holds (notes, run links); check runs and resolved proposals, which it has none of, are seeded into a scratch Hub's own database.",
+  "evidence": {
+    "checked": [
+      "survey of checkpoints, task_check_runs, task_transitions, spec_edit_proposals and checkpoint_notes routes and UI (2026-10-17)"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "The visibility map of 2026-10-17 found records the Hub keeps and no screen reads: a checkpoint's body, files changed, open questions and probe findings (only its status drives a banner), checkpoint notes (no read route at all), every check run but the newest in the drawer's checks row, the run behind each transition (returned, ignored), and every resolved spec proposal (the route returns pending only). Slice remaining-hidden-data of roadmap spdoc-d882f76795b3.",
+  "requirements": [
+    {
+      "key": "notes-route",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Notes had a write route and no read route.",
+      "statement": "GET /conversations/{id}/checkpoint-notes MUST return the conversation's checkpoint notes oldest first with intent, suspicions, warnings, agent, run and the checkpoint that consumed each, and 404 for a conversation of another project."
+    },
+    {
+      "key": "resolved-proposals",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "GET /documents/{path}/proposals MUST accept status pending, resolved or all, keep pending as the default, and return resolved proposals with their resolver, time and reason."
+    },
+    {
+      "key": "checkpoints-panel",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A checkpoint nobody can read is the defect checkpoints exist to remove.",
+      "statement": "A conversation MUST offer its checkpoints and notes, each checkpoint showing its body, files changed, open questions, citations and probe verdict with findings."
+    },
+    {
+      "key": "checks-history",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The task drawer's checks row MUST offer the task's earlier check runs, each with its state, time and every check's exit code and duration."
+    },
+    {
+      "key": "run-links",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "run_id was returned and ignored.",
+      "statement": "A transition made by a run, and a run, in the task story MUST link to that run's conversation."
+    },
+    {
+      "key": "proposals-history",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The spec proposals panel MUST list resolved proposals with their outcome, who resolved them, when and the reason."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "GET /conversations/{id}/checkpoint-notes, oldest first, with the checkpoint that consumed each",
+      "GET /documents/{path}/proposals?status=pending|resolved|all, pending by default",
+      "A conversation's checkpoints panel: body, files changed, open questions, citations, probe verdict and findings, and its notes",
+      "The drawer's checks row lists earlier runs with per-check exit code and duration",
+      "Transitions and runs in the task story link to the conversation of their run",
+      "The spec proposals panel lists resolved proposals with who resolved them, when and why"
+    ],
+    "non_goals": [
+      "Diffing a checkpoint against its predecessor",
+      "Acting on a resolved proposal"
+    ]
+  },
+  "summary": "Checkpoint bodies, probe findings, files changed and the notes a checkpoint consumed are readable from the conversation; a task's earlier check runs and their per-check results are in its drawer; transitions and runs link to their conversation; resolved spec proposals and their reasons are listed beside the pending ones.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Two read routes; CheckpointsPanel in the conversation; TaskChecksRow earlier runs; TaskStory run links; SpecProposalsPanel resolved list; tests and the drive.",
+      "files": [
+        "hub/hub/api/v1/checkpoints.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/ui/src/components/agents/CheckpointsPanel.tsx"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "notes-route",
+        "resolved-proposals",
+        "checkpoints-panel",
+        "checks-history",
+        "run-links",
+        "proposals-history"
+      ],
+      "reviewer": null,
+      "title": "Notes and resolved-proposal routes; checkpoints panel, checks history, run links, proposals history"
+    }
+  ],
+  "title": "The rest of what the Hub records becomes reachable"
+}
