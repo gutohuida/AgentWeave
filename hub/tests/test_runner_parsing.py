@@ -10,7 +10,7 @@ import json
 import pytest
 
 from hub.runner_adapters import build_command
-from hub.runner_commands import UnsupportedRunnerError
+from hub.runner_commands import CLAUDE_RUN_SETTINGS, UnsupportedRunnerError
 from hub.runner_parsing import (
     parse_claude_line,
     parse_codex_line,
@@ -32,6 +32,9 @@ class TestBuildCommandClaude:
             # F454: the project's settings and skills, not the operator's personal ones.
             "--setting-sources",
             "project,local",
+            # F578: thinking text, through a settings file.
+            "--settings",
+            str(CLAUDE_RUN_SETTINGS),
             # `a-run-reaches-the-hub-without-mcp` D13: the call command is pre-allowed on every
             # non-yolo run, MCP or not.
             "--allowedTools",

@@ -51,6 +51,7 @@ hub = [
     "alembic.ini",
     "data/charters/*.md",
     "data/charters/*.json",
+    "data/*.json",
     "migrations/env.py",
     "migrations/script.py.mako",
     "migrations/versions/*.py",

@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from hub.runner_adapters import AccessAxes, LaunchRequest, build_command, get_adapter
+from hub.runner_commands import CLAUDE_RUN_SETTINGS
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "runner_adapters"
 GOLDEN_PATH = FIXTURES_DIR / "argv_golden.json"
@@ -47,6 +48,16 @@ def _resolve_context_path(tmp_dir: Path, which: str) -> Path:
     return tmp_dir / "missing-context.md"
 
 
+def _normalise(argv, context_path):
+    """Machine paths out of an argv: the context file, and the Claude run settings file (F578)."""
+    return [
+        arg.replace(str(context_path), "<CTX>").replace(
+            str(CLAUDE_RUN_SETTINGS), "<CLAUDE_RUN_SETTINGS>"
+        )
+        for arg in argv
+    ]
+
+
 def _case_ids():
     return [case["id"] for case in GOLDEN_CASES]
 
@@ -69,7 +80,7 @@ def test_build_command_matches_golden(case, tmp_path):
         control_overrides=inputs["control_overrides"],
         restrict_spec_writes=inputs["restrict_spec_writes"],
     )
-    normalised = [arg.replace(str(context_path), "<CTX>") for arg in argv]
+    normalised = _normalise(argv, context_path)
     assert normalised == case["argv"]
 
 
@@ -95,7 +106,7 @@ def test_build_launch_matches_golden(case, tmp_path):
         axes=_axes_for(inputs["runner"], inputs["mcp_command"]),
     )
     argv = transport.build_launch(req)
-    normalised = [arg.replace(str(context_path), "<CTX>") for arg in argv]
+    normalised = _normalise(argv, context_path)
     assert normalised == case["argv"]
 
 

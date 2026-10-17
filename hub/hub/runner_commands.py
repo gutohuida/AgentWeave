@@ -183,6 +183,10 @@ def _with_permission_mode(control_args: Optional[List[str]], mode: str) -> List[
     return out
 
 
+#: The settings layer every Claude run gets (F578), shipped as package data.
+CLAUDE_RUN_SETTINGS = Path(__file__).resolve().parent / "data" / "claude_run_settings.json"
+
+
 def _build_claude_command(
     *,
     cli: str,
@@ -270,6 +274,10 @@ def _build_claude_command(
     # and started loops nobody asked for -- and their personal plugins and hooks. `project,local`
     # rather than "": an empty value also drops the project's CLAUDE.md (F195's titler note).
     cmd += ["--setting-sources", "project,local"]
+    # Thinking text (F578): without `showThinkingSummaries` the CLI streams thinking blocks with
+    # empty text, so no Claude run ever recorded its reasoning. A file, never inline JSON: a JSON
+    # argument's quotes do not survive a Windows `.cmd` shim (F549).
+    cmd += ["--settings", str(CLAUDE_RUN_SETTINGS)]
     mcp_args = _claude_mcp_args(mcp_command, yolo=yolo)
     cmd += mcp_args
     if not yolo:
