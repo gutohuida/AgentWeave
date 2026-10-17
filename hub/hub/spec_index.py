@@ -69,6 +69,9 @@ class IndexedRequirement:
     digest: str
     state: str = ACTIVE
     anchor: str = ""
+    # The wording as declared, recorded on each revision (migration 0131). Not part of identity or
+    # meaning — the digest is — and absent for a retired requirement, which declares none.
+    statement: Optional[str] = None
 
 
 def requirements_from_payload(
@@ -109,6 +112,7 @@ def requirements_from_payload(
                 digest=live_digests.get(identifier, ""),
                 state=ACTIVE,
                 anchor=requirement_anchor(identifier),
+                statement=requirement.statement,
             )
         )
 
@@ -143,6 +147,7 @@ def _revision(
     classification: str,
     actor: spec_lifecycle.Actor,
     source: str,
+    statement: Optional[str] = None,
 ) -> SpecRequirementRevision:
     return SpecRequirementRevision(
         id=f"sprev-{short_id()}",
@@ -157,6 +162,7 @@ def _revision(
         actor_kind=actor.kind,
         actor=actor.name or "",
         run_id=actor.run_id,
+        statement=statement,
     )
 
 
@@ -209,6 +215,7 @@ async def reindex_document(
                     classification=CREATED,
                     actor=actor,
                     source=source,
+                    statement=declared.statement,
                 )
             )
             result.created.append(declared.identifier)
@@ -243,6 +250,7 @@ async def reindex_document(
                     classification=RESTORED,
                     actor=actor,
                     source=source,
+                    statement=declared.statement,
                 )
             )
             result.restored.append(declared.identifier)
@@ -265,6 +273,7 @@ async def reindex_document(
                     classification=REWORDED,
                     actor=actor,
                     source=source,
+                    statement=declared.statement,
                 )
             )
             result.reworded.append(declared.identifier)

@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0130"
+HEAD_REVISION = "0131"
 
 
 # ---------------------------------------------------------------------------
@@ -5473,3 +5473,60 @@ def test_migration_0130_is_a_no_op_without_the_table(tmp_path) -> None:
         conn.commit()
     _upgrade_to(db_url, "0130")
     _downgrade_to(db_url, "0129")
+
+
+# ---------------------------------------------------------------------------
+# 0131 -- spec_requirement_revisions.statement (`how-a-requirement-changed-and-what-proved-it`)
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0131_adds_a_nullable_statement_and_keeps_old_revisions(tmp_path) -> None:
+    db_file = tmp_path / "revisions.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        # The 0130 shape, with one revision recorded before wording was.
+        conn.execute("ALTER TABLE spec_requirement_revisions DROP COLUMN statement")
+        conn.execute(
+            "INSERT INTO spec_requirement_revisions (id, project_id, requirement_id, document_id, "
+            "digest, digest_version, source, classification, actor_kind, actor, created_at) "
+            "VALUES ('sprev-old', 'proj-x', 'spreq-x', 'spdoc-x', 'd1', 1, 'hub', 'created', "
+            "'operator', 'operator', '2026-10-01 00:00:00')"
+        )
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0130')")
+        conn.commit()
+        before = {r[1] for r in conn.execute("PRAGMA table_info(spec_requirement_revisions)")}
+    assert "statement" not in before
+
+    _upgrade_to(db_url, "0131")
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {r[1]: r for r in conn.execute("PRAGMA table_info(spec_requirement_revisions)")}
+        old = conn.execute(
+            "SELECT digest, statement FROM spec_requirement_revisions WHERE id = 'sprev-old'"
+        ).fetchone()
+    assert columns["statement"][3] == 0  # nullable
+    assert old == ("d1", None), "an old revision says its wording was not recorded"
+
+    _downgrade_to(db_url, "0130")
+
+    with sqlite3.connect(db_file) as conn:
+        after = {r[1] for r in conn.execute("PRAGMA table_info(spec_requirement_revisions)")}
+        kept = conn.execute("SELECT count(*) FROM spec_requirement_revisions").fetchone()[0]
+    assert after == before
+    assert kept == 1
+
+
+def test_migration_0131_is_a_no_op_without_the_table(tmp_path) -> None:
+    db_file = tmp_path / "bare.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("DROP TABLE spec_requirement_revisions")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0130')")
+        conn.commit()
+    _upgrade_to(db_url, "0131")
+    _downgrade_to(db_url, "0130")

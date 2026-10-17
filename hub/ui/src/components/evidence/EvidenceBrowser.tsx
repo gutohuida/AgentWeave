@@ -7,6 +7,7 @@ import { useEvidenceReviews, useProjectEvidence, type EvidencePiece } from '@/ap
 import { useTasks } from '@/api/tasks'
 import { evidenceTone, statusTone } from '@/lib/storyTones'
 import { hubDate } from '@/lib/hubTime'
+import { RequirementLink } from '@/components/spec/RequirementLink'
 
 /**
  * Every piece of evidence in the project, in one place (slice evidence-browser).
@@ -333,6 +334,13 @@ export function EvidenceBrowser({
                         <span className="aw-tl-meta" title={requirement.document.path}>
                           {requirement.document.title}
                         </span>
+                      ) : null}
+                      {requirement?.document?.path ? (
+                        <RequirementLink
+                          document={requirement.document.path}
+                          identifier={requirement.identifier}
+                          testId={`evidence-group-history-${key}`}
+                        />
                       ) : null}
                     </>
                   ) : (

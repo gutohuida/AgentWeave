@@ -2415,6 +2415,9 @@ class SpecRequirementRevision(Base):
     # Never accepted from a request body — it comes from the credential the run was minted with.
     actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The wording the requirement had after this revision (migration 0131); null on a retirement,
+    # and on every revision recorded before 0131, whose wording a digest cannot give back.
+    statement: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (

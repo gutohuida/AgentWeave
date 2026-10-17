@@ -104,7 +104,9 @@ export type WorkspaceDestination =
       // The Spec tab's evidence view (slice evidence-browser), and what it is focused on: a task id
       // (`task-...`) or a requirement's durable id (`spreq-...`; a bare `FR-4` still works, but
       // repeats in every document). Linkable, so every mention of evidence opens the pieces it means.
-      view?: 'evidence' | null
+      // `requirement` (slice requirement-story) is one requirement's story: `document` names its
+      // document and `focus` its `FR-n`, the pair the requirement's detail route resolves.
+      view?: 'evidence' | 'requirement' | null
       focus?: string | null
     }
   | { kind: 'project'; projectId: string; tab: 'environment'; environmentSection: EnvironmentSection }
@@ -160,6 +162,19 @@ export function evidenceDestination(
   return cleaned
     ? { kind: 'project', projectId, tab: 'spec', view: 'evidence', focus: cleaned }
     : { kind: 'project', projectId, tab: 'spec', view: 'evidence' }
+}
+
+/** One requirement's story: how its wording changed and what proved it (slice requirement-story).
+ *  A path or identifier that does not parse lands on the document instead, never a dead end. */
+export function requirementDestination(
+  projectId: string,
+  document: string | null,
+  identifier: string | null,
+): Extract<WorkspaceDestination, { kind: 'project' }> {
+  const parsed = parseSpecDocument(document)
+  const cleaned = identifier && /^[A-Za-z0-9_.:-]{1,80}$/.test(identifier) ? identifier : null
+  if (!parsed || !cleaned) return projectDestination(projectId, 'spec', parsed)
+  return { kind: 'project', projectId, tab: 'spec', view: 'requirement', document: parsed, focus: cleaned }
 }
 
 /** Navigate from anywhere: push the destination's URL and announce it the way Back does, so the
@@ -348,6 +363,18 @@ export function serializeDestination(destination: WorkspaceDestination): string 
     if (destination.focus) params.set('focus', destination.focus)
     return `?${params.toString()}`
   }
+  if (
+    destination.tab === 'spec' &&
+    destination.view === 'requirement' &&
+    destination.document &&
+    isSpecDocumentPath(destination.document) &&
+    destination.focus
+  ) {
+    params.set('view', 'requirement')
+    params.set('document', destination.document)
+    params.set('focus', destination.focus)
+    return `?${params.toString()}`
+  }
   if (destination.tab === 'spec' && destination.document && isSpecDocumentPath(destination.document)) {
     params.set('document', destination.document)
     if (destination.anchor) params.set('anchor', destination.anchor)
@@ -411,6 +438,9 @@ export function parseDestination(search: string): WorkspaceDestination | null {
     : DEFAULT_TAB
   if (tab === 'spec' && params.get('view') === 'evidence') {
     return evidenceDestination(projectId, params.get('focus'))
+  }
+  if (tab === 'spec' && params.get('view') === 'requirement') {
+    return requirementDestination(projectId, params.get('document'), params.get('focus'))
   }
   return projectDestination(projectId, tab, parseSpecDocument(params.get('document')), params.get('anchor'))
 }

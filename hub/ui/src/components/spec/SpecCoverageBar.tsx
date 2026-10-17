@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { EvidencePieces } from './EvidencePieces'
 import { EvidenceLink } from '@/components/evidence/EvidenceLink'
+import { RequirementLink } from './RequirementLink'
 import { useSpecCoverage, type CoverageEntry } from '@/api/spec'
 
 /** Order and wording, highest precedence first. The labels say what the state *means* rather than
@@ -167,6 +168,12 @@ export function SpecCoverageBar({ path, onOpenTasks }: SpecCoverageBarProps) {
                 </a>{' '}
                 — {state?.label ?? entry.state}
                 {integration ? ` · ${integration}` : ''}
+                {' · '}
+                <RequirementLink
+                  document={path}
+                  identifier={entry.identifier}
+                  testId={`coverage-history-${entry.identifier}`}
+                />
                 {/* Verified by the change folded into this capability, not by evidence of its own
                     (F593): say which, or the state reads as if this requirement were driven. */}
                 {entry.served_by

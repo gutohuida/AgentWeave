@@ -4,9 +4,9 @@ import { useConfigStore } from '@/store/configStore'
 import { evidenceDestination, goTo } from '@/lib/navigation'
 
 /**
- * Opens the evidence browser focused on what a mention of evidence means: a task id (`task-…`) or
- * a requirement's durable id (`spreq-…`; `FR-n` repeats in every document), or the whole project when `focus` is null (slice
- * evidence-browser's cross-links). Every place that says "evidence" can then show the pieces.
+ * Opens the evidence browser focused on what a mention of evidence means: a task id (`task-…`), a
+ * requirement's durable id (`spreq-…`; `FR-n` repeats in every document), or the whole project
+ * when `focus` is null (slice evidence-browser's cross-links).
  */
 export function EvidenceLink({
   focus,

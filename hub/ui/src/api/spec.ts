@@ -895,8 +895,42 @@ export function useSpecRequirements(path: string | null) {
   })
 }
 
+/** One revision of a requirement (slice requirement-story), oldest first as the route returns.
+ *  `statement` is null on a retirement and on every revision recorded before migration 0131. */
+export interface RequirementRevision {
+  id: string
+  classification: 'created' | 'reworded' | 'retired' | 'restored'
+  source: string
+  actor_kind: string
+  actor: string
+  run_id: string | null
+  statement: string | null
+  digest: string
+  previous_digest: string | null
+  created_at: string | null
+  /** The change this revision was folded in from, when a fold wrote it. */
+  folded_from?: { path: string; title: string; at: string } | null
+}
+
+export interface RequirementDriftRow {
+  id: string
+  evidence_id: string
+  state: 'candidate' | 'resolved' | 'superseded'
+  observed: unknown
+  resolution: string | null
+  resolved_by: string | null
+  resolved_at: string | null
+  created_at: string | null
+}
+
 export interface SpecRequirementDetail {
-  requirement: SpecRequirementRow
+  /** `statement` and `document` are absent from a Hub before slice requirement-story. */
+  requirement: SpecRequirementRow & {
+    statement?: string | null
+    document?: { path: string; title: string } | null
+  }
+  revisions?: RequirementRevision[]
+  drift?: RequirementDriftRow[]
   /** In `Task.created_at` order (`requirement_links.tasks_for_requirement`). */
   tasks: Array<{ id: string; title: string; status: string; assignee: string | null }>
   /** Oldest first (`requirement_evidence.for_requirement`). */

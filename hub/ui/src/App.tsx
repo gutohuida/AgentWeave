@@ -36,6 +36,7 @@ import { RunnersPage } from '@/components/runners/RunnersPage'
 import { useSpecDocuments } from '@/api/spec'
 import { SpecPage } from '@/components/spec/SpecPage'
 import { EvidenceBrowser } from '@/components/evidence/EvidenceBrowser'
+import { RequirementStory } from '@/components/spec/RequirementStory'
 import { useTasks } from '@/api/tasks'
 import { TasksBoard } from '@/components/tasks/TasksBoard'
 import { DependencyBoardView } from '@/components/tasks/DependencyBoardView'
@@ -439,6 +440,25 @@ export default function App() {
             )}
           </div>
         </div>
+      )
+    } else if (
+      destination.tab === 'spec' &&
+      destination.view === 'requirement' &&
+      destination.document &&
+      destination.focus
+    ) {
+      // One requirement's story (slice requirement-story): linkable, from its document and FR-n.
+      projectContent = (
+        <RequirementStory
+          key={`${destination.document}#${destination.focus}`}
+          document={destination.document}
+          identifier={destination.focus}
+          onOpenDocument={(path) => navigateTo(projectDestination(destination.projectId, 'spec', path))}
+          onOpenTask={(taskId) => {
+            useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
+            navigateTo(projectDestination(destination.projectId, 'tasks'))
+          }}
+        />
       )
     } else if (destination.tab === 'spec' && destination.view === 'evidence') {
       // The Spec tab's evidence view (slice evidence-browser): linkable, focused by the URL.

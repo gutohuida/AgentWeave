@@ -67,8 +67,10 @@ from ...db.models import (
     RequirementEvidence,
     SpecDocument,
     SpecDocumentEvent,
+    SpecDocumentMerge,
     SpecEditProposal,
     SpecRequirement,
+    SpecRequirementRevision,
     Task,
 )
 from ...schemas.common import RequestModel
@@ -1309,6 +1311,7 @@ async def requirement_detail(
         (entry for entry in report.requirements if entry.requirement_id == requirement.id), None
     )
     views = await _evidence_views(session, project_id, evidence)
+    story = await _requirement_story(session, project_id, requirement)
     return {
         "requirement": {
             "id": requirement.id,
@@ -1318,7 +1321,14 @@ async def requirement_detail(
             "state": requirement.state,
             "digest": requirement.digest,
             "anchor": requirement.anchor,
+            "statement": story["statement"],
+            "document": story["document"],
         },
+        # How it changed (slice requirement-story): oldest first, as recorded. `statement` is null
+        # on a retirement and on every revision recorded before migration 0131.
+        "revisions": story["revisions"],
+        # Every drift row, resolved and superseded included, oldest first.
+        "drift": story["drift"],
         "tasks": [
             {"id": task.id, "title": task.title, "status": task.status, "assignee": task.assignee}
             for task in tasks
@@ -1326,6 +1336,117 @@ async def requirement_detail(
         "evidence": views,
         # Never omitted, and never without its integration answer.
         "coverage": coverage.to_dict() if coverage else None,
+    }
+
+
+#: How close a revision and a merge row must be to belong to one fold (one transaction).
+_FOLD_WINDOW_SECONDS = 5.0
+
+
+async def _requirement_story(
+    session: AsyncSession, project_id: str, requirement: SpecRequirement
+) -> Dict[str, Any]:
+    """The requirement's current wording and document, its revisions and its drift."""
+    from ... import spec_reading
+
+    document = await session.get(SpecDocument, requirement.document_id)
+    statement: Optional[str] = None
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, project_id)
+        payloads = await spec_reading.payloads_for_documents(
+            session, workspace, [requirement.document_id]
+        )
+        statement = (
+            spec_reading.statements_by_key(payloads.get(requirement.document_id))
+            .get(requirement.key, {})
+            .get("statement")
+        )
+    except Exception:  # noqa: BLE001 - the wording is an addition; its absence is not a failure
+        statement = None
+    revisions = (
+        (
+            await session.execute(
+                select(SpecRequirementRevision)
+                .where(SpecRequirementRevision.requirement_id == requirement.id)
+                .order_by(SpecRequirementRevision.created_at, SpecRequirementRevision.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    # A fold writes the capability through a merge in one transaction: the revision it causes and
+    # the merge row are recorded within a moment of each other, and the revision's meaning (its
+    # digest) is one the change declares. Both must hold for a revision to name the change it was
+    # folded from; no column links them.
+    merges = (
+        await session.execute(
+            select(SpecDocumentMerge, SpecDocument)
+            .join(SpecDocument, SpecDocument.id == SpecDocumentMerge.change_document_id)
+            .where(SpecDocumentMerge.capability_document_id == requirement.document_id)
+        )
+    ).all()
+
+    def folded_from(revision: SpecRequirementRevision) -> Optional[Dict[str, Any]]:
+        if revision.created_at is None:
+            return None
+        near = [
+            (abs((merge.created_at - revision.created_at).total_seconds()), merge, change)
+            for merge, change in merges
+            if merge.created_at is not None
+            and isinstance(change.requirement_digests, dict)
+            and revision.digest in change.requirement_digests.values()
+        ]
+        near = [entry for entry in near if entry[0] <= _FOLD_WINDOW_SECONDS]
+        if not near:
+            return None
+        _, merge, change = min(near, key=lambda entry: entry[0])
+        return {"path": change.path, "title": change.title, "at": merge.created_at.isoformat()}
+
+    drift = (
+        (
+            await session.execute(
+                select(RequirementDrift)
+                .where(RequirementDrift.requirement_id == requirement.id)
+                .order_by(RequirementDrift.created_at, RequirementDrift.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "statement": statement,
+        "document": (
+            {"path": document.path, "title": document.title} if document is not None else None
+        ),
+        "revisions": [
+            {
+                "id": row.id,
+                "classification": row.classification,
+                "source": row.source,
+                "actor_kind": row.actor_kind,
+                "actor": row.actor,
+                "run_id": row.run_id,
+                "statement": row.statement,
+                "digest": row.digest,
+                "previous_digest": row.previous_digest,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "folded_from": folded_from(row),
+            }
+            for row in revisions
+        ],
+        "drift": [
+            {
+                "id": row.id,
+                "evidence_id": row.evidence_id,
+                "state": row.state,
+                "observed": row.observed,
+                "resolution": row.resolution,
+                "resolved_by": row.resolved_by,
+                "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in drift
+        ],
     }
 
 
