@@ -1332,6 +1332,69 @@ async def slice_claims(
     return claims
 
 
+async def link_roadmap_slice(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    document: SpecDocument,
+    roadmap_path: str,
+    slice_key: str,
+    *,
+    actor: spec_lifecycle.Actor,
+) -> bool:
+    """Name the roadmap slice a change document built, at any phase (F674 backfill, vis-D9).
+
+    A metadata write, not a content write: `save_document` refuses an approved or archived document
+    whole, and this touches the `roadmap` field alone, so no requirement, digest or phase moves.
+    Set-once: a document already naming a different slice is refused, since a moving link would
+    move a slice's state silently. Returns False when the same link was already there.
+    """
+    if document.kind != "change-spec":
+        raise SaveRefusedError(
+            "only a change document names the roadmap slice it specifies",
+            code="not_a_change_document",
+            field_path="roadmap",
+        )
+    roadmap = await spec_lifecycle.get_document(session, document.project_id, roadmap_path)
+    if roadmap is None or roadmap.kind != "roadmap":
+        raise SaveRefusedError(
+            f"{roadmap_path} is not a roadmap of this project",
+            code="roadmap_not_found",
+            field_path="roadmap.document",
+        )
+    keys = [str(item["key"]) for item in roadmap_slices(workspace, roadmap.path)]
+    if slice_key not in keys:
+        raise SaveRefusedError(
+            f"{roadmap.path} has no slice {slice_key!r}; its slices are: {', '.join(keys)}",
+            code="roadmap_slice_unknown",
+            field_path="roadmap.slice",
+        )
+    content = spec_documents.read_document(workspace, document.path)
+    stored = spec_documents.parse_stored(content)
+    if stored is None:
+        raise SaveRefusedError(
+            f"{document.path} holds no payload to link", code="document_unreadable"
+        )
+    link = {"document": roadmap.path, "slice": slice_key}
+    current = stored.get("roadmap")
+    if current == link:
+        return False
+    if current:
+        raise SaveRefusedError(
+            f"{document.path} already names {current}; reopen it to change its slice",
+            code="roadmap_link_differs",
+            field_path="roadmap",
+        )
+    stored["roadmap"] = link
+    rewritten = spec_documents.write_payload(
+        workspace, document.path, stored, spec_documents.parse_hub(content)
+    )
+    document.content_digest = spec_lifecycle.digest(rewritten)
+    await spec_lifecycle.record_event(
+        session, document, kind="roadmap_link", actor=actor, detail=dict(link)
+    )
+    return True
+
+
 async def _unclaimed_slices(
     session: AsyncSession, workspace: ProjectWorkspace, project_id: str, payload: SpecPayload
 ) -> List[spec_completeness.Finding]:

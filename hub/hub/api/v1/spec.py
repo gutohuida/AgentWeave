@@ -837,6 +837,53 @@ async def write_document_content(
     }
 
 
+class RoadmapLink(RequestModel):
+    """The roadmap slice a change document built: the roadmap's path and the slice's key."""
+
+    document: str = Field(min_length=1, max_length=255)
+    slice: str = Field(min_length=1, max_length=64)
+
+
+@router.put("/documents/{path:path}/roadmap")
+async def link_roadmap_slice(
+    path: str,
+    body: RoadmapLink,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Name the roadmap slice a change document built, at any phase, archived included (vis-D9).
+
+    Changes the `roadmap` field and nothing else, so it is not a way around the content checks; the
+    same link twice is a no-op, and a different one is refused (`spec_service.link_roadmap_slice`).
+    """
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    workspace = await _workspace(session, project_id)
+    try:
+        roadmap_path = validate_spec_path(body.document)
+    except SpecPathError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    try:
+        changed = await spec_service.link_roadmap_slice(
+            session, workspace, document, roadmap_path, body.slice, actor=_operator()
+        )
+    except spec_service.SaveRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
+        ) from exc
+    await session.commit()
+    if changed:
+        await sse_manager.broadcast(
+            project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+        )
+    return {
+        "path": document.path,
+        "roadmap": {"document": roadmap_path, "slice": body.slice},
+        "changed": changed,
+    }
+
+
 @router.get("/documents/{path:path}/rigor-history")
 async def rigor_history(
     path: str,

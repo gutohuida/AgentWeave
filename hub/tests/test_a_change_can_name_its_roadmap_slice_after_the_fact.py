@@ -10,6 +10,7 @@ from hub import spec_lifecycle
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument, SpecDocumentEvent
 
+from .test_a_finished_change_is_folded_into_its_capability import _finish_tasks
 from .test_a_roadmap_shows_which_of_its_slices_are_done import (
     BASE,
     FIRST,
@@ -20,7 +21,6 @@ from .test_a_roadmap_shows_which_of_its_slices_are_done import (
     _change,
     _write,
 )
-from .test_a_finished_change_is_folded_into_its_capability import _finish_tasks
 
 
 async def _archived_loose(app, auth_headers):
