@@ -265,6 +265,27 @@
       "requirement": "a-roadmaps-open-question-can-wait-for-its-slice-carried",
       "then": "the first 409 lists roadmap_question_for_slice with the question's text; once restated, that gap is gone",
       "when": "it is approved without approve_anyway, then again after restating the question"
+    },
+    {
+      "given": "an approved roadmap with slice first, and an archived change document with no roadmap link",
+      "key": "a-change-can-name-its-roadmap-slice-after-the-fact-archived",
+      "requirement": "a-change-can-name-its-roadmap-slice-after-the-fact-link",
+      "then": "200; its stored requirements and aw_identity are byte-identical, its phase is still archived, and the row's content digest is the file's",
+      "when": "the operator PUTs {document: roadmap, slice: first} to its roadmap route"
+    },
+    {
+      "given": "the same project",
+      "key": "a-change-can-name-its-roadmap-slice-after-the-fact-refused",
+      "requirement": "a-change-can-name-its-roadmap-slice-after-the-fact-valid",
+      "then": "each is a 422 naming its code, and nothing is written",
+      "when": "the link names an unknown slice, a non-roadmap document, targets the roadmap itself, or re-points an already linked document"
+    },
+    {
+      "given": "that link set",
+      "key": "a-change-can-name-its-roadmap-slice-after-the-fact-page",
+      "requirement": "a-change-can-name-its-roadmap-slice-after-the-fact-shows",
+      "then": "slice first shows archived and names the linked document",
+      "when": "the roadmap page is read"
     }
   ],
   "algorithms": [
@@ -288,6 +309,9 @@
       "FR-13": "0a7ca08b44bdc8e73add0d9c234628552c28af410ef90426ae6b7a3e1dd528f5",
       "FR-14": "869b45c68c7820042507c75abcb016f3d16f1ad4e20d6ab0161ba557080a1b47",
       "FR-15": "9f35f517d9999f407c8bc9c9a5111bd7ed0b80c5bd94cc84de15d63f13ac759c",
+      "FR-16": "3b324359c771ffa67460bc6d4f7d7c8d24ce5ed0fbbdcaac1ddb3f23975bf9f1",
+      "FR-17": "c16473649f95b19d567eb4fa5029f8d47251f5fde355bc069f8e2e09df11d77a",
+      "FR-18": "f15eae283892e03b46b0ba843d3dd9b984b240ac1cce635dd172e48a1820d317",
       "FR-2": "1b0ab14431a14ce5ed2ae7d3a9277f7c1a4d5bec75c3b8ce44329e44c8201479",
       "FR-3": "eda11f47a5a82d253c708a076938760db3b76d5a11f85d053c69342e1c2d83f6",
       "FR-4": "80b5efd6d72fe8a30263e3f5df49a6af7525bf4465164d5af101e52ba615fd1b",
@@ -297,8 +321,11 @@
       "FR-8": "4e84810bfb8fde5a2acd6fbeb9292281042c3cbc64a5968f38b7bc5af17bb375",
       "FR-9": "785c4093bccb411caaff07dcc4180cf18568ac10d128ebcb1dff553616bc0b0c"
     },
-    "high_water": 15,
+    "high_water": 18,
     "requirements": {
+      "a-change-can-name-its-roadmap-slice-after-the-fact-link": "FR-16",
+      "a-change-can-name-its-roadmap-slice-after-the-fact-shows": "FR-18",
+      "a-change-can-name-its-roadmap-slice-after-the-fact-valid": "FR-17",
       "a-change-document-may-name-the-roadmap-slice-it-specifies": "FR-2",
       "a-roadmap-carries-ordered-slices-and-no-requirements-or-task": "FR-1",
       "a-roadmap-shows-which-of-its-slices-are-done-slice-state": "FR-11",
@@ -440,6 +467,27 @@
       "party": null,
       "rationale": "F573: nothing carried the question to the slice.",
       "statement": "Proposing or approving a change document whose roadmap link names a slice MUST list a roadmap_question_for_slice gap for each unresolved roadmap question naming that slice whose text the document does not repeat among its own open questions."
+    },
+    {
+      "key": "a-change-can-name-its-roadmap-slice-after-the-fact-link",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "vis-D9: a built slice must read as done.",
+      "statement": "An operator MUST be able to set a change document's roadmap link at any phase, archived included, without changing its requirements, their digests or its phase."
+    },
+    {
+      "key": "a-change-can-name-its-roadmap-slice-after-the-fact-valid",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A metadata write must not be a way around the content checks.",
+      "statement": "The link MUST be refused when the target is not a change document, the named document is not a roadmap of the project, the slice is not one of the roadmap's slices, or the document already names a different slice."
+    },
+    {
+      "key": "a-change-can-name-its-roadmap-slice-after-the-fact-shows",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F579's slice states are derived from the link, so this is what makes the backfill visible.",
+      "statement": "After the link is set, the roadmap page MUST show the slice at the linked document's phase."
     }
   ],
   "schema_version": 1,
