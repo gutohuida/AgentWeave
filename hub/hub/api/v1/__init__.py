@@ -16,6 +16,7 @@ from .fs_browse import router as fs_browse_router
 from .inbound_queue import router as inbound_queue_router
 from .instructions import router as instructions_router
 from .jobs import router as jobs_router
+from .ledger import router as ledger_router
 from .logs import router as logs_router
 from .loops import router as loops_router
 from .manager import router as manager_router
@@ -44,6 +45,7 @@ v1_router.include_router(native_dialog_router)
 
 project_resources_router = APIRouter(prefix="/projects/{project_id}")
 project_resources_router.include_router(accounting_router)
+project_resources_router.include_router(ledger_router)
 project_resources_router.include_router(messages_router)
 project_resources_router.include_router(tasks_router)
 project_resources_router.include_router(questions_router)

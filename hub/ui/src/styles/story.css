@@ -363,6 +363,9 @@
   padding: 28px clamp(16px, 4vw, 48px) 48px;
   display: grid;
   align-content: start;
+  /* Rows take their content's height: in a fixed-height grid, auto rows shrink an overflow-hidden
+     child (the ledger's totals) to nothing once the page is taller than the screen. */
+  grid-auto-rows: max-content;
   gap: 18px;
   max-width: 1080px;
   margin: 0 auto;
@@ -602,4 +605,68 @@
   background: color-mix(in srgb, var(--red) 9%, transparent);
   border-radius: 3px;
   padding: 0 1px;
+}
+
+/* The project's ledger (slice project-ledger). */
+.aw-ledger-chart { display: grid; gap: 6px; margin: 0; }
+.aw-ledger-chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-height: 18px; }
+.aw-ledger-chart-readout { font-size: 12px; color: var(--text-2); }
+.aw-ledger-chart-readout strong { color: var(--text); font-weight: 600; }
+.aw-ledger-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 140px;
+  padding-bottom: 1px;
+  border-bottom: 1px solid var(--border);
+  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--border) 60%, transparent) 1px, transparent 1px);
+  background-size: 100% 25%;
+}
+.aw-ledger-bar {
+  flex: 1 1 0;
+  min-width: 3px;
+  max-width: 44px;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  padding: 0;
+  cursor: default;
+}
+.aw-ledger-bar > span {
+  display: block;
+  width: 100%;
+  height: var(--h);
+  border-radius: 4px 4px 0 0;
+  background: var(--blue);
+  opacity: 0.78;
+  transform-origin: bottom;
+  animation: aw-ledger-grow var(--dur-expand, 260ms) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 25ms);
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.aw-ledger-bar[data-active="true"] > span, .aw-ledger-bar:focus-visible > span { opacity: 1; }
+.aw-ledger-bar:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
+@keyframes aw-ledger-grow { from { transform: scaleY(0); } }
+.aw-ledger-axis { display: flex; justify-content: space-between; }
+.aw-ledger-columns > section { align-content: start; }
+.aw-ledger-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 26px; }
+.aw-ledger-rank { display: grid; grid-template-columns: minmax(0, 11rem) 1fr auto; align-items: center; gap: 10px; font-size: 12.5px; }
+.aw-ledger-rank-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; color: var(--text); }
+.aw-ledger-rank-track { height: 8px; border-radius: 4px; background: var(--surface-2, color-mix(in srgb, var(--border) 50%, transparent)); overflow: hidden; }
+.aw-ledger-rank-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--blue);
+  opacity: 0.78;
+  transform-origin: left;
+  animation: aw-ledger-reach var(--dur-expand, 260ms) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+@keyframes aw-ledger-reach { from { transform: scaleX(0); } }
+.aw-ledger-rank-value { font: 500 12px/1.2 var(--mono); font-variant-numeric: tabular-nums; color: var(--text-2); }
+.aw-ledger-meta { flex-shrink: 0; white-space: nowrap; }
+.aw-folded-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 6px; border-radius: 8px; font-size: 12px; color: var(--text-2); background: color-mix(in srgb, var(--amber) 8%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .aw-ledger-bar > span, .aw-ledger-rank-track > span { animation: none; }
 }

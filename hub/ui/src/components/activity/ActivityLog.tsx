@@ -28,6 +28,10 @@ function eventActor(data: unknown): string | null {
 
 const MAX_EVENTS = 200
 
+/** Notices folded into one counted row instead of one row each (slice project-ledger, decision 4):
+ *  `context_warning` was half the log. */
+const FOLDED_KINDS = new Set(['context_warning'])
+
 const SEVERITY_FILTERS = ['all', 'error', 'warn', 'info', 'debug'] as const
 type SeverityFilter = (typeof SEVERITY_FILTERS)[number]
 
@@ -161,9 +165,16 @@ export function ActivityLog() {
     setAtTail(el.scrollTop < 40)
   }
 
-  const visibleEvents = severityFilter === 'all'
+  const filteredEvents = severityFilter === 'all'
     ? events
     : events.filter((e) => e.severity === severityFilter)
+  const visibleEvents = filteredEvents.filter((e) => !FOLDED_KINDS.has(e.type))
+  const folded = [...FOLDED_KINDS]
+    .map((kind) => {
+      const matching = filteredEvents.filter((e) => e.type === kind)
+      return { kind, count: matching.length, last: matching[matching.length - 1]?.timestamp ?? null }
+    })
+    .filter((entry) => entry.count > 0)
 
   return (
     <div className="flex flex-col h-full p-4 gap-3">
@@ -215,11 +226,20 @@ export function ActivityLog() {
               </div>
             ))}
           </div>
-        ) : visibleEvents.length === 0 ? (
+        ) : visibleEvents.length === 0 && folded.length === 0 ? (
           <EmptyState icon="monitoring" title="Waiting for events…" description="SSE events will stream here in real time." />
         ) : (
           <>
             <div ref={tailRef} data-testid="activity-tail-anchor" />
+            {folded.map((entry) => (
+              <div key={entry.kind} className="aw-folded-row" data-testid={`activity-folded-${entry.kind}`}>
+                <Icon name="warning" size={14} />
+                <span>
+                  <strong>{entry.count}</strong> {entry.kind.replace(/_/g, ' ')}
+                  {entry.count === 1 ? '' : 's'} in this window, folded into one row
+                </span>
+              </div>
+            ))}
             {[...visibleEvents].reverse().map((event) => (
               <EventRow
                 key={event.localId}

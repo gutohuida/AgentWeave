@@ -6,6 +6,7 @@ import { ConversationView } from '@/components/agents/ConversationView'
 import { AgentCreateDialog } from '@/components/agents/AgentCreateDialog'
 import { NewConversationSurface } from '@/components/agents/NewConversationSurface'
 import { ActivityLog } from '@/components/activity/ActivityLog'
+import { ProjectLedger } from '@/components/activity/ProjectLedger'
 import { ChartersPage } from '@/components/charters/ChartersPage'
 import { InstructionsPage } from '@/components/instructions/InstructionsPage'
 import { JobsPage } from '@/components/jobs/JobsPage'
@@ -103,7 +104,8 @@ export default function App() {
   const [projectManagerMode, setProjectManagerMode] = useState<ProjectManagerMode | null>(null)
   const [agentCreateProjectId, setAgentCreateProjectId] = useState<string | null>(null)
   const [overviewQuestionsOpen, setOverviewQuestionsOpen] = useState(false)
-  const [activitySubview, setActivitySubview] = useState<'activity' | 'logs'>('activity')
+  // The ledger leads (slice project-ledger): what the project did, before the live stream of it.
+  const [activitySubview, setActivitySubview] = useState<'ledger' | 'activity' | 'logs'>('ledger')
   // Task 8.11: the seven-column board stays the default and unchanged — the dependency board is
   // an alternate lens on the same data, not a replacement, so it is opt-in per visit rather than
   // a stored preference.
@@ -524,7 +526,7 @@ export default function App() {
               aria-label="Activity view"
               style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
             >
-            {(['activity', 'logs'] as const).map((view) => (
+            {(['ledger', 'activity', 'logs'] as const).map((view) => (
               <button
                 key={view}
                 type="button"
@@ -540,7 +542,18 @@ export default function App() {
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
-            {activitySubview === 'activity' ? <ActivityLog /> : <LogsView />}
+            {activitySubview === 'ledger' ? (
+              <ProjectLedger
+                onOpenTask={(taskId) => {
+                  useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
+                  navigateTo(projectDestination(destination.projectId, 'tasks'))
+                }}
+              />
+            ) : activitySubview === 'activity' ? (
+              <ActivityLog />
+            ) : (
+              <LogsView />
+            )}
           </div>
         </div>
       )

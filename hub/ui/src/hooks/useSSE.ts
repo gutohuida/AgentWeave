@@ -461,6 +461,8 @@ export function useSSE(onEvent?: SSEListener) {
           break
         case 'task_updated':
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
+          // An approval merges into main and moves the ledger's lanes (slice project-ledger).
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'ledger'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
           // Neither payload carries `loop_id` (`tasks.py` broadcasts only `id`/`title`/`status`),
           // and `Task.loop_id` is write-once (design D14) so there is no reassignment to track —
@@ -481,6 +483,7 @@ export function useSSE(onEvent?: SSEListener) {
           break
         }
         case 'task_integration_retried':
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'ledger'] })
           // The note reads a per-task key, and a retry appends a row to exactly one of them.
           queryClient.invalidateQueries({
             queryKey: ['project', pid, 'task', (event.data as { task_id?: string } | null)?.task_id, 'integrations'],
@@ -524,6 +527,8 @@ export function useSSE(onEvent?: SSEListener) {
           // update for a direct-spawn run.
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'accounting'] })
+          // A run's spend and divergence are ledger lanes.
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'ledger'] })
           queryClient.invalidateQueries({ queryKey: ['projects'] })
           // A run belongs to a task's story (its cost, its duration); an open drawer refetches it.
           invalidateTaskStories(queryClient, pid)

@@ -229,3 +229,29 @@ describe('ActivityLog and a stream_gap', () => {
     expect(screen.queryByText('task_updated')).not.toBeInTheDocument()
   })
 })
+
+describe('slice project-ledger — repeated notices fold into one counted row', () => {
+  beforeEach(() => {
+    capturedCallback.current = null
+    vi.mocked(getJson).mockResolvedValue([])
+    useConfigStore.setState({
+      apiKey: 'aw_live_TESTKEY',
+      hubUrl: 'http://hub.test',
+      selectedProjectId: 'proj-test',
+      isConfigured: true,
+      bootstrapState: 'ready',
+    })
+  })
+
+  it('shows three context_warning events as one row counting them, other events as rows', async () => {
+    render(withQueryClient(<ActivityLog />))
+    await waitFor(() => expect(capturedCallback.current).not.toBeNull())
+    act(() => {
+      for (let i = 0; i < 3; i++) capturedCallback.current?.(fakeEvent('context_warning', { agent: 'builder' }))
+      capturedCallback.current?.(fakeEvent('message_created', { id: 'm-1' }))
+    })
+    expect(screen.getByTestId('activity-folded-context_warning').textContent).toContain('3 context warnings')
+    expect(screen.queryByText('context_warning')).toBeNull()
+    expect(screen.getByText('message_created')).toBeInTheDocument()
+  })
+})
