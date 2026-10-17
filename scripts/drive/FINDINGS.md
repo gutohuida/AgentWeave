@@ -35372,7 +35372,7 @@ The "Depends on" picker added for F571 (`97ef44f`) called `useTasks()` binding o
 
 ## F579 (C) -- a roadmap cannot show which of its slices are closed
 
-**Status:** open 2026-10-11. Found closing the `contradictions` slice (build window iteration 3).
+**Status:** fixed 2026-10-17 (Tier 1, `a-roadmap-shows-which-of-its-slices-are-done`, `spdoc-eaf6fb419bb7`): a roadmap's page shows each slice's state and document, derived on read from the change documents whose roadmap link names it, or "not started". `d1017_roadmap_slice_states.py` 3 FAILED before, ALL PASS after. Earlier: open 2026-10-11. Found closing the `contradictions` slice (build window iteration 3).
 
 The build playbook's close step ends "mark the slice done in the roadmap document through the Hub" (`.claude/loops/build-window.md:101`). There is nothing to mark: a slice carries `key`, `title`, `intent`, `done`, `builds_after` and no state (`hub/hub/spec_payload.py`, `_check_kind_shape`), and `spec_render._slices` (`hub/hub/spec_render.py:444-460`) renders only those fields. A slice is closed when the change document naming it (`roadmap.slice`) is archived, but nothing joins the two for a reader: the roadmap page reads the same after `sources-that-disagree-are-pointed-out` was folded and archived (200) as before. Each loop composes by listing `spec/changes/` and `spec/changes/archive/` and matching slice keys by hand (`build-window.md:27-30`).
 
@@ -36203,7 +36203,7 @@ A piece renders as one run-on line: the agent's own summary, actor, locator, com
 
 ## F674 (C) -- a roadmap slice's change document can be written, approved, built and archived without ever naming its slice
 
-**Status:** open 2026-10-17. Found closing the visibility roadmap (interactive, after slice remaining-hidden-data).
+**Status:** partly fixed 2026-10-17 (Tier 1, same change as F579): proposing or approving a change document that names no slice, while an approved roadmap has unclaimed slices, lists a `roadmap_slice_unclaimed` gap (warn, never gate). Open: whether an archived document may gain its roadmap link afterwards (the change's open question `backfill`, for the operator), which is what the visibility roadmap's seven archived slice documents would need to read as done. Earlier: open 2026-10-17. Found closing the visibility roadmap (interactive, after slice remaining-hidden-data).
 
 All seven change documents that built `evidence-goes-agentic-and-the-project-becomes-visible-roadmap` (`spdoc-d882f76795b3`) carry no `roadmap` link (`SpecPayload.roadmap`, `hub/hub/spec_payload.py:316`): `the-reviewers-verdict-decides-the-tasks-evidence`, `evidence-carries-what-it-takes-to-judge-it`, `a-tasks-whole-story-is-in-its-drawer`, `every-piece-of-evidence-in-one-place`, `how-a-requirement-changed-and-what-proved-it`, `the-activity-tab-becomes-the-projects-ledger`, `the-rest-of-what-the-hub-records-becomes-reachable`. Each was written through `PUT .../content`, proposed, approved with `approve_anyway`, and folded; no step said the project has an approved roadmap whose slices no document claims. Their problem statements name the slice in prose ("Slice X of roadmap spdoc-…"), which nothing reads. So even with F579's fix (derive each slice's state from the change document that names it) this roadmap would read as seven unstarted slices, and the documents are archived, which refuses an edit.
 

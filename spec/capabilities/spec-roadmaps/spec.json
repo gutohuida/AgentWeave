@@ -230,6 +230,20 @@
       "requirement": "n6",
       "then": "the response names the roadmap slice for the app",
       "when": "the operator's document read is requested"
+    },
+    {
+      "given": "a scratch Hub with an approved roadmap of two slices and an approved change document naming the first",
+      "key": "a-roadmap-shows-which-of-its-slices-are-done-drive",
+      "requirement": "a-roadmap-shows-which-of-its-slices-are-done-slice-state",
+      "then": "the first slice shows approved with the document's path and the second shows not started",
+      "when": "scripts/drive/d1017_roadmap_slice_states.py reads the roadmap page"
+    },
+    {
+      "given": "the same roadmap, its second slice unclaimed",
+      "key": "a-roadmap-shows-which-of-its-slices-are-done-gap",
+      "requirement": "a-roadmap-shows-which-of-its-slices-are-done-unclaimed-gap",
+      "then": "the 409 lists roadmap_slice_unclaimed naming the second slice, and approving anyway succeeds",
+      "when": "a change document naming no slice is approved without approve_anyway"
     }
   ],
   "algorithms": [
@@ -248,6 +262,8 @@
     "digests": {
       "FR-1": "7e342f09532b3fa4ac768ba634b509db4d78fb4bcd17bcc25ea785a793a6d40e",
       "FR-10": "a720214874f84cdbad5bfc7d423da9ec15343001d49ed78a43846e2b8ebabb6a",
+      "FR-11": "3243a62cbc09153fcf16d5095a05224f84a9348ce8978b32e67803fbfda00de6",
+      "FR-12": "7dcbec931ab91d01cc6ca35ff9bc786bcc4b5ee42c4ae99c08ea66a94be51016",
       "FR-2": "1b0ab14431a14ce5ed2ae7d3a9277f7c1a4d5bec75c3b8ce44329e44c8201479",
       "FR-3": "eda11f47a5a82d253c708a076938760db3b76d5a11f85d053c69342e1c2d83f6",
       "FR-4": "80b5efd6d72fe8a30263e3f5df49a6af7525bf4465164d5af101e52ba615fd1b",
@@ -257,10 +273,12 @@
       "FR-8": "4e84810bfb8fde5a2acd6fbeb9292281042c3cbc64a5968f38b7bc5af17bb375",
       "FR-9": "785c4093bccb411caaff07dcc4180cf18568ac10d128ebcb1dff553616bc0b0c"
     },
-    "high_water": 10,
+    "high_water": 12,
     "requirements": {
       "a-change-document-may-name-the-roadmap-slice-it-specifies": "FR-2",
       "a-roadmap-carries-ordered-slices-and-no-requirements-or-task": "FR-1",
+      "a-roadmap-shows-which-of-its-slices-are-done-slice-state": "FR-11",
+      "a-roadmap-shows-which-of-its-slices-are-done-unclaimed-gap": "FR-12",
       "authoring-guidance-prefers-a-roadmap-and-a-small-slice": "FR-4",
       "n1": "FR-5",
       "n2": "FR-6",
@@ -360,6 +378,20 @@
       "party": null,
       "rationale": "Readers of either document need to see where a slice sits in its plan without opening the roadmap's payload.",
       "statement": "A roadmap's slices SHALL render, and be returned by the agent document read, with each slice's key, title, intent, done criterion and builds-after in roadmap order; a change document naming a roadmap slice SHALL render a line naming the slice's key and title and the roadmap's title and path, and the operator's document read SHALL return that link for the app."
+    },
+    {
+      "key": "a-roadmap-shows-which-of-its-slices-are-done-slice-state",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F579.",
+      "statement": "A roadmap's page MUST show, beside each slice, the phase of the change document whose roadmap link names that slice and the document's path, or that no document has started it; where several do, the most advanced phase."
+    },
+    {
+      "key": "a-roadmap-shows-which-of-its-slices-are-done-unclaimed-gap",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F674; approvals are scarce, so this warns and does not gate.",
+      "statement": "Proposing or approving a change document that names no roadmap slice, in a project with an approved roadmap that has slices no document claims, MUST list a roadmap_slice_unclaimed gap naming the roadmap, those slices and the roadmap field, and MUST NOT refuse."
     }
   ],
   "schema_version": 1,

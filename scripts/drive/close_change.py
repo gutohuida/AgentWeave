@@ -79,6 +79,8 @@ HIDDEN_TESTS = "hub/tests/test_the_rest_of_what_the_hub_records_becomes_reachabl
 HIDDEN_DRIVE = "scripts/drive/d1017_hidden_data_screens.py"
 CHECKS_ROW_TESTS = "hub/ui/src/__tests__/taskChecksRow.test.tsx"
 RESOLVED_TESTS = "hub/ui/src/__tests__/specResolvedProposals.test.tsx"
+SLICES_TESTS = "hub/tests/test_a_roadmap_shows_which_of_its_slices_are_done.py"
+SLICES_DRIVE = "scripts/drive/d1017_roadmap_slice_states.py"
 TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
 TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
@@ -1701,6 +1703,19 @@ CHANGES = {
              "FR-1 too far'; specResolvedProposals.test.tsx pins order and fields."),
         ],
     },
+    "fslices": {
+        "document": "spec/changes/a-roadmap-shows-which-of-its-slices-are-done/spec.json",
+        "commit": "e510caf",
+        "tasks": ["task-f605e0533b5b"],
+        "evidence": [
+            ("FR-1", "task-f605e0533b5b", "test_result", SLICES_DRIVE,
+             "Scratch :8127: the roadmap page shows 'first' approved in its document's path and "
+             "'second' not started. 3 FAILED before the build."),
+            ("FR-2", "task-f605e0533b5b", "test_result", SLICES_TESTS,
+             "A document naming no slice gets a 409 listing roadmap_slice_unclaimed for 'second' "
+             "only; approving anyway succeeds; no gap without an approved roadmap."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1763,6 +1778,7 @@ CHANGE_FOLDS = {
     "fbrowser": 'requirement-traceability',
     "freqstory": 'requirement-traceability',
     "fledger": 'usage-accounting',
+    "fslices": 'spec-roadmaps',
     "fhidden": {
         'conversation-checkpoint': ['notes-route', 'checkpoints-panel'],
         'project-checks': ['checks-history'],
