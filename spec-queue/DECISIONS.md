@@ -20,6 +20,20 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### vis-1017: evidence goes agentic, and the project becomes visible -- DECIDED 2026-10-17
+
+From the interactive exploration of F672/F673 (evidence hard to find, hard to judge). Plan: https://claude.ai/artifact/2W2SWKXcukLL6hLHQedJnS (eight slices); map of what the database holds against what the app shows: https://claude.ai/artifact/YUSxzdpHms7iM7WWi3fR8t. Evidence on Terra (`:8000`, read `mode=ro`): granted QA agents decided 34 pieces and rejected 3, all three real defects; the operator accepted 10 with no reason, the screen showing only the builder's sentence.
+
+- DECIDED   vis-D1  The operator is removed from evidence judgment: full agentic. Agents record and decide evidence; the operator can inspect it afterwards. "Then let's remove the evidence judgment from the user at all. Full agentic." (operator, 2026-10-17)
+- DECIDED   vis-D2  Where a decision exists it is one per task, not per piece, and an agent can make it. (operator, 2026-10-17)
+- DECIDED   vis-D3  Review waiting on anyone never stops a loop. (operator, 2026-10-17)
+- DECIDED   vis-D4  The reviewing agent's verdict decides the task's evidence: approve accepts the pieces with the review's reason, send-back rejects them with it. Rejected: keeping `can_accept_evidence` as a separate grant given to the reviewer by default (a grant to forget, which is what stalled Terra). (operator, 2026-10-17)
+- DECIDED   vis-D5  Evidence carries real output, supplied by the agent now (`command`, an output tail, `covers: full|partial` on `record_evidence`); the Hub re-running the command at the evidence's commit is a later spike. Rejected for now: Hub re-run from the start (run time per task); diff only. (operator, 2026-10-17)
+- DECIDED   vis-D6  UI drives run against a Terra replica: a read-only copy of `:8000`'s database in an ignored scratch profile, every job, loop and manager job switched off, pointed at a clone of Terra's folder. Rejected: synthetic data only. (operator, 2026-10-17)
+- DECIDED   vis-D7  The trial Hub `:8010` may be restarted on current code (applies 0129 to the trial database) so the slices are authored in the app. (operator, 2026-10-17)
+- DECIDED   vis-D8  The UI bar is high: animation, color where it carries meaning, judged in a real browser with Playwright every slice. "I want you to be very mindfull of UI/UX. Use playwright for testing and evaluating the UI. I want finess." (operator, 2026-10-17)
+- ASSUMED   vis-A1  Task story is the first view built (after foundations and agentic evidence); the ledger is a rework of the Activity tab. The plan's defaults; not asked. (2026-10-17)
+
 ### fix-1015: the decisions of the 2026-10-15 fix plan (D1-D11) -- DECIDED 2026-10-15
 
 Put to the operator in an interactive session, each with background, stakes and options. D3-D6 and D11 also decided the `wpc-1012` rows marked DECIDED below; the `wpc-1012` rows still OPEN were not asked, and their recommendation stands until they are.
