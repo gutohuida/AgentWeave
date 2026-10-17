@@ -896,6 +896,34 @@
       "requirement": "evidence-carries-what-it-takes-to-judge-it-carries-output",
       "then": "the builder's evidence carries its command and output, and the routes return the statement and the diff",
       "when": "scripts/drive/d1017_evidence_worth_reading.py runs"
+    },
+    {
+      "given": "two documents each with an FR-1 and evidence in the route's order",
+      "key": "every-piece-of-evidence-in-one-place-unit",
+      "requirement": "every-piece-of-evidence-in-one-place-durable-focus",
+      "then": "the two FR-1 stay separate groups each named by its document, rows read newest first, and the focus shows only that document's pieces with the document in its label (evidenceBrowser.test.tsx)",
+      "when": "the browser renders unfocused and focused on one requirement id"
+    },
+    {
+      "given": "the same evidence",
+      "key": "every-piece-of-evidence-in-one-place-filters-unit",
+      "requirement": "every-piece-of-evidence-in-one-place-filters",
+      "then": "the counts match and the rows narrow accordingly",
+      "when": "a state chip, the agent filter and the search are used"
+    },
+    {
+      "given": "a piece recorded against FR-1 of a document",
+      "key": "every-piece-of-evidence-in-one-place-route",
+      "requirement": "every-piece-of-evidence-in-one-place-names-document",
+      "then": "its requirement block carries that document's path and title",
+      "when": "the project's evidence is listed"
+    },
+    {
+      "given": "the Terra replica",
+      "key": "every-piece-of-evidence-in-one-place-replica",
+      "requirement": "every-piece-of-evidence-in-one-place-cross-links",
+      "then": "the browser lists Terra's 44 pieces, the rejected chip narrows to 3, a task focus to 10, the story's See all opens that task's pieces, the coverage link for FR-15 focuses its durable id with one group and the document in the chip, and there is no console error",
+      "when": "scripts/drive/d1017_evidence_browser_screens.py runs"
     }
   ],
   "algorithms": [
@@ -979,11 +1007,16 @@
       "FR-61": "4a8b8d2f6634aa65c918aefc2d7bdf2e3df04022a846c08e6f0064acc1f1f09d",
       "FR-62": "6edaa3f3f297e30d4e1b3be2e6db0ccedd3ab91e9a254eb72c5eff1aa16e99d7",
       "FR-63": "b60b4876c82b7b94c3adcca2d4e0a1b04705a70931c777e84079b00f31b794b7",
+      "FR-64": "0b03602f71a4804af5d7d0b4dea02e5b8621f79c1bbe3b7268addef034579e28",
+      "FR-65": "b010488dece9bc8cfa21a106a87d4083e968162738e52c042cb540f1f588a115",
+      "FR-66": "283cff47099d4931872eac8430dec4a2a9ddc80372dcd257ad1ba2e5ae98e72f",
+      "FR-67": "76ce2282fea4abea7fbafc739f5343b32454b53a8f6651410c9827ac704e4065",
+      "FR-68": "d4cf5ffefec298b02f79b411b80302996c024fdd87d3d29fe50144030162e906",
       "FR-7": "822fa2cbcc9ee98f412a7040d2bd7738941a2c762b8af112c3c1ff28d0a26c47",
       "FR-8": "e320eebf6045fc12d206c38c7d6e54299432f7f6fe1c4948faddb267d400fea3",
       "FR-9": "da908b42a1d65c2b719f110fe3b3f6d9af59a64cde27ad8f1118a0164cdc9ee3"
     },
-    "high_water": 63,
+    "high_water": 68,
     "requirements": {
       "a-changed-implementation-raises-a-candidate-never-an-edit": "FR-11",
       "a-committed-turn-s-footprints-are-repointed-at-its-commit": "FR-55",
@@ -1003,6 +1036,11 @@
       "coverage-is-one-computation-with-one-precedence": "FR-10",
       "drift-is-assessed-against-the-line-of-work-a-footprint-names": "FR-54",
       "drift-is-raised-and-answered-where-the-operator-reads-the-re": "FR-20",
+      "every-piece-of-evidence-in-one-place-browser-view": "FR-64",
+      "every-piece-of-evidence-in-one-place-cross-links": "FR-68",
+      "every-piece-of-evidence-in-one-place-durable-focus": "FR-66",
+      "every-piece-of-evidence-in-one-place-filters": "FR-65",
+      "every-piece-of-evidence-in-one-place-names-document": "FR-67",
       "evidence-carries-what-it-takes-to-judg-says-what-it-demonstrates": "FR-61",
       "evidence-carries-what-it-takes-to-judge-it-carries-output": "FR-60",
       "evidence-carries-what-it-takes-to-judge-it-diff-of-the-work": "FR-62",
@@ -1467,6 +1505,41 @@
       "party": null,
       "rationale": null,
       "statement": "The record_evidence tool MUST describe command, output and covers, and MUST say that the reviewing agent's verdict decides the evidence."
+    },
+    {
+      "key": "every-piece-of-evidence-in-one-place-browser-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Evidence had no place of its own.",
+      "statement": "The Spec tab MUST offer an evidence view listing every piece of the project's evidence, reachable by URL and from a Spec rail entry showing the project's count, newest first within groups ordered by their newest piece."
+    },
+    {
+      "key": "every-piece-of-evidence-in-one-place-filters",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The evidence view MUST filter by review state with a count per state, by agent, and by a search over summary, locator, command and requirement wording, and MUST group by requirement or by task."
+    },
+    {
+      "key": "every-piece-of-evidence-in-one-place-durable-focus",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "FR-n repeats in every document; focusing FR-4 gathered every document's FR-4.",
+      "statement": "A focus on a requirement MUST name it by its durable id and narrow to that requirement only, and the view MUST label requirement groups and the focus with the requirement's document."
+    },
+    {
+      "key": "every-piece-of-evidence-in-one-place-names-document",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every evidence view the Hub returns MUST carry, in its requirement block, the document the requirement belongs to as its path and title."
+    },
+    {
+      "key": "every-piece-of-evidence-in-one-place-cross-links",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Every place that says evidence should show it.",
+      "statement": "The coverage row of a requirement with evidence, the task story's evidence summary, the approval report's awaiting-evidence entry and a job firing whose reason mentions evidence MUST each link to the evidence view focused on what they mean."
     }
   ],
   "schema_version": 1,
