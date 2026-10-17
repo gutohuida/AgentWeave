@@ -260,6 +260,16 @@ def thinking_event(text: str) -> RunEvent:
     return RunEvent(kind="thinking", content=bounded, payload=payload)
 
 
+def hidden_thinking_event() -> RunEvent:
+    """The model reasoned and did not share the text (vis-D10): Claude 5.x signs an empty thinking
+    block, or sends a redacted one. The conversation says so instead of showing nothing (F578)."""
+    return RunEvent(
+        kind="thinking",
+        content="",
+        payload={"version": PAYLOAD_VERSION, "text": "", "hidden": True},
+    )
+
+
 def tool_use_event(
     *,
     tool: str,

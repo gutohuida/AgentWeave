@@ -1866,6 +1866,20 @@
     background: var(--row-hover);
     color: var(--text);
   }
+  /* Reasoning a model did not share (vis-D10): while it is the turn's latest event the icon
+     breathes, so a long silent think reads as work rather than a stall. */
+  .hidden-reasoning { animation: hidden-reasoning-in var(--dur-fast) var(--ease) both; }
+  .hidden-reasoning.is-live .hidden-reasoning-icon {
+    animation: hidden-reasoning-breathe 1.6s ease-in-out infinite;
+  }
+  @keyframes hidden-reasoning-in {
+    from { opacity: 0; transform: translateY(2px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes hidden-reasoning-breathe {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 1; }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .composer-send-spinner,
@@ -1874,6 +1888,8 @@
     .conversation-interject,
     .interject-choice-check,
     .overview-activity-pill,
+    .hidden-reasoning,
+    .hidden-reasoning.is-live .hidden-reasoning-icon,
     .setup-dialog { animation: none; }
     .interject-choice:hover:not(:disabled),
     .overview-agent-card:hover,

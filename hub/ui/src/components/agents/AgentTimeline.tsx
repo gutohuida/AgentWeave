@@ -526,6 +526,19 @@ function TurnBody({
           ) : null
 
         if (block.kind === 'work') {
+          // A block that is nothing but reasoning the model did not share is one quiet line: a
+          // disclosure would open onto nothing (vis-D10).
+          if (block.entries.every(isHiddenThought)) {
+            return (
+              <Fragment key={block.id}>
+                {durationLine}
+                <HiddenReasoningLine
+                  count={block.entries.length}
+                  live={live && blockIndex === blocks.length - 1}
+                />
+              </Fragment>
+            )
+          }
           return (
             <Fragment key={block.id}>
               {durationLine}
@@ -681,7 +694,10 @@ function WorkBlockDisclosure({
       </summary>
       {open && (
         <div className="pl-[3px] py-1 text-[12px]" style={{ color: 'var(--text-2)' }}>
-          {workRows.map((entry) => (
+          {workRows.map((entry) =>
+            isHiddenThought(entry) ? (
+              <HiddenReasoningRow key={entry.id} />
+            ) : (
             <WorkRow
               key={entry.id}
               entry={entry}
@@ -689,10 +705,55 @@ function WorkBlockDisclosure({
               runStatus={runStatus}
               startExpanded={autoOpen && entry.output_kind === 'thinking'}
             />
-          ))}
+            ),
+          )}
         </div>
       )}
     </details>
+  )
+}
+
+/** Reasoning the model did and did not share (vis-D10, F578): Claude 5.x signs an empty thinking
+ *  block, which the Hub records with `payload.hidden` and no text. */
+function isHiddenThought(entry: TimelineEntry): boolean {
+  if (entry.output_kind !== 'thinking') return false
+  const payload = entry.payload as Record<string, unknown> | null | undefined
+  return payload?.hidden === true || !entry.content?.trim()
+}
+
+const HIDDEN_REASONING_TITLE = 'The agent reasoned here; this model does not share its reasoning text.'
+
+/** A turn's reasoning with no text, as one muted line in place of a work block. While it is the
+ *  turn's latest event the icon breathes, so a long silent think reads as work, not a stall. */
+function HiddenReasoningLine({ count, live }: { count: number; live: boolean }) {
+  return (
+    <div
+      data-testid="hidden-reasoning"
+      className={`hidden-reasoning flex items-center gap-1.5 py-[3px] text-[11.5px]${live ? ' is-live' : ''}`}
+      style={{ color: 'var(--text-3)' }}
+      title={HIDDEN_REASONING_TITLE}
+    >
+      <Icon name="psychology" size={14} className="hidden-reasoning-icon" style={{ opacity: 0.7 }} />
+      <span>{live ? 'Reasoning…' : 'Reasoned'}</span>
+      {count > 1 && <span className="tabular-nums">×{count}</span>}
+    </div>
+  )
+}
+
+/** The same, as a row among a work block's calls: not a button, since there is nothing to open. */
+function HiddenReasoningRow() {
+  return (
+    <div
+      data-testid="hidden-reasoning-row"
+      className="flex gap-[.55rem] items-baseline w-full min-w-0 font-mono text-[12px] py-[2.5px]"
+      title={HIDDEN_REASONING_TITLE}
+    >
+      <Icon name="psychology" size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+      <span style={{ color: 'var(--text-2)', fontWeight: 500 }}>Reasoned</span>
+      <span className="truncate min-w-0 flex-1" style={{ color: 'var(--text-3)' }}>
+        text not shared by this model
+      </span>
+    </div>
   )
 }
 
@@ -821,7 +882,7 @@ function WorkRow({
         ? entry.content || 'Tool call'
         : entry.content || 'Tool result'
   const toolName = (entry.payload as Record<string, unknown> | null | undefined)?.tool
-  const visual = toolVisual(toolName)
+  const visual = entry.output_kind === 'thinking' ? { icon: 'psychology' } : toolVisual(toolName)
   const iconName = visual.icon
   const displayLabel = visual.label ?? label
   // A thought carries its text in `content`, not in a payload: it is what the row exists to show.

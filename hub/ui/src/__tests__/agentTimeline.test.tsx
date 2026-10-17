@@ -932,7 +932,7 @@ describe('AgentTimeline — WorkRow tool icon and label (Q7 D2)', () => {
     expect(fallbackIconNames).toContain('build')
   })
 
-  it('falls back to the Wrench icon without throwing for an entry with no payload at all', () => {
+  it('renders a thought with no payload at all without throwing, under the reasoning icon', () => {
     render(
       <AgentTimeline
         agent={agent}
@@ -954,7 +954,7 @@ describe('AgentTimeline — WorkRow tool icon and label (Q7 D2)', () => {
     fireEvent.click(screen.getByText('Work · 1 step'))
     expect(screen.getByText('Thinking')).toBeInTheDocument()
     const fallbackIconNames = screen.getAllByTestId('icon').map((el) => el.getAttribute('data-name'))
-    expect(fallbackIconNames).toContain('build')
+    expect(fallbackIconNames).toContain('psychology')
   })
 })
 

@@ -37,3 +37,31 @@ def test_a_thinking_block_with_text_is_recorded():
     )
     events = parse_claude_line(line).events
     assert any("thinking" in str(e) and "340" in str(e) for e in events), events
+
+
+def _assistant(*blocks):
+    return json.dumps({"type": "assistant", "message": {"content": list(blocks)}})
+
+
+def test_a_thinking_block_without_text_is_recorded_as_hidden_reasoning():
+    """vis-D10: Claude 5.x sends a signed thinking block with no text (Haiku 5.5, CLI 2.1.301);
+    the conversation says the agent reasoned rather than showing nothing."""
+    from hub.runner_parsing import parse_claude_line
+
+    for block in (
+        {"type": "thinking", "thinking": "", "signature": "EqQBCkYI..."},
+        {"type": "redacted_thinking", "data": "EmwKAhgBEgy..."},
+    ):
+        events = parse_claude_line(_assistant(block)).events
+        assert [e.kind for e in events] == ["thinking"], (block, events)
+        assert events[0].content == ""
+        assert events[0].payload["hidden"] is True
+
+
+def test_a_thinking_block_with_text_is_not_hidden():
+    from hub.runner_parsing import parse_claude_line
+
+    events = parse_claude_line(
+        _assistant({"type": "thinking", "thinking": "Plan it.", "signature": "x"})
+    ).events
+    assert "hidden" not in events[0].payload

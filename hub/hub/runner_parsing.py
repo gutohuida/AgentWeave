@@ -39,6 +39,7 @@ from .runner_events import (
     ContextUsageSample,
     RunEvent,
     error_event,
+    hidden_thinking_event,
     status_event,
     text_event,
     thinking_event,
@@ -281,8 +282,9 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
                 block_type = block.get("type", "")
                 if block_type == "thinking":
                     thinking = block.get("thinking", "").strip()
-                    if thinking:
-                        events.append(thinking_event(thinking))
+                    events.append(thinking_event(thinking) if thinking else hidden_thinking_event())
+                elif block_type == "redacted_thinking":
+                    events.append(hidden_thinking_event())
                 elif block_type == "text":
                     text = block.get("text", "").strip()
                     if text:
