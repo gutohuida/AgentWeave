@@ -32,6 +32,9 @@ From the interactive exploration of F672/F673 (evidence hard to find, hard to ju
 - DECIDED   vis-D6  UI drives run against a Terra replica: a read-only copy of `:8000`'s database in an ignored scratch profile, every job, loop and manager job switched off, pointed at a clone of Terra's folder. Rejected: synthetic data only. (operator, 2026-10-17)
 - DECIDED   vis-D7  The trial Hub `:8010` may be restarted on current code (applies 0129 to the trial database) so the slices are authored in the app. (operator, 2026-10-17)
 - DECIDED   vis-D8  The UI bar is high: animation, color where it carries meaning, judged in a real browser with Playwright every slice. "I want you to be very mindfull of UI/UX. Use playwright for testing and evaluating the UI. I want finess." (operator, 2026-10-17)
+- DECIDED   vis-D9  F674 backfill: an archived change document may gain its `roadmap` link afterwards, as a metadata-only write that changes no requirement, so a roadmap's built slices read as done. (operator, 2026-10-17)
+- DECIDED   vis-D10 F578: for a model that sends no thinking text (Claude 5.x), the conversation shows a muted row saying the agent reasoned, without text. Rejected: show nothing. (operator, 2026-10-17)
+- DECIDED   vis-D11 `:8000` restart: rehearse migrations 0130/0131 on a `mode=ro` copy of its database first; the operator restarts it. wpc-obs-4 stays as decided (Full access hidden for Copilot); the "Ask again" card-or-drawer question is moot since vis-D4. (operator, 2026-10-17)
 - ASSUMED   vis-A1  Task story is the first view built (after foundations and agentic evidence); the ledger is a rework of the Activity tab. The plan's defaults; not asked. (2026-10-17)
 
 ### fix-1015: the decisions of the 2026-10-15 fix plan (D1-D11) -- DECIDED 2026-10-15
@@ -77,10 +80,10 @@ From the live GHCP drive (findings WPC-1..WPC-7, handoff-0162 in `.claude/work-p
 - DECIDED   wpc1-a  Which fix? Recommended: (c) both. Send one follow-up `session/prompt` in the same run, and add a visible "turn ended on a refusal" diagnostic. **Decided by the operator 2026-10-15** (D3 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - DECIDED   wpc1-b  Does an operator Deny also continue ("The operator did not approve")? Recommended: yes. Counterpoint: Copilot natively stops on a human Deny. **Decided by the operator 2026-10-15** (D3 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - DECIDED   wpc1-c  How many continuations per turn? Recommended: 1. **Decided by the operator 2026-10-15** (D3 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
-- OPEN      wpc1-d  How is the continuation counted? Recommended: on the same usage row, plus `refusal_continuations`. R3: Copilot usage is cumulative per process, so keep the last value and do not sum.
+- DECIDED   wpc1-d  How is the continuation counted? Recommended: on the same usage row, plus `refusal_continuations`. R3: Copilot usage is cumulative per process, so keep the last value and do not sum. **Decided by the operator 2026-10-17: as recommended.**
 - DECIDED   wpc1-e  How visible? Recommended: a timeline diagnostic only, no banner. **Decided by the operator 2026-10-15** (D3 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - DECIDED   wpc1-f  KEY. May the "no Copilot hook decides a call or a turn" / no-backstop rule get a narrow carve-out? It keys only on the Hub's own refusal record, never on prose. Recommended: yes. **Decided by the operator 2026-10-15** (D3 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
-- OPEN      wpc1-g  Keep `stop_reason` on the payload although it never varies today? Cost: 14 `TurnOutcome` equality asserts change. Recommended: keep.
+- DECIDED   wpc1-g  Keep `stop_reason` on the payload although it never varies today? Cost: 14 `TurnOutcome` equality asserts change. Recommended: keep. **Decided by the operator 2026-10-17: as recommended.**
 - DECIDED   wpc1-h  A continuation that fails: if it fails after producing output, the run is failed; if before, keep the first outcome. Recommended: option 2. **Decided by the operator 2026-10-15** (D3 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 
 `the-workspace-judge-reads-paths-not-patterns` (WPC-2, SECURITY: `\\.git\\` is read as a UNC root, and `$` in a single-quoted regex is read as an expansion):
@@ -113,14 +116,14 @@ From the live GHCP drive (findings WPC-1..WPC-7, handoff-0162 in `.claude/work-p
 - DECIDED   wpc6-a  May a Copilot budget be in premium requests or credits? Recommended: no, tokens only. **Decided by the operator 2026-10-15** (D2 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - DECIDED   wpc6-b  Mixed units in project accounting? Recommended: show them side by side. **Decided by the operator 2026-10-15** (D2 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - DECIDED   wpc6-c  Does `preferred_display` follow the dominant runner? Recommended: no, it follows the data that exists. **Decided by the operator 2026-10-15** (D2 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
-- OPEN      wpc6-d  Who carries the worker credit sums? Recommended: this change.
+- DECIDED   wpc6-d  Who carries the worker credit sums? Recommended: this change. **Decided by the operator 2026-10-17: as recommended.**
 - OPEN      wpc6-e  Under D7-A or D7-B, do worker credits still reach the project credit total? Recommended: no, only under those options.
-- OPEN      wpc6-f  (R3) Do worker credits alone switch the headline to credits? Recommended: yes.
+- DECIDED   wpc6-f  (R3) Do worker credits alone switch the headline to credits? Recommended: yes. **Decided by the operator 2026-10-17: as recommended.**
 
 `stop-closes-the-tool-card-it-interrupted` (WPC-7: after Stop, the tool card stays "awaiting result" forever):
 - DECIDED   wpc7-a  Who closes the card? Recommended: both. The Hub persists a synthetic interrupted `tool_result`, and the UI derives the state for history and reconciled runs. **Decided by the operator 2026-10-15** (D6 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 - DECIDED   wpc7-b  How does it read? Recommended: "? interrupted", neutral, not counted as failed. **Decided by the operator 2026-10-15** (D6 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
-- OPEN      wpc7-c  Close open calls on a `completed` run too? Recommended: no. Show "? no result", because it marks a mapper defect.
+- DECIDED   wpc7-c  Close open calls on a `completed` run too? Recommended: no. Show "? no result", because it marks a mapper defect. **Decided by the operator 2026-10-17: as recommended.**
 - DECIDED   wpc7-d  KEY. Pair a call with its result across the whole turn, since 6 of 50 real results sit in a different work block? Recommended: yes. This REMOVES and re-ADDS the "independent block state" requirement and inverts UI test 1.14. **Decided by the operator 2026-10-15** (D6 of `spec-queue/FIX-PLAN-2026-10-15.md`): the recommendation, as stated.
 
 Observations from the drive with no change written yet (product questions):
