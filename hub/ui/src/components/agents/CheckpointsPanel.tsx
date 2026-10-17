@@ -5,6 +5,7 @@ import { Expander } from '@/components/common/Expander'
 import { useCheckpointNotes, useCheckpoints, type Checkpoint } from '@/api/checkpoints'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
+import { ApiError } from '@/api/client'
 
 /**
  * A conversation's checkpoints and checkpoint notes (slice remaining-hidden-data). Only a
@@ -139,7 +140,9 @@ export function CheckpointsPanel({ conversationId, onClose }: { conversationId: 
           </section>
           <section className="aw-req-section">
             <h3 className="aw-req-heading">Notes for the next checkpoint · {noteRows.length}</h3>
-            {notes.isError ? (
+            {notes.error instanceof ApiError && notes.error.status === 404 ? (
+              <p className="aw-tl-meta">This Hub predates reading checkpoint notes; they appear once it restarts.</p>
+            ) : notes.isError ? (
               <p className="aw-callout tone-red">This conversation’s checkpoint notes could not be read.</p>
             ) : noteRows.length === 0 ? (
               <p className="aw-tl-meta">No agent has left a note for a checkpoint here.</p>

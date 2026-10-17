@@ -3,6 +3,8 @@ import { StatePill } from '@/components/common/StatePill'
 import { Expander } from '@/components/common/Expander'
 import { useProjectLedger, type ProjectLedger as Ledger } from '@/api/ledger'
 import { hubDate } from '@/lib/hubTime'
+import { ApiError } from '@/api/client'
+import { ActivityLog } from './ActivityLog'
 
 /**
  * The project's ledger (slice project-ledger): what merged into main, what was spent and on what,
@@ -175,7 +177,22 @@ function Lane<T>({
 }
 
 export function ProjectLedger({ onOpenTask }: { onOpenTask: (taskId: string) => void }) {
-  const { data, isLoading, isError } = useProjectLedger()
+  const { data, isLoading, isError, error } = useProjectLedger()
+
+  // A Hub that predates the ledger answers 404 (the committed bundle reaches a running Hub before
+  // it restarts): the tab still opens on something useful, the live log, and says why.
+  if (error instanceof ApiError && error.status === 404) {
+    return (
+      <div className="flex h-full flex-col" data-testid="ledger-unavailable">
+        <p className="px-4 pt-3 text-[12px]" style={{ color: 'var(--text-3)' }}>
+          This Hub predates the ledger; it appears once the Hub restarts. Live activity meanwhile.
+        </p>
+        <div className="min-h-0 flex-1">
+          <ActivityLog />
+        </div>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (
