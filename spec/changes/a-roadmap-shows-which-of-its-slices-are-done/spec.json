@@ -1,0 +1,103 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a scratch Hub with an approved roadmap of two slices and an approved change document naming the first",
+      "key": "drive",
+      "requirement": "slice-state",
+      "then": "the first slice shows approved with the document's path and the second shows not started",
+      "when": "scripts/drive/d1017_roadmap_slice_states.py reads the roadmap page"
+    },
+    {
+      "given": "the same roadmap, its second slice unclaimed",
+      "key": "gap",
+      "requirement": "unclaimed-gap",
+      "then": "the 409 lists roadmap_slice_unclaimed naming the second slice, and approving anyway succeeds",
+      "when": "a change document naming no slice is approved without approve_anyway"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "3243a62cbc09153fcf16d5095a05224f84a9348ce8978b32e67803fbfda00de6",
+      "FR-2": "7dcbec931ab91d01cc6ca35ff9bc786bcc4b5ee42c4ae99c08ea66a94be51016"
+    },
+    "high_water": 2,
+    "requirements": {
+      "slice-state": "FR-1",
+      "unclaimed-gap": "FR-2"
+    },
+    "retired": {}
+  },
+  "design": "D1 Derived on read, never stored: a slice's state is whatever the document naming it says now, so archiving moves it with no second write. D2 Read from the change documents' payloads (the link lives only in the file); one read per change document, only when a roadmap page is rendered or a document is proposed or approved. D3 A gap, not a refusal (approvals are scarce): a change that is not a slice simply approves over it.",
+  "evidence": {
+    "checked": [
+      "hub/hub/spec_render.py _slices",
+      "hub/hub/spec_service.py roadmap_states, render_page, _completeness",
+      "hub/hub/spec_completeness.py REFUSAL_CODES"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [
+    {
+      "key": "backfill",
+      "question": "May an archived change document gain its roadmap link afterwards, as a metadata write that changes no requirement, so a roadmap built before this change can show its slices done?",
+      "resolved": false
+    }
+  ],
+  "problem": "F579: a slice carries no state and the roadmap page reads the same before and after its slices are built; each loop matched slice keys by hand. F674: all seven change documents that built the visibility roadmap went from written to archived without naming their slice, and no step said so, so even a derived state would read as unstarted.",
+  "requirements": [
+    {
+      "key": "slice-state",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F579.",
+      "statement": "A roadmap's page MUST show, beside each slice, the phase of the change document whose roadmap link names that slice and the document's path, or that no document has started it; where several do, the most advanced phase."
+    },
+    {
+      "key": "unclaimed-gap",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F674; approvals are scarce, so this warns and does not gate.",
+      "statement": "Proposing or approving a change document that names no roadmap slice, in a project with an approved roadmap that has slices no document claims, MUST list a roadmap_slice_unclaimed gap naming the roadmap, those slices and the roadmap field, and MUST NOT refuse."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Each roadmap slice rendered with the state of the change document that names it (not started, exploring, proposed, approved, archived) and that document's path",
+      "A gap at propose and approve, never a refusal, when the document names no roadmap slice and the project has an approved roadmap with unclaimed slices"
+    ],
+    "non_goals": [
+      "Adding a roadmap link to an archived document (an open question)",
+      "Inferring a slice from a document's prose"
+    ]
+  },
+  "summary": "A roadmap's page shows each slice's state from the change document that names it, and proposing or approving a change document in a project with an approved roadmap whose slices nobody claims lists that as a gap.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "spec_service slice_states joined into render_page and spec_render._slices; a finding in _completeness; tests and the drive.",
+      "files": [
+        "hub/hub/spec_service.py",
+        "hub/hub/spec_render.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "slice-state",
+        "unclaimed-gap"
+      ],
+      "reviewer": null,
+      "title": "Slice states on the roadmap page; the unclaimed-slice gap"
+    }
+  ],
+  "title": "A roadmap shows which of its slices are done, and a slice document is asked to name its slice"
+}
