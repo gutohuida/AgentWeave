@@ -1,0 +1,123 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "hub/hub/requirement_gate.py:625-676 evidence gate",
+      "hub/hub/review_turn.py:278 reviewer grant",
+      "hub/ui/src/components/spec/EvidencePieces.tsx is the only accept/reject surface",
+      ":8000 database read mode=ro 2026-10-17"
+    ],
+    "limits": [
+      "UI coverage classes rest on grep and spot reads of the rendering lines"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "F672 and F673 (scripts/drive/FINDINGS.md), reported by the operator from :8000 on 2026-10-16. On Terra a task waited on the operator for 10 evidence pieces, its loop skipped with that sentence as the only record, the controls sat behind a collapsed one-line bar on the spec (EvidencePieces inside SpecCoverageBar), and granting the right did not re-run the reviewer. A piece renders as one run-on line holding only the builder's own sentence and a path: the row stores no output (hub/hub/db/models.py:2594). Measured on Terra (:8000 mode=ro): granted QA agents decided 34 pieces and rejected 3, all three real defects; the operator accepted 10 with no reason. A scan of all tables against the UI (2026-10-17) found data recorded and never shown: spec_requirement_revisions and checkpoint_notes have no read route; run_divergences, evidence review history and messages have a route no screen calls; task_transitions.override_reason, per-task cost, checks history and merge actors are dropped; context_warning is 570 of 1,143 events. Decisions vis-D1..D8 in spec-queue/DECISIONS.md; plan https://claude.ai/artifact/2W2SWKXcukLL6hLHQedJnS.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The reviewing agent's verdict decides the task's evidence; nothing waits on the operator for evidence; a loop never stalls on it",
+      "Evidence carrying the command, an output tail and whether it covers the requirement fully or partly, supplied by the agent",
+      "A diff route for the commit a piece names, limited to the files it touched",
+      "Four views over existing records: task story, evidence browser, requirement story, project ledger",
+      "A shared motion and state-colour vocabulary and shared parts, judged every slice in a real browser with Playwright against a replica of a real project"
+    ],
+    "non_goals": [
+      "The Hub re-running an evidence command itself (a later spike, vis-D5)",
+      "Any new gate on the operator",
+      "A second icon source or a UI framework change",
+      "Changing what event_logs records, beyond folding noise in the view"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "The harness drives a gallery of the shared parts on the replica in both themes with no console errors and a reduced-motion pass.",
+      "intent": "Motion tokens that reduced motion turns off, one state palette, shared Timeline, StatePill, DiffView and Expander parts, and a harness that drives a Terra replica Hub and shoots both widths and both themes with frame strips of animations.",
+      "key": "foundations",
+      "title": "Motion, state colours, shared parts and the Playwright harness"
+    },
+    {
+      "builds_after": [],
+      "done": "A loop with a builder and a reviewer and no agent holding can_accept_evidence takes a task from start to merged with no operator action.",
+      "intent": "Approving a task as its reviewer accepts its waiting evidence with the review's reason and sending it back rejects it with that reason, so no evidence waits on the operator and a loop never stalls on it; the operator can still reject a piece afterwards, which reopens the task.",
+      "key": "agentic-evidence",
+      "title": "The reviewer's verdict decides the task's evidence"
+    },
+    {
+      "builds_after": [
+        "agentic-evidence"
+      ],
+      "done": "A real builder records evidence with its command and output, and the routes return that output, the diff and the requirement text.",
+      "intent": "record_evidence takes an optional command, output tail and covers full or partial; the evidence payload carries the requirement text, kind, time, review history, what replaced it and the footprint's reachability; a route returns the diff at the piece's commit for the files it touched.",
+      "key": "evidence-worth-reading",
+      "title": "Evidence carries what it takes to judge it"
+    },
+    {
+      "builds_after": [
+        "foundations",
+        "evidence-worth-reading"
+      ],
+      "done": "On the replica a Terra task shows its full history including a rejected piece and its replacement, and a live run on a scratch project adds events without a reload.",
+      "intent": "The task drawer shows one timeline of transitions with override reasons, runs with agent, model, duration and cost, evidence with requirement and proof side by side, checks, merges and divergences, under a header naming state, total cost and what merged; it updates live.",
+      "key": "task-story",
+      "title": "A task's whole story in its drawer"
+    },
+    {
+      "builds_after": [
+        "task-story"
+      ],
+      "done": "Each place that mentions evidence opens the right pieces in one click.",
+      "intent": "A project-wide evidence view filterable by state, agent, task and requirement, and every place that mentions evidence links to the pieces it means.",
+      "key": "evidence-browser",
+      "title": "Every piece of evidence in one place, linked from every mention"
+    },
+    {
+      "builds_after": [
+        "foundations"
+      ],
+      "done": "A reworded requirement on the replica shows each wording with who changed it, matching spec_requirement_revisions.",
+      "intent": "A read route for requirement revisions, and from any requirement its wording history as diffs, the tasks that served it, its evidence and its drift including resolved drift.",
+      "key": "requirement-story",
+      "title": "How a requirement changed and what proved it"
+    },
+    {
+      "builds_after": [
+        "foundations"
+      ],
+      "done": "The replica's ledger totals match the database and a live merge on a scratch project appears in its lane.",
+      "intent": "Lanes for merges into main, spend over time by task and agent, divergences, agent-to-agent messages and where work came from, with context_warning folded into one counted row.",
+      "key": "project-ledger",
+      "title": "The Activity tab becomes the project's ledger"
+    },
+    {
+      "builds_after": [
+        "foundations"
+      ],
+      "done": "Each is reachable from where the operator would look for it, by Playwright.",
+      "intent": "Checkpoint bodies and probe findings, checks history, transitions linked to their run, resolved spec proposals and checkpoint notes each get a place where the operator would look for them.",
+      "key": "remaining-hidden-data",
+      "title": "The rest of what the Hub records becomes reachable"
+    }
+  ],
+  "summary": "Agents decide evidence, so no task or loop waits on the operator for it, and the operator gets places to see what the Hub already records: a task's whole story, every piece of evidence, how each requirement changed, and a ledger of the project.",
+  "tasks": [],
+  "title": "Evidence goes agentic, and the project becomes visible"
+}
