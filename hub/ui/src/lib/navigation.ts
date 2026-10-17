@@ -95,7 +95,18 @@ export type WorkspaceDestination =
   // with — `design.md` D7. It only ever accompanies a `document`, but is not narrowed to the spec
   // tab in the type for the same reason `document` is not: `projectDestination` is the one place
   // that decides when either survives.
-  | { kind: 'project'; projectId: string; tab: ProjectTab; document?: string | null; anchor?: string | null }
+  | {
+      kind: 'project'
+      projectId: string
+      tab: ProjectTab
+      document?: string | null
+      anchor?: string | null
+      // The Spec tab's evidence view (slice evidence-browser), and what it is focused on: a task id
+      // (`task-...`) or a requirement identifier (`FR-4`). Linkable, so every mention of evidence
+      // can open the pieces it means.
+      view?: 'evidence' | null
+      focus?: string | null
+    }
   | { kind: 'project'; projectId: string; tab: 'environment'; environmentSection: EnvironmentSection }
   // `agent` is null only on the new-conversation surface reached from the recency view, where
   // no agent is implied by where the operator started — that surface asks for one.
@@ -138,6 +149,24 @@ export function projectDestination(
   return anchor
     ? { kind: 'project', projectId, tab, document: parsed, anchor }
     : { kind: 'project', projectId, tab, document: parsed }
+}
+
+/** The Spec tab's evidence view, optionally focused on a task id or a requirement identifier. */
+export function evidenceDestination(
+  projectId: string,
+  focus: string | null = null,
+): Extract<WorkspaceDestination, { kind: 'project' }> {
+  const cleaned = focus && /^[A-Za-z0-9_.:-]{1,80}$/.test(focus) ? focus : null
+  return cleaned
+    ? { kind: 'project', projectId, tab: 'spec', view: 'evidence', focus: cleaned }
+    : { kind: 'project', projectId, tab: 'spec', view: 'evidence' }
+}
+
+/** Navigate from anywhere: push the destination's URL and announce it the way Back does, so the
+ *  one `useWorkspaceNavigation` that owns the destination picks it up (no callback threading). */
+export function goTo(destination: WorkspaceDestination): void {
+  window.history.pushState(null, '', `${window.location.pathname}${serializeDestination(destination)}`)
+  window.dispatchEvent(new PopStateEvent('popstate'))
 }
 
 export function environmentDestination(
@@ -275,6 +304,8 @@ export function isSpecDestination(
   tab: 'spec'
   document?: string | null
   anchor?: string | null
+  view?: 'evidence' | null
+  focus?: string | null
 } {
   return destination.kind === 'project' && destination.tab === 'spec'
 }
@@ -311,6 +342,11 @@ export function serializeDestination(destination: WorkspaceDestination): string 
   params.set('tab', destination.tab)
   if (destination.tab === 'environment') {
     params.set('section', destination.environmentSection ?? DEFAULT_ENVIRONMENT_SECTION)
+  }
+  if (destination.tab === 'spec' && destination.view === 'evidence') {
+    params.set('view', 'evidence')
+    if (destination.focus) params.set('focus', destination.focus)
+    return `?${params.toString()}`
   }
   if (destination.tab === 'spec' && destination.document && isSpecDocumentPath(destination.document)) {
     params.set('document', destination.document)
@@ -373,6 +409,9 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   const tab: ProjectTab = (PROJECT_TABS as readonly string[]).includes(rawTab ?? '')
     ? (rawTab as ProjectTab)
     : DEFAULT_TAB
+  if (tab === 'spec' && params.get('view') === 'evidence') {
+    return evidenceDestination(projectId, params.get('focus'))
+  }
   return projectDestination(projectId, tab, parseSpecDocument(params.get('document')), params.get('anchor'))
 }
 

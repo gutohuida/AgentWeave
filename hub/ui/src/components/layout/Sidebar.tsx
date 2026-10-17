@@ -41,6 +41,8 @@ interface SidebarProps {
   onBackFromAgentSettings?: (projectId: string, agent: string) => void
   /** Opening a specification document while the rail is standing in for the project tree. */
   onOpenSpecDocument?: (projectId: string, path: string) => void
+  /** Opens the Spec tab's evidence view (slice evidence-browser). */
+  onOpenSpecEvidence?: (projectId: string) => void
   onAddAgent?: (projectId: string) => void
   /** Open a folder as a project. `open_existing` initialises it if it is not one yet,
    *  so this single action covers both opening and creating. */
@@ -150,6 +152,7 @@ export function Sidebar({
   onOpenAgentSettings,
   onBackFromAgentSettings,
   onOpenSpecDocument,
+  onOpenSpecEvidence,
   onAddAgent,
   onAddProject,
   compact = false,
@@ -268,7 +271,9 @@ export function Sidebar({
       ) : spec ? (
         <SpecRailNav
           projectName={specProject?.name ?? 'project'}
-          currentPath={spec.document ?? null}
+          currentPath={spec.view === 'evidence' ? null : spec.document ?? null}
+          evidenceOpen={spec.view === 'evidence'}
+          onOpenEvidence={() => onOpenSpecEvidence?.(spec.projectId)}
           onSelect={(path) => onOpenSpecDocument?.(spec.projectId, path)}
           onBack={() => onOpenProject(spec.projectId)}
         />

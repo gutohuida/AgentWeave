@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
-import { useSpecList } from '@/api/spec'
+import { useProjectEvidence, useSpecList } from '@/api/spec'
 import { buildInventory } from './specNavigation'
 import { SpecTree } from './SpecTree'
 import { SpecDefectsReport } from './SpecDefectsReport'
@@ -11,6 +11,9 @@ interface SpecRailNavProps {
   currentPath: string | null
   onSelect: (path: string) => void
   onBack: () => void
+  /** Whether the evidence view is open, and how to open it (slice evidence-browser). */
+  evidenceOpen?: boolean
+  onOpenEvidence?: () => void
 }
 
 /**
@@ -26,10 +29,19 @@ interface SpecRailNavProps {
  * The back control is what keeps that honest. Taking the rail over is only acceptable while there
  * is one press that gives it back.
  */
-export function SpecRailNav({ projectName, currentPath, onSelect, onBack }: SpecRailNavProps) {
+export function SpecRailNav({
+  projectName,
+  currentPath,
+  onSelect,
+  onBack,
+  evidenceOpen = false,
+  onOpenEvidence,
+}: SpecRailNavProps) {
   // Same query key as the Spec screen's, so standing in for the project tree costs no request.
   const { data: specList } = useSpecList()
   const inventory = useMemo(() => buildInventory(specList), [specList])
+  const { data: evidence } = useProjectEvidence(!!onOpenEvidence)
+  const pieces = evidence?.evidence?.length ?? null
 
   return (
     <>
@@ -56,6 +68,19 @@ export function SpecRailNav({ projectName, currentPath, onSelect, onBack }: Spec
           {inventory.nodes.length}
         </span>
       </div>
+      {onOpenEvidence ? (
+        <button
+          type="button"
+          className="aw-rail-entry mb-2"
+          aria-current={evidenceOpen ? 'page' : undefined}
+          onClick={onOpenEvidence}
+          data-testid="spec-rail-evidence"
+        >
+          <Icon name="fact_check" size={15} />
+          Evidence
+          {pieces !== null ? <span className="aw-rail-count">{pieces}</span> : null}
+        </button>
+      ) : null}
       <nav
         aria-label="Specification documents"
         data-testid="spec-rail-tree"

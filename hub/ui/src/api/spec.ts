@@ -399,6 +399,41 @@ export interface EvidencePiece {
   superseded_by?: string | null
 }
 
+/** Every piece of evidence in the project, oldest first (`GET /spec/evidence`, the order the route
+ *  returns). Under `specEvidence`, so `spec_updated` refreshes it with every other evidence read. */
+export function useProjectEvidence(enabled = true) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ evidence: EvidencePiece[] }>({
+    queryKey: ['project', projectId, 'specEvidence', '__all__'],
+    queryFn: () =>
+      getJson<{ evidence: EvidencePiece[] }>(`/api/v1/projects/${projectId}/project/spec/evidence`),
+    enabled: isConfigured && !!projectId && enabled,
+  })
+}
+
+export interface EvidenceReviewRow {
+  id: string
+  decision: 'accepted' | 'rejected'
+  actor_kind: string
+  actor: string
+  run_id: string | null
+  reason: string | null
+  created_at: string
+}
+
+/** Every review of one piece, oldest first (`GET /spec/evidence/{id}/reviews`); read when opened. */
+export function useEvidenceReviews(evidenceId: string, enabled: boolean) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ reviews: EvidenceReviewRow[] }>({
+    queryKey: ['project', projectId, 'specEvidence', 'reviews', evidenceId],
+    queryFn: () =>
+      getJson<{ reviews: EvidenceReviewRow[] }>(
+        `/api/v1/projects/${projectId}/project/spec/evidence/${encodeURIComponent(evidenceId)}/reviews`,
+      ),
+    enabled: isConfigured && !!projectId && enabled,
+  })
+}
+
 export interface EvidenceDiff {
   files: { path: string; status: string; patch: string }[]
   base: string | null

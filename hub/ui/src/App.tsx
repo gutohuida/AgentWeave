@@ -35,6 +35,7 @@ import { QuestionsPanel } from '@/components/questions/QuestionsPanel'
 import { RunnersPage } from '@/components/runners/RunnersPage'
 import { useSpecDocuments } from '@/api/spec'
 import { SpecPage } from '@/components/spec/SpecPage'
+import { EvidenceBrowser } from '@/components/evidence/EvidenceBrowser'
 import { useTasks } from '@/api/tasks'
 import { TasksBoard } from '@/components/tasks/TasksBoard'
 import { DependencyBoardView } from '@/components/tasks/DependencyBoardView'
@@ -50,6 +51,7 @@ import {
   isNewConversationDestination,
   newConversationDestination,
   projectDestination,
+  evidenceDestination,
   resolveConversationSelection,
   withDocument,
   type EnvironmentSection,
@@ -438,6 +440,20 @@ export default function App() {
           </div>
         </div>
       )
+    } else if (destination.tab === 'spec' && destination.view === 'evidence') {
+      // The Spec tab's evidence view (slice evidence-browser): linkable, focused by the URL.
+      projectContent = (
+        <EvidenceBrowser
+          focus={destination.focus ?? null}
+          onFocus={(focus) =>
+            navigateTo(evidenceDestination(destination.projectId, focus), { replace: true })
+          }
+          onOpenTask={(taskId) => {
+            useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
+            navigateTo(projectDestination(destination.projectId, 'tasks'))
+          }}
+        />
+      )
     } else if (destination.tab === 'spec') {
       projectContent = (
         <SpecPage
@@ -599,6 +615,7 @@ export default function App() {
             onOpenSpecDocument={(id, path) =>
               navigateTo(projectDestination(id, 'spec', path), { replace: true })
             }
+            onOpenSpecEvidence={(id) => navigateTo(evidenceDestination(id), { replace: true })}
             // Navigating is not decoration here, it is what scopes the dialog. Everything the
             // dialog reads — `useCreateAgent`, `useCharters`, `useProviderLaunchability` — resolves
             // the *selected* project, and selection is derived from the destination by the effect
