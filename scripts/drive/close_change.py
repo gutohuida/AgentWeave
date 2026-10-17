@@ -75,6 +75,10 @@ LEDGER_DRIVE = "scripts/drive/d1017_project_ledger.py"
 LEDGER_SCREENS = "scripts/drive/d1017_project_ledger_screens.py"
 LEDGER_LIVE = "scripts/drive/d1017_project_ledger_live.py"
 ACTIVITY_TESTS = "hub/ui/src/__tests__/ActivityLog.test.tsx"
+HIDDEN_TESTS = "hub/tests/test_the_rest_of_what_the_hub_records_becomes_reachable.py"
+HIDDEN_DRIVE = "scripts/drive/d1017_hidden_data_screens.py"
+CHECKS_ROW_TESTS = "hub/ui/src/__tests__/taskChecksRow.test.tsx"
+RESOLVED_TESTS = "hub/ui/src/__tests__/specResolvedProposals.test.tsx"
 TEXT_SECRET_TESTS = "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
 TEXT_SECRET_DRIVE = "scripts/drive/d1015_f602_text_redaction.py"
 FLAG_TESTS = "hub/tests/test_a_runner_s_flags_cannot_override_the_posture.py"
@@ -1672,6 +1676,31 @@ CHANGES = {
              "Three context_warning events render as one row counting them; other events stay rows."),
         ],
     },
+    "fhidden": {
+        "document": "spec/changes/the-rest-of-what-the-hub-records-becomes-reachable/spec.json",
+        "commit": "747b02e",
+        "tasks": ["task-6066baf9cf5e"],
+        "evidence": [
+            ("FR-1", "task-6066baf9cf5e", "test_result", HIDDEN_TESTS,
+             "Notes oldest first, the consumed one naming its checkpoint; suspicions and warnings "
+             "carried; 404 for another project's conversation."),
+            ("FR-2", "task-6066baf9cf5e", "test_result", HIDDEN_TESTS,
+             "Default answers the pending one only; resolved = rejected then accepted (newest "
+             "decision first) with reason and resolver; all = the three; a bad status is 422."),
+            ("FR-3", "task-6066baf9cf5e", "test_result", HIDDEN_DRIVE,
+             "Replica: a Builder conversation's Checkpoints sheet shows its note (intent, suspects, "
+             "warns, waiting). Before the build the drive failed here (no toggle)."),
+            ("FR-4", "task-6066baf9cf5e", "test_result", HIDDEN_DRIVE,
+             "Scratch :8127: the checks row lists the two earlier runs, 'unit · exit 1 · 12.5s'; "
+             "taskChecksRow.test.tsx pins the route's order."),
+            ("FR-5", "task-6066baf9cf5e", "test_result", HIDDEN_DRIVE,
+             "Replica: a transition's 'in its conversation' opened conv-6ffbe1de5a7b; "
+             "taskStory.test.tsx: a run outside the story gets no link."),
+            ("FR-6", "task-6066baf9cf5e", "test_result", HIDDEN_DRIVE,
+             "Scratch :8127: the spec page lists 2 decided proposals with 'Why: this would narrow "
+             "FR-1 too far'; specResolvedProposals.test.tsx pins order and fields."),
+        ],
+    },
 }
 
 # Folds that rewrite existing capability requirements: change key -> the key it replaces.
@@ -1734,6 +1763,12 @@ CHANGE_FOLDS = {
     "fbrowser": 'requirement-traceability',
     "freqstory": 'requirement-traceability',
     "fledger": 'usage-accounting',
+    "fhidden": {
+        'conversation-checkpoint': ['notes-route', 'checkpoints-panel'],
+        'project-checks': ['checks-history'],
+        'task-lifecycle-governance': ['run-links'],
+        'spec-document-authority': ['resolved-proposals', 'proposals-history'],
+    },
     "f660": {
         'turn-outcome-visibility': ['stop-reason-recorded', 'divergence-names-refusal'],
         'agent-run-sandboxing': [
