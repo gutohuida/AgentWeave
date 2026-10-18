@@ -188,6 +188,59 @@ async def test_a_later_limit_only_row_does_not_hide_the_complete_one(app, auth_h
 
 
 @pytest.mark.asyncio
+async def test_a_claude_turn_records_one_reading_not_a_second_empty_one(app, auth_headers):
+    """F733: every Claude turn logged a second `context_warning` ~40 ms after the real one --
+    the end-of-turn `result`'s window, `status: measured`, `context_tokens: null`. Fed here as the
+    runner feeds it: the real parser, on the two lines in the order Claude emits them."""
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import EventLog
+    from hub.output_recording import record_context_usage
+
+    assistant = (
+        '{"type":"assistant","session_id":"s1","message":{"model":"'
+        + HAIKU
+        + '","content":[{"type":"text","text":"hi"}],'
+        '"usage":{"input_tokens":1000,"cache_read_input_tokens":9000,'
+        '"cache_creation_input_tokens":0}}}'
+    )
+    result = (
+        '{"type":"result","subtype":"success","session_id":"s1","is_error":false,'
+        '"modelUsage":{"' + HAIKU + '":{"contextWindow":200000,"inputTokens":1000,'
+        '"outputTokens":5,"cacheReadInputTokens":9000,"cacheCreationInputTokens":0,'
+        '"costUSD":0.001}}}'
+    )
+    verdicts = []
+    for line in (assistant, result):
+        usage = parse_claude_line(line).usage
+        assert usage is not None
+        async with async_session_factory() as db:
+            verdicts.append(
+                await record_context_usage(
+                    db, "proj-test", "ctx-pair", usage.to_payload("ctx-pair")
+                )
+            )
+            await db.commit()
+
+    async with async_session_factory() as db:
+        rows = (
+            (
+                await db.execute(
+                    select(EventLog).where(
+                        EventLog.event_type == "context_warning", EventLog.agent == "ctx-pair"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert verdicts == ["ok", "ignored"]
+    assert [row.data["context_tokens"] for row in rows] == [10_000]
+    assert rows[0].data["percent"] == 5.0
+
+
+@pytest.mark.asyncio
 async def test_a_reset_is_not_papered_over_with_the_previous_sessions_reading(app, auth_headers):
     """The fallback is scoped to the newest row's session on purpose. A compaction starts a new
     session at low usage; reporting the pre-compaction percentage as current would be worse than

@@ -199,6 +199,18 @@ async def record_context_usage(
     (a newer observation whose measurement is identical to the latest persisted one).
     """
     payload = resolve_usage_limit({**sample_payload, "agent": agent})
+    # F733: a "measured" reading that measured nothing -- Claude's end-of-turn `result` reports
+    # the window with no token count, ~40 ms after the turn's real reading -- is not recorded. It
+    # doubled every Claude turn's readings, showed in Logs as "a context reading with no
+    # measurement", and could never yield a percentage; the trigger ignores it anyway. A reading
+    # that says it is not a measurement (`unavailable`, `unsupported`) is still recorded: that is
+    # information about the runner, and it scopes the read path's session fallback.
+    if (
+        payload.get("status") == "measured"
+        and payload.get("context_tokens") is None
+        and payload.get("percent") is None
+    ):
+        return "ignored"
 
     # Which conversation this reading belongs to.
     #

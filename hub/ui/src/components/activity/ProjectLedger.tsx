@@ -13,7 +13,11 @@ import { ActivityLog } from './ActivityLog'
  * `GET /ledger` returns it.
  */
 
-const NOTICE_LABEL: Record<string, string> = { context_warning: 'Context warnings' }
+// F733: every context reading is stored as a `context_warning` event, routine 3% ones included,
+// so the folded row counts readings. Calling them warnings, in amber, told the operator 37
+// things had gone wrong in 14 turns. A reading is information: named so, in a neutral tone.
+const NOTICE_LABEL: Record<string, string> = { context_warning: 'Context readings' }
+const NOTICE_TONE: Record<string, 'neutral' | 'amber'> = { context_warning: 'neutral' }
 const LANE_PREVIEW = 8
 
 function money(value: number): string {
@@ -372,7 +376,7 @@ export function ProjectLedger({ onOpenTask }: { onOpenTask: (taskId: string) => 
           <ul className="aw-req-list">
             {data.notices.map((notice) => (
               <li key={notice.kind} data-testid={`ledger-notice-${notice.kind}`}>
-                <StatePill tone="amber">{notice.count}</StatePill>
+                <StatePill tone={NOTICE_TONE[notice.kind] ?? 'amber'}>{notice.count}</StatePill>
                 <span className="aw-req-line">
                   {NOTICE_LABEL[notice.kind] ?? notice.kind.replace(/_/g, ' ')}
                   <span className="aw-tl-meta">
