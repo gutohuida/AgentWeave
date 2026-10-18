@@ -411,6 +411,54 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           </div>
         </TimelineItem>
       )
+    case 'turn': {
+      const what = event.review ? 'review' : 'turn'
+      const head =
+        event.state === 'abandoned'
+          ? `’s ${what} was given up`
+          : event.state === 'withdrawn'
+            ? `’s ${what} was withdrawn`
+            : event.state === 'delivered'
+              ? `’s ${what} was refused before it ran`
+              : `’s ${what} is held`
+      return (
+        <TimelineItem
+          key={event.id}
+          {...common}
+          tone="amber"
+          icon="warning"
+          head={
+            <span>
+              <strong>{event.agent}</strong>
+              {head}
+            </span>
+          }
+          meta={
+            <>
+              queued <Time value={event.at} />
+              {event.attempts > 0 ? ` · ${event.attempts} ${event.attempts === 1 ? 'attempt' : 'attempts'}` : ''}
+            </>
+          }
+        >
+          {event.refusal || event.ended_reason ? (
+            <div className="aw-callout tone-amber">{event.ended_reason ?? event.refusal}</div>
+          ) : null}
+        </TimelineItem>
+      )
+    }
+    case 'workspace':
+      return (
+        <TimelineItem
+          key={event.id}
+          {...common}
+          tone="amber"
+          icon="warning"
+          head={<span>The task’s checkout could not be released</span>}
+          meta={<Time value={event.at} />}
+        >
+          {event.reason ? <div className="aw-callout tone-amber">{event.reason}</div> : null}
+        </TimelineItem>
+      )
   }
 }
 

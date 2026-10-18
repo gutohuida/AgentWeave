@@ -218,4 +218,77 @@ async def test_a_task_with_nothing_yet_has_a_one_line_story(app, auth_headers, b
         assert (await session.get(Task, task)).status == body["task"]["status"]
 
 
+@pytest.mark.asyncio
+async def test_refused_turns_and_a_failed_checkout_release_are_in_the_story(
+    app, auth_headers, builder, tmp_path
+):
+    """F711: two refused deliveries and `task_worktree_release_failed` left ~13 minutes of a jammed
+    task out of its whole story. A turn that ran normally is its run, so it is not told twice."""
+    from hub.db.models import InboundQueueEntry
+    from hub.utils import persist_event
+
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    start = datetime.now(timezone.utc)
+    async with async_session_factory() as session:
+        session.add(
+            InboundQueueEntry(
+                id="entry-story-refused",
+                project_id="proj-test",
+                agent="beta",
+                origin_type="operator",
+                content="work",
+                hop_depth=0,
+                state="queued",
+                task_id=task,
+                arrived_at=start + timedelta(seconds=1),
+                delivery_attempts=2,
+                waiting_reason=f"Could not prepare the checkout for task {task}: refusing path",
+            )
+        )
+        session.add(
+            InboundQueueEntry(
+                id="entry-story-ran",
+                project_id="proj-test",
+                agent="beta",
+                origin_type="operator",
+                content="work",
+                hop_depth=0,
+                state="delivered",
+                task_id=task,
+                arrived_at=start,
+            )
+        )
+        await persist_event(
+            session,
+            "proj-test",
+            "task_worktree_release_failed",
+            {"task_id": task, "reason": "Permission denied"},
+            severity="warn",
+            commit=False,
+        )
+        await persist_event(
+            session,
+            "proj-test",
+            "task_worktree_release_failed",
+            {"task_id": "task-someone-else", "reason": "not this one"},
+            severity="warn",
+            commit=False,
+        )
+        await session.commit()
+
+    body = await story(app, auth_headers, task)
+
+    turns = [event for event in body["events"] if event["kind"] == "turn"]
+    assert [t["id"] for t in turns] == ["entry-story-refused"]
+    assert "Could not prepare the checkout" in turns[0]["refusal"]
+    assert turns[0]["agent"] == "beta" and turns[0]["attempts"] == 2
+    (workspace,) = [event for event in body["events"] if event["kind"] == "workspace"]
+    assert workspace["outcome"] == "release_failed"
+    assert workspace["reason"] == "Permission denied"
+    stamps = [event["at"] for event in body["events"]]
+    assert stamps == sorted(stamps), "still oldest first"
+
+
 assert BASE

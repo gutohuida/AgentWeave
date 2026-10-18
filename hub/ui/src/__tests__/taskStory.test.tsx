@@ -188,3 +188,33 @@ describe('slice remaining-hidden-data — transitions and runs open their conver
     }
   })
 })
+
+describe('F711 — a jammed task tells its jam', () => {
+  it('shows a refused turn with its refusal and a failed checkout release with its reason', () => {
+    storyOverride.current = {
+      ...STORY,
+      events: [
+        ...STORY.events,
+        {
+          kind: 'turn', id: 'entry-1', at: '2026-10-16T14:40:00Z', agent: 'beta', review: false,
+          state: 'queued', refusal: 'Could not prepare the checkout for task task-1: refusing path',
+          ended_reason: null, attempts: 2, run_id: null,
+        },
+        {
+          kind: 'workspace', id: 'ev-ws', at: '2026-10-16T14:41:00Z', outcome: 'release_failed',
+          reason: 'Permission denied',
+        },
+      ],
+    }
+    try {
+      render(<TaskStory taskId="task-1" />)
+      const turn = screen.getByTestId('story-event-entry-1')
+      expect(turn.textContent).toContain('beta')
+      expect(turn.textContent).toContain('Could not prepare the checkout')
+      expect(turn.textContent).toContain('2 attempts')
+      expect(screen.getByTestId('story-event-ev-ws').textContent).toContain('Permission denied')
+    } finally {
+      storyOverride.current = null
+    }
+  })
+})
