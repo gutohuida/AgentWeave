@@ -1007,6 +1007,8 @@ export function useSetSpecPhase() {
         SpecDocumentRecord & {
           approval_outcome?: SpecApprovalOutcome
           next_slice?: SpecNextSliceOutcome
+          /** F704: what approval told and did not gate on (an unclaimed roadmap slice). */
+          approval_notes?: SpecBlockingFinding[]
         }
       >(
         `/api/v1/projects/${projectId}/project/documents/phase?path=${encodeURIComponent(path)}&to=${encodeURIComponent(to)}`,

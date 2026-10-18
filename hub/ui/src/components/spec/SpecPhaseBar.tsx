@@ -181,6 +181,8 @@ export function SpecPhaseBar({
   // anyway`). Only an `approval_warnings` refusal makes them overridable: the one Approve anyway answers.
   const [gaps, setGaps] = useState<SpecBlockingFinding[]>([])
   const [gapsOverridable, setGapsOverridable] = useState(false)
+  // What an approval told and did not gate on (F704: an unclaimed roadmap slice).
+  const [approvalNotes, setApprovalNotes] = useState<SpecBlockingFinding[]>([])
   const [rigorRefusal, setRigorRefusal] = useState<string[]>([])
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [archiveRefusal, setArchiveRefusal] = useState<string | null>(null)
@@ -254,6 +256,7 @@ export function SpecPhaseBar({
     setBlocking([])
     setGaps([])
     setGapsOverridable(false)
+    setApprovalNotes([])
   }
 
   async function onPropose() {
@@ -289,7 +292,10 @@ export function SpecPhaseBar({
         ...(anyway ? { approve_anyway: true } : {}),
       },
       {
-        onSuccess: (result) => setNextSliceOutcome(result.next_slice ?? null),
+        onSuccess: (result) => {
+          setNextSliceOutcome(result.next_slice ?? null)
+          setApprovalNotes(result.approval_notes ?? [])
+        },
         // F207: approval runs the completeness checks again. Gaps alone answer `approval_warnings`,
         // which Approve anyway gets past; a refusal answers `document_incomplete`.
         onError: (error: unknown) =>
@@ -839,6 +845,13 @@ export function SpecPhaseBar({
               </Button>
             </div>
           )}
+        </div>
+      )}
+
+      {approvalNotes.length > 0 && (
+        <div data-testid="approval-notes" className="flex flex-col gap-0.5" style={{ color: 'var(--text-3)' }}>
+          <span>Approved. For your information:</span>
+          <GapLines gaps={approvalNotes} />
         </div>
       )}
 

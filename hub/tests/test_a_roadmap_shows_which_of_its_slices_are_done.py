@@ -1,5 +1,5 @@
 """A roadmap shows which of its slices are done (F579), and a change document naming no slice is
-asked to while a roadmap has unclaimed slices (F674) -- a gap, never a refusal."""
+told while a roadmap has unclaimed slices (F674) -- a note, which gates nothing (F704)."""
 
 import re
 
@@ -88,14 +88,45 @@ async def test_each_slice_says_where_it_stands(app, auth_headers, tmp_path):
     assert "not started" in second
 
 
-async def test_a_document_naming_no_slice_is_asked_to_as_a_gap(app, auth_headers, tmp_path):
+async def test_a_document_naming_no_slice_is_told_without_being_gated(app, auth_headers, tmp_path):
+    """F704: an unclaimed slice is a note, never a gap. FAILS before: approval answered 409
+    `approval_warnings`, so every unrelated change needed Approve anyway while a slice was open."""
     await _roadmap_with_first_claimed(app, auth_headers)
-    await _write(app, auth_headers, LOOSE, "Not a slice", _change("Not a slice"))
-    refused = await _approve(app, auth_headers, LOOSE, anyway=False)
-    assert refused.status_code == 409, refused.text
-    assert "roadmap_slice_unclaimed" in refused.text and "second" in refused.text
-    assert "first" not in re.findall(r"names: ([^.]*)", refused.text)[0]
-    assert (await _approve(app, auth_headers, LOOSE)).status_code == 200
+    created = await app.post(
+        f"{BASE}/documents", json={"path": LOOSE, "title": "Not a slice"}, headers=auth_headers
+    )
+    assert created.status_code == 201, created.text
+    clean = _change("Not a slice")
+    # Nothing else to approve over, so a 409 here could only be the slice note gating.
+    clean["acceptance_criteria"][0].update(how_to_check="run it", checked_by="agent")
+    written = await app.put(
+        f"{BASE}/documents/{LOOSE}/content", json={"document": clean}, headers=auth_headers
+    )
+    assert written.status_code == 200, written.text
+    stepped = await app.post(
+        f"{BASE}/documents/journey",
+        params={"path": LOOSE},
+        json={"step": "delivery"},
+        headers=auth_headers,
+    )
+    assert stepped.status_code == 200, stepped.text
+    await app.post(
+        f"{BASE}/documents/close-exploration", params={"path": LOOSE}, headers=auth_headers
+    )
+    proposed = await app.post(
+        f"{BASE}/documents/propose", params={"path": LOOSE}, headers=auth_headers
+    )
+    assert proposed.status_code == 200, proposed.text
+    assert "roadmap_slice_unclaimed" in proposed.text, proposed.text
+
+    approved = await _approve(app, auth_headers, LOOSE, anyway=False)
+
+    assert approved.status_code == 200, approved.text
+    body = approved.json()
+    [note] = [n for n in body["approval_notes"] if n["code"] == "roadmap_slice_unclaimed"]
+    assert "second" in note["message"]
+    assert "first" not in re.findall(r"names: ([^.]*)", note["message"])[0]
+    assert not body.get("approval_warnings_overridden"), body
 
 
 async def test_no_gap_without_an_approved_roadmap(app, auth_headers, tmp_path):

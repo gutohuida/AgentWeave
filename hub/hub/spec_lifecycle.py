@@ -390,6 +390,7 @@ async def transition(
             )
 
     gaps: List[Dict[str, Any]] = []
+    notes: List[Dict[str, Any]] = []
     if to_phase in (PROPOSED, APPROVED):
         # Required `workspace`: a caller with none cannot move a document at all, rather than
         # moving it unchecked (F207). Imported here because `spec_service` imports this module.
@@ -402,7 +403,7 @@ async def transition(
                 + ", ".join(b["code"] for b in found.refusals),
                 code="document_incomplete",
                 blocking=found.refusals,
-                warnings=found.gaps,
+                warnings=found.gaps + found.notes,
             )
         if to_phase == APPROVED and found.gaps and not approve_anyway:
             raise PhaseError(
@@ -414,6 +415,8 @@ async def transition(
                 warnings=found.gaps,
             )
         gaps = found.gaps
+        # Told, never gating (F704): approval passes them without approve_anyway.
+        notes = found.notes
 
     previous = document.phase
     document.phase = to_phase
@@ -431,8 +434,11 @@ async def transition(
     if to_phase == APPROVED:
         # What the operator approved over: [] for a clean approval, so "clean" is a recorded fact.
         detail["warnings_overridden"] = gaps
-    elif to_phase == PROPOSED and gaps:
-        detail["warnings"] = gaps
+        if notes:
+            detail["notes"] = notes
+    elif to_phase == PROPOSED and (gaps or notes):
+        # A proposal passes gaps and notes alike; the author reads both as warnings.
+        detail["warnings"] = gaps + notes
     if previous == CURRENT:
         detail["absorbed_by"] = absorbed_by
     return await record_event(session, document, kind="phase", actor=actor, detail=detail)

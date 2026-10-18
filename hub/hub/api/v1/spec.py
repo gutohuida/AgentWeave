@@ -3041,7 +3041,7 @@ async def set_phase(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     try:
-        await spec_lifecycle.transition(
+        phase_event = await spec_lifecycle.transition(
             session,
             document,
             to_phase=to,
@@ -3064,6 +3064,8 @@ async def set_phase(
         if exc.warnings:
             detail["warnings"] = exc.warnings
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+
+    phase_notes = list((phase_event.detail or {}).get("notes") or [])
 
     # Approval is what turns a decomposition from a description into work: the board is
     # materialised, the delivery's flow is created, and what both did is recorded. Neither can undo
@@ -3147,6 +3149,10 @@ async def set_phase(
     }
     if report is not None:
         response["approval_outcome"] = report
+    # F704: what approval told and did not gate on (an unclaimed roadmap slice). Read from the
+    # values captured before the commit's expiry, as every other field here is.
+    if phase_notes:
+        response["approval_notes"] = phase_notes
     if body.draft_next_slice and document.phase == "approved":
         # After the commit: the approval stands whatever happens here, and the response says it.
         response["next_slice"] = await slice_drafting.request_next_slice(
