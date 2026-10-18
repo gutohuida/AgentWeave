@@ -2551,6 +2551,7 @@ _ADOPTION_REFUSAL_STATUS = {
     "payload_absent": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "payload_unreadable": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "payload_identity_missing": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "payload_invalid": status.HTTP_422_UNPROCESSABLE_ENTITY,
 }
 
 

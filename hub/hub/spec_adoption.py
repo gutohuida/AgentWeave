@@ -35,7 +35,7 @@ from . import spec_documents, spec_index, spec_lifecycle
 from .db.models import SpecDocument
 from .project_workspace import ProjectPathError, ProjectWorkspace
 from .spec_manifest import SpecPathError, validate_spec_path
-from .spec_payload import KINDS
+from .spec_payload import KINDS, PayloadError, validate_payload
 
 #: Every phase a row may hold. `current` is included and `transition()` never
 #: accepts it — a capability document reaches it through creation only, which is
@@ -226,6 +226,19 @@ def identity_from_content(path: str, content: str) -> Adoptable:
                 f"the document's payload declares kind {kind!r}, which is not one of "
                 f"{', '.join(KINDS)}"
             ),
+        )
+
+    try:
+        validate_payload(payload)
+    except PayloadError as exc:
+        # F689: a payload the schema refuses indexes nothing (`requirements_from_payload`
+        # reads it as unknown) and no reader can open it, so a row for it would be a
+        # document that exists, asserts nothing, and whose page never loads. Refused here,
+        # naming the field, so the operator repairs the file and adopts again.
+        return AdoptionRefusal(
+            path=path,
+            code="payload_invalid",
+            message=f"the document's payload is not a valid specification: {exc}",
         )
 
     status = _text(hub.get("phase"))
