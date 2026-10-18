@@ -57,8 +57,9 @@ HOME = pathlib.Path.home()
 # AW_E2E_STATE lets parallel sweeps each keep their own Hub record.
 STATE = pathlib.Path(os.environ.get("AW_E2E_STATE") or HOME / ".agentweave" / "e2e-current.json")
 PROFILES = HOME / ".agentweave" / "hub" / "profiles"
-#: The checkout the Hub runs from. Override with AW_REPO_ROOT.
-REPO = pathlib.Path(os.environ.get("AW_REPO_ROOT") or HOME / "Documents" / "projects" / "AgentWeave")
+#: The checkout the Hub runs from: the one this script sits in (`<root>/.claude/skills/e2e-loop`),
+#: so a drive started from a worktree tests that worktree. Override with AW_REPO_ROOT.
+REPO = pathlib.Path(os.environ.get("AW_REPO_ROOT") or pathlib.Path(__file__).resolve().parents[3])
 #: Test projects live here — never inside the repository.
 PROJECTS = pathlib.Path(os.environ.get("AW_E2E_ROOT") or HOME / "Documents")
 PY311 = os.environ.get("AW_PY311") or str(
@@ -166,6 +167,12 @@ def cmd_hub_up(profile, port):
             f"Something already listens on :{port}. Its /health would answer for a Hub this "
             "command did not start; pick another port or stop it first."
         )
+    if not (REPO / "hub" / "hub" / "main.py").is_file():
+        raise SystemExit(
+            f"No Hub source under {REPO} (expected hub/hub/main.py). Run this script from inside "
+            "an AgentWeave checkout, or set AW_REPO_ROOT to one."
+        )
+    print("serving the Hub from", REPO)
     path = PROFILES / profile / "agentweave.db"
     path.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
