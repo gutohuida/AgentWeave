@@ -302,3 +302,35 @@ async def test_a_transcribed_file_distils_on_any_runner_without_reading(
     answered = await app.post(f"{BASE}/vault/sources/{source['id']}/distil", headers=auth_headers)
     assert answered.status_code == 202, answered.text
     assert fake.spawns and fake.readings == []
+
+
+@pytest.mark.asyncio
+async def test_an_unread_image_says_what_is_in_the_way_not_to_enable_an_enabled_job(
+    app, auth_headers, process
+) -> None:
+    """F720: job on, Claude runner, budget spent. The upload's own reading is autonomous and is
+    paused; the entry said "enable the job" beside a firing that said the budget was spent."""
+    from .test_accounting_budget import _set_budget_and_usage
+
+    fake = process()
+    await _enable(app, auth_headers, await _runner(app, auth_headers))
+    await _set_budget_and_usage(limit=10, used=50)
+    source = await _upload(app, auth_headers, PNG, "image/png")
+    assert fake.spawns == []
+    [firing] = await _firings()
+    assert firing["outcome"] == "failed" and "budget" in firing["detail"]
+
+    read = await app.get(f"{BASE}/vault/entries/{source['id']}", headers=auth_headers)
+    note = read.json()["note"]
+    assert "has not been read yet" in note
+    assert "enable the job" not in note.lower()
+    assert "budget" in note and "Distil the source" in note
+
+    # Job off: that, and only that, is what the entry names.
+    patched = await app.patch(
+        f"{BASE}/manager/jobs/{JOB}", json={"enabled": False}, headers=auth_headers
+    )
+    assert patched.status_code == 200, patched.text
+    read = await app.get(f"{BASE}/vault/entries/{source['id']}", headers=auth_headers)
+    note = read.json()["note"]
+    assert "job is disabled" in note and "budget" not in note

@@ -461,6 +461,30 @@ async def test_proposal_fires_one_check_keeping_only_conflicts_that_name_real_id
 
 
 @pytest.mark.asyncio
+async def test_check_now_with_nothing_to_compare_says_so_instead_of_queueing(
+    app, auth_headers, run_headers, worker, tmp_path  # noqa: F811
+) -> None:
+    """F735: on a document with no requirements, "check now" answered 202 queued and nothing
+    fired or was recorded. Each idle case now answers 409 naming what is missing."""
+    fake = worker([])
+    await _enable(app, auth_headers)
+    await _create(app, auth_headers)
+    refused = await _check_now(app, auth_headers)
+    assert refused.status_code == 409, refused.text
+    assert "no requirements" in refused.json()["detail"]
+
+    await _saved(app, run_headers, _requirement("r1", "Refunds up to 300 need no approval."))
+    refused = await _check_now(app, auth_headers)
+    assert refused.status_code == 409, refused.text
+    assert "no current fact" in refused.json()["detail"]
+
+    january = await _source(app, auth_headers, JANUARY, "2026-01-10")
+    await _fact(app, auth_headers, tmp_path, january, "Refunds up to 300 need none.")
+    assert (await _check_now(app, auth_headers)).status_code == 202
+    assert len(fake.calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_a_disabled_job_spawns_nothing_on_proposal(
     app, auth_headers, run_headers, worker, tmp_path  # noqa: F811
 ) -> None:

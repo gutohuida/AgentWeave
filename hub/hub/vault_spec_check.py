@@ -278,6 +278,21 @@ async def prepare(project_id: str, path: str) -> Plan:
     )
 
 
+def nothing_to_compare(plan: Plan) -> Optional[str]:
+    """Why `check` would spawn nothing for *plan*, or None when it would compare (F735): the
+    operator who asked to check now is told, where a background check stays silent."""
+    if not plan.requirements:
+        return (
+            f"{plan.path} has no requirements yet, so there is nothing to check against the vault."
+        )
+    if not plan.facts:
+        return (
+            "The vault holds no current fact to check the requirements against. Add a source and "
+            "distil it, then check again."
+        )
+    return None
+
+
 def _prompt(plan: Plan) -> str:
     requirements = "\n".join(
         f"{r['key']}: {' '.join(r['statement'].split())}" for r in plan.requirements

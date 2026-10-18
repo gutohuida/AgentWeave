@@ -283,6 +283,8 @@ async def test_a_decision_source_is_not_distilled(app, auth_headers, worker) -> 
     await _enable(app, auth_headers)
     source = await _upload(app, auth_headers, "We decided.\n", type="decision")
     assert fake.calls == []
+    # F735: the upload's own answer says so, rather than only a later Distil's 409.
+    assert "not distilled" in source["note"]
     refused = await _distil(app, auth_headers, source["id"])
     assert refused.status_code == 409, refused.text
     assert "decision" in refused.json()["detail"].lower()
