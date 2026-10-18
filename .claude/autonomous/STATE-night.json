@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 5,
+  "iteration": 6,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "flow-stages-spec",
-  "next_action": "Do queue item flow-stages-spec: brief in spec-queue/APPROVALS.md '## 2026-10-18'; inputs are parts 1 and 2 of spec-queue/research/2026-10-18-editable-flow-stages.md (part 2 = the driven spike, five resistance points). One change document on trial Hub :8010 (proj-d85a82bf4216), phase exploring, never proposed or approved; options + recommendation per question, acceptance drive sketch, Tier 2 hazards. OPEN rows flow-1018-<n> in spec-queue/DECISIONS.md, their ids in decisions_for_user. If :8010 will not come up, write spec-queue/night-proposals/editable-flow-stages.md. Then F739-impl.",
+  "current": "F739-impl",
+  "next_action": "Do queue item F739-impl: F739 (C), a request body without Content-Length is not size-limited. Tier 0: write the test that fails at the seam the finding names, fix, drive it against a scratch Hub (never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F743-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -39,11 +39,11 @@
     },
     {
       "id": "flow-stages-spec",
-      "status": "open",
+      "status": "done",
       "model": "opus",
       "effort": "high",
       "title": "Author the editable-flow-stages change on :8010 as exploring + OPEN rows",
-      "detail": "Brief: spec-queue/APPROVALS.md ## 2026-10-18 (operator, ~23:00). One exploring change document on :8010 (proj-d85a82bf4216): options + recommendation per question, acceptance drive sketch, Tier 2 hazards. Do NOT propose or approve. OPEN rows flow-1018-<n> in DECISIONS.md, ids in decisions_for_user."
+      "detail": "exploring document spdoc-9e407ca6ffe8 on :8010; OPEN rows flow-1018-1..8; see log iteration 6"
     },
     {
       "id": "F739-impl",
@@ -113,7 +113,16 @@
       "detail": "Reproduce first; fix or -drive confirm; Status."
     }
   ],
-  "decisions_for_user": [],
+  "decisions_for_user": [
+    "flow-1018-1",
+    "flow-1018-2",
+    "flow-1018-3",
+    "flow-1018-4",
+    "flow-1018-5",
+    "flow-1018-6",
+    "flow-1018-7",
+    "flow-1018-8"
+  ],
   "limits": [
     "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. Only the day window's merge gate (day-window.md, 'The merge gate') may fast-forward master. This window never merges.",
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

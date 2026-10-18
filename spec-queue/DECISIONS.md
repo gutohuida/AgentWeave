@@ -20,6 +20,19 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### flow-1018: editable flow stages -- eight OPEN -- 2026-10-18 night
+
+From the operator's 2026-10-18 brief (`APPROVALS.md` `## 2026-10-18`: "dev -> test -> deploy is edditable. The default is dev ->test but if I want to remove or add steps to be possible"). Night items `flow-stages-map`, `-spike`, `-spec`. The map and the driven Haiku spike are in `spec-queue/research/2026-10-18-editable-flow-stages.md`. Options and reasoning per question are in the change document's design: `spec/changes/editable-flow-stages/spec.json` (`spdoc-9e407ca6ffe8` on `:8010`, phase `exploring`, not proposed). Any build is Tier 2: the lifecycle contract, a migration, and today's flows kept as the default.
+
+- OPEN      flow-1018-1  What is a stage: an agent turn (name or charter, plus a Markdown duty), a command (`Project.checks`), a gate, or a mix? Recommended: a mix with a `kind` field, v1 shipping `agent` only. In the spike, the duty text alone produced a security review that caught a real defect.
+- OPEN      flow-1018-2  Where does the stage list live: per flow (`Delivery`), as a project default file (shaped like `spec/journey.json`), as a per-task override, or a combination? Recommended: project default plus a per-flow override, snapshotted on the flow at approval; no per-task override in v1.
+- OPEN      flow-1018-3  What does removing `test` mean? Recommended: a dev-only flow auto-lands through the same gate (repository categories still apply; the requirement gate at the document's rigor), recorded with a new `flow` actor kind, never as the operator. It warns at `gate` rigor, and the card and history say "landed without review". Alternative: park for the operator's Land, as a documentless loop does today.
+- OPEN      flow-1018-4  Order and conditions? Recommended: strictly sequential, with no optional stages in v1. A send-back from any stage returns to the builder, and after rework the task restarts at the first stage. The operator's Land may skip the remaining stages and says which. Alternative: resume at the stage that sent it back.
+- OPEN      flow-1018-5  What does `deploy` mean: a post-merge command, a post-merge agent, or out of scope? Recommended: out of scope for v1.
+- OPEN      flow-1018-6  The status enum: a stage field on `Task` with the statuses unchanged, or new statuses per stage? Recommended: a stage field (the key, not an index), plus a named stage-pass edge in `TRANSITIONS` and a tool result that says "passed stage 1 of 2". Authorship (`completion_attribution`, seven callers) must ignore stage passes.
+- OPEN      flow-1018-7  Where is the editor: the project page beside Spec steps, the document's Delivery section, or both? Recommended: both, one shared component, and the board shows each card's stage.
+- OPEN      flow-1018-8  How is a stage staffed? (Added from the spike: the test agent was given the build and then could not test it.) Recommended: by agent name or by charter. Agents named by a later stage are kept out of that flow's build pool, and the unstaffed sentence names the stage.
+
 ### loop-1018: the daily cycle restarts as DRIVE by day, FIX by night -- DECIDED 2026-10-18
 
 Interactive session, 2026-10-18 ~22:40. "I want to restart my daily and nightly run. The daily run will be about driving and testing e2e agentweave and finding everything wrong with it and the night about fixing everything that was found. Unless I add something new." Then: "also e2e loop should start with a pretask that is reviewing the plan agains the code to check if it's reaching everything and if there is something new."

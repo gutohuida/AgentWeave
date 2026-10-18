@@ -322,3 +322,12 @@ an anecdote, not a rate.
 - **Removing `test` is cheap to build and expensive to explain.** It works in one firing, but the
   history and the board have to say "landed without review" truthfully (question 3), and today
   they cannot.
+
+## Part 3 - the change document
+
+Authored on the trial Hub `:8010` (`proj-d85a82bf4216`) as `spec/changes/editable-flow-stages/spec.json`
+(`spdoc-9e407ca6ffe8`), phase **`exploring`**: not proposed, not approved. It holds the problem in
+the operator's words, options and a recommendation for each of the brief's seven questions plus an
+eighth (stage staffing, from resistance point 3), a sketch of the acceptance drive, and the Tier 2
+hazards. Four requirements are drafted, and only ones that hold under every option. The eight
+questions are `OPEN` rows `flow-1018-1` to `flow-1018-8` in `spec-queue/DECISIONS.md`.

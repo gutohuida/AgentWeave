@@ -1,0 +1,170 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub with a flow declaring tester qa and no stages, and a documentless loop",
+      "how_to_check": "acceptance drive variant (a) and the documentless row",
+      "key": "regression-row",
+      "requirement": "absent-stages-is-todays-flow",
+      "then": "the transition sequence, the reviewer staffed and the stall on the loop's task match a run on master's code",
+      "when": "each works one task to the end"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow declaring stages security(sec) then test(qa)",
+      "how_to_check": "acceptance drive variant (c)",
+      "key": "security-then-test",
+      "requirement": "stage-pass-is-its-own-move",
+      "then": "the history shows a stage-pass move naming security and test, sec's tool result says it passed stage 1 of 2, and the next firing staffs qa",
+      "when": "sec passes the built task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "variant (c) after security passed",
+      "how_to_check": "acceptance drive variant (c), forced send-back",
+      "key": "send-back-to-builder",
+      "requirement": "builder-stays-the-author",
+      "then": "the task goes to dev, not sec, and qa was never given the build",
+      "when": "qa sends the task back"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow declaring stages []",
+      "how_to_check": "acceptance drive variant (b)",
+      "key": "dev-only-lands-honestly",
+      "requirement": "a-land-names-what-it-skipped",
+      "then": "the next firing lands it through the gate with a non-operator actor, and the card and the history read landed without review",
+      "when": "dev completes its task"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "4f781c9b8f1edd6db0d0dfca15874aa50283c6354dbd5714eebb40d8d320576f",
+      "FR-2": "36afdaa34039a9d62aa18c8ffa64c8ac1644e9f15e49a09dd47d428be435afef",
+      "FR-3": "ebc31d2f4574cbd840d24ca38645568c214bd2d10af391fafd7ff52c7f9ff052",
+      "FR-4": "3af6e89e102c9b9aa6436236f9eeab2ee258127e7267dc6ef7af2a6d1d497ac3"
+    },
+    "high_water": 4,
+    "requirements": {
+      "a-land-names-what-it-skipped": "FR-4",
+      "absent-stages-is-todays-flow": "FR-1",
+      "builder-stays-the-author": "FR-3",
+      "stage-pass-is-its-own-move": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Status: exploring. Nothing here is decided. Each question is an OPEN row flow-1018-<n> in spec-queue/DECISIONS.md. Evidence: research parts 1 (map, file:line at 8e07aa1) and 2 (tracer spike/2026-10-18-flow-stages@6a13a15, three stage lists driven to master with Haiku on a scratch Hub).\n\nQ1 (flow-1018-1) What a stage is.\n A. An agent turn: a review-shaped turn with a staffing rule (agent name or charter) and a Markdown duty. B. A command: reuse Project.checks (project_checks.py:63), the only place the Hub runs project commands. C. A gate: a named refusal category. D. A mix, with a `kind` field.\n Recommend: D, with v1 shipping kind=agent only and the `kind` field reserved. Spike: the duty text alone turned a generic reviewer into a security reviewer that found a real symlink-traversal defect. Gates stay where they are (evidence gate on the final approval; repository categories on every land). kind=command (named checks) is the natural second slice.\n\nQ2 (flow-1018-2) Where the stage list lives.\n A. Per flow, on Delivery (spec_payload.py:196). B. A project default, a tracked file shaped like spec/journey.json (spec_journey.py:70-250, edited via GET/PUT /spec/journey). C. Per-task override on the task entry. D. A+B.\n Recommend: D. Precedence: the document's delivery.stages, else the project file, else the built-in default (today's behaviour, exactly). No per-task override in v1: the task entry's `reviewer` already exists, and per-task lists multiply the contract. The list is snapshotted on the flow at approval, so editing the project file never moves a task in flight.\n\nQ3 (flow-1018-3) What removing test means.\n A. A dev-only flow auto-lands each completed task as a new Hub actor, through the same gate. B. It parks tasks for the operator's Land (today's documentless behaviour). C. Refuse a dev-only list on a gate-rigor document.\n Recommend: A. Quick and dirty skips agents, not merge safety: the repository categories (conflict, unlanded, checks) still apply, and the requirement gate still runs at the document's rigor (silent at sketch, spec_rigor.py:39). At gate rigor, approving a dev-only document warns (approvals are scarce: warn, don't gate). The land is recorded with a new actor kind (`flow`), never as the operator: the spike's land was written actor_kind=operator, which says the operator approved work they never saw. The board card and the task history say \"landed without review\" and name the stages that were skipped.\n Hazard: ACTOR_KINDS = (run, operator) at task_transitions.py:36; a third kind touches every edge's allowed-actor set (:88).\n\nQ4 (flow-1018-4) Order and conditions.\n Recommend: strictly sequential; no optional or conditional stages in v1 (an optional stage is a stage you remove). revision_needed from any stage returns to the build author (as today, task_transition_service.py:911-943) and, after rework, restarts at the first stage, because the rework changes code the earlier stages passed (the spike did this; a test-stage send-back after security passed was not exercised). The operator's Land at any stage may jump the remaining stages; the button says which stages it skips, and the history records the jump.\n Alternative: resume at the stage that sent it back (cheaper, but security would never see the rework).\n\nQ5 (flow-1018-5) What deploy means here.\n A. A post-merge command after integrate_task (task_transition_service.py:1096). B. A post-merge agent. C. Out of scope for v1.\n Recommend: C. Nothing exists after the merge, and a post-merge position is a different lifecycle point from a pre-merge stage. The kind field (Q1) leaves room for a post-merge command later.\n\nQ6 (flow-1018-6) The status enum.\n A. A stage field on Task, statuses unchanged, plus one named stage-pass edge. B. New statuses per stage.\n Recommend: A. The spike needed no new statuses, only a position and an edge. B hits the three-way status pinning (mcp_server.py:73-82, schemas/tasks.py, src/agentweave/constants.py:294) and STATUS_BANDS' import-time check (task_transitions.py:187, :218-228). The edge must be honest: the spike rewrote an agent's `approved` into under_review -> completed past TRANSITIONS, and the agent got back a status it did not ask for. Build: a named stage-pass move in TRANSITIONS, and an update_task result that says \"passed stage 1 of 2 (security); the next stage is test\". Store the stage key, not an index (the Q2 snapshot keeps the key stable).\n Hazard: authorship is \"the latest move into completed\" (completion_attribution, task_transition_service.py:190-207; agent_that_completed has seven callers, :216). A stage pass must never make the stage agent the author. That is a contract change across those callers, not a one-line filter.\n\nQ7 (flow-1018-7) The editor.\n Recommend: both, sharing one component. The project default on the project page beside Spec steps (hub/ui/src/components/environment/SpecStepsSection.tsx); the per-flow override in the change document's Delivery section. The board shows each card's current stage.\n\nQ8 (flow-1018-8) How a stage is staffed (added from the spike's resistance point 3).\n The spike's test stage stalled because the busy builder made the pool give the build to qa, the test-stage agent, which then could not test its own work (rung 1b, review_turn.py:102-155).\n A. Keep agents named by a later stage out of that flow's build pool. B. Pin the build to delivery.agent. C. A stage names a charter (security_engineer ships, hub/hub/data/charters/security_engineer.md, and nothing staffs by it) or a name.\n Recommend: A+C. A stage names an agent or a charter; a charter resolves to a free non-author agent holding it; a named stage agent is excluded from building that flow's tasks. Keep the rules that an unresolved name is surfaced and never substituted, and that the author is excluded. The unstaffed sentence names the stage (\"the test stage names qa, which built this task\"), not \"reviewer\".\n\nTier 2 hazards (any build of this is Tier 2):\n 1. The task-lifecycle contract: a new edge in TRANSITIONS and a new actor kind, both pinned in agent prompts, MCP tool docs and the UI.\n 2. A migration: a nullable stage column on tasks, and the stage snapshot on loops. The next free number on this branch is 0135 (the spike's 0135 is throwaway). Rollback: downgrade drops both; a null stage means today's flow. The branch's merge gate stays shut while it carries the migration (DECISIONS.md loop-A1).\n 3. Existing flows and loops keep today's behaviour by default: absent stages everywhere means the code path that runs today, untouched, including documentless loops (scheduler.py:2137) and tester-over-reviewer precedence. :8000's flows must be unaffected by the restart that runs the migration.\n 4. completion_attribution's seven callers (Q6).\n 5. Not exercised by the spike: evidence at contract/gate rigor across stages, a command stage, a test-stage send-back after security passed, deploy.\n\nAcceptance drive sketch (written, and run failing, before any build). Scratch Hub on 8110+, its own profile, four agents on claude-haiku-4-5 (dev Developer, sec Security Engineer, qa, rev). Three change documents, one small task each: (a) no stages declared, tester qa; (b) stages []; (c) stages security(sec) then test(qa). Plus a documentless loop with one task as the regression row. Fails today: delivery.stages is kept and ignored (_Part extra='allow', spec_payload.py:80), so (c) gets one review turn and no security turn, and (b) gets a normal review. Passes only when: all three reach master; (a) and the documentless loop behave exactly as before; (b) lands with no reviewer turn, recorded with the flow actor and shown as landed without review; (c) history shows a stage-pass move naming security, then the test stage staffed by qa (never by the builder), with dev still the author; a forced test-stage revision_needed returns to dev and re-runs security; an unresolvable stage agent stalls with a sentence naming the stage. Also checked: what update_task returns to the stage agent on a stage pass, and what the route returns when stage resolution raises.",
+  "evidence": {
+    "checked": [
+      "Map, read at 8e07aa1: spec-queue/research/2026-10-18-editable-flow-stages.md part 1",
+      "Spike driven with Haiku on scratch Hub :8110, project proj-53781bb53af9: variants a, b, c all reached master (a8d2c7f, 0997ace, 6271eaa); part 2",
+      "Tracer branch spike/2026-10-18-flow-stages@6a13a15 (throwaway, never merged)"
+    ],
+    "limits": [
+      "Haiku, one run per variant: the security catch is an anecdote, not a rate",
+      "Hub test suite not run on the tracer; which existing tests it breaks is unmeasured",
+      "Not exercised: contract/gate rigor across stages, command stages, a test-stage send-back after security passed, deploy",
+      "Which briefing path a hand-dispatched review takes was not traced (unverified)"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Records one change; when built, it folds into agent-flows and the task lifecycle capabilities.",
+  "open_questions": [
+    {
+      "question": "flow-1018-1 What is a stage: an agent turn, a command, a gate, or a mix? Recommended: a mix with a kind field; v1 ships kind=agent only.",
+      "resolved": false
+    },
+    {
+      "question": "flow-1018-2 Where does the list live? Recommended: a project default file shaped like spec/journey.json plus a per-flow override on Delivery, snapshotted at approval; no per-task override in v1.",
+      "resolved": false
+    },
+    {
+      "question": "flow-1018-3 What does removing test mean? Recommended: dev only auto-lands through the same gate as a new flow actor, warns at gate rigor, and shows landed without review.",
+      "resolved": false
+    },
+    {
+      "question": "flow-1018-4 Order and conditions? Recommended: strictly sequential, no optional stages; any send-back returns to the builder and restarts at the first stage; the operator's Land may skip stages and says which.",
+      "resolved": false
+    },
+    {
+      "question": "flow-1018-5 What does deploy mean? Recommended: out of scope for v1.",
+      "resolved": false
+    },
+    {
+      "question": "flow-1018-6 The status enum? Recommended: a stage field on Task, statuses unchanged, plus a named stage-pass edge and an honest tool result.",
+      "resolved": false
+    },
+    {
+      "question": "flow-1018-7 Where is the editor? Recommended: both places, one component: the project page beside Spec steps, and the document's Delivery section.",
+      "resolved": false
+    },
+    {
+      "question": "flow-1018-8 How is a stage staffed? Recommended: by agent name or charter, and agents named by a later stage are kept out of that flow's build pool.",
+      "resolved": false
+    }
+  ],
+  "problem": "Operator, 2026-10-18 (verbatim): \"The way the flow executes is good and it isnt at the same time. It's good because we have testing automatic but sometimes I want something built quick and dirty and sometime I want to add for example a security step. Other steps. So I would like to make so the flow like dev -> test -> deploy is edditable. The default is dev ->test but if I want to remove or add steps to be possible\"\n\nToday a flow has exactly two task-level stages and only one agent slot after build: one non-author agent takes a completed task to approved or revision_needed. `tester` and `reviewer` are alternatives, never a sequence (hub/hub/review_turn.py:194-204), so dev -> security -> test has nowhere to go. 'Test' is three mechanisms, none of them a stage: the tester duty, Project.checks, and the requirement/evidence gate at approved. Land is a side effect of entering approved (task_transition_service.py:877). Deploy does not exist. A documentless loop already skips review, but every task then stalls until the operator presses Land (scheduler.py:2306-2317).",
+  "requirements": [
+    {
+      "key": "absent-stages-is-todays-flow",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Existing flows and loops, including the operator's on :8000, must not change behaviour when this ships (Tier 2 hazard 3).",
+      "statement": "A flow whose document and project declare no stages works its tasks exactly as it does today: the same build staffing, the same single review slot with tester-over-reviewer precedence, and a documentless loop still parks completed tasks for the operator's Land."
+    },
+    {
+      "key": "stage-pass-is-its-own-move",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The spike returned completed to an agent that asked for approved; the contract has to say what happened.",
+      "statement": "When a stage agent passes a task on a stage that is not the last, the task history records a move that names the stage passed and the next stage, and the agent's update_task result says so; it is never recorded or reported as approved."
+    },
+    {
+      "key": "builder-stays-the-author",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "completion_attribution reads the latest move into completed; a stage pass must not move authorship to the stage agent (spike resistance point 2).",
+      "statement": "A task's author is the agent that built it, across every stage pass: no stage is staffed by the author, and a send-back from any stage returns the task to the author."
+    },
+    {
+      "key": "a-land-names-what-it-skipped",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Quick and dirty is cheap to build and expensive to explain (research part 2).",
+      "statement": "A task that lands without one or more of its flow's stages running, because the list has no review stage or because the operator landed it early, shows on its card and in its history which stages did not run and who landed it; an automatic land is never attributed to the operator."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "An ordered stage list after build, as a project default and per flow",
+      "Removing the test stage (dev only) with an honest automatic land",
+      "Adding agent stages (e.g. security), staffed by name or charter",
+      "How the board, the history and the editor show stages"
+    ],
+    "non_goals": [
+      "Deploy (Q5 recommends out of scope for v1)",
+      "Command stages in v1 (the kind is reserved; named checks follow)",
+      "Per-task stage overrides in v1",
+      "Optional or conditional stages in v1"
+    ]
+  },
+  "summary": "EXPLORING, not proposed. Lets a project and a flow declare an ordered list of stages after build (default: today's dev -> test), so a flow can drop the test stage (quick and dirty) or add one (a security review). Eight design questions are open, each with options and a recommendation; the operator decides them (DECISIONS.md flow-1018-1..8). Grounded in a read map and a driven Haiku spike: spec-queue/research/2026-10-18-editable-flow-stages.md parts 1 and 2.",
+  "tasks": [],
+  "title": "A flow's stages are editable: drop the test stage, or add one"
+}
