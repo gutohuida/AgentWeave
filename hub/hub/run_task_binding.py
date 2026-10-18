@@ -758,14 +758,15 @@ async def withdraw_review_entries_for(session: AsyncSession, task: Task) -> "Lis
     """
     verdict = task.status
     rows = await session.execute(
-        select(InboundQueueEntry.id, InboundQueueEntry.agent).where(
+        select(InboundQueueEntry.id, InboundQueueEntry.agent, InboundQueueEntry.job_id).where(
             InboundQueueEntry.project_id == task.project_id,
             InboundQueueEntry.review_task_id == task.id,
             InboundQueueEntry.state == "queued",
         )
     )
     withdrawn: "List[Dict[str, str]]" = []
-    for entry_id, agent in rows.all():
+    firing_jobs: "set[str]" = set()
+    for entry_id, agent, job_id in rows.all():
         result = await session.execute(
             update(InboundQueueEntry)
             .where(InboundQueueEntry.id == entry_id, InboundQueueEntry.state == "queued")
@@ -786,6 +787,17 @@ async def withdraw_review_entries_for(session: AsyncSession, task: Task) -> "Lis
             session, task.project_id, "queue_entry_withdrawn", payload, agent=agent, commit=False
         )
         withdrawn.append(payload)
+        if job_id:
+            firing_jobs.add(job_id)
+    if firing_jobs:
+        # A flow's staged review waits as one of these entries, and its firing stays `in_progress`
+        # until the run carrying the entry ends. Withdrawn, that run never comes (F712), so the
+        # firing is closed here, as the operator's own withdrawal closes it (F625). Imported here:
+        # the scheduler is built on this module.
+        from .scheduler import close_firings_left_without_input
+
+        for job_id in sorted(firing_jobs):
+            await close_firings_left_without_input(session, task.project_id, job_id)
     return withdrawn
 
 
