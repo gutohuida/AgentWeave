@@ -3382,15 +3382,23 @@ def _ps_pattern_operands(arguments: List[str], shapes: List[_ArgumentShape]) -> 
 # an operand the tool reads as text is exempt, and a sed or awk script only when it provably cannot
 # write a file or run a command (`_sed_reads_only`, `_awk_reads_only`); any other script stays
 # judged word by word, as before. A file operand -- every input, `sed -f`, `awk -f` -- is judged.
-# grep's pattern is not exempt: a quoted `$HOME` or `\.\./` in it is a cost the operator accepted
-# (`test_permission_approver.py` 1.5a2, `test_the_shell_judge_reads_a_word_whole.py` 1.7c1).
+# grep's pattern -- its first operand, or each `-e`/`--regexp` value -- is exempt too (operator,
+# 2026-10-18; it was accepted costs 1.5a2/1.7c1): a pattern is never run and names no file.
+# `-f`/`--file` and every file operand are judged, and every grep option that takes a separate
+# value is listed, so a value (`--exclude-from ../x`) is never mistaken for the pattern.
 
 _TEXT_TOOLS = {
     "sed": "sed", "gsed": "sed", "awk": "awk", "gawk": "awk", "mawk": "awk", "nawk": "awk",
-    "cut": "cut", "tr": "tr",
+    "cut": "cut", "tr": "tr", "grep": "grep", "egrep": "grep", "fgrep": "grep",
 }  # fmt: skip
 # Options that take a value, per tool, and the subset whose value is text rather than a path.
 _TEXT_TOOL_VALUE_OPTIONS = {
+    "grep": {
+        "-e", "--regexp", "-f", "--file", "-m", "--max-count", "-A", "--after-context", "-B",
+        "--before-context", "-C", "--context", "-d", "--directories", "-D", "--devices",
+        "--include", "--exclude", "--exclude-from", "--exclude-dir", "--label", "--binary-files",
+        "--group-separator",
+    },
     "sed": {"-e", "--expression", "-f", "--file", "-l", "--line-length"},
     "awk": {"-F", "--field-separator", "-f", "--file", "-v", "--assign"},
     "cut": {
@@ -3400,6 +3408,7 @@ _TEXT_TOOL_VALUE_OPTIONS = {
     "tr": set(),
 }  # fmt: skip
 _TEXT_VALUES = {
+    "grep": {"-e", "--regexp"},
     "sed": {"-e", "--expression"},
     "awk": {"-F", "--field-separator"},
     "cut": {
@@ -3410,6 +3419,7 @@ _TEXT_VALUES = {
 }  # fmt: skip
 # The options that supply the script or pattern, so no operand is one.
 _TEXT_SCRIPT_OPTIONS = {
+    "grep": {"-e", "--regexp", "-f", "--file"},
     "sed": {"-e", "--expression", "-f", "--file"},
     "awk": {"-f", "--file"},
 }
@@ -3594,6 +3604,47 @@ def _text_script_ok_for(tool: str, option: str, value: str) -> bool:
     return True
 
 
+# --- A bare `$PWD` (F696, operator 2026-10-18) ---------------------------------------------------
+#
+# `echo $PWD` was refused by D2 (F401) like any directory variable. A bare `$PWD`/`${PWD}` that is
+# a whole argument is the directory the command runs in, so it is judged as `.` -- the same
+# boundary `.` already has (a `cd` earlier in the command is not seen for either). Anything that
+# derives another path from it stays refused by D2/rule 3: `$PWD/..`, `$PWD..`, `${PWD%/*}`, a
+# substitution or group around it (`$(dirname $PWD)`, PowerShell's `(Split-Path $PWD)` and script
+# blocks), `x=$PWD`, a quoted `'$PWD'` an inner shell expands. So does every `$PWD` in a command
+# that names `PWD` anywhere else (`PWD=/ cp x $PWD`, `$PWD = 'C:\'`, `read PWD`), read both in the
+# text and in the lexed arguments (`eval P"WD"=/`), the way a `HUB_URL` reference is trusted.
+
+_BARE_PWD_RE = {
+    "bash": re.compile(r"\$(?:PWD|\{PWD\})"),
+    "powershell": re.compile(r"(?i)\$(?:PWD|\{PWD\})"),
+}
+
+
+def _bare_pwd_arguments(
+    command: str, arguments: List[str], shapes: List[_ArgumentShape], dialect: str
+) -> "set[int]":
+    """The indexes of the arguments that are a bare `$PWD` judged as `.` -- none unless every
+    mention of `PWD` in the command is one of them."""
+    pattern = _BARE_PWD_RE[dialect]
+    bare = {
+        index
+        for index, (argument, shape) in enumerate(zip(arguments, shapes, strict=True))
+        if not shape.starts and pattern.fullmatch(argument)
+    }
+    if not bare:
+        return set()
+    flags = re.IGNORECASE if dialect == "powershell" else 0
+    in_text = len(re.findall("PWD", command, flags))
+    in_arguments = sum(len(re.findall("PWD", argument, flags)) for argument in arguments)
+    if in_text != len(bare) or in_arguments != len(bare):
+        return set()
+    if dialect == "powershell" and re.search(r"[({]", pattern.sub("", command)):
+        # A group, subexpression or script block hands what it computes on as an argument.
+        return set()
+    return bare
+
+
 def _read_command(
     command: str,
     root: str,
@@ -3624,6 +3675,10 @@ def _read_command(
         return None
     shapes: List[_ArgumentShape] = []
     arguments, nested = _lex(command, dialect == "bash", reading, shapes)
+    if depth == 0:
+        # F696: a bare `$PWD` names the directory the command runs in, the same as `.`.
+        for index in _bare_pwd_arguments(command, arguments, shapes, dialect):
+            arguments[index] = "."
     # F696: a text tool's script, pattern or delimiter is not a path in the command.
     patterns = _text_operands(arguments, shapes)
     if dialect == "powershell":

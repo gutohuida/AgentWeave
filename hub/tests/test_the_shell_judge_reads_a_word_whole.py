@@ -334,7 +334,10 @@ _TABLE = [
     # escape-removed-level reading. Rule 6's own literal-text reading already sees the `..`
     # the two backslash-escaped dots spell. Not marked `posix_only`/`windows_only`: the measured
     # behaviour is unconditional, stronger than the task's own platform qualifier claimed.
-    _row("1.7c1", r"grep -rn '\.\./' src", False),
+    # F696 (operator, 2026-10-18): grep's pattern is text, so 1.7c1 flipped to allowed; the same
+    # word as a file operand (1.7c1b) is still refused, by the reading described above.
+    _row("1.7c1", r"grep -rn '\.\./' src", True),
+    _row("1.7c1b", r"grep -rn x '\.\./'", False),
     # Task 1.7c's fifth bullet, second half (the first half is already `2.2a-doublecolon1` above,
     # same command verbatim). `::` reaching rule 6 (D7's second bullet, already unconditional on
     # both platforms, unaffected by F487) refuses the piece after it, naming `..\x`. Measured fresh:
@@ -1759,7 +1762,8 @@ def test_the_1_7c_independent_rows_name_the_claimed_reason(workspace, monkeypatc
     backslash-reduced level instead -- the exact case its own docstring names."""
     monkeypatch.setenv("HUB_URL", _HUB)
 
-    grep_dotdot = _decide("Bash", {"command": r"grep -rn '\.\./' src"})
+    # F696: the word sits in a file operand (`1.7c1b`); as grep's pattern it is text (`1.7c1`).
+    grep_dotdot = _decide("Bash", {"command": r"grep -rn x '\.\./'"})
     assert grep_dotdot["allow"] is False
     if _WINDOWS:
         assert grep_dotdot["reason"] == "'\\.\\./' is outside your workspace"

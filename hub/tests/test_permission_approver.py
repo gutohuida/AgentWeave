@@ -517,8 +517,15 @@ _TABLE = [
     # of quoting; the judge cannot tell the two apart. Each PASSES today (allowed), so each FAILS
     # today.
     _row("1.5a1", "echo '$HOME'", False, _UNCHECKED),
-    _row("1.5a2", "grep '$HOME' f", False, _UNCHECKED),
-    _row("1.5a3", "cp x $(dirname $PWD)", False, _UNCHECKED),  # the nested text has the word $PWD
+    # F696 (operator, 2026-10-18): grep's pattern is text, no longer judged -- 1.5a2 flipped to
+    # allowed; the file grep reads (`-f`) is still judged (1.5a2b).
+    _row("1.5a2", "grep '$HOME' f", True),
+    _row("1.5a2b", "grep -f '$HOME' f", False, _UNCHECKED),
+    # F696: a bare `$PWD` is judged as `.` (1.5a3b); one a path is derived from stays refused --
+    # 1.5a3 (the nested text has the word $PWD) and 1.5a3c.
+    _row("1.5a3", "cp x $(dirname $PWD)", False, _UNCHECKED),
+    _row("1.5a3b", "echo $PWD", True),
+    _row("1.5a3c", "cp x $PWD/..", False, _UNCHECKED),
     _row(
         "1.5a4",
         "git commit -m \"$(cat <<'EOF'\nuse $HOME for config\nEOF\n)\"",
