@@ -1371,11 +1371,14 @@ def snapshot_worktree(
             ", ".join(unresolved),
         )
         return None
-    if not _has_uncommitted_changes(worktree):
+    # A merge resolved by keeping this side's file leaves the tree equal to HEAD: nothing is dirty
+    # and nothing is staged, yet the merge is still open (F747). It is concluded like any other.
+    concluding = _is_mid_merge(worktree)
+    if not concluding and not _has_uncommitted_changes(worktree):
         return None
     _run_git(worktree, "add", "-A")
     staged = _run_git(worktree, "diff", "--cached", "--name-only")
-    if not staged.stdout.strip():
+    if not concluding and not staged.stdout.strip():
         return None
     if message is None:
         task_id = task_id_of(worktree)
