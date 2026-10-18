@@ -49,6 +49,7 @@ from ...schemas.tasks import (
     TaskResponse,
     TaskUpdate,
     check_task_id,
+    check_task_title,
 )
 from ...sse import sse_manager
 from ...task_transitions import ENTRY_STATUSES, run_actor
@@ -143,6 +144,11 @@ class AgentTaskCreate(RequestModel):
     @classmethod
     def validate_id(cls, value: Optional[str]) -> Optional[str]:
         return None if value is None else check_task_id(value)
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        return check_task_title(value)
 
     @field_validator("priority")
     @classmethod

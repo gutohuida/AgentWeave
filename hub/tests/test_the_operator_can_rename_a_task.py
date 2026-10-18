@@ -179,3 +179,38 @@ def test_title_refusal_precedes_the_transition_and_assignee_write_in_source():
     assignee_write_pos = source.index("task.assignee = body.assignee")
     assert title_refusal_pos < transition_pos
     assert title_refusal_pos < assignee_write_pos
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("title", ["", "   "])
+async def test_creating_a_task_with_a_blank_title_is_refused_at_both_doors(
+    app, auth_headers, title
+):
+    """F710: `POST /tasks` stored `{"title": ""}` as an untitled card that rename then refused to
+    reproduce. Both creation doors now answer the same 422 rename does, and nothing is written."""
+    response = await app.post(
+        f"/api/v1/projects/{PROJECT}/tasks",
+        headers=auth_headers,
+        json={"title": title},
+    )
+    assert response.status_code == 422, response.text
+    assert "cannot be blank" in response.text
+
+    headers = await _active_run(f"run-blank-{len(title)}", f"blanker{len(title)}")
+    response = await app.post("/api/v1/agent-actions/tasks", headers=headers, json={"title": title})
+    assert response.status_code == 422, response.text
+    assert "cannot be blank" in response.text
+
+    async with async_session_factory() as session:
+        assert (await session.execute(select(Task))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_creating_a_task_trims_its_title(app, auth_headers):
+    response = await app.post(
+        f"/api/v1/projects/{PROJECT}/tasks",
+        headers=auth_headers,
+        json={"title": "  Padded  "},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["title"] == "Padded"
