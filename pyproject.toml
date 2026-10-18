@@ -44,7 +44,7 @@ dependencies = ["agentweave-hub>=1.1.0"]
 # `httpx2`, none of which this suite has run against. `hub/tests/test_fastmcp_api_contract.py`
 # names each API the tool surface depends on, so raising this ceiling has a test to answer to
 # rather than a red CI run to explain.
-mcp = ["fastmcp>=2.0,<4", "pyyaml>=6.0"]
+mcp = ["fastmcp>=3.4.9,<4", "pyyaml>=6.0"]
 jobs = ["croniter>=2.0"]
 dev = [
     "pytest>=7.0",
@@ -68,7 +68,7 @@ app = ["pywebview>=5.0"]
 # Same fastmcp ceiling as `mcp` above, and for the same reason. The three declarations of
 # this pin (here, `mcp`, and hub/pyproject.toml) are asserted identical by
 # `hub/tests/test_fastmcp_api_contract.py` — raise them together or not at all.
-all = ["fastmcp>=2.0,<4", "croniter>=2.0", "pyyaml>=6.0"]
+all = ["fastmcp>=3.4.9,<4", "croniter>=2.0", "pyyaml>=6.0"]
 
 [project.urls]
 Homepage = "https://github.com/gutohuida/AgentWeave"

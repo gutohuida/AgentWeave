@@ -21,7 +21,8 @@ dependencies = [
     # FastAPI>=0.133.0 and httpx2 — a transitive set this suite has never run against — so the
     # ceiling buys a conscious upgrade rather than a silent one, exactly as `starlette<2.0`
     # below does. `hub/tests/test_fastmcp_api_contract.py` names the APIs that must survive it.
-    "fastmcp>=2.0,<4",
+    # Floor 3.4.9 (2026-10-18): thirteen advisories fall below it, two fixed only in 3.4.9.
+    "fastmcp>=3.4.9,<4",
     "sse-starlette>=2.0",
     # starlette is transitive via fastapi, but pinned explicitly: an unbounded fastapi>=0.110
     # once let pip silently resolve starlette 1.6.0 in CI while dev ran 0.52.1, crossing a major
@@ -31,7 +32,9 @@ dependencies = [
     # silent one.
     "starlette<2.0",
     "croniter>=2.0",
-    "apscheduler>=3.10",
+    # APScheduler 4 is a rewrite with a different API (AsyncScheduler, data stores); the Hub is
+    # written against 3.x, so a 4.x needs a conscious port, not a silent resolve.
+    "apscheduler>=3.10,<4",
     "pywinpty>=2.0; sys_platform == 'win32'",
     "ptyprocess>=0.7; sys_platform != 'win32'",
 ]
