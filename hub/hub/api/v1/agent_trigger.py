@@ -3549,12 +3549,11 @@ async def _execute_run(
                     agent=agent,
                     runner=runner,
                     sample=accounting_sample,
-                    # F697: a stopped Claude turn's interrupted call is in no CLI report; its input
-                    # is at least the turn's last context reading. Kept only if unmeasured.
+                    # F697: a stopped turn's interrupted call is in no CLI report; its input is at
+                    # least the turn's last context reading. Kept only if unmeasured, so a runner
+                    # whose stop still reports usage records no estimate.
                     estimated_input_tokens=(
-                        last_context_tokens
-                        if final_status == "stopped" and runner == "claude"
-                        else None
+                        last_context_tokens if final_status == "stopped" else None
                     ),
                 )
                 # Inside `if run`, deliberately (D2, D5): only a *recorded* reading holds the

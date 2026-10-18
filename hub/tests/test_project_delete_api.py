@@ -62,6 +62,7 @@ from hub.db.models import (
     VaultFetch,
     VaultSettings,
     WorkerInvocation,
+    WorkspaceFingerprint,
 )
 from hub.project_lifecycle import ProjectLifecycleService
 from hub.project_workspace import ProjectPathError
@@ -72,6 +73,7 @@ from hub.project_workspace import ProjectPathError
 # live model registry in `test_sweep_covers_every_project_scoped_table_in_the_model_registry`
 # below instead of silently drifting out of date.
 PROJECT_SCOPED_TABLE_NAMES = [
+    "workspace_fingerprints",
     "requirement_drift",
     "evidence_reviews",
     "evidence_footprints",
@@ -167,6 +169,16 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             project_id=project_id,
             agent=f"agent-{tag}",
             status="unavailable",
+        )
+    )
+    session.add(
+        WorkspaceFingerprint(
+            project_id=project_id,
+            workspace_key=f"c:/w/{tag}",
+            workspace_dir=f"C:/w/{tag}",
+            fingerprint={},
+            digest="d",
+            recorded_by="baseline",
         )
     )
     session.add(
