@@ -1541,6 +1541,54 @@ def _where(path: str, root: str) -> Optional[str]:
     return None
 
 
+# F675: what a runner reads from its workspace root to configure itself. An allow rule in a Claude
+# settings file runs ahead of `--permission-prompt-tool` on the next turn, and a hook runs with no
+# permission check at all (research 2026-10-01 §1, measured on 2.1.280 and 2.1.286), so a write
+# here is a write to the posture, not to the work. A one-part entry or a directory covers
+# everything beneath it. Instructions and skills (`CLAUDE.md`, `.claude/skills/`) are ordinary work.
+_RUNNER_CONFIG_PATHS = (
+    (".claude", "settings.json"),
+    (".claude", "settings.local.json"),
+    (".claude", "hooks"),
+    (".mcp.json",),
+    (".codex",),
+    (".github", "hooks"),
+)
+_RUNNER_CONFIG = (
+    "configures your runner: an allow rule, hook or MCP server written there would apply to "
+    "your later turns without being checked. If the task needs it changed, ask the operator with "
+    "ask_user"
+)
+
+
+def _runner_config(path: str, root: str) -> Optional[str]:
+    """`_RUNNER_CONFIG` when `path`, read lexically or through its links, names one of
+    `_RUNNER_CONFIG_PATHS` under `root`; else None. Total: a path that cannot be read is None,
+    because `_where` has already ruled on it."""
+    absolute = path if os.path.isabs(path) else os.path.join(root, path)
+    try:
+        readings = {os.path.normpath(absolute), os.path.realpath(absolute)}
+    except (OSError, ValueError):
+        return None
+    for reading in readings:
+        try:
+            relative = os.path.relpath(reading, root)
+        except ValueError:  # another drive
+            continue
+        parts = []
+        for part in re.split(f"[{re.escape(_SEPARATORS)}]", relative):
+            if _DRIVE_LETTERS and part != "..":
+                # Windows drops a trailing dot or space and reads `name:stream` as `name`.
+                part = part.partition(":")[0].rstrip(". ")
+            if part not in ("", "."):
+                parts.append(os.path.normcase(part))
+        if not parts or parts[0] == "..":
+            continue
+        if any(tuple(parts[: len(entry)]) == entry for entry in _RUNNER_CONFIG_PATHS):
+            return _RUNNER_CONFIG
+    return None
+
+
 def _resolves_elsewhere(absolute: str, resolved: str) -> str:
     """`_OUTSIDE`, plus where the path really lands when a link moved it (F282).
 
@@ -1730,6 +1778,11 @@ def _judge_path(
         why = _where(path + "_", root)
         if why:
             return _refuse(argument, why)
+    # F675: a shell word cannot say whether it reads or writes, so naming the runner's
+    # configuration at all is refused.
+    why = _runner_config(path, root)
+    if why:
+        return _refuse(shown, why)
     return None
 
 
@@ -2392,6 +2445,8 @@ def _judge_word(
         if _names_the_parent_once_expanded(value):  # D3 (R4)
             return _refuse(word, _UNCHECKED)
         cut = value.partition("\x00")[0]
+        if cut and _runner_config(cut, root):  # F675: `.mcp.json`, `.codex`, existing or not
+            return _refuse(word, _RUNNER_CONFIG)
         if cut == "..":
             return _judge_path("..", root, word, argument, continues)
         # D4: `.*`/`.?` are not rewritten -- as often a quoted regular expression (`grep '.*' f`).
@@ -3722,6 +3777,11 @@ def _decide(
             why = _where(value, root)
             if why:
                 return _refuse(value, why)
+            # F675: a file tool says whether it writes, so reading the configuration stays open.
+            if tool_name in _HUB_OWN_WRITE_TOOLS:
+                why = _runner_config(value, root)
+                if why:
+                    return _refuse(value, why)
     command = tool_input.get("command")
     expands = False
     if isinstance(command, str) and command:
@@ -3744,6 +3804,9 @@ def _decide(
                 refusal = _read_command(command, root, dialect, reading, budget, hub_url=hub_url)
                 if refusal:
                     return refusal
+                fed = _feeds_arguments(command, dialect, reading)  # F676
+                if fed:
+                    return _refuse(command, _UNBOUND.format(part=_quote(fed)))
                 expands = expands or _names_a_runtime_value(command, dialect, reading)
 
     if expands:
@@ -3765,6 +3828,167 @@ def _names_a_runtime_value(command: str, dialect: str, reading: str) -> bool:
     decides when it runs -- which the judge above cannot see."""
     arguments, nested = _lex(command, dialect == "bash", reading)
     return bool(nested) or any(_expands(word) for word, _, _, _ in _words(arguments, dialect))
+
+
+# --- Arguments another command produces (F676, research 2026-10-02 §1) ---------------------------
+#
+# The judge reads the command's text, and a stage that takes its paths or its code from another
+# command's output is the case where, by construction, the text does not hold them: `echo <base64>
+# | base64 -d | xargs touch` created a file outside the workspace while judged "inside". Copilot
+# CLI 1.0.91 sends such an "unbound" pipeline to a person; so does this. Only the stage that takes
+# paths or code from its input is held back -- `| wc -l`, `| head`, `| python -m json.tool` read
+# and print -- which cost about 1% of Hub agents' commands in the research's measurement. A script
+# file written a turn earlier and then run does the same thing with no pipe; that stays the
+# conceded class in `_decide`'s docstring.
+
+_UNBOUND = (
+    "takes paths or code from what another command outputs (at {part}), which cannot be checked "
+    "against your workspace; name the paths in the command itself, or ask the operator with "
+    "ask_user"
+)
+# Taking a command's arguments from input, anywhere in a command.
+_ARGUMENT_FEEDERS = {"xargs", "parallel"}
+# Running their input as code when they are fed by a pipe and given no script of their own.
+_PIPE_SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "pwsh", "powershell"}
+_PIPE_INTERPRETERS_RE = re.compile(r"^(?:python[0-9.]*|py|node|perl|ruby|php)$")
+_PIPE_RUNNERS = {"eval", "source", ".", "while"}
+# What a stage may be preceded by without being the command it describes.
+_STAGE_PREFIXES = {
+    "!", "{", "(", "then", "do", "else", "time", "sudo", "env", "nohup", "command", "exec",
+    "builtin", "nice",
+}  # fmt: skip
+_DECODE_FLAGS = {"base64": {"-d", "--decode", "-D"}, "basenc": {"-d", "--decode"}, "xxd": {"-r"}}
+_ENCODED_COMMAND_FLAGS_RE = re.compile(r"(?i)^-(?:e|ec|en|enc|enco|encod|encode|encodedcommand)$")
+# PowerShell cmdlets (and their aliases) that act on a path they can take from the pipeline.
+_PS_PATH_CMDLETS = {
+    "new-item", "ni", "remove-item", "ri", "rm", "rmdir", "rd", "del", "erase", "copy-item", "cpi",
+    "cp", "copy", "move-item", "mi", "mv", "move", "rename-item", "rni", "ren", "set-location",
+    "sl", "cd", "chdir", "push-location", "pushd", "invoke-item", "ii", "start-process", "saps",
+    "start", "expand-archive", "compress-archive",
+}  # fmt: skip
+_PS_FOREACH = {"foreach-object", "%", "foreach"}
+_PS_LISTING = {"get-childitem", "gci", "ls", "dir", "get-item", "gi"}
+_PS_PIPELINE_VARIABLE_RE = re.compile(r"(?i)\$(?:_|psitem)\b")
+# Matched against each word the command lexes to, so a quoted mention of one is not a call.
+_PS_CODE_FROM_TEXT_RE = re.compile(
+    r"(?i)^(?:invoke-expression|iex)$|\[scriptblock\]::create|\]::frombase64string"
+)
+
+
+def _stages(command: str, bash: bool) -> List[Tuple[str, str]]:
+    """Each top-level stage of `command` with the operator before it (`""` for the first).
+
+    Quote-aware only: a substitution or block is not tracked, so its own `|` splits it too, which
+    can only add a stage to judge. A `&` that belongs to a redirection (`2>&1`, `&>`) is not a
+    break, nor is PowerShell's `&` call operator."""
+    escape = "\\" if bash else "`"
+    stages: List[Tuple[str, str]] = []
+    before, start, quote, index = "", 0, None, 0
+    while index < len(command):
+        char = command[index]
+        if quote:
+            if char == quote:
+                quote = None
+            elif char == escape and quote == '"':
+                index += 1
+        elif char == escape:
+            index += 1
+        elif char in "'\"":
+            quote = char
+        elif char in "|;&\n":
+            operator = command[index : index + 2]
+            if operator not in ("&&", "||", "|&"):
+                operator = char
+            if operator == "&" and (
+                not bash
+                or command[index - 1 : index] in ("<", ">")
+                or command[index + 1 : index + 2] == ">"
+            ):
+                index += 1
+                continue
+            stages.append((before, command[start:index]))
+            before = "|" if operator == "|&" else operator
+            index += len(operator)
+            start = index
+            continue
+        index += 1
+    stages.append((before, command[start:]))
+    return stages
+
+
+def _stage_words(text: str, bash: bool, reading: str) -> Tuple[str, List[str]]:
+    """The command a stage runs, lower-cased with any directory and Windows suffix dropped, and
+    the words after it. Assignments and wrappers before it (`X=1`, `sudo`, `time`) are skipped."""
+    arguments, _ = _lex(text, bash, reading)
+    words = [argument for argument in arguments if argument]
+    while words and (
+        words[0].lower() in _STAGE_PREFIXES
+        or (bash and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]))
+    ):
+        words.pop(0)
+    if not words:
+        return "", []
+    name = re.split(r"[\\/]", words[0])[-1].lower()
+    for suffix in (".exe", ".cmd", ".bat"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+    return name, words[1:]
+
+
+def _feeds_arguments(command: str, dialect: str, reading: str, depth: int = 0) -> Optional[str]:
+    """The stage of `command` whose paths or code come from another command's output, or None."""
+    if depth > _MAX_NESTING:
+        return None
+    bash = dialect == "bash"
+    if not bash:
+        for word in _lex(command, bash, reading)[0]:
+            if _PS_CODE_FROM_TEXT_RE.search(word):
+                return word
+    stages = _stages(command, bash)
+    decoded = None
+    for index, (before, text) in enumerate(stages):
+        name, words = _stage_words(text, bash, reading)
+        piped = before == "|"
+        feeds_on = index + 1 < len(stages) and stages[index + 1][0] == "|"
+        if name in _ARGUMENT_FEEDERS:
+            return text.strip()
+        if name in ("pwsh", "powershell") and any(
+            _ENCODED_COMMAND_FLAGS_RE.match(w) for w in words
+        ):
+            return text.strip()
+        if name in _DECODE_FLAGS and _DECODE_FLAGS[name] & set(words) and (feeds_on or depth):
+            # Decoded text reaching another command, or standing in for an argument. Named only
+            # when no later stage is the one that consumes it.
+            decoded = decoded or text.strip()
+        if not piped:
+            continue
+        if name in _PIPE_RUNNERS:
+            return text.strip()
+        if name in _PIPE_SHELLS and not {"-c", "-command", "-file", "-f"} & {
+            w.lower() for w in words
+        }:
+            return text.strip()
+        if _PIPE_INTERPRETERS_RE.match(name) and (not words or words[0] == "-"):
+            return text.strip()
+        if not bash:
+            producer, _ = _stage_words(stages[index - 1][1], bash, reading)
+            if producer in _PS_LISTING:
+                continue
+            if name in _PS_PATH_CMDLETS:
+                return text.strip()
+            if (
+                name in _PS_FOREACH
+                and _PS_PIPELINE_VARIABLE_RE.search(text)
+                and any(word.lower() in _PS_PATH_CMDLETS for word in words)
+            ):
+                return text.strip()
+    if bash:
+        _, nested = _lex(command, bash, reading)
+        for inner in nested:
+            found = _feeds_arguments(inner, dialect, reading, depth + 1)
+            if found:
+                return found
+    return decoded
 
 
 def _report_decision(tool_name: str, decision: Dict[str, Any], tool_use_id: str) -> None:

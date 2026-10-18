@@ -119,6 +119,11 @@ class ClaudeAdapter(RunnerAdapter):
     # `checkpoint_policy.py:24`'s comment: the value today's thresholds were chosen against.
     compaction_percent = 95
     one_shot_reads_files = True
+    # F677 (research 2026-10-07 §1): a turn is one `-p` process and the run ends when it does.
+    # Since 2.1.292 that process waits for a background command and then takes a second,
+    # unprompted model turn; before it, the command was killed after the reply. With this the
+    # model is told the parameter is unsupported, and the run ends at its reply.
+    run_env_defaults = {"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}
 
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:
         cli, present, reason = probe_binary(self.binary, config.get("cli"), agent)

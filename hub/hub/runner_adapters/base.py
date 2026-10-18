@@ -282,6 +282,9 @@ class RunnerAdapter(ABC):
     # the call command is told it may report `unreachable` (`a-run-reaches-the-hub-without-mcp`
     # D10). True for Codex, whose `workspace-write` sandbox's network default is unverified.
     shell_may_lack_network: ClassVar[bool] = False
+    # Variables a run of this runner gets unless its environment already names them (an agent's
+    # `env_vars` win). Claude: background tasks off (F677).
+    run_env_defaults: ClassVar[Mapping[str, str]] = {}
     # The percentage of the context window at which this runner's CLI compacts by itself
     # (`a-copilot-run-shows-its-credits` D9). No base default: an adapter that omits it fails
     # the conformance test that every `ADAPTERS` entry declares it.

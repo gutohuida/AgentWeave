@@ -1777,6 +1777,9 @@ async def _trigger_agent_directly(
     # the agent is *told* about and the one that is *enforced* must come from one value, or an
     # agent can be refused at a line it was never shown.
     env["AW_WORKSPACE_DIR"] = effective_work_dir
+    # The runner's own defaults (F677: Claude's background tasks off). An agent's `env_vars` win.
+    for name, value in adapter.run_env_defaults.items():
+        env.setdefault(name, value)
     # The call command, first on the run's `PATH` whatever its surface (D5).
     prepend_run_path(env, launcher_dir)
     # Which approver posture this run is under. The approval tool serves both, and only this

@@ -2308,6 +2308,60 @@ async def test_trigger_resolves_claude_proxy_env_at_spawn_time(
     assert spawned_env["ANTHROPIC_BASE_URL"] == "https://api.minimax.io/anthropic"
 
 
+async def _spawned_claude_env(app, auth_headers, bind_runner, agent, config):
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {agent: config}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner(agent, cli="claude")
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-bg-1"}\n']
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": agent, "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            await _await_background_run()
+    return fake_spawn.call_args.kwargs["env"]
+
+
+@pytest.mark.asyncio
+async def test_a_claude_run_has_background_tasks_turned_off(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """F677 (research 2026-10-07 §1): on Claude Code 2.1.292 a `-p` run waits for its background
+    commands and then takes an unprompted second model turn; before it, a stale `result` read as
+    Completed. With background tasks off, measured: one `result`, a prompt exit, and the model is
+    told the parameter is unsupported."""
+    monkeypatch.delenv("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS", raising=False)
+    env = await _spawned_claude_env(
+        app, auth_headers, bind_runner, "bg-claude", {"runner": "claude"}
+    )
+    assert env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_an_agents_own_background_tasks_setting_wins(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """The operator can still turn them back on for one agent, through its `env_vars`."""
+    monkeypatch.delenv("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS", raising=False)
+    env = await _spawned_claude_env(
+        app,
+        auth_headers,
+        bind_runner,
+        "bg-claude-on",
+        {"runner": "claude", "env_vars": {"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "0"}},
+    )
+    assert env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "0"
+
+
 @pytest.mark.asyncio
 async def test_trigger_derives_hub_url_from_observed_address_not_configured_port(
     app, auth_headers, bind_runner, monkeypatch
