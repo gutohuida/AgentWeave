@@ -79,3 +79,38 @@ def test_a_body_within_the_limit_still_passes(server_url):
     request = urllib.request.Request(f"{server_url}/x", data=b"x" * LIMIT, method="POST")
     with urllib.request.urlopen(request, timeout=30) as resp:
         assert resp.status == 200
+
+
+def _chunked_post(server_url: str, total: int, chunk: int = 16 * 1024):
+    """POST *total* bytes with Transfer-Encoding: chunked, so no Content-Length is declared (F739)."""
+    import http.client
+
+    def body():
+        sent = 0
+        while sent < total:
+            piece = min(chunk, total - sent)
+            sent += piece
+            yield b"x" * piece
+
+    host, port = server_url.removeprefix("http://").split(":")
+    conn = http.client.HTTPConnection(host, int(port), timeout=30)
+    try:
+        conn.request("POST", "/api/v1/anything", body=body(), encode_chunked=True)
+        resp = conn.getresponse()
+        return resp.status, resp.read()
+    finally:
+        conn.close()
+
+
+def test_a_chunked_body_over_the_limit_is_refused_with_the_413(server_url):
+    status, raw = _chunked_post(server_url, LIMIT * 4)
+
+    assert status == 413
+    detail = json.loads(raw)["detail"]
+    assert "Request body too large" in detail and "64 KiB" in detail
+
+
+def test_a_chunked_body_within_the_limit_still_passes(server_url):
+    status, raw = _chunked_post(server_url, LIMIT // 2)
+
+    assert status == 200 and raw == b"ok"

@@ -363,40 +363,80 @@ class ContentSizeLimitMiddleware:
 
         headers = dict(scope.get("headers", []))
         content_length = headers.get(b"content-length")
+        limit = self._limit(scope.get("path", ""))
         if content_length is not None:
             try:
                 length = int(content_length.decode())
             except (ValueError, UnicodeDecodeError):
                 length = 0
-            limit = self._limit(scope.get("path", ""))
             if length > limit:
                 # Read the body before answering (F734). A client that sends its whole body before
                 # reading -- Python's urllib, most SDKs -- otherwise meets a socket closed with its
                 # bytes unread: the peer resets and the client reports a connection abort, never
                 # this sentence. Bounded, so a client declaring gigabytes is not read forever.
                 await _discard_body(receive, _DRAIN_LIMIT_BYTES)
-                await send(
-                    {
-                        "type": "http.response.start",
-                        "status": 413,
-                        "headers": [[b"content-type", b"application/json"]],
-                    }
-                )
-                await send(
-                    {
-                        "type": "http.response.body",
-                        # The limit it applied, which differs by route (F641).
-                        "body": json.dumps(
-                            {
-                                "detail": f"Request body too large: this route takes at most "
-                                f"{_size(limit)} ({limit} bytes)."
-                            }
-                        ).encode(),
-                    }
-                )
+                await _send_too_large(send, limit)
                 return
+            await self.app(scope, receive, send)
+            return
 
-        await self.app(scope, receive, send)
+        # No Content-Length (a chunked body, F739): there is no declared size to refuse on, so count
+        # what arrives. Past the limit the app is told the client went away, its own answer is
+        # dropped, and the 413 goes out in its place.
+        received = 0
+        exceeded = False
+        responded = False
+
+        async def counting_receive():
+            nonlocal received, exceeded
+            if exceeded:
+                return {"type": "http.disconnect"}
+            message = await receive()
+            if message.get("type") == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit:
+                    exceeded = True
+                    return {"type": "http.disconnect"}
+            return message
+
+        async def guarded_send(message):
+            nonlocal responded
+            if exceeded:
+                return
+            if message.get("type") == "http.response.start":
+                responded = True
+            await send(message)
+
+        try:
+            await self.app(scope, counting_receive, guarded_send)
+        except Exception:
+            if not exceeded:
+                raise
+        if exceeded and not responded:
+            await _discard_body(receive, _DRAIN_LIMIT_BYTES)
+            await _send_too_large(send, limit)
+
+
+async def _send_too_large(send, limit: int) -> None:
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 413,
+            "headers": [[b"content-type", b"application/json"]],
+        }
+    )
+    await send(
+        {
+            "type": "http.response.body",
+            # The limit it applied, which differs by route (F641).
+            "body": json.dumps(
+                {
+                    "detail": f"Request body too large: this route takes at most "
+                    f"{_size(limit)} ({limit} bytes)."
+                }
+            ).encode(),
+        }
+    )
 
 
 #: How much of an over-limit body `ContentSizeLimitMiddleware` reads and discards so its 413 can be
