@@ -532,7 +532,8 @@ async def test_crossing_the_threshold_under_automatic_generates_and_cuts_over(ap
     def fake_run(cmd, **kwargs):
         stdout = _claude_stdout(
             GOOD_BODY
-            if "checkpoint" in cmd[-1] or "objective" in cmd[-1]
+            if "checkpoint" in (kwargs.get("input") or "")
+            or "objective" in (kwargs.get("input") or "")
             else {"files_changed": [], "task_ids": [], "unanswered_question_ids": []}
         )
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
@@ -585,7 +586,8 @@ async def test_an_automatic_checkpoint_waits_for_the_turn_it_was_read_in_to_end(
         generated_while.append(turn["status"])
         stdout = _claude_stdout(
             GOOD_BODY
-            if "checkpoint" in cmd[-1] or "objective" in cmd[-1]
+            if "checkpoint" in (kwargs.get("input") or "")
+            or "objective" in (kwargs.get("input") or "")
             else {"files_changed": [], "task_ids": [], "unanswered_question_ids": []}
         )
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
@@ -822,7 +824,8 @@ async def test_an_automatic_cutover_that_loses_the_race_keeps_its_checkpoint_and
     def fake_run(cmd, **kwargs):
         stdout = _claude_stdout(
             GOOD_BODY
-            if "checkpoint" in cmd[-1] or "objective" in cmd[-1]
+            if "checkpoint" in (kwargs.get("input") or "")
+            or "objective" in (kwargs.get("input") or "")
             else {"files_changed": [], "task_ids": [], "unanswered_question_ids": []}
         )
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")

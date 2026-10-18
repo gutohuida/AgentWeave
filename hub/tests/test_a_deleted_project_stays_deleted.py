@@ -116,7 +116,23 @@ async def test_a_location_shared_with_another_project_refuses_and_deletes_nothin
     first = await _open(app, auth_headers, tmp_path / "first")
     second = await _open(app, auth_headers, tmp_path / "second")
     await _choose(app, auth_headers, first, location)
-    await _choose(app, auth_headers, second, location / "nested")
+    # The settings route now refuses a shared location (F683); one chosen before that check is
+    # still possible in a stored row, and delete must still refuse it.
+    nested = await app.put(
+        f"/api/v1/projects/{second}/vault/settings",
+        json={"private_location": str(location / "nested")},
+        headers=auth_headers,
+    )
+    assert nested.status_code == 400 and first in nested.text, nested.text
+    from hub.db.models import VaultSettings
+
+    async with async_session_factory() as session:
+        row = await session.get(VaultSettings, second)
+        if row is None:
+            row = VaultSettings(project_id=second, default_visibility="tracked")
+            session.add(row)
+        row.private_location = str(location / "nested")
+        await session.commit()
     await _source(app, auth_headers, first, "secret", "private")
     kept = sorted(location.rglob("*"))
 

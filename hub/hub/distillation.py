@@ -140,6 +140,11 @@ class Contradictions(BaseModel):
     contradictions: List[ContradictionDraft] = Field(default_factory=list)
 
 
+DECISION_NOT_DISTILLED = (
+    "A decision source is not distilled: it restates facts the vault already holds."
+)
+
+
 class CannotDistilError(Exception):
     """Why a source cannot be distilled now. `status` is what the distil route answers."""
 
@@ -226,9 +231,7 @@ async def prepare(project_id: str, source_id: str) -> Plan:
         )
     meta, text = found
     if meta.get("type") == vault.DECISION:
-        raise CannotDistilError(
-            "A decision source is not distilled: it restates facts the vault already holds."
-        )
+        raise CannotDistilError(DECISION_NOT_DISTILLED)
     data: Optional[bytes] = None
     if text is None:
         held = await asyncio.to_thread(vault.file_of, root, private, source_id)
@@ -604,6 +607,29 @@ async def _distil_piece(
             answer=manager.answer_record(result),
         )
     return stored
+
+
+async def unread_note(project_id: str, source_id: str, word: str) -> str:
+    """Why a file source held here has no text yet, and what reads it (F720).
+
+    The static note told the operator to enable a job that was already on, beside a firing that
+    said the budget was spent. This names what `prepare` refuses (the job off, no runner, a runner
+    that cannot read files), else the last reading attempt's failure, else the plain next step.
+    An operator's Distil is never paused by the budget, so "distil the source" stays true."""
+    opening = f"This {word} has not been read yet, so it has no text."
+    try:
+        await prepare(project_id, source_id)
+    except CannotDistilError as refusal:
+        return f"{opening} {refusal.reason}"
+    async with async_session_factory() as db:
+        firings = await manager.list_firings(db, project_id, job=manager.DISTILLATION, limit=200)
+    last = next((f for f in firings if (f.get("subject") or {}).get("source") == source_id), None)
+    if last is not None and last.get("outcome") == "failed":
+        return (
+            f"{opening} The last attempt ({last['at']}) did not read it: {last.get('detail')}. "
+            "Distil the source to try again."
+        )
+    return f"{opening} Distil the source to read it."
 
 
 async def distil_in_background(project_id: str, source_id: str, *, trigger: str) -> None:

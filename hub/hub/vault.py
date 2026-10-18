@@ -252,11 +252,42 @@ def check_private_location(
             "could be committed with that repository; choose a folder outside it."
         )
     existing = next((p for p in (resolved, *resolved.parents) if p.exists()), None)
-    if existing is not None and not existing.is_dir():
+    if existing is None:
+        # F717: not even its drive or share is there, so the first private write would fail. At a
+        # write, the location chosen earlier has gone away (a drive unplugged): a conflict.
+        raise VaultError(
+            f"The private location {resolved} is not reachable: {resolved.anchor or resolved} "
+            "does not exist on this machine (a drive or network share that is not present?).",
+            status=400 if choosing else 409,
+        )
+    if not existing.is_dir():
         raise VaultError(
             f"The private location {resolved} cannot be a folder: {existing} is a file."
         )
     return resolved
+
+
+async def _other_private_locations(
+    db: AsyncSession, project_id: str
+) -> List[Tuple[str, str, Path]]:
+    """Every other project's effective private location: (id, name, location)."""
+    rows = await db.execute(
+        select(Project.id, Project.name, VaultSettings.private_location)
+        .outerjoin(VaultSettings, VaultSettings.project_id == Project.id)
+        .where(Project.id != project_id)
+    )
+    return [
+        (other_id, name, Path(chosen) if chosen else default_private_location(other_id))
+        for other_id, name, chosen in rows
+    ]
+
+
+def _shared_with(location: Path, others: Iterable[Tuple[str, str, Path]]) -> Optional[str]:
+    """The project (name and id) whose private location equals, holds or lies in *location*."""
+    for other_id, name, theirs in others:
+        if _inside(location, theirs) or _inside(theirs, location):
+            return f"{name} ({other_id})"
+    return None
 
 
 async def remove_private_entries(db: AsyncSession, project_id: str) -> None:
@@ -270,20 +301,14 @@ async def remove_private_entries(db: AsyncSession, project_id: str) -> None:
     raises `OSError`; the caller deletes no record then, so the operator can retry."""
     row = await db.get(VaultSettings, project_id)
     location = Path(_listed_settings(project_id, row)["effective_private_location"])
-    others = await db.execute(
-        select(Project.id, Project.name, VaultSettings.private_location)
-        .outerjoin(VaultSettings, VaultSettings.project_id == Project.id)
-        .where(Project.id != project_id)
-    )
-    for other_id, name, chosen in others:
-        theirs = Path(chosen) if chosen else default_private_location(other_id)
-        if _inside(location, theirs) or _inside(theirs, location):
-            raise VaultError(
-                f"The private location {location} is shared with project {name} ({other_id}), and "
-                "its private files do not say which project they belong to. Delete this project "
-                "keeping its private entries, or choose a separate location for one of them first.",
-                status=409,
-            )
+    sharer = _shared_with(location, await _other_private_locations(db, project_id))
+    if sharer is not None:
+        raise VaultError(
+            f"The private location {location} is shared with project {sharer}, and its private "
+            "files do not say which project they belong to. Delete this project keeping its "
+            "private entries, or choose a separate location for one of them first.",
+            status=409,
+        )
     if not location.exists():
         return
     if row is None or row.private_location is None:
@@ -345,6 +370,20 @@ async def set_settings(
             if raw is None
             else str(check_private_location(raw, project_root, others, choosing=True))
         )
+        # F683: private files carry no project id, so a location another project already uses
+        # (its chosen one or its default folder) would show each project the other's entries.
+        location = (
+            Path(values["private_location"])
+            if raw is not None
+            else default_private_location(project_id)
+        )
+        sharer = _shared_with(location, await _other_private_locations(db, project_id))
+        if sharer is not None:
+            raise VaultError(
+                f"The private location {location} is already used by project {sharer}, or holds "
+                "or lies inside its location. Private entries do not say which project they "
+                "belong to, so each project would read the other's; choose a separate folder."
+            )
     row = await db.get(VaultSettings, project_id)
     if row is None:
         row = VaultSettings(project_id=project_id, default_visibility=DEFAULT_VISIBILITY)
@@ -739,11 +778,22 @@ def read_entry(
 
 
 def _not_read_yet(word: str) -> str:
+    """What a file read here but not yet transcribed says when nothing better is known; the read
+    route replaces it with what is actually in the way (`distillation.unread_note`, F720)."""
     return (
         f"This {word} has not been read yet, so it has no text. It is read when the vault "
         "distillation job runs on it: enable the job with a Claude runner on the Manager page, "
         "then distil the source."
     )
+
+
+def unread_word(entry: Dict[str, Any]) -> Optional[str]:
+    """The word for a file source `read_entry` found here and not read yet ("image", "PDF"), or
+    None for every other entry."""
+    known = FILE_TYPES.get(entry.get("media_type") or "")
+    if known is None or entry.get("content") is not None:
+        return None
+    return known[2] if entry.get("note") == _not_read_yet(known[2]) else None
 
 
 def file_of(

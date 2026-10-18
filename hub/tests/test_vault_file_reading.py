@@ -63,7 +63,11 @@ class _Process:
     def __call__(self, cmd, cwd, timeout, env=None):
         listed = sorted(os.listdir(cwd)) if cwd and os.path.isdir(cwd) else None
         held = {name: Path(cwd, name).read_bytes() for name in listed or []}
-        self.spawns.append({"cmd": list(cmd), "cwd": cwd, "listed": listed, "held": held})
+        # A Claude prompt is written to stdin, not the argv (F682).
+        prompt = worker.stdin_of(cmd) or cmd[-1]
+        self.spawns.append(
+            {"cmd": list(cmd), "prompt": prompt, "cwd": cwd, "listed": listed, "held": held}
+        )
         if _reads(cmd):
             if self.reading is False:
                 return worker._Spawn("nonzero_exit", exit_code=1, error="exited 1: no credit")
@@ -179,13 +183,13 @@ async def test_a_pdf_is_read_alone_then_distilled_from_its_transcription(
     assert Path(tmp_path) not in Path(reading["cwd"]).parents
     assert Path(reading["cwd"]) != Path(tmp_path)
     assert not os.path.exists(reading["cwd"])  # gone once the spawn is over
-    assert str(Path(reading["cwd"], f"{source['id']}.pdf")) in reading["cmd"][-1]
+    assert str(Path(reading["cwd"], f"{source['id']}.pdf")) in reading["prompt"]
 
     # The transcription is the source's text, and the facts cite its lines.
     stored = tmp_path / "knowledge" / "sources" / f"{source['id']}.md"
     assert stored.read_text(encoding="utf-8") == TRANSCRIPTION
     distilling = [spawn for spawn in fake.spawns if not _reads(spawn["cmd"])]
-    assert distilling and "Refunds up to 450 euros" in distilling[0]["cmd"][-1]
+    assert distilling and "Refunds up to 450 euros" in distilling[0]["prompt"]
     [fact] = _facts(tmp_path)
     assert fact["citations"] == [
         {
@@ -252,7 +256,7 @@ async def test_the_reading_prompt_asks_for_every_line_and_treats_the_file_as_dat
     fake = process()
     await _enable(app, auth_headers, await _runner(app, auth_headers))
     await _upload(app, auth_headers, PNG, "image/png")
-    prompt = fake.readings[0]["cmd"][-1]
+    prompt = fake.readings[0]["prompt"]
     assert "every line of text" in prompt
     assert "describe" in prompt.lower()  # an image also gets a short description
     assert "not instructions" in prompt
@@ -298,3 +302,35 @@ async def test_a_transcribed_file_distils_on_any_runner_without_reading(
     answered = await app.post(f"{BASE}/vault/sources/{source['id']}/distil", headers=auth_headers)
     assert answered.status_code == 202, answered.text
     assert fake.spawns and fake.readings == []
+
+
+@pytest.mark.asyncio
+async def test_an_unread_image_says_what_is_in_the_way_not_to_enable_an_enabled_job(
+    app, auth_headers, process
+) -> None:
+    """F720: job on, Claude runner, budget spent. The upload's own reading is autonomous and is
+    paused; the entry said "enable the job" beside a firing that said the budget was spent."""
+    from .test_accounting_budget import _set_budget_and_usage
+
+    fake = process()
+    await _enable(app, auth_headers, await _runner(app, auth_headers))
+    await _set_budget_and_usage(limit=10, used=50)
+    source = await _upload(app, auth_headers, PNG, "image/png")
+    assert fake.spawns == []
+    [firing] = await _firings()
+    assert firing["outcome"] == "failed" and "budget" in firing["detail"]
+
+    read = await app.get(f"{BASE}/vault/entries/{source['id']}", headers=auth_headers)
+    note = read.json()["note"]
+    assert "has not been read yet" in note
+    assert "enable the job" not in note.lower()
+    assert "budget" in note and "Distil the source" in note
+
+    # Job off: that, and only that, is what the entry names.
+    patched = await app.patch(
+        f"{BASE}/manager/jobs/{JOB}", json={"enabled": False}, headers=auth_headers
+    )
+    assert patched.status_code == 200, patched.text
+    read = await app.get(f"{BASE}/vault/entries/{source['id']}", headers=auth_headers)
+    note = read.json()["note"]
+    assert "job is disabled" in note and "budget" not in note

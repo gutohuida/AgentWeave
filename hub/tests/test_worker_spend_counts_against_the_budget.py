@@ -405,3 +405,12 @@ async def test_the_titler_is_not_spawned_at_exhaustion(app, auth_headers, bind_r
     )
     [row] = await _rows("conversation_title")
     assert row.outcome == "budget_exhausted"
+    # F721: the Manager's activity says why no title came, as a vault job's paused call does.
+    from hub import manager
+
+    async with async_session_factory() as db:
+        firings = await manager.list_firings(db, PROJECT, job=manager.TITLES)
+    [firing] = firings
+    assert firing["outcome"] == "failed"
+    assert "budget" in firing["detail"]
+    assert firing["subject"] == {"conversation_id": conversation_id}

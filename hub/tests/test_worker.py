@@ -83,8 +83,8 @@ def test_the_claude_command_asks_for_json_and_is_not_an_agent_turn():
         "--model",
         "claude-haiku-4-5-20251001",
         "-p",
-        "hi",
     ]
+    assert cmd.stdin == "hi"  # on stdin, so no command-line cap applies (F682)
     assert build_worker_command(cli="claude", model=None, prompt="hi") == [
         "claude",
         "--tools",
@@ -93,7 +93,6 @@ def test_the_claude_command_asks_for_json_and_is_not_an_agent_turn():
         "--output-format",
         "json",
         "-p",
-        "hi",
     ]
     # The spec is explicit: a worker invocation carries no streaming protocol, no tool server,
     # no permission posture, no injected context. Pin it, because the tempting fix for any

@@ -11,7 +11,26 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable, Optional
+
+
+class OneShotCommand(list):
+    """A one-shot's argv plus the text its process reads on stdin (F682).
+
+    A prompt passed as an argument is capped by the platform's command line (32,767 characters on
+    Windows; a 50,000-character vault piece failed `WinError 206`). An adapter whose CLI reads its
+    prompt on stdin returns its argv without the prompt and the prompt here; the spawn writes it.
+    A plain list (no stdin text) is spawned with stdin closed, as before.
+    """
+
+    def __init__(self, argv: Iterable[str], *, stdin: Optional[str] = None) -> None:
+        super().__init__(argv)
+        self.stdin = stdin
+
+
+def stdin_of(cmd: Any) -> Optional[str]:
+    """The text *cmd* writes to its process's stdin, or None for a plain argv."""
+    return getattr(cmd, "stdin", None)
 
 
 @dataclass(frozen=True)

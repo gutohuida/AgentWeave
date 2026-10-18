@@ -286,6 +286,23 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
     gated = await budget_blocks_autonomy(project_id)
     if gated is not None:
         await _recorded(gated)
+        # F721: the job's record too, as a vault job's paused call leaves one, so the Manager's
+        # activity says why no title came instead of showing nothing.
+        async with async_session_factory() as db:
+            await manager.record_firing(
+                db,
+                project_id,
+                job=manager.TITLES,
+                trigger="turn_completed",
+                subject={"conversation_id": conversation_id},
+                runner_id=runner.id,
+                cli=runner.cli,
+                model=model,
+                outcome="failed",
+                detail=f"Did not run: {gated.error}",
+                duration_ms=0,
+                usage=None,
+            )
         return None
 
     try:

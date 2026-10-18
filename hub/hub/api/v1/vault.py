@@ -22,6 +22,7 @@ vault (`vault_spec_check.py`), and checking a document again now.
 """
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -50,6 +51,7 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...spec_manifest import SpecPathError, validate_spec_path
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/vault", tags=["vault"])
 
 
@@ -125,6 +127,12 @@ async def read_one(
     entry = await asyncio.to_thread(vault.read_entry, root, private, entry_id, offset)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No entry '{entry_id}'")
+    word = vault.unread_word(entry)
+    if word is not None:
+        try:
+            entry["note"] = await distillation.unread_note(project_id, entry_id, word)
+        except Exception:  # noqa: BLE001 -- a note that cannot be refined keeps the general one
+            logger.warning("could not say why %s is unread", entry_id, exc_info=True)
     counts = await vault_access.counts_for(session, project_id)
     return vault_access.annotate(entry, counts.get(entry_id))
 
@@ -181,8 +189,17 @@ async def upload_vault_source(
         )
     except vault.VaultError as exc:
         raise _refused(exc) from exc
-    # After the answer is sent; a no-op when the job is off, has no runner, or the source is a
-    # decision.
+    # After the answer is sent; a no-op when the job is off or has no runner.
+    return _distil_after_upload(background, project_id, entry)
+
+
+def _distil_after_upload(
+    background: BackgroundTasks, project_id: str, entry: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Queue an upload's own distillation, or say in the answer why there is none (F735: a
+    decision source is never distilled, and the upload used to answer as if it would be)."""
+    if entry.get("type") == vault.DECISION:
+        return {**entry, "note": distillation.DECISION_NOT_DISTILLED}
     background.add_task(
         distillation.distil_in_background,
         project_id,
@@ -231,13 +248,7 @@ async def upload_vault_file(
         )
     except vault.VaultError as exc:
         raise _refused(exc) from exc
-    background.add_task(
-        distillation.distil_in_background,
-        project_id,
-        entry["id"],
-        trigger=distillation.UPLOADED,
-    )
-    return entry
+    return _distil_after_upload(background, project_id, entry)
 
 
 @router.get("/sources/{source_id}/file")
@@ -388,11 +399,16 @@ async def check_vault_warnings(
     project: Tuple[str, str] = Depends(get_project),
 ) -> dict:
     """Check a document against the vault again, in the background: 404 for an unknown document,
-    409 naming what to do while the job is off or has no runner."""
+    409 naming what to do while the job is off or has no runner, or when there is nothing to
+    compare (no requirement, or no current fact)."""
     try:
         plan = await vault_spec_check.prepare(project[0], path)
     except vault_spec_check.CannotCheckError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.reason) from exc
+    idle = vault_spec_check.nothing_to_compare(plan)
+    if idle is not None:
+        # F735: "queued" for a check that would spawn nothing and record nothing was a dead end.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=idle)
     background.add_task(_check_quietly, plan)
     return {"document": plan.path, "queued": True}
 
