@@ -20,7 +20,6 @@ from pathlib import Path
 import pytest
 
 from hub.runner_adapters import AccessAxes, LaunchRequest, build_command, get_adapter
-from hub.runner_commands import CLAUDE_RUN_SETTINGS
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "runner_adapters"
 GOLDEN_PATH = FIXTURES_DIR / "argv_golden.json"
@@ -49,13 +48,8 @@ def _resolve_context_path(tmp_dir: Path, which: str) -> Path:
 
 
 def _normalise(argv, context_path):
-    """Machine paths out of an argv: the context file, and the Claude run settings file (F578)."""
-    return [
-        arg.replace(str(context_path), "<CTX>").replace(
-            str(CLAUDE_RUN_SETTINGS), "<CLAUDE_RUN_SETTINGS>"
-        )
-        for arg in argv
-    ]
+    """Machine paths out of an argv: the context file."""
+    return [arg.replace(str(context_path), "<CTX>") for arg in argv]
 
 
 def _case_ids():

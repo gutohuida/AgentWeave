@@ -1,25 +1,24 @@
 """F578: a Claude run streams its thinking text.
 
-The CLI sends thinking blocks with empty text unless the `showThinkingSummaries` setting is on
-(measured 2026-10-17, CLI 2.1.301: Haiku 4.5 sent 0 characters without it and 336 with it). The
-Hub passes it as a settings *file*, never inline JSON, because a JSON argument's quotes do not
-survive a Windows `.cmd` shim (F549).
+The CLI sends thinking blocks with empty text unless asked for summaries. The
+`showThinkingSummaries` setting does it for Haiku 4.5 only (2026-10-17, CLI 2.1.301: 0 characters
+without it, 336 with it); on 5.5 models it sends nothing. `--thinking-display summarized` does it
+for both (research 2026-10-10 on 2.1.291; re-measured 2026-10-18 on 2.1.301: Haiku 5.5 0 -> 199
+characters with the setting on, Haiku 4.5 858 with the flag alone).
 """
 
 import json
-from pathlib import Path
 
 from hub.runner_adapters import build_command
 
 
-def test_every_claude_run_asks_for_thinking_summaries_through_a_settings_file():
+def test_every_claude_run_asks_for_summarized_thinking():
     for kwargs in ({}, {"yolo": True}, {"session_id": "s-1"}):
         cmd = build_command(runner="claude", cli="claude", prompt="hi", **kwargs)
-        assert cmd.count("--settings") == 1
-        path = Path(cmd[cmd.index("--settings") + 1])
-        assert path.is_file(), path
-        assert json.loads(path.read_text(encoding="utf-8")) == {"showThinkingSummaries": True}
-        assert '"' not in cmd[cmd.index("--settings") + 1]
+        assert cmd.count("--thinking-display") == 1
+        assert cmd[cmd.index("--thinking-display") + 1] == "summarized"
+        # The settings-file route it replaces asked 5.5 models for nothing they sent.
+        assert "--settings" not in cmd
 
 
 def test_a_thinking_block_with_text_is_recorded():
