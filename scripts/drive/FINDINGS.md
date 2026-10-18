@@ -36708,3 +36708,37 @@ The harness should default to the git toplevel of the current directory, or refu
 **Theme:** Requirements & evidence
 
 F692 refuses accepting evidence for an earlier wording on `decide` and `overturn`, but `decide_with_verdict` still accepts it. It does no harm, because coverage ignores stale acceptance, but the record reads "accepted" for evidence that no longer applies. Related: F692, F691.
+
+## F752 (C) -- recording already-built work as a spec change cannot be approved without "Approve anyway"
+
+**Status:** open 2026-10-18. Spec-flow friction from authoring the 2026-10-18 decisions on the trial Hub (eight changes).
+**Source:** drive
+**Theme:** Spec documents
+
+A change whose work was built with tests, not through tasks, has no tasks. Every requirement then raises `requirement_without_task` as a blocking gap, and `steps_skipped` fires on a document written in one PUT. All eight changes needed `approve_anyway`, and there is no record-only path. Approvals are scarce: this trains the operator to approve over gaps. Related: F704.
+
+## F753 (C) -- a fold can change requirements but not an algorithm or a criterion's text
+
+**Status:** open 2026-10-18. Spec-flow friction from the same authoring.
+**Source:** drive
+**Theme:** Spec documents
+
+`fold_draft` (`hub/hub/spec_service.py`) folds requirements (`replaces`, `as_key`, `statement`) and retires criteria, but cannot amend an algorithm step or a criterion's wording. F696's correction needed a separate full-payload `merge` of the capability.
+
+Folding one change into several capabilities works, but only with `archive:false` on every fold except the last, and nothing in the route or the app guides that.
+
+## F754 (D) -- every fold into some capabilities reports the capability's old gaps as if they were the change's
+
+**Status:** open 2026-10-18. Spec-flow friction from the same authoring.
+**Source:** drive
+**Theme:** Spec documents
+
+Folding into `requirement-traceability` or `workspace-isolation` answers `blocking` entries for long-standing `requirement_without_criterion` gaps, e.g. `evidence-carries-what-it-takes-to-judge-it-tool-says-so` and `an-agent-checkout-catches-up-with-main-scope`. They are existing gaps in the capability, not something the change introduced, but the fold reports them as the change's.
+
+## F755 (C) -- Tier 0 judge fixes leave the spec corpus behind: the shell judge's rules are not specified
+
+**Status:** open 2026-10-18. Found while folding F696/F737.
+**Source:** drive
+**Theme:** Permissions & sandbox
+
+No capability states F675's or F676's text rules: the interpreter and pipe-fed rules, or the sed/awk/grep pattern exemptions (d0a27d4, 570e93d). The 2026-10-18 fold added `pipe-fed-shapes` to `agent-run-sandboxing`, but the rest of the judge's behaviour exists only in code and in `test_permission_approver.py`'s row table. Related: F675, F676, F696, F737.
