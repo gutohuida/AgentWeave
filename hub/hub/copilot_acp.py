@@ -3110,8 +3110,9 @@ async def _await_prompt(
         await say(
             "copilot.refusal_continued",
             "info",
-            f"Copilot ended the turn on a refused call ({facts['label']}); the Hub told it why "
-            "and asked it to continue another way.",
+            # F698: the reason is what the operator needs too, not only the agent.
+            f"Copilot ended the turn on a refused call ({facts['label']}): {facts['reason']}. "
+            "The Hub told it why and asked it to continue another way.",
             facts,
         )
         state["last_refusal"] = None
