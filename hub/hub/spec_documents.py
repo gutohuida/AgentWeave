@@ -42,7 +42,7 @@ from .spec_manifest import (
     load_manifest,
     validate_spec_path,
 )
-from .spec_payload import extract_payload
+from .spec_payload import PayloadError, extract_payload, validate_payload
 from .spec_render import CorpusChild, CorpusContext
 
 SPEC_DIR = "spec"
@@ -233,6 +233,24 @@ def read_payload(workspace: ProjectWorkspace, path: str) -> Optional[Dict[str, A
     Raises what `read_document` raises: a caller decides what an unreadable file means to it.
     """
     return parse_stored(read_document(workspace, path))
+
+
+def payload_problem(content: Optional[str]) -> Optional[str]:
+    """Why a stored file's payload cannot be read, in words, or ``None`` when it can (F702).
+
+    The one sentence every corpus report gives for "no readable payload", so a rebuild's skip and
+    its unindexed requirements name the field to repair instead of a bare code.
+    """
+    if content is None:
+        return "there is no file at that path"
+    stored = parse_stored(content)
+    if stored is None:
+        return "its file is not readable JSON describing an object"
+    try:
+        validate_payload(stored)
+    except PayloadError as exc:
+        return f"its payload is not a valid specification ({exc})"
+    return None
 
 
 def _legacy_file(workspace: ProjectWorkspace, path: str) -> Path:
@@ -516,12 +534,18 @@ def _write_index_text(workspace: ProjectWorkspace, text: str) -> Path:
     return resolved
 
 
-def repoint_index(workspace: ProjectWorkspace, swap: Callable[[str], str]) -> bool:
+def repoint_index(
+    workspace: ProjectWorkspace,
+    swap: Callable[[str], str],
+    *,
+    titles: Optional[Dict[str, str]] = None,
+) -> bool:
     """Rewrite the paths `spec/index.json` names (home, each path and parent) through `swap`.
 
-    The conversion's index step (FR-7). Read as JSON rather than through `load_manifest`, which
-    refuses the `.html` paths a legacy index holds; written in `dump_manifest`'s layout and
-    atomically. Returns whether anything changed; an absent or unparsable index is left alone.
+    The conversion's index step (FR-7), and a rename's (F730). Read as JSON rather than through
+    `load_manifest`, which refuses the `.html` paths a legacy index holds; written in
+    `dump_manifest`'s layout and atomically. `titles` maps a (swapped) path to the title its entry
+    now records. Returns whether anything changed; an absent or unparsable index is left alone.
     """
     try:
         resolved = workspace.resolve_relative(INDEX_RELATIVE)
@@ -542,6 +566,8 @@ def repoint_index(workspace: ProjectWorkspace, swap: Callable[[str], str]) -> bo
         if isinstance(entry, dict):
             entry["path"] = _swapped(entry.get("path"))
             entry["parent"] = _swapped(entry.get("parent"))
+            if titles and entry["path"] in titles:
+                entry["title"] = titles[entry["path"]]
     if json.dumps(raw) == before:
         return False
     _write_index_text(workspace, json.dumps(raw, indent=2, ensure_ascii=False) + "\n")

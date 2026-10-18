@@ -3,7 +3,12 @@ import { Icon } from '@/components/common/Icon'
 import { StatePill, type Tone } from '@/components/common/StatePill'
 import { Timeline, TimelineItem } from '@/components/common/Timeline'
 import { EvidenceLink } from '@/components/evidence/EvidenceLink'
-import { useSpecRequirement, type RequirementRevision, type RequirementDriftRow } from '@/api/spec'
+import {
+  forEarlierWording,
+  useSpecRequirement,
+  type RequirementRevision,
+  type RequirementDriftRow,
+} from '@/api/spec'
 import { evidenceTone, statusTone } from '@/lib/storyTones'
 import { hubDate } from '@/lib/hubTime'
 import { wordDiff } from '@/lib/wordDiff'
@@ -168,8 +173,13 @@ export function RequirementStory({
   const { requirement, tasks, evidence } = data
   const revisions = data.revisions ?? []
   const drift = data.drift ?? []
-  const counts = { accepted: 0, awaiting: 0, rejected: 0 } as Record<string, number>
-  for (const piece of evidence) counts[piece.review_state] = (counts[piece.review_state] ?? 0) + 1
+  // A piece recorded for an earlier wording is counted apart (F691): its verdict is about words the
+  // requirement no longer says, which is why coverage calls the requirement stale.
+  const counts = { accepted: 0, awaiting: 0, rejected: 0, earlier: 0 } as Record<string, number>
+  for (const piece of evidence) {
+    const key = forEarlierWording(piece) ? 'earlier' : piece.review_state
+    counts[key] = (counts[key] ?? 0) + 1
+  }
   // The wording before each revision: the previous revision's, when it was recorded. A retirement
   // carries no wording, so a restoration compares against the last wording that was recorded.
   let lastWording: string | null | undefined = undefined
@@ -240,6 +250,11 @@ export function RequirementStory({
             {counts.accepted ? <span className="tone-green">{counts.accepted} accepted</span> : null}
             {counts.awaiting ? <span className="tone-amber">{counts.awaiting} waiting</span> : null}
             {counts.rejected ? <span className="tone-red">{counts.rejected} rejected</span> : null}
+            {counts.earlier ? (
+              <span className="tone-neutral" data-testid="requirement-story-evidence-earlier">
+                {counts.earlier} for an earlier wording
+              </span>
+            ) : null}
           </span>
           {evidence.length ? (
             <EvidenceLink focus={requirement.id} testId="requirement-story-evidence">
@@ -254,9 +269,16 @@ export function RequirementStory({
             {[...evidence].reverse().slice(0, 5).map((piece, index) => (
               <li key={piece.id} style={{ '--i': index } as CSSProperties}>
                 <span className="aw-req-line">{piece.summary || piece.locator || 'No summary'}</span>
-                <StatePill tone={evidenceTone(piece.review_state)}>
-                  {piece.review_state === 'awaiting' ? 'waiting' : piece.review_state}
-                </StatePill>
+                {forEarlierWording(piece) ? (
+                  <StatePill tone="neutral" testId={`requirement-story-earlier-${piece.id}`}>
+                    {piece.review_state === 'awaiting' ? 'waiting' : piece.review_state} · earlier
+                    wording
+                  </StatePill>
+                ) : (
+                  <StatePill tone={evidenceTone(piece.review_state)}>
+                    {piece.review_state === 'awaiting' ? 'waiting' : piece.review_state}
+                  </StatePill>
+                )}
               </li>
             ))}
           </ul>

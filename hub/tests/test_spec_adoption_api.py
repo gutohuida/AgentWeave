@@ -250,6 +250,51 @@ class TestRefusals:
         assert _bytes(tmp_path, path) == before
 
     @pytest.mark.asyncio
+    async def test_a_payload_the_schema_refuses_is_refused_naming_the_field(
+        self, app, tmp_path, auth_headers
+    ):
+        """F689: one requirement without a `key` used to adopt (201), index nothing — not even
+        the valid requirement beside it — and leave a page that never loads."""
+        path = "spec/changes/hand-written-fmt/spec.json"
+        before = _write(
+            tmp_path,
+            path,
+            stored_text(
+                {
+                    "schema_version": 1,
+                    "kind": "change-spec",
+                    "title": "Hand written",
+                    "requirements": [
+                        _requirement("fmt1"),
+                        {"statement": "The Hub formats.", "modal": "SHALL"},
+                    ],
+                },
+                phase="exploring",
+            ),
+        )
+
+        response = await _adopt(app, path, auth_headers)
+        assert response.status_code == 422, response.text
+        detail = response.json()["detail"]
+        assert detail["code"] == "payload_invalid"
+        assert "requirements[1].key" in detail["message"]
+        assert _bytes(tmp_path, path) == before
+
+        async with async_session_factory() as session:
+            rows = (
+                (await session.execute(select(SpecDocument).where(SpecDocument.path == path)))
+                .scalars()
+                .all()
+            )
+        assert rows == []
+
+        swept = await app.post(f"{BASE}/spec/adopt", headers=auth_headers)
+        assert swept.status_code == 200, swept.text
+        outcome = swept.json()["documents"][path]
+        assert outcome["adopted"] is False
+        assert outcome["code"] == "payload_invalid"
+
+    @pytest.mark.asyncio
     async def test_a_path_outside_the_spec_tree_is_refused(self, app, tmp_path, auth_headers):
         outside = tmp_path / "notes.json"
         outside.write_text(_document(title="Notes"), encoding="utf-8")

@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import Field
-from sqlalchemy import func, literal_column, select
+from sqlalchemy import func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
@@ -78,6 +78,7 @@ from ...schemas.jobs import JobCreate
 from ...spec_manifest import (
     Manifest,
     SpecPathError,
+    describe_diagnostic,
     dump_manifest,
     load_manifest,
     validate_spec_path,
@@ -150,13 +151,23 @@ async def list_specs(
         }
         for entry in state.specs
     ]
+    # F702: discovery cannot see rows, so it says a rebuild files every unfiled document. A rebuild
+    # files only tracked ones; an untracked one is told to be adopted first. The code is kept.
+    diagnostics = [
+        (
+            {**d, "message": describe_diagnostic("untracked_document", d.get("path"))}
+            if d.get("code") == "unfiled_document" and d.get("path") not in tracked
+            else d
+        )
+        for d in state.diagnostics
+    ]
 
     return {
         "specs": specs,
         "home": state.home,
         "manifest": state.index,
         "missing": state.missing,
-        "diagnostics": state.diagnostics,
+        "diagnostics": diagnostics,
     }
 
 
@@ -1551,14 +1562,31 @@ async def record_evidence(
     return view
 
 
+#: The review states evidence can be listed by (`requirement_evidence`).
+_REVIEW_STATES = (
+    requirement_evidence.AWAITING,
+    requirement_evidence.ACCEPTED,
+    requirement_evidence.REJECTED,
+)
+
+
 @router.get("/spec/evidence")
 async def list_evidence(
     identifier: Optional[str] = Query(None),
     document: Optional[str] = Query(None),
+    review_state: Optional[str] = Query(None),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    if review_state is not None and review_state not in _REVIEW_STATES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": f"review_state must be one of {', '.join(_REVIEW_STATES)}",
+                "code": "unknown_review_state",
+            },
+        )
     if identifier:
         requirement = await _requirement(session, project_id, identifier, document or "")
         rows = await requirement_evidence.for_requirement(session, requirement.id)
@@ -1578,6 +1606,9 @@ async def list_evidence(
         rows = list(
             (await session.execute(query.order_by(RequirementEvidence.produced_at))).scalars().all()
         )
+    if review_state is not None:
+        # F730: the agent route filtered by it and this one ignored it, answering every piece.
+        rows = [row for row in rows if row.review_state == review_state]
     return {"evidence": await _evidence_views(session, project_id, rows)}
 
 
@@ -1791,10 +1822,29 @@ async def list_drift(
     query = select(RequirementDrift).where(RequirementDrift.project_id == project_id)
     if state is not None:
         query = query.where(RequirementDrift.state == state)
+    # F690: a capability requirement served by a folded change's evidence (F593) answers that
+    # evidence's drift on its own page, keyed by the change requirement that holds it.
+    serves: Dict[str, Dict[str, Any]] = {}
     if document_id is not None:
+        report = await requirement_coverage.requirement_coverage(
+            session, project_id, document_id=document_id
+        )
+        serves = {
+            entry.served_by["requirement_id"]: {
+                "identifier": entry.identifier,
+                "document": document,
+            }
+            for entry in report.requirements
+            if entry.served_by
+        }
         query = query.join(
             SpecRequirement, SpecRequirement.id == RequirementDrift.requirement_id
-        ).where(SpecRequirement.document_id == document_id)
+        ).where(
+            or_(
+                SpecRequirement.document_id == document_id,
+                RequirementDrift.requirement_id.in_(list(serves) or [""]),
+            )
+        )
     rows = list(
         (await session.execute(query.order_by(RequirementDrift.created_at, RequirementDrift.id)))
         .scalars()
@@ -1852,6 +1902,9 @@ async def list_drift(
                 if requirement is not None
                 else None
             ),
+            # The requirement of the asked-for document this drift reaches through a fold (F690);
+            # null where the drift is on the document's own requirement.
+            "serves": serves.get(row.requirement_id),
             "evidence": (
                 {
                     "summary": item.summary,
@@ -1960,7 +2013,13 @@ async def resolve_drift(
 
 
 def _evidence_view(
-    evidence, footprint=None, latest_review=None, *, requirement=None, superseded_by=None
+    evidence,
+    footprint=None,
+    latest_review=None,
+    *,
+    requirement=None,
+    superseded_by=None,
+    for_current_wording=None,
 ) -> dict:
     return {
         # Still being recorded: the run that recorded it is running, so its commit is about to be
@@ -2008,6 +2067,11 @@ def _evidence_view(
         # (`says-what-it-demonstrates`). Built by `_evidence_views`; null where it was not asked.
         "requirement": requirement,
         "superseded_by": superseded_by,
+        # Whether it was recorded against what the requirement says now (F691): its digest is the
+        # requirement's. False is coverage's `stale` for this piece -- its review state is about an
+        # earlier wording, so a surface must not count it as the requirement's evidence. Null where
+        # the requirement could not be read.
+        "for_current_wording": for_current_wording,
     }
 
 
@@ -2112,6 +2176,9 @@ async def _evidence_views(
                     else None
                 ),
                 superseded_by=latest.id if latest is not None and latest.id != row.id else None,
+                for_current_wording=(
+                    row.digest == requirement.digest if requirement is not None else None
+                ),
             )
         )
     return views
@@ -2221,23 +2288,50 @@ async def reindex(
     """
     project_id, _ = project
     workspace = await _workspace(session, project_id)
+    on_disk, discovery_diagnostics = spec_documents.discover(workspace)
+    rows = await spec_lifecycle.list_documents(session, project_id)
+    chosen_home = body.home if body is not None else None
+    if chosen_home is not None and (
+        chosen_home not in on_disk or chosen_home not in {row.path for row in rows}
+    ):
+        # F702: refused before anything is rebuilt. Accepted, it rebuilt the requirements and then
+        # answered "not written" with a diagnostic, for a home the caller simply mistyped.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": describe_diagnostic("home_missing", chosen_home),
+                "code": "home_unknown",
+            },
+        )
+
     results = await spec_index.reindex_project(session, workspace, project_id)
     backfilled = await requirement_links.backfill_project(session, project_id)
 
-    on_disk, discovery_diagnostics = spec_documents.discover(workspace)
-    rows = await spec_lifecycle.list_documents(session, project_id)
     existing, _, _ = spec_documents.read_index(workspace)
     manifest, index_diagnostics = spec_documents.build_index(
         on_disk,
         [(row.path, row.title, row.kind, row.phase) for row in rows],
         existing,
-        home=body.home if body is not None else None,
+        home=chosen_home,
     )
 
     written = None
     rerendered: List[str] = []
     rerender_skipped: List[Dict[str, Any]] = []
     index_diagnostics = list(index_diagnostics)
+    for path, result in results.items():
+        if result is not None:
+            continue
+        # F689/F702: a document whose requirements could not be read answered `null` and nothing
+        # said why. The reason names the field to repair.
+        try:
+            problem = spec_documents.payload_problem(spec_documents.read_document(workspace, path))
+        except (SpecPathError, project_workspace.ProjectPathError, OSError) as exc:
+            problem = str(exc)
+        if problem is not None:
+            index_diagnostics.append(
+                spec_documents._diag("requirements_unreadable", path=path, actual=problem)
+            )
     try:
         if manifest is not None:
             spec_documents.write_index(workspace, manifest)
@@ -2551,6 +2645,7 @@ _ADOPTION_REFUSAL_STATUS = {
     "payload_absent": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "payload_unreadable": status.HTTP_422_UNPROCESSABLE_ENTITY,
     "payload_identity_missing": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "payload_invalid": status.HTTP_422_UNPROCESSABLE_ENTITY,
 }
 
 
@@ -2861,6 +2956,28 @@ async def set_phase(
                 f"{', '.join(misplaced)} sent as a query parameter; only path and to go in the "
                 "query string, the rest go in the JSON request body"
             ),
+        )
+
+    # F730: a phase that does not exist is a malformed request (422), as an unknown rigor is (F657),
+    # not a conflict with the document's state (409).
+    phases = (
+        spec_lifecycle.EXPLORING,
+        spec_lifecycle.PROPOSED,
+        spec_lifecycle.APPROVED,
+        spec_lifecycle.ARCHIVED,
+    )
+    if to not in phases:
+        what = (
+            "current is reached only by creating a capability document, never moved to"
+            if to == spec_lifecycle.CURRENT
+            else f"unknown phase {to!r}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": f"{what}: to must be one of {', '.join(phases)}",
+                "code": "unknown_phase",
+            },
         )
 
     project_id, _ = project
@@ -3326,6 +3443,7 @@ async def merge_document(
             "proposals": result.proposals,
             "unchanged": result.unchanged,
             "already_pending": result.already_pending,
+            "applied": False,
             "merged": 0,
         }
     else:
@@ -3333,6 +3451,9 @@ async def merge_document(
             **await _project_document_view(session, project_id, document),
             "blocking": result.blocking,
             "divergence": result.divergence,
+            # F730: whether the payload was written. `merged` counts the changes folded, so an
+            # operator edit naming none answered `merged: 0` and read as nothing having happened.
+            "applied": True,
             "merged": len(sources),
         }
 

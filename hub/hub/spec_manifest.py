@@ -153,6 +153,23 @@ class ManifestDiagnostic:
 #: What a diagnostic means, for a person (F643). The code stays beside it for callers that branch.
 _DIAGNOSTIC_SENTENCES = {
     "unfiled_document": ("{path} is not in the index yet. Rebuilding the index files it."),
+    # F702: the same unfiled document when the Hub does not track it -- a rebuild files only
+    # tracked documents (`spec_documents.build_index`), so "rebuilding files it" was untrue.
+    "untracked_document": (
+        "{path} is not in the index, and a rebuild cannot file it until the Hub tracks it. "
+        "Adopt it first."
+    ),
+    "unindexable_document": (
+        "{path} was not filed: the Hub does not track it. Adopt it first; if adoption refuses "
+        "it, the refusal says what in its file to repair."
+    ),
+    "requirements_unreadable": "{path}: its requirements were not indexed, because {actual}.",
+    "home_ambiguous": (
+        "The index was not written: more than one document could be the corpus's home "
+        "({actual}), and the Hub does not choose one. Choose it."
+    ),
+    "index_home_required": "The index was not written: it needs a home document, and none is set.",
+    "home_missing": "{path} cannot be the home: it is not a tracked document on disk.",
     "missing_document": (
         "The index lists {path}, but there is no file there: it was deleted, renamed, or never "
         "written."

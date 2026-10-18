@@ -60,6 +60,12 @@ export function SpecCorpusStrip({ specList, adoptedSinceRebuild = false, onRebui
   const manifestState = specList.manifest?.state ?? 'absent'
   const valid = manifestState === 'valid'
   const untracked = specList.specs.filter((s) => !s.document_id)
+  // F702: a document the last sweep refused stays untracked, and offering to adopt it again
+  // promises what the Hub just declined. Only the rest are offered; the refusals are listed below.
+  const refused = new Set(
+    (adopted?.skipped ?? []).filter((path) => adopted?.documents[path]?.code !== 'document_exists'),
+  )
+  const adoptable = untracked.filter((s) => !refused.has(s.path))
   const tracked = specList.specs.filter((s) => !!s.document_id)
   const homeTitle = specList.specs.find((s) => s.path === specList.home)?.title ?? specList.home
 
@@ -145,15 +151,22 @@ export function SpecCorpusStrip({ specList, adoptedSinceRebuild = false, onRebui
               ? '1 document on disk is not tracked'
               : `${untracked.length} documents on disk are not tracked`}
           </p>
-          <Button
-            size="xs"
-            variant="outline"
-            data-testid="spec-corpus-adopt-all"
-            disabled={busy}
-            onClick={adoptEverything}
-          >
-            Adopt all {untracked.length}
-          </Button>
+          {adoptable.length > 0 ? (
+            <Button
+              size="xs"
+              variant="outline"
+              data-testid="spec-corpus-adopt-all"
+              disabled={busy}
+              onClick={adoptEverything}
+            >
+              Adopt all {adoptable.length}
+            </Button>
+          ) : (
+            <p data-testid="spec-corpus-unadoptable" style={quietStyle}>
+              The Hub could not adopt {untracked.length === 1 ? 'it' : 'them'}: the reasons are
+              below.
+            </p>
+          )}
         </div>
       )}
 
@@ -241,8 +254,8 @@ export function SpecCorpusStrip({ specList, adoptedSinceRebuild = false, onRebui
           </p>
           {result.corpus.skipped.map((skip) => (
             <p key={skip.path} style={quietStyle}>
-              Skipped {skip.path}: {skip.reason}
-              {skip.message ? ` (${skip.message})` : ''}
+              {/* The Hub's sentence when it sends one (F702); the bare code is for an older Hub. */}
+              Skipped {skip.path}: {skip.message ?? skip.reason.replace(/_/g, ' ')}
             </p>
           ))}
         </div>

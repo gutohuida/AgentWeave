@@ -336,23 +336,27 @@ async def _apply_and_write(
     board_served = await requirement_links.served_keys(session, document.id)
     approved_paths = await spec_lifecycle.approved_document_paths(session, document.project_id)
     roadmaps = await roadmap_states(session, workspace, document.project_id, payload)
+    # F703: split exactly as a proposal splits them, so a write and a propose of the same
+    # payload agree on what blocks. A gap is a warning here too; calling it `blocking` told
+    # agents a proposal would be refused when it would pass.
+    refusals, gaps = spec_completeness.split(
+        spec_completeness.check(
+            payload,
+            board_served=board_served,
+            approved_document_paths=approved_paths,
+            roadmaps=roadmaps,
+        )
+    )
     return SaveResult(
         path=document.path,
         phase=document.phase,
         identifiers=identifiers,
-        blocking=[
-            finding.to_dict()
-            for finding in spec_completeness.check(
-                payload,
-                board_served=board_served,
-                approved_document_paths=approved_paths,
-                roadmaps=roadmaps,
-            )
-        ],
+        blocking=[finding.to_dict() for finding in refusals],
         divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
         warnings=[
             f.to_dict()
             for f in (
+                *gaps,
                 *spec_completeness.overlap_warnings(payload),
                 *spec_completeness.undeclared_files_warnings(payload),
                 *spec_completeness.test_only_task_warnings(payload),
@@ -1176,6 +1180,18 @@ async def rename_document(
     document.title = subject.strip() or document.title
     await _repoint_pending_input(session, document.project_id, previous_path, new_path)
     spec_documents.move_document(workspace, previous_path, new_path)
+    # F730: the index follows the move. Without it the renamed document read as missing at its old
+    # path and unfiled (no title, no Place under) at its new one until somebody rebuilt the index.
+    # After the move, like it, because a file move does not roll back; a failed index write leaves
+    # what a rebuild repairs, never a refused rename of a file that already moved.
+    try:
+        spec_documents.repoint_index(
+            workspace,
+            lambda path: new_path if path == previous_path else path,
+            titles={new_path: document.title},
+        )
+    except OSError:
+        logger.warning("the index could not follow the rename of %s", previous_path, exc_info=True)
     await spec_lifecycle.record_event(
         session,
         document,
@@ -1361,6 +1377,15 @@ async def link_roadmap_slice(
             code="roadmap_not_found",
             field_path="roadmap.document",
         )
+    if roadmap.phase != spec_lifecycle.APPROVED:
+        # F705: the rule a proposal holds (`spec_completeness._roadmap_link_findings`). A link
+        # accepted here to an unapproved roadmap refused the change's own re-proposal later.
+        raise SaveRefusedError(
+            f"{roadmap.path} is {roadmap.phase}; a change names a roadmap slice only once that "
+            "roadmap is approved",
+            code="roadmap_not_approved",
+            field_path="roadmap.document",
+        )
     keys = [str(item["key"]) for item in roadmap_slices(workspace, roadmap.path)]
     if slice_key not in keys:
         raise SaveRefusedError(
@@ -1379,8 +1404,13 @@ async def link_roadmap_slice(
     if current == link:
         return False
     if current:
+        named = (
+            f"slice {current.get('slice')!r} of {current.get('document')}"
+            if isinstance(current, dict)
+            else "another roadmap slice"
+        )
         raise SaveRefusedError(
-            f"{document.path} already names {current}; reopen it to change its slice",
+            f"{document.path} already names {named}; reopen it to change its slice",
             code="roadmap_link_differs",
             field_path="roadmap",
         )
@@ -1518,7 +1548,9 @@ def _steps_skipped(
             "step",
             f"the document is at step {document.step!r}; this project's journey ({sized}) goes "
             f"on to {', '.join(ahead)}, which it never reached. If it already holds what those "
-            f"steps produce, record that: POST /project/documents/journey?path={document.path} "
+            # The full route (F730): without `/api/v1/projects/{id}` it named nothing callable.
+            f"steps produce, record that: POST /api/v1/projects/{document.project_id}/project/"
+            f"documents/journey?path={document.path} "
             f'{{"step": "{last}"}} (the step control on its phase bar)',
         )
     ]
@@ -1736,15 +1768,14 @@ async def rerender_corpus(
         if current is None:
             skipped.append({"path": entry.path, "reason": "file_missing"})
             continue
+        problem = spec_documents.payload_problem(current)
+        if problem is not None:
+            skipped.append(
+                {"path": entry.path, "reason": "no_readable_payload", "message": problem}
+            )
+            continue
         stored = spec_documents.parse_stored(current)
-        if stored is None:
-            skipped.append({"path": entry.path, "reason": "no_readable_payload"})
-            continue
-        try:
-            validate_payload(stored)
-        except PayloadError:
-            skipped.append({"path": entry.path, "reason": "no_readable_payload"})
-            continue
+        assert stored is not None  # `payload_problem` answered None
 
         # The page's corpus navigation is rendered on read now (FR-2), so what a rebuild can find
         # stale in the file is its hub block or its layout. A path filed in the manifest always

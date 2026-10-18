@@ -134,6 +134,9 @@ class TestTheOperatorCanWrite:
         assert response.status_code == 200, response.text
         assert response.json()["phase"] == "current"
         assert "It responds within 200ms" in (tmp_path / CAP_PATH).read_text(encoding="utf-8")
+        # F730: an edit naming no change folds none (`merged: 0`) and says it was applied.
+        assert response.json()["merged"] == 0
+        assert response.json()["applied"] is True
 
     async def test_the_written_document_reads_back_with_its_requirement(
         self, app, auth_headers, tmp_path

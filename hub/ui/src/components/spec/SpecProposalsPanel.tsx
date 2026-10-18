@@ -92,7 +92,7 @@ export function SpecProposalsPanel({ path }: { path: string }) {
                 {proposal.change_kind}
               </span>
               <span style={{ color: 'var(--text-2)' }}>
-                {proposal.unit_kind === 'metadata' ? 'Summary / problem / scope' : proposal.unit_key}
+                {proposal.unit_kind === 'metadata' ? metadataLabel(proposal) : proposal.unit_key}
               </span>
               {proposal.change_kind === 'add' && (
                 <span style={{ color: 'var(--text-3)' }}>
@@ -153,6 +153,17 @@ export function SpecProposalsPanel({ path }: { path: string }) {
               </div>
             )}
 
+            {proposal.unit_kind === 'metadata' && (
+              <ul className="flex flex-col gap-0.5" data-testid={`proposal-fields-${proposal.id}`}>
+                {metadataChanges(proposal).map((change) => (
+                  <li key={change.field} style={{ color: 'var(--text-2)' }}>
+                    <span style={{ color: 'var(--text-3)' }}>{fieldName(change.field)}:</span>{' '}
+                    {describeValue(change.before)} → {describeValue(change.after)}
+                  </li>
+                ))}
+              </ul>
+            )}
+
             {rejecting === proposal.id && (
               <div className="flex items-center gap-1.5">
                 <input
@@ -189,6 +200,60 @@ export function SpecProposalsPanel({ path }: { path: string }) {
       )}
     </div>
   )
+}
+
+/** One document-level field a metadata proposal changes, before and after. */
+interface FieldChange {
+  field: string
+  before: unknown
+  after: unknown
+}
+
+/** An absent field, `null`, `''`, `[]` and `{}` all read as "nothing": the stored file and a
+ *  submission spell an unset field differently, and that difference is not a change. */
+function isEmptyValue(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true
+  if (Array.isArray(value)) return value.length === 0
+  if (typeof value === 'object') return Object.keys(value as object).length === 0
+  return false
+}
+
+/** The fields a metadata proposal actually changes (F707). The unit carries every document-level
+ *  field, so naming it "Summary / problem / scope" mislabelled a proposal that only cleared
+ *  `lifecycle`, and showed nothing of what it did. */
+function metadataChanges(proposal: SpecEditProposal): FieldChange[] {
+  const before = proposal.previous_payload ?? {}
+  const after = proposal.proposed_payload ?? {}
+  const fields = Array.from(new Set([...Object.keys(before), ...Object.keys(after)])).sort()
+  return fields
+    .filter((field) => {
+      const was = before[field]
+      const now = after[field]
+      if (isEmptyValue(was) && isEmptyValue(now)) return false
+      return JSON.stringify(sortedKeys(was)) !== JSON.stringify(sortedKeys(now))
+    })
+    .map((field) => ({ field, before: before[field], after: after[field] }))
+}
+
+function metadataLabel(proposal: SpecEditProposal): string {
+  const changes = metadataChanges(proposal)
+  if (changes.length === 0) return 'Document fields (no visible change)'
+  return `Document fields: ${changes.map((change) => fieldName(change.field)).join(', ')}`
+}
+
+function fieldName(field: string): string {
+  return field.replace(/_/g, ' ')
+}
+
+function describeValue(value: unknown): string {
+  if (isEmptyValue(value)) return '(empty)'
+  if (typeof value === 'string') {
+    const text = value.length > 80 ? `${value.slice(0, 80)}…` : value
+    return `“${text}”`
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) return `${value.length} ${value.length === 1 ? 'item' : 'items'}`
+  return 'an object'
 }
 
 /** `ApiError.message` is the response body verbatim — the same parse-back-out pattern

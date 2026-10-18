@@ -404,6 +404,15 @@ export interface EvidencePiece {
   } | null
   /** The newest later piece for the same requirement and task, when one replaced this. */
   superseded_by?: string | null
+  /** False when it was recorded for an earlier wording of the requirement (coverage's `stale`
+   *  for this piece): its review state is about words the requirement no longer says, so it does
+   *  not count as the requirement's evidence (F691). Null or absent when the Hub could not tell. */
+  for_current_wording?: boolean | null
+}
+
+/** A piece recorded for words the requirement no longer says (F691). */
+export function forEarlierWording(piece: Pick<EvidencePiece, 'for_current_wording'>): boolean {
+  return piece.for_current_wording === false
 }
 
 /** Every piece of evidence in the project, oldest first (`GET /spec/evidence`, the order the route
@@ -1358,6 +1367,9 @@ export interface DriftCandidate {
   resolution: string | null
   created_at: string | null
   requirement: { identifier: string; document: string | null } | null
+  /** The asked-for document's requirement this drift reaches through a fold (F690): the
+   *  candidate is on the change requirement whose evidence serves it. Absent or null otherwise. */
+  serves?: { identifier: string; document: string | null } | null
   evidence: { summary: string; locator: string | null; actor: string; actor_kind: string } | null
 }
 

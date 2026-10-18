@@ -58,9 +58,11 @@ const DETAIL: SpecRequirementDetail = {
   coverage: null,
 }
 
+let served: SpecRequirementDetail = DETAIL
+
 vi.mock('@/api/spec', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/spec')>()
-  return { ...actual, useSpecRequirement: () => ({ data: DETAIL, isLoading: false, isError: false }) }
+  return { ...actual, useSpecRequirement: () => ({ data: served, isLoading: false, isError: false }) }
 })
 
 function story() {
@@ -71,6 +73,32 @@ function story() {
 }
 
 describe('RequirementStory', () => {
+  it('does not count evidence for an earlier wording as accepted (F691)', () => {
+    const base = {
+      kind: 'test_result', locator: null, actor_kind: 'agent', actor: 'Tester', run_id: null,
+      task_id: 'task-1', latest_review: null, footprint: null, command: null, output: null,
+      covers: null, superseded_by: null,
+    }
+    // Oldest first, as the route returns them: accepted before the rewording, then a new piece.
+    served = {
+      ...DETAIL,
+      evidence: [
+        { ...base, id: 'ev-old', summary: 'renamed', review_state: 'accepted', produced_at: '2026-10-13T10:00:00Z', for_current_wording: false },
+        { ...base, id: 'ev-new', summary: 'renamed live', review_state: 'awaiting', produced_at: '2026-10-15T10:00:00Z', for_current_wording: true },
+      ],
+    }
+    try {
+      story()
+      const heading = screen.getByText('Evidence').closest('h2') as HTMLElement
+      expect(within(heading).queryByText(/accepted/)).toBeNull()
+      expect(within(heading).getByText('1 waiting')).toBeTruthy()
+      expect(screen.getByTestId('requirement-story-evidence-earlier').textContent).toBe('1 for an earlier wording')
+      expect(screen.getByTestId('requirement-story-earlier-ev-old').textContent).toContain('earlier wording')
+    } finally {
+      served = DETAIL
+    }
+  })
+
   it('shows the current wording, and every revision in the route’s order', () => {
     story()
     expect(screen.getByTestId('requirement-story-statement').textContent).toBe(

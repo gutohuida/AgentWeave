@@ -1564,7 +1564,7 @@ async def decide_evidence(
     # F621, as on the operator's route: a review this decision may release, asked before it.
     held_review = await run_divergence.held_review_before_a_decision(session, evidence)
     try:
-        await requirement_evidence.decide(
+        review = await requirement_evidence.decide(
             session,
             evidence,
             decision=body.decision,
@@ -1582,7 +1582,13 @@ async def decide_evidence(
     await session.commit()
     # Read before the integration below, which rolls back when it fails and expires every loaded
     # row: the decision has committed and the answer must not depend on the merge (F426).
-    answer = {"id": evidence.id, "review_state": evidence.review_state}
+    # The whole evidence view, footprint and review included, as the operator's route answers
+    # (F730, after F657). `id` and `review_state` stay where they were.
+    from .spec import _evidence_views
+
+    [answer] = await _evidence_views(
+        session, actor.project_id, [evidence], latest_reviews={evidence.id: review}
+    )
     requirement = await session.get(SpecRequirement, evidence.requirement_id)
     announced = {
         "evidence": evidence.id,

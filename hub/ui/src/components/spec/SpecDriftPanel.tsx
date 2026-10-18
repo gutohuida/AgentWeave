@@ -55,7 +55,16 @@ function CandidateRow({ candidate }: { candidate: DriftCandidate }) {
       style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 0', borderTop: '1px solid var(--border)' }}
     >
       <p style={{ ...line, color: 'var(--text)' }}>
-        <strong>{candidate.requirement?.identifier ?? 'A requirement'}</strong>
+        {candidate.serves ? (
+          <span data-testid={`spec-drift-serves-${candidate.id}`}>
+            <strong>{candidate.serves.identifier}</strong>
+            {` · through ${candidate.requirement?.identifier ?? 'a requirement'} of ${
+              candidate.requirement?.document ?? 'the change folded into it'
+            }`}
+          </span>
+        ) : (
+          <strong>{candidate.requirement?.identifier ?? 'A requirement'}</strong>
+        )}
         {candidate.evidence ? ` · verified by ${candidate.evidence.summary} (${candidate.evidence.actor})` : ''}
       </p>
       {Object.entries(candidate.observed).map(([path, change]) => (
