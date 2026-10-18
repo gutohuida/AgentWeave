@@ -584,7 +584,9 @@ export default function App() {
             active={destination.tab}
             onSelect={(tab) => {
               setOverviewQuestionsOpen(false)
-              if (tab === 'activity') setActivitySubview('activity')
+              // The tab opens on the ledger, which leads (F718: this reset to the live stream, so
+              // the ledger was never what a click on Activity showed).
+              if (tab === 'activity') setActivitySubview('ledger')
               navigateTo(projectDestination(destination.projectId, tab))
             }}
           />
