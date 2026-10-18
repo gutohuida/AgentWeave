@@ -135,7 +135,29 @@ describe('the corpus strip', () => {
     expect(summary).toContain('reworded 1')
     expect(summary).toContain('retired 1')
     expect(summary).toContain('re-rendered 1')
-    expect(summary).toContain('Skipped spec/other.json: write_failed (No space left on device)')
+    expect(summary).toContain('Skipped spec/other.json: No space left on device')
+  })
+
+  it('a skip reads as the Hub’s sentence, never a bare code (F702)', () => {
+    state.answers.reindex.push({
+      ok: reindexAnswer({
+        written: { path: 'spec/index.json', documents: 3, home: 'spec/home.json' },
+        skipped: [
+          {
+            path: 'spec/changes/hand-written-fmt/spec.json',
+            reason: 'no_readable_payload',
+            message: 'its payload is not a valid specification (requirements[1].key: Field required)',
+          },
+          { path: 'spec/old.json', reason: 'file_missing' },
+        ],
+      }),
+    })
+    strip()
+    fireEvent.click(screen.getByTestId('spec-corpus-rebuild'))
+    const summary = screen.getByTestId('spec-corpus-summary').textContent ?? ''
+    expect(summary).toContain('requirements[1].key: Field required')
+    expect(summary).not.toContain('no_readable_payload')
+    expect(summary).toContain('Skipped spec/old.json: file missing')
   })
 
   it('1.10 offers only tracked documents as the home, and says when there is nothing to index', () => {
@@ -186,11 +208,33 @@ describe('the corpus strip', () => {
     })
     strip()
     fireEvent.click(screen.getByTestId('spec-corpus-adopt-all'))
-    expect(screen.getByTestId('spec-corpus-adopt-all').textContent).toBe('Adopt all 2')
+    // F702: the refused document is no longer offered (the list here is not refetched, so the
+    // adopted one still reads untracked until it is).
+    expect(screen.getByTestId('spec-corpus-adopt-all').textContent).toBe('Adopt all 1')
     expect(state.calls.adoptAll).toBe(1)
     const result = screen.getByTestId('spec-corpus-adopt-result').textContent ?? ''
     expect(result).toContain('spec/stray.json: no payload block')
     expect(result).toContain('discovery_truncated — spec/')
+  })
+
+  it('stops offering Adopt all once the Hub refused every untracked document (F702)', () => {
+    state.answers.adoptAll.push({
+      ok: {
+        documents: {
+          'spec/loose.json': { adopted: false, path: 'spec/loose.json', code: 'payload_invalid', message: 'requirements[1].key: Field required' },
+          'spec/stray.json': { adopted: false, path: 'spec/stray.json', code: 'payload_identity_missing', message: 'declares no title' },
+        },
+        adopted: [],
+        skipped: ['spec/loose.json', 'spec/stray.json'],
+        diagnostics: [],
+      },
+    })
+    strip()
+    fireEvent.click(screen.getByTestId('spec-corpus-adopt-all'))
+    expect(screen.queryByTestId('spec-corpus-adopt-all')).toBeNull()
+    expect(screen.getByTestId('spec-corpus-unadoptable').textContent).toMatch(/could not adopt them/)
+    const result = screen.getByTestId('spec-corpus-adopt-result').textContent ?? ''
+    expect(result).toContain('spec/loose.json: requirements[1].key: Field required')
   })
 
   it('counts documents already tracked and agreeing, and lists only the rest', () => {

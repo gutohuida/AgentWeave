@@ -78,6 +78,7 @@ from ...schemas.jobs import JobCreate
 from ...spec_manifest import (
     Manifest,
     SpecPathError,
+    describe_diagnostic,
     dump_manifest,
     load_manifest,
     validate_spec_path,
@@ -150,13 +151,23 @@ async def list_specs(
         }
         for entry in state.specs
     ]
+    # F702: discovery cannot see rows, so it says a rebuild files every unfiled document. A rebuild
+    # files only tracked ones; an untracked one is told to be adopted first. The code is kept.
+    diagnostics = [
+        (
+            {**d, "message": describe_diagnostic("untracked_document", d.get("path"))}
+            if d.get("code") == "unfiled_document" and d.get("path") not in tracked
+            else d
+        )
+        for d in state.diagnostics
+    ]
 
     return {
         "specs": specs,
         "home": state.home,
         "manifest": state.index,
         "missing": state.missing,
-        "diagnostics": state.diagnostics,
+        "diagnostics": diagnostics,
     }
 
 
@@ -2235,23 +2246,50 @@ async def reindex(
     """
     project_id, _ = project
     workspace = await _workspace(session, project_id)
+    on_disk, discovery_diagnostics = spec_documents.discover(workspace)
+    rows = await spec_lifecycle.list_documents(session, project_id)
+    chosen_home = body.home if body is not None else None
+    if chosen_home is not None and (
+        chosen_home not in on_disk or chosen_home not in {row.path for row in rows}
+    ):
+        # F702: refused before anything is rebuilt. Accepted, it rebuilt the requirements and then
+        # answered "not written" with a diagnostic, for a home the caller simply mistyped.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": describe_diagnostic("home_missing", chosen_home),
+                "code": "home_unknown",
+            },
+        )
+
     results = await spec_index.reindex_project(session, workspace, project_id)
     backfilled = await requirement_links.backfill_project(session, project_id)
 
-    on_disk, discovery_diagnostics = spec_documents.discover(workspace)
-    rows = await spec_lifecycle.list_documents(session, project_id)
     existing, _, _ = spec_documents.read_index(workspace)
     manifest, index_diagnostics = spec_documents.build_index(
         on_disk,
         [(row.path, row.title, row.kind, row.phase) for row in rows],
         existing,
-        home=body.home if body is not None else None,
+        home=chosen_home,
     )
 
     written = None
     rerendered: List[str] = []
     rerender_skipped: List[Dict[str, Any]] = []
     index_diagnostics = list(index_diagnostics)
+    for path, result in results.items():
+        if result is not None:
+            continue
+        # F689/F702: a document whose requirements could not be read answered `null` and nothing
+        # said why. The reason names the field to repair.
+        try:
+            problem = spec_documents.payload_problem(spec_documents.read_document(workspace, path))
+        except (SpecPathError, project_workspace.ProjectPathError, OSError) as exc:
+            problem = str(exc)
+        if problem is not None:
+            index_diagnostics.append(
+                spec_documents._diag("requirements_unreadable", path=path, actual=problem)
+            )
     try:
         if manifest is not None:
             spec_documents.write_index(workspace, manifest)

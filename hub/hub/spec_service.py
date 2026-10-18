@@ -1754,15 +1754,14 @@ async def rerender_corpus(
         if current is None:
             skipped.append({"path": entry.path, "reason": "file_missing"})
             continue
+        problem = spec_documents.payload_problem(current)
+        if problem is not None:
+            skipped.append(
+                {"path": entry.path, "reason": "no_readable_payload", "message": problem}
+            )
+            continue
         stored = spec_documents.parse_stored(current)
-        if stored is None:
-            skipped.append({"path": entry.path, "reason": "no_readable_payload"})
-            continue
-        try:
-            validate_payload(stored)
-        except PayloadError:
-            skipped.append({"path": entry.path, "reason": "no_readable_payload"})
-            continue
+        assert stored is not None  # `payload_problem` answered None
 
         # The page's corpus navigation is rendered on read now (FR-2), so what a rebuild can find
         # stale in the file is its hub block or its layout. A path filed in the manifest always
