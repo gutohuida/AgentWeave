@@ -511,7 +511,12 @@ async def approve_without_a_main_branch(app, auth_headers, builder, tmp_path):
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
 
-    task, evidence, work = await a_task_with_awaiting_evidence(app, auth_headers, builder, tmp_path)
+    # Unbound (F692): since vis-D4 the verdict accepts the task's own pieces at approval, and a
+    # decided piece cannot be accepted again, so what still waits after approval is a piece the
+    # verdict does not decide -- one recorded by a run bound to no task.
+    task, evidence, work = await a_task_with_unbound_awaiting_evidence(
+        app, auth_headers, builder, tmp_path
+    )
     approved = await approve(app, auth_headers, task)
     assert approved.status_code == 200, approved.text
 
@@ -969,7 +974,9 @@ async def test_a_commit_this_task_already_merged_is_not_attempted_again(
     task = await linked_task_for(app, auth_headers, ["FR-1", "FR-2"])
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "one.py", "1\n")
     accepted = await record_evidence_for(app, builder, "FR-1", task_id=task)
-    awaiting = await record_evidence_for(app, builder, "FR-2", task_id=task)
+    # Unbound (F692): the verdict accepts the task's own pieces at approval, and a decided piece
+    # cannot be accepted again, so the piece accepted after approval is one the verdict leaves.
+    awaiting = await record_evidence_for(app, builder, "FR-2")
     git(tmp_path, "checkout", "-q", "main")
     await accept(app, auth_headers, accepted)
 

@@ -12,6 +12,11 @@ The builder never amends (D2): only a run whose delivered entry was a review of 
 document may call `amend`, and only while the document's testing is on. A change or removal of a
 criterion, and a `cannot_satisfy` report, are *relaxing* (D3): while one is not reviewed its
 requirement cannot be verified, whatever evidence it holds (`requirement_coverage`).
+
+**A `cannot_satisfy` report is answered, not marked reviewed** (F700): the operator amends the
+criterion, accepts the report, or rejects it (`respond_to_report`), and each answer does something
+-- the criterion changes, the blocked task resumes, or the reporter is told why not. The answer
+rides the `amendment_reviewed` event's detail, so the report's row says what was done.
 """
 
 from __future__ import annotations
@@ -34,6 +39,8 @@ CHANGE_CRITERION = "change_criterion"
 REMOVE_CRITERION = "remove_criterion"
 CANNOT_SATISFY = "cannot_satisfy"
 OPS = (ADD_TASK, ADD_CRITERION, CHANGE_CRITERION, REMOVE_CRITERION)
+# The operator's answers to a `cannot_satisfy` report (F700), and how the report's row names each.
+RESPONSES = {"amend": "amended", "accept": "accepted", "reject": "rejected"}
 # Structural, never judged by reading (D3): a change can be called a tightening by the agent it lets
 # pass, so every change or removal waits for the operator; an addition never does.
 RELAXING = frozenset({CHANGE_CRITERION, REMOVE_CRITERION, CANNOT_SATISFY})
@@ -69,6 +76,11 @@ class Amendment:
     reviewed_at: Optional[str]
     reviewed_by: Optional[str]
     detail: Dict[str, Any]
+    # F700: how a report was answered (`amended` / `accepted` / `rejected`), why, and the amendment
+    # an `amended` answer produced. None for anything not answered that way.
+    response: Optional[str] = None
+    response_reason: Optional[str] = None
+    answered_by: Optional[str] = None
 
     @property
     def relaxing(self) -> bool:
@@ -92,6 +104,11 @@ class Amendment:
             "relaxing": self.relaxing,
             "change": self.detail.get("change"),
             "before": self.detail.get("before"),
+            "task_id": self.detail.get("task_id"),
+            "response": self.response,
+            "response_reason": self.response_reason,
+            "answered_by": self.answered_by,
+            "responds_to": self.detail.get("responds_to"),
         }
 
 
@@ -541,6 +558,8 @@ async def list_amendments(session: AsyncSession, document: SpecDocument) -> List
             continue
         detail = dict(event.detail or {})
         review = reviewed.get(detail.get("id", ""))
+        answer = (review.detail or {}) if review is not None else {}
+        answered = answer.get("report") == detail.get("id")
         out.append(
             Amendment(
                 id=detail.get("id", event.id),
@@ -557,6 +576,9 @@ async def list_amendments(session: AsyncSession, document: SpecDocument) -> List
                 reviewed_at=review.created_at.isoformat() if review and review.created_at else None,
                 reviewed_by=review.actor if review else None,
                 detail=detail,
+                response=answer.get("response") if answered else None,
+                response_reason=answer.get("reason") if answered else None,
+                answered_by=answer.get("amendment") if answered else None,
             )
         )
     return out
@@ -572,19 +594,30 @@ async def mark_reviewed(
     """Mark amendments reviewed: the named ids, or every not-reviewed one when `ids` is None.
 
     Returns the ids newly marked. An id the document does not hold is refused (404), so a typo is
-    not a silent no-op.
+    not a silent no-op. **A `cannot_satisfy` report is not marked, it is answered** (F700): naming
+    one is refused 409 `report_needs_response`, and marking the whole document leaves reports as
+    they are -- "reviewed" changed nothing for a report, which is the finding.
     """
     from . import spec_lifecycle
 
     amendments = await list_amendments(session, document)
     known = {a.id: a for a in amendments}
     if ids is None:
-        wanted = [a.id for a in amendments if not a.reviewed]
+        wanted = [a.id for a in amendments if not a.reviewed and a.op != CANNOT_SATISFY]
     else:
         missing = [i for i in ids if i not in known]
         if missing:
             raise AmendmentRefused(
                 f"this document has no amendment {missing[0]}", code="unknown_amendment", status=404
+            )
+        reports = [i for i in ids if known[i].op == CANNOT_SATISFY and not known[i].reviewed]
+        if reports:
+            raise AmendmentRefused(
+                f"{reports[0]} is a cannot-satisfy report: answer it rather than mark it reviewed "
+                f"(POST .../documents/{document.path}/amendments/{reports[0]}/respond with "
+                "response amend, accept or reject)",
+                code="report_needs_response",
+                status=409,
             )
         wanted = [i for i in ids if not known[i].reviewed]
     if wanted:
@@ -626,3 +659,229 @@ async def counts(session: AsyncSession, document_ids: Iterable[str]) -> Dict[str
         if (event.detail or {}).get("id") not in reviewed:
             entry["unreviewed"] += 1
     return out
+
+
+async def respond_to_report(
+    session: AsyncSession,
+    workspace: Any,
+    document: SpecDocument,
+    report_id: str,
+    *,
+    response: Any,
+    reason: Any,
+    change: Optional[Dict[str, Any]],
+    actor: Any,
+) -> Dict[str, Any]:
+    """The operator's answer to a `cannot_satisfy` report (F700). The caller commits.
+
+    * ``amend`` changes the reported criterion with `change` (a `change_criterion` amendment by the
+      operator, naming the report, born reviewed), refreshes the open tasks serving it, and unblocks
+      the reported task.
+    * ``accept`` leaves the criterion as written and unblocks the task.
+    * ``reject`` needs a reason and leaves the task blocked.
+
+    Every answer marks the report reviewed with the response, and is sent to the reporter as input
+    (the returned `note`, queued by `queue_note_to_reporter` once committed).
+    """
+    from . import spec_documents, spec_identity, spec_lifecycle, spec_service, spec_tasks
+    from .spec_payload import PayloadError, validate_payload
+
+    if actor.kind != "operator":
+        raise AmendmentRefused(
+            "answering a cannot-satisfy report is the operator's", code="not_operator", status=403
+        )
+    if response not in RESPONSES:
+        raise AmendmentRefused(
+            f"response must be one of {', '.join(RESPONSES)}",
+            code="unknown_response",
+            field="response",
+        )
+    amendments = {a.id: a for a in await list_amendments(session, document)}
+    report = amendments.get(report_id)
+    if report is None:
+        raise AmendmentRefused(
+            f"this document has no amendment {report_id}", code="unknown_amendment", status=404
+        )
+    if report.op != CANNOT_SATISFY:
+        raise AmendmentRefused(
+            f"{report_id} is a {report.op} amendment, not a cannot-satisfy report; mark it "
+            "reviewed instead",
+            code="not_a_report",
+        )
+    if report.reviewed:
+        raise AmendmentRefused(
+            f"{report_id} was already answered"
+            + (f" ({report.response})" if report.response else "")
+            + f" by {report.reviewed_by or 'the operator'}",
+            code="report_answered",
+            status=409,
+        )
+    reason_text = _text(reason, "reason", required=False)
+    if response == "reject" and not reason_text:
+        raise AmendmentRefused(
+            "a rejection needs a reason: it is what the reporter reads to try again",
+            code="response_needs_reason",
+            field="reason",
+        )
+
+    produced: Optional[str] = None
+    criterion_now: Optional[Dict[str, Any]] = None
+    if response == "amend":
+        if document.phase != spec_lifecycle.APPROVED:
+            raise AmendmentRefused(
+                f"{document.path} is {document.phase}; only an approved document is amended",
+                code="amend_not_approved",
+                status=409,
+            )
+        content = spec_documents.read_document(workspace, document.path)
+        stored_before = spec_documents.parse_stored(content)
+        if not isinstance(stored_before, dict):
+            raise AmendmentRefused(
+                "this document has no readable payload", code="payload_unreadable", status=409
+            )
+        current = {k: v for k, v in stored_before.items() if k != spec_identity.IDENTITY_FIELD}
+        new_payload, target, req_key, detail = apply(
+            current, CHANGE_CRITERION, criterion=report.target, change=change
+        )
+        try:
+            payload = validate_payload(new_payload)
+        except PayloadError as exc:
+            raise AmendmentRefused(str(exc), code="payload_invalid", field=exc.field) from exc
+        produced = f"amd-{short_id()}"
+        result = await spec_service._apply_and_write(
+            session,
+            workspace,
+            document,
+            payload,
+            stored_before,
+            content,
+            actor=actor,
+            extra_detail={"amendment": produced},
+        )
+        await spec_lifecycle.record_event(
+            session,
+            document,
+            kind=EVENT,
+            actor=actor,
+            detail={
+                "id": produced,
+                "op": CHANGE_CRITERION,
+                "target": target,
+                "requirement": req_key,
+                "identifier": result.identifiers.get(req_key) if req_key else None,
+                "reason": reason_text or f"answers the cannot-satisfy report {report_id}",
+                "how_to_check": "",
+                "responds_to": report_id,
+                **detail,
+            },
+        )
+        criterion_now = next(
+            (
+                c
+                for c in new_payload.get("acceptance_criteria") or []
+                if isinstance(c, dict) and c.get("key") == target
+            ),
+            None,
+        )
+
+    await spec_lifecycle.record_event(
+        session,
+        document,
+        kind=REVIEWED_EVENT,
+        actor=actor,
+        detail={
+            "ids": [report_id] + ([produced] if produced else []),
+            "report": report_id,
+            "response": RESPONSES[response],
+            "reason": reason_text,
+            "amendment": produced,
+        },
+    )
+    if produced:
+        # The criterion moved: the open tasks serving it carry it again (F699's rule, as `amend`).
+        stored_after = spec_documents.read_payload(workspace, document.path)
+        await spec_tasks.materialise(session, document, stored_after, actor=actor)
+
+    task_id = report.detail.get("task_id")
+    unblocked = False
+    if response in ("amend", "accept") and task_id:
+        unblocked = await _unblock(session, task_id)
+
+    return {
+        "id": report_id,
+        "response": RESPONSES[response],
+        "amendment": produced,
+        "task_id": task_id,
+        "task_unblocked": unblocked,
+        "note": _note_to_reporter(report, RESPONSES[response], reason_text, criterion_now),
+        "reporter": report.author,
+    }
+
+
+async def _unblock(session: AsyncSession, task_id: str) -> bool:
+    """Resume the reported task, as an answered question does; silent when it has moved on."""
+    from .run_task_binding import release_reason
+    from .task_transition_service import TransitionRefusedError, apply_transition
+    from .task_transitions import STATUS_BLOCKED, operator
+
+    task = await session.get(Task, task_id)
+    if task is None or task.status != STATUS_BLOCKED:
+        return False
+    try:
+        await apply_transition(session, task, "in_progress", operator())
+    except TransitionRefusedError:
+        return False
+    release_reason(task)
+    return True
+
+
+def _note_to_reporter(
+    report: Amendment, response: str, reason: str, criterion: Optional[Dict[str, Any]]
+) -> str:
+    """What the reporter is told: the answer, why, and what to do next."""
+    head = f"The operator answered your report that criterion {report.target} cannot be satisfied"
+    task = report.detail.get("task_id")
+    on = f" (task {task})" if task else ""
+    why = f" Their reason: {reason}" if reason else ""
+    if response == "amended":
+        fields = ", ".join(
+            f"{field}: {criterion[field]}"
+            for field in CRITERION_FIELDS
+            if criterion and criterion.get(field)
+        )
+        return (
+            f"{head}{on}: they amended it. It now reads -- {fields}.{why} The task is unblocked; "
+            "continue the work against the criterion as it now reads."
+        )
+    if response == "accepted":
+        return (
+            f"{head}{on}: they accepted the report and left the criterion as written.{why} The "
+            "task is unblocked; continue the work."
+        )
+    return (
+        f"{head}{on}: they rejected the report, so the criterion stands as written and the task "
+        f"stays blocked.{why} Try again with that in mind, or report back what still stands in "
+        "the way."
+    )
+
+
+async def queue_note_to_reporter(session: AsyncSession, project_id: str, agent: str, note: str):
+    """Queue *note* for *agent* as operator input in its open conversation; the caller commits and
+    then schedules (`turn_scheduler.schedule_accepted`). Returns the entry."""
+    from .conversations import latest_open_conversation, new_conversation
+    from .inbound_queue import new_entry
+
+    conversation = await latest_open_conversation(session, project_id=project_id, agent=agent)
+    if conversation is None:
+        conversation = new_conversation(project_id=project_id, agent=agent, origin="operator")
+        session.add(conversation)
+    entry = new_entry(
+        project_id=project_id,
+        agent=agent,
+        origin_type="operator",
+        content=note,
+        hop_depth=0,
+        conversation_id=conversation.id,
+    )
+    session.add(entry)
+    return entry

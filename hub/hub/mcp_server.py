@@ -5065,6 +5065,11 @@ def decide_evidence(
     **You cannot decide evidence you produced yourself.** Another agent, or the operator, decides
     on yours.
 
+    **Only evidence still `awaiting`.** A piece already accepted or rejected is refused with
+    `already_decided` (HTTP 409): only the operator overturns a decision. Evidence recorded for an
+    earlier wording of its requirement cannot be accepted (`evidence_stale`, 409); reject it, or
+    leave it for its author to record again.
+
     **A decision waits for the run that recorded the evidence.** While that run is still running its
     commit is about to be replaced, so the Hub refuses with `recording_run_live` (HTTP 409). Decide
     after the run has ended; the Hub sends you a note in this conversation when it does.

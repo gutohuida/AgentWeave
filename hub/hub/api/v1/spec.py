@@ -647,6 +647,13 @@ class EvidenceDecision(RequestModel):
     reason: str = Field(default="", max_length=10000)
 
 
+class EvidenceOverturn(RequestModel):
+    """The operator reversing a decided piece (F692). The decision is the opposite of the current
+    one, so only the reason is sent, and it is required."""
+
+    reason: str = Field(default="", max_length=10000)
+
+
 class DriftResolution(RequestModel):
     resolution: str = Field(max_length=32)
 
@@ -1031,6 +1038,15 @@ class AmendmentReviewRequest(RequestModel):
     ids: Optional[List[str]] = None
 
 
+class ReportResponse(RequestModel):
+    """The operator's answer to a cannot-satisfy report (F700): `amend` with the criterion fields
+    to change, `accept`, or `reject` with a reason."""
+
+    response: str = Field(max_length=16)
+    reason: str = Field(default="", max_length=2000)
+    change: Optional[Dict[str, Any]] = None
+
+
 @router.get("/documents/{path:path}/amendments")
 async def list_amendments(
     path: str,
@@ -1076,6 +1092,59 @@ async def review_amendments(
     )
     return {
         "marked": marked,
+        "amendments": [
+            amendment.to_dict()
+            for amendment in await spec_amendments.list_amendments(session, document)
+        ],
+    }
+
+
+@router.post("/documents/{path:path}/amendments/{amendment_id}/respond")
+async def respond_to_report(
+    path: str,
+    amendment_id: str,
+    body: ReportResponse,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator's answer to a cannot-satisfy report (F700): amend the criterion, accept the
+    report, or reject it. Each answer does something, is recorded on the report, and is sent to the
+    reporter as input."""
+    from ... import spec_amendments
+    from ...turn_scheduler import schedule_accepted
+
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    try:
+        answer = await spec_amendments.respond_to_report(
+            session,
+            workspace,
+            document,
+            amendment_id,
+            response=body.response,
+            reason=body.reason,
+            change=body.change,
+            actor=_operator(),
+        )
+    except spec_amendments.AmendmentRefused as exc:
+        detail: Dict[str, Any] = {"message": str(exc), "code": exc.code}
+        if exc.field:
+            detail["field"] = exc.field
+        raise HTTPException(status_code=exc.status, detail=detail) from exc
+    reporter = answer.pop("reporter")
+    note = answer.pop("note")
+    await spec_amendments.queue_note_to_reporter(session, project_id, reporter, note)
+    document_path, phase = document.path, document.phase
+    await session.commit()
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": document_path, "phase": phase})
+    if answer.get("task_id"):
+        await sse_manager.broadcast(project_id, "task_updated", {"id": answer["task_id"]})
+    # The note is committed: a failed start is logged and retried by the Hub, never this answer's
+    # failure (`schedule_accepted`).
+    await schedule_accepted(project_id, reporter)
+    return {
+        **answer,
         "amendments": [
             amendment.to_dict()
             for amendment in await spec_amendments.list_amendments(session, document)
@@ -1616,31 +1685,63 @@ async def list_evidence(
 
 async def _reopen_an_approved_task(
     session: AsyncSession, project_id: str, evidence_id: str, decision: str
-) -> None:
-    """Send an approved task back when the operator rejects a piece of its evidence (vis-D1).
+) -> Optional[Dict[str, Any]]:
+    """Send an approved task back when the operator rejects a piece of its evidence (vis-D1), and
+    say what happened to it: ``None`` when no approved task was concerned, else ``{"task",
+    "reopened"}`` with a ``reason`` when it was not reopened.
 
     Read fresh: the integration above may have rolled back and expired every loaded row. The
-    rejection has committed either way; a refused reopen is logged, never raised, because the
+    rejection has committed either way; a refused reopen is reported, never raised, because the
     operator's judgement about the evidence stands whatever the task's state allows.
+
+    **An archived document keeps its task approved** (F730 item 8): archived has no way back, so a
+    reopened task would be work against a specification that can no longer change. The rejection
+    stands as the record; the task is left where it is, and the answer says why.
     """
     from ...task_transition_service import TransitionRefusedError, apply_transition
 
     if decision != requirement_evidence.REJECTED:
-        return
+        return None
     evidence = await session.get(RequirementEvidence, evidence_id)
     task = await session.get(Task, evidence.task_id) if evidence and evidence.task_id else None
     if task is None or task.project_id != project_id or task.status != "approved":
-        return
+        return None
+    task_id = task.id
+    requirement = await session.get(SpecRequirement, evidence.requirement_id)
+    document_ids = [
+        document_id
+        for document_id in (
+            requirement.document_id if requirement is not None else None,
+            task.spec_document_id,
+        )
+        if document_id
+    ]
+    for document_id in dict.fromkeys(document_ids):
+        document = await session.get(SpecDocument, document_id)
+        if document is not None and document.phase == spec_lifecycle.ARCHIVED:
+            return {
+                "task": task_id,
+                "reopened": False,
+                "reason": (
+                    f"{document.path} is archived and cannot reopen, so {task_id} stays approved; "
+                    "the rejection is kept as the record. To redo the work, write a new change."
+                ),
+            }
     try:
         await apply_transition(session, task, "revision_needed", task_transitions.operator())
         await session.commit()
-    except TransitionRefusedError:
+    except TransitionRefusedError as exc:
         await session.rollback()
         logging.getLogger(__name__).warning(
-            "rejecting %s could not reopen task %s", evidence_id, task.id, exc_info=True
+            "rejecting %s could not reopen task %s", evidence_id, task_id, exc_info=True
         )
-        return
-    await sse_manager.broadcast(project_id, "task_updated", {"id": task.id, "status": task.status})
+        return {
+            "task": task_id,
+            "reopened": False,
+            "reason": f"{task_id} could not be reopened: {exc}",
+        }
+    await sse_manager.broadcast(project_id, "task_updated", {"id": task_id, "status": task.status})
+    return {"task": task_id, "reopened": True}
 
 
 async def _decision_announcement(session: AsyncSession, evidence) -> Dict[str, Any]:
@@ -1661,17 +1762,62 @@ async def decide_evidence(
 ):
     """The operator accepting or rejecting. An agent uses its own plane, and cannot reach this."""
     project_id, _ = project
+    evidence = await _operator_evidence(session, project_id, evidence_id)
+    return await _operator_decides(session, project_id, evidence, body.decision, body.reason)
+
+
+@router.post("/spec/evidence/{evidence_id}/overturn")
+async def overturn_evidence(
+    evidence_id: str,
+    body: EvidenceOverturn,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator reversing a decided piece, with a reason (F692): an accepted piece becomes
+    rejected and a rejected one accepted, with a first decision's consequences. 409 `not_decided`
+    for a piece still awaiting, 422 `overturn_needs_reason` with no reason, and 409
+    `evidence_stale` for accepting evidence recorded for an earlier wording."""
+    project_id, _ = project
+    evidence = await _operator_evidence(session, project_id, evidence_id)
+    current = evidence.review_state
+    if current not in (requirement_evidence.ACCEPTED, requirement_evidence.REJECTED):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": f"{evidence.id} is {current}, not decided; accept or reject it instead",
+                "code": "not_decided",
+            },
+        )
+    opposite = (
+        requirement_evidence.REJECTED
+        if current == requirement_evidence.ACCEPTED
+        else requirement_evidence.ACCEPTED
+    )
+    view = await _operator_decides(session, project_id, evidence, opposite, body.reason)
+    view["overturned"] = {"from": current}
+    return view
+
+
+async def _operator_evidence(session: AsyncSession, project_id: str, evidence_id: str):
     evidence = await session.get(RequirementEvidence, evidence_id)
     if evidence is None or evidence.project_id != project_id:
         raise HTTPException(status_code=404, detail="Evidence not found")
+    return evidence
+
+
+async def _operator_decides(
+    session: AsyncSession, project_id: str, evidence, decision: str, reason: str
+) -> Dict[str, Any]:
+    """One operator decision and everything it causes, for the decision and overturn routes."""
+    evidence_id = evidence.id
     # F621: a review this decision may release, asked before it is made.
     held_review = await run_divergence.held_review_before_a_decision(session, evidence)
     try:
         review = await requirement_evidence.decide(
             session,
             evidence,
-            decision=body.decision,
-            reason=body.reason,
+            decision=decision,
+            reason=reason,
             actor=spec_lifecycle.Actor(kind="operator", name="operator"),
         )
     except requirement_evidence.EvidenceRefusedError as exc:
@@ -1700,7 +1846,10 @@ async def decide_evidence(
     await run_divergence.release_held_review(session, held_review)
     # vis-D1: the operator left the evidence gate and kept the last word. Rejecting a piece whose
     # task an agent's verdict approved reopens that task (`operator-overturns`).
-    await _reopen_an_approved_task(session, project_id, evidence_id, body.decision)
+    reopen = await _reopen_an_approved_task(session, project_id, evidence_id, decision)
+    if reopen is not None:
+        # F730 item 8: what the rejection did to the approved task, said rather than left implied.
+        view["task_reopen"] = reopen
     # After the integration, so a view refetching on it sees any merge the decision caused.
     await sse_manager.broadcast(project_id, "spec_updated", announced)
     return view
@@ -3041,7 +3190,7 @@ async def set_phase(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     try:
-        await spec_lifecycle.transition(
+        phase_event = await spec_lifecycle.transition(
             session,
             document,
             to_phase=to,
@@ -3064,6 +3213,8 @@ async def set_phase(
         if exc.warnings:
             detail["warnings"] = exc.warnings
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+
+    phase_notes = list((phase_event.detail or {}).get("notes") or [])
 
     # Approval is what turns a decomposition from a description into work: the board is
     # materialised, the delivery's flow is created, and what both did is recorded. Neither can undo
@@ -3147,6 +3298,10 @@ async def set_phase(
     }
     if report is not None:
         response["approval_outcome"] = report
+    # F704: what approval told and did not gate on (an unclaimed roadmap slice). Read from the
+    # values captured before the commit's expiry, as every other field here is.
+    if phase_notes:
+        response["approval_notes"] = phase_notes
     if body.draft_next_slice and document.phase == "approved":
         # After the commit: the approval stands whatever happens here, and the response says it.
         response["next_slice"] = await slice_drafting.request_next_slice(

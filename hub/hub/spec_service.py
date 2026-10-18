@@ -1429,7 +1429,8 @@ async def _unclaimed_slices(
     session: AsyncSession, workspace: ProjectWorkspace, project_id: str, payload: SpecPayload
 ) -> List[spec_completeness.Finding]:
     """A change document naming no slice, while an approved roadmap has slices nobody claims
-    (F674): a gap, never a refusal, since a change that is no slice approves straight over it."""
+    (F674): a note (`NOTE_CODES`), neither a refusal nor a gap. A change that is no slice has no way
+    to answer it, so as a gap it made every unrelated approval need Approve anyway (F704)."""
     if payload.kind != "change-spec" or payload.roadmap is not None:
         return []
     roadmaps = (
@@ -1469,13 +1470,21 @@ async def _unclaimed_slices(
     return findings
 
 
+#: Findings that are told and never gate (F704, "warn, don't gate"): neither a refusal nor a gap the
+#: operator must approve over. A proposal returns them among its warnings; an approval records them
+#: as the phase event's `notes` and answers them as `approval_notes`.
+NOTE_CODES = frozenset({"roadmap_slice_unclaimed"})
+
+
 @dataclass(frozen=True)
 class PhaseFindings:
-    """What a move to proposed or approved finds: refusals, which nothing passes, and gaps, which
-    the operator may approve over (approve-lists-what-is-missing-and-can-approve-anyway, FR-2/3)."""
+    """What a move to proposed or approved finds: refusals, which nothing passes, gaps, which the
+    operator may approve over (approve-lists-what-is-missing-and-can-approve-anyway, FR-2/3), and
+    notes, which gate nothing (`NOTE_CODES`)."""
 
     refusals: List[Dict[str, Any]]
     gaps: List[Dict[str, Any]]
+    notes: List[Dict[str, Any]] = field(default_factory=list)
 
 
 async def _completeness(
@@ -1627,7 +1636,11 @@ async def phase_findings(
         *await _vault_warnings(session, workspace, document),
     ]
     refusals, gaps = spec_completeness.split(findings)
-    return PhaseFindings([f.to_dict() for f in refusals], [f.to_dict() for f in gaps])
+    return PhaseFindings(
+        [f.to_dict() for f in refusals],
+        [f.to_dict() for f in gaps if f.code not in NOTE_CODES],
+        [f.to_dict() for f in gaps if f.code in NOTE_CODES],
+    )
 
 
 async def propose(

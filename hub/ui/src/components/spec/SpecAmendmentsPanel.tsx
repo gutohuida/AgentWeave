@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { readableApiError } from '@/api/client'
 import { hubDate } from '@/lib/hubTime'
 import {
+  useRespondToReport,
   useReviewSpecAmendments,
   useSpecAmendments,
   useSpecDocuments,
@@ -71,6 +73,7 @@ export function SpecAmendmentsPanel({ path }: { path: string }) {
         {amendments.map((amendment) => (
           <AmendmentRow
             key={amendment.id}
+            path={path}
             amendment={amendment}
             busy={review.isPending}
             onReview={() => review.mutate({ path, ids: [amendment.id] })}
@@ -81,16 +84,26 @@ export function SpecAmendmentsPanel({ path }: { path: string }) {
   )
 }
 
+const RESPONSE_LABEL: Record<string, string> = {
+  amended: 'Answered: criterion amended',
+  accepted: 'Answered: report accepted',
+  rejected: 'Answered: report rejected',
+}
+
 function AmendmentRow({
+  path,
   amendment,
   busy,
   onReview,
 }: {
+  path: string
   amendment: SpecAmendment
   busy: boolean
   onReview: () => void
 }) {
   const at = hubDate(amendment.created_at)
+  // F700: a cannot-satisfy report is answered, not marked reviewed.
+  const report = amendment.op === 'cannot_satisfy'
   return (
     <li
       data-testid={`spec-amendment-${amendment.id}`}
@@ -115,9 +128,10 @@ function AmendmentRow({
         <div className="flex-1" />
         {amendment.reviewed ? (
           <span style={{ color: 'var(--text-3)' }}>
-            Reviewed{amendment.reviewed_by ? ` by ${amendment.reviewed_by}` : ''}
+            {(amendment.response && RESPONSE_LABEL[amendment.response]) || 'Reviewed'}
+            {amendment.reviewed_by ? ` by ${amendment.reviewed_by}` : ''}
           </span>
-        ) : (
+        ) : report ? null : (
           <Button variant="primary" size="xs" disabled={busy} onClick={onReview}>
             Mark reviewed
           </Button>
@@ -129,11 +143,116 @@ function AmendmentRow({
           How to check: <code>{amendment.how_to_check}</code>
         </span>
       )}
+      {amendment.response_reason && (
+        <span style={{ color: 'var(--text-3)' }}>Answer: {amendment.response_reason}</span>
+      )}
+      {report && !amendment.reviewed && <ReportAnswer path={path} amendment={amendment} />}
       {amendment.relaxing && !amendment.reviewed && (
         <span style={{ color: 'var(--amber)' }}>
           {amendment.identifier ?? 'Its requirement'} cannot be verified until you review this.
         </span>
       )}
     </li>
+  )
+}
+
+/** The three answers to a cannot-satisfy report (F700), each of which does something. */
+function ReportAnswer({ path, amendment }: { path: string; amendment: SpecAmendment }) {
+  const respond = useRespondToReport()
+  const before = (amendment.before ?? {}) as Record<string, string>
+  const [mode, setMode] = useState<'amend' | 'reject' | null>(null)
+  const [then, setThen] = useState(before.then ?? '')
+  const [howToCheck, setHowToCheck] = useState(before.how_to_check ?? '')
+  const [reason, setReason] = useState('')
+
+  function send(response: 'amend' | 'accept' | 'reject') {
+    const change: Record<string, string> = {}
+    if (response === 'amend') {
+      if (then.trim() && then.trim() !== (before.then ?? '')) change.then = then.trim()
+      if (howToCheck.trim() && howToCheck.trim() !== (before.how_to_check ?? ''))
+        change.how_to_check = howToCheck.trim()
+    }
+    respond.mutate(
+      {
+        path,
+        id: amendment.id,
+        response,
+        reason: reason.trim(),
+        ...(response === 'amend' ? { change } : {}),
+      },
+      { onSuccess: () => setMode(null) },
+    )
+  }
+
+  const amendReady = then.trim() !== (before.then ?? '') || howToCheck.trim() !== (before.how_to_check ?? '')
+  return (
+    <div className="flex flex-col gap-1" data-testid={`report-answer-${amendment.id}`}>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button variant="ghost" size="xs" disabled={respond.isPending} onClick={() => setMode('amend')}>
+          Amend criterion…
+        </Button>
+        <Button variant="primary" size="xs" disabled={respond.isPending} onClick={() => send('accept')}>
+          Accept and unblock
+        </Button>
+        <Button variant="ghost" size="xs" disabled={respond.isPending} onClick={() => setMode('reject')}>
+          Reject…
+        </Button>
+      </div>
+      {mode === 'amend' && (
+        <div className="flex flex-col gap-1">
+          <label className="flex flex-col gap-0.5">
+            <span>Then</span>
+            <input aria-label="Criterion then" value={then} onChange={(e) => setThen(e.target.value)} />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span>How to check</span>
+            <input
+              aria-label="Criterion how to check"
+              value={howToCheck}
+              onChange={(e) => setHowToCheck(e.target.value)}
+            />
+          </label>
+          <input
+            aria-label="Reason for the amendment"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="why (optional)"
+          />
+          <div>
+            <Button
+              variant="primary"
+              size="xs"
+              disabled={respond.isPending || !amendReady}
+              onClick={() => send('amend')}
+            >
+              Amend and unblock
+            </Button>
+          </div>
+        </div>
+      )}
+      {mode === 'reject' && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <input
+            aria-label="Reason for rejecting the report"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="what the reporter should try"
+          />
+          <Button
+            variant="primary"
+            size="xs"
+            disabled={respond.isPending || reason.trim() === ''}
+            onClick={() => send('reject')}
+          >
+            Reject and tell the reporter
+          </Button>
+        </div>
+      )}
+      {respond.isError && (
+        <span role="alert" style={{ color: 'var(--red)' }}>
+          {readableApiError(respond.error, 'The Hub refused this answer.')}
+        </span>
+      )}
+    </div>
   )
 }

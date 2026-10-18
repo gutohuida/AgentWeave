@@ -412,6 +412,13 @@ export interface EvidencePiece {
   for_current_wording?: boolean | null
 }
 
+/** A decision's answer: the piece, plus what it did to an approved task (F730 item 8) and, for an
+ *  overturn, the decision it reversed (F692). */
+export interface EvidenceDecisionResult extends EvidencePiece {
+  task_reopen?: { task: string; reopened: boolean; reason?: string }
+  overturned?: { from: string }
+}
+
 /** A piece recorded for words the requirement no longer says (F691). */
 export function forEarlierWording(piece: Pick<EvidencePiece, 'for_current_wording'>): boolean {
   return piece.for_current_wording === false
@@ -504,22 +511,39 @@ export function useDecideEvidence(path: string, identifier: string) {
       decision: 'accepted' | 'rejected'
       reason: string
     }) =>
-      postJson<EvidencePiece>(`/api/v1/projects/${projectId}/project/spec/evidence/${id}/decision`, {
-        decision,
-        reason,
-      }),
-    onSuccess: () => {
-      // Accepting can merge a commit for a waiting task, so the task-scoped keys move too
-      // (`task` covers integrations/transitions/preview, `tasks` the lists and boards).
-      for (const key of [
-        ['specCoverage'],
-        ['specEvidence', path, identifier],
-        ['task'],
-        ['tasks'],
-      ]) {
-        queryClient.invalidateQueries({ queryKey: ['project', projectId, ...key] })
-      }
-    },
+      postJson<EvidenceDecisionResult>(
+        `/api/v1/projects/${projectId}/project/spec/evidence/${id}/decision`,
+        { decision, reason },
+      ),
+    onSuccess: () => invalidateAfterDecision(queryClient, projectId, path, identifier),
+  })
+}
+
+function invalidateAfterDecision(
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectId: string | null,
+  path: string,
+  identifier: string,
+) {
+  // Accepting can merge a commit for a waiting task, and rejecting can reopen an approved one, so
+  // the task-scoped keys move too (`task` covers integrations/transitions/preview, `tasks` the
+  // lists and boards).
+  for (const key of [['specCoverage'], ['specEvidence', path, identifier], ['task'], ['tasks']]) {
+    queryClient.invalidateQueries({ queryKey: ['project', projectId, ...key] })
+  }
+}
+
+/** The operator reversing a decided piece, with a required reason (F692). */
+export function useOverturnEvidence(path: string, identifier: string) {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      postJson<EvidenceDecisionResult>(
+        `/api/v1/projects/${projectId}/project/spec/evidence/${id}/overturn`,
+        { reason },
+      ),
+    onSuccess: () => invalidateAfterDecision(queryClient, projectId, path, identifier),
   })
 }
 
@@ -852,6 +876,13 @@ export interface SpecAmendment {
   relaxing: boolean
   change: Record<string, unknown> | null
   before: Record<string, unknown> | null
+  /** F700: how a cannot-satisfy report was answered, why, and the amendment an `amended` answer
+   *  produced. Absent from a Hub before F700. */
+  response?: 'amended' | 'accepted' | 'rejected' | null
+  response_reason?: string | null
+  answered_by?: string | null
+  /** The report an operator's amendment answers. */
+  responds_to?: string | null
 }
 
 export function useSpecAmendments(path: string | null, enabled = true) {
@@ -875,6 +906,27 @@ export function useReviewSpecAmendments() {
         `/api/v1/projects/${projectId}/project/documents/${path}/amendments/review`,
         ids ? { ids } : {},
       ),
+  )
+}
+
+/** The operator's answer to a cannot-satisfy report (F700): amend the criterion, accept the
+ *  report (the task resumes), or reject it with a reason (the task stays blocked). */
+export function useRespondToReport() {
+  return useSpecMutation<
+    {
+      path: string
+      id: string
+      response: 'amend' | 'accept' | 'reject'
+      reason: string
+      change?: Record<string, string>
+    },
+    { response: string; task_unblocked: boolean }
+  >((projectId, { path, id, response, reason, change }) =>
+    postJson(`/api/v1/projects/${projectId}/project/documents/${path}/amendments/${id}/respond`, {
+      response,
+      reason,
+      ...(change ? { change } : {}),
+    }),
   )
 }
 
@@ -1009,6 +1061,8 @@ export function useSetSpecPhase() {
         SpecDocumentRecord & {
           approval_outcome?: SpecApprovalOutcome
           next_slice?: SpecNextSliceOutcome
+          /** F704: what approval told and did not gate on (an unclaimed roadmap slice). */
+          approval_notes?: SpecBlockingFinding[]
         }
       >(
         `/api/v1/projects/${projectId}/project/documents/phase?path=${encodeURIComponent(path)}&to=${encodeURIComponent(to)}`,
