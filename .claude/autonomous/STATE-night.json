@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 4,
+  "iteration": 5,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "flow-stages-spike",
-  "next_action": "Do queue item flow-stages-spike: brief in spec-queue/APPROVALS.md '## 2026-10-18' and the hook points in part 1 of spec-queue/research/2026-10-18-editable-flow-stages.md. Throwaway tracer in a git worktree on branch spike/2026-10-18-flow-stages (push it, never merge, no PR, never on the cycle branch); scratch Hub on 8110+, every agent turn claude-haiku-4-5; drive dev->test, dev only, dev->security->test. Write part 2 of the research file on the cycle branch. This is firing 1 of at most 2. Then flow-stages-spec, then F739-impl.",
+  "current": "flow-stages-spec",
+  "next_action": "Do queue item flow-stages-spec: brief in spec-queue/APPROVALS.md '## 2026-10-18'; inputs are parts 1 and 2 of spec-queue/research/2026-10-18-editable-flow-stages.md (part 2 = the driven spike, five resistance points). One change document on trial Hub :8010 (proj-d85a82bf4216), phase exploring, never proposed or approved; options + recommendation per question, acceptance drive sketch, Tier 2 hazards. OPEN rows flow-1018-<n> in spec-queue/DECISIONS.md, their ids in decisions_for_user. If :8010 will not come up, write spec-queue/night-proposals/editable-flow-stages.md. Then F739-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -31,11 +31,11 @@
     },
     {
       "id": "flow-stages-spike",
-      "status": "open",
+      "status": "done",
       "model": "opus",
       "effort": "high",
       "title": "Spike: dev->test, dev only, dev->security->test driven with Haiku",
-      "detail": "Brief: spec-queue/APPROVALS.md ## 2026-10-18 (operator, ~23:00). Throwaway tracer in a git worktree on branch spike/2026-10-18-flow-stages (push it, never merge, never on the cycle branch). Scratch Hub 8110+, Haiku. Part 2 of the research file. Max two firings."
+      "detail": "done in one firing; tracer spike/2026-10-18-flow-stages@6a13a15; part 2 written; see log iteration 5"
     },
     {
       "id": "flow-stages-spec",

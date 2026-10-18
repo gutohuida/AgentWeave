@@ -220,3 +220,105 @@ These are the brief's seven, sharpened by the map:
 6. A stage field on `Task` with statuses unchanged (recommended by the map), or new statuses?
 7. Where is the editor: the project page beside Spec steps, the document's Delivery section, or
    both?
+
+## Part 2 - the spike (driven, not read)
+
+Tracer: branch `spike/2026-10-18-flow-stages` at `6a13a15` (pushed, never to be merged). About 80
+lines across `spec_payload.py`, `db/models.py`, `review_turn.py`, `task_transition_service.py` and
+`scheduler.py`, plus `hub/hub/flow_stages.py` and migration `0135`. The drive scripts and the
+transition log are in `testbed/spike-flow-stages/` on that branch. Hub test suite **not run** on the
+spike. It is a tracer, and which existing tests it breaks was not measured.
+
+### What the tracer does
+
+- `delivery.stages` on a change document: a list of `{key, agent, duty}`. Absent means today's
+  flow, untouched. `[]` means dev only.
+- `Task.stage_index` (new column) is the task's position in that list.
+- The current stage's `agent` is the declared reviewer (`_declared_reviewer_name`), and its `duty`
+  replaces the tester text in the review briefing ("This review is stage 1 of 2: `security`").
+- An agent's `approved` on a non-final stage does not approve. It advances the stage, writes
+  `under_review -> completed`, and skips the gate, the evidence decision and integration. The next
+  firing staffs the next stage like any finished task.
+- `revision_needed` from any stage goes back to the build author and restarts at stage 0.
+- `stages: []`: the next firing lands a `completed` task with the Land button's composition.
+
+### The drive
+
+Scratch Hub `:8110`, run from the worktree (with `AW_REPO_ROOT` set, which avoids F749). Four agents
+on `claude-haiku-4-5-20251001`: `dev` (Developer), `sec` (Security Engineer), `qa`, `rev` (Code
+Reviewer). One project, three change documents with one small task each, all approved at 23:13:40.
+
+| Variant | Stages declared | What happened | Reached master |
+|---|---|---|---|
+| a, `dev -> test` | none (`tester: qa`) | dev built (23:14:57), qa test-reviewed and approved (23:18:33). Unchanged behaviour. | yes, `a8d2c7f` |
+| b, `dev` only | `[]` | dev built (23:17:00), and the next firing landed it (23:18:03). No reviewer turn. | yes, `0997ace` |
+| c, `dev -> security -> test` | security: `sec`, test: `qa` | built by **qa** (23:15:27). sec sent it back with `revision_needed` (23:18:03). qa reworked it (23:20:04). sec approved, which advanced the task to stage 2 (23:21:04, `stage_index` 1, status `completed`). Stage 2 stalled: qa is the author. An operator hand-dispatched `rev`, which approved it, and the task landed. | yes, `6271eaa` (merges the reworked `6c1d159`, not the first `64ab55a`) |
+
+The scratch Hub logged no tracebacks.
+
+**The security stage earned its place on the first try.** sec found a real defect that the tests
+passed over. `safe_join` used `os.path.abspath`, so a symlink inside `base` escaped it. sec named
+the fix (`realpath`), qa applied it, and sec approved the second build. Measured once, with Haiku:
+an anecdote, not a rate.
+
+### Where the existing code resisted (each one is a design question the spec has to answer)
+
+1. **The status machine has no edge for "this stage passed, next stage".** The tracer rewrote an
+   agent's `approved` into `under_review -> completed` inside `apply_transition`, past
+   `TRANSITIONS`. The agent asked for `approved` and got back `completed`. Haiku accepted it ("approved,
+   with the task status showing as completed"), but the contract is now dishonest. The map's lean
+   held: no new statuses were needed, only a position field and a stage-advance edge. The edge
+   needs a name, a place in `TRANSITIONS`, and a tool result that says "passed stage 1 of 2".
+2. **Authorship is read from "the latest move into `completed`"** (`completion_attribution`,
+   `task_transition_service.py:190-207`). Without a filter, the security agent's stage advance would
+   make *it* the author. The test stage would then exclude the wrong agent, and a test-stage
+   `revision_needed` would go to sec instead of the builder. The tracer filters out
+   `from_status = 'under_review'`. Its wrapper `agent_that_completed` has seven callers (its docstring, `:216`), so
+   a real build must treat this as a contract change, not a one-line filter.
+3. **Build staffing does not know the stages.** dev was busy, so the flow gave c's build to the
+   first free pool agent: qa, the test-stage agent. Once qa was the author it could not test, and
+   stage 2 hit rung 1b (`review_unstaffed`): *"this task names 'qa' as its reviewer, and that agent
+   is the one that completed this task"*. The sentence says "reviewer", not "test stage". The
+   options:
+   - keep a stage's named agents out of the build pool;
+   - pin the build to `delivery.agent`;
+   - let a stage name a charter or a pool rather than one agent (the `security_engineer` charter
+     exists, and nothing staffs by it, part 1).
+4. **The operator's remedies are awkward.**
+   - Re-pointing the stage at another agent was refused: an approved document is immutable (`422
+     document_approved`), so changing it means reopening it.
+   - A hand-dispatched review (`review_task_id`) worked, but its briefing carried **no stage
+     line**. `rev` called itself the reviewer "ready for the next stage" when it was the last
+     stage. Its approval still landed correctly, because `stage_index` was already the last. Which
+     briefing path the hand dispatch takes was not traced: **unverified**.
+5. **There is no Hub actor.** The dev-only land is recorded as `actor_kind = operator` on both
+   edges, so the history says the operator approved work they never saw. It also runs inside
+   `decide_firing`, a decision function that now writes. A real build needs an actor kind for
+   "the flow, under its declared stages", and the land belongs in the dispatch.
+   - The gate still ran on the dev-only land. At `sketch` rigor it was silent. The repository
+     categories (merge, checks) still apply, which is presumably what the operator wants from
+     "quick and dirty": no agent review, but no broken merge either.
+6. **An operator approval skips the remaining stages.** The tracer advances only on an agent's
+   verdict, so Land at stage 1 merges at once. Whether the operator may jump stages is question 4.
+7. **Not exercised:**
+   - a test-stage `revision_needed` after security passed. Under the tracer that re-runs security
+     after the rework (reset to stage 0). Whether it should is question 4;
+   - evidence at `contract` or `gate` rigor across stages (the tracer decides evidence only at the
+     final approval);
+   - a `command` stage (`project_checks`);
+   - deploy.
+
+### What this hands to `flow-stages-spec`
+
+- **A stage = a named, review-shaped agent turn with its own duty** worked end to end with very
+  little code. The duty text alone was enough to turn a generic reviewer into a security reviewer
+  with a different verdict. Commands and deploy are separate kinds and can follow.
+- **`delivery.stages` on the document** was enough for per-flow configuration. Agents never had to
+  read it, because the Hub briefed them.
+- **The hard parts are the contracts, not the plumbing.** They are the stage-advance edge (1),
+  authorship (2), stage-aware build staffing (3), and an honest actor for an automatic land (5).
+  Each is Tier 2 material: the task-lifecycle contract, a migration, and the
+  `completion_attribution` callers.
+- **Removing `test` is cheap to build and expensive to explain.** It works in one firing, but the
+  history and the board have to say "landed without review" truthfully (question 3), and today
+  they cannot.
