@@ -36687,7 +36687,7 @@ F737's fingerprint runs once per turn launch (`runner_config_guard.hold_if_chang
 
 ## F749 (C) -- `e2e.py hub-up` from a worktree serves the main checkout's code
 
-**Status:** open 2026-10-18. Filed from the 2026-10-18 decision pass. One fix agent's first drive Hub served master's code without saying so.
+**Status:** fixed 2026-10-19 night (Tier 0), 353b67a. `REPO` in `e2e.py` now defaults to the checkout the script sits in (`parents[3]`), `hub-up` prints "serving the Hub from <path>" and refuses a tree with no `hub/hub/main.py`; `AW_REPO_ROOT` still wins. `tests/test_e2e_harness_repo_root.py` (3 tests; two red first). Driven: a real git worktree whose `hub/hub/main.py` carried a marker in `/health`; `hub-up` from it on :8131 answered with the marker, then `hub-down`. Filed from the 2026-10-18 decision pass. One fix agent's first drive Hub served master's code without saying so.
 **Source:** drive
 **Theme:** CLI & lifecycle
 

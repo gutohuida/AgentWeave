@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 10,
+  "iteration": 11,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F749-impl",
-  "next_action": "Do queue item F749-impl: F749 (C), `scripts/e2e.py hub-up` run from a worktree serves the main checkout's code. Tier 0: write the test that fails at the seam the finding names, fix, drive it (scratch Hub, never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F747-impl.",
+  "current": "F747-impl",
+  "next_action": "Do queue item F747-impl: F747 (C), a delete/modify merge conflict has no markers. Tier 0: write the test that fails at the seam the finding names, fix, drive it (scratch Hub, never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F746-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -72,9 +72,9 @@
     },
     {
       "id": "F749-impl",
-      "status": "open",
+      "status": "done",
       "title": "F749 (C): e2e.py hub-up from a worktree serves main checkout code",
-      "detail": "Test-first; fix; drive; Status."
+      "detail": "fixed 353b67a; see log iteration 11"
     },
     {
       "id": "F747-impl",

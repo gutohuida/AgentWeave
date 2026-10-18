@@ -2494,7 +2494,7 @@ disappears is indistinguishable from one that was forgotten.
 
 - **Removing a `node_modules` junction with `rm -rf` (or `Remove-Item -Recurse`) deletes the target's contents.** A fix agent's cleanup emptied the main checkout's `hub/ui/node_modules`. Remove a junction with `cmd //c rmdir <path>` (link only). Recovery: `cd hub/ui && npm ci` (about a minute).
 - **`py -3.11 -c "import hub"` inside a worktree imports the MAIN checkout's `hub`.** pytest run from the worktree root picks up the worktree's code. When it matters, set `PYTHONPATH=<worktree>/hub;<worktree>/src`.
-- **`.claude/skills/e2e-loop/e2e.py hub-up` from a worktree serves the main checkout's code**, because `REPO` defaults to the main checkout (line ~61). Set `AW_REPO_ROOT=<worktree>` first.
+- **(fixed F749, 2026-10-19)** `e2e.py hub-up` now serves the checkout the script sits in; it printed master's code from a worktree before. A stale copy of the script still needs `AW_REPO_ROOT=<worktree>`.
 
 ## 2026-10-18 -- the first full Hub suite after an `mcp_server.py` change can crash collection
 
