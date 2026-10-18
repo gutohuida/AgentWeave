@@ -68,3 +68,38 @@ def test_the_default_profiles_hint_is_unchanged():
     assert cli._hub_start_hint("default", None) == "agentweave"
     assert cli._hub_start_hint("default", 8000) == "agentweave"
     assert cli._hub_start_hint("default", 8010) == "agentweave --port 8010"
+
+
+def test_reset_of_a_named_profile_stops_the_hub_it_finds_on_that_profiles_port(
+    hub_home, monkeypatch
+):
+    """F738: a named profile's Hub writes `hub-<profile>-<port>.pid`, so `reset --profile X` looked
+    for `hub-X-8000.pid`, never saw the Hub on 8035, and deleted the data folder under it."""
+    tmp_path, _ = hub_home
+    data = tmp_path / "profiles" / "sweepdcli"
+    data.mkdir(parents=True)
+    (tmp_path / "hub-sweepdcli-8035.pid").write_text("4242\n8035", encoding="utf-8")
+    # A sibling profile whose name starts with ours, and the default profile's Hub: both are left.
+    (tmp_path / "hub-sweepdcli-b-8036.pid").write_text("4343\n8036", encoding="utf-8")
+    (tmp_path / "hub.pid").write_text("4444\n8000", encoding="utf-8")
+    killed = []
+    monkeypatch.setattr(
+        cli,
+        "_hub_pid_running",
+        lambda port=None, profile="default": (
+            {("sweepdcli", 8035): 4242, ("sweepdcli-b", 8036): 4343, ("default", None): 4444}.get(
+                (profile, port)
+            )
+        ),
+    )
+    monkeypatch.setattr(cli, "_hub_native_confirmed", lambda port: True)
+    monkeypatch.setattr(cli, "_hub_kill_pid", killed.append)
+    monkeypatch.setattr(cli, "_report_app_windows_closed", lambda port: None)
+
+    assert cli.main(["reset", "--profile", "sweepdcli", "--yes"]) == 0
+
+    assert killed == [4242]
+    assert not data.exists()
+    assert not (tmp_path / "hub-sweepdcli-8035.pid").exists()
+    assert (tmp_path / "hub-sweepdcli-b-8036.pid").exists()
+    assert (tmp_path / "hub.pid").exists()

@@ -36582,7 +36582,7 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F738 (B) -- `agentweave reset --profile X` cannot find X's running Hub, so it deletes the data folder from under it
 
-**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass (projects/CLI group), by reading the code; not driven.
+**Status:** fixed (this commit) 2026-10-18 (Tier 0): `reset --profile X` now stops every live Hub whose `hub-X-<port>.pid` it finds (`_hub_pid_files_of`, exact-name match so `a` does not claim `a-b`) before deleting the data folder. Test: tests/test_cli_named_profile_port_rule.py (red before the fix). Driven: a real Hub on a fresh profile at :8061, reset stopped PID and freed the port before the data dir went.
 **Source:** review
 **Theme:** CLI & lifecycle
 

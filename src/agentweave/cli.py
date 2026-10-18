@@ -8,12 +8,13 @@ import contextlib
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import __version__
 from .utils import load_dotenv, now_iso, print_error, print_info, print_success, print_warning
@@ -581,6 +582,24 @@ def _hub_pid_file(port: Optional[int] = None, profile: str = "default") -> Path:
     if port is None or port == DEFAULT_HUB_PORT:
         return HUB_DIR / "hub.pid"
     return HUB_DIR / f"hub-{port}.pid"
+
+
+def _hub_pid_files_of(profile: str) -> List[Tuple[Optional[int], Path]]:
+    """Every PID file that belongs to `profile`, as (port, path); the default profile has one.
+
+    A named profile's Hub runs on a port of its own (F723/F732) and records itself in
+    `hub-<profile>-<port>.pid`, so the port is only known from the filename (F738). The match is
+    exact, so profile `a` does not claim `a-b`'s `hub-a-b-8036.pid`.
+    """
+    if not profile or profile == "default":
+        return [(None, _hub_pid_file(profile=profile))]
+    pattern = re.compile(rf"^hub-{re.escape(profile)}-(\d+)\.pid$")
+    found = []
+    for path in HUB_DIR.glob("hub-*.pid"):
+        match = pattern.match(path.name)
+        if match:
+            found.append((int(match.group(1)), path))
+    return sorted(found)
 
 
 def _hub_pid_running(port: Optional[int] = None, profile: str = "default") -> Optional[int]:
@@ -1525,9 +1544,13 @@ def cmd_reset(args: argparse.Namespace) -> int:
     # profile, named or default, never inferred (`design.md` D6).
     data_dir = _hub_profile_data_dir(profile)
     env_path = HUB_DIR / ".env"
-    pid_file = _hub_pid_file(profile=profile)
+    pid_files = _hub_pid_files_of(profile)
 
-    if not data_dir.exists() and not env_path.exists() and not pid_file.exists():
+    if (
+        not data_dir.exists()
+        and not env_path.exists()
+        and not any(path.exists() for _, path in pid_files)
+    ):
         print_info("No Hub data found. Nothing to destroy.")
         return 0
 
@@ -1557,23 +1580,25 @@ def cmd_reset(args: argparse.Namespace) -> int:
             print_info("Destroy cancelled.")
             return 0
 
-    # Stop the Hub first if running
-    pid = _hub_pid_running(profile=profile)
-    if pid is not None:
-        # Read the recorded port so we can confirm identity before killing.
-        recorded_port: Optional[int] = None
-        with contextlib.suppress(OSError, ValueError, IndexError):
-            _content = pid_file.read_text().strip().splitlines()
-            recorded_port = int(_content[1]) if len(_content) > 1 else None
-        if recorded_port is not None and not _hub_native_confirmed(recorded_port):
-            # Alive PID but no Hub serving on the recorded port — likely a recycled
-            # PID owned by an unrelated process. Skip the kill; just clear the file.
-            print_info("No running native Hub found (stale PID file removed).")
-        else:
-            print_info(f"Stopping Hub (native, PID {pid}) before destroy...")
-            _hub_kill_pid(pid)
-            if recorded_port is not None:
-                _report_app_windows_closed(recorded_port)
+    # Stop the Hub first if running. A named profile's Hub may be on any port (F738), so every PID
+    # file of this profile is examined, not just the one at the default port.
+    for port, pid_file in pid_files:
+        pid = _hub_pid_running(port=port, profile=profile)
+        if pid is not None:
+            # Read the recorded port so we can confirm identity before killing.
+            recorded_port: Optional[int] = port
+            with contextlib.suppress(OSError, ValueError, IndexError):
+                _content = pid_file.read_text().strip().splitlines()
+                recorded_port = int(_content[1]) if len(_content) > 1 else port
+            if recorded_port is not None and not _hub_native_confirmed(recorded_port):
+                # Alive PID but no Hub serving on the recorded port — likely a recycled
+                # PID owned by an unrelated process. Skip the kill; just clear the file.
+                print_info("No running native Hub found (stale PID file removed).")
+            else:
+                print_info(f"Stopping Hub (native, PID {pid}) before destroy...")
+                _hub_kill_pid(pid)
+                if recorded_port is not None:
+                    _report_app_windows_closed(recorded_port)
         with contextlib.suppress(OSError):
             pid_file.unlink()
 
@@ -1581,10 +1606,6 @@ def cmd_reset(args: argparse.Namespace) -> int:
     if data_dir.exists():
         _shutil.rmtree(data_dir, ignore_errors=True)
         print_info(f"Deleted {data_dir}")
-
-    # Always clean up PID file
-    with contextlib.suppress(OSError):
-        pid_file.unlink()
 
     if destroy_all:
         if env_path.exists():

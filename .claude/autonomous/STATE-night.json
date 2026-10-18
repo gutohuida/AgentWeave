@@ -8,18 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "d7b552c",
     "stop_at": "2026-10-19T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-18-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F738-impl",
-    "next_action": "Do queue item F738-impl: failing test at the seam FINDINGS.md names for F738, fix, drive it, set its Status line, commit and push.",
+    "current": "F739-impl",
+    "next_action": "Do queue item F739-impl: failing test at the seam the F739 finding names (ContentSizeLimitMiddleware, hub/hub/main.py), fix, drive it, set its Status line, commit and push.",
     "queue": [
         {
             "id": "F738-impl",
-            "status": "open",
+            "status": "done",
             "title": "F738 (B): `agentweave reset --profile X` cannot find X's running Hub",
-            "detail": "Test-first at the seam the finding names in scripts/drive/FINDINGS.md; fix, drive, set Status line."
+            "detail": "fixed; see log iteration 2"
         },
         {
             "id": "F739-impl",
