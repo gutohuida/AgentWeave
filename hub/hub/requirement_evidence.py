@@ -1907,10 +1907,12 @@ async def resolve_drift(
     feature a nuisance within a day.
 
     **Answered once** (`drift-is-scanned-and-answered-on-the-document` D4, F430): a second answer is
-    refused 409 rather than overwriting the first. **Code corrected stores no fingerprint** (D8,
-    F436): its claim is that the code went back, so if the change is still there the next scan asks
-    again; the other two answers keep theirs, because "this change is fine" must stay silent and a
-    specification update is followed by a rewording, which drift already skips.
+    refused 409 rather than overwriting the first. **Only "no change required" stores a
+    fingerprint.** *Code corrected* (D8, F436) claims the code went back, so if the change is still
+    there the next scan asks again. *Specification updated* (F730 item 1) claims a rewording, and a
+    reworded requirement is skipped by the scan already (its evidence's digest no longer matches);
+    storing the fingerprint as well let the answer silence the drift with nothing reworded. "This
+    change is fine" alone must stay silent on the same change.
     """
     if actor.kind != "operator":
         raise EvidenceRefusedError(
@@ -1943,7 +1945,7 @@ async def resolve_drift(
     candidate.resolved_at = datetime.now(timezone.utc)
     candidate.resolved_digest = requirement.digest if requirement else candidate.digest
     candidate.resolved_fingerprint = (
-        None if resolution == "implementation_corrected" else candidate.observed
+        candidate.observed if resolution == "no_change_required" else None
     )
     return candidate
 

@@ -517,9 +517,10 @@ async def test_code_corrected_without_a_revert_asks_again(app, auth_headers, bui
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("resolution", ["no_change_required", "specification_updated"])
-async def test_the_other_answers_stay_answered(app, auth_headers, builder, tmp_path, resolution):
-    """1.14 (D8) control: *No change* and *Spec updated* keep their fingerprint."""
+async def test_the_other_answers_stay_answered(app, auth_headers, builder, tmp_path):
+    """1.14 (D8) control: *No change* keeps its fingerprint. *Spec updated* no longer does (F730
+    item 1): its claim is a rewording, which the tests below cover."""
+    resolution = "no_change_required"
     await _document(app, auth_headers, builder)
     (tmp_path / "ledger.py").write_text("one\n", encoding="utf-8")
     await _record(app, auth_headers)
@@ -545,4 +546,61 @@ async def test_code_corrected_and_reverted_raises_nothing(app, auth_headers, bui
         headers=auth_headers,
     )
     (tmp_path / "ledger.py").write_text("one\n", encoding="utf-8")
+    assert await _detect(app, auth_headers) == []
+
+
+@pytest.mark.asyncio
+async def test_specification_updated_without_a_rewording_asks_again(
+    app, auth_headers, builder, tmp_path
+):
+    """F730 item 1. FAILS before: *Spec updated* stored the fingerprint, so answering it without
+    rewording anything silenced that drift for good."""
+    await _document(app, auth_headers, builder)
+    (tmp_path / "ledger.py").write_text("one\n", encoding="utf-8")
+    await _record(app, auth_headers)
+    (tmp_path / "ledger.py").write_text("two\n", encoding="utf-8")
+    (raised,) = await _detect(app, auth_headers)
+    answered = await app.post(
+        f"{BASE}/spec/drift/{raised}/resolve",
+        json={"resolution": "specification_updated"},
+        headers=auth_headers,
+    )
+    assert answered.status_code == 200, answered.text
+    async with async_session_factory() as session:
+        assert (await session.get(RequirementDrift, raised)).resolved_fingerprint is None
+
+    (again,) = await _detect(app, auth_headers)
+    assert again != raised
+
+
+@pytest.mark.asyncio
+async def test_specification_updated_and_reworded_raises_nothing(
+    app, auth_headers, builder, tmp_path
+):
+    """F730 item 1 control: the rewording the answer claims is what silences the drift."""
+    await _document(app, auth_headers, builder)
+    (tmp_path / "ledger.py").write_text("one\n", encoding="utf-8")
+    await _record(app, auth_headers)
+    (tmp_path / "ledger.py").write_text("two\n", encoding="utf-8")
+    (raised,) = await _detect(app, auth_headers)
+    await app.post(
+        f"{BASE}/spec/drift/{raised}/resolve",
+        json={"resolution": "specification_updated"},
+        headers=auth_headers,
+    )
+    reworded = await app.post(
+        SUBMIT,
+        json={
+            "path": PATH,
+            "document": {
+                "schema_version": SCHEMA_VERSION,
+                "kind": "change-spec",
+                "title": "Drift demo",
+                "requirements": [{**ALPHA, "statement": "It lists what is due this week"}],
+            },
+        },
+        headers=builder,
+    )
+    assert reworded.status_code == 200, reworded.text
+
     assert await _detect(app, auth_headers) == []

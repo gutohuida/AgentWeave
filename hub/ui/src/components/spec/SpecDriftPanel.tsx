@@ -15,7 +15,8 @@ const ANSWERS: { resolution: DriftResolution; label: string; title: string }[] =
   {
     resolution: 'specification_updated',
     label: 'Spec updated',
-    title: 'The implementation is right; the specification has been changed to match it.',
+    title:
+      'The implementation is right; the specification has been changed to match it. The next scan asks again until the requirement is reworded.',
   },
   {
     resolution: 'implementation_corrected',
