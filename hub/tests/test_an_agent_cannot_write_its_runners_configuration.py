@@ -95,6 +95,19 @@ def test_a_powershell_command_naming_runner_configuration_is_refused(workspace):
     _refused_as_config(
         _decide(
             "PowerShell",
+            {"command": "Set-Content -Path .claude/settings.local.json -Value '{}'"},
+        )
+    )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="a drive-letter host reads `\\` as a separator")
+def test_a_backslashed_powershell_command_naming_runner_configuration_is_refused_on_windows(
+    workspace,
+):
+    """On POSIX `.claude\\settings.local.json` is one file name (`_SEPARATORS`, D9; F487)."""
+    _refused_as_config(
+        _decide(
+            "PowerShell",
             {"command": "Set-Content -Path .claude\\settings.local.json -Value '{}'"},
         )
     )
