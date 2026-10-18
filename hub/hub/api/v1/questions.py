@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import project_workspace
+from ... import project_workspace, refused_capability
 from ...auth import get_project
 from ...conversations import (
     conversation_id_for_run,
@@ -16,7 +16,7 @@ from ...conversations import (
     new_conversation,
 )
 from ...db.engine import get_session
-from ...db.models import Conversation, InboundQueueEntry, Question, Run
+from ...db.models import Conversation, InboundQueueEntry, Project, Question, Run
 from ...file_mentions import neutralise_file_mentions
 from ...inbound_queue import new_entry, withdraw_entry
 from ...run_task_binding import release_block_for_question
@@ -516,10 +516,16 @@ async def answer_question(
     # overwrite the first, and once the asker's run had ended it queued a new turn on the new text.
     if question.answered:
         raise HTTPException(status_code=409, detail=_REANSWER_DETAIL)
+    # F727: a refused-capability question's "it is enabled" option is accepted once it is true.
+    labels = list(body.labels or [])
+    if question.subject_key in refused_capability.GATES:
+        untrue = refused_capability.enabling_answer_refusal(
+            question, labels, await session.get(Project, project_id)
+        )
+        if untrue:
+            raise HTTPException(status_code=409, detail=untrue)
 
-    question = await apply_answer(
-        session, project_id, question, body.answer, list(body.labels or [])
-    )
+    question = await apply_answer(session, project_id, question, body.answer, labels)
     return await _with_asker_state_one(session, question)
 
 
