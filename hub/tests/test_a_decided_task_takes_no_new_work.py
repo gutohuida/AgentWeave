@@ -37,7 +37,7 @@ import pytest
 from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Conversation, InboundQueueEntry, Task
+from hub.db.models import Conversation, InboundQueueEntry, Task, TaskTransition
 from hub.run_task_binding import (
     TERMINAL_FOR_BINDING,
     release_bindings_to,
@@ -221,13 +221,32 @@ async def test_triggering_a_run_on_a_rejected_task_is_refused_over_http(app, aut
     assert response.status_code == 409, response.text
 
 
-async def test_triggering_a_run_on_a_task_under_review_is_not_refused(app, auth_headers):
-    """The band boundary, and the mutation check for it. `completed` and `under_review` are
-    deliberately outside `TERMINAL_FOR_BINDING` — work under review comes back often, and refusing
-    there would refuse precisely the turn that does the revisions."""
+async def test_triggering_work_on_a_task_under_review_is_refused_except_for_its_author(
+    app, auth_headers
+):
+    """**Rewritten for F687's under_review variant (operator decision, 2026-10-18).** This used to
+    pin that a `task_id` start on an `under_review` task is never refused. The sweep found the cost:
+    a reviewer started with `task_id` ran in the author's checkout and completed the work it was
+    judging (F693). Now a `task_id` start there is refused, pointing at `review_task_id`, while the
+    task's **author** may still be started on it — the revision turn F79 kept this band open for.
+
+    The band boundary itself is unchanged: `completed` and `under_review` stay outside
+    `TERMINAL_FOR_BINDING`, so a queued delegation is still bound and never refused."""
     assert set(TERMINAL_FOR_BINDING) == {"approved", "rejected"}
     async with async_session_factory() as session:
         await _task(session, "task-f79-open", status="under_review")
+        # The author: the agent recorded completing it (`agent_that_completed`).
+        session.add(
+            TaskTransition(
+                id="tt-f687-completed",
+                project_id="proj-test",
+                task_id="task-f79-open",
+                from_status="in_progress",
+                to_status="completed",
+                actor_kind="agent",
+                actor_agent="builder",
+            )
+        )
         await session.commit()
 
     # `builder` has to exist on the roster for this test to be about what it says (F108).
@@ -240,11 +259,23 @@ async def test_triggering_a_run_on_a_task_under_review_is_not_refused(app, auth_
     # got past the band check and was queued.
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",
-        json={"data": {"agents": {"builder": {}}}},
+        json={"data": {"agents": {"builder": {}, "tester": {}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
 
+    # Anyone else is refused, and told the door that does what it was likely after.
+    refused = await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={"agent": "tester", "message": "ACK", "task_id": "task-f79-open"},
+        headers=auth_headers,
+    )
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert "under review" in detail and "review_task_id" in detail, detail
+    assert "builder" in detail, detail
+
+    # The author's revision turn is still accepted.
     response = await app.post(
         "/api/v1/projects/proj-test/agent/trigger",
         json={"agent": "builder", "message": "ACK", "task_id": "task-f79-open"},

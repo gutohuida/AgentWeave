@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import InboundQueueEntry, Task
+from hub.db.models import InboundQueueEntry, Task, TaskTransition
 
 pytestmark = pytest.mark.asyncio
 
@@ -58,9 +58,23 @@ async def test_the_author_still_starts_on_its_task_while_a_reviewer_holds_it(
     app, auth_headers, add_agent
 ):
     """Under review the assignee is the staffed reviewer, so the holder rule does not apply: the
-    author's revision turn is deliberately not refused (F79's band boundary)."""
+    author's revision turn is deliberately not refused (F79's band boundary). The author is the
+    agent recorded completing it; anyone else is refused (the under_review variant, below)."""
     await add_agent("author")
     await _task("task-f687-review", status="under_review", assignee="rev")
+    async with async_session_factory() as session:
+        session.add(
+            TaskTransition(
+                id="tt-f687-review",
+                project_id="proj-test",
+                task_id="task-f687-review",
+                from_status="in_progress",
+                to_status="completed",
+                actor_kind="agent",
+                actor_agent="author",
+            )
+        )
+        await session.commit()
 
     response = await app.post(
         TRIGGER,
@@ -69,6 +83,29 @@ async def test_the_author_still_starts_on_its_task_while_a_reviewer_holds_it(
     )
 
     assert response.status_code == 200, response.text
+
+
+@pytest.mark.parametrize("agent", ["rev", "other"])
+async def test_a_task_id_start_on_work_under_review_points_at_review_task_id(
+    app, auth_headers, add_agent, agent
+):
+    """F687's under_review variant (operator decision 2026-10-18): judging is review_task_id's door.
+    Group C's sweep started the reviewer with task_id; it ran in the author's checkout (F693).
+    With no author recorded at all, nobody may be started with task_id."""
+    await add_agent(agent)
+    await _task("task-f687-judged", status="under_review", assignee="rev")
+
+    response = await app.post(
+        TRIGGER,
+        json={"agent": agent, "message": "look", "task_id": "task-f687-judged"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert "review_task_id='task-f687-judged'" in detail, detail
+    assert "revision_needed" in detail, detail
+    assert await _entries() == []
 
 
 @pytest.mark.parametrize("assignee", [None, "alpha"])
