@@ -1032,7 +1032,7 @@ async def retry_integration(session: AsyncSession, task: Task, actor: Actor) -> 
     return await integrate_task(session, task, actor)
 
 
-async def _hub_written_documents(session: AsyncSession, workspace, project_id: str) -> set:
+async def hub_written_documents(session: AsyncSession, workspace, project_id: str) -> set:
     """The project's documents whose file is exactly what the Hub last wrote (F515).
 
     `content_digest` is stamped by every Hub write of a document, so a file that still hashes to it
@@ -1132,12 +1132,26 @@ async def integrate_task(session: AsyncSession, task: Task, actor: Actor) -> lis
             )
         )
 
-    hub_written = await _hub_written_documents(session, workspace, task.project_id)
+    hub_written = await hub_written_documents(session, workspace, task.project_id)
     results = [
         task_integration.integrate(root, target, project.main_branch, hub_written=hub_written)
         for target in targets
     ]
+    newest = await task_integration.newest_per_target(session, task.id)
     for result in results:
+        previous = newest.get((result.commit_sha, result.target_branch))
+        already = task_integration.ALREADY_INTEGRATED.format(
+            commit=(result.commit_sha or "")[:12], target=result.target_branch
+        )
+        if (
+            result.outcome == task_integration.SKIPPED
+            and result.reason == already
+            and previous is not None
+            and (previous.outcome, previous.reason) == (task_integration.SKIPPED, already)
+        ):
+            # F715: the newest record for this commit already says it is in the main branch, so a
+            # repeat press appends an identical row that adds nothing true.
+            continue
         _record(result)
 
     # Re-answer "has this reached the main line?" across the project, not only for what just merged.

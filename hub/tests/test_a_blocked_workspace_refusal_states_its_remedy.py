@@ -337,3 +337,27 @@ def test_a_base_that_no_longer_exists_says_so_rather_than_asking_for_a_first_com
     assert "branch-that-was-deleted" in message
     assert "no commit yet" not in message, "the repository has commits; this ref does not resolve"
     assert not worktrees.task_root(unborn).exists(), "a refusal leaves no directory behind"
+
+
+def test_an_empty_directory_a_failed_release_left_is_cleared_by_the_next_turn(repo):
+    """F693. On Windows an agent that approved its task from inside the checkout held the folder
+    as its working directory, so `git worktree remove --force` deregistered the worktree and then
+    failed to delete the directory. The empty folder refused every later turn with "not the
+    registered git worktree", a remedy only a filesystem action could carry out. An *empty*
+    directory holds nothing to salvage, so provisioning clears it itself."""
+    path = ensure_task_worktree(repo, TASK, base="main")
+    # The state the failed release leaves: git no longer lists it, the directory is still there.
+    shutil.rmtree(path)
+    _git(repo, "worktree", "prune")
+    path.mkdir()
+
+    assert ensure_task_worktree(repo, TASK, base="main") == path
+    assert (path / "f.txt").exists()
+
+
+def test_an_empty_leftover_agent_workspace_is_cleared_by_the_next_turn(repo):
+    path = worktrees.worktree_path(repo, AGENT)
+    path.mkdir(parents=True)
+
+    assert worktrees.ensure_worktree(repo, AGENT) == path
+    assert worktrees.existing_worktree(repo, AGENT) == path

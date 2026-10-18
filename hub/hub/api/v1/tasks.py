@@ -73,6 +73,7 @@ from ...task_transition_service import (
     evaluate_approval,
     guard_entry_status,
     history_for,
+    hub_written_documents,
     retry_integration,
 )
 from ...task_transitions import (
@@ -1200,6 +1201,8 @@ async def task_integration_preview(
     conflicts: Optional[List[dict]] = None
     git_failed = False
     situation = None
+    obstacle: Optional[str] = None
+    on: Optional[str] = None
     try:
         situation = await requirement_gate.merge_situation(session, task)
         if situation is not None:
@@ -1237,8 +1240,22 @@ async def task_integration_preview(
                             "paths": paths,
                         }
                     )
+            if targets:
+                # F715: integration's own checkout preconditions, asked the way approval will ask
+                # them -- the Hub's own document writes exempt (F515) -- so "merges cleanly" is
+                # never said over a checkout approval would skip.
+                workspace = await project_workspace.resolve_project_workspace(session, project_id)
+                hub_written = await hub_written_documents(session, workspace, project_id)
+                obstacle = await asyncio.to_thread(
+                    task_integration.checkout_obstacle,
+                    situation.root,
+                    situation.main_branch,
+                    hub_written,
+                )
+                if obstacle is not None:
+                    on = await asyncio.to_thread(task_integration.current_branch, situation.root)
     except Exception:  # noqa: BLE001 - a git failure is stated below, never a 500
-        situation, conflicts, git_failed = None, None, True
+        situation, conflicts, git_failed, obstacle = None, None, True, None
 
     if situation is None:
         # No conflict answer: list what approval would merge without the probe. Governed, the
@@ -1270,6 +1287,18 @@ async def task_integration_preview(
             for c in conflicts
         )
         reason = f"approval will be refused: {clauses}"
+    elif obstacle == task_integration.CHECKOUT_DIRTY:
+        reason = (
+            f"approval will not merge {count} into {main_branch} as things stand: the project's "
+            f"checkout has uncommitted changes to tracked files, so the merge would be recorded as "
+            f"skipped — commit or stash them before approving"
+        )
+    elif obstacle is not None:
+        reason = (
+            f"approval will not merge {count} into {main_branch} as things stand: the project's "
+            f"checkout is on {on or 'a detached HEAD'}, not {main_branch}, so the merge would be "
+            f"recorded as skipped — switch to {main_branch} before approving"
+        )
     elif conflicts == []:
         reason = f"approval will merge {count} into {main_branch}; it merges cleanly as of now"
     else:

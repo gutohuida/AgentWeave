@@ -384,6 +384,30 @@ def existing_worktree(repo_root: Path, agent: str) -> Optional[Path]:
     return path if registered == f"refs/heads/{branch_name(agent)}" else None
 
 
+def _clear_empty_leftover(repo_root: Path, path: Path) -> None:
+    """Remove an **empty**, unregistered directory at *path*, where a checkout is about to be.
+
+    F693: on Windows a run whose working directory is the checkout holds the folder, so a release
+    made from inside it (an agent approving the task it is reviewing) has `git worktree remove
+    --force` deregister the worktree and then fail to delete the directory. The empty folder then
+    refused every later turn as "not the registered git worktree", a remedy only a filesystem
+    action could carry out. An empty directory holds nothing anyone could salvage, so it is cleared
+    here; a directory with anything in it, a link, or a registered worktree is left to the refusals
+    in the callers. A removal that fails (the folder still held) leaves it to them as well.
+    """
+    try:
+        if path.is_symlink() or not path.is_dir() or any(path.iterdir()):
+            return
+    except OSError:
+        return
+    if _registered_worktree_record(repo_root, path) is not None:
+        return
+    try:
+        path.rmdir()
+    except OSError:
+        logger.warning("could not clear the empty leftover directory %s", path, exc_info=True)
+
+
 def ensure_worktree(repo_root: Path, agent: str) -> Path:
     """Provision *agent*'s isolated checkout, creating it if absent. Idempotent.
 
@@ -402,6 +426,7 @@ def ensure_worktree(repo_root: Path, agent: str) -> Path:
     (not discarded) until they act.
     """
     path = worktree_path(repo_root, agent)
+    _clear_empty_leftover(repo_root, path)
     if path.exists():
         expected_ref = f"refs/heads/{branch_name(agent)}"
         if path.is_symlink():
@@ -838,6 +863,7 @@ def ensure_task_worktree(
     branch = task_branch_name(task_id)
     expected_ref = f"refs/heads/{branch}"
 
+    _clear_empty_leftover(repo_root, path)
     if path.exists():
         # Split for the same reason as `ensure_worktree`'s, and the three branches below are
         # what the requirement's "a different obstruction at the same path states a different
@@ -970,6 +996,7 @@ def ensure_review_checkout(repo_root: Path, agent: str, sha: str) -> Path:
     commit = resolve_review_commit(repo_root, sha)
     path = review_path(repo_root, agent)
 
+    _clear_empty_leftover(repo_root, path)
     if path.exists():
         if existing_review_checkout(repo_root, agent) is None:
             raise IsolationUnavailableError(

@@ -124,6 +124,12 @@ async def test_retry_after_a_merge_records_already_integrated_and_merges_nothing
     assert "already in" in rows[-1]["reason"]
     assert commits_on(tmp_path, "main") == before, "a retry must not merge twice"
 
+    # F715: every further press appended another identical "already in" row. The record already
+    # says it; a repeat adds nothing true.
+    again = await app.post(RETRY.format(task), headers=auth_headers)
+    assert again.status_code == 200, again.text
+    assert [row["outcome"] for row in again.json()["integrations"]] == ["merged", "skipped"]
+
 
 @pytest.mark.asyncio
 async def test_the_agent_plane_can_read_and_retry(app, auth_headers, builder, tmp_path):

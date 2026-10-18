@@ -200,12 +200,31 @@ class GateRefusal:
             )
         if not parts:
             return ""
-        sentence = (
-            "This task serves requirements a gate is enforcing, and they are not verified: "
-            + "; ".join(parts)
-            + ". Satisfy them, or lower the document's rigor — which is recorded."
+        rejected = any(entry["state"] == requirement_coverage.REJECTED for entry in self.blocking)
+        # F701: lowering the rigor relieves only what a gate enforces. A rejection blocks at every
+        # rigor (D2), `sketch` included, so where every entry is a rejection the offer cannot work.
+        relievable = self.diagnostics or any(
+            entry["state"] != requirement_coverage.REJECTED for entry in self.blocking
         )
-        if any(entry["state"] == requirement_coverage.REJECTED for entry in self.blocking):
+        if relievable:
+            sentence = (
+                "This task serves requirements a gate is enforcing, and they are not verified: "
+                + "; ".join(parts)
+                + ". Satisfy them, or lower the document's rigor — which is recorded"
+                + (
+                    ", though a rejected requirement blocks approval at every rigor."
+                    if rejected
+                    else "."
+                )
+            )
+        else:
+            sentence = (
+                "This task serves requirements that were rejected: "
+                + "; ".join(parts)
+                + ". A rejected requirement blocks approval at every rigor, so lowering the "
+                "document's rigor does not clear it."
+            )
+        if rejected:
             sentence += " " + REVIEWER_SENDS_BACK_REJECTED
         return sentence
 
@@ -820,7 +839,7 @@ async def _check_checks(
     previous_error = ""
     if state == "error" and start_checks:
         # F516: an error is the Hub failing to produce a result, not a verdict; approving retries.
-        project_checks.schedule(task.project_id, task.id)
+        project_checks.schedule(task.project_id, task.id, targets)
         state = "running"
         previous_error = (run.error if run is not None else "") or "an unknown error"
     elif state in ("missing", "stale", "interrupted"):
@@ -829,7 +848,8 @@ async def _check_checks(
             # would be false; the conflict is the refusal.
             return
         if start_checks:
-            project_checks.schedule(task.project_id, task.id)
+            # F680: the targets this transaction resolved, not ones re-read from committed state.
+            project_checks.schedule(task.project_id, task.id, targets)
             state = "running"
         else:
             state = "not_run"

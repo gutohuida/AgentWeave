@@ -394,11 +394,24 @@ def is_running(task_id: str) -> bool:
     return task_id in _starting or (current is not None and not current.done())
 
 
-async def request_run(project_id: str, task_id: str, *, force: bool = False) -> Optional[str]:
+async def request_run(
+    project_id: str,
+    task_id: str,
+    *,
+    force: bool = False,
+    targets: Optional[Sequence[str]] = None,
+) -> Optional[str]:
     """Start a run for *task_id* unless one is executing or the latest result is current.
 
     Returns the id of the run that is or will be current, or `None` where no check applies or one is
     already executing. *force* (the operator's re-run) starts one even over a current result.
+
+    *targets* are the commits approval would merge, as the caller resolved them. The approval gate
+    passes its own (F680): it runs inside the transaction in which the reviewer's verdict has just
+    accepted the task's evidence, and this function reads from a session of its own, which cannot
+    see that uncommitted acceptance -- resolved here, the targets came out empty, no run started,
+    and the gate's refusal rolled the acceptance back, so every retry repeated it. `None` resolves
+    them from committed state, which is right for every caller outside a transaction.
     """
     if is_running(task_id):
         return None
@@ -420,10 +433,11 @@ async def request_run(project_id: str, task_id: str, *, force: bool = False) -> 
             tip = await asyncio.to_thread(main_tip, root, project.main_branch)
             if tip is None:
                 return None
-            targets = [
-                t.commit_sha for t in await task_integration.merge_targets(session, task, root)
-            ]
-            targets = await asyncio.to_thread(unmerged, root, tip, targets)
+            if targets is None:
+                targets = [
+                    t.commit_sha for t in await task_integration.merge_targets(session, task, root)
+                ]
+            targets = await asyncio.to_thread(unmerged, root, tip, list(targets))
             if not targets:
                 return None
             latest = await latest_run(session, task_id)
@@ -491,10 +505,15 @@ async def _execute(
         )
 
 
-def schedule(project_id: str, task_id: str) -> None:
-    """Fire-and-forget `request_run`. Never raises, so it may sit anywhere a wake may."""
+def schedule(project_id: str, task_id: str, targets: Optional[Sequence[str]] = None) -> None:
+    """Fire-and-forget `request_run`. Never raises, so it may sit anywhere a wake may.
+
+    *targets*: see `request_run`; a caller inside an open transaction passes the ones it resolved.
+    """
     try:
-        job = asyncio.get_running_loop().create_task(request_run(project_id, task_id))
+        job = asyncio.get_running_loop().create_task(
+            request_run(project_id, task_id, targets=targets)
+        )
     except Exception:  # noqa: BLE001
         logger.warning("could not schedule checks for task %s", task_id, exc_info=True)
         return
