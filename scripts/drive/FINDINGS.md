@@ -36234,232 +36234,407 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F680 (A) -- with project checks configured, a reviewer can never approve a task whose merge depends on its evidence: "checks are still running" while no check run exists
 
-**Status:** open 2026-10-18. Found by the 2026-10-18 sweep, group C (scratch `:8033`, `aw-sweepC-1018`, checks `tests` and `text`). Reproduced twice. rev's `update_task -> approved` on a flow task answered 409 "This task's checks are still running on the work approval would merge. Nothing is wrong yet; approval can be retried when they finish." while `GET /tasks/{id}/checks` read `{"running": false, "runs": []}` and `task_check_runs` held no row for the task. rev retried by `ScheduleWakeup` inside its run: `task-24f78326cf0e` 5 refusals over ~9 min; the README task 16 refusals in ~4 min (`run-b0c417bd0f0c`). Each cleared only when the operator accepted the waiting evidence first. Mechanism (grounded): `requirement_gate._check_checks` (`requirement_gate.py:811-832`) runs inside the PATCH transaction in which F672's verdict has just accepted the evidence, finds no check result and calls `project_checks.schedule`; `request_run` (`project_checks.py:397-430`) opens its own session (`async_session_factory()`), cannot see the uncommitted acceptance, so `merge_targets` is empty and it returns without a run; the 409 rolls the acceptance back, so every retry repeats. Reaches every document flow on a project with checks. Defect; sibling of F613 (same sentence, different cause), seam with `the-reviewers-verdict-decides-the-tasks-evidence`. Seam: Flows & review x Worktrees & integration (project checks). Tier guess: 0-1.
+**Status:** fixed 9ee1227 2026-10-18 (Tier 0): the approval gate now passes the merge targets its own transaction resolved to project_checks.schedule/request_run, so the check run sees the evidence the verdict just accepted instead of finding nothing and starting no run (test_the_reviewers_verdict_decides_the_tasks_evidence::test_approval_with_checks_starts_a_run_on_the_evidence_the_verdict_accepts).
+
+**Found:** open 2026-10-18. Found by the 2026-10-18 sweep, group C (scratch `:8033`, `aw-sweepC-1018`, checks `tests` and `text`). Reproduced twice. rev's `update_task -> approved` on a flow task answered 409 "This task's checks are still running on the work approval would merge. Nothing is wrong yet; approval can be retried when they finish." while `GET /tasks/{id}/checks` read `{"running": false, "runs": []}` and `task_check_runs` held no row for the task. rev retried by `ScheduleWakeup` inside its run: `task-24f78326cf0e` 5 refusals over ~9 min; the README task 16 refusals in ~4 min (`run-b0c417bd0f0c`). Each cleared only when the operator accepted the waiting evidence first. Mechanism (grounded): `requirement_gate._check_checks` (`requirement_gate.py:811-832`) runs inside the PATCH transaction in which F672's verdict has just accepted the evidence, finds no check result and calls `project_checks.schedule`; `request_run` (`project_checks.py:397-430`) opens its own session (`async_session_factory()`), cannot see the uncommitted acceptance, so `merge_targets` is empty and it returns without a run; the 409 rolls the acceptance back, so every retry repeats. Reaches every document flow on a project with checks. Defect; sibling of F613 (same sentence, different cause), seam with `the-reviewers-verdict-decides-the-tasks-evidence`. Seam: Flows & review x Worktrees & integration (project checks). Tier guess: 0-1.
 
 ## F681 (B) -- Land approves a task on evidence another, task-less run recorded at main's tip, then skips the merge: the task's own commit never reaches main while its requirement reads verified
 
-**Status:** open 2026-10-18. Sweep group B (`:8032`). The builder recorded FR-1 evidence in a turn bound to no task (`ev-9493...`, footprint `agentweave/builder@efd83ab` = master's tip), then worked the task without recording evidence (commit `29d4830` on `agentweave/task/task-8735ec91be9e`). Dispatching a review was refused 409 "task ... has no recorded evidence, so there is no commit to review" (no remedy named; the app has no review control, F336). The operator accepted the evidence and Landed: 200, approved; `task_integrations` `skipped` "efd83abb1f37 is already in master; there was nothing to merge". README on master lacks the change; FR-1 reads verified. Rejecting `ev-9493...` afterwards left the task approved (task-less evidence reopens nothing). Defect; sibling of F622 (fixed only for tasks with no requirements). Seam: Requirements, evidence & coverage x Worktrees & integration. Tier guess: 1.
+**Status:** open, needs operator decision 2026-10-18: refuse approval (recommended) or also merge the task branch tip when the task branch holds commits no merge target contains; see the 2026-10-18 fix report.
+
+**Found:** open 2026-10-18. Sweep group B (`:8032`). The builder recorded FR-1 evidence in a turn bound to no task (`ev-9493...`, footprint `agentweave/builder@efd83ab` = master's tip), then worked the task without recording evidence (commit `29d4830` on `agentweave/task/task-8735ec91be9e`). Dispatching a review was refused 409 "task ... has no recorded evidence, so there is no commit to review" (no remedy named; the app has no review control, F336). The operator accepted the evidence and Landed: 200, approved; `task_integrations` `skipped` "efd83abb1f37 is already in master; there was nothing to merge". README on master lacks the change; FR-1 reads verified. Rejecting `ev-9493...` afterwards left the task approved (task-less evidence reopens nothing). Defect; sibling of F622 (fixed only for tasks with no requirements). Seam: Requirements, evidence & coverage x Worktrees & integration. Tier guess: 1.
 
 ## F682 (B) -- a vault source piece longer than ~32k characters fails distillation on Windows: the 50,000-character piece is passed on the command line
 
-**Status:** open 2026-10-18. Sweep group D (`:8034`). `distillation.PIECE_CHARS = vault.PAGE_CHARS = 50_000`; the Claude adapter passes the prompt as `-p <prompt>` (`hub/hub/runner_adapters/claude.py:180`); Windows caps a command line at 32,767 characters. "On-call handbook" (55,262 chars) split into three pieces; the 50k piece failed `FileNotFoundError: [WinError 206] The filename or extension is too long` (`worker_invocations.outcome = spawn_failed`), the other two distilled, so the lost facts are silent (the source still shows facts). Same exposure: `vault_reports.SOURCE_CHARS`, `distillation.COMPARED_CHARS` (both 50k), and any worker prompt past the limit. Defect. Seam: Knowledge vault x Manager jobs (worker argv). Tier guess: 0 (prompt on stdin, as the agent turns already do for long input?).
+**Status:** fixed ab1e849 2026-10-18 (Tier 0): the Claude worker and title prompts go on stdin (OneShotCommand), so a 50,000-character vault piece no longer hits Windows' 32,767-character command line; Codex/Copilot one-shots still pass the prompt as an argument.
+
+**Found:** open 2026-10-18. Sweep group D (`:8034`). `distillation.PIECE_CHARS = vault.PAGE_CHARS = 50_000`; the Claude adapter passes the prompt as `-p <prompt>` (`hub/hub/runner_adapters/claude.py:180`); Windows caps a command line at 32,767 characters. "On-call handbook" (55,262 chars) split into three pieces; the 50k piece failed `FileNotFoundError: [WinError 206] The filename or extension is too long` (`worker_invocations.outcome = spawn_failed`), the other two distilled, so the lost facts are silent (the source still shows facts). Same exposure: `vault_reports.SOURCE_CHARS`, `distillation.COMPARED_CHARS` (both 50k), and any worker prompt past the limit. Defect. Seam: Knowledge vault x Manager jobs (worker argv). Tier guess: 0 (prompt on stdin, as the agent turns already do for long input?).
 
 ## F683 (B) -- two projects can share one private vault location, and each then reads the other's private entries
 
-**Status:** open 2026-10-18. Sweep group D. `PUT /vault/settings` answered 200 for P1 pointed at P2's default private folder (`~/.agentweave/hub/vaults/proj-3c1db4d37322`) and for P1 and P2 both at `C:\Users\huida\Documents\sweepD private vault ü`. P2's vault map then listed P1's private source `src-399b9bd5a7f5` "Escalation contacts" (holder TITAN, "support line is 555-0142"). The Hub already knows the hazard: `vault.remove_private_entries` (`hub/hub/vault.py:262`) refuses delete on a shared location because "private files carry no project id"; only the settings route lets the sharing happen. Defect; F610 covered other projects' directories and git work trees, not another project's private location. Seam: Knowledge vault (privacy). Tier guess: 0.
+**Status:** fixed 535ad49 2026-10-18 (Tier 0): PUT /vault/settings answers 400 naming the other project for a private location equal to, inside or holding another project's location (chosen or default), including a reset to a default another project holds.
+
+**Found:** open 2026-10-18. Sweep group D. `PUT /vault/settings` answered 200 for P1 pointed at P2's default private folder (`~/.agentweave/hub/vaults/proj-3c1db4d37322`) and for P1 and P2 both at `C:\Users\huida\Documents\sweepD private vault ü`. P2's vault map then listed P1's private source `src-399b9bd5a7f5` "Escalation contacts" (holder TITAN, "support line is 555-0142"). The Hub already knows the hazard: `vault.remove_private_entries` (`hub/hub/vault.py:262`) refuses delete on a shared location because "private files carry no project id"; only the settings route lets the sharing happen. Defect; F610 covered other projects' directories and git work trees, not another project's private location. Seam: Knowledge vault (privacy). Tier guess: 0.
 
 ## F684 (B) -- re-distilling the winning side of a resolved contradiction mints a new fact id, so the fact the resolution says "stands" is gone
 
-**Status:** open 2026-10-18. Sweep group D. First pass quoted "the public API rate limit is 100 ..."; the re-distil quoted "Decision: the public API rate limit is ..." on the same line 3. `citation_key` includes `loose_quote(quote)`, so `fct-fb32e8f38742` was deleted and `fct-d628e12bc1c8` created, unlinked from the decision. `ctr-ea180246ee9c` side reads `{"id":"fct-fb32e8f38742","claim":null,"missing":true}`; the Vault card "A fact no longer in the vault ... Resolved: one fact stands"; the spec warning "the fact that stands is fct-fb32e8f38742, which is no longer in the vault". The loser kept its id (quote matched). F587/F617 hold only while the model quotes identically. Defect. Seam: Knowledge vault (distil x contradictions x spec warnings). Tier guess: 1.
+**Status:** open 2026-10-18, needs a Tier 1 spec change: FR-1 of a-redistilled-fact-keeps-its-id requires an equal quote, so matching a re-distilled fact by its line span alone needs that requirement amended first (recommended: a second pass matching leftover drafts on visibility + source/line spans, each earlier fact claimed once).
+
+**Found:** open 2026-10-18. Sweep group D. First pass quoted "the public API rate limit is 100 ..."; the re-distil quoted "Decision: the public API rate limit is ..." on the same line 3. `citation_key` includes `loose_quote(quote)`, so `fct-fb32e8f38742` was deleted and `fct-d628e12bc1c8` created, unlinked from the decision. `ctr-ea180246ee9c` side reads `{"id":"fct-fb32e8f38742","claim":null,"missing":true}`; the Vault card "A fact no longer in the vault ... Resolved: one fact stands"; the spec warning "the fact that stands is fct-fb32e8f38742, which is no longer in the vault". The loser kept its id (quote matched). F587/F617 hold only while the model quotes identically. Defect. Seam: Knowledge vault (distil x contradictions x spec warnings). Tier guess: 1.
 
 ## F685 (B) -- opening a folder that contains existing projects is accepted, and every later project under it is then refused as nested
 
-**Status:** open 2026-10-18. Sweep group A (`:8031`). `POST /projects/open {"path":"C:\\Users\\huida\\Documents"}` -> 200 (`proj-347524cd72f9`), writing `~/Documents/.agentweave/project.json`, though `aw-sweepA-1018` lives inside it; opening `~/Documents/aw sweepA ü 1018` then got 409 `project_nested` "...is inside the directory of project Documents". `project_lifecycle._refuse_inside_another_project` checks only that the new path is under an existing project, never the reverse (F646's other direction). Deleting the parent leaves its marker on disk. (Harness: `e2e.py clean` on such a project would have removed `~/Documents`; guarded 2026-10-18.) Defect. Seam: Projects (workspace binding). Tier guess: 0.
+**Status:** fixed 5daee14 2026-10-18 (Tier 0): `_refuse_inside_another_project` also refuses a folder that contains a registered project (`project_nested`, naming it). The parent's leftover marker on delete is unchanged by design (delete never touches the folder).
+
+**Found:** open 2026-10-18. Sweep group A (`:8031`). `POST /projects/open {"path":"C:\\Users\\huida\\Documents"}` -> 200 (`proj-347524cd72f9`), writing `~/Documents/.agentweave/project.json`, though `aw-sweepA-1018` lives inside it; opening `~/Documents/aw sweepA ü 1018` then got 409 `project_nested` "...is inside the directory of project Documents". `project_lifecycle._refuse_inside_another_project` checks only that the new path is under an existing project, never the reverse (F646's other direction). Deleting the parent leaves its marker on disk. (Harness: `e2e.py clean` on such a project would have removed `~/Documents`; guarded 2026-10-18.) Defect. Seam: Projects (workspace binding). Tier guess: 0.
 
 ## F686 (B) -- project instructions take any size and are prepended to every agent turn
 
-**Status:** open 2026-10-18. Sweep group A. `PUT /project/instructions` with 300,000 characters -> 200; every later turn carried them (a 330,231-char system block in the transcript). Haiku 4.5 first turns read ~70k input tokens (vs ~33k after reset); one Haiku 5.5 "is 391 prime" turn wrote 315,416 cache tokens, 316,982 micros (~$0.32). The Instructions page shows no size or warning. Design gap. Seam: Projects x Accounting & allowance. Tier guess: 0 (a limit, or a size warning on screen).
+**Status:** fixed 4fa0ed3 2026-10-18 (Tier 0): instructions over 40,000 characters are refused 422 with both sizes, and the Instructions page shows the size against the limit and disables Save over it.
+
+**Found:** open 2026-10-18. Sweep group A. `PUT /project/instructions` with 300,000 characters -> 200; every later turn carried them (a 330,231-char system block in the transcript). Haiku 4.5 first turns read ~70k input tokens (vs ~33k after reset); one Haiku 5.5 "is 391 prime" turn wrote 315,416 cache tokens, 316,982 micros (~$0.32). The Instructions page shows no size or warning. Design gap. Seam: Projects x Accounting & allowance. Tier guess: 0 (a limit, or a size warning on screen).
 
 ## F687 (B) -- an operator trigger binds an agent to another agent's task, and that run then completes the task while it stays assigned to the other agent
 
-**Status:** open 2026-10-18. Sweep groups A and C. `task-94234b3b55c8` (assignee `board`) + `POST /agent/trigger {"agent":"alpha","task_id":...}` -> 200; `task_transitions`: alpha moved it `pending->in_progress` (origin runtime) then `->completed` (origin actor), editing `calc`; the task ends completed with assignee `board`, which the board credits. `run_task_binding` keeps an existing assignee and the completion gate lets the bound run through; no warning at trigger. Group C saw the same with `task_id` on an under-review task (the reviewer ran in the author's checkout, which led to F693). The checklist says a run claims only an unassigned task or its own agent's. Defect or design gap (refuse with a sentence, or reassign visibly). Seam: Runs x Tasks. Tier guess: 0.
+**Status:** fixed c978b9b 2026-10-18 (Tier 0): starting an agent on a task assigned to another agent is a 409 naming the holder and the remedy (outside completed/under_review, where the assignee is the reviewer; the under_review variant awaits an operator decision).
+
+**Found:** open 2026-10-18. Sweep groups A and C. `task-94234b3b55c8` (assignee `board`) + `POST /agent/trigger {"agent":"alpha","task_id":...}` -> 200; `task_transitions`: alpha moved it `pending->in_progress` (origin runtime) then `->completed` (origin actor), editing `calc`; the task ends completed with assignee `board`, which the board credits. `run_task_binding` keeps an existing assignee and the completion gate lets the bound run through; no warning at trigger. Group C saw the same with `task_id` on an under-review task (the reviewer ran in the author's checkout, which led to F693). The checklist says a run claims only an unassigned task or its own agent's. Defect or design gap (refuse with a sentence, or reassign visibly). Seam: Runs x Tasks. Tier guess: 0.
 
 ## F688 (B) -- the Ask-me card's verdict says "Outside this agent's workspace" for refusals that are not about the workspace
 
-**Status:** open 2026-10-18. Sweep group A, rendered in Chromium (`permission-verdict-*`): "Outside this agent's workspace -- Workspace only would refuse this: '...\worktrees\alpha\.claude\settings.local.json' configures your runner...". `PermissionRequestCard.tsx:146-147` prefixes every refusal with "Outside...", so F675 (runner config), F676 (pipe-fed) and variable/`~` refusals all read as outside-the-workspace. Defect (legibility). Seam: Permissions & sandbox x F675/F676. Tier guess: 0.
+**Status:** fixed 6b66c0c 2026-10-18 (Tier 0): the Ask-me verdict no longer prefixes every refusal with "Outside this agent's workspace"; the reason says why.
+
+**Found:** open 2026-10-18. Sweep group A, rendered in Chromium (`permission-verdict-*`): "Outside this agent's workspace -- Workspace only would refuse this: '...\worktrees\alpha\.claude\settings.local.json' configures your runner...". `PermissionRequestCard.tsx:146-147` prefixes every refusal with "Outside...", so F675 (runner config), F676 (pipe-fed) and variable/`~` refusals all read as outside-the-workspace. Defect (legibility). Seam: Permissions & sandbox x F675/F676. Tier guess: 0.
 
 ## F689 (B) -- an adopted spec.json whose payload fails validation is accepted (201), indexes nothing, and its page loads forever
 
-**Status:** open 2026-10-18. Sweep group B. Hand-placed `spec/changes/hand-written-fmt/spec.json` with one requirement lacking `key`: Adopt -> 201 `"requirements": null, "minted": []`, no `spec_requirements` row (not even the valid `fmt1`); Reindex reports the path `null` with no diagnostic; the Spec page shows its skeleton after 15 s, with two 422s in the console from `GET /project/spec?path=...` ("holds no readable spec payload") that never reach the screen. Only rigor/propose name the cause ("requirements[1].key: Field required"). `spec_index.requirements_from_payload` returns `None` on `PayloadError`; adopt never validates. Defect; variant of F612 (fixed for a valid payload without identity). Seam: Corpus & folding x Spec documents. Tier guess: 0.
+**Status:** fixed b6425bf 2026-10-18 (Tier 0): adoption refuses a payload the schema refuses (422 payload_invalid, naming the field, e.g. requirements[1].key) and the sweep reports it skipped; a rebuild now says why a document's requirements were not indexed (f8fbe25).
+
+**Found:** open 2026-10-18. Sweep group B. Hand-placed `spec/changes/hand-written-fmt/spec.json` with one requirement lacking `key`: Adopt -> 201 `"requirements": null, "minted": []`, no `spec_requirements` row (not even the valid `fmt1`); Reindex reports the path `null` with no diagnostic; the Spec page shows its skeleton after 15 s, with two 422s in the console from `GET /project/spec?path=...` ("holds no readable spec payload") that never reach the screen. Only rigor/propose name the cause ("requirements[1].key: Field required"). `spec_index.requirements_from_payload` returns `None` on `PayloadError`; adopt never validates. Defect; variant of F612 (fixed for a valid payload without identity). Seam: Corpus & folding x Spec documents. Tier guess: 0.
 
 ## F690 (B) -- after a fold, drift on the folded requirement's evidence shows only on the archived change, while the capability reads verified with nothing to answer
 
-**Status:** open 2026-10-18. Sweep group B. Folded `scarlet-minotaur` into `interval-arithmetic`, then edited the watched `tests/test_core.py`; Scan raised `drift-cd814faeb6c1` on the archived change's FR-2. The capability's FR-4 (served by it) reads "Verified - Accepted evidence for the current wording" and "Drifting: nothing to answer"; the archived change reads "Drifting: 1 to answer". F593 carried verification across the fold, not drift. Design gap. Seam: Drift x Corpus & folding. Tier guess: 1.
+**Status:** fixed 833e72a 2026-10-18 (Tier 0): drift is carried across a fold as verification was (F593): a served capability requirement reads drifting, and its drift list shows the change's candidate with serves FR-n.
+
+**Found:** open 2026-10-18. Sweep group B. Folded `scarlet-minotaur` into `interval-arithmetic`, then edited the watched `tests/test_core.py`; Scan raised `drift-cd814faeb6c1` on the archived change's FR-2. The capability's FR-4 (served by it) reads "Verified - Accepted evidence for the current wording" and "Drifting: nothing to answer"; the archived change reads "Drifting: 1 to answer". F593 carried verification across the fold, not drift. Design gap. Seam: Drift x Corpus & folding. Tier guess: 1.
 
 ## F691 (B) -- evidence for a reworded requirement still reads "accepted" in the requirement story and the evidence browser
 
-**Status:** open 2026-10-18. Sweep group B. FR-1 reworded after `ev-031...` was accepted: the coverage bar says "Stale -- reworded after its evidence was accepted", but the requirement story shows "Evidence - 1 accepted" (green) under the new wording and the evidence browser counts it in "Accepted 3". Neither `components/evidence/*.tsx` nor `components/spec/RequirementStory.tsx` compares digests (grep stale/digest: nothing). Group C saw the converse: the drawer's "Serves FR-1" still reads "Rejected: <old reason>" after the piece was superseded. Defect. Seam: Requirements, evidence & coverage (screens built 10-17). Tier guess: 0.
+**Status:** fixed e9c86e5 2026-10-18 (Tier 0): evidence views carry for_current_wording; the requirement story and evidence browser count earlier-wording pieces apart instead of as accepted.
+
+**Found:** open 2026-10-18. Sweep group B. FR-1 reworded after `ev-031...` was accepted: the coverage bar says "Stale -- reworded after its evidence was accepted", but the requirement story shows "Evidence - 1 accepted" (green) under the new wording and the evidence browser counts it in "Accepted 3". Neither `components/evidence/*.tsx` nor `components/spec/RequirementStory.tsx` compares digests (grep stale/digest: nothing). Group C saw the converse: the drawer's "Serves FR-1" still reads "Rejected: <old reason>" after the piece was superseded. Defect. Seam: Requirements, evidence & coverage (screens built 10-17). Tier guess: 0.
 
 ## F692 (B) -- a decided piece of evidence has no control to reverse it, and a granted agent overturns a rejection silently
 
-**Status:** open 2026-10-18. Sweep group B. `EvidencePieces.tsx` offers Accept/Reject only while `awaiting`; F672's "the operator rejecting an accepted piece of an approved task reopens it" works by API (`task-67fd...` approved -> revision_needed) with no screen. The granted tester called `decide_evidence(ev-da84..., accepted, "probe overturn")` on a piece its own review had rejected (an empty commit, stale digest): answer `{"id","review_state":"accepted"}`, no overturn note, no stale-digest refusal. Design gap. Seam: Requirements, evidence & coverage. Tier guess: 1.
+**Status:** open, needs operator decision 2026-10-18: who may overturn a decided piece, and whether earlier-wording evidence may be accepted (recommend agents decide awaiting only; the operator overturns with a reason via a UI control; refuse accepting stale-digest evidence).
+
+**Found:** open 2026-10-18. Sweep group B. `EvidencePieces.tsx` offers Accept/Reject only while `awaiting`; F672's "the operator rejecting an accepted piece of an approved task reopens it" works by API (`task-67fd...` approved -> revision_needed) with no screen. The granted tester called `decide_evidence(ev-da84..., accepted, "probe overturn")` on a piece its own review had rejected (an empty commit, stale digest): answer `{"id","review_state":"accepted"}`, no overturn note, no stale-digest refusal. Design gap. Seam: Requirements, evidence & coverage. Tier guess: 1.
 
 ## F693 (B) -- an agent that approves a task from inside its checkout leaves an empty directory that refuses the task's next turn
 
-**Status:** open 2026-10-18. Sweep group C. Operator triggered rev with `task_id` on an under_review task (see F687); rev ran inside `.agentweave/tasks/<task>` and approved; the integration merged, but `git worktree remove --force ...task-31419f3604b8 failed (255): ... Permission denied` (`task_worktree_release_failed`); git deregistered the worktree, the empty directory stayed. After a reopen the author's trigger queued with "refusing existing path ...: it is not the registered git worktree ... Move or delete that directory (`rm -r ...`)". Only a filesystem action clears it; nothing retries the release. Flow reviews (`.agentweave/reviews/<agent>`) released cleanly, as did 7 other releases. Defect on Windows (the run's cwd holds the folder). Seam: Worktrees & integration x Dependencies (reopen). Tier guess: 0.
+**Status:** fixed b6595bb 2026-10-18 (Tier 0): task, agent and review checkout provisioning now removes an empty, unregistered leftover directory (the one a release from inside a held cwd leaves on Windows) instead of refusing the turn; non-empty directories, links and registered worktrees still refuse (test_a_blocked_workspace_refusal_states_its_remedy::test_an_empty_*).
+
+**Found:** open 2026-10-18. Sweep group C. Operator triggered rev with `task_id` on an under_review task (see F687); rev ran inside `.agentweave/tasks/<task>` and approved; the integration merged, but `git worktree remove --force ...task-31419f3604b8 failed (255): ... Permission denied` (`task_worktree_release_failed`); git deregistered the worktree, the empty directory stayed. After a reopen the author's trigger queued with "refusing existing path ...: it is not the registered git worktree ... Move or delete that directory (`rm -r ...`)". Only a filesystem action clears it; nothing retries the release. Flow reviews (`.agentweave/reviews/<agent>`) released cleanly, as did 7 other releases. Defect on Windows (the run's cwd holds the folder). Seam: Worktrees & integration x Dependencies (reopen). Tier guess: 0.
 
 ## F694 (B) -- the planner's same-file warning never reaches the operator, so same-file tasks run in parallel and collide
 
-**Status:** open 2026-10-18. Sweep group C. Tasks `t-cv` and `t-trunc` both declare `mathkit/registry.py` in `files`, no `depends_on`. `PUT /project/documents/{path}/content` answers with no `warnings` key: the route builds its response by hand (`spec.py` ~832) and drops `SaveResult.warnings` (`spec_service.py:352-360`), which carries `overlap_warnings`; propose's warnings and approve's `approval_warnings` carry no `unordered_file_overlap` either. The two ran in parallel, conflicted in `registry.py`, rev sent `t-cv` back: one extra author and one extra review turn. Defect. Seam: Dependencies x Spec documents (`same-file-tasks-run-in-order` roadmap). Tier guess: 0.
+**Status:** fixed c70fe5d 2026-10-18 (Tier 0): PUT content (and every SaveResult route) returns warnings, and unordered_file_overlap is now a propose/approval gap the operator sees and can approve over.
+
+**Found:** open 2026-10-18. Sweep group C. Tasks `t-cv` and `t-trunc` both declare `mathkit/registry.py` in `files`, no `depends_on`. `PUT /project/documents/{path}/content` answers with no `warnings` key: the route builds its response by hand (`spec.py` ~832) and drops `SaveResult.warnings` (`spec_service.py:352-360`), which carries `overlap_warnings`; propose's warnings and approve's `approval_warnings` carry no `unordered_file_overlap` either. The two ran in parallel, conflicted in `registry.py`, rev sent `t-cv` back: one extra author and one extra review turn. Defect. Seam: Dependencies x Spec documents (`same-file-tasks-run-in-order` roadmap). Tier guess: 0.
 
 ## F695 (B) -- a conflicting prerequisite refuses the author's turns, so only the operator, in a terminal, can resolve it
 
-**Status:** open 2026-10-18. Sweep group C. Beta's turn refused: "approved work of task-31419f3604b8 ... conflicts with work already on task-436c2082fb8c's branch ... Reconcile it there with `git -C ... merge --no-ff ...`; this task's turns are refused until it is in." The gate's own sentence calls resolving it the author's work, but the author gets no turn to do it; the operator merged by hand, then Continue worked. A conflict with main (no prerequisite) was resolved by beta itself in its turn. Design gap in F158's remedy. Seam: Dependencies x Worktrees & integration. Tier guess: 1.
+**Status:** open, needs operator decision 2026-10-18 (Tier 1): give the author its turn with a merge instruction instead of refusing; needs a workspace-to-prompt note channel and a decision on clean vs mid-merge handover.
+
+**Found:** open 2026-10-18. Sweep group C. Beta's turn refused: "approved work of task-31419f3604b8 ... conflicts with work already on task-436c2082fb8c's branch ... Reconcile it there with `git -C ... merge --no-ff ...`; this task's turns are refused until it is in." The gate's own sentence calls resolving it the author's work, but the author gets no turn to do it; the operator merged by hand, then Continue worked. A conflict with main (no prerequisite) was resolved by beta itself in its turn. Design gap in F158's remedy. Seam: Dependencies x Worktrees & integration. Tier guess: 1.
 
 ## F696 (C) -- "Workspace only" refuses ordinary read-only commands: sed/awk scripts read as paths, every `| while read` loop, `echo $PWD`
 
-**Status:** open 2026-10-18. Sweep group A. In real turns: `pwd | sed 's/^/PWD=/'` refused "'/' is outside your workspace" (`run-99e650f426ce`); `cat README.md | while read l; do echo "$l"; done` refused by F676 "at 'while read l'"; `echo $PWD` refused "contains a variable...". In-process `_decide`: `sed 's|/usr|x|' a.txt` and `awk -F/ '{print $1}' a.txt` refused alike. `git status --short | sed ...` ran only because Claude's own read-only rule passed it first. F661 fixed PowerShell `-match` operands only; this is the bash counterpart plus a new F676 false positive. Defect (cost: turns spent rephrasing). Seam: Permissions & sandbox (shell judge). Tier guess: 0.
+**Status:** fixed d0a27d4 2026-10-18 (Tier 0), partly: sed/awk/cut/tr scripts and delimiters are no longer read as paths (a sed/awk script only when provably read-only), and a printing '| while read' loop passes F676; grep patterns (accepted cost 1.5a2/1.7c1) and bare $PWD (design D2) stay refused pending the operator's decision.
+
+**Found:** open 2026-10-18. Sweep group A. In real turns: `pwd | sed 's/^/PWD=/'` refused "'/' is outside your workspace" (`run-99e650f426ce`); `cat README.md | while read l; do echo "$l"; done` refused by F676 "at 'while read l'"; `echo $PWD` refused "contains a variable...". In-process `_decide`: `sed 's|/usr|x|' a.txt` and `awk -F/ '{print $1}' a.txt` refused alike. `git status --short | sed ...` ran only because Claude's own read-only rule passed it first. F661 fixed PowerShell `-match` operands only; this is the bash counterpart plus a new F676 false positive. Defect (cost: turns spent rephrasing). Seam: Permissions & sandbox (shell judge). Tier guess: 0.
 
 ## F697 (C) -- a stopped Claude turn's spend is recorded nowhere
 
-**Status:** open 2026-10-18. Sweep group A. `run-02af114595bf` stopped mid-Bash: `turn_usage` `unavailable`, null cost. The next turn `run-7f0a832b742f` recorded 17,173 micros = exactly its own one call; session totals 316,982 -> 334,155. The CLI's totals never included the interrupted call (~333k cached tokens), so it is in no row and no difference. Accounting admits "unavailable turns" but never sizes them: about one model call lost per Stop. Confirms handoff 0202's untested crash path (F678). Design gap. Seam: Runs x Accounting & allowance. Tier guess: 1.
+**Status:** open, deferred 2026-10-18 (Tier 1): the interrupted call is in no CLI report, so only an estimate (the stopped turn's last context reading) is possible; needs a decision on showing estimates and whether they count toward the budget.
+
+**Found:** open 2026-10-18. Sweep group A. `run-02af114595bf` stopped mid-Bash: `turn_usage` `unavailable`, null cost. The next turn `run-7f0a832b742f` recorded 17,173 micros = exactly its own one call; session totals 316,982 -> 334,155. The CLI's totals never included the interrupted call (~333k cached tokens), so it is in no row and no difference. Accounting admits "unavailable turns" but never sizes them: about one model call lost per Stop. Confirms handoff 0202's untested crash path (F678). Design gap. Seam: Runs x Accounting & allowance. Tier guess: 1.
 
 ## F698 (C) -- Copilot conversation rows show `Edit {` / `Shell {` instead of the path or command, and an F675 refusal's reason is not on the card
 
-**Status:** open 2026-10-18. Sweep group A, real Copilot CLI 1.0.91 over ACP with the model replaced by `s1018_A_copilot_stub.py`. For Copilot `agent_outputs.payload.input` is a JSON string (`"{\"changes\":...,\"rawInput\":{\"path\":\".mcp.json\"...}}"`) and the row prints its first character. Same run: the F675 diagnostic card says only "the Hub told it why"; the reason (`.mcp.json` configures your runner) is in `permission_denied` but not on screen (the F676 card does show its reason). Defect. Seam: Conversations & composer x Copilot. Tier guess: 0.
+**Status:** fixed 1f35809 2026-10-18 (Tier 0): Copilot rows show rawInput's path/command (else locations, else title), and the refusal-continued card quotes the refusal's reason.
+
+**Found:** open 2026-10-18. Sweep group A, real Copilot CLI 1.0.91 over ACP with the model replaced by `s1018_A_copilot_stub.py`. For Copilot `agent_outputs.payload.input` is a JSON string (`"{\"changes\":...,\"rawInput\":{\"path\":\".mcp.json\"...}}"`) and the row prints its first character. Same run: the F675 diagnostic card says only "the Hub told it why"; the reason (`.mcp.json` configures your runner) is in `permission_denied` but not on screen (the F676 card does show its reason). Defect. Seam: Conversations & composer x Copilot. Tier guess: 0.
 
 ## F699 (C) -- a tester's `add_criterion` amendment never reaches the task it was written for
 
-**Status:** open 2026-10-18. Sweep group B. After `amd-3541...` added `c2-touching`, `GET /tasks/task-26c0...` still listed only `["c2: ..."]`. Defect. Seam: Spec documents (amendments) x Tasks. Tier guess: 0.
+**Status:** fixed eda00fb 2026-10-18 (Tier 0): every tester amendment re-materialises the document, refreshing open tasks' acceptance_criteria.
+
+**Found:** open 2026-10-18. Sweep group B. After `amd-3541...` added `c2-touching`, `GET /tasks/task-26c0...` still listed only `["c2: ..."]`. Defect. Seam: Spec documents (amendments) x Tasks. Tier guess: 0.
 
 ## F700 (C) -- after `report_cannot_satisfy`, the operator's only response is "mark reviewed", which changes nothing
 
-**Status:** open 2026-10-18. Sweep group B. `amd-06eb...` blocked `task-26c0...`; marking it reviewed left c2 unchanged in the file and the task `blocked`, with no pointer between the two. Design gap. Seam: Spec documents x Tasks. Tier guess: 1.
+**Status:** open, needs operator decision 2026-10-18: define the operator's responses to report_cannot_satisfy (amend / accept-and-unblock / reject-with-reason) so "reviewed" changes something.
+
+**Found:** open 2026-10-18. Sweep group B. `amd-06eb...` blocked `task-26c0...`; marking it reviewed left c2 unchanged in the file and the task `blocked`, with no pointer between the two. Design gap. Seam: Spec documents x Tasks. Tier guess: 1.
 
 ## F701 (C) -- the gate refusal at sketch rigor offers "lower the document's rigor", which cannot work
 
-**Status:** open 2026-10-18. Sweep group B. FR-2 rejected at `sketch`; Land 409 `gate_unsatisfied` "...requirements a gate is enforcing... Satisfy them, or lower the document's rigor" (`requirement_gate.py:204-206`). Sketch is the lowest rigor and a rejection blocks at every rigor. Defect (legibility). Seam: Requirements, evidence & coverage. Tier guess: 0.
+**Status:** fixed 4106610 2026-10-18 (Tier 0): the gate refusal offers "lower the document's rigor" only when a gate-enforced entry could be relieved by it; an all-rejected refusal says a rejection blocks at every rigor (test_requirement_gate::test_a_sketch_refuses_a_rejected_requirement).
+
+**Found:** open 2026-10-18. Sweep group B. FR-2 rejected at `sketch`; Land 409 `gate_unsatisfied` "...requirements a gate is enforcing... Satisfy them, or lower the document's rigor" (`requirement_gate.py:204-206`). Sketch is the lowest rigor and a rejection blocks at every rigor. Defect (legibility). Seam: Requirements, evidence & coverage. Tier guess: 0.
 
 ## F702 (C) -- the corpus strip still promises fixes that cannot happen and prints codes (F643 remainder)
 
-**Status:** open 2026-10-18. Sweep group B. "spec/areas/noid/spec.json is not in the index yet. Rebuilding the index files it." after Rebuild reported it unindexable; "Adopt all 2" still offered after Adopt all answered "skipped 2"; "Skipped ...hand-written-fmt...: no_readable_payload" raw; "Unindexable document: X." with no reason; a homeless rebuild says "Home ambiguous: the index." / "Index home required: the index."; a rebuild naming an unknown home path is not refused. Defect. Seam: Corpus & folding. Tier guess: 0.
+**Status:** fixed f8fbe25 2026-10-18 (Tier 0): the corpus strip and rebuild speak in sentences (untracked -> adopt first, home codes, unreadable requirements naming the field, skip reasons), an unknown home is refused 422 home_unknown, and Adopt all no longer offers refused documents.
+
+**Found:** open 2026-10-18. Sweep group B. "spec/areas/noid/spec.json is not in the index yet. Rebuilding the index files it." after Rebuild reported it unindexable; "Adopt all 2" still offered after Adopt all answered "skipped 2"; "Skipped ...hand-written-fmt...: no_readable_payload" raw; "Unindexable document: X." with no reason; a homeless rebuild says "Home ambiguous: the index." / "Index home required: the index."; a rebuild naming an unknown home path is not refused. Defect. Seam: Corpus & folding. Tier guess: 0.
 
 ## F703 (C) -- a document write calls warn-only gaps `blocking`
 
-**Status:** open 2026-10-18. Sweep group B. `PUT .../content` and `POST /documents` return `blocking: [unresolved_question, delivery_unanswered, ...]`; propose then answers `blocking: []` with the same codes under `warnings`. `SaveResult.blocking` is every completeness finding (`spec_service.py:343`); F632 fixed only the schema text, so agents reading the answer are still told these block. Defect. Seam: Spec documents. Tier guess: 0.
+**Status:** fixed 5486070 2026-10-18 (Tier 0): a document write splits findings with spec_completeness.split as propose does: refusals in blocking, gaps in warnings, so write and propose agree.
+
+**Found:** open 2026-10-18. Sweep group B. `PUT .../content` and `POST /documents` return `blocking: [unresolved_question, delivery_unanswered, ...]`; propose then answers `blocking: []` with the same codes under `warnings`. `SaveResult.blocking` is every completeness finding (`spec_service.py:343`); F632 fixed only the schema text, so agents reading the answer are still told these block. Defect. Seam: Spec documents. Tier guess: 0.
 
 ## F704 (C) -- once an approved roadmap has an unclaimed slice, every unrelated change needs "Approve anyway"
 
-**Status:** open 2026-10-18. Sweep group B. An agent-written change and a large catalogue document both got 409 `roadmap_slice_unclaimed` ("has slices no document names: printing"); there is no way to say "this change is not a slice". Design gap against "warn, don't gate" (F674's gap). Seam: Spec documents (roadmaps). Tier guess: 1.
+**Status:** open, needs operator decision 2026-10-18: make roadmap_slice_unclaimed a non-gating warning (recommended) and/or let a change declare it is no slice.
+
+**Found:** open 2026-10-18. Sweep group B. An agent-written change and a large catalogue document both got 409 `roadmap_slice_unclaimed` ("has slices no document names: printing"); there is no way to say "this change is not a slice". Design gap against "warn, don't gate" (F674's gap). Seam: Spec documents (roadmaps). Tier guess: 1.
 
 ## F705 (C) -- a slice link can be backfilled to an unapproved roadmap, and it then blocks re-proposing the change
 
-**Status:** open 2026-10-18. Sweep group B. `PUT .../roadmap` naming a proposed roadmap -> 200 `changed: true`; after a reopen, propose refused `roadmap_not_approved` until the roadmap was approved. Asking for a different slice is refused with a Python dict repr ("already names {'document': ...}"). Defect. Seam: Spec documents (roadmaps, F674 backfill). Tier guess: 0.
+**Status:** fixed effebce 2026-10-18 (Tier 0): a slice link is backfilled only to an approved roadmap (propose's rule, roadmap_not_approved), and a differing link is named in words, not a dict repr.
+
+**Found:** open 2026-10-18. Sweep group B. `PUT .../roadmap` naming a proposed roadmap -> 200 `changed: true`; after a reopen, propose refused `roadmap_not_approved` until the roadmap was approved. Asking for a different slice is refused with a Python dict repr ("already names {'document': ...}"). Defect. Seam: Spec documents (roadmaps, F674 backfill). Tier guess: 0.
 
 ## F706 (C) -- evidence that says `covers: partial` alone makes a requirement Verified
 
-**Status:** open 2026-10-18. Sweep group B. FR-2 and the capability's FR-4 read verified though the only accepted current piece said `covers: partial`; `covers` is displayed, never weighed. Design gap (F673 data). Seam: Requirements, evidence & coverage. Tier guess: 1.
+**Status:** open, needs operator decision 2026-10-18 (Tier 1): whether partial-only accepted evidence should read in_progress (recommended) instead of verified, which also changes what the gate blocks.
+
+**Found:** open 2026-10-18. Sweep group B. FR-2 and the capability's FR-4 read verified though the only accepted current piece said `covers: partial`; `covers` is displayed, never weighed. Design gap (F673 data). Seam: Requirements, evidence & coverage. Tier guess: 1.
 
 ## F707 (C) -- a metadata-only proposal is labelled as a Summary/problem/scope change and shows no diff
 
-**Status:** open 2026-10-18. Sweep group B. `spprop-cf64...` only clears `lifecycle` (`'one-off' -> ''`), but the panel says "modify Summary / problem / scope" with no diff. Defect. Seam: Spec documents (proposals). Tier guess: 0.
+**Status:** fixed 8ed7aa7 2026-10-18 (Tier 0): a metadata proposal is labelled by the fields it actually changes and shows each before -> after (lifecycle: "one-off" -> (empty)).
+
+**Found:** open 2026-10-18. Sweep group B. `spprop-cf64...` only clears `lifecycle` (`'one-off' -> ''`), but the panel says "modify Summary / problem / scope" with no diff. Defect. Seam: Spec documents (proposals). Tier guess: 0.
 
 ## F708 (C) -- sending back an operator-completed task leaves the reviewer holding it
 
-**Status:** open 2026-10-18. Sweep group B. The tester sent back `task-26c0...`, which the operator had moved to completed: it ended `revision_needed` with assignee `tester`, the agent that must not write the fix. When the builder completed it, the same send-back returned it to `builder`. Defect. Seam: Tasks x Flows & review. Tier guess: 0.
+**Status:** fixed e9e4ffc 2026-10-18 (Tier 0): with no recorded completer, revision_needed returns the task to the agent named by evidence or the in_progress/completed edges, and never leaves the reviewer who sent it back holding it.
+
+**Found:** open 2026-10-18. Sweep group B. The tester sent back `task-26c0...`, which the operator had moved to completed: it ended `revision_needed` with assignee `tester`, the agent that must not write the fix. When the builder completed it, the same send-back returned it to `builder`. Defect. Seam: Tasks x Flows & review. Tier guess: 0.
 
 ## F709 (C) -- an agent can overwrite the notes of another agent's task, and notes become evidence verdict text
 
-**Status:** open 2026-10-18. Sweep group C. alpha's run (bound to its task A) called `update_task` with notes only on beta's `task-436c2082fb8c`: 200, `notes: "Attempting to set description to hijacked"`, `updated_by_run_id: run-d2ca91a5a825`. `_guard_run_holds_the_task` checks only moves to in_progress/completed; the operator-only field check covers assignee/priority/description, not notes; notes feed `_verdict_text`. Defect or design gap. Seam: Tasks (actor boundaries). Tier guess: 0.
+**Status:** fixed 618f27e 2026-10-18 (Tier 0): an agent may write a task's notes only as its assignee, from a run bound to it, or alongside a real status move; otherwise 403 before any write.
+
+**Found:** open 2026-10-18. Sweep group C. alpha's run (bound to its task A) called `update_task` with notes only on beta's `task-436c2082fb8c`: 200, `notes: "Attempting to set description to hijacked"`, `updated_by_run_id: run-d2ca91a5a825`. `_guard_run_holds_the_task` checks only moves to in_progress/completed; the operator-only field check covers assignee/priority/description, not notes; notes feed `_verdict_text`. Defect or design gap. Seam: Tasks (actor boundaries). Tier guess: 0.
 
 ## F710 (C) -- `POST /tasks` accepts an empty title that rename refuses
 
-**Status:** open 2026-10-18. Sweep group C. `{"title": ""}` -> 201, untitled card; `PATCH {"title": "   "}` -> 422 "A task's title cannot be blank." `TaskCreate.title` has no validator (`schemas/tasks.py:62` vs `:210`). Defect. Seam: Tasks. Tier guess: 0.
+**Status:** fixed 2fba73b 2026-10-18 (Tier 0): both task-creation doors refuse a blank title with rename's 422, through one shared check_task_title.
+
+**Found:** open 2026-10-18. Sweep group C. `{"title": ""}` -> 201, untitled card; `PATCH {"title": "   "}` -> 422 "A task's title cannot be blank." `TaskCreate.title` has no validator (`schemas/tasks.py:62` vs `:210`). Defect. Seam: Tasks. Tier guess: 0.
 
 ## F711 (C) -- the task story leaves out refused turns, a failed checkout release and an operator's manual merge
 
-**Status:** open 2026-10-18. Sweep group C. `/story` for A and B has no event for two refused deliveries ("Could not prepare the checkout ..."), `task_worktree_release_failed`, or the manual merge: ~13 minutes of a jammed task invisible in its "whole story" (1143a0f). Design gap. Seam: Tasks (story) x Worktrees. Tier guess: 0.
+**Status:** fixed 959a3c4 2026-10-18 (Tier 0): the story now shows refused/abandoned/withdrawn turns and failed checkout releases; a hand merge in a terminal leaves no Hub record and stays out.
+
+**Found:** open 2026-10-18. Sweep group C. `/story` for A and B has no event for two refused deliveries ("Could not prepare the checkout ..."), `task_worktree_release_failed`, or the manual merge: ~13 minutes of a jammed task invisible in its "whole story" (1143a0f). Design gap. Seam: Tasks (story) x Worktrees. Tier guess: 0.
 
 ## F712 (C) -- a flow firing whose staged review is withdrawn stays `in_progress` forever
 
-**Status:** open 2026-10-18. Sweep group C. JobRun `run-55e1d5b4f085` staged rev's review of `t-trunc`; landing `t-trunc` withdrew the queued review; the JobRun was still `in_progress` after the loop completed and its job was archived; the Loop tab lists it with no state. Defect; a new path to open F442. Seam: Jobs & loops x Flows & review. Tier guess: 0.
+**Status:** fixed 8e9faec 2026-10-18 (Tier 0): withdrawing a flow's staged review on a verdict closes the firing waiting for it (stopped, with a reason).
+
+**Found:** open 2026-10-18. Sweep group C. JobRun `run-55e1d5b4f085` staged rev's review of `t-trunc`; landing `t-trunc` withdrew the queued review; the JobRun was still `in_progress` after the loop completed and its job was archived; the Loop tab lists it with no state. Defect; a new path to open F442. Seam: Jobs & loops x Flows & review. Tier guess: 0.
 
 ## F713 (C) -- a loop stops on a blank reason, and a real reason is then refused
 
-**Status:** open 2026-10-18. Sweep group C. `PATCH {"stop_reason": "  "}` -> 200, loop `stopped`; the next PATCH with a real reason -> 409. Defect. Seam: Jobs & loops. Tier guess: 0.
+**Status:** fixed 8d0a355 2026-10-18 (Tier 0): a blank stop_reason is a 422 before any write, so the real reason sent next is still the first stop.
+
+**Found:** open 2026-10-18. Sweep group C. `PATCH {"stop_reason": "  "}` -> 200, loop `stopped`; the next PATCH with a real reason -> 409. Defect. Seam: Jobs & loops. Tier guess: 0.
 
 ## F714 (C) -- an ended loop's collapsed job card reads "Paused" and offers Resume
 
-**Status:** open 2026-10-18. Sweep group C. The completed flow's card shows a "Paused" chip with Run and Resume; Resume (`enabled: true`) -> 409 `loop_ended`; only the expanded card says "Stopped: loop queue is empty". For a loop past `stop_at` the Jobs card says "Stopping" while the side panel says "idle". Defect. Seam: Jobs & loops (UI, 3c9dd5c). Tier guess: 0.
+**Status:** fixed 2f1feb5 2026-10-18 (Tier 0): the collapsed job card reads Complete/Stopped for an ended loop with no Resume, and the card and loop tab both read Stopping past stop_at.
+
+**Found:** open 2026-10-18. Sweep group C. The completed flow's card shows a "Paused" chip with Run and Resume; Resume (`enabled: true`) -> 409 `loop_ended`; only the expanded card says "Stopped: loop queue is empty". For a loop past `stop_at` the Jobs card says "Stopping" while the side panel says "idle". Defect. Seam: Jobs & loops (UI, 3c9dd5c). Tier guess: 0.
 
 ## F715 (C) -- the integration preview says "merges cleanly" when approval will skip the merge for a dirty checkout
 
-**Status:** open 2026-10-18. Sweep group C. With an uncommitted edit in the project checkout the preview says "merges cleanly as of now"; approval 200 approved, integration `skipped` ("uncommitted changes to tracked files"); Retry worked once clean. Also: Retry on an already-merged task appends a new `skipped` row per press. Defect. Seam: Worktrees & integration. Tier guess: 0.
+**Status:** fixed 9bf91eb 2026-10-18 (Tier 0): the preview asks integrate()'s own checkout preconditions (task_integration.checkout_obstacle) and names a dirty or off-branch checkout instead of "merges cleanly"; a repeat retry no longer appends an identical "already in" row (test_the_preview_asks_the_merge_question, test_task_integration_retry).
+
+**Found:** open 2026-10-18. Sweep group C. With an uncommitted edit in the project checkout the preview says "merges cleanly as of now"; approval 200 approved, integration `skipped` ("uncommitted changes to tracked files"); Retry worked once clean. Also: Retry on an already-merged task appends a new `skipped` row per press. Defect. Seam: Worktrees & integration. Tier guess: 0.
 
 ## F716 (C) -- Checkpoint now on an already-handed-over conversation still makes a paid checkpoint
 
-**Status:** open 2026-10-18. Sweep group C. After cutover, `POST /conversations/{old}/checkpoint` -> 201 `ckpt-39bcd7b2614f` (a worker call); its own cutover is then refused "already handed over". Defect (spend). Seam: Checkpoints. Tier guess: 0.
+**Status:** fixed cb7a934 2026-10-18 (Tier 0): Checkpoint now on an already-handed-over conversation is refused 409 naming the successor, before the worker call.
+
+**Found:** open 2026-10-18. Sweep group C. After cutover, `POST /conversations/{old}/checkpoint` -> 201 `ckpt-39bcd7b2614f` (a worker call); its own cutover is then refused "already handed over". Defect (spend). Seam: Checkpoints. Tier guess: 0.
 
 ## F717 (C) -- a private vault location on a missing drive is accepted, then every private add is a bare 500
 
-**Status:** open 2026-10-18. Sweep group D. `PUT /vault/settings {"private_location":"Q:\\nowhere\\vault"}` -> 200; `POST /vault/sources {visibility: private}` -> 500 "Internal Server Error", log `FileNotFoundError: [WinError 3] ... 'Q:\\'`. A path that is a file, or under one, is refused 400. Defect. Seam: Knowledge vault x Resilience. Tier guess: 0.
+**Status:** fixed 535ad49 2026-10-18 (Tier 0): a private location on a drive or share that is not there is refused 400 when chosen, and a private add after it disappears answers 409 naming it instead of a bare 500.
+
+**Found:** open 2026-10-18. Sweep group D. `PUT /vault/settings {"private_location":"Q:\\nowhere\\vault"}` -> 200; `POST /vault/sources {visibility: private}` -> 500 "Internal Server Error", log `FileNotFoundError: [WinError 3] ... 'Q:\\'`. A path that is a file, or under one, is refused 400. Defect. Seam: Knowledge vault x Resilience. Tier guess: 0.
 
 ## F718 (C) -- clicking the Activity tab always opens the "Activity" view; the Ledger never leads
 
-**Status:** open 2026-10-18. Sweep group D. 1ffaf49 made `ledger` the initial state (`hub/ui/src/App.tsx:108`), but the tab's onSelect still runs `if (tab === 'activity') setActivitySubview('activity')` (`App.tsx:587`). A fresh browser clicking `project-tab-activity` lands on Activity. Defect. Seam: Logs, events & SSE (Activity ledger). Tier guess: 0.
+**Status:** fixed 9e32ea8 2026-10-18 (Tier 0): the Activity tab's onSelect resets to `ledger`, so a click on Activity opens the Ledger.
+
+**Found:** open 2026-10-18. Sweep group D. 1ffaf49 made `ledger` the initial state (`hub/ui/src/App.tsx:108`), but the tab's onSelect still runs `if (tab === 'activity') setActivitySubview('activity')` (`App.tsx:587`). A fresh browser clicking `project-tab-activity` lands on Activity. Defect. Seam: Logs, events & SSE (Activity ledger). Tier guess: 0.
 
 ## F719 (C) -- Manager firing rows never say what they fired on
 
-**Status:** open 2026-10-18. Sweep group D. `ManagerPanel.tsx:240` renders only `subject.conversation_id`; 23 firings on screen named no source, report or document; identical "1 fact stored" rows cannot be told apart. The route returns `subject`. Design gap. Seam: Manager jobs. Tier guess: 0.
+**Status:** fixed da76102 2026-10-18 (Tier 0): Manager activity rows say what each firing worked on (source by name and id, document, report and entry, conversation).
+
+**Found:** open 2026-10-18. Sweep group D. `ManagerPanel.tsx:240` renders only `subject.conversation_id`; 23 firings on screen named no source, report or document; identical "1 fact stored" rows cannot be told apart. The route returns `subject`. Design gap. Seam: Manager jobs. Tier guess: 0.
 
 ## F720 (C) -- the vault entry detail tells the operator to enable a job that is already enabled
 
-**Status:** open 2026-10-18. Sweep group D. Job on with a Claude runner, budget spent: the image entry said "enable the job with a Claude runner on the Manager page, then distil the source" (static text near `vault.py:744`); the firing said token budget exhausted. Defect. Seam: Knowledge vault x Accounting. Tier guess: 0.
+**Status:** fixed 535ad49 2026-10-18 (Tier 0): an unread image/PDF's entry note names what is actually in the way (job off, no runner, non-reading runner, or the last reading firing's failure such as the spent budget) instead of always saying to enable the job.
+
+**Found:** open 2026-10-18. Sweep group D. Job on with a Claude runner, budget spent: the image entry said "enable the job with a Claude runner on the Manager page, then distil the source" (static text near `vault.py:744`); the firing said token budget exhausted. Defect. Seam: Knowledge vault x Accounting. Tier guess: 0.
 
 ## F721 (C) -- at a spent budget a conversation-title job leaves no firing, while vault jobs record a failed one
 
-**Status:** open 2026-10-18. Sweep group D. `conversation_titles.py:286-288` returns before `record_firing`; only a `worker_invocations` row (`budget_exhausted`) exists. Manager Activity shows nothing; Budgets says "Conversation titles: Unavailable" though nothing ran. Defect. Seam: Manager jobs x Accounting. Tier guess: 0.
+**Status:** fixed 535ad49 2026-10-18 (Tier 0): a conversation-title call paused by a spent budget records a failed manager firing naming the budget, as the vault jobs do.
+
+**Found:** open 2026-10-18. Sweep group D. `conversation_titles.py:286-288` returns before `record_firing`; only a `worker_invocations` row (`budget_exhausted`) exists. Manager Activity shows nothing; Budgets says "Conversation titles: Unavailable" though nothing ran. Defect. Seam: Manager jobs x Accounting. Tier guess: 0.
 
 ## F722 (C) -- the Overview budget card omits the Hub's workers, so its lines do not sum to its total
 
-**Status:** open 2026-10-18. Sweep group D. Total 710,206; alpha 575,030 + beta 32,227 = 607,257. Environment -> Budgets lists the workers. Design gap left by F240. Seam: Accounting & allowance. Tier guess: 0.
+**Status:** fixed 1c75a3c 2026-10-18 (Tier 0): the Overview budget card lists a "Hub workers" row, so its lines sum to the project total.
+
+**Found:** open 2026-10-18. Sweep group D. Total 710,206; alpha 575,030 + beta 32,227 = 607,257. Environment -> Budgets lists the workers. Design gap left by F240. Seam: Accounting & allowance. Tier guess: 0.
 
 ## F723 (C) -- `agentweave doctor --profile X` without `--port` is not refused and examines :8000
 
-**Status:** open 2026-10-18. Sweep group D. `src/agentweave/cli.py:170` defaults the port to 8000 and skips the named-profile port rule that status/stop/start apply (F649/F650); it reported "[OK] port:8000 ... running and answering" beside the sweepdcli database; `--no-network` did not stop the local probe. (The probe was a read-only liveness check on the operator's instance.) Defect. Seam: CLI & lifecycle. Tier guess: 0.
+**Status:** fixed 5e3f4d3 2026-10-18 (Tier 0): `doctor --profile X` without `--port` is refused by the same rule status/stop/start apply, instead of probing :8000; `--no-network` help now states it only exists for compatibility.
+
+**Found:** open 2026-10-18. Sweep group D. `src/agentweave/cli.py:170` defaults the port to 8000 and skips the named-profile port rule that status/stop/start apply (F649/F650); it reported "[OK] port:8000 ... running and answering" beside the sweepdcli database; `--no-network` did not stop the local probe. (The probe was a read-only liveness check on the operator's instance.) Defect. Seam: CLI & lifecycle. Tier guess: 0.
 
 ## F724 (C) -- `agentweave stop` leaves the desktop window that start opened
 
-**Status:** open 2026-10-18. Sweep group D. start opened a pywebview "AgentWeave" window (pid 25200); after `stop` printed "[OK] Hub stopped" the window was alive 20 s later against a dead Hub. Defect or design gap. Seam: CLI & lifecycle. Tier guess: 0.
+**Status:** fixed 5e3f4d3 2026-10-18 (Tier 0): app windows register a per-port marker and close when `stop`/`reset` removes it, so stopping the Hub closes the window start opened.
+
+**Found:** open 2026-10-18. Sweep group D. start opened a pywebview "AgentWeave" window (pid 25200); after `stop` printed "[OK] Hub stopped" the window was alive 20 s later against a dead Hub. Defect or design gap. Seam: CLI & lifecycle. Tier guess: 0.
 
 ## F725 (D) -- a Copilot provider runner gets three different model labels
 
-**Status:** open 2026-10-18. Sweep group A. Settings runner select: "copilot-stub -- claude-haiku-4-5-20251001 (unrecognised) (copilot)"; API `model_unrecognised: false`; composer pill "Haiku 4.5". Seam: Runners & models.
+**Status:** fixed 8f3f76e 2026-10-18 (Tier 0): the runner select labels a provider runner's model from the claude catalog, agreeing with model_unrecognised and the composer pill.
+
+**Found:** open 2026-10-18. Sweep group A. Settings runner select: "copilot-stub -- claude-haiku-4-5-20251001 (unrecognised) (copilot)"; API `model_unrecognised: false`; composer pill "Haiku 4.5". Seam: Runners & models.
 
 ## F726 (D) -- relocating onto a folder another project claims gives a misleading refusal
 
-**Status:** open 2026-10-18. Sweep group A. 409 `project_identity_conflict` "relocation target does not carry the project marker": it carries another project's marker, and the message names neither that project nor a remedy. Seam: Projects.
+**Status:** fixed 5daee14 2026-10-18 (Tier 0): relocating onto another project's folder names that project and both remedies; an unmarked folder is told it has no .agentweave/project.json.
+
+**Found:** open 2026-10-18. Sweep group A. 409 `project_identity_conflict` "relocation target does not carry the project marker": it carries another project's marker, and the message names neither that project nor a remedy. Seam: Projects.
 
 ## F727 (D) -- the capability question's "Enabled it -- go ahead" reads as a grant but grants nothing
 
-**Status:** open 2026-10-18. Sweep group A. Picking it without turning the setting on delivers the answer; the agent retries: a paid turn, a second 403, a second question ("this is the last time"). Seam: Capability plane x Questions.
+**Status:** fixed 5fd3870 2026-10-18 (Tier 0): picking the enabling option while the setting is off is refused (409, says where to turn it on) instead of waking the agent into a second 403.
+
+**Found:** open 2026-10-18. Sweep group A. Picking it without turning the setting on delivers the answer; the agent retries: a paid turn, a second 403, a second question ("this is the last time"). Seam: Capability plane x Questions.
 
 ## F728 (D) -- small agent/project items from the 2026-10-18 sweep
 
-**Status:** open 2026-10-18. Sweep group A. (1) `agent_budget` can be set to 8 while 10 agents are open (`warnings: []`); Overview reads "10 of 8 agents". (2) `work_dir` refusals for a writing agent are one sentence with no remedy. (3) An outside write into `.agentweave/worktrees/` is recorded `destination_kind: agent`, `destination_name: f614-allowed.txt` (a file read as an agent's workspace). Seam: Agents x Permissions.
+**Status:** fixed 2026-10-18 (Tier 0): items (1)-(2) fixed 0463fe8 2026-10-18 (Tier 0): a budget below the open agents saves with a warning the settings panel now shows (it showed no save warnings before); the writing-agent work_dir refusal names its checkout and both remedies. Item (3) fixed a0b82e5 2026-10-18: a file directly in .agentweave/worktrees|tasks|reviews/ is the Hub's, not an agent named after the file.
+
+**Found:** open 2026-10-18. Sweep group A. (1) `agent_budget` can be set to 8 while 10 agents are open (`warnings: []`); Overview reads "10 of 8 agents". (2) `work_dir` refusals for a writing agent are one sentence with no remedy. (3) An outside write into `.agentweave/worktrees/` is recorded `destination_kind: agent`, `destination_name: f614-allowed.txt` (a file read as an agent's workspace). Seam: Agents x Permissions.
 
 ## F729 (D) -- after a project delete the app refetches the deleted project
 
-**Status:** open 2026-10-18. Sweep groups A and D. Ten-odd queries for the deleted project return 404 in the console before the app navigates away. Seam: Projects (UI).
+**Status:** fixed 7a55bb1 2026-10-18 (Tier 0): the delete no longer writes the selected project itself (which raced App's destination->store effect back to the deleted id); navigation resolves the fallback once, and no query for the deleted project runs.
+
+**Found:** open 2026-10-18. Sweep groups A and D. Ten-odd queries for the deleted project return 404 in the console before the app navigates away. Seam: Projects (UI).
 
 ## F730 (D) -- small spec/evidence echoes from the 2026-10-18 sweep
 
-**Status:** open 2026-10-18. Sweep group B. (1) `specification_updated` drift answer accepted with no rewording, silencing that drift. (2) Operator `GET /spec/evidence?review_state=rejected` -> 200 with every piece (the agent route filters). (3) `to=nonsense` on `/documents/phase` -> 409 while an unknown rigor is 422 (F657). (4) A capability `merge` that applied the operator's edit answers `merged: 0`. (5) An agent's `decide_evidence` answer omits the footprint (F657 fixed the operator route only). (6) The `steps_skipped` message names the journey route without its `/projects/{id}` prefix. (7) After an agent's `rename_spec_document` the picker and tree show the slug, and Place under is hidden until a Rebuild. (8) Rejecting evidence of an approved task on an archived, folded change reopens the task on a document that cannot reopen. Seam: Spec documents x Evidence x Drift.
+**Status:** partly fixed 89afece 2026-10-18 (Tier 0): items 2-7 fixed (operator review_state filter, unknown phase 422, merge answers applied, agent decide answer carries footprint, full journey route, rename repoints the index); items 1 (specification_updated without rewording) and 8 (reopen on an archived folded change) await an operator decision.
+
+**Found:** open 2026-10-18. Sweep group B. (1) `specification_updated` drift answer accepted with no rewording, silencing that drift. (2) Operator `GET /spec/evidence?review_state=rejected` -> 200 with every piece (the agent route filters). (3) `to=nonsense` on `/documents/phase` -> 409 while an unknown rigor is 422 (F657). (4) A capability `merge` that applied the operator's edit answers `merged: 0`. (5) An agent's `decide_evidence` answer omits the footprint (F657 fixed the operator route only). (6) The `steps_skipped` message names the journey route without its `/projects/{id}` prefix. (7) After an agent's `rename_spec_document` the picker and tree show the slug, and Place under is hidden until a Rebuild. (8) Rejecting evidence of an approved task on an archived, folded change reopens the task on a document that cannot reopen. Seam: Spec documents x Evidence x Drift.
 
 ## F731 (D) -- small task/flow/loop items from the 2026-10-18 sweep
 
-**Status:** open 2026-10-18. Sweep group C. (1) Story says "Loop ... moved it", Details history says "Flow ... moved" for the same move. (2) `POST /jobs/{id}/run` names one `job_run_id` when the firing created two JobRuns. (3) `stop_at` with no timezone accepted and shown as local; one in the past accepted silently. (4) `task_integrations.actor` is `""` when the operator integrates. (5) Review of a pending task refused "has no branch to review" (not its status); review of a nonexistent task tells the operator "A delegation may only name a task in the project the delegating run belongs to". (6) Land refusal loses failing-check line breaks and reads as addressed to reviewers. (7) Dependency 404 lists an existing id beside the missing one. Seam: Tasks x Flows x Jobs.
+**Status:** fixed 2026-10-18 (Tier 0), all seven items: items 1 c14ba89, 2 f7d80f6, 3 f14bdbd, 4 664e614, 5 13f76d8, 7 428815e; item 6 c558074 (a checks refusal the operator receives ends on the operator's next step and keeps its line breaks in the drawer).
+
+**Found:** open 2026-10-18. Sweep group C. (1) Story says "Loop ... moved it", Details history says "Flow ... moved" for the same move. (2) `POST /jobs/{id}/run` names one `job_run_id` when the firing created two JobRuns. (3) `stop_at` with no timezone accepted and shown as local; one in the past accepted silently. (4) `task_integrations.actor` is `""` when the operator integrates. (5) Review of a pending task refused "has no branch to review" (not its status); review of a nonexistent task tells the operator "A delegation may only name a task in the project the delegating run belongs to". (6) Land refusal loses failing-check line breaks and reads as addressed to reviewers. (7) Dependency 404 lists an existing id beside the missing one. Seam: Tasks x Flows x Jobs.
 
 ## F732 (D) -- the `reset` hint is a command that is refused
 
-**Status:** open 2026-10-18. Sweep group D. `reset --profile sweepdcli --yes` ends "Run 'agentweave --profile sweepdcli' to start fresh", refused without `--port`. Seam: CLI & lifecycle.
+**Status:** fixed 5e3f4d3 2026-10-18 (Tier 0): a named profile's start hint always names a port (`--port <port>` when unknown), so reset's "start fresh" line is a command the CLI accepts.
+
+**Found:** open 2026-10-18. Sweep group D. `reset --profile sweepdcli --yes` ends "Run 'agentweave --profile sweepdcli' to start fresh", refused without `--port`. Seam: CLI & lifecycle.
 
 ## F733 (D) -- every Claude turn logs a second, empty context reading, and the Ledger counts routine readings as warnings
 
-**Status:** open 2026-10-18. Sweep groups D and B. A second `context_warning` ~40 ms after the real one, `status:"measured"`, `context_tokens:null`, shown in Logs as "a context reading with no measurement"; the Ledger's "Repeated notices - Context warnings" counted 37 for ~14 turns (group B: 56, routine 3-4% measurements). Stored `context_usage` is correct. Seam: Logs, events & SSE.
+**Status:** fixed bd5881e 2026-10-18 (Tier 0): a 'measured' reading with neither tokens nor percent is no longer recorded (one reading per Claude turn), and the Ledger labels the folded row "Context readings" in a neutral tone.
+
+**Found:** open 2026-10-18. Sweep groups D and B. A second `context_warning` ~40 ms after the real one, `status:"measured"`, `context_tokens:null`, shown in Logs as "a context reading with no measurement"; the Ledger's "Repeated notices - Context warnings" counted 37 for ~14 turns (group B: 56, routine 3-4% measurements). Stored `context_usage` is correct. Seam: Logs, events & SSE.
 
 ## F734 (D) -- a client sending a body over the limit gets a connection abort instead of the 413 sentence
 
-**Status:** open 2026-10-18. Sweep group D. Python urllib sending 10 MiB+1 gets `[WinError 10053]`: the middleware answers from `content-length` without draining the body; curl reads the 413. F641 holds for curl. Seam: Knowledge vault x Resilience.
+**Status:** fixed 85cd26c 2026-10-18 (Tier 0): ContentSizeLimitMiddleware reads (bounded, 64 MiB) and discards an over-limit body before answering, so clients that send first read the 413 sentence.
+
+**Found:** open 2026-10-18. Sweep group D. Python urllib sending 10 MiB+1 gets `[WinError 10053]`: the middleware answers from `content-length` without draining the body; curl reads the 413. F641 holds for curl. Seam: Knowledge vault x Resilience.
 
 ## F735 (D) -- two silent vault dead ends: "check now" with no requirements, and decision-type uploads
 
-**Status:** open 2026-10-18. Sweep group D. (1) On a document with no requirements, spec-vault "check now" answers 202 `queued` and nothing fires or is recorded. (2) An upload typed `decision` is never distilled; Distil explains with a 409, the upload response and form do not. Seam: Knowledge vault.
+**Status:** fixed 535ad49 2026-10-18 (Tier 0): spec-vault "check now" answers 409 naming what is missing (no requirements, or no current fact) instead of 202 queued, and a decision-type upload's answer says it is not distilled.
+
+**Found:** open 2026-10-18. Sweep group D. (1) On a document with no requirements, spec-vault "check now" answers 202 `queued` and nothing fires or is recorded. (2) An upload typed `decision` is never distilled; Distil explains with a 409, the upload response and form do not. Seam: Knowledge vault.
 
 ## F736 (D) -- starting the Hub from a folder registers that folder as a project and rewrites its binding
 
-**Status:** open 2026-10-18. Sweep group D. `agentweave --profile sweepdcli --port 8035` run from `testbed/scratch` rewrote `testbed/scratch/.agentweave/project.json` to `proj-49aa617ace86` (a profile since reset); any earlier binding of that folder is gone. Seam: CLI & lifecycle x Projects.
+**Status:** open, needs operator decision 2026-10-18: registering the invocation folder is spec'd; the rewrite happens only when the marker's id was deleted in this database (F609 re-mint), which can strand another database's binding. Decide whether an implicit CLI start may overwrite such a marker (recommend: no, open without a project and say why).
+
+**Found:** open 2026-10-18. Sweep group D. `agentweave --profile sweepdcli --port 8035` run from `testbed/scratch` rewrote `testbed/scratch/.agentweave/project.json` to `proj-49aa617ace86` (a profile since reset); any earlier binding of that folder is gone. Seam: CLI & lifecycle x Projects.
 
 ## F737 (B) -- the workspace judge still reads commands as text: four shapes reach the runner's configuration or feed arguments without F675's or F676's rule seeing them
 
-**Status:** open 2026-10-18. Sweep group A, found calling `_decide` in-process (deliberately not run as agent turns). Shapes neither rule sees: a copy or move whose destination is the runner-config directory without naming the file; a decoder writing a file that a later command substitution reads; an interpreter reached through a version launcher; a listing cmdlet piped into a path cmdlet. Same "text boundary" class F675's status concedes for `cd .claude && ...`, without needing `cd`. Grounded review points: the directory-as-destination match in `_RUNNER_CONFIG_PATHS`, the scope of `_PIPE_INTERPRETERS_RE` and `_PS_LISTING` (`hub/hub/mcp_server.py`). Defect (posture holes, not driven to effect). Seam: Permissions & sandbox (shell judge). Tier guess: 0 per shape; the class is the research question of a structural boundary.
+**Status:** open 2026-10-18, needs operator decision: the four shapes reproduce on HEAD, but each text-rule narrowing leaves adjacent variants (git apply/checkout, archive extraction, cd/Join-Path, runtime substitutions), so the runner-config class needs a structural boundary — recommended: the Hub fingerprints the runner-config paths at each turn launch and asks the operator when they changed (Tier 2).
+
+**Found:** open 2026-10-18. Sweep group A, found calling `_decide` in-process (deliberately not run as agent turns). Shapes neither rule sees: a copy or move whose destination is the runner-config directory without naming the file; a decoder writing a file that a later command substitution reads; an interpreter reached through a version launcher; a listing cmdlet piped into a path cmdlet. Same "text boundary" class F675's status concedes for `cd .claude && ...`, without needing `cd`. Grounded review points: the directory-as-destination match in `_RUNNER_CONFIG_PATHS`, the scope of `_PIPE_INTERPRETERS_RE` and `_PS_LISTING` (`hub/hub/mcp_server.py`). Defect (posture holes, not driven to effect). Seam: Permissions & sandbox (shell judge). Tier guess: 0 per shape; the class is the research question of a structural boundary.
+
+## F738 (B) -- `agentweave reset --profile X` cannot find X's running Hub, so it deletes the data folder from under it
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass (projects/CLI group), by reading the code; not driven.
+**Source:** review
+**Theme:** CLI & lifecycle
+
+`src/agentweave/cli.py:1514` builds the PID path with `_hub_pid_file(profile=profile)` and no port, so it only ever looks for `hub-X-8000.pid`. A named profile's Hub runs on its own port (the named-profile port rule, F723/F732), so reset never sees it, never stops it, and deletes the profile's data directory while that Hub still has the database open. Related: F723, F732.
+
+## F739 (C) -- a request body sent without a Content-Length is not size-limited
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass (projects/CLI group), by reading the code; not driven.
+**Source:** review
+**Theme:** Resilience
+
+`ContentSizeLimitMiddleware` (`hub/hub/main.py:365`) checks only the `content-length` header, so a chunked body is read whole with no limit. F734 made an over-limit declared body read the 413; an undeclared one is never refused. Related: F734.
+
+## F740 (D) -- a failed conversation-title firing does not say why
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass (vault group), by reading the code.
+**Source:** review
+**Theme:** Manager jobs
+
+`conversation_titles.py` records a failed firing (spawn failure, non-zero exit) with `_fired(db, "failed" if failed else "empty", None)`, so the Manager activity row reads "failed" with no detail; the vault jobs record their reason. Related: F719, F721.
+
+## F741 (D) -- a vault report on an unread file still gets the fixed "enable the job" note
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass (vault group), by reading the code.
+**Source:** review
+**Theme:** Knowledge vault
+
+F720 replaced the fixed note on the entry-read route only. `vault_reports.py:136` calls `vault.read_entry` directly, so the vault-reports job reading an unread image or PDF still sees "enable the job" when the job is enabled. Related: F720.
+
+## F742 (C) -- renaming a spec document changes its index title but not the file's, which then reads as a metadata conflict
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass (spec group); reproduces in `test_spec_rename.py::test_the_index_follows_the_rename`, which leaves the title diagnostic unasserted.
+**Source:** review
+**Theme:** Spec documents
+
+`spec_service.rename_document` (`hub/hub/spec_service.py:1180`) sets the row's title to the rename subject but leaves the payload `title` in `spec.json` unchanged. After a rename plus a rebuild (and now after F730 (7)'s index update), `/specs` reports `intrinsic_metadata_conflict` on `title`. Related: F730.
+
+## F743 (C) -- an operator PATCH to revision_needed that names an assignee silently ignores it
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass (tasks group), by reading the code.
+**Source:** review
+**Theme:** Task ledger
+
+`update_task_for_actor` (`hub/hub/api/v1/tasks.py`) writes `body.assignee` before `apply_transition`, whose revision_needed path (`task_transition_service.py`, the F495/F708 author-return block) then overwrites it with the author. `{status: "revision_needed", assignee: "X"}` answers 200 and the task goes to the author, not X. Related: F708.
+
+## F744 (D) -- small items from the 2026-10-18 fix pass
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass, by reading the code.
+**Source:** review
+**Theme:** Resilience
+
+(1) `copilot_acp.turn_ended_on_refusal` and the `refusal_continued` notice append "." after a reason that may already end in one ("..").
+(2) The integration preview in `hub/hub/api/v1/tasks.py` treats an exception from workspace resolution as "git failed" and drops the conflict answer it already had.
+(3) `test_manager_jobs.py:275` uses a fake `next(...)` with no default, so a regression hangs the test instead of failing it.
+(4) `test_permission_approver.py` row 1.5a3 says `cp x $(dirname $PWD)` is refused because of the inner `$PWD`. But `cp x $(dirname "$(pwd)")` is already allowed as a runtime value, so the row protects less than it reads.
