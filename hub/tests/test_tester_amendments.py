@@ -147,6 +147,24 @@ async def test_the_builder_is_refused_and_the_tester_amends(
 
 
 @pytest.mark.asyncio
+async def test_an_added_criterion_reaches_the_task_it_was_written_for(
+    app, auth_headers, author_headers, tmp_path
+):
+    """F699: after the amendment the task still listed only its approval-time criteria."""
+    task_id = await _approved(app, auth_headers, author_headers)
+    tester = await _run("run-tester", "tess", reviews=task_id)
+
+    accepted = await app.post(AMEND, json=NEW_CRITERION, headers=tester)
+    assert accepted.status_code == 201, accepted.text
+
+    task = await app.get(f"/api/v1/projects/proj-test/tasks/{task_id}", headers=auth_headers)
+    assert task.status_code == 200, task.text
+    criteria = task.json()["acceptance_criteria"]
+    assert [line.split(":")[0] for line in criteria] == ["c1", "c-slow"]
+    assert "within 200ms" in criteria[1]
+
+
+@pytest.mark.asyncio
 async def test_testing_off_refuses_even_the_test_turn(app, auth_headers, author_headers):
     task_id = await _approved(app, auth_headers, author_headers, delivery={**FLOW, "tester": False})
     tester = await _run("run-tester", "tess", reviews=task_id)
