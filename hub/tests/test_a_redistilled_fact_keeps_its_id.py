@@ -1,8 +1,9 @@
-"""`a-redistilled-fact-keeps-its-id` (F587, F617).
+"""`a-redistilled-fact-keeps-its-id` (F587, F617, F684).
 
 A re-distil keeps, under its id and unchanged, every earlier fact drawn again from the same lines
-(same source and span, the quote equal but for case, spacing and trailing punctuation); facts drawn
-from other lines are new, and the earlier ones not drawn again are deleted. A fact that is gone is
+(same source and span: first a draft whose quote is equal but for case, spacing and trailing
+punctuation, then any draft left over, however it quotes them); facts drawn from other lines are
+new, and the earlier ones not drawn again are deleted. A fact that is gone is
 warned of as gone, and a private entry whose holder is this machine says its text is missing here.
 The worker is faked; the real spawn is `scripts/drive/d1015_f587_redistil_keeps_ids.py`.
 """
@@ -115,6 +116,31 @@ async def test_each_earlier_fact_is_kept_at_most_once(app, auth_headers, worker,
 
     after = _facts(folder)
     assert kept in after and len(after) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_fact_requoted_from_the_same_lines_keeps_its_id_once(
+    app, auth_headers, worker, tmp_path
+) -> None:
+    """F684: the model quotes the same line from another word on; the earlier fact is still that
+    line's fact and keeps its id and record. A second draft on the same line finds it claimed."""
+    worker(
+        [("Refunds up to 437 euros.", ["the refund limit is 437 euros."])],
+        [
+            ("Decision: refunds up to 437 euros.", ["Dana: the refund limit is 437 euros."]),
+            ("Managers sign above 437.", ["refund limit is 437"]),
+        ],
+    )
+    source = await _ready(app, auth_headers)
+    folder = tmp_path / "knowledge" / "facts"
+    [kept] = _facts(folder)
+    before = (folder / f"{kept}.json").read_bytes()
+
+    await app.post(f"{BASE}/vault/sources/{source}/distil", headers=auth_headers)
+
+    after = _facts(folder)
+    assert kept in after and (folder / f"{kept}.json").read_bytes() == before
+    assert len(after) == 2
 
 
 @pytest.mark.asyncio

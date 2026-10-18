@@ -1073,16 +1073,29 @@ def citation_key(citations: List[Dict[str, Any]], visibility: str) -> CitationKe
     )
 
 
+def span_key(citations: List[Dict[str, Any]], visibility: str) -> CitationKey:
+    """What makes a fact drawn again from the same lines the same fact, however it is quoted: its
+    visibility and its citations as a set, each its source and line span (F684: a model re-quotes
+    the same line from another word on, and the quote alone re-minted the fact)."""
+    return (
+        visibility,
+        frozenset((c["source"], c["line_start"], c["line_end"]) for c in citations),
+    )
+
+
 def facts_by_citations(
     project_root: Path, private_root: Path, source_id: str
-) -> Dict[CitationKey, str]:
-    """The facts citing *source_id* whose record is here, by `citation_key`; the first id wins
-    when two share one."""
-    found: Dict[CitationKey, str] = {}
+) -> Dict[str, Tuple[CitationKey, CitationKey]]:
+    """The facts citing *source_id* whose record is here, in id order, each with its
+    `citation_key` and its `span_key`: what a re-distil matches its drafts against."""
+    found: Dict[str, Tuple[CitationKey, CitationKey]] = {}
     for fact_id, fact in sorted(_facts(project_root, private_root).items()):
         meta = fact.meta
         if source_id in meta["sources"] and meta.get("citations"):
-            found.setdefault(citation_key(meta["citations"], meta["visibility"]), fact_id)
+            found[fact_id] = (
+                citation_key(meta["citations"], meta["visibility"]),
+                span_key(meta["citations"], meta["visibility"]),
+            )
     return found
 
 

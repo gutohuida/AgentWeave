@@ -2,14 +2,14 @@
 
 Before: pressing Distil again on a source deleted every earlier fact and wrote the same claims under
 new ids, orphaning the decisions and spec requirements that cited them. After: a fact drawn again
-from the same lines (same spans, quotes equal but for case, spacing and trailing punctuation) keeps
-its id.
+from the same lines (same source and line spans, however it is quoted: F684 dropped the quote from
+the match) keeps its id.
 
   py -3.11 scripts/drive/d1015_f587_redistil_keeps_ids.py <project-name>
 
-Drives the Hub `e2e.py hub-up` started (never :8000 or :8010). Two Haiku distillations. A model that
-quotes differently on the second pass churns that fact by design; the drive needs at least one fact
-drawn from the same lines, and says so when there is none rather than passing. Exit 1 on any fail.
+Drives the Hub `e2e.py hub-up` started (never :8000 or :8010). Three Haiku distillations. The drive
+needs at least one fact drawn from the same lines, and says so when there is none rather than
+passing; it prints which kept facts were quoted differently (the F684 case). Exit 1 on any fail.
 """
 
 import importlib.util
@@ -47,21 +47,25 @@ def loose(quote):
 
 
 def facts(directory, source_id):
-    """Fact id -> the set of its located citations, for the tracked facts citing *source_id*."""
+    """Fact id -> (the set of its citations' line spans, the set of its loose quotes), for the
+    tracked facts citing *source_id*."""
     found = {}
     for path in sorted((directory / "knowledge" / "facts").glob("fct-*.json")):
         record = json.loads(path.read_text(encoding="utf-8"))
         if source_id in (record.get("sources") or []):
-            found[record["id"]] = frozenset(
-                (c["source"], loose(c["quote"]), c["line_start"], c["line_end"])
-                for c in record.get("citations") or []
+            citations = record.get("citations") or []
+            found[record["id"]] = (
+                frozenset((c["source"], c["line_start"], c["line_end"]) for c in citations),
+                frozenset(loose(c["quote"]) for c in citations),
             )
     return found
 
 
 def firings(project, source_id):
     listed = e2e.call("GET", f"/projects/{project}/manager/activity?job={JOB}&limit=200")
-    return [f for f in listed.get("firings", []) if (f.get("subject") or {}).get("source") == source_id]
+    return [
+        f for f in listed.get("firings", []) if (f.get("subject") or {}).get("source") == source_id
+    ]
 
 
 def wait_for_firings(project, source_id, count, seconds=240):
@@ -94,21 +98,31 @@ def main(name):
     first = facts(directory, source)
     check("the first distillation stores facts", bool(first), str(first))
 
-    status, res = e2e.request("POST", f"/projects/{project}/vault/sources/{source}/distil")
-    check("Distil answers 202", status == 202, f"{status} {res}")
-    check("the second distillation fires", wait_for_firings(project, source, 2))
-    second = facts(directory, source)
-    check("the second distillation leaves facts", bool(second), str(second))
-
-    by_lines = {lines: fact_id for fact_id, lines in first.items()}
-    same = {fact_id: by_lines[lines] for fact_id, lines in second.items() if lines in by_lines}
-    check(
-        "at least one fact is drawn again from the same lines",
-        bool(same),
-        "Haiku quoted differently on both facts; re-run before judging the build",
-    )
-    moved = {now: before for now, before in same.items() if now != before}
-    check("every fact drawn from the same lines keeps its id", not moved, f"new id -> old: {moved}")
+    original = dict(first)
+    for attempt in (2, 3):
+        status, res = e2e.request("POST", f"/projects/{project}/vault/sources/{source}/distil")
+        check(f"Distil {attempt} answers 202", status == 202, f"{status} {res}")
+        check(f"distillation {attempt} fires", wait_for_firings(project, source, attempt))
+        second = facts(directory, source)
+        check(f"distillation {attempt} leaves facts", bool(second), str(second))
+        by_lines = {lines: fact_id for fact_id, (lines, _) in first.items()}
+        same = {i: by_lines[lines] for i, (lines, _) in second.items() if lines in by_lines}
+        check(
+            f"distillation {attempt}: a fact is drawn again from the same lines",
+            bool(same),
+            "Haiku cited other lines for every fact; re-run before judging the build",
+        )
+        moved = {now: before for now, before in same.items() if now != before}
+        check(
+            f"distillation {attempt}: every fact from the same lines keeps its id",
+            not moved,
+            f"new id -> old: {moved}",
+        )
+        first = second
+    kept = [i for i in first if i in original]
+    print(f"kept from the first pass: {kept}")
+    for firing in reversed(firings(project, source)):
+        print(f"answer ({firing.get('trigger')}): {firing.get('answer')}")
 
 
 if __name__ == "__main__":

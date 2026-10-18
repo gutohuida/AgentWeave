@@ -320,17 +320,19 @@ async def distil(plan: Plan, *, trigger: str) -> int:
             text = await _transcribe(plan, trigger=trigger)
         if text is None:
             return 0
-        # F587: a fact drawn again from the same lines keeps its id, so the decisions and spec
-        # requirements citing it still point at it. Each earlier fact is claimed at most once.
-        reusable = await asyncio.to_thread(
-            vault.facts_by_citations, plan.project_root, plan.private_root, source_id
+        # F587, F684: a fact drawn again from the same lines keeps its id, so the decisions and
+        # spec requirements citing it still point at it. Each earlier fact is claimed at most once.
+        reusable = Reusable(
+            await asyncio.to_thread(
+                vault.facts_by_citations, plan.project_root, plan.private_root, source_id
+            )
         )
-        kept: Set[str] = set()
+        kept = reusable.kept
         stored_ids: List[str] = []
         line_offset = 0
         for piece in pieces(text):
             stored_ids += await _distil_piece(
-                plan, piece, line_offset, trigger=trigger, reusable=reusable, kept=kept
+                plan, piece, line_offset, trigger=trigger, reusable=reusable
             )
             line_offset += piece.count("\n")
         if stored_ids:
@@ -532,19 +534,44 @@ def _record_pairs(
     return recorded, dropped
 
 
+class Reusable:
+    """The source's earlier facts a re-distil may keep under their ids (F587, F684).
+
+    A draft claims the earlier fact with its `vault.citation_key` (the same lines, the quote equal
+    but for case, spacing and trailing punctuation); a draft left over after that claims one with
+    its `vault.span_key` (the same lines, however quoted). The exact pass runs first, so a reworded
+    draft never takes the fact an exactly quoted one would have kept. Each earlier fact is claimed
+    at most once, lowest id first, and once claimed is in *kept*."""
+
+    def __init__(self, facts: Dict[str, Tuple[vault.CitationKey, vault.CitationKey]]) -> None:
+        self._facts = dict(sorted(facts.items()))
+        self.kept: Set[str] = set()
+
+    def claim(
+        self, citations: List[Dict[str, Any]], visibility: str, *, exact: bool
+    ) -> Optional[str]:
+        """Take the first unclaimed earlier fact whose key matches *citations*; None if none does."""
+        key = (vault.citation_key if exact else vault.span_key)(citations, visibility)
+        index = 0 if exact else 1
+        for fact_id, keys in self._facts.items():
+            if keys[index] == key:
+                del self._facts[fact_id]
+                self.kept.add(fact_id)
+                return fact_id
+        return None
+
+
 async def _distil_piece(
     plan: Plan,
     piece: str,
     line_offset: int,
     *,
     trigger: str,
-    reusable: Optional[Dict[vault.CitationKey, str]] = None,
-    kept: Optional[Set[str]] = None,
+    reusable: Optional[Reusable] = None,
 ) -> List[str]:
-    """Distil one piece; answer the ids of its facts, new or kept. A draft whose citations match
-    one of *reusable* (the source's earlier facts) takes that fact out of it and into *kept*."""
-    reusable = {} if reusable is None else reusable
-    kept = set() if kept is None else kept
+    """Distil one piece; answer the ids of its facts, new or kept. A draft that claims one of
+    *reusable* (the source's earlier facts) is that fact, kept under its id and unchanged."""
+    reusable = Reusable({}) if reusable is None else reusable
     source = plan.source
     result = await run_worker(
         project_id=plan.project_id,
@@ -563,15 +590,24 @@ async def _distil_piece(
         outcome, detail = "failed", result.error or result.outcome
     else:
         drafts = result.parsed.facts if isinstance(result.parsed, Distilled) else []
+        cited: List[Tuple[FactDraft, List[Dict[str, Any]]]] = []
         for draft in drafts:
             citations = _cited(piece, line_offset, source["id"], draft)
             if citations is None:
                 dropped += 1
-                continue
-            earlier = reusable.pop(vault.citation_key(citations, source["visibility"]), None)
-            if earlier is not None:
-                kept.add(earlier)
-                stored.append(earlier)
+            else:
+                cited.append((draft, citations))
+        # The exact pass over every draft first, then the same-lines pass over what is left.
+        claimed: Dict[int, str] = {}
+        for exact in (True, False):
+            for at, (_, citations) in enumerate(cited):
+                if at not in claimed:
+                    earlier = reusable.claim(citations, source["visibility"], exact=exact)
+                    if earlier is not None:
+                        claimed[at] = earlier
+        for at, (draft, citations) in enumerate(cited):
+            if at in claimed:
+                stored.append(claimed[at])
                 continue
             try:
                 meta = await asyncio.to_thread(
