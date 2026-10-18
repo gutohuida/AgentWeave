@@ -374,3 +374,70 @@ async def test_approval_with_checks_starts_a_run_on_the_evidence_the_verdict_acc
     assert approved.status_code == 200, approved.text
     assert await state_of(evidence) == "accepted"
     assert work in commits_on(tmp_path, "main")
+
+
+@pytest.mark.asyncio
+async def test_rejecting_on_an_archived_document_keeps_the_rejection_and_the_task(
+    app, auth_headers, builder, reviewer, tmp_path
+):
+    """F730 item 8. FAILS before: the rejection reopened an approved task whose document is
+    archived, which has no way back, and the answer did not say what happened to the task."""
+    from hub.db.models import SpecDocument
+
+    from .test_task_integration import PATH
+
+    await ready(app, auth_headers, builder, tmp_path)
+    task, evidence, _work = await a_task_with_awaiting_evidence(
+        app, auth_headers, builder, tmp_path
+    )
+    await under_review(app, auth_headers, task)
+    approved = await app.patch(
+        f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer
+    )
+    assert approved.status_code == 200, approved.text
+    async with async_session_factory() as session:
+        # How a folded change ends: archived. The phase is what the rule reads.
+        document = (
+            await session.execute(select(SpecDocument).where(SpecDocument.path == PATH))
+        ).scalar_one()
+        document.phase = "archived"
+        await session.commit()
+
+    rejected = await app.post(
+        f"{BASE}/spec/evidence/{evidence}/decision",
+        json={"decision": "rejected", "reason": "this does not show the overdue list"},
+        headers=auth_headers,
+    )
+
+    assert rejected.status_code == 200, rejected.text
+    assert await state_of(evidence) == "rejected"
+    assert await status_of(task) == "approved"
+    reopen = rejected.json()["task_reopen"]
+    assert reopen["task"] == task and reopen["reopened"] is False, reopen
+    assert "archived" in reopen["reason"] and PATH in reopen["reason"], reopen
+
+
+@pytest.mark.asyncio
+async def test_rejecting_on_a_live_document_says_the_task_reopened(
+    app, auth_headers, builder, reviewer, tmp_path
+):
+    """F730 item 8 control: the answer names the reopen it caused."""
+    await ready(app, auth_headers, builder, tmp_path)
+    task, evidence, _work = await a_task_with_awaiting_evidence(
+        app, auth_headers, builder, tmp_path
+    )
+    await under_review(app, auth_headers, task)
+    approved = await app.patch(
+        f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer
+    )
+    assert approved.status_code == 200, approved.text
+
+    rejected = await app.post(
+        f"{BASE}/spec/evidence/{evidence}/decision",
+        json={"decision": "rejected", "reason": "this does not show the overdue list"},
+        headers=auth_headers,
+    )
+
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["task_reopen"] == {"task": task, "reopened": True}
+    assert await status_of(task) == "revision_needed"

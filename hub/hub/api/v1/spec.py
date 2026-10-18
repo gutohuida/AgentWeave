@@ -1616,31 +1616,63 @@ async def list_evidence(
 
 async def _reopen_an_approved_task(
     session: AsyncSession, project_id: str, evidence_id: str, decision: str
-) -> None:
-    """Send an approved task back when the operator rejects a piece of its evidence (vis-D1).
+) -> Optional[Dict[str, Any]]:
+    """Send an approved task back when the operator rejects a piece of its evidence (vis-D1), and
+    say what happened to it: ``None`` when no approved task was concerned, else ``{"task",
+    "reopened"}`` with a ``reason`` when it was not reopened.
 
     Read fresh: the integration above may have rolled back and expired every loaded row. The
-    rejection has committed either way; a refused reopen is logged, never raised, because the
+    rejection has committed either way; a refused reopen is reported, never raised, because the
     operator's judgement about the evidence stands whatever the task's state allows.
+
+    **An archived document keeps its task approved** (F730 item 8): archived has no way back, so a
+    reopened task would be work against a specification that can no longer change. The rejection
+    stands as the record; the task is left where it is, and the answer says why.
     """
     from ...task_transition_service import TransitionRefusedError, apply_transition
 
     if decision != requirement_evidence.REJECTED:
-        return
+        return None
     evidence = await session.get(RequirementEvidence, evidence_id)
     task = await session.get(Task, evidence.task_id) if evidence and evidence.task_id else None
     if task is None or task.project_id != project_id or task.status != "approved":
-        return
+        return None
+    task_id = task.id
+    requirement = await session.get(SpecRequirement, evidence.requirement_id)
+    document_ids = [
+        document_id
+        for document_id in (
+            requirement.document_id if requirement is not None else None,
+            task.spec_document_id,
+        )
+        if document_id
+    ]
+    for document_id in dict.fromkeys(document_ids):
+        document = await session.get(SpecDocument, document_id)
+        if document is not None and document.phase == spec_lifecycle.ARCHIVED:
+            return {
+                "task": task_id,
+                "reopened": False,
+                "reason": (
+                    f"{document.path} is archived and cannot reopen, so {task_id} stays approved; "
+                    "the rejection is kept as the record. To redo the work, write a new change."
+                ),
+            }
     try:
         await apply_transition(session, task, "revision_needed", task_transitions.operator())
         await session.commit()
-    except TransitionRefusedError:
+    except TransitionRefusedError as exc:
         await session.rollback()
         logging.getLogger(__name__).warning(
-            "rejecting %s could not reopen task %s", evidence_id, task.id, exc_info=True
+            "rejecting %s could not reopen task %s", evidence_id, task_id, exc_info=True
         )
-        return
-    await sse_manager.broadcast(project_id, "task_updated", {"id": task.id, "status": task.status})
+        return {
+            "task": task_id,
+            "reopened": False,
+            "reason": f"{task_id} could not be reopened: {exc}",
+        }
+    await sse_manager.broadcast(project_id, "task_updated", {"id": task_id, "status": task.status})
+    return {"task": task_id, "reopened": True}
 
 
 async def _decision_announcement(session: AsyncSession, evidence) -> Dict[str, Any]:
@@ -1700,7 +1732,10 @@ async def decide_evidence(
     await run_divergence.release_held_review(session, held_review)
     # vis-D1: the operator left the evidence gate and kept the last word. Rejecting a piece whose
     # task an agent's verdict approved reopens that task (`operator-overturns`).
-    await _reopen_an_approved_task(session, project_id, evidence_id, body.decision)
+    reopen = await _reopen_an_approved_task(session, project_id, evidence_id, body.decision)
+    if reopen is not None:
+        # F730 item 8: what the rejection did to the approved task, said rather than left implied.
+        view["task_reopen"] = reopen
     # After the integration, so a view refetching on it sees any merge the decision caused.
     await sse_manager.broadcast(project_id, "spec_updated", announced)
     return view
