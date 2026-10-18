@@ -126,19 +126,23 @@ def test_a_clean_top_up_leaves_no_note(repo, monkeypatch):
     assert _is_ancestor(checkout, a_commit)
 
 
-def test_uncommitted_changes_refuse_without_touching_them(repo):
-    """1.4 (D2): something to merge and a dirty checkout -- refused, the file untouched."""
+def test_uncommitted_changes_are_snapshotted_then_the_prerequisite_comes_in(repo):
+    """1.4 (D2), as F695 changed it: something to merge and a dirty checkout -- the dirty state is
+    committed by the auto-snapshot first (the same commit a turn's end makes), then the prerequisite
+    is merged. Refusing left the author no turn to commit it in."""
     checkout = _b_started_before_a(repo)
+    own = _git(checkout, "rev-parse", "HEAD").stdout.strip()
     (checkout / "scratch.txt").write_text("not committed\n")
     a_commit = _commit_on_new_branch(repo, "agentweave/task/" + A, "a.txt", "a's work\n")
 
-    with pytest.raises(IsolationUnavailableError) as refused:
-        ensure_task_worktree(repo, B, "main", (), approved=((A, a_commit),))
+    again = ensure_task_worktree(repo, B, "main", (), approved=((A, a_commit),))
 
-    assert A in str(refused.value)
-    assert "uncommitted" in str(refused.value)
+    assert again == checkout
     assert (checkout / "scratch.txt").read_text() == "not committed\n"
-    assert not _is_ancestor(checkout, a_commit)
+    assert _is_ancestor(checkout, a_commit) and _is_ancestor(checkout, own)
+    assert _git(checkout, "status", "--porcelain").stdout.strip() == ""
+    subjects = _git(checkout, "log", "--format=%s", "HEAD").stdout
+    assert "Auto-snapshot" in subjects and B in subjects
 
 
 def test_a_dirty_checkout_whose_prerequisite_is_already_in_starts(repo):
