@@ -593,6 +593,38 @@ async def test_a_redistil_does_not_compare_with_a_fact_the_operator_overruled(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xfail(strict=True, reason="F684: a re-quoted standing fact is re-minted")
+async def test_a_redistil_rewording_the_standing_facts_quote_keeps_it_standing(
+    app, auth_headers, worker, tmp_path
+) -> None:
+    """F684: the re-distil of the source that stands quotes the same line differently ("Dana: ..."
+    where the first pass quoted from "the refund ..."). The fact is the same lines' fact: it keeps
+    its id, so the resolution still names a fact in the vault, the overruled fact stays superseded
+    and nothing is checked or reopened (F586, F587)."""
+    fake, newer, _, fact300, fact437, record = await _one_open(app, auth_headers, worker, tmp_path)
+    resolved = await _resolve(app, auth_headers, record["id"], stands=fact300, note="Finance.")
+    assert resolved.status_code == 200, resolved.text
+    decision = resolved.json()["resolution"]["decision"]
+    checks = len(fake.checks())
+    fake.answers.append(
+        [("Decision: the refund limit is 300 euros.", ["Dana: the refund limit is 300 euros"])]
+    )
+
+    assert (await _distil(app, auth_headers, newer["id"])).status_code == 202
+
+    assert _fact(tmp_path, newer["id"], "300") == fact300
+    listed = await _map(app, auth_headers)
+    assert fact300 in listed and listed[fact300]["superseded_by"] is None
+    assert listed[fact437]["superseded_by"] == decision
+    assert not any(e.get("disputed") for e in listed.values())
+    [after] = await _contradictions(app, auth_headers)
+    assert after["id"] == record["id"] and after["status"] == "resolved"
+    assert after["resolution"]["stands"] == fact300
+    assert not any(side["missing"] for side in after["sides"]), after["sides"]
+    assert len(fake.checks()) == checks
+
+
+@pytest.mark.asyncio
 async def test_resolving_for_neither_supersedes_both(app, auth_headers, worker, tmp_path) -> None:
     _, _, _, fact300, fact437, record = await _one_open(app, auth_headers, worker, tmp_path)
     done = await _resolve(app, auth_headers, record["id"], stands=None, note="Neither; ask Dana.")
