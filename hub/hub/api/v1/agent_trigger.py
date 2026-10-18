@@ -1376,6 +1376,9 @@ async def _trigger_agent_directly(
             writing_agent_work_dir_sentence(agent),
             request_level=True,
         )
+    # F695: sentences provisioning returns about the checkout it handed over (a prerequisite merge
+    # left for the author), rendered with the turn's notices below. Only the resolver's arm sets it.
+    workspace_notes: Tuple[str, ...] = ()
     if work_dir:
         # Task 3.3: work_dir is resolved as a project-relative path, never an absolute
         # or escaping one — resolve_relative rejects traversal, absolute paths, control
@@ -1469,7 +1472,7 @@ async def _trigger_agent_directly(
             else None
         )
         try:
-            workspace = worktrees.resolve_turn_workspace(
+            resolved = worktrees.resolve_turn_workspace(
                 repo_root,
                 agent,
                 config,
@@ -1499,6 +1502,8 @@ async def _trigger_agent_directly(
                 # what failed; `turn_scheduler` decides whether anything was starving behind it.
                 agent_workspace_unavailable=True,
             ) from exc
+        workspace = resolved.path
+        workspace_notes = resolved.notes
         effective_work_dir = str(workspace)
         isolated_workspace = workspace if workspace != repo_root else None
         # Task 6.5. Same argument as `effective_work_dir` above: computed here, from the same
@@ -1657,6 +1662,7 @@ async def _trigger_agent_directly(
     # no worktree at all (`isolated_workspace is None`) has nothing this notice would help with.
     if isolated_workspace is not None and review_context is None:
         notices.append(auto_snapshot_notice())
+    notices.extend(workspace_notes)
     # F567: a shared dependency directory that could not be linked into this checkout is told to
     # the agent here and recorded on the run below (`setup_events`), with the reason and the
     # remedy, rather than found by the agent as a build that fails for no reason it can see.

@@ -186,6 +186,10 @@ class GateRefusal:
     # Set when the operator's stated reason cleared a failed or errored check result; the caller
     # records the reason on the transition.
     checks_overridden: bool = False
+    # F695: an approved prerequisite's commit the task's branch does not contain -- its merge
+    # conflicted and was left for the author. A seventh kind of claim: "this is missing work it
+    # was built on". See `_check_prerequisites_merged`.
+    unmerged_prerequisites: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def refuses(self) -> bool:
@@ -197,6 +201,7 @@ class GateRefusal:
             or self.unlanded
             or self.unfinished
             or self.checks
+            or self.unmerged_prerequisites
         )
 
     def detail(self) -> str:
@@ -217,6 +222,7 @@ class GateRefusal:
                 self._unlanded_detail(),
                 self._unfinished_detail(),
                 self._checks_detail(),
+                self._prerequisites_detail(),
             )
             if sentence
         )
@@ -514,6 +520,30 @@ class GateRefusal:
             + (OPERATOR_ON_FAILING_CHECKS if self.for_operator else REVIEWER_SENDS_BACK_CHECKS)
         )
 
+    def _prerequisites_detail(self) -> str:
+        """Each missing prerequisite commit by task and sha, and who merges it (F695)."""
+        if not self.unmerged_prerequisites:
+            return ""
+        pieces = []
+        commands = []
+        for entry in self.unmerged_prerequisites:
+            sha = str(entry.get("commit_sha") or "")
+            piece = f"{entry.get('prerequisite_task')}'s commit {sha[:12]}"
+            if entry.get("paths"):
+                piece += " (conflicting in " + ", ".join(entry["paths"][:10]) + ")"
+            pieces.append(piece)
+            commands.append(f"`git merge --no-ff {sha}`")
+        return (
+            "This task's branch does not contain the approved work it depends on: "
+            + "; ".join(pieces)
+            + ". Merging it conflicted, so it was left for the task's author, whose turns are told "
+            "to run "
+            + " and ".join(commands)
+            + " in the task's checkout, resolve the conflicts and commit; approve once that merge "
+            "is on the branch. If you are reviewing this task, the merge is its author's work, not "
+            "yours: move the task to revision_needed with notes naming the commit."
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "code": "gate_unsatisfied",
@@ -525,6 +555,7 @@ class GateRefusal:
             "unlanded": list(self.unlanded),
             "unfinished": list(self.unfinished),
             "reported": list(self.reported),
+            "unmerged_prerequisites": list(self.unmerged_prerequisites),
             "message": self.detail(),
         }
 
@@ -799,6 +830,39 @@ async def _check_unlanded(task: Task, refusal: GateRefusal, situation: _MergeSit
     )
 
 
+async def _check_prerequisites_merged(
+    session: AsyncSession, task: Task, refusal: GateRefusal, situation: _MergeSituation
+) -> None:
+    """Refuse while an approved prerequisite's commit is not on this task's branch (F695).
+
+    A turn on the task tops its checkout up with that work (`worktrees._catch_up_prerequisites`);
+    one whose merge conflicts is left for the author, who is told in the turn's prompt. Until the
+    author has merged it the branch is missing work it was built on, and approving would land it
+    without. Asked of the branch with the prompt's own function (`worktrees.unmerged_prerequisites`),
+    so the two cannot disagree. Silent for a task with no checkout of its own or no branch yet.
+    """
+    from . import task_integration, task_workspace, worktrees
+
+    approved = await task_workspace.approved_prerequisite_commits(session, task, situation.root)
+    if not approved:
+        return
+    branch = worktrees.task_branch_name(task.id)
+    if not await asyncio.to_thread(task_integration.branch_exists, situation.root, branch):
+        return
+    pending = await asyncio.to_thread(
+        worktrees.unmerged_prerequisites, situation.root, approved, branch
+    )
+    refusal.unmerged_prerequisites.extend(
+        {
+            "prerequisite_task": entry.prerequisite_id,
+            "commit_sha": entry.commit_sha,
+            "branch": branch,
+            "paths": list(entry.paths),
+        }
+        for entry in pending
+    )
+
+
 async def _check_live_turn(
     session: AsyncSession, task: Task, refusal: GateRefusal, *, acting_run_id: Optional[str]
 ) -> None:
@@ -999,6 +1063,7 @@ async def evaluate(
             start_checks=start_checks and not refusal.unmergeable,
             override_checks_reason=override_checks_reason,
         )
+        await _check_prerequisites_merged(session, task, refusal, situation)
 
     # Beside that block rather than inside it, and above the early return for the same reason both
     # of the above are. Liveness is not a question about the repository — see `_check_live_turn`,

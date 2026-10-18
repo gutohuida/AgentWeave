@@ -162,6 +162,18 @@ async def resolve_turn_workspace_inputs(
     )
 
 
+async def approved_prerequisite_commits(
+    session: AsyncSession, task: Task, repo_root: Path
+) -> Tuple[Tuple[str, str], ...]:
+    """The `(prerequisite, commit)` pairs *task*'s own checkout takes in on every turn (F158), for a
+    task that has one; empty otherwise. What approval asks its branch to contain (F695), from the
+    same query the turn's top-up uses, so the two cannot name different commits."""
+    if not takes_own_checkout(task):
+        return ()
+    _, approved = await _prerequisite_commits(session, task, repo_root)
+    return approved
+
+
 async def integration_base(session: AsyncSession, project_id: str, repo_root: Path) -> str:
     """What a task branch is cut from: the branch approval will merge *into* (design D1).
 

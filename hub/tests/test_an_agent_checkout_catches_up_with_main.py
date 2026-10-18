@@ -45,7 +45,7 @@ def _contains(checkout: Path, sha: str) -> bool:
 
 
 def _turn(repo: Path, config=None) -> Path:
-    return worktrees.resolve_turn_workspace(repo, AGENT, config or {}, catch_up_to="HEAD")
+    return worktrees.resolve_turn_workspace(repo, AGENT, config or {}, catch_up_to="HEAD").path
 
 
 def test_a_worktree_behind_main_is_fast_forwarded(repo):
