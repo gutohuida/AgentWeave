@@ -29,7 +29,7 @@ import logging
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Collection, Dict, List, Optional
+from typing import Collection, Dict, List, Optional, Tuple
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -595,6 +595,23 @@ class IntegrationResult:
     rode_along: List[str] = field(default_factory=list)
 
 
+def checkout_obstacle(
+    root: Path, main_branch: str, hub_written: Collection[str] = ()
+) -> Optional[str]:
+    """Why the project's checkout cannot take a merge right now, or `None` where it can.
+
+    The checkout's half of `integrate`'s preconditions, on its own so the approval preview asks the
+    same question approval will (F715): it said "merges cleanly as of now" over a dirty checkout,
+    and approval then recorded the merge `skipped`. Returns the reason `integrate` records.
+    """
+    if has_uncommitted_changes(root, hub_written):
+        return CHECKOUT_DIRTY
+    on = current_branch(root)
+    if on != main_branch:
+        return CHECKOUT_ELSEWHERE.format(current=on or "a detached HEAD", target=main_branch)
+    return None
+
+
 def integrate(
     root: Path, target: Target, main_branch: str, *, hub_written: Collection[str] = ()
 ) -> IntegrationResult:
@@ -626,13 +643,9 @@ def integrate(
         base.reason = ALREADY_INTEGRATED.format(commit=target.commit_sha[:12], target=main_branch)
         return base
 
-    if has_uncommitted_changes(root, hub_written):
-        base.reason = CHECKOUT_DIRTY
-        return base
-
-    on = current_branch(root)
-    if on != main_branch:
-        base.reason = CHECKOUT_ELSEWHERE.format(current=on or "a detached HEAD", target=main_branch)
+    obstacle = checkout_obstacle(root, main_branch, hub_written)
+    if obstacle is not None:
+        base.reason = obstacle
         return base
 
     # Computed before the merge runs: once it succeeds, `target.commit_sha` is reachable from
@@ -697,6 +710,24 @@ def record(
     )
     session.add(row)
     return row
+
+
+async def newest_per_target(
+    session: AsyncSession, task_id: str
+) -> Dict[Tuple[Optional[str], Optional[str]], TaskIntegration]:
+    """The task's newest integration row per `(commit_sha, target_branch)`."""
+    rows = (
+        (
+            await session.execute(
+                select(TaskIntegration)
+                .where(TaskIntegration.task_id == task_id)
+                .order_by(TaskIntegration.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {(row.commit_sha, row.target_branch): row for row in rows}
 
 
 async def tasks_skipped_for_want_of_a_main_branch(

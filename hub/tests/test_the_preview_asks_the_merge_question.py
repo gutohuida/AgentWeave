@@ -99,6 +99,53 @@ async def test_once_resolved_the_preview_says_it_merges_cleanly(
 
 
 @pytest.mark.asyncio
+async def test_a_dirty_checkout_is_named_not_called_clean(
+    app, auth_headers, builder, tmp_path  # noqa: F811
+):
+    """F715. With an uncommitted edit in the project checkout the preview said "merges cleanly as
+    of now", and approval then recorded the merge `skipped`. The preview asks integration's own
+    preconditions, so what it says matches what approval will do."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+    commit_on_branch(tmp_path, AGENT_BRANCH, "alpha.txt", "alpha\n")
+    await accept_evidence(app, auth_headers, builder, identifier="FR-1")
+    git(tmp_path, "checkout", "-q", "main")
+    tracked = git(tmp_path, "ls-files").stdout.split()[0]
+    (tmp_path / tracked).write_text("the operator is mid-edit\n", encoding="utf-8")
+    task = await linked_task(app, auth_headers)
+
+    answer = await preview(app, auth_headers, task)
+
+    assert "merges cleanly" not in answer["reason"], answer["reason"]
+    assert "uncommitted changes" in answer["reason"], answer["reason"]
+
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+    integrations = await app.get(f"{TASKS}/{task}/integrations", headers=auth_headers)
+    [row] = integrations.json()["integrations"]
+    assert row["outcome"] == "skipped" and row["reason"] == task_integration.CHECKOUT_DIRTY
+
+
+@pytest.mark.asyncio
+async def test_a_checkout_on_another_branch_is_named_not_called_clean(
+    app, auth_headers, builder, tmp_path  # noqa: F811
+):
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+    commit_on_branch(tmp_path, AGENT_BRANCH, "alpha.txt", "alpha\n")
+    await accept_evidence(app, auth_headers, builder, identifier="FR-1")
+    git(tmp_path, "checkout", "-q", "-b", "parked", "main")
+    task = await linked_task(app, auth_headers)
+
+    answer = await preview(app, auth_headers, task)
+
+    assert "merges cleanly" not in answer["reason"], answer["reason"]
+    assert "parked" in answer["reason"], answer["reason"]
+
+
+@pytest.mark.asyncio
 async def test_work_already_on_main_is_not_counted_as_merging(
     app, auth_headers, builder, tmp_path  # noqa: F811
 ):
