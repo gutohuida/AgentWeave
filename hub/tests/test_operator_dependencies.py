@@ -117,6 +117,8 @@ async def test_a_missing_task_is_named(app, auth_headers):
 
     assert response.status_code == 404, response.text
     assert "task-imaginary" in response.json()["detail"]
+    # F731(7): the task that exists is not listed beside the one that does not.
+    assert "task-real" not in response.json()["detail"]
 
 
 @pytest.mark.asyncio

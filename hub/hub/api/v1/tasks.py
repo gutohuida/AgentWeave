@@ -2170,10 +2170,25 @@ async def add_task_dependency(
             detail="a task cannot depend on itself",
         )
     if outcome == task_dependency_writer.MISSING:
+        # Name only the missing ones (F731): listing both ids sent the operator hunting for a task
+        # that exists.
+        present = set(
+            (
+                await session.execute(
+                    select(Task.id).where(
+                        Task.project_id == project_id, Task.id.in_([task_id, body.depends_on])
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        missing = [tid for tid in dict.fromkeys([task_id, body.depends_on]) if tid not in present]
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"one of these tasks does not exist in this project: {task_id}, {body.depends_on}"
+                f"no task {' or '.join(missing or [body.depends_on])} in this project; nothing "
+                f"was declared"
             ),
         )
     if outcome == task_dependency_writer.CYCLE:
