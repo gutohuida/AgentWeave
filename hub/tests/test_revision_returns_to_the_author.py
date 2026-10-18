@@ -87,3 +87,50 @@ async def test_an_operator_completion_leaves_the_assignee_alone(app):
 
     async with async_session_factory() as db:
         assert (await _fresh_task(db, task.id)).assignee == REVIEWER
+
+
+async def test_an_operator_completion_returns_to_the_agent_that_worked_it(app):
+    """F708: the author took the task to in_progress, the operator marked it completed, and the
+    reviewer's send-back left the reviewer holding the rework."""
+    async with async_session_factory() as db:
+        _job, _loop, task = await _flow_with_task(db, suffix="f708-worked")
+        author = run_actor(run_id=f"run-{AUTHOR}-{task.id}", agent=AUTHOR)
+        await apply_transition(db, task, "assigned", author)
+        await apply_transition(db, task, "in_progress", author)
+        await apply_transition(db, task, "completed", operator())
+        await db.commit()
+        await _sent_back_by_reviewer(db, task)
+
+    async with async_session_factory() as db:
+        back = await _fresh_task(db, task.id)
+        assert back.status == "revision_needed"
+        assert back.assignee == AUTHOR
+
+
+async def test_an_operator_completion_returns_to_the_agent_that_recorded_its_evidence(app):
+    async with async_session_factory() as db:
+        _job, _loop, task = await _flow_with_task(db, suffix="f708-evidence")
+        for status in ("assigned", "in_progress", "completed"):
+            await apply_transition(db, task, status, operator())
+        await db.commit()
+        await record_review_evidence(db, task.id, suffix="f708-evidence", actor=AUTHOR)
+        await _sent_back_by_reviewer(db, task)
+
+    async with async_session_factory() as db:
+        assert (await _fresh_task(db, task.id)).assignee == AUTHOR
+
+
+async def test_a_reviewer_sending_back_unattributed_work_does_not_keep_it(app):
+    """Nobody is named as the author: the reviewer must not hold the fix, so it is left unassigned
+    for the operator to give."""
+    async with async_session_factory() as db:
+        _job, _loop, task = await _flow_with_task(db, suffix="f708-nobody")
+        for status in ("assigned", "in_progress", "completed"):
+            await apply_transition(db, task, status, operator())
+        await db.commit()
+        await _sent_back_by_reviewer(db, task)
+
+    async with async_session_factory() as db:
+        back = await _fresh_task(db, task.id)
+        assert back.status == "revision_needed"
+        assert back.assignee is None

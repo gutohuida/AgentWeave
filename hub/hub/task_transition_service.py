@@ -832,11 +832,10 @@ async def apply_transition(
     # resumes a staffed task with whoever `assignee` names — so without this the reviewer reworked
     # what it had reviewed, became the completer, and the author was staffed to review the
     # reviewer's fix. Read before the status write, so the lookup's autoflush cannot matter. An
-    # operator completion names no agent, and the assignee is then left as it is, not guessed at.
+    # operator completion names no agent; `_holder_of_sent_back_work` then asks the other records
+    # of authorship before it leaves the assignee alone (F708).
     if to_status == "revision_needed":
-        author = await agent_that_completed(session, task.id)
-        if author is not None:
-            task.assignee = author
+        task.assignee = await _holder_of_sent_back_work(session, task, actor)
     if to_status in ("revision_needed", "rejected"):
         await _decide_evidence_with_verdict(session, task, actor, to_status, verdict_reason)
 
@@ -906,6 +905,41 @@ async def apply_transition(
         await on_task_closed(session, task)
 
     return transition
+
+
+async def _holder_of_sent_back_work(
+    session: AsyncSession, task: Task, actor: Actor
+) -> Optional[str]:
+    """Who holds *task* once it is sent back for revision: its author, never its reviewer.
+
+    The agent that completed it, when one did (F495). When the operator completed it (F708, found
+    2026-10-18: the tester sent back an operator-completed task and ended up holding the rework),
+    the other records of authorship are asked — evidence recorded for the task, and the agents that
+    took it to `in_progress` or `completed` — less the agent sending it back. The current assignee
+    stays if it is one of them; otherwise a single named author takes it. With nobody named, the
+    agent sending the work back does not keep it — the task is left unassigned for the operator to
+    give — and any other holder is left as it is, not guessed at.
+    """
+    completer = await agent_that_completed(session, task.id)
+    if completer is not None:
+        return completer
+    edges = await session.execute(
+        select(TaskTransition.actor_agent)
+        .where(TaskTransition.task_id == task.id)
+        .where(TaskTransition.to_status.in_(("in_progress", "completed")))
+        .where(TaskTransition.actor_agent.isnot(None))
+        .distinct()
+    )
+    authors = {agent for agent in edges.scalars().all() if agent}
+    authors |= await agents_that_recorded_evidence_for(session, task.id)
+    authors.discard(actor.agent or "")
+    if task.assignee in authors:
+        return task.assignee
+    if len(authors) == 1:
+        return next(iter(authors))
+    if actor.agent and task.assignee == actor.agent:
+        return None
+    return task.assignee
 
 
 async def _decide_evidence_with_verdict(
