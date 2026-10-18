@@ -1116,7 +1116,8 @@ async def integrate_task(session: AsyncSession, task: Task, actor: Actor) -> lis
             task,
             result,
             actor_kind=actor.kind,
-            actor=actor.agent or "",
+            # Who integrated, by name: the operator carries no agent, and "" read as nobody (F731).
+            actor=actor.agent or ("operator" if actor.is_operator else ""),
         )
         return [result]
 

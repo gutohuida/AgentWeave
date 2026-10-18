@@ -192,6 +192,8 @@ async def test_a_merge_and_an_override_reach_the_summary(app, auth_headers, buil
 
     [integration] = [e for e in body["events"] if e["kind"] == "integration"]
     assert integration["outcome"] == "merged"
+    # F731(4): the operator's approval integrated it, and the record says so rather than "".
+    assert (integration["actor_kind"], integration["actor"]) == ("operator", "operator")
     assert body["summary"]["merged"] == [integration["commit_sha"]]
     approved = [e for e in body["events"] if e["kind"] == "transition" and e["to"] == "approved"]
     assert approved[0]["override_reason"] == "the flaky suite fails on main too"
