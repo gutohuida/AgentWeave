@@ -814,6 +814,7 @@ async def apply_transition(
                 override_checks_reason=reason,
             )
             if refusal.refuses:
+                refusal.for_operator = actor.is_operator
                 raise GateUnsatisfiedError(refusal)
         overridden = reason if refusal.checks_overridden else None
         # `contract` never refuses, so its unmet and rejected requirements have nowhere to surface

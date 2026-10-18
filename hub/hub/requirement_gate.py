@@ -103,6 +103,12 @@ REVIEWER_SENDS_BACK_CHECKS = (
     "move the task to revision_needed with notes quoting the failing output."
 )
 
+#: F731 (6): the same moment said to the operator, who lands rather than reviews.
+OPERATOR_ON_FAILING_CHECKS = (
+    "Send the task back to its author (revision_needed) with the failing output, or land it "
+    "anyway with a reason if the failure is acceptable."
+)
+
 #: How much of a failing check's output a refusal quotes. Agents read only the message.
 CHECK_TAIL_IN_MESSAGE = 1500
 NEWLINE = chr(10)
@@ -119,6 +125,9 @@ class GateRefusal:
     """Why the gate refused, in a shape a surface can render without parsing prose."""
 
     blocking: List[Dict[str, str]] = field(default_factory=list)
+    # F731 (6): who reads the refusal. The checks sentences end on what the reader does next, and a
+    # reviewer's next step (send it back) is not the operator's (send it back or land anyway).
+    for_operator: bool = False
     diagnostics: List[Dict[str, str]] = field(default_factory=list)
     # Work that cannot land where approval says it lands. Separate from `blocking` because it is a
     # different kind of claim: not "this is unproven" but "this cannot go in". An operator told the
@@ -441,15 +450,19 @@ class GateRefusal:
                 "task's work. "
                 + (NEWLINE * 2).join(parts)
                 + NEWLINE * 2
-                + "Approval waits on the operator: land it with an override reason, or fix main "
-                "first. A reviewer should not send it back for this."
+                + (
+                    "Land it with an override reason, or fix main first."
+                    if self.for_operator
+                    else "Approval waits on the operator: land it with an override reason, or fix "
+                    "main first. A reviewer should not send it back for this."
+                )
             )
         return (
             "This task's checks failed on the work approval would merge, so approving would land "
             "work that breaks the project. "
             + (NEWLINE * 2).join(parts)
             + NEWLINE * 2
-            + REVIEWER_SENDS_BACK_CHECKS
+            + (OPERATOR_ON_FAILING_CHECKS if self.for_operator else REVIEWER_SENDS_BACK_CHECKS)
         )
 
     def to_dict(self) -> Dict[str, Any]:

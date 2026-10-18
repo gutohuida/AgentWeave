@@ -812,7 +812,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         {refusal && (
           <p
             data-testid={`task-status-refusal-${task.id}`}
-            className="text-[11px] p-2 rounded"
+            className="text-[11px] p-2 rounded whitespace-pre-line"
             style={{
               color: 'var(--amber)',
               background: 'color-mix(in srgb, var(--amber) 10%, transparent)',

@@ -11,8 +11,10 @@ from hub.api.v1.tasks import update_task_for_actor
 from hub.db.engine import async_session_factory
 from hub.db.models import Task, TaskCheckRun, TaskTransition
 from hub.requirement_gate import (
+    OPERATOR_ON_FAILING_CHECKS,
     PREEXISTING_CHECKS_HOLD_REMEDY,
     REVIEWER_SENDS_BACK_CHECKS,
+    GateRefusal,
     approval_held_for_operator,
     evaluate,
 )
@@ -57,7 +59,9 @@ async def test_a_failing_check_refuses_approval_with_its_output_and_the_reviewer
     detail = refused.json()["detail"]
     assert detail["checks"][0]["state"] == "failed"
     assert "tests" in detail["message"] and "boom: 2 != 3" in detail["message"]
-    assert REVIEWER_SENDS_BACK_CHECKS in detail["message"]
+    # F731 (6): the operator approved here, so the next step is said to the operator.
+    assert OPERATOR_ON_FAILING_CHECKS in detail["message"]
+    assert REVIEWER_SENDS_BACK_CHECKS not in detail["message"]
     assert work not in commits_on(tmp_path, "main")
 
 
@@ -355,7 +359,7 @@ async def test_a_new_failure_beside_a_preexisting_one_stays_the_authors(
 
     detail = refused.json()["detail"]
     assert detail["checks"][0]["state"] == "failed"
-    assert REVIEWER_SENDS_BACK_CHECKS in detail["message"]
+    assert OPERATOR_ON_FAILING_CHECKS in detail["message"]
     assert "`suite` exited 1 (and fails on main too)" in detail["message"]
     assert "`tests` exited 3:" in detail["message"]
 
@@ -387,3 +391,38 @@ async def test_land_takes_the_operators_override_reason(app, auth_headers, tmp_p
             .all()
         )
     assert reasons == ["main carries the defect"]
+
+
+def test_failing_checks_end_on_the_readers_own_next_step():
+    """F731 (6): Land's refusal read as addressed to reviewers; each failing check keeps its lines."""
+    checks = [
+        {
+            "state": "failed",
+            "failing": [
+                {"name": "tests", "exit_code": 3, "output_tail": "one\ntwo"},
+                {"name": "lint", "exit_code": 1, "output_tail": "bad"},
+            ],
+        }
+    ]
+    for_reviewer = GateRefusal(checks=checks).detail()
+    for_operator = GateRefusal(checks=checks, for_operator=True).detail()
+
+    assert REVIEWER_SENDS_BACK_CHECKS in for_reviewer
+    assert OPERATOR_ON_FAILING_CHECKS not in for_reviewer
+    assert OPERATOR_ON_FAILING_CHECKS in for_operator
+    assert REVIEWER_SENDS_BACK_CHECKS not in for_operator
+    assert "`tests` exited 3:\none\ntwo\n\n`lint` exited 1:\nbad" in for_operator
+
+
+@pytest.mark.asyncio
+async def test_land_refused_by_failing_checks_speaks_to_the_operator(app, auth_headers, tmp_path):
+    task_id, work = await _task_with_work(tmp_path)
+    await _checked(task_id, [FAIL])
+
+    refused = await app.post(f"{TASKS}/{task_id}/land", headers=auth_headers)
+
+    assert refused.status_code == 409, refused.text
+    message = refused.json()["detail"]["message"]
+    assert OPERATOR_ON_FAILING_CHECKS in message
+    assert REVIEWER_SENDS_BACK_CHECKS not in message
+    assert work not in commits_on(tmp_path, "main")

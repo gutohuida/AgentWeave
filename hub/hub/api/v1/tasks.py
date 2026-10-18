@@ -1987,6 +1987,7 @@ async def land_task(
         override_checks_reason=override,
     )
     if refusal.refuses:
+        refusal.for_operator = True  # F731 (6): Land is the operator's door
         raise GateUnsatisfiedError(refusal)
     # Step one: the author's hold. `None` rather than the operator's name — the operator is not an
     # agent and `assignee` names agents.
