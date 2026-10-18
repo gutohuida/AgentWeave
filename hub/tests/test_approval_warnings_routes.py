@@ -262,3 +262,49 @@ async def test_skipped_journey_steps_are_listed_at_approval(
     warnings = refused.json()["detail"]["warnings"]
     assert [w["code"] for w in warnings] == ["steps_skipped"]
     assert "threat-model" in warnings[0]["message"]
+
+
+_SAME_FILE_TASKS = [
+    {"key": "t-cv", "description": "a", "requirements": ["alpha"], "files": ["m/registry.py"]},
+    {"key": "t-trunc", "description": "b", "requirements": ["alpha"], "files": ["m/registry.py"]},
+]
+
+
+# F694
+@pytest.mark.asyncio
+async def test_the_operators_write_answers_the_same_file_warning(
+    app, auth_headers, tmp_path  # noqa: F811
+):
+    """`PUT .../content` built its answer by hand and dropped `SaveResult.warnings`."""
+    await _create(app, auth_headers)
+
+    response = await app.put(
+        f"{BASE}/documents/{PATH}/content",
+        json={"document": _checked(tasks=_SAME_FILE_TASKS)},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert "unordered_file_overlap" in {w["code"] for w in response.json()["warnings"]}
+
+
+@pytest.mark.asyncio
+async def test_propose_and_approve_name_same_file_tasks_with_no_order(
+    app, auth_headers, run_headers, tmp_path  # noqa: F811
+):
+    """F694: the warning lived only in the save result, so the operator who proposes and approves
+    never saw it, and the two tasks ran in parallel and collided."""
+    await _create(app, auth_headers)
+    await _submit(app, run_headers, _checked(tasks=_SAME_FILE_TASKS))
+    await _place(step="delivery", size="large")
+
+    proposed = (await _propose(app, auth_headers)).json()
+    assert proposed["proposed"] is True, proposed
+    assert "unordered_file_overlap" in {w["code"] for w in proposed["warnings"]}
+
+    refused = await _phase(app, auth_headers, "approved")
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["code"] == "approval_warnings"
+    assert "unordered_file_overlap" in {w["code"] for w in detail["warnings"]}
+    assert (await _phase(app, auth_headers, "approved", approve_anyway=True)).status_code == 200

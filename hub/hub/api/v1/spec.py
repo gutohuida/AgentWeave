@@ -834,6 +834,7 @@ async def write_document_content(
         "identifiers": result.identifiers,
         "divergence": result.divergence,
         "blocking": result.blocking,
+        "warnings": result.warnings,
     }
 
 
@@ -1190,6 +1191,7 @@ async def accept_proposal_route(
         "phase": result.phase,
         "identifiers": result.identifiers,
         "blocking": result.blocking,
+        "warnings": result.warnings,
         "proposal": _proposal_view(proposal),
     }
 
@@ -2536,6 +2538,7 @@ async def create_document(
     return {
         **await _project_document_view(session, project_id, document),
         "blocking": result.blocking,
+        "warnings": result.warnings,
     }
 
 
@@ -3332,6 +3335,7 @@ async def merge_document(
         response = {
             **await _project_document_view(session, project_id, document),
             "blocking": result.blocking,
+            "warnings": result.warnings,
             "divergence": result.divergence,
             "merged": len(sources),
         }
@@ -3487,7 +3491,7 @@ async def fold_document(
     if isinstance(result, spec_service.ProposeResult):
         response.update(merged=0, proposals=result.proposals)
     else:
-        response.update(merged=1, blocking=result.blocking)
+        response.update(merged=1, blocking=result.blocking, warnings=result.warnings)
     await session.commit()
     for document in (capability, change):
         await sse_manager.broadcast(

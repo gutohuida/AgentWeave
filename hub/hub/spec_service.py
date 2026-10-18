@@ -1587,6 +1587,9 @@ async def phase_findings(
     findings = [
         *findings,
         *spec_completeness.approval_gaps(payload),
+        # Same-file tasks with no order between them run in parallel and collide (F694): the save
+        # result's advisory alone never reached the operator, so proposal and approval say it too.
+        *spec_completeness.overlap_warnings(payload),
         *_steps_skipped(workspace, document),
         *await _amendments_unreviewed(session, document),
         *await _vault_warnings(session, workspace, document),
