@@ -1365,6 +1365,15 @@ async def link_roadmap_slice(
             code="roadmap_not_found",
             field_path="roadmap.document",
         )
+    if roadmap.phase != spec_lifecycle.APPROVED:
+        # F705: the rule a proposal holds (`spec_completeness._roadmap_link_findings`). A link
+        # accepted here to an unapproved roadmap refused the change's own re-proposal later.
+        raise SaveRefusedError(
+            f"{roadmap.path} is {roadmap.phase}; a change names a roadmap slice only once that "
+            "roadmap is approved",
+            code="roadmap_not_approved",
+            field_path="roadmap.document",
+        )
     keys = [str(item["key"]) for item in roadmap_slices(workspace, roadmap.path)]
     if slice_key not in keys:
         raise SaveRefusedError(
@@ -1383,8 +1392,13 @@ async def link_roadmap_slice(
     if current == link:
         return False
     if current:
+        named = (
+            f"slice {current.get('slice')!r} of {current.get('document')}"
+            if isinstance(current, dict)
+            else "another roadmap slice"
+        )
         raise SaveRefusedError(
-            f"{document.path} already names {current}; reopen it to change its slice",
+            f"{document.path} already names {named}; reopen it to change its slice",
             code="roadmap_link_differs",
             field_path="roadmap",
         )
