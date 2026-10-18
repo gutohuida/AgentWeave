@@ -336,7 +336,7 @@ describe('permission card wears the composer’s chrome', () => {
 
     const refused = screen.getByTestId('permission-verdict-perm-outside')
     expect(refused).toHaveTextContent(
-      "Outside this agent's workspace — Workspace only would refuse this: writes to C:/outside/secrets.txt, outside your workspace",
+      'Workspace only would refuse this: writes to C:/outside/secrets.txt, outside your workspace',
     )
     const allowed = screen.getByTestId('permission-verdict-perm-inside')
     expect(allowed).toHaveTextContent('Workspace only would allow this: inside your workspace')
@@ -349,6 +349,32 @@ describe('permission card wears the composer’s chrome', () => {
       'permission-verdict-perm-outside',
       'permission-verdict-perm-inside',
     ])
+  })
+
+  // F688: a refusal is not always about the workspace's edge -- a runner's configuration (F675)
+  // or a pipe-fed argument (F676) is inside it. The line says what was refused and why, and leaves
+  // "where" to the reason.
+  it('does not call a refusal outside the workspace when its reason is something else', () => {
+    render(
+      <PermissionRequestCard
+        requests={[
+          request({
+            tool_name: 'Write',
+            tool_input: { file_path: 'C:/work/asker/.claude/settings.local.json' },
+            workspace_verdict: {
+              allow: false,
+              reason: "'C:/work/asker/.claude/settings.local.json' configures your runner",
+            },
+          }),
+        ]}
+        agent="haiku-1"
+      />,
+    )
+    const line = screen.getByTestId('permission-verdict-perm-1')
+    expect(line).toHaveTextContent(
+      "Workspace only would refuse this: 'C:/work/asker/.claude/settings.local.json' configures your runner",
+    )
+    expect(line).not.toHaveTextContent(/outside/i)
   })
 
   it('never says a command stays inside', () => {

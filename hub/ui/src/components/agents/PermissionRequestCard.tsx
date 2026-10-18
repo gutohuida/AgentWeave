@@ -142,9 +142,11 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
                   color: request.workspace_verdict.allow ? 'var(--text-3)' : 'var(--amber)',
                 }}
               >
+                {/* F688: not every refusal is about the workspace's edge (a runner's configuration,
+                    a pipe-fed argument), so the reason alone says why. */}
                 {request.workspace_verdict.allow
                   ? 'Workspace only would allow this: '
-                  : "Outside this agent's workspace — Workspace only would refuse this: "}
+                  : 'Workspace only would refuse this: '}
                 {request.workspace_verdict.reason}
               </p>
             )}
