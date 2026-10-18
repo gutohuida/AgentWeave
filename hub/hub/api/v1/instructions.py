@@ -2,7 +2,7 @@
 
 from typing import Tuple
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,12 @@ from ...db.models import ProjectInstructions
 from ...schemas.common import RequestModel
 
 router = APIRouter(prefix="/project", tags=["instructions"])
+
+#: The most characters project instructions may hold (F686). They are prepended to every agent
+#: turn, so their size is paid in input tokens on each one: 300,000 characters were accepted and
+#: carried by every later turn (~70k input tokens for a Haiku first turn). 40,000 is the size at
+#: which Claude Code itself warns that a CLAUDE.md is large enough to hurt.
+MAX_INSTRUCTIONS_CHARS = 40_000
 
 
 class InstructionsUpdate(RequestModel):
@@ -41,9 +47,7 @@ async def get_instructions(
         select(ProjectInstructions).where(ProjectInstructions.project_id == project_id)
     )
     row = result.scalars().first()
-    if row:
-        return {"content": row.content}
-    return {"content": ""}
+    return {"content": row.content if row else "", "max_chars": MAX_INSTRUCTIONS_CHARS}
 
 
 @router.put("/instructions")
@@ -55,6 +59,20 @@ async def put_instructions(
     """Upsert project-wide instructions content."""
     project_id, _ = project
     content = body.content
+    if len(content) > MAX_INSTRUCTIONS_CHARS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "instructions_too_long",
+                "message": (
+                    f"These instructions are {len(content):,} characters; the limit is "
+                    f"{MAX_INSTRUCTIONS_CHARS:,}. They are sent with every agent turn, so their "
+                    "size is paid on each one. Shorten them, or keep reference material in the "
+                    "project's files or knowledge vault and point to it from here."
+                ),
+                "max_chars": MAX_INSTRUCTIONS_CHARS,
+            },
+        )
 
     result = await session.execute(
         select(ProjectInstructions).where(ProjectInstructions.project_id == project_id)
@@ -67,4 +85,4 @@ async def put_instructions(
         session.add(row)
 
     await session.commit()
-    return {"content": content}
+    return {"content": content, "max_chars": MAX_INSTRUCTIONS_CHARS}
