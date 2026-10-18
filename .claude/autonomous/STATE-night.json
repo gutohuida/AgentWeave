@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 3,
+  "iteration": 4,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "flow-stages-map",
-  "next_action": "Do queue item flow-stages-map: read spec-queue/APPROVALS.md section '## 2026-10-18' (the operator's brief for the three flow-stages-* items) in full, then map how a flow executes today and write part 1 of spec-queue/research/2026-10-18-editable-flow-stages.md. No product code. Then continue with F739-impl after the three flow-stages items.",
+  "current": "flow-stages-spike",
+  "next_action": "Do queue item flow-stages-spike: brief in spec-queue/APPROVALS.md '## 2026-10-18' and the hook points in part 1 of spec-queue/research/2026-10-18-editable-flow-stages.md. Throwaway tracer in a git worktree on branch spike/2026-10-18-flow-stages (push it, never merge, no PR, never on the cycle branch); scratch Hub on 8110+, every agent turn claude-haiku-4-5; drive dev->test, dev only, dev->security->test. Write part 2 of the research file on the cycle branch. This is firing 1 of at most 2. Then flow-stages-spec, then F739-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -23,11 +23,11 @@
     },
     {
       "id": "flow-stages-map",
-      "status": "open",
+      "status": "done",
       "model": "opus",
       "effort": "high",
       "title": "Explore editable flow stages: map how a flow runs today (file:line)",
-      "detail": "Brief: spec-queue/APPROVALS.md ## 2026-10-18 (operator, ~23:00). Map build/review/test-gate/land stages, what is hard-wired, where a configurable stage would hook in. Write part 1 of spec-queue/research/2026-10-18-editable-flow-stages.md. No product code."
+      "detail": "part 1 written; see log iteration 4"
     },
     {
       "id": "flow-stages-spike",
