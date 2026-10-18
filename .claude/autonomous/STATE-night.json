@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 7,
+  "iteration": 8,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F743-impl",
-  "next_action": "Do queue item F743-impl: F743 (C), an operator PATCH to revision_needed naming an assignee silently ignores it. Tier 0: write the test that fails at the seam the finding names, fix, drive it against a scratch Hub (never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F742-impl.",
+  "current": "F742-impl",
+  "next_action": "Do queue item F742-impl: F742 (C), renaming a spec doc changes the index title but not the file's. Tier 0: write the test that fails at the seam the finding names, fix, drive it against a scratch Hub (never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F745-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -53,9 +53,9 @@
     },
     {
       "id": "F743-impl",
-      "status": "open",
+      "status": "done",
       "title": "F743 (C): operator PATCH to revision_needed naming an assignee silently ignores it",
-      "detail": "Test-first; fix; drive; Status."
+      "detail": "fixed; see log iteration 8"
     },
     {
       "id": "F742-impl",
