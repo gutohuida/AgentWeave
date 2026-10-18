@@ -426,6 +426,31 @@ async def test_a_wide_firing_records_one_job_run_per_selection(app, auth_headers
     assert run_count == 1
 
 
+async def test_pressing_run_on_a_wide_flow_names_every_job_run_it_wrote(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """F731(2): `POST /jobs/{id}/run` answered one `job_run_id` when the firing wrote two."""
+    import hub.scheduler as scheduler_module
+
+    instance = JobScheduler()
+    monkeypatch.setattr(scheduler_module, "get_scheduler", lambda: instance)
+    await _roster(app, auth_headers, bind_runner, OWNER, SECOND)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="press")
+        await _task(db, loop, "press-a")
+        await _task(db, loop, "press-b")
+
+    response = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    async with async_session_factory() as db:
+        written = (await db.execute(select(JobRun.id).where(JobRun.job_id == job.id))).scalars()
+        written = set(written.all())
+    assert len(written) == 2
+    assert set(response.json()["job_run_ids"]) == written
+    assert response.json()["job_run_id"] in written
+
+
 async def test_two_firings_of_one_flow_count_as_two_however_many_agents_each_started(
     app, auth_headers, bind_runner
 ):
