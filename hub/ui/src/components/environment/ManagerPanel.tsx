@@ -10,6 +10,7 @@ import {
 } from '@/api/manager'
 import { useModelCatalog, type ModelCatalogResponse } from '@/api/modelCatalog'
 import { useRunners, type Runner } from '@/api/runners'
+import { useVaultMap } from '@/api/vault'
 import { Badge } from '@/components/common/Badge'
 import type { BadgeVariant } from '@/components/common/badgeVariants'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
@@ -33,6 +34,9 @@ export function ManagerPanel() {
   const { data: runners = [], error: runnersError } = useRunners()
   const { data: catalog, error: catalogError } = useModelCatalog()
   const update = useUpdateManagerJob()
+  // Names for the vault entries a firing worked on (F719); ids alone when the map is unavailable.
+  const { data: vaultEntries } = useVaultMap()
+  const entryNames = new Map((vaultEntries ?? []).map((entry) => [entry.id, entry.name]))
 
   const noManager = isNoManager(jobs.error) || isNoManager(activity.error)
   const save = (key: string, input: ManagerJobInput) => update.mutate({ key, input })
@@ -84,6 +88,7 @@ export function ManagerPanel() {
             jobs={jobs.data}
             runners={runners}
             catalog={catalog}
+            entryNames={entryNames}
           />
         </>
       )}
@@ -185,18 +190,40 @@ const OUTCOME_VARIANT: Record<ManagerFiring['outcome'], BadgeVariant> = {
   failed: 'danger',
 }
 
+/** What a firing worked on, in words (F719): every job's subject, not only a title's conversation.
+ *  A vault entry is named when the map knows it, its id kept so two of one name stay apart. */
+function firingSubject(
+  subject: Record<string, string> | null | undefined,
+  entryNames: Map<string, string>,
+): string | null {
+  if (!subject) return null
+  const entry = (id: string) => {
+    const name = entryNames.get(id)
+    return name ? `"${name}" (${id})` : id
+  }
+  const parts: string[] = []
+  if (subject.source) parts.push(`source ${entry(subject.source)}`)
+  if (subject.document) parts.push(`document ${subject.document}`)
+  if (subject.report) parts.push(`report ${subject.report}`)
+  if (subject.entry) parts.push(`on ${entry(subject.entry)}`)
+  if (subject.conversation_id) parts.push(`conversation ${subject.conversation_id}`)
+  return parts.length ? parts.join(' ') : null
+}
+
 function Activity({
   firings,
   error,
   jobs,
   runners,
   catalog,
+  entryNames,
 }: {
   firings: ManagerFiring[] | undefined
   error: unknown
   jobs: ManagerJob[]
   runners: Runner[]
   catalog: ModelCatalogResponse | undefined
+  entryNames: Map<string, string>
 }) {
   if (error) {
     return (
@@ -237,9 +264,9 @@ function Activity({
               {' · '}
               {(firing.duration_ms / 1000).toFixed(1)} s
             </span>
-            {firing.subject.conversation_id && (
-              <span className="font-mono" style={{ color: 'var(--text-3)' }}>
-                {firing.subject.conversation_id}
+            {firingSubject(firing.subject, entryNames) && (
+              <span data-testid={`manager-firing-${index}-subject`} style={{ color: 'var(--text-3)' }}>
+                {firingSubject(firing.subject, entryNames)}
               </span>
             )}
             {firing.detail && (

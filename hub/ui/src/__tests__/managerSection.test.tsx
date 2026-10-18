@@ -136,6 +136,37 @@ describe('Environment > Manager', () => {
     expect(within(row).getByText(/The source says 437 euros/)).toBeInTheDocument()
   })
 
+  it('says what each firing worked on, a vault source by its name (F719)', async () => {
+    const distilled = (id: string, source: string) => ({
+      ...FIRINGS[1], id, job: 'vault-distillation', trigger: 'source_uploaded',
+      subject: { source }, outcome: 'written', detail: '1 fact stored, 0 dropped',
+    })
+    const firings = [
+      distilled('evt-5', 'src-aaa'),
+      distilled('evt-4', 'src-bbb'),
+      { ...FIRINGS[1], id: 'evt-3', job: 'spec-vault-check', subject: { document: 'spec/changes/x' } },
+      { ...FIRINGS[1], id: 'evt-2', job: 'vault-reports', subject: { report: 'rpt-1', entry: 'src-aaa' } },
+    ]
+    manager = (url) => {
+      if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [JOB] } }
+      if (url.includes('/manager/activity')) return { status: 200, body: { firings } }
+      if (url.endsWith('/vault/map')) {
+        return {
+          status: 200,
+          body: { entries: [{ id: 'src-aaa', name: 'On-call handbook' }, { id: 'src-bbb', name: 'Refunds' }] },
+        }
+      }
+      return undefined
+    }
+    render(<ManagerPanel />, { wrapper })
+    expect(await screen.findByText('source "On-call handbook" (src-aaa)')).toBeInTheDocument()
+    expect(screen.getByTestId('manager-firing-1-subject')).toHaveTextContent('source "Refunds" (src-bbb)')
+    expect(screen.getByTestId('manager-firing-2-subject')).toHaveTextContent('document spec/changes/x')
+    expect(screen.getByTestId('manager-firing-3-subject')).toHaveTextContent(
+      'report rpt-1 on "On-call handbook" (src-aaa)',
+    )
+  })
+
   it('words the empty runner choice by what the job does with none (F590)', async () => {
     const vault = {
       ...JOB, key: 'vault-distillation', title: 'Vault distillation', needs_runner: true,
