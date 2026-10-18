@@ -48,6 +48,7 @@ from ... import (
     review_turn,
     run_liveness,
     run_secrets,
+    runner_config_guard,
     task_workspace,
     tool_server,
     worktrees,
@@ -551,6 +552,7 @@ class TriggerAgentError(Exception):
         request_level: bool = False,
         agent_wide: bool = False,
         agent_workspace_unavailable: bool = False,
+        after_rollback: Optional[Callable[[AsyncSession], Awaitable[None]]] = None,
     ) -> None:
         self.status_code = status_code
         self.detail = detail
@@ -658,6 +660,11 @@ class TriggerAgentError(Exception):
         #: well, because `schedule_agent` returns `terminal_failure=not transient` and the job and
         #: flow-step outcomes in `scheduler.py` read it.
         self.agent_workspace_unavailable = agent_workspace_unavailable
+        #: A write this refusal owes, run by `turn_scheduler` **after** it rolls back the refused
+        #: dispatch (F319) -- on a session holding nothing of the dispatch's staging. F737's hold
+        #: opens the operator's question this way: committing it on the dispatch's own session
+        #: would make whatever the dispatch staged durable along with it.
+        self.after_rollback = after_rollback
         super().__init__(detail)
 
 
@@ -1505,6 +1512,27 @@ async def _trigger_agent_directly(
         # disagree with the branch its process is standing on.
         workspace_branch = worktrees.turn_branch_name(
             repo_root, agent, config, task_id=turn_workspace.task_id
+        )
+
+    # F737: the workspace's runner configuration is compared with what it held at its last
+    # launch, once the directory this turn starts in is final and before anything of the turn is
+    # written there. A change holds the turn -- transient, so its input stays queued and is not
+    # counted -- and the operator's question is opened after the scheduler's rollback.
+    hold = await runner_config_guard.hold_if_changed(
+        session,
+        project_id=project_id,
+        agent=agent,
+        conversation_id=conversation.id,
+        workspace_dir=effective_work_dir,
+        project_root=str(repo_root),
+        queue_entry_ids=queue_entry_ids,
+    )
+    if hold is not None:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            hold.detail,
+            transient=True,
+            after_rollback=hold.open_question,
         )
 
     # Resolved here rather than beside the notice it used to sit with, because the canonical

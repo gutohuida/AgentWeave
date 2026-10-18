@@ -132,20 +132,13 @@ async def _pending_requests(app, auth_headers):
     return response.json()
 
 
-def test_no_text_rule_sees_the_write():
+def test_no_text_rule_sees_the_write(tmp_path, monkeypatch):
     """Why the boundary is structural: the judge allows the command that makes the write."""
-    import os
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as ws:
-        os.environ["AW_WORKSPACE_DIR"] = ws
-        try:
-            assert _decide("Bash", {"command": "git apply agent.patch"})["allow"] is True
-        finally:
-            os.environ.pop("AW_WORKSPACE_DIR", None)
+    monkeypatch.setenv("AW_WORKSPACE_DIR", str(tmp_path))
+    monkeypatch.delenv("AW_RUN_TOKEN", raising=False)
+    assert _decide("Bash", {"command": "git apply agent.patch"})["allow"] is True
 
 
-@pytest.mark.xfail(strict=True, reason="F737: no structural boundary on runner configuration yet")
 @pytest.mark.asyncio
 async def test_a_settings_write_by_git_apply_holds_the_next_turn_and_asks_the_operator(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
@@ -196,3 +189,170 @@ async def test_a_settings_write_by_git_apply_holds_the_next_turn_and_asks_the_op
             await _trigger(app, auth_headers, "fourth turn", conversation)
             assert len(runner.cwds) == 3
             assert await _pending_requests(app, auth_headers) == []
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_keeps_the_turn_held_until_the_operator_sends_something_new(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    from hub.turn_scheduler import schedule_agent
+
+    await _setup(app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch)
+    runner = _Runner(actions=[_apply_settings_patch])
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", runner):  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            first = await _trigger(app, auth_headers, "first turn")
+            conversation = first["conversation_id"]
+            await _trigger(app, auth_headers, "second turn", conversation)
+            (request,) = await _pending_requests(app, auth_headers)
+            denied = await app.post(
+                f"/api/v1/projects/proj-test/permission-requests/{request['id']}/decide",
+                json={"allow": False},
+                headers=auth_headers,
+            )
+            assert denied.status_code == 200
+
+            # Re-scheduling the same input meets the refusal: held, not asked again.
+            await schedule_agent("proj-test", "writer")
+            await await_background_runs()
+            assert len(runner.cwds) == 1
+            assert await _pending_requests(app, auth_headers) == []
+            (queued,) = await _queued()
+            assert "refused" in queued.waiting_reason
+            assert queued.state == "queued"
+
+            # New operator input is how they reconsider: asked again, still held.
+            await _trigger(app, auth_headers, "please, again", conversation)
+            assert len(runner.cwds) == 1
+            (again,) = await _pending_requests(app, auth_headers)
+            assert again["id"] != request["id"]
+            assert len(await _queued()) == 2
+
+
+@pytest.mark.asyncio
+async def test_restoring_the_files_releases_the_turn_without_an_answer(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    from hub.turn_scheduler import schedule_agent
+
+    await _setup(app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch)
+    runner = _Runner(actions=[_apply_settings_patch])
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", runner):  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            first = await _trigger(app, auth_headers, "first turn")
+            await _trigger(app, auth_headers, "second turn", first["conversation_id"])
+            assert len(runner.cwds) == 1
+            (runner.cwds[0] / ".claude" / "settings.local.json").unlink()
+            await schedule_agent("proj-test", "writer")
+            await await_background_runs()
+            assert len(runner.cwds) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_first_launch_records_its_baseline_without_asking(
+    app, auth_headers, bind_runner, tmp_path
+):
+    """The project directory (the default test workspace) already holds a settings file: its
+    first launch records it and starts."""
+    settings = tmp_path / ".claude" / "settings.local.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text('{"permissions": {"allow": ["Bash"]}}', encoding="utf-8")
+    await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"writer": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    await bind_runner("writer", cli="claude")
+    runner = _Runner()
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", runner):  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            await _trigger(app, auth_headers, "first turn")
+    assert len(runner.cwds) == 1
+    assert await _pending_requests(app, auth_headers) == []
+
+
+async def _hold(workspace: Path, root: Path, agent="writer"):
+    from hub.runner_config_guard import hold_if_changed
+
+    async with async_session_factory() as db:
+        hold = await hold_if_changed(
+            db,
+            project_id="proj-test",
+            agent=agent,
+            conversation_id=None,
+            workspace_dir=str(workspace),
+            project_root=str(root),
+        )
+        await db.commit()
+        return hold
+
+
+@pytest.mark.asyncio
+async def test_a_fresh_checkout_is_asked_about_config_the_project_directory_does_not_hold(
+    app, tmp_path
+):
+    """A new checkout's first launch is silent only when it brings nothing new: an agent's commit
+    to `.mcp.json`, checked out fresh for its reviewer, is asked about."""
+    root = tmp_path / "root"
+    (root / ".claude").mkdir(parents=True)
+    (root / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
+    same = tmp_path / "same"
+    (same / ".claude").mkdir(parents=True)
+    (same / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
+    brings = tmp_path / "brings"
+    brings.mkdir()
+    (brings / ".mcp.json").write_text('{"mcpServers": {}}', encoding="utf-8")
+
+    assert await _hold(root, root) is None
+    assert await _hold(same, root) is None
+    held = await _hold(brings, root)
+    assert held is not None
+    assert ".mcp.json (added)" in held.detail
+
+
+@pytest.mark.asyncio
+async def test_a_hook_added_under_a_directory_entry_is_a_change(app, tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+    assert await _hold(root, root) is None
+    hooks = root / ".claude" / "hooks"
+    hooks.mkdir(parents=True)
+    (hooks / "pre.sh").write_text("echo hi", encoding="utf-8")
+    held = await _hold(root, root)
+    assert held is not None
+    assert ".claude/hooks/pre.sh (added)" in held.detail
+
+
+def test_the_judge_and_the_fingerprint_cover_one_list():
+    """`mcp_server` is spawned standalone and restates the list; the two must agree."""
+    from hub import mcp_server, runner_config
+
+    assert mcp_server._RUNNER_CONFIG_PATHS == runner_config.RUNNER_CONFIG_PATHS
+
+
+def test_the_fingerprint_sees_additions_changes_and_removals(tmp_path):
+    from hub import runner_config
+
+    empty = runner_config.fingerprint(str(tmp_path))
+    assert empty == {}
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex" / "config.toml").write_text("a", encoding="utf-8")
+    (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    one = runner_config.fingerprint(str(tmp_path))
+    (tmp_path / ".codex" / "config.toml").write_text("b", encoding="utf-8")
+    (tmp_path / ".mcp.json").unlink()
+    two = runner_config.fingerprint(str(tmp_path))
+    assert runner_config.changes(empty, one) == [
+        (".codex/config.toml", "added"),
+        (".mcp.json", "added"),
+    ]
+    assert runner_config.changes(one, two) == [
+        (".codex/config.toml", "changed"),
+        (".mcp.json", "removed"),
+    ]
+    assert runner_config.digest(one) != runner_config.digest(two)
+    # Not the runner's configuration: instructions and skills are ordinary work.
+    (tmp_path / ".claude" / "skills").mkdir(parents=True)
+    (tmp_path / ".claude" / "skills" / "x.md").write_text("x", encoding="utf-8")
+    (tmp_path / "CLAUDE.md").write_text("x", encoding="utf-8")
+    assert runner_config.fingerprint(str(tmp_path)) == two

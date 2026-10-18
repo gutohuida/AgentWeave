@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import AgentOutput, PermissionRequest
+from ...runner_config_guard import RUNNER_CONFIG_TOOL
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...utils import persist_event
@@ -168,6 +169,14 @@ async def decide_permission_request(
         "permission_decided",
         {"id": row.id, "agent": row.agent, "status": row.status},
     )
+    if row.tool_name == RUNNER_CONFIG_TOOL and body.allow:
+        # F737: no run waits on this answer -- a held turn does. The launch reads the Allow,
+        # records the workspace's new fingerprint and starts; every agent held on that workspace
+        # is re-drained, not only the one the card is filed under.
+        from ...turn_scheduler import redrain_queued_agents
+
+        await redrain_queued_agents(project_id)
+        await session.refresh(row)
     return row
 
 
