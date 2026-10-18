@@ -36645,7 +36645,9 @@ F720 replaced the fixed note on the entry-read route only. `vault_reports.py:136
 
 ## F745 (C) -- a command substitution's output is never judged: `cp x $(dirname $(pwd))` copies outside the workspace
 
-**Status:** open 2026-10-18. Filed from the 2026-10-18 decision pass (judge group, F696), by calling `_decide` in-process; not driven to effect.
+**Status:** fixed c22b861 2026-10-19 (Tier 0): the working directory spelled as a command is judged as `$PWD` is -- a whole-argument `$(pwd)`/`` `pwd` ``/PowerShell `$(Get-Location)` is `.`, and a substitution, group or assignment that consumes a location command's output is refused (`$(dirname $(pwd))`, nested backticks, `d=$(pwd)`, `(Split-Path (pwd))`, `$d = Get-Location`); bash backtick substitutions now un-escape. Conceded and asserted allowed: a value handed on through a file (example 2) and `$(dirname $(realpath .))`. Driven through the spawned approver with each allowed command then run in Git Bash: nothing landed outside the workspace. Spec drift stays with F755.
+
+**Found:** open 2026-10-18. Filed from the 2026-10-18 decision pass (judge group, F696), by calling `_decide` in-process; not driven to effect.
 **Source:** review
 **Theme:** Permissions & sandbox
 

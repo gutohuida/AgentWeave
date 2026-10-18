@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 9,
+  "iteration": 10,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F745-impl",
-  "next_action": "Do queue item F745-impl: F745 (C), a command substitution's output is never judged (`_decide`, hub/hub/mcp_server.py ~3967). Tier 0, opus: write the test that fails at the seam the finding names, fix, drive it against a scratch Hub (never 8000), set its Status line in scripts/drive/FINDINGS.md. See F755 for spec drift. Then F749-impl.",
+  "current": "F749-impl",
+  "next_action": "Do queue item F749-impl: F749 (C), `scripts/e2e.py hub-up` run from a worktree serves the main checkout's code. Tier 0: write the test that fails at the seam the finding names, fix, drive it (scratch Hub, never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F747-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -65,9 +65,9 @@
     },
     {
       "id": "F745-impl",
-      "status": "open",
+      "status": "done",
       "title": "F745 (C): command substitution output never judged",
-      "detail": "Shell judge; test-first; fix; drive; Status. See F755 for spec drift.",
+      "detail": "fixed c22b861; see log iteration 10",
       "model": "opus"
     },
     {
