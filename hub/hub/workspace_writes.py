@@ -221,7 +221,8 @@ def classify(
     """Where *path* lands, relative to the run's own workspace and to its project.
 
     Pure and total: no filesystem writes, no session, and every input maps to a location. The
-    only filesystem contact is `os.path.realpath`, which reads links -- the same contact
+    only filesystem contact is `os.path.realpath`, which reads links (and one `isdir` for a path
+    directly under a checkout root, F728) -- the same contact
     `mcp_server._decide` makes for the same comparison, the reason the two agree about a link
     named directly. They may differ about a `..` after one: on a drive-letter host `_decide` also
     resolves it physically (design D12, `mcp_server._physical`), which this `realpath` alone does
@@ -323,8 +324,12 @@ def _within_project(project: str, resolved: str) -> WriteLocation:
     parts = [part for part in relative.split(os.sep) if part and part != "."]
     if not parts or os.path.normcase(parts[0]) != os.path.normcase(HUB_DIRECTORY):
         return WriteLocation("project")
-    if len(parts) >= 3:
-        kind = CHECKOUT_SEGMENTS.get(os.path.normcase(parts[1]))
-        if kind is not None:
-            return WriteLocation(kind, parts[2])
+    kind = CHECKOUT_SEGMENTS.get(os.path.normcase(parts[1])) if len(parts) >= 3 else None
+    # A path beneath `<segment>/<name>/` is in that checkout. A path that *is* `<segment>/<name>`
+    # is the checkout only when it is one, a directory: a write tool names a file, and a file
+    # directly in the segment directory (`worktrees/f614-allowed.txt`) belongs to no agent (F728).
+    # The one stat this function makes, and only here: the path has usually not been written yet,
+    # which is exactly the case it answers -- a new file, not a checkout.
+    if kind is not None and (len(parts) >= 4 or os.path.isdir(resolved)):
+        return WriteLocation(kind, parts[2])
     return WriteLocation("hub")

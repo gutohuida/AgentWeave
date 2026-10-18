@@ -340,6 +340,18 @@ def test_a_task_checkout_and_a_review_checkout_are_their_own_kinds(project):
     assert _in(project, workspace, review_path(project, "bob") / "a.txt") == ("review", "bob")
 
 
+def test_a_file_directly_in_a_checkout_directory_names_no_checkout(project):
+    """F728 (3): `.agentweave/worktrees/f614-allowed.txt` was recorded as `("agent",
+    "f614-allowed.txt")` -- a file sitting beside the checkouts read as an agent's workspace. Only
+    a path *inside* `<segment>/<name>/` belongs to a checkout; a file in the segment directory
+    itself is the Hub's directory."""
+    workspace = worktree_path(project, "alice")
+    for segment in CHECKOUT_SEGMENTS:
+        stray = project / HUB_DIRECTORY / segment / "f614-allowed.txt"
+        assert _in(project, workspace, stray) == ("hub", None), segment
+    assert _in(project, workspace, worktree_path(project, "bob") / "a.txt") == ("agent", "bob")
+
+
 def test_the_restated_layout_is_the_one_the_worktree_helpers_use(project):
     """Task 3.1's one-source-of-truth half, asserted rather than described.
 
@@ -406,10 +418,11 @@ def test_the_hubs_own_record_keeping_about_the_run_is_hub_not_project(project):
     # The residue of the subtree, not only the six excluded directories.
     assert _in(project, workspace, project / HUB_DIRECTORY / "project.json") == ("hub", None)
     # A checkout *root* itself is not a checkout: the layout needs a name under it before the
-    # path belongs to anybody. What sits directly under a root *is* read as that name, whatever
-    # it turns out to be on disk -- the classifier stats nothing, deliberately, because the path
-    # it is handed has usually not been written yet.
+    # path belongs to anybody. What sits directly under a root is that checkout only when it is
+    # one, a directory; a file there is the Hub's (F728).
     assert _in(project, workspace, worktree_root(project)) == ("hub", None)
+    assert _in(project, workspace, worktree_root(project) / "bob") == ("hub", None)
+    (worktree_root(project) / "bob").mkdir(parents=True)
     assert _in(project, workspace, worktree_root(project) / "bob") == ("agent", "bob")
 
 
