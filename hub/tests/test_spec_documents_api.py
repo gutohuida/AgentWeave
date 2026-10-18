@@ -182,9 +182,21 @@ async def test_an_incomplete_submission_is_stored_and_reports_what_blocks_a_prop
     response = await _submit(app, run_headers, _document(tasks=[], acceptance_criteria=[]))
 
     assert response.status_code == 200
-    codes = {item["code"] for item in response.json()["blocking"]}
+    body = response.json()
+    # F703: these are gaps a proposal passes, so a write reports them as warnings and does not
+    # call them blocking -- the write and the propose of the same payload agree.
+    codes = {item["code"] for item in body["warnings"]}
     assert "requirement_without_task" in codes
     assert "requirement_without_criterion" in codes
+    assert body["blocking"] == []
+    assert body["ready_to_propose"] is True
+
+    proposed = await app.post(
+        f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
+    )
+    assert proposed.status_code == 200, proposed.text
+    assert proposed.json()["blocking"] == []
+    assert codes <= {item["code"] for item in proposed.json()["warnings"]}
 
 
 @pytest.mark.asyncio

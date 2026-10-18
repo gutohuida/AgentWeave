@@ -336,23 +336,27 @@ async def _apply_and_write(
     board_served = await requirement_links.served_keys(session, document.id)
     approved_paths = await spec_lifecycle.approved_document_paths(session, document.project_id)
     roadmaps = await roadmap_states(session, workspace, document.project_id, payload)
+    # F703: split exactly as a proposal splits them, so a write and a propose of the same
+    # payload agree on what blocks. A gap is a warning here too; calling it `blocking` told
+    # agents a proposal would be refused when it would pass.
+    refusals, gaps = spec_completeness.split(
+        spec_completeness.check(
+            payload,
+            board_served=board_served,
+            approved_document_paths=approved_paths,
+            roadmaps=roadmaps,
+        )
+    )
     return SaveResult(
         path=document.path,
         phase=document.phase,
         identifiers=identifiers,
-        blocking=[
-            finding.to_dict()
-            for finding in spec_completeness.check(
-                payload,
-                board_served=board_served,
-                approved_document_paths=approved_paths,
-                roadmaps=roadmaps,
-            )
-        ],
+        blocking=[finding.to_dict() for finding in refusals],
         divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
         warnings=[
             f.to_dict()
             for f in (
+                *gaps,
                 *spec_completeness.overlap_warnings(payload),
                 *spec_completeness.undeclared_files_warnings(payload),
                 *spec_completeness.test_only_task_warnings(payload),
