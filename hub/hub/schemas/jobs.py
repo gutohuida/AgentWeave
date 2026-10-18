@@ -1,12 +1,34 @@
 """Job schemas."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
 from ..db.models import JOB_RUN_ERROR_SUMMARY_CHARS
 from .common import RequestModel
+
+
+def check_stop_at(value: Optional[datetime]) -> Optional[datetime]:
+    """A loop's stop time states its zone, and has not already passed (F731).
+
+    A stop time with no zone was stored and shown as if it were the reader's local time, which it
+    is for nobody in particular; one in the past made a loop already due to stop at its first tick,
+    and nothing said so.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(
+            "stop_at must name its time zone, e.g. 2026-10-20T18:00:00Z or +01:00; nothing was "
+            "changed"
+        )
+    if value <= datetime.now(timezone.utc):
+        raise ValueError(
+            f"stop_at {value.isoformat()} has already passed, so the loop would stop at once; "
+            "choose a later time. Nothing was changed"
+        )
+    return value
 
 
 class JobCreate(RequestModel):
@@ -52,6 +74,11 @@ class JobCreate(RequestModel):
             raise ValueError("session_mode must be 'new' or 'resume'")
         return v
 
+    @field_validator("stop_at")
+    @classmethod
+    def validate_stop_at(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return check_stop_at(v)
+
 
 class JobUpdate(RequestModel):
     name: Optional[str] = Field(default=None, max_length=256)
@@ -80,6 +107,23 @@ class JobUpdate(RequestModel):
         if v is not None and v not in ("new", "resume"):
             raise ValueError("session_mode must be 'new' or 'resume'")
         return v
+
+    @field_validator("stop_at")
+    @classmethod
+    def validate_stop_at(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return check_stop_at(v)
+
+    @field_validator("stop_reason")
+    @classmethod
+    def validate_stop_reason(cls, v: Optional[str]) -> Optional[str]:
+        # F713: a blank reason ended the loop, and the real reason sent next was then refused as
+        # "this loop already ended" — the one stop an operator gets spent on nothing. Refused here,
+        # before anything is written, so the retry with a reason is still the first stop.
+        if v is not None and not v.strip():
+            raise ValueError(
+                "stop_reason cannot be blank: say why the loop stops. Nothing was changed."
+            )
+        return v.strip() if v is not None else None
 
 
 class JobRunResponse(BaseModel):

@@ -37,7 +37,7 @@ from ...run_task_binding import (
     wait_has_expired,
 )
 from ...schemas.common import RequestModel
-from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
+from ...schemas.jobs import JobCreate, JobResponse, JobUpdate, check_stop_at
 from ...schemas.messages import _MESSAGE_TYPES, MessageCreate, MessageResponse
 from ...schemas.questions import QuestionCreate, QuestionOption, QuestionResponse
 from ...schemas.spec import SpecDocumentCreate
@@ -49,6 +49,7 @@ from ...schemas.tasks import (
     TaskResponse,
     TaskUpdate,
     check_task_id,
+    check_task_title,
 )
 from ...sse import sse_manager
 from ...task_transitions import ENTRY_STATUSES, run_actor
@@ -144,6 +145,11 @@ class AgentTaskCreate(RequestModel):
     def validate_id(cls, value: Optional[str]) -> Optional[str]:
         return None if value is None else check_task_id(value)
 
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        return check_task_title(value)
+
     @field_validator("priority")
     @classmethod
     def validate_priority(cls, value: str) -> str:
@@ -211,6 +217,11 @@ class AgentJobCreate(RequestModel):
         if value not in ("new", "resume"):
             raise ValueError("session_mode must be 'new' or 'resume'")
         return value
+
+    @field_validator("stop_at")
+    @classmethod
+    def validate_stop_at(cls, value: Optional[datetime]) -> Optional[datetime]:
+        return check_stop_at(value)
 
 
 @router.post("/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)

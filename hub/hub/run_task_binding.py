@@ -177,6 +177,33 @@ def decided_task_refusal(task: Task) -> Optional[str]:
     )
 
 
+#: Statuses at which a task's assignee may be its reviewer, not its author (the review handover
+#: writes the reviewer in, F70). The holder rule below does not apply there: a turn started to
+#: revise work under review is the author's, and is deliberately not refused (F79's band boundary).
+_WITH_A_REVIEWER = frozenset({"completed", "under_review"})
+
+
+def held_task_refusal(task: Task, agent: str) -> Optional[str]:
+    """Why the operator cannot start *agent* working *task*, or None because it may (F687).
+
+    Found 2026-10-18: `POST /agent/trigger {"agent": "alpha", "task_id": ...}` on a task assigned to
+    another agent was accepted; alpha's run moved the task to in_progress and then completed while
+    the board kept crediting the assignee. A run claims only work that is its agent's or nobody's
+    (`_guard_run_holds_the_task`, F450), and the binding a trigger makes skips that guard — so the
+    rule is asked here, of the start, with the remedy.
+
+    Asked only by `POST /agent/trigger`, like `decided_task_refusal`, and for the same reason: the
+    operator is naming the task now and reads the answer, where a queued delegation is not refused.
+    """
+    if task.status in _WITH_A_REVIEWER or not task.assignee or task.assignee == agent:
+        return None
+    return (
+        f"Task {task.id!r} is assigned to {task.assignee!r}, and an agent works only the tasks "
+        f"assigned to it or to nobody. Start {task.assignee!r} on it, or reassign it to "
+        f"{agent!r} in its drawer first."
+    )
+
+
 def task_named_by(entry: InboundQueueEntry) -> Optional[str]:
     """The task this entry is about, whichever way it says so.
 
@@ -731,14 +758,15 @@ async def withdraw_review_entries_for(session: AsyncSession, task: Task) -> "Lis
     """
     verdict = task.status
     rows = await session.execute(
-        select(InboundQueueEntry.id, InboundQueueEntry.agent).where(
+        select(InboundQueueEntry.id, InboundQueueEntry.agent, InboundQueueEntry.job_id).where(
             InboundQueueEntry.project_id == task.project_id,
             InboundQueueEntry.review_task_id == task.id,
             InboundQueueEntry.state == "queued",
         )
     )
     withdrawn: "List[Dict[str, str]]" = []
-    for entry_id, agent in rows.all():
+    firing_jobs: "set[str]" = set()
+    for entry_id, agent, job_id in rows.all():
         result = await session.execute(
             update(InboundQueueEntry)
             .where(InboundQueueEntry.id == entry_id, InboundQueueEntry.state == "queued")
@@ -759,6 +787,17 @@ async def withdraw_review_entries_for(session: AsyncSession, task: Task) -> "Lis
             session, task.project_id, "queue_entry_withdrawn", payload, agent=agent, commit=False
         )
         withdrawn.append(payload)
+        if job_id:
+            firing_jobs.add(job_id)
+    if firing_jobs:
+        # A flow's staged review waits as one of these entries, and its firing stays `in_progress`
+        # until the run carrying the entry ends. Withdrawn, that run never comes (F712), so the
+        # firing is closed here, as the operator's own withdrawal closes it (F625). Imported here:
+        # the scheduler is built on this module.
+        from .scheduler import close_firings_left_without_input
+
+        for job_id in sorted(firing_jobs):
+            await close_firings_left_without_input(session, task.project_id, job_id)
     return withdrawn
 
 

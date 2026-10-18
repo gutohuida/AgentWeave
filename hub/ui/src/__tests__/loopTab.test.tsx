@@ -92,4 +92,20 @@ describe('LoopTab — the active-now indicator (task B6.2/B6.3, 2026-08-18-a-loo
     expect(screen.getByText('Idle')).toBeInTheDocument()
     expect(screen.queryByTestId('loop-tab-firing-active')).not.toBeInTheDocument()
   })
+
+  it('reads Stopping, as the Jobs card does, for a loop past its stop time (F714)', () => {
+    mockedUseLoop.mockReturnValue({
+      data: baseLoop({
+        firing_active: false,
+        ending_state: null,
+        stop_at: new Date(Date.now() - 60_000).toISOString(),
+      }),
+      isLoading: false,
+      isError: false,
+    } as never)
+    render(<LoopTab loopId="loop-1" onClose={vi.fn()} />)
+
+    expect(screen.getByText('Stopping')).toBeInTheDocument()
+    expect(screen.queryByText('Idle')).not.toBeInTheDocument()
+  })
 })

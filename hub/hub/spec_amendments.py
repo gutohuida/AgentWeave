@@ -421,10 +421,13 @@ async def amend(
         "reviewed": False,
         "event_id": event.id,
     }
+    # Takes effect at once on the board. An added task is materialised into the document's live
+    # flow, for the implementer; a criterion added, changed or removed refreshes the open tasks that
+    # serve its requirement (F699: an added criterion never reached the task it was written for,
+    # whose `acceptance_criteria` were copied once at approval).
+    stored_after = spec_documents.read_payload(workspace, document.path)
+    created = await spec_tasks.materialise(session, document, stored_after, actor=actor)
     if op == ADD_TASK:
-        # Takes effect at once: materialised into the document's live flow, for the implementer.
-        stored_after = spec_documents.read_payload(workspace, document.path)
-        created = await spec_tasks.materialise(session, document, stored_after, actor=actor)
         view["task_created"] = next(
             (row.id for row in created if row.spec_task_key == target), None
         )

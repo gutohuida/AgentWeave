@@ -17,12 +17,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import (
     AIJob,
+    EventLog,
     EvidenceReview,
+    InboundQueueEntry,
+    Loop,
     Question,
     RequirementEvidence,
     Run,
@@ -44,7 +47,13 @@ KIND_ORDER = {
     "check": 5,
     "integration": 6,
     "divergence": 7,
+    "turn": 8,
+    "workspace": 9,
 }
+
+#: Event-log entries about a task's checkout that the story tells (F711). Only the failure: a
+#: release that worked is the ordinary end of a decided task and says nothing new.
+_WORKSPACE_EVENTS = {"task_worktree_release_failed": "release_failed"}
 
 
 def _iso(value: Optional[datetime]) -> Optional[str]:
@@ -107,13 +116,44 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
         .order_by(RunDivergence.sequence),
     )
     questions = await _all(session, select(Question).where(Question.blocked_task_id == task.id))
+    # Turns for this task the Hub refused, gave up on or withdrew (F711): "Could not prepare the
+    # checkout" lived only on the queue entry, so a jammed task's story skipped the jam. A turn
+    # that ran is already its run; only an entry with a refusal or an ending on it is told here.
+    held_turns = await _all(
+        session,
+        select(InboundQueueEntry)
+        .where(
+            InboundQueueEntry.project_id == task.project_id,
+            or_(InboundQueueEntry.task_id == task.id, InboundQueueEntry.review_task_id == task.id),
+            or_(
+                InboundQueueEntry.waiting_reason.is_not(None),
+                InboundQueueEntry.abandoned_reason.is_not(None),
+            ),
+        )
+        .order_by(InboundQueueEntry.sequence),
+    )
+    workspace_events = await _all(
+        session,
+        select(EventLog).where(
+            EventLog.project_id == task.project_id,
+            EventLog.event_type.in_(list(_WORKSPACE_EVENTS)),
+            EventLog.data["task_id"].as_string() == task.id,
+        ),
+    )
     job_names: Dict[str, str] = {}
+    # "flow" for a job whose loop draws from a document, else "loop": the same word the drawer's
+    # Details history uses for the same move (F731), from the same join.
+    job_kinds: Dict[str, str] = {}
     job_ids = {row.job_id for row in transitions if row.job_id}
     if job_ids:
-        job_names = {
-            job.id: job.name
-            for job in await _all(session, select(AIJob).where(AIJob.id.in_(job_ids)))
-        }
+        found = await session.execute(
+            select(AIJob.id, AIJob.name, Loop.spec_document_id)
+            .outerjoin(Loop, Loop.job_id == AIJob.id)
+            .where(AIJob.id.in_(job_ids))
+        )
+        for job_id, name, spec_document_id in found.all():
+            job_names[job_id] = name
+            job_kinds[job_id] = "flow" if spec_document_id else "loop"
 
     events: List[Dict[str, Any]] = [
         {
@@ -137,6 +177,7 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
                 or ("operator" if row.actor_kind == "operator" else None),
                 "origin": row.origin,
                 "job": job_names.get(row.job_id or "") if row.job_id else None,
+                "job_kind": job_kinds.get(row.job_id or "") if row.job_id else None,
                 "run_id": row.run_id,
                 "override_reason": row.override_reason,
             }
@@ -259,6 +300,35 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
                 "answer": row.answer,
                 "declined": row.declined,
                 "wait_ended_at": _iso(row.wait_ended_at),
+            }
+        )
+
+    for row in held_turns:
+        events.append(
+            {
+                "kind": "turn",
+                "id": row.id,
+                # The refusal itself carries no time of its own; the turn's arrival does.
+                "at": _iso(row.arrived_at),
+                "agent": row.agent,
+                "review": row.review_task_id == task.id,
+                "state": row.state,
+                "refusal": row.waiting_reason,
+                "ended_reason": row.abandoned_reason,
+                "attempts": row.delivery_attempts,
+                "run_id": row.delivered_in_run_id,
+            }
+        )
+
+    for row in workspace_events:
+        data = row.data if isinstance(row.data, dict) else {}
+        events.append(
+            {
+                "kind": "workspace",
+                "id": row.id,
+                "at": _iso(row.timestamp),
+                "outcome": _WORKSPACE_EVENTS[row.event_type],
+                "reason": data.get("reason"),
             }
         )
 

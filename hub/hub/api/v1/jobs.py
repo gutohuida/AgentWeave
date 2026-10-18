@@ -1784,6 +1784,13 @@ async def run_job(
         # later read compares the row's count with itself (design D3 of
         # `pressing-run-names-the-reason-that-held`).
         earlier_ticks = earlier_run.tick_count if earlier_run is not None else None
+        # Every row that existed before the press: a wide flow's one firing writes a `JobRun` per
+        # agent it starts, and the press named only the newest of them (F731).
+        rows_before = set(
+            (await session.execute(select(JobRun.id).where(JobRun.job_id == job_id)))
+            .scalars()
+            .all()
+        )
 
         # Pass the session to avoid duplicate work
         success = await scheduler._fire_job_internal(job, trigger="manual", session=session)
@@ -1791,10 +1798,22 @@ async def run_job(
         latest_run = await _newest_job_run(session, job_id)
         wrote_row = latest_run is not None and latest_run.id != earlier_run_id
         job_run_id = latest_run.id if latest_run is not None and wrote_row else "unknown"
-        if latest_run is not None and wrote_row:
-            # Only a row this firing wrote. Stamping an earlier one erased an agent's attribution
+        written = (
+            (
+                await session.execute(
+                    select(JobRun)
+                    .where(JobRun.job_id == job_id, JobRun.id.not_in(rows_before or {""}))
+                    .order_by(JobRun.fired_at, JobRun.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if written:
+            # Only rows this firing wrote. Stamping an earlier one erased an agent's attribution
             # with an operator's `None`, or claimed another firing for the agent pressing Run.
-            latest_run.requested_by_run_id = run_identity
+            for row in written:
+                row.requested_by_run_id = run_identity
             await session.commit()
 
         if not success:
@@ -1905,7 +1924,12 @@ async def run_job(
 
     # Note: sse_manager.broadcast("job_fired") is already done by _fire_job_internal
     # We only return the success response here to avoid duplicate events
-    answer = {"success": True, "job_id": job_id, "job_run_id": job_run_id}
+    answer = {
+        "success": True,
+        "job_id": job_id,
+        "job_run_id": job_run_id,
+        "job_run_ids": [row.id for row in written],
+    }
     # F596: a firing whose message the queue keeps for a repair (no runner bound) is a wait, not a
     # failure; the press says why, as an operator trigger to the same agent does.
     if wrote_row and latest_run.status == "in_progress" and latest_run.conversation_id:

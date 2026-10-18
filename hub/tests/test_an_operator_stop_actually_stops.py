@@ -168,3 +168,64 @@ async def test_a_bare_job_with_no_loop_is_untouched_by_the_ending_path(app, auth
 
     job, _ = await _rows(job_id)
     assert job.enabled is True
+
+
+@pytest.mark.parametrize(
+    "stop_at, said",
+    [("2099-01-01T00:00:00", "time zone"), ("2020-01-01T00:00:00Z", "already passed")],
+)
+async def test_a_stop_time_without_a_zone_or_in_the_past_is_refused(
+    app, auth_headers, stop_at, said
+):
+    """F731(3): both were accepted; the first was shown as local time, the second stopped the loop
+    at its first tick with nothing said."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Timed",
+            "agent": "kimi",
+            "message": "work",
+            "cron": "*/5 * * * *",
+            "purpose": "p",
+            "stop_at": stop_at,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422, resp.text
+    assert said in resp.text
+
+    job_id = await _loop_job(app, auth_headers)
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}", json={"stop_at": stop_at}, headers=auth_headers
+    )
+    assert resp.status_code == 422, resp.text
+    _, loop = await _rows(job_id)
+    assert loop.stop_at is None and loop.pending_stop_at is None
+
+
+async def test_a_blank_stop_reason_is_refused_and_leaves_the_stop_for_a_real_reason(
+    app, auth_headers
+):
+    """F713: `{"stop_reason": "  "}` stopped the loop, and the real reason sent next got 409."""
+    job_id = await _loop_job(app, auth_headers)
+
+    blank = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"stop_reason": "  "},
+        headers=auth_headers,
+    )
+    assert blank.status_code == 422, blank.text
+    assert "cannot be blank" in blank.text
+    job, loop = await _rows(job_id)
+    assert job.enabled is True
+    assert loop.ending_state is None
+
+    real = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"stop_reason": "  the real reason  "},
+        headers=auth_headers,
+    )
+    assert real.status_code == 200, real.text
+    _, loop = await _rows(job_id)
+    assert loop.ending_state == "stopped"
+    assert loop.stop_reason == "the real reason"

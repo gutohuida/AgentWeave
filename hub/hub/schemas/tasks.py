@@ -32,6 +32,17 @@ def check_task_id(value: str) -> str:
     return value
 
 
+def check_task_title(value: Optional[str]) -> str:
+    """The one title check every task door calls (F710): create, the agent's create, and rename.
+
+    Creation had no check, so `{"title": ""}` made an untitled card that rename then refused to
+    restore to blank — the same field answering two ways depending on which door wrote it.
+    """
+    if value is None or not value.strip():
+        raise ValueError("A task's title cannot be blank.")
+    return value.strip()
+
+
 _TASK_STATUSES = [
     "pending",
     "assigned",
@@ -90,6 +101,11 @@ class TaskCreate(RequestModel):
     # the agent find the task. Validated to the same shape as the CLI's
     # generate_id() output and the local Task model.
     id: Optional[str] = Field(default=None, max_length=64)
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: str) -> str:
+        return check_task_title(v)
 
     @field_validator("id")
     @classmethod
@@ -210,9 +226,7 @@ class TaskUpdate(RequestModel):
     @field_validator("title")
     @classmethod
     def validate_title(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or not v.strip():
-            raise ValueError("A task's title cannot be blank.")
-        return v.strip()
+        return check_task_title(v)
 
     @field_validator("assignee")
     @classmethod

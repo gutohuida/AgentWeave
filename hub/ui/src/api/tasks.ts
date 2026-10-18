@@ -292,6 +292,8 @@ export type StoryEvent =
       actor: string | null
       origin: string
       job: string | null
+      /** "flow" when the job's loop draws from a document, else "loop" (F731). */
+      job_kind?: 'flow' | 'loop' | null
       run_id: string | null
       override_reason: string | null
     }
@@ -357,6 +359,22 @@ export type StoryEvent =
       declined: boolean
       wait_ended_at: string | null
     }
+  /** A turn for this task the Hub refused, gave up on or withdrew (F711). `at` is when it was
+   *  queued: the refusal itself is not timestamped. */
+  | {
+      kind: 'turn'
+      id: string
+      at: string | null
+      agent: string
+      review: boolean
+      state: string
+      refusal: string | null
+      ended_reason: string | null
+      attempts: number
+      run_id: string | null
+    }
+  /** Something that went wrong with the task's checkout (F711): today a release that failed. */
+  | { kind: 'workspace'; id: string; at: string | null; outcome: string; reason: string | null }
 
 export interface TaskStory {
   task: { id: string; title: string; status: string }

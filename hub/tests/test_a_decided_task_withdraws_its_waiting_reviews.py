@@ -160,3 +160,55 @@ async def test_landing_withdraws_the_waiting_review(app, auth_headers):
     entry = await _row("entry-f440-land")
     assert entry.state == "withdrawn"
     assert "approved" in (entry.abandoned_reason or "")
+
+
+async def test_landing_closes_the_firing_whose_staged_review_it_withdrew(app, auth_headers):
+    """F712: the flow's firing staged the review and waited for its run; landing the task withdrew
+    the review, no run ever came, and the firing stayed `in_progress` after the loop ended."""
+    from hub.db.models import AIJob, JobRun
+
+    async with async_session_factory() as session:
+        session.add(
+            AIJob(
+                id="job-f712",
+                project_id="proj-test",
+                name="flow",
+                agent="builder",
+                message="work",
+                cron="*/5 * * * *",
+                session_mode="new",
+                enabled=True,
+            )
+        )
+        await session.flush()
+        session.add(
+            JobRun(
+                id="jr-f712",
+                job_id="job-f712",
+                project_id="proj-test",
+                status="in_progress",
+                conversation_id="conv-f712",
+            )
+        )
+        await session.commit()
+    await _task("task-f712", status="completed", assignee="builder")
+    await _entry("entry-f712", review_task_id="task-f712")
+    async with async_session_factory() as session:
+        entry = (
+            await session.execute(
+                select(InboundQueueEntry).where(InboundQueueEntry.id == "entry-f712")
+            )
+        ).scalar_one()
+        entry.job_id, entry.conversation_id = "job-f712", "conv-f712"
+        await session.commit()
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/tasks/task-f712/land", headers=auth_headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert (await _row("entry-f712")).state == "withdrawn"
+    async with async_session_factory() as session:
+        firing = await session.get(JobRun, "jr-f712")
+    assert firing.status == "stopped"
+    assert "withdrawn" in (firing.error_summary or "")

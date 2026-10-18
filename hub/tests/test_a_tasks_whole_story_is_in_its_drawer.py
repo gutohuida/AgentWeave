@@ -192,6 +192,8 @@ async def test_a_merge_and_an_override_reach_the_summary(app, auth_headers, buil
 
     [integration] = [e for e in body["events"] if e["kind"] == "integration"]
     assert integration["outcome"] == "merged"
+    # F731(4): the operator's approval integrated it, and the record says so rather than "".
+    assert (integration["actor_kind"], integration["actor"]) == ("operator", "operator")
     assert body["summary"]["merged"] == [integration["commit_sha"]]
     approved = [e for e in body["events"] if e["kind"] == "transition" and e["to"] == "approved"]
     assert approved[0]["override_reason"] == "the flaky suite fails on main too"
@@ -216,6 +218,132 @@ async def test_a_task_with_nothing_yet_has_a_one_line_story(app, auth_headers, b
     assert body["summary"]["runs"] == 0 and body["summary"]["cost_usd"] is None
     async with async_session_factory() as session:
         assert (await session.get(Task, task)).status == body["task"]["status"]
+
+
+@pytest.mark.asyncio
+async def test_refused_turns_and_a_failed_checkout_release_are_in_the_story(
+    app, auth_headers, builder, tmp_path
+):
+    """F711: two refused deliveries and `task_worktree_release_failed` left ~13 minutes of a jammed
+    task out of its whole story. A turn that ran normally is its run, so it is not told twice."""
+    from hub.db.models import InboundQueueEntry
+    from hub.utils import persist_event
+
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    start = datetime.now(timezone.utc)
+    async with async_session_factory() as session:
+        session.add(
+            InboundQueueEntry(
+                id="entry-story-refused",
+                project_id="proj-test",
+                agent="beta",
+                origin_type="operator",
+                content="work",
+                hop_depth=0,
+                state="queued",
+                task_id=task,
+                arrived_at=start + timedelta(seconds=1),
+                delivery_attempts=2,
+                waiting_reason=f"Could not prepare the checkout for task {task}: refusing path",
+            )
+        )
+        session.add(
+            InboundQueueEntry(
+                id="entry-story-ran",
+                project_id="proj-test",
+                agent="beta",
+                origin_type="operator",
+                content="work",
+                hop_depth=0,
+                state="delivered",
+                task_id=task,
+                arrived_at=start,
+            )
+        )
+        await persist_event(
+            session,
+            "proj-test",
+            "task_worktree_release_failed",
+            {"task_id": task, "reason": "Permission denied"},
+            severity="warn",
+            commit=False,
+        )
+        await persist_event(
+            session,
+            "proj-test",
+            "task_worktree_release_failed",
+            {"task_id": "task-someone-else", "reason": "not this one"},
+            severity="warn",
+            commit=False,
+        )
+        await session.commit()
+
+    body = await story(app, auth_headers, task)
+
+    turns = [event for event in body["events"] if event["kind"] == "turn"]
+    assert [t["id"] for t in turns] == ["entry-story-refused"]
+    assert "Could not prepare the checkout" in turns[0]["refusal"]
+    assert turns[0]["agent"] == "beta" and turns[0]["attempts"] == 2
+    (workspace,) = [event for event in body["events"] if event["kind"] == "workspace"]
+    assert workspace["outcome"] == "release_failed"
+    assert workspace["reason"] == "Permission denied"
+    stamps = [event["at"] for event in body["events"]]
+    assert stamps == sorted(stamps), "still oldest first"
+
+
+@pytest.mark.asyncio
+async def test_a_flows_move_names_its_job_kind_as_the_details_history_does(
+    app, auth_headers, builder, tmp_path
+):
+    """F731(1): the story said "Loop <job> moved it" where Details said "Flow <job> moved" for the
+    same move; both now read the job's kind from the same join."""
+    from sqlalchemy import select
+
+    from hub.db.models import AIJob, Loop, SpecDocument
+    from hub.task_transition_service import apply_transition
+    from hub.task_transitions import operator
+
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    task_id = await linked_task(app, auth_headers)
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        document_id = (await session.execute(select(SpecDocument.id))).scalars().first()
+        session.add(
+            AIJob(
+                id="job-story-flow",
+                project_id="proj-test",
+                name="build-flow",
+                agent="builder",
+                message="work",
+                cron="*/5 * * * *",
+                session_mode="new",
+                enabled=True,
+            )
+        )
+        await session.flush()
+        session.add(
+            Loop(
+                id="loop-story-flow",
+                project_id="proj-test",
+                job_id="job-story-flow",
+                purpose="p",
+                stop_when_queue_empties=True,
+                spec_document_id=document_id,
+            )
+        )
+        await apply_transition(
+            session, task, "assigned", operator(), origin="job", job_id="job-story-flow"
+        )
+        await session.commit()
+
+    body = await story(app, auth_headers, task_id)
+    (move,) = [event for event in body["events"] if event["kind"] == "transition"]
+    assert (move["job"], move["job_kind"]) == ("build-flow", "flow")
+    details = await app.get(f"{TASKS}/{task_id}/transitions", headers=auth_headers)
+    assert details.json()["transitions"][0]["job_kind"] == move["job_kind"]
 
 
 assert BASE

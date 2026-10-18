@@ -1532,6 +1532,24 @@ def _verdict_text(notes) -> Optional[str]:
     return json.dumps(notes, ensure_ascii=False)[:2000]
 
 
+async def _run_may_write_notes(
+    session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor
+) -> bool:
+    """Whether an agent's run holds *task* closely enough to write its notes (F709).
+
+    It does when its agent is the assignee, or when the run is bound to the task (a reviewer's run is
+    bound to the task it inspects). Notes that ride a real status move are that move's statement —
+    a claim's, or a reviewer's verdict, which becomes the evidence decision's reason — and the
+    transition's own guards decide whether this run may make it, so they are not asked here.
+    """
+    if actor.is_operator or (task.assignee and task.assignee == actor.agent):
+        return True
+    if body.status is not None and body.status != task.status:
+        return True
+    run = await session.get(Run, actor.run_id) if actor.run_id else None
+    return run is not None and run.task_id == task.id
+
+
 async def update_task_for_actor(
     task_id: str,
     body: TaskUpdate,
@@ -1594,6 +1612,19 @@ async def update_task_for_actor(
                     "An agent moves its task with status and notes, and links it to the "
                     "requirements it serves with requirement_ids; who holds a task, its priority "
                     "and its description are the operator's."
+                ),
+            )
+        if body.notes is not None and not await _run_may_write_notes(session, task, body, actor):
+            # F709: notes are the task's statement and become its verdict's evidence text
+            # (`_verdict_text`), yet any run could overwrite them on a task it neither holds nor
+            # works — the status guards only look at moves to in_progress/completed. Refused before
+            # any write, like the operator-only fields above.
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"This run cannot write the notes of task {task.id}: it is assigned to "
+                    f"{task.assignee or 'nobody'} and this run is not working it. An agent writes "
+                    f"notes on the task it holds; to tell the holder something, send it a message."
                 ),
             )
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
@@ -2168,10 +2199,25 @@ async def add_task_dependency(
             detail="a task cannot depend on itself",
         )
     if outcome == task_dependency_writer.MISSING:
+        # Name only the missing ones (F731): listing both ids sent the operator hunting for a task
+        # that exists.
+        present = set(
+            (
+                await session.execute(
+                    select(Task.id).where(
+                        Task.project_id == project_id, Task.id.in_([task_id, body.depends_on])
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        missing = [tid for tid in dict.fromkeys([task_id, body.depends_on]) if tid not in present]
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"one of these tasks does not exist in this project: {task_id}, {body.depends_on}"
+                f"no task {' or '.join(missing or [body.depends_on])} in this project; nothing "
+                f"was declared"
             ),
         )
     if outcome == task_dependency_writer.CYCLE:

@@ -8,7 +8,7 @@ import { useAgents } from '@/api/agents'
 import { readableApiError } from '@/api/client'
 import { hubDate } from '@/lib/hubTime'
 import { loopEventSentence } from '@/lib/loopHistory'
-import { endingBucket } from './loopCounts'
+import { endingBucket, loopPastStop } from './loopCounts'
 import { LoopSettings } from './LoopSettings'
 
 interface LoopTabProps {
@@ -155,6 +155,8 @@ function EndingSummary({ loop }: { loop: LoopSummary }) {
     )
   }
   if (bucket === 'running') return null
+  // Past its stop time and not yet recorded as stopped: the Jobs card says "Stopping" (F714).
+  if (loopPastStop(loop)) return <Badge variant="secondary">Stopping</Badge>
   return <Badge variant="secondary">Idle</Badge>
 }
 
