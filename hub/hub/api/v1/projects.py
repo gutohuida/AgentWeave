@@ -71,6 +71,10 @@ class ProjectPathRequest(RequestModel):
     path: str = Field(min_length=1, max_length=4096)
     name: Optional[str] = Field(default=None, min_length=1, max_length=256)
     register_copy_as_new: bool = False
+    # F736: set by a bare `agentweave` start registering the folder it was run from. Such a start
+    # never overwrites a marker naming a project this Hub deleted (it may be another database's
+    # binding); an open the operator asks for in the app re-registers it (F609).
+    implicit: bool = False
 
 
 class ProjectRelocateRequest(RequestModel):
@@ -342,6 +346,7 @@ async def open_project(
             body.path,
             name=body.name,
             register_copy_as_new=body.register_copy_as_new,
+            implicit=body.implicit,
         )
     except ProjectWorkspaceError as exc:
         raise_workspace_http_error(exc)
