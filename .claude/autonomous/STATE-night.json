@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 11,
+  "iteration": 12,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F747-impl",
-  "next_action": "Do queue item F747-impl: F747 (C), a delete/modify merge conflict has no markers. Tier 0: write the test that fails at the seam the finding names, fix, drive it (scratch Hub, never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F746-impl.",
+  "current": "F746-impl",
+  "next_action": "Do queue item F746-impl: F746 (D), releasing a checkout discards a half-resolved prerequisite merge. Test-first, fix, drive (scratch Hub, never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F751-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -78,9 +78,9 @@
     },
     {
       "id": "F747-impl",
-      "status": "open",
+      "status": "done",
       "title": "F747 (C): delete/modify merge conflict has no markers",
-      "detail": "Test-first; fix; drive; Status."
+      "detail": "fixed bdb3801 (not as filed; see log iteration 12)"
     },
     {
       "id": "F746-impl",

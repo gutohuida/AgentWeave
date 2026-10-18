@@ -36671,7 +36671,7 @@ F737's launch-time fingerprint covers this class only for the runner's configura
 
 ## F747 (C) -- a delete/modify merge conflict has no markers, so the snapshot commits it as the files stand
 
-**Status:** open 2026-10-18. Filed from the 2026-10-18 decision pass (F695 group), by reading the code; not driven.
+**Status:** fixed 2026-10-19 night (Tier 0), part-as-filed not a defect. The claim does not hold: a delete/modify path stays unmerged in the index (`diff --diff-filter=U` names it, driven in a raw git repo), so `unresolved_merge_paths` already declines the snapshot, and once the agent stages it, keeping the file or taking the deletion is the resolution the conflict asks for; git keeps no marker to tell a careless `add` from a deliberate one. The real gap was next to it: keeping this side's file leaves the tree equal to HEAD, so `snapshot_worktree` saw nothing dirty and never concluded the merge, leaving it open. It now commits when a merge is open and unresolved-free. `hub/tests/test_a_delete_modify_merge_conflict_is_unresolved_until_the_path_is_resolved.py` (3 tests; the keep case red first); the 377 worktree/merge/checkout Hub tests pass. Was: open 2026-10-18. Filed from the 2026-10-18 decision pass (F695 group), by reading the code; not driven.
 **Source:** review
 **Theme:** Worktrees & integration
 
