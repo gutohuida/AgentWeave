@@ -381,6 +381,14 @@ export function ProjectSettingsPanel({ onNavigate }: { onNavigate?: (page: strin
       </SettingsRow>
 
       {update.isSuccess && <div role="status" className="py-3 text-xs" style={{ color: 'var(--green)' }}>Settings saved.</div>}
+      {/* Saved, but worth knowing (warn, not refuse): F728's agent budget below the open agents,
+          F541's token threshold an agent can never reach. The Hub returned these and nothing
+          showed them. */}
+      {update.isSuccess && (update.data?.warnings ?? []).length > 0 && (
+        <ul data-testid="settings-save-warnings" role="alert" className="space-y-1 pb-3 text-xs" style={{ color: 'var(--amber)' }}>
+          {(update.data?.warnings ?? []).map((warning) => <li key={warning}>{warning}</li>)}
+        </ul>
+      )}
       {relocate.isSuccess && <div role="status" className="py-3 text-xs" style={{ color: 'var(--green)' }}>Project directory updated.</div>}
       {error && <div role="alert" className="py-3 text-xs" style={{ color: 'var(--red)' }}>{readableApiError(error, 'The update could not be saved.')}</div>}
       </form>

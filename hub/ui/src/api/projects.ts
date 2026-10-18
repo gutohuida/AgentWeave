@@ -105,6 +105,13 @@ export interface ProjectSettings {
   checks: ProjectCheck[] | null
 }
 
+/** What a settings save answers: the stored settings, plus what the operator should know about
+ *  them (an agent budget below the open agents, a token threshold an agent can never reach).
+ *  Answer-only; never sent back. */
+export interface ProjectSettingsSaved extends ProjectSettings {
+  warnings?: string[]
+}
+
 /** One of a project's checks (`approval-runs-the-projects-checks`). */
 export interface ProjectCheck {
   name: string
@@ -154,8 +161,11 @@ export function useUpdateProjectSettings(projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: ProjectSettingsInput) =>
-      putJson<ProjectSettings>(`/api/v1/projects/${projectId}/settings`, input),
-    onSuccess: (settings) => {
+      putJson<ProjectSettingsSaved>(`/api/v1/projects/${projectId}/settings`, input),
+    onSuccess: (saved) => {
+      // `warnings` is answer-only: the cached settings are what is stored, without it.
+      const settings: ProjectSettings & { warnings?: string[] } = { ...saved }
+      delete settings.warnings
       queryClient.setQueryData<ProjectSettings>(['project', projectId, 'settings'], settings)
       queryClient.setQueryData<ProjectSummary[]>(['projects'], (current = []) =>
         current.map((project) => project.id === projectId ? { ...project, ...settings } : project),

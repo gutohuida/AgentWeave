@@ -92,6 +92,7 @@ from ...launchability import (
     record_harness_mcp_status,
     resolve_agent_env,
     spec_turn_notice,
+    writing_agent_work_dir_sentence,
 )
 from ...model_catalog import (
     PERMISSION_MODE_CONTROL,
@@ -1370,7 +1371,7 @@ async def _trigger_agent_directly(
     if work_dir and worktrees.is_writing_agent(config) and project_is_repo:
         raise TriggerAgentError(
             status.HTTP_400_BAD_REQUEST,
-            "work_dir cannot override workspace isolation for a writing agent",
+            writing_agent_work_dir_sentence(agent),
             request_level=True,
         )
     if work_dir:
@@ -2096,7 +2097,7 @@ async def trigger_agent(
     ):
         raise HTTPException(
             status_code=400,
-            detail="work_dir cannot override workspace isolation for a writing agent",
+            detail=writing_agent_work_dir_sentence(body.agent),
         )
     if body.work_dir:
         try:

@@ -7,6 +7,8 @@ import type { AgentSummary } from '@/api/agents'
 import { ApiError } from '@/api/client'
 
 const update = vi.fn()
+/** What the last save answered, for the tests that read it (F728's warnings). */
+let updateResult: { isSuccess: boolean; data?: { warnings?: string[] } } = { isSuccess: false }
 const relocate = vi.fn()
 const deleteProject = vi.fn()
 const project = {
@@ -78,7 +80,7 @@ vi.mock('@/api/projects', () => ({
     data: settingsError ? undefined : settings, error: settingsError, isError: settingsError !== null, refetch: refetchSettings,
   }),
   useMainBranchSuggestion: () => ({ data: suggestion }),
-  useUpdateProjectSettings: () => ({ mutate: update, isPending: false, error: null }),
+  useUpdateProjectSettings: () => ({ mutate: update, isPending: false, error: null, ...updateResult }),
   useRelocateProject: () => ({ mutate: relocate, isPending: false, error: null }),
   useDeleteProject: () => ({
     mutate: deleteProject, isPending: false, error: null, isSuccess: false, reset: vi.fn(),
@@ -391,5 +393,29 @@ describe('F197 a failed settings query', () => {
     expect(screen.queryByText('Save settings')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(refetchSettings).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('F728 a save answers warnings, and the panel shows them', () => {
+  beforeEach(() => {
+    settings = makeSettings()
+    settingsError = null
+    useConfigStore.setState({ selectedProjectId: 'proj-a' })
+  })
+
+  it('lists what the Hub warned of beside "Settings saved."', () => {
+    const warning = 'The agent budget is now 2, but 3 agents are open.'
+    updateResult = { isSuccess: true, data: { warnings: [warning] } }
+    render(<ProjectSettingsPanel />)
+    expect(screen.getByText('Settings saved.')).toBeInTheDocument()
+    expect(screen.getByTestId('settings-save-warnings')).toHaveTextContent(warning)
+    updateResult = { isSuccess: false }
+  })
+
+  it('shows no warning list for a save that warned of nothing', () => {
+    updateResult = { isSuccess: true, data: { warnings: [] } }
+    render(<ProjectSettingsPanel />)
+    expect(screen.queryByTestId('settings-save-warnings')).not.toBeInTheDocument()
+    updateResult = { isSuccess: false }
   })
 })
