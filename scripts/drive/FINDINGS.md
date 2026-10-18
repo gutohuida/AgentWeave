@@ -36626,7 +36626,7 @@ F720 replaced the fixed note on the entry-read route only. `vault_reports.py:136
 
 ## F743 (C) -- an operator PATCH to revision_needed that names an assignee silently ignores it
 
-**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass (tasks group), by reading the code.
+**Status:** fixed 2026-10-18 night (Tier 0). `apply_transition` takes `holder_named`; the operator route passes it when the PATCH carries `assignee`, so the author-return no longer overwrites it (a named agent or an explicit null both stand; no `assignee` still returns to the author). Test `test_an_operator_send_back_naming_an_assignee_gives_it_to_that_agent` in `hub/tests/test_revision_returns_to_the_author.py` was red first. Driven on a scratch Hub :8126: named -> `named`, null -> unassigned, omitted -> `author`; no tracebacks.
 **Source:** review
 **Theme:** Task ledger
 

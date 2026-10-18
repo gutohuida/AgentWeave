@@ -692,8 +692,13 @@ async def apply_transition(
     job_id: Optional[str] = None,
     override_checks_reason: Optional[str] = None,
     verdict_reason: Optional[str] = None,
+    holder_named: bool = False,
 ) -> Optional[TaskTransition]:
     """Move `task` to `to_status` as `actor`, recording it. Returns None when nothing changed.
+
+    *holder_named* says the caller has just written `task.assignee` on the operator's instruction
+    (the same PATCH that sends the work back, F743), so the send-back does not return it to its
+    author over the top of that.
 
     A verdict decides the task's evidence (`the-reviewers-verdict-decides-the-tasks-evidence`):
     `approved` accepts the pieces recorded for it, `revision_needed` and `rejected` reject them, with
@@ -835,7 +840,7 @@ async def apply_transition(
     # reviewer's fix. Read before the status write, so the lookup's autoflush cannot matter. An
     # operator completion names no agent; `_holder_of_sent_back_work` then asks the other records
     # of authorship before it leaves the assignee alone (F708).
-    if to_status == "revision_needed":
+    if to_status == "revision_needed" and not (holder_named and actor.is_operator):
         task.assignee = await _holder_of_sent_back_work(session, task, actor)
     if to_status in ("revision_needed", "rejected"):
         await _decide_evidence_with_verdict(session, task, actor, to_status, verdict_reason)

@@ -1738,6 +1738,8 @@ async def update_task_for_actor(
             override_checks_reason=body.override_checks_reason,
             # The verdict's notes are the reason its evidence decision records (vis-D4).
             verdict_reason=_verdict_text(body.notes),
+            # An assignee the operator wrote in this same PATCH is who holds the rework (F743).
+            holder_named="assignee" in body.model_fields_set,
         )
         approval_report = list(getattr(transition, "reported_advisories", None) or [])
         # Every exit from the waiting status drops the text, whichever exit it was — released,

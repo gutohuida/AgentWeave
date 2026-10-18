@@ -134,3 +134,69 @@ async def test_a_reviewer_sending_back_unattributed_work_does_not_keep_it(app):
         back = await _fresh_task(db, task.id)
         assert back.status == "revision_needed"
         assert back.assignee is None
+
+
+# F743: the operator names the holder in the very PATCH that sends the work back.
+
+TASKS = "/api/v1/projects/proj-test/tasks"
+NAMED = "f743-named"
+
+
+async def _under_review_task(db, suffix):
+    _job, _loop, task = await _flow_with_task(db, suffix=suffix)
+    await _completed_by(db, task, AUTHOR)
+    await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+    await db.commit()
+    return task
+
+
+async def test_an_operator_send_back_naming_an_assignee_gives_it_to_that_agent(
+    app, auth_headers, bind_runner
+):
+    """The route, not the service: `update_task_for_actor` wrote the named assignee and then
+    `apply_transition` overwrote it with the author, answering 200 either way."""
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER, NAMED)
+    async with async_session_factory() as db:
+        task = await _under_review_task(db, "f743-named")
+
+    resp = await app.patch(
+        f"{TASKS}/{task.id}",
+        json={"status": "revision_needed", "assignee": NAMED},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "revision_needed"
+    assert resp.json()["assignee"] == NAMED, "the operator's named holder is not the author's"
+
+    async with async_session_factory() as db:
+        assert (await _fresh_task(db, task.id)).assignee == NAMED
+
+
+async def test_an_operator_send_back_naming_nobody_leaves_it_unassigned(
+    app, auth_headers, bind_runner
+):
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        task = await _under_review_task(db, "f743-nobody")
+
+    resp = await app.patch(
+        f"{TASKS}/{task.id}",
+        json={"status": "revision_needed", "assignee": None},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["assignee"] is None
+
+
+async def test_an_operator_send_back_without_an_assignee_still_returns_to_the_author(
+    app, auth_headers, bind_runner
+):
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        task = await _under_review_task(db, "f743-default")
+
+    resp = await app.patch(
+        f"{TASKS}/{task.id}", json={"status": "revision_needed"}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["assignee"] == AUTHOR
