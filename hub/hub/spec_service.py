@@ -1180,6 +1180,20 @@ async def rename_document(
     document.title = subject.strip() or document.title
     await _repoint_pending_input(session, document.project_id, previous_path, new_path)
     spec_documents.move_document(workspace, previous_path, new_path)
+    # F742: the file's own title follows the row's. The index is built from the row and the
+    # manifest compares it with the file, so a stale file title read as a metadata conflict.
+    # After the move, like the index: a failed write leaves what a rewrite repairs, never a
+    # refused rename of a file that already moved.
+    try:
+        content = spec_documents.read_document(workspace, new_path)
+        stored = spec_documents.parse_stored(content)
+        if stored is not None and stored.get("title") != document.title:
+            stored["title"] = document.title
+            spec_documents.write_payload(
+                workspace, new_path, stored, spec_documents.parse_hub(content)
+            )
+    except OSError:
+        logger.warning("the title of %s could not follow its rename", new_path, exc_info=True)
     # F730: the index follows the move. Without it the renamed document read as missing at its old
     # path and unfiled (no title, no Place under) at its new one until somebody rebuilt the index.
     # After the move, like it, because a file move does not roll back; a failed index write leaves

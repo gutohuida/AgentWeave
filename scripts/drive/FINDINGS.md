@@ -36618,7 +36618,7 @@ F720 replaced the fixed note on the entry-read route only. `vault_reports.py:136
 
 ## F742 (C) -- renaming a spec document changes its index title but not the file's, which then reads as a metadata conflict
 
-**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass (spec group); reproduces in `test_spec_rename.py::test_the_index_follows_the_rename`, which leaves the title diagnostic unasserted.
+**Status:** fixed 2026-10-18 night (Tier 0). `rename_document` now rewrites the moved file's payload `title` to the row's (after the move; an OSError is logged, never a refused rename). `test_the_index_follows_the_rename` asserts empty diagnostics and the file's title, and was red first (`intrinsic_metadata_conflict` on `title`, actual `Demo`). Driven on a scratch Hub :8127: create, reindex, rename via a run token -> `/specs` diagnostics `[]`, file title = subject.
 **Source:** review
 **Theme:** Spec documents
 

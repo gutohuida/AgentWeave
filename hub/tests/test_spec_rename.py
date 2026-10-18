@@ -132,10 +132,9 @@ async def test_the_index_follows_the_rename(app, auth_headers, run_headers, tmp_
     assert tree["home"] == NAMED
     assert tree["missing"] == []
     assert tree["manifest"]["state"] == "valid"
-    # Nothing about the move itself. (The file's payload title still reads what it was written
-    # with while the row and index carry the subject -- a separate, pre-existing gap a rebuild
-    # reports identically, so it is not asserted either way here.)
-    assert [d["code"] for d in tree["diagnostics"] if d.get("field") != "title"] == []
+    # F742: the file's own title follows too, so the index and the file do not disagree.
+    assert tree["diagnostics"] == []
+    assert parse_stored((tmp_path / NAMED).read_text(encoding="utf-8"))["title"] == SUBJECT
 
 
 @pytest.mark.asyncio
