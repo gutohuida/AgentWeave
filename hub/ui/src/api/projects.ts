@@ -197,14 +197,15 @@ export function useDeleteProject(projectId: string) {
         method: 'DELETE',
       }).then(() => undefined),
     onSuccess: () => {
-      let remaining: ProjectSummary[] = []
-      queryClient.setQueryData<ProjectSummary[]>(['projects'], (current = []) => {
-        remaining = current.filter((project) => project.id !== projectId)
-        return remaining
-      })
-      if (useConfigStore.getState().selectedProjectId === projectId) {
-        useConfigStore.getState().setSelectedProject(remaining[0]?.id ?? null)
-      }
+      // Only the collection changes here. Navigation owns the selection: with the project gone
+      // from `['projects']` it resolves a fallback destination, and App writes that to the store.
+      // Writing the store here as well (F729) raced App's destination->store effect, which, still
+      // holding the deleted destination for one commit, wrote the deleted id straight back, and
+      // every query keyed on the selected project re-ran against a project that no longer exists.
+      queryClient.setQueryData<ProjectSummary[]>(['projects'], (current = []) =>
+        current.filter((project) => project.id !== projectId),
+      )
+      void queryClient.cancelQueries({ queryKey: ['project', projectId] })
     },
   })
 }
