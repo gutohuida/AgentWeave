@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 
 class TestTransportJsonAtomicWrite:
     """S8 — transport.json must be written via write_json_atomic so the
@@ -279,6 +281,11 @@ class TestAppModeNativeWindow:
     pywebview's actual window, so these tests exercise `_open_app_window_native` and its
     call sites' wiring in isolation, not a real window.
     """
+
+    @pytest.fixture(autouse=True)
+    def _scratch_hub_dir(self, tmp_path, monkeypatch):
+        # An open window records itself under HUB_DIR so `stop` can close it (F724).
+        monkeypatch.setattr("agentweave.cli.HUB_DIR", tmp_path)
 
     def test_pywebview_not_installed_returns_false(self, monkeypatch):
         """4.1 — with pywebview unimportable, the function reports it can't run the
