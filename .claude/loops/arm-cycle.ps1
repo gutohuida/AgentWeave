@@ -16,8 +16,8 @@
     a tree it does not understand costs the morning.
 
 .PARAMETER Window
-    day   09:00-17:00, fills: drives, spec loops, review page.
-    night 23:00-07:00, fixes: implements what is approved and what is in the backlog.
+    day   09:00-17:00, drives: e2e sweeps that file ready findings; gated ff of master at close.
+    night 23:00-07:00, fixes: everything the day found, every tier.
 
 .PARAMETER DryRun
     Do everything except mutate git and register the task. Prints what it would do.
@@ -70,7 +70,8 @@ $windows = @{
     StateFile = ".claude\autonomous\STATE-day.json"
     LogFile   = ".claude\autonomous\driver-day.log"
     Playbook  = ".claude/loops/day-window.md"
-    Purpose   = "FILL. Drive the product first; spec findings and research candidates by tier (CLAUDE.md, Spec weight follows risk) into openspec/changes/, list Tier-0 fixes for APPROVED-FIXES, and write the review page the operator approves from. This window does NOT implement, except on a build day: today's DIRECTION.md section names one under an operator's DECISIONS.md row (day-window.md, 'A day that builds')."
+    Purpose   = "DRIVE. Operator, 2026-10-18: drive AgentWeave end to end and file everything wrong with it, as ready findings (repro, severity, seam, tier) for the night to fix. Open with plan-review (the e2e checklist checked against the code: unreached, new, gone), then anything today's DIRECTION.md adds, then re-drive last night's fixes, then 3-4 full-surface sweep areas. Close with the merge gate. No product code unless DIRECTION.md asks. Playbook: .claude/loops/day-window.md"
+    MergeGate = $true
   }
   night = @{
     StartAt   = "23:00"
@@ -79,7 +80,7 @@ $windows = @{
     StateFile = ".claude\autonomous\STATE-night.json"
     LogFile   = ".claude\autonomous\driver-night.log"
     Playbook  = ".claude/loops/night-window.md"
-    Purpose   = "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals."
+    Purpose   = "FIX. Operator, 2026-10-18: fix everything the day window found, at every tier (Tier 1/2 author their own short change on trial Hub :8010 and approve_anyway; Tier 2 writes its acceptance drive failing first). Red CI first, then what the operator added in APPROVALS.md, then today's day-log findings, then every other open finding, severity first. Test-first, drive each fix, set its Status line. Never merges."
     Closeout  = $true
   }
   # Operator, 2026-10-11 (DECISIONS.md away-1011): away until Wednesday; the day builds the
@@ -269,9 +270,9 @@ $state = [ordered]@{
   decisions_for_user = @()
   limits            = @(
     $(if ($w.MergeGate) {
-      "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window's merge-gate item (build-window.md, 'The merge gate'), which may fast-forward master to this branch with 'git fetch . <branch>:master' and 'git push origin master' when all four gate conditions hold -- operator, 2026-10-11 (DECISIONS.md away-1011). Never a merge commit, never a conflict resolved."
+      "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window's merge-gate item ($($w.Playbook), 'The merge gate'), which may fast-forward master to this branch with 'git fetch . <branch>:master' and 'git push origin master' when all four gate conditions hold and the branch adds no migration -- operator, 2026-10-11 and 2026-10-18. Never a merge commit, never a conflict resolved."
     } else {
-      "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master."
+      "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. Only the day window's merge gate (day-window.md, 'The merge gate') may fast-forward master. This window never merges."
     }),
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
     "Nothing destructive: no deleting projects, databases, or kept reproductions.",
@@ -280,7 +281,7 @@ $state = [ordered]@{
     "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
     "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
     "Tests under py -3.11, never bare python. black needs --target-version py311.",
-    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, 'Something new'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
     "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
   )
 }

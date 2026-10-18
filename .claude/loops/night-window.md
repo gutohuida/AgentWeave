@@ -37,12 +37,16 @@ job's log with `gh run view <id> --log-failed`), whatever `next_action` says. Re
 compose is not enough: measured 2026-09-22 night, the first build commit (`384254e`) turned the CLI
 matrix red and the window pushed **16 more commits onto it over five hours** without looking again.
 
-This window **fixes**: it implements and drives. It does not write new proposals — the day window
-already took them through three rounds. If a change you are implementing turns out to be wrong,
-**stop implementing it**, add an `OPEN` row to `spec-queue/DECISIONS.md` recording why, put only that
-row's id in `decisions_for_user`, and move to the next queue item. A proposal that survives three
-rounds and then fails contact with the code is exactly the finding this whole arrangement exists to
-surface; do not paper over it at 03:00.
+This window **fixes everything the day window found** (operator, 2026-10-18: "the night about
+fixing everything that was found. Unless I add something new"). The day window drives the product
+and files ready findings; you build them, at every tier, test-first, and drive each fix before you
+close it. On 2026-10-18 the operator authorised all three tiers at night, so a finding needs no
+`APPROVED-FIXES` line before you build it. Tier 1 and Tier 2 work writes its own short spec first
+(`## Tier 1 and Tier 2 at night`, below).
+
+If a fix turns out to be wrong, or a finding needs a decision that is genuinely the operator's,
+**stop that item**. Add an `OPEN` row to `spec-queue/DECISIONS.md` recording why, put only that
+row's id in `decisions_for_user`, and move to the next queue item. Do not paper over it at 03:00.
 
 Map, tasks, state layout and the cycle-branch rule: `.claude/loops/README.md`.
 File contract: `spec-queue/README.md`. Design and rejected alternatives:
@@ -117,10 +121,10 @@ Only the first firing of the window does this.
    - **`ORDER:`** → that is the queue for tonight, verbatim, and the default below is ignored.
    - Otherwise collect the `APPROVED` rows. `REVISING` and `REJECTED` are not yours to act on.
    - **`APPROVED-FIXES: F<n>, F<n>`** (since 2026-10-04): the operator's batch approval of
-     **Tier-0** findings (`CLAUDE.md`, *Spec weight follows risk*). Each one is built with no
-     openspec change, under `day-window.md`'s `D-6` rules: a test that fails at the finding's seam,
-     the fix, CI's lint set, a mutation check, a drive, and then `**Status:** fixed <sha>`. If one
-     turns out to need a spec, stop it and leave it for the day window. Do not stretch it to fit.
+     findings. Since 2026-10-18 it no longer gates anything: every ready finding is already work.
+     What it does now is put the findings it names **first**, in its order.
+   - **Anything else the operator added** for tonight (a feature, a change, a redirect) goes first,
+     ahead of the findings. That is the "unless I add something new" clause.
    - **No section for today, or an empty one** → the operator did not sit down. This is normal and
      needs no special case: the whole window goes to the backlog.
 
@@ -167,38 +171,66 @@ Only the first firing of the window does this.
      `--timeout=300`, so a wedged test should now fail in minutes; a run still hung past 60 minutes
      is wedged outside a test, which is exactly the case nothing else will report.)
 
-4. **Write the queue**, in this order unless `ORDER:` says otherwise. Backlog first, decided
-   2026-09-01; the rejected alternative was approved-first, which would let 8 unarchived changes and
-   173 findings rot while the loop shipped new ideas.
+4. **Write the queue**, in this order unless `ORDER:` says otherwise. This order was decided on
+   2026-10-18 and replaces the 2026-09-01 order, which put archiving first.
 
-   1. **Unarchived changes that are implemented and only need archiving.** Cheapest work in the
-      repository. Read `openspec/changes/a-conflict-refusal-names-what-clears-it`'s task 6.4a
-      **first**: it must not be archived before `a-loop-declares-whether-it-needs-evidence` is. That
-      ordering constraint is real, and archiving out of order is not trivially reversible.
+   1. **Red CI, or a red tree you inherited** (step 3). That comes first, always.
+   2. **What the operator added for tonight** (step 2), in their order.
+   3. **The findings today's day window filed**, from the newest
+      `.claude/autonomous/*-day-log.md` closing entry, plus any finding it `REOPENED`. Take them
+      severity first (A before B before C before D), then Tier 0 before Tier 1 before Tier 2 at
+      equal severity, because the cheap ones drain fastest.
+   4. **Every other open finding** in `scripts/drive/FINDINGS.md`, by the same order. Take only
+      findings with a repro you can reproduce. A finding you cannot reproduce on this branch gets
+      a `-drive` item that confirms whether it is still live, and then a status line either way.
+   5. **Unarchived `openspec/changes/`** do not get finished here. When one fixes a finding that is
+      in tonight's queue, re-author it as a short app change (`CLAUDE.md`, *Specifications*), then
+      archive the openspec copy with a note that names its successor. Before fixing any finding,
+      grep `openspec/changes/` for it, and never carry one change in both places.
 
-      **Archiving a change retires the findings it fixes, in the same commit.** For every `F<n>` the
-      change's `proposal.md` names, set that section's `**Status:**` line in
-      `scripts/drive/FINDINGS.md` to `fixed <sha>`, and correct the index paragraph's open
-      severity-A list. Append the change's row to `spec-queue/METRICS.md` in the same commit. This is not optional tidying — it is the step whose absence makes source 2
-      below unusable. Measured 2026-09-03: 145 of the ledger's 280 entries carry no status at all,
-      and the summary has twice been provably wrong about what is open (it read "one" for a week
-      while F188 sat in it, and carried F12 as open years after `5237ec5` fixed it). A backlog that
-      cannot say what is done is read as a backlog of everything.
-   2. **Open findings from `scripts/drive/FINDINGS.md`,** severity A before B before C. The ones
-      tonight's `APPROVED-FIXES:` line names are work: one item each, suffix `-impl`, built as Tier 0.
-      Any other finding with no proposal needs the day window first: queue it as a note to
-      tomorrow, not as work.
-   3. **`APPROVED` rows naming an `openspec/changes/` change are not built here** (operator,
-      2026-10-08: openspec changes are moved into the app, not finished in openspec). Note the row
-      for tomorrow's interactive session instead; the night has no operator to approve the app copy.
+   **Item ids:** `F<n>-impl` for a fix (Sonnet/high; add `"model": "opus"` for a Tier 2 fix or a
+   hard one), `F<n>-spec` for a Tier 1/2 change document (default Opus/high), and `F<n>-drive` for a
+   confirm-only drive. Group findings that share a seam into one item when one test and one fix
+   cover them all. Size each item to finish inside one firing. If an item ends without a commit, it
+   was too big, so split it in the log for the next firing. **Split by finding, never below one.**
+   Queue only what the window can reach, which is about 10 to 14 items, and leave the rest for
+   tomorrow night.
 
-   Size each item to finish inside one firing. If an item ends without a commit, it was too big;
-   split it in the log so the next firing inherits the split. **Split by task, never below one.**
-   The smallest unit a firing may take is one whole `tasks.md` task, and the normal unit is a
-   vertical slice (see "Implementing", below). See "Pace", below, for what happens when an item
-   uses many firings.
+   **Closing a finding:** set its `**Status:**` line to `fixed <sha>` in the same commit as the
+   fix, or in the commit right after it. Add one line naming the drive that showed it firing. If it
+   was tested but not driven, say "tested, not driven". The day window re-drives every fix the next
+   morning and reopens any that do not fire.
 
 ---
+
+## Tier 1 and Tier 2 at night
+
+Authorised by the operator on 2026-10-18. Tier 1 and Tier 2 follow `CLAUDE.md`'s table exactly, and
+nobody is awake to approve, so:
+
+- **Author the change in the app**, as one `spec/changes/<name>/` document on the trial Hub :8010
+  (project `proj-d85a82bf4216`; the runbook is `.claude/reference/hubs.md`). It holds the
+  requirements, the scenarios and the **acceptance drive**. Approve it with `approve_anyway` and
+  record that in the log. Never hand-edit `spec/capabilities/*/spec.json`. After the build and the
+  drive, fold the change into its capability through the Hub's routes, then commit the files the
+  Hub wrote.
+- **:8010 is yours tonight**, between items. If it is down, or serving code older than this branch,
+  restart it from `hub/` as the runbook says, never mid-request. If it will not come up, author the
+  proposal as a markdown file under `spec-queue/night-proposals/`, build anyway, and add an `OPEN`
+  row asking the operator to fold it.
+- **Tier 2 additionally:** the proposal names the hazard and the migration or rollback. **The
+  acceptance drive is written, and fails, before the build.** A migration:
+  - follows the database-column rule in "Implementing";
+  - is round-tripped (upgrade, downgrade, upgrade) on a **copy** of the trial profile's database;
+  - is never run against :8000's database, not even read-write on a copy in place.
+
+  A branch that carries a new migration holds the day's merge gate shut until the operator lands
+  it (`day-window.md`, the migration hold), so say in the closing entry which migration is waiting.
+- **Auth, secrets or permission-judge changes** are Tier 2 by definition. Their test asserts the
+  refusal as well as the allow.
+- **A short review is grounded or it does not count.** There are no R1/R2/R3 rounds. One Opus
+  foreground subagent may check a Tier 2 diff against its acceptance drive, and every claim it
+  makes cites a `file:line` or something it ran.
 
 ## Implementing
 

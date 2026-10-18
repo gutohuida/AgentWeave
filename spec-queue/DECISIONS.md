@@ -20,6 +20,16 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### loop-1018: the daily cycle restarts as DRIVE by day, FIX by night -- DECIDED 2026-10-18
+
+Interactive session, 2026-10-18 ~22:40. "I want to restart my daily and nightly run. The daily run will be about driving and testing e2e agentweave and finding everything wrong with it and the night about fixing everything that was found. Unless I add something new." Then: "also e2e loop should start with a pretask that is reviewing the plan agains the code to check if it's reaching everything and if there is something new."
+
+- DECIDED   loop-D1  Day window (09:00-17:00) = DRIVE: `plan-review` first (the e2e checklist checked against the code), then whatever the operator adds in DIRECTION.md/REQUESTS.md, then a re-drive of last night's fixes, then 3-4 sweep areas. It files ready findings (repro, severity, seam, tier) and writes no product code. `day-window.md` was rewritten. (operator, 2026-10-18)
+- DECIDED   loop-D2  Night window (23:00-07:00) = FIX everything found, **every tier, Tier 2 included**. Tier 1/2 author their own short change on :8010 and use approve_anyway; Tier 2 writes its acceptance drive and sees it fail before the build. APPROVED-FIXES no longer gates anything. (operator, 2026-10-18)
+- DECIDED   loop-D3  The gated fast-forward of master stays, at day close (D-7), with the morning fallback. The night never merges. (operator, 2026-10-18)
+- DECIDED   loop-D4  Restart with the night of 2026-10-18, armed by hand; ArmDay and ArmNight re-enabled from 2026-10-19. (operator, 2026-10-18)
+- ASSUMED   loop-A1  Migration hold: the merge gate stays shut while the branch adds a migration, because :8000's next restart would run it on real data. This is the session's own safety default, not the operator's call; drop it if it is unwanted. (2026-10-18)
+
 ### vis-1017: evidence goes agentic, and the project becomes visible -- DECIDED 2026-10-17
 
 From the interactive exploration of F672/F673 (evidence hard to find, hard to judge). Plan: https://claude.ai/artifact/2W2SWKXcukLL6hLHQedJnS (eight slices); map of what the database holds against what the app shows: https://claude.ai/artifact/YUSxzdpHms7iM7WWi3fR8t. Evidence on Terra (`:8000`, read `mode=ro`): granted QA agents decided 34 pieces and rejected 3, all three real defects; the operator accepted 10 with no reason, the screen showing only the builder's sentence.

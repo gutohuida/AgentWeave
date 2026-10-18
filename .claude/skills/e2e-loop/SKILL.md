@@ -137,6 +137,29 @@ still in `openspec/changes/` are leftovers to be moved across, not in flight: tr
 as not shipped. Re-verifying an open finding on a row you touch is cheap and tells the operator
 whether it still bites.
 
+**Then check the plan against the code, not only against the specs** (operator, 2026-10-18). A
+behaviour that shipped without a spec document, or as a Tier 0 fix, never shows up in
+`spec/changes`. Take an inventory of what the product can actually do:
+
+```bash
+grep -rnE '@router\.(get|post|put|patch|delete)\(' hub/hub/api   # every Hub route (~230)
+grep -nA2 '^@_tool()' hub/hub/mcp_server.py | grep 'def '         # every agent MCP tool
+grep -n '^def cmd_' src/agentweave/cli.py                         # the CLI that survives
+ls hub/ui/src/components                                          # screens, tabs, dialogs
+git log --since=<checklist date> --stat -- hub/hub/api hub/hub/mcp_server.py hub/ui/src/components
+```
+
+Map each route group, tool, command and screen to a checklist row. Three things come out of this,
+and all three are written into this file before driving:
+
+- **Unreached**: anything that maps to no row. Add it to the row it belongs to, or add a new row.
+- **New**: anything added since the checklist date. Mark it `(new <date>)` in its row. A sweep
+  drives new paths first, because nothing has driven them yet.
+- **Gone**: a path a row names that the code no longer has. Remove it from the row, or record it
+  as `not shipped`.
+
+Update the checklist's date line once the reconcile is done.
+
 ## Step 1 — Establish scope before looking at anything *(scoped mode only)*
 
 **Ask the user what to test, in their own words, first.** Do not read `git log`, the change in

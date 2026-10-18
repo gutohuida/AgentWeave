@@ -8,15 +8,17 @@ Design and the decisions behind it:
 `openspec/explorations/2026-09-01-a-daily-research-spec-and-build-loop.md`.
 Contract for the files the windows exchange: `spec-queue/README.md`.
 
+**Since 2026-10-18 (`DECISIONS.md` loop-1018):** day = DRIVE (find everything wrong), night = FIX (everything found). The build pair is retired.
+
 ## The five tasks — three permanent, two transient
 
 | Task | When | Lifetime | Mode | Playbook |
 |---|---|---|---|---|
 | `AgentWeaveResearch` | 07:10 daily | **persistent** | **`auto`** | `~/.claude/routines/agentweave-research/prompt.md` |
 | `AgentWeaveArmDay` | 08:55 daily | **persistent** | — | registers the next row |
-| `AgentWeaveDayLoop` | 09:00-17:00 | *transient* | `bypassPermissions` | `day-window.md` |
+| `AgentWeaveDayLoop` | 09:00-17:00 | *transient* | `bypassPermissions` | `day-window.md` (DRIVE: plan-review, e2e sweeps, files findings) |
 | `AgentWeaveArmNight` | 22:55 daily | **persistent** | — | registers the next row |
-| `AgentWeaveNightLoop` | 23:00-07:00 | *transient* | `bypassPermissions` | `night-window.md` |
+| `AgentWeaveNightLoop` | 23:00-07:00 | *transient* | `bypassPermissions` | `night-window.md` (FIX: everything found, every tier) |
 | `AgentWeaveArmBuild` | 08:55 daily, ends 2026-10-15 | temporary (`away-1011`) | — | registers the next row |
 | `AgentWeaveBuildLoop` | 09:00-21:30 | *transient* | `bypassPermissions` | `build-window.md` |
 
@@ -115,7 +117,7 @@ page, so the operator sees they are looking at more than one day of accumulated 
 
 **The day window's merge gate may fast-forward master itself, since 2026-09-06.** The operator
 relaxed the seeded `limits[0]` line that had kept condition zero permanently unmet
-(`day-window.md`, Iteration 1 step 1). The other three conditions are unchanged and still gate it:
+(`day-window.md`, `The merge gate`; run at day close since 2026-09-19, and since 2026-10-18 it is held while the branch adds a migration). The other three conditions are unchanged and still gate it:
 a genuine fast-forward, a clean pushed HEAD, CI green at that exact commit, and no `HOLD MERGE` in
 `DIRECTION.md`. `git merge --ff-only` only — the gate still cannot invent a merge commit or resolve
 a conflict with nobody awake. The night window still never merges, under any condition.
