@@ -96,9 +96,6 @@ async def _agent(app, auth_headers, bind_runner, name):
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True, reason="F697: a stopped turn's interrupted call is not yet estimated"
-)
 async def test_a_stopped_claude_turn_records_an_estimate_that_is_not_counted(
     app, auth_headers, bind_runner
 ):
@@ -148,9 +145,6 @@ async def test_a_stopped_claude_turn_records_an_estimate_that_is_not_counted(
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True, reason="F697: a stopped turn's interrupted call is not yet estimated"
-)
 async def test_a_completed_claude_turn_carries_no_estimate(app, auth_headers, bind_runner):
     from tests.test_a_claude_turn_records_its_own_cost import SESSION as COST_SESSION
     from tests.test_a_claude_turn_records_its_own_cost import TURNS, _init, _turn, _usage

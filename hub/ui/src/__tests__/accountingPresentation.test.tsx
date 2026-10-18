@@ -196,6 +196,27 @@ describe('accounting presentation', () => {
     ).toBe('Copilot AI credits · no allowance reported')
   })
 
+  it("shows a stopped turn's interrupted call as an estimate, not counted (F697)", () => {
+    snapshot.project = { ...snapshot.project, estimated_input_tokens: 333_102 }
+    snapshot.agents = snapshot.agents.map((agent) =>
+      agent.agent === 'codex' ? { ...agent, estimated_input_tokens: 333_102 } : agent,
+    )
+    render(<AccountingPanel />)
+    expect(
+      screen.getByText('≈333,102 input tokens, not measured — not counted against the budget'),
+    ).toBeInTheDocument()
+    // The measured total stays as it was; the estimate is never folded into it.
+    expect(screen.getByText('1,234 tokens')).toBeInTheDocument()
+    expect(
+      screen.getByText('codex: Unavailable · 1 unavailable (≈333,102 input tokens, not measured)'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows no estimate line when no turn was estimated', () => {
+    render(<AccountingPanel />)
+    expect(screen.queryByText(/not measured/)).toBeNull()
+  })
+
   it('keeps the turns-only caption when there are no worker calls', () => {
     render(<AccountingPanel />)
     expect(screen.getByText(/2 measured · 1 usage unavailable/)).toBeInTheDocument()

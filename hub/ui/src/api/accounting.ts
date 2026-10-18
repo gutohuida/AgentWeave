@@ -8,6 +8,9 @@ export interface UsageSummary {
   total_tokens: number | null
   measured_turns: number
   unavailable_turns: number
+  /** F697: the estimated input of unavailable turns' interrupted calls (a stopped Claude turn).
+   *  An estimate: in no measured figure, never counted against the budget. Null when none. */
+  estimated_input_tokens?: number | null
   api_equivalent_usd_micros: number | null
   unpriced_turns: number
   /** Copilot's reported charge (nano-AIU), summed; null where no turn reported one. */
@@ -64,6 +67,8 @@ export interface TurnUsage {
   cache_read_tokens: number | null
   cache_write_tokens: number | null
   reasoning_tokens: number | null
+  /** F697: on an unavailable stopped Claude turn, its interrupted call's estimated input. */
+  estimated_input_tokens?: number | null
   api_equivalent_usd_micros: number | null
   allowance: Record<string, unknown> | null
   observed_at: string
