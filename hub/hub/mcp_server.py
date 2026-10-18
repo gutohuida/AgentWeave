@@ -1546,6 +1546,8 @@ def _where(path: str, root: str) -> Optional[str]:
 # permission check at all (research 2026-10-01 §1, measured on 2.1.280 and 2.1.286), so a write
 # here is a write to the posture, not to the work. A one-part entry or a directory covers
 # everything beneath it. Instructions and skills (`CLAUDE.md`, `.claude/skills/`) are ordinary work.
+# Restated from `hub/hub/runner_config.py` (this file imports only the stdlib), whose fingerprint the
+# Hub compares at every launch to catch the writes no text rule sees (F737); a test pins the two.
 _RUNNER_CONFIG_PATHS = (
     (".claude", "settings.json"),
     (".claude", "settings.local.json"),
@@ -4073,6 +4075,13 @@ _ARGUMENT_FEEDERS = {"xargs", "parallel"}
 # Running their input as code when they are fed by a pipe and given no script of their own.
 _PIPE_SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "pwsh", "powershell"}
 _PIPE_INTERPRETERS_RE = re.compile(r"^(?:python[0-9.]*|py|node|perl|ruby|php)$")
+# F737 (3): the Windows launcher's version selector (`py -3.11`, `py -V:3.12`) comes before the
+# interpreter's own arguments, and is not a script.
+_PY_LAUNCHER_SELECTOR_RE = re.compile(r"^-(?:[0-9]+(?:\.[0-9]+)*(?:-(?:32|64))?|V:\S+)$")
+# What names the code an interpreter runs instead of its input; a bare word is a script file.
+_INTERPRETER_CODE_FLAGS = {"-c", "-m", "-e", "-p", "-E", "--eval", "--print", "-r", "-f"}
+# Python options that take a value, so the word after them is not a script.
+_INTERPRETER_VALUE_FLAGS = {"-W", "-X", "-Q"}
 _PIPE_RUNNERS = {"eval", "source", ".", "while"}
 # What a stage may be preceded by without being the command it describes.
 _STAGE_PREFIXES = {
@@ -4187,6 +4196,28 @@ def _while_read_prints_only(
     return False
 
 
+def _reads_code_from_input(name: str, words: List[str]) -> bool:
+    """Whether an interpreter fed by a pipe runs that input as code: it is given `-`, or nothing
+    that names code of its own (`-c`, `-m`, `-e`, a script file). Options alone (`python -u`,
+    `py -3.11`) leave it reading its input (F737 (3))."""
+    rest = list(words)
+    if name == "py":
+        while rest and _PY_LAUNCHER_SELECTOR_RE.match(rest[0]):
+            rest.pop(0)
+    skip = False
+    for word in rest:
+        if skip:
+            skip = False
+            continue
+        if word == "-":
+            return True
+        if word in _INTERPRETER_CODE_FLAGS or not word.startswith("-"):
+            return False
+        if word in _INTERPRETER_VALUE_FLAGS:
+            skip = True
+    return True
+
+
 def _feeds_arguments(command: str, dialect: str, reading: str, depth: int = 0) -> Optional[str]:
     """The stage of `command` whose paths or code come from another command's output, or None."""
     if depth > _MAX_NESTING:
@@ -4222,11 +4253,13 @@ def _feeds_arguments(command: str, dialect: str, reading: str, depth: int = 0) -
             w.lower() for w in words
         }:
             return text.strip()
-        if _PIPE_INTERPRETERS_RE.match(name) and (not words or words[0] == "-"):
+        if _PIPE_INTERPRETERS_RE.match(name) and _reads_code_from_input(name, words):
             return text.strip()
         if not bash:
             producer, _ = _stage_words(stages[index - 1][1], bash, reading)
-            if producer in _PS_LISTING:
+            # F737 (4): a listing names its paths in its own text, so what it feeds on is judged
+            # there -- unless it is itself fed by a pipe (`gc names.txt | gi | Remove-Item`).
+            if producer in _PS_LISTING and stages[index - 1][0] != "|":
                 continue
             if name in _PS_PATH_CMDLETS:
                 return text.strip()

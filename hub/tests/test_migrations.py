@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0132"
+HEAD_REVISION = "0133"
 
 
 # ---------------------------------------------------------------------------
@@ -5584,3 +5584,77 @@ def test_migration_0132_is_a_no_op_without_the_tables(tmp_path) -> None:
         conn.commit()
     _upgrade_to(db_url, "0132")
     _downgrade_to(db_url, "0131")
+
+
+# ---------------------------------------------------------------------------------------------
+# 0133 -- workspace_fingerprints (F737). A new table only: it starts empty, every workspace's
+# first launch after it records a baseline, and the downgrade drops it and nothing else.
+# ---------------------------------------------------------------------------------------------
+
+
+def test_migration_0133_adds_workspace_fingerprints_and_round_trips(tmp_path) -> None:
+    db_file = tmp_path / "fingerprints.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        before = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        conn.execute("DROP TABLE workspace_fingerprints")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0132')")
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p', 'p', '2026-01-01T00:00:00Z')"
+        )
+        conn.commit()
+
+    _upgrade_to(db_url, "0133")
+
+    row = (
+        "INSERT INTO workspace_fingerprints (project_id, workspace_key, workspace_dir, "
+        "fingerprint, digest, recorded_by, recorded_at) VALUES "
+        "('p', 'c:/w', 'C:/w', '{}', 'd', 'baseline', '2026-10-18T00:00:00Z')"
+    )
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert tables == before | {"alembic_version"}
+        info = {r[1]: r for r in conn.execute("PRAGMA table_info(workspace_fingerprints)")}
+        assert set(info) == {
+            "project_id",
+            "workspace_key",
+            "workspace_dir",
+            "fingerprint",
+            "digest",
+            "recorded_by",
+            "recorded_at",
+        }
+        conn.execute(row)
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(row)  # one row per workspace per project
+        conn.commit()
+
+    _downgrade_to(db_url, "0132")
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert conn.execute("SELECT id FROM projects").fetchall() == [("p",)]
+    assert tables == (before - {"workspace_fingerprints"}) | {"alembic_version"}
+
+    _upgrade_to(db_url, "0133")
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT count(*) FROM workspace_fingerprints").fetchone() == (0,)
+
+
+def test_migration_0133_is_a_no_op_without_the_projects_table(tmp_path) -> None:
+    db_file = tmp_path / "bare.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("DROP TABLE workspace_fingerprints")
+        conn.execute("DROP TABLE projects")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0132')")
+        conn.commit()
+    _upgrade_to(db_url, "0133")
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "workspace_fingerprints" not in tables
+    _downgrade_to(db_url, "0132")

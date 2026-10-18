@@ -99,3 +99,40 @@ def test_ordinary_pipelines_are_still_allowed(workspace, tool, command):
     """A pipe whose last stage reads, counts or prints is ordinary work: only a stage that takes
     paths or code from its input is held back."""
     assert _decide(tool, {"command": command})["allow"] is True
+
+
+@pytest.mark.parametrize(
+    "tool,command",
+    [
+        # F737 (3): an interpreter reached through the version launcher, or given options only.
+        ("Bash", "cat s.txt | py -3.11"),
+        ("Bash", "cat s.txt | py -3"),
+        ("Bash", "cat s.txt | py -V:3.12"),
+        ("Bash", "cat s.txt | py -3.11 -"),
+        ("Bash", "cat s.txt | python -u"),
+        ("Bash", "cat s.txt | node --no-warnings"),
+        ("PowerShell", "Get-Content s.txt | py -3.11"),
+        # F737 (4): a listing that is itself fed by a pipe takes its paths from that pipe.
+        ("PowerShell", "Get-Content names.txt | Get-Item | Remove-Item"),
+        ("PowerShell", "Get-Content names.txt | gci | Remove-Item"),
+        ("PowerShell", "Get-Content n.txt | Get-ChildItem | ForEach-Object { Remove-Item $_ }"),
+    ],
+)
+def test_the_pipe_fed_shapes_f737_named_are_refused(workspace, tool, command):
+    _refused_as_unbound(_decide(tool, {"command": command}))
+
+
+@pytest.mark.parametrize(
+    "tool,command",
+    [
+        ("Bash", "cat data.json | py -3.11 -m json.tool"),
+        ("Bash", "cat data.json | py -3 -c 'import sys; print(sys.stdin.read())'"),
+        ("Bash", "cat data.json | python -W ignore -m json.tool"),
+        ("Bash", "cat data.txt | python script.py"),
+        ("Bash", "cat data.txt | node -e 'process.stdin.pipe(process.stdout)'"),
+        ("PowerShell", "Get-ChildItem *.tmp | Remove-Item"),
+        ("PowerShell", "Get-Item a.txt | Remove-Item"),
+    ],
+)
+def test_interpreters_with_their_own_code_and_plain_listings_stay_allowed(workspace, tool, command):
+    assert _decide(tool, {"command": command})["allow"] is True

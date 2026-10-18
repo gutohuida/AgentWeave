@@ -48,6 +48,27 @@ describe('permission request card', () => {
     expect(screen.getByLabelText('File change: C:/outside/secrets.txt')).toBeInTheDocument()
   })
 
+  it('says a held turn waits on a runner-config change and names the files (F737)', () => {
+    render(
+      <PermissionRequestCard
+        requests={[
+          request({
+            run_id: null,
+            tool_name: 'RunnerConfiguration',
+            tool_use_id: '',
+            tool_input: { paths: ['.claude/settings.local.json'], workspace: 'C:/w' },
+          }),
+        ]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByText(/haiku-1's next turn is held/)).toBeInTheDocument()
+    expect(screen.getByText('.claude/settings.local.json')).toBeInTheDocument()
+    expect(screen.getByText('Runner configuration')).toBeInTheDocument()
+    expect(screen.getByText(/Deny keeps it held/)).toBeInTheDocument()
+    expect(screen.queryByText(/will be refused if nobody answers/)).not.toBeInTheDocument()
+  })
+
   it('falls back to the command when there is no path', () => {
     render(
       <PermissionRequestCard

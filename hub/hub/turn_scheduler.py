@@ -579,6 +579,15 @@ async def _attempt_turn(
         for entry in selected:
             entry.waiting_reason = exc.detail
         await db.commit()
+        # A write the refusal owes, on a session the rollback above emptied (F737's question).
+        # Best-effort: the input is already kept and its reason recorded, and the next attempt
+        # owes the same write again.
+        if getattr(exc, "after_rollback", None) is not None:
+            try:
+                await exc.after_rollback(db)
+            except Exception:  # noqa: BLE001 - the hold stands whatever happens to the question
+                logger.exception("Could not complete the write owed by %s's refusal", agent)
+                await db.rollback()
         # Does this refusal clear on its own? `workspace_unavailable` was the first refusal
         # that did, and it still selects the operator event below, but it is no longer the only
         # one: a turn refused because another agent holds the task's checkout (design D8) waits

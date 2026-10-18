@@ -1219,6 +1219,30 @@ class ProjectInstructions(Base):
     )
 
 
+class WorkspaceFingerprint(Base):
+    """The runner configuration a workspace held at its last approved launch (migration 0133).
+
+    F737. One row per workspace a turn has started in -- an agent's checkout, a task's, a review
+    checkout, the project directory -- keyed by its resolved path. A launch whose workspace now
+    differs from this is held and the operator asked (`runner_config_guard`); their Allow is what
+    moves this row on. `fingerprint` is `runner_config.fingerprint()`'s `{path: hash}`.
+    """
+
+    __tablename__ = "workspace_fingerprints"
+
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    # `os.path.normcase(os.path.realpath(dir))`, so two spellings of one directory share a row.
+    workspace_key: Mapped[str] = mapped_column(String(1024), nullable=False)
+    workspace_dir: Mapped[str] = mapped_column(Text, nullable=False)
+    fingerprint: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    # "baseline" (first launch, nothing new) or "operator" (an Allow on a held turn).
+    recorded_by: Mapped[str] = mapped_column(String(16), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (PrimaryKeyConstraint("project_id", "workspace_key"),)
+
+
 class Run(Base):
     """A single agent process execution — the Hub's record of owning a spawned run.
 

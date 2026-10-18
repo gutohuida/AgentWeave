@@ -46,7 +46,12 @@ function describe(request: PermissionRequest): string {
   return 'no details given — the provider sent none'
 }
 
+/** The `tool_name` of the Hub's question about a turn held on a runner-config change (F737,
+ *  `runner_config_guard.RUNNER_CONFIG_TOOL`). */
+export const RUNNER_CONFIG_TOOL = 'RunnerConfiguration'
+
 function requestKind(request: PermissionRequest): { label: string; impact: 'neutral' | 'mutates' } {
+  if (request.tool_name === RUNNER_CONFIG_TOOL) return { label: 'Runner configuration', impact: 'mutates' }
   const input = request.tool_input ?? {}
   const tool = request.tool_name.toLowerCase()
   if (typeof input.command === 'string') return { label: 'Command', impact: 'mutates' }
@@ -69,6 +74,8 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
       {open.map((request, index) => {
         const expired = request.status === 'expired'
         const kind = requestKind(request)
+        // F737: the Hub's own question about a held turn, not a run's tool call.
+        const heldTurn = request.tool_name === RUNNER_CONFIG_TOOL
         // The residual race: the run gave up between this render and the click. The 409 says
         // what happened, and is worth more than a generic failure — an operator who is not told
         // reads it as the app being broken.
@@ -86,7 +93,9 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
             <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
               <span className="permission-kind" data-impact={kind.impact}>{kind.label}</span>
               <p className="interject-eyebrow">
-                {agent} wants to use {request.tool_name}
+                {heldTurn
+                  ? `${agent}'s next turn is held: its runner configuration changed`
+                  : `${agent} wants to use ${request.tool_name}`}
               </p>
               {open.length > 1 && <span className="interject-count ml-auto">{index + 1}/{open.length}</span>}
               {expired && (
@@ -181,7 +190,9 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
                     ticking number on the highest-stakes control in the product. */}
                 <span className="permission-waiting">
                   <Icon name="schedule" size={12} />
-                  The agent is waiting, and will be refused if nobody answers.
+                  {heldTurn
+                    ? 'The turn waits for your answer. Allow starts it with these files; Deny keeps it held.'
+                    : 'The agent is waiting, and will be refused if nobody answers.'}
                 </span>
               </div>
             )}
