@@ -8,6 +8,7 @@ import { useTasks } from '@/api/tasks'
 import { hubDate } from '@/lib/hubTime'
 import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import { cronDayAmbiguity, describeCron } from '@/lib/cron'
+import { loopEnded, loopPastStop } from '@/components/spec/loopCounts'
 
 interface JobCardProps {
   job: Job
@@ -21,12 +22,16 @@ interface JobCardProps {
   onOpenTasks?: (taskIds: string[]) => void
 }
 
-function getStatusVariant(enabled: boolean): 'default' | 'secondary' | 'success' {
-  return enabled ? 'success' : 'secondary'
-}
-
-function getStatusLabel(enabled: boolean): string {
-  return enabled ? 'Active' : 'Paused'
+/** The card's status chip. A loop's own state outranks `enabled` (F714): an ended loop's job is
+ *  disabled for good, so it read "Paused" and offered a Resume the Hub refuses (`loop_ended`); a
+ *  loop past its stop time read "Active" while its own block said "Stopping". */
+function jobStatus(job: Job): { label: string; variant: 'default' | 'secondary' | 'success' } {
+  const loop = job.loop
+  if (loop && loopEnded(loop)) {
+    return { label: loop.ending_state === 'completed' ? 'Complete' : 'Stopped', variant: 'secondary' }
+  }
+  if (loop && loopPastStop(loop)) return { label: 'Stopping', variant: 'secondary' }
+  return job.enabled ? { label: 'Active', variant: 'success' } : { label: 'Paused', variant: 'secondary' }
 }
 
 /**
@@ -253,13 +258,6 @@ function RunHistory({ runs, isLoading }: { runs?: JobRun[]; isLoading?: boolean 
  * so the `useTasks({ loopId })` fetch — needed only to build the task-id list `onOpenTasks`
  * expects — only ever runs for a job that actually has a loop.
  */
-/** A loop past its stop time that the scheduler has not yet recorded as stopped (F655): the next
- *  tick stops it without firing, so it is neither active nor due to run again. */
-function loopPastStop(job: Job): boolean {
-  const loop = job.loop
-  return Boolean(loop && !loop.stop_reason && loop.stop_at && hubDate(loop.stop_at).getTime() <= Date.now())
-}
-
 function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: string[]) => void }) {
   const loop = job.loop
   const { data: loopTaskPage } = useTasks(loop ? { loopId: loop.id } : undefined)
@@ -298,10 +296,16 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
           Loop
         </span>
         <Badge
-          variant={loop.stop_reason || loopPastStop(job) ? 'secondary' : 'success'}
+          variant={loopEnded(loop) || loopPastStop(loop) ? 'secondary' : 'success'}
           className="text-[10px]"
         >
-          {loop.stop_reason ? 'Stopped' : loopPastStop(job) ? 'Stopping' : 'Active'}
+          {loopEnded(loop)
+            ? loop.ending_state === 'completed'
+              ? 'Complete'
+              : 'Stopped'
+            : loopPastStop(loop)
+              ? 'Stopping'
+              : 'Active'}
         </Badge>
       </div>
 
@@ -392,6 +396,9 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
   // Shown for a paused job too, unlike the "Next:" line it replaces — a paused job with this
   // schedule is precisely the one worth warning about before it is resumed.
   const cronAmbiguity = cronDayAmbiguity(job.cron)
+  const status = jobStatus(job)
+  // An ended loop is not paused: its Resume is refused (`loop_ended`), so it offers neither (F714).
+  const ended = Boolean(job.loop && loopEnded(job.loop))
 
   return (
     <div
@@ -447,7 +454,7 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
 
         {/* Badges row */}
         <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-          <Badge variant={getStatusVariant(job.enabled)}>{getStatusLabel(job.enabled)}</Badge>
+          <Badge variant={status.variant}>{status.label}</Badge>
           <Badge variant="secondary">{job.session_mode}</Badge>
           <Badge variant="default">{job.run_count} fired</Badge>
           {/* F25: `0 runs` sat on the same card as a Recent Runs list showing one entry, and the
@@ -487,7 +494,7 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
           ) : (
             job.next_run &&
             job.enabled &&
-            !loopPastStop(job) && (
+            !(job.loop && loopPastStop(job.loop)) && (
               <p className="text-[11px]" style={{ color: 'var(--blue)' }}>
                 Next: {formatDistanceToNow(hubDate(job.next_run), { addSuffix: true })}
               </p>
@@ -507,7 +514,7 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
             Run
           </Button>
 
-          {job.enabled ? (
+          {ended ? null : job.enabled ? (
             <Button variant="outline" size="xs" onClick={() => onPause(job.id)} disabled={isPending} title="Pause">
               <Icon name="pause" size={16} />
               Pause

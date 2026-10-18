@@ -1,4 +1,21 @@
 import type { LoopSummary } from '@/api/loops'
+import { hubDate } from '@/lib/hubTime'
+
+/** Whether the loop has ended — completed, or stopped by the operator or its stop condition. An
+ *  ended loop's job is disabled for good: resuming it is refused (`loop_ended`), so no surface may
+ *  read it as merely paused (F714). */
+export function loopEnded(loop: LoopSummary): boolean {
+  return Boolean(loop.ending_state || loop.stop_reason)
+}
+
+/** A loop past its stop time that the scheduler has not yet recorded as stopped (F655): the next
+ *  tick stops it without firing, so it is neither active nor due to run again. Shared so the Jobs
+ *  card and the loop's own tab say the same word for it (F714). */
+export function loopPastStop(loop: LoopSummary): boolean {
+  return Boolean(
+    !loopEnded(loop) && loop.stop_at && hubDate(loop.stop_at).getTime() <= Date.now(),
+  )
+}
 
 export type EndingBucket = 'running' | 'stalled' | 'idle' | 'completed' | 'stopped'
 

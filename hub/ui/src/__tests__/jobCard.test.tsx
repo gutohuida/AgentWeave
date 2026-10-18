@@ -245,9 +245,64 @@ describe('JobCard loop block', () => {
     )
 
     await user.click(screen.getByLabelText('Expand job details'))
-    expect(screen.getByText('Stopped')).toBeInTheDocument()
+    expect(within(screen.getByTestId('job-loop-block')).getByText('Stopped')).toBeInTheDocument()
     expect(screen.getByText('Stopped: queue empty')).toBeInTheDocument()
     expect(screen.getByText('No current item')).toBeInTheDocument()
+  })
+
+  it('reads an ended loop as ended when collapsed, and offers no Resume (F714)', () => {
+    // The completed flow's collapsed card read "Paused" with Run and Resume; Resume -> 409
+    // `loop_ended`. Only the expanded block said it had stopped.
+    loopTasks = []
+    renderCard(
+      baseJob({
+        enabled: false,
+        loop: {
+          id: 'loop-1',
+          label: 'Flow',
+          purpose: 'Build the change',
+          stop_when_queue_empties: true,
+          stop_reason: 'loop queue is empty',
+          stopped_at: '2026-10-18T01:00:00Z',
+          ending_state: 'completed',
+          queue: {},
+          current_tasks: [],
+          open_questions: 0,
+          firing_active: false,
+        },
+      }),
+    )
+    expect(screen.getByText('Complete')).toBeInTheDocument()
+    expect(screen.queryByText('Paused')).toBeNull()
+    expect(screen.queryByTitle('Resume')).toBeNull()
+    expect(screen.queryByTitle('Pause')).toBeNull()
+  })
+
+  it('reads Stopping on the collapsed card once a loop is past its stop time (F714)', () => {
+    loopTasks = []
+    renderCard(
+      baseJob({
+        loop: {
+          id: 'loop-1',
+          label: 'Nightly scan job',
+          purpose: 'Nightly scan',
+          stop_when_queue_empties: false,
+          stop_at: new Date(Date.now() - 60_000).toISOString(),
+          queue: {},
+          current_tasks: [],
+          open_questions: 0,
+          firing_active: false,
+        },
+      }),
+    )
+    expect(screen.getByText('Stopping')).toBeInTheDocument()
+    expect(screen.queryByText('Active')).toBeNull()
+  })
+
+  it('still reads a paused plain job as Paused, with Resume', () => {
+    renderCard(baseJob({ enabled: false }))
+    expect(screen.getByText('Paused')).toBeInTheDocument()
+    expect(screen.getByTitle('Resume')).toBeInTheDocument()
   })
 
   it('opens every loop task id on clicking the current item, and only when onOpenTasks is given', async () => {
