@@ -400,6 +400,11 @@ async def test_a_sketch_refuses_a_rejected_requirement(app, auth_headers, builde
     assert blocking["identifier"] == "FR-1"
     assert blocking["state"] == "rejected"
     assert "rejected" in blocking["remedy"]
+    # F701: a rejection blocks at every rigor, and `sketch` is already the lowest, so the refusal
+    # must not offer lowering the rigor as a way out.
+    message = response.json()["detail"]["message"]
+    assert "or lower the document's rigor" not in message, message
+    assert "every rigor" in message, message
 
 
 @pytest.mark.asyncio
