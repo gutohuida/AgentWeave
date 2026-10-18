@@ -820,7 +820,7 @@ async def _check_checks(
     previous_error = ""
     if state == "error" and start_checks:
         # F516: an error is the Hub failing to produce a result, not a verdict; approving retries.
-        project_checks.schedule(task.project_id, task.id)
+        project_checks.schedule(task.project_id, task.id, targets)
         state = "running"
         previous_error = (run.error if run is not None else "") or "an unknown error"
     elif state in ("missing", "stale", "interrupted"):
@@ -829,7 +829,8 @@ async def _check_checks(
             # would be false; the conflict is the refusal.
             return
         if start_checks:
-            project_checks.schedule(task.project_id, task.id)
+            # F680: the targets this transaction resolved, not ones re-read from committed state.
+            project_checks.schedule(task.project_id, task.id, targets)
             state = "running"
         else:
             state = "not_run"
