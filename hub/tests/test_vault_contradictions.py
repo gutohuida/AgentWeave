@@ -574,10 +574,10 @@ async def test_a_redistil_does_not_compare_with_a_fact_the_operator_overruled(
     fake, newer, _, fact300, fact437, record = await _one_open(app, auth_headers, worker, tmp_path)
     resolved = await _resolve(app, auth_headers, record["id"], stands=fact300, note="Finance.")
     assert resolved.status_code == 200, resolved.text
-    # Quoted differently, so the re-distil stores a new fact and checks it (F587 keeps one quoted
-    # alike, and does not check it again).
+    # The 300 fact is drawn again (kept, and not checked again: F587, F684); a fact from another
+    # line is new, so the re-distil checks it.
     fake.answers.extend(
-        [[("The refund limit is 300 euros.", ["Dana: the refund limit is 300 euros."])], []]
+        [[F300, ("The follow-up was on 2026-10-01.", ["Follow-up, 2026-10-01."])], []]
     )
 
     assert (await _distil(app, auth_headers, newer["id"])).status_code == 202
@@ -590,6 +590,37 @@ async def test_a_redistil_does_not_compare_with_a_fact_the_operator_overruled(
     ]
     listed = await _map(app, auth_headers)
     assert not any(e.get("disputed") for e in listed.values())
+
+
+@pytest.mark.asyncio
+async def test_a_redistil_rewording_the_standing_facts_quote_keeps_it_standing(
+    app, auth_headers, worker, tmp_path
+) -> None:
+    """F684: the re-distil of the source that stands quotes the same line differently ("Dana: ..."
+    where the first pass quoted from "the refund ..."). The fact is the same lines' fact: it keeps
+    its id, so the resolution still names a fact in the vault, the overruled fact stays superseded
+    and nothing is checked or reopened (F586, F587)."""
+    fake, newer, _, fact300, fact437, record = await _one_open(app, auth_headers, worker, tmp_path)
+    resolved = await _resolve(app, auth_headers, record["id"], stands=fact300, note="Finance.")
+    assert resolved.status_code == 200, resolved.text
+    decision = resolved.json()["resolution"]["decision"]
+    checks = len(fake.checks())
+    fake.answers.append(
+        [("Decision: the refund limit is 300 euros.", ["Dana: the refund limit is 300 euros"])]
+    )
+
+    assert (await _distil(app, auth_headers, newer["id"])).status_code == 202
+
+    assert _fact(tmp_path, newer["id"], "300") == fact300
+    listed = await _map(app, auth_headers)
+    assert fact300 in listed and listed[fact300]["superseded_by"] is None
+    assert listed[fact437]["superseded_by"] == decision
+    assert not any(e.get("disputed") for e in listed.values())
+    [after] = await _contradictions(app, auth_headers)
+    assert after["id"] == record["id"] and after["status"] == "resolved"
+    assert after["resolution"]["stands"] == fact300
+    assert not any(side["missing"] for side in after["sides"]), after["sides"]
+    assert len(fake.checks()) == checks
 
 
 @pytest.mark.asyncio
@@ -624,9 +655,9 @@ async def test_redistilling_drops_open_contradictions_and_keeps_resolved_ones(
         [F300, ("Returns take 14 days.", ["returns take 14 days."])],
         [F437, F30],
         both,
-        # Another quote of the same line: a new fact, so the earlier 437 fact is replaced (one
-        # quoted alike would be kept, with its open contradiction, F587).
-        [("The limit is 437 euros.", ["Dana: the refund limit is 437 euros."])],
+        # A fact from another line: new, so the earlier 437 fact is replaced (one drawn again from
+        # its line, however quoted, would be kept with its open contradiction, F587, F684).
+        [("The limit is 437 euros.", ["Kickoff, 2026-09-01."])],
         [],
     )
     await _enable(app, auth_headers)
