@@ -17,6 +17,92 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-10-18
+
+**For the night window armed by hand 2026-10-18 22:41 (22:44-07:00).** Written ~23:00 in an
+interactive session, after compose had already run. The three `flow-stages-*` items below were
+inserted into `STATE-night.json` by that session, directly after `F738-impl`. This section is their
+durable brief. Nothing else in tonight's queue changes.
+
+Operator (verbatim): "Let's explore this: The way the flow executes is good and it isnt at the same
+time. It's good because we have testing automatic but sometimes I want something built quick and
+dirty and sometime I want to add for example a security step. Other steps. So I would like to make
+so the flow like dev -> test -> deploy is edditable. The default is dev ->test but if I want to
+remove or add steps to be possible"
+
+Asked how far tonight should go, the operator chose **"Explore + spike, you decide"**: an
+exploration and a throwaway tracer, with **no product code**. The design decisions are the
+operator's, and they make them in the morning.
+
+ORDER: (unchanged, with `flow-stages-map`, `flow-stages-spike` and `flow-stages-spec` after `F738-impl`)
+
+**`flow-stages-map`** (Opus). Map how a flow runs today, stage by stage, citing `file:line`:
+
+- who builds;
+- how the review is staffed;
+- where the "test" happens: the evidence and requirement gate, and review;
+- how a task lands or merges.
+
+For each stage, say what is hard-wired: the task status enum `pending → … → under_review →
+approved`, the review staffing, and the gate categories. Then say where a configurable stage
+would hook in.
+
+- Start from `spec/capabilities/agent-flows`, `agent-loops`, `approval-integration`,
+  `requirement-traceability` and `task-dependencies`; and from `hub/hub/requirement_gate.py`,
+  `review_turn.py` and `dependency_gate.py`.
+- Grep `openspec/explorations/`, `spec/changes/` and `FINDINGS.md` for prior art (stage,
+  pipeline, step, quick).
+- Write the result to `spec-queue/research/2026-10-18-editable-flow-stages.md`, part 1.
+
+**`flow-stages-spike`** (Opus). A throwaway tracer that drives three stage lists end to end with
+Haiku on a scratch Hub:
+
+- the default `dev → test`;
+- a quick-and-dirty `dev` only;
+- `dev → security → test`, where the security stage is a second agent with its own charter.
+
+Rules:
+
+- Build the spike in a **git worktree on its own branch, `spike/2026-10-18-flow-stages`**, never
+  on the cycle branch. Push that branch, never merge it, and open no PR.
+- Write part 2 of the research file: what happened, what was hard, and where the existing code
+  resisted.
+- If the spike cannot reach a real end-to-end drive in one firing, record how far it got. Do not
+  extend it past two firings.
+
+**`flow-stages-spec`** (Opus). Author one change document on the trial Hub :8010
+(`proj-d85a82bf4216`) with phase **`exploring`**. **Do not propose it, and do not approve it.**
+The document holds:
+
+- the problem, in the operator's words above;
+- options for each design question, with a recommendation;
+- a sketch of the acceptance drive;
+- the Tier 2 hazards: the task-lifecycle contract, a probable migration, and existing flows and
+  loops keeping today's behaviour as the default.
+
+Each design question becomes an `OPEN` row `flow-1018-<n>` in `DECISIONS.md`, with its id in
+`decisions_for_user`. At minimum these questions:
+
+1. **What a stage is:** an agent role plus a charter, a gate, a command, or a mix.
+2. **Where the stage list lives:** per flow, per project default, or per task override.
+3. **What removing `test` means.** Does quick-and-dirty skip the evidence gate and the review
+   entirely, and how does the app show that a task landed without it?
+4. **Order and conditions:** are stages strictly sequential, can a stage be required or optional,
+   and what does a failing stage send back, and to whom?
+5. **What `deploy` means here:** an agent, a command, or out of scope for v1.
+6. **The status enum:** do stages map onto `completed`/`under_review`, or does a task gain a stage
+   field?
+7. **The editor:** where in the app the operator edits the stage list.
+
+If :8010 is down, restart it from `hub/` as `.claude/reference/hubs.md` describes. If it will not
+come up, write the document to `spec-queue/night-proposals/editable-flow-stages.md` instead.
+Commit the files the Hub writes and the research file on the cycle branch.
+
+The morning briefing must lead with this exploration: the research file, the change document and
+the `flow-1018-*` rows.
+
+---
+
 ## 2026-10-09
 
 **For the night window armed 2026-10-09 22:55 (23:00-07:00).** Written ~12:30 in an interactive

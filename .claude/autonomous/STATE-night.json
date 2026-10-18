@@ -1,112 +1,136 @@
 {
-    "purpose": "FIX. Operator, 2026-10-18: fix everything the day window found, at every tier (Tier 1/2 author their own short change on trial Hub :8010 and approve_anyway; Tier 2 writes its acceptance drive failing first). Red CI first, then what the operator added in APPROVALS.md, then today's day-log findings, then every other open finding, severity first. Test-first, drive each fix, set its Status line. Never merges.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-18-daily",
-    "parent_branch": "master",
-    "parent_sha": "d7b552c",
-    "stop_at": "2026-10-19T07:00:00+01:00",
-    "iteration": 2,
-    "log_file": ".claude/autonomous/2026-10-18-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F739-impl",
-    "next_action": "Do queue item F739-impl: failing test at the seam the F739 finding names (ContentSizeLimitMiddleware, hub/hub/main.py), fix, drive it, set its Status line, commit and push.",
-    "queue": [
-        {
-            "id": "F738-impl",
-            "status": "done",
-            "title": "F738 (B): `agentweave reset --profile X` cannot find X's running Hub",
-            "detail": "fixed; see log iteration 2"
-        },
-        {
-            "id": "F739-impl",
-            "status": "open",
-            "title": "F739 (C): body without Content-Length is not size-limited",
-            "detail": "Test-first; fix; drive; Status."
-        },
-        {
-            "id": "F743-impl",
-            "status": "open",
-            "title": "F743 (C): operator PATCH to revision_needed naming an assignee silently ignores it",
-            "detail": "Test-first; fix; drive; Status."
-        },
-        {
-            "id": "F742-impl",
-            "status": "open",
-            "title": "F742 (C): renaming a spec doc changes index title but not the file's",
-            "detail": "Test-first; fix; drive; Status."
-        },
-        {
-            "id": "F745-impl",
-            "status": "open",
-            "title": "F745 (C): command substitution output never judged",
-            "detail": "Shell judge; test-first; fix; drive; Status. See F755 for spec drift.",
-            "model": "opus"
-        },
-        {
-            "id": "F749-impl",
-            "status": "open",
-            "title": "F749 (C): e2e.py hub-up from a worktree serves main checkout code",
-            "detail": "Test-first; fix; drive; Status."
-        },
-        {
-            "id": "F747-impl",
-            "status": "open",
-            "title": "F747 (C): delete/modify merge conflict has no markers",
-            "detail": "Test-first; fix; drive; Status."
-        },
-        {
-            "id": "F746-impl",
-            "status": "open",
-            "title": "F746 (D): releasing a checkout discards half-resolved prerequisite merge",
-            "detail": "Test-first; fix; drive; Status."
-        },
-        {
-            "id": "F751-impl",
-            "status": "open",
-            "title": "F751 (D): verdict accepts awaiting evidence recorded for earlier wording",
-            "detail": "Test-first; fix; drive; Status."
-        },
-        {
-            "id": "F750-impl",
-            "status": "open",
-            "title": "F750 (D): tool-server digest pin race, Access denied on Windows",
-            "detail": "Test-first; fix; Status."
-        },
-        {
-            "id": "F752-spec",
-            "status": "open",
-            "title": "F752/F753/F754/F755 (C/D): spec-flow friction + shell-judge spec gap",
-            "detail": "Group by seam; one finding per commit. Spec flow on trial Hub :8010."
-        },
-        {
-            "id": "F444-impl",
-            "status": "open",
-            "title": "F444 (B): worktree shared dependency links make reads refused",
-            "detail": "Reproduce first; fix or -drive confirm; Status."
-        }
-    ],
-    "decisions_for_user": [],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. Only the day window's merge gate (day-window.md, 'The merge gate') may fast-forward master. This window never merges.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, 'Something new'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ],
-    "closeout": {
-        "briefing": "claude-doc",
-        "model": "sonnet",
-        "skill": ".claude/skills/night-briefing/SKILL.md"
+  "purpose": "FIX. Operator, 2026-10-18: fix everything the day window found, at every tier (Tier 1/2 author their own short change on trial Hub :8010 and approve_anyway; Tier 2 writes its acceptance drive failing first). Red CI first, then what the operator added in APPROVALS.md, then today's day-log findings, then every other open finding, severity first. Test-first, drive each fix, set its Status line. Never merges.",
+  "playbook": ".claude/loops/night-window.md",
+  "runner": "claude",
+  "model": "opus",
+  "permission_mode": "unattended-full-access",
+  "branch": "autonomous/2026-10-18-daily",
+  "parent_branch": "master",
+  "parent_sha": "d7b552c",
+  "stop_at": "2026-10-19T07:00:00+01:00",
+  "iteration": 2,
+  "log_file": ".claude/autonomous/2026-10-18-night-log.md",
+  "findings_file": "scripts/drive/FINDINGS.md",
+  "approvals_file": "spec-queue/APPROVALS.md",
+  "current": "flow-stages-map",
+  "next_action": "Do queue item flow-stages-map: read spec-queue/APPROVALS.md section '## 2026-10-18' (the operator's brief for the three flow-stages-* items) in full, then map how a flow executes today and write part 1 of spec-queue/research/2026-10-18-editable-flow-stages.md. No product code. Then continue with F739-impl after the three flow-stages items.",
+  "queue": [
+    {
+      "id": "F738-impl",
+      "status": "done",
+      "title": "F738 (B): `agentweave reset --profile X` cannot find X's running Hub",
+      "detail": "fixed; see log iteration 2"
     },
-    "armed_at": "2026-10-18T22:41:33+01:00",
-    "driver_log": ".claude/autonomous/driver-night.log"
+    {
+      "id": "flow-stages-map",
+      "status": "open",
+      "model": "opus",
+      "effort": "high",
+      "title": "Explore editable flow stages: map how a flow runs today (file:line)",
+      "detail": "Brief: spec-queue/APPROVALS.md ## 2026-10-18 (operator, ~23:00). Map build/review/test-gate/land stages, what is hard-wired, where a configurable stage would hook in. Write part 1 of spec-queue/research/2026-10-18-editable-flow-stages.md. No product code."
+    },
+    {
+      "id": "flow-stages-spike",
+      "status": "open",
+      "model": "opus",
+      "effort": "high",
+      "title": "Spike: dev->test, dev only, dev->security->test driven with Haiku",
+      "detail": "Brief: spec-queue/APPROVALS.md ## 2026-10-18 (operator, ~23:00). Throwaway tracer in a git worktree on branch spike/2026-10-18-flow-stages (push it, never merge, never on the cycle branch). Scratch Hub 8110+, Haiku. Part 2 of the research file. Max two firings."
+    },
+    {
+      "id": "flow-stages-spec",
+      "status": "open",
+      "model": "opus",
+      "effort": "high",
+      "title": "Author the editable-flow-stages change on :8010 as exploring + OPEN rows",
+      "detail": "Brief: spec-queue/APPROVALS.md ## 2026-10-18 (operator, ~23:00). One exploring change document on :8010 (proj-d85a82bf4216): options + recommendation per question, acceptance drive sketch, Tier 2 hazards. Do NOT propose or approve. OPEN rows flow-1018-<n> in DECISIONS.md, ids in decisions_for_user."
+    },
+    {
+      "id": "F739-impl",
+      "status": "open",
+      "title": "F739 (C): body without Content-Length is not size-limited",
+      "detail": "Test-first; fix; drive; Status."
+    },
+    {
+      "id": "F743-impl",
+      "status": "open",
+      "title": "F743 (C): operator PATCH to revision_needed naming an assignee silently ignores it",
+      "detail": "Test-first; fix; drive; Status."
+    },
+    {
+      "id": "F742-impl",
+      "status": "open",
+      "title": "F742 (C): renaming a spec doc changes index title but not the file's",
+      "detail": "Test-first; fix; drive; Status."
+    },
+    {
+      "id": "F745-impl",
+      "status": "open",
+      "title": "F745 (C): command substitution output never judged",
+      "detail": "Shell judge; test-first; fix; drive; Status. See F755 for spec drift.",
+      "model": "opus"
+    },
+    {
+      "id": "F749-impl",
+      "status": "open",
+      "title": "F749 (C): e2e.py hub-up from a worktree serves main checkout code",
+      "detail": "Test-first; fix; drive; Status."
+    },
+    {
+      "id": "F747-impl",
+      "status": "open",
+      "title": "F747 (C): delete/modify merge conflict has no markers",
+      "detail": "Test-first; fix; drive; Status."
+    },
+    {
+      "id": "F746-impl",
+      "status": "open",
+      "title": "F746 (D): releasing a checkout discards half-resolved prerequisite merge",
+      "detail": "Test-first; fix; drive; Status."
+    },
+    {
+      "id": "F751-impl",
+      "status": "open",
+      "title": "F751 (D): verdict accepts awaiting evidence recorded for earlier wording",
+      "detail": "Test-first; fix; drive; Status."
+    },
+    {
+      "id": "F750-impl",
+      "status": "open",
+      "title": "F750 (D): tool-server digest pin race, Access denied on Windows",
+      "detail": "Test-first; fix; Status."
+    },
+    {
+      "id": "F752-spec",
+      "status": "open",
+      "title": "F752/F753/F754/F755 (C/D): spec-flow friction + shell-judge spec gap",
+      "detail": "Group by seam; one finding per commit. Spec flow on trial Hub :8010."
+    },
+    {
+      "id": "F444-impl",
+      "status": "open",
+      "title": "F444 (B): worktree shared dependency links make reads refused",
+      "detail": "Reproduce first; fix or -drive confirm; Status."
+    }
+  ],
+  "decisions_for_user": [],
+  "limits": [
+    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. Only the day window's merge gate (day-window.md, 'The merge gate') may fast-forward master. This window never merges.",
+    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+    "Every claim is measured or labelled unverified.",
+    "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+    "Tests under py -3.11, never bare python. black needs --target-version py311.",
+    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, 'Something new'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+  ],
+  "closeout": {
+    "briefing": "claude-doc",
+    "model": "sonnet",
+    "skill": ".claude/skills/night-briefing/SKILL.md"
+  },
+  "armed_at": "2026-10-18T22:41:33+01:00",
+  "driver_log": ".claude/autonomous/driver-night.log"
 }
