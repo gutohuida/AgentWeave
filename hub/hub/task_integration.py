@@ -400,6 +400,25 @@ def task_branch_tip(root: Path, task_id: str) -> Optional[str]:
     return result.stdout.strip() or None
 
 
+def task_commits_nothing_merges(
+    root: Path, task_id: str, main_branch: str, merge_shas: List[str]
+) -> tuple[Optional[str], List[str]]:
+    """`(branch, commits)`: the commits on *task_id*'s own branch that are on neither *main_branch*
+    nor inside any of *merge_shas* -- work approving would leave behind (F681). Oldest first.
+
+    No commits where the task has no branch or git cannot answer: an unknown is not a refusal.
+    """
+    tip = task_branch_tip(root, task_id)
+    if tip is None:
+        return None, []
+    branch = worktrees.task_branch_name(task_id)
+    excluded = [f"^{ref}" for ref in [main_branch, *merge_shas] if ref]
+    result = _git(root, "rev-list", "--reverse", tip, *excluded, "--")
+    if result.returncode != 0:
+        return branch, []
+    return branch, [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
 async def task_has_requirement_links(session: AsyncSession, task: Task) -> bool:
     """Is this task wired into the evidence chain at all (design D11, task 4.3c)?
 

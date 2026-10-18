@@ -340,6 +340,8 @@ export interface CoverageEntry {
     document_id: string
     document_path?: string | null
   } | null
+  /** Why the state is what it is, where the state alone does not say (F706: "partial evidence only"). */
+  reason?: string | null
 }
 
 /** A requirement that could not be given a state at all — broken, not unserved. */

@@ -57,7 +57,8 @@ function onlyChecksRefuse(error: unknown): boolean {
   const filled = (key: string) => Array.isArray(detail?.[key]) && (detail?.[key] as unknown[]).length > 0
   return (
     filled('checks') &&
-    !['blocking', 'diagnostics', 'unmergeable', 'unaccepted', 'unfinished'].some(filled)
+    // F681: `unlanded` (work on the task's branch approval would not merge) is no checks failure.
+    !['blocking', 'diagnostics', 'unmergeable', 'unaccepted', 'unlanded', 'unfinished'].some(filled)
   )
 }
 

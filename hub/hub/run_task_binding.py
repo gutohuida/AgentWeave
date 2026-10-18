@@ -44,6 +44,8 @@ from .task_transition_service import (
     ORIGIN_ACTOR,
     ORIGIN_RUNTIME,
     TransitionRefusedError,
+    agent_that_completed,
+    agents_that_recorded_evidence_for,
     apply_transition,
 )
 from .task_transitions import (
@@ -201,6 +203,46 @@ def held_task_refusal(task: Task, agent: str) -> Optional[str]:
         f"Task {task.id!r} is assigned to {task.assignee!r}, and an agent works only the tasks "
         f"assigned to it or to nobody. Start {task.assignee!r} on it, or reassign it to "
         f"{agent!r} in its drawer first."
+    )
+
+
+async def under_review_refusal(session: AsyncSession, task: Task, agent: str) -> Optional[str]:
+    """Why the operator cannot start *agent* with `task_id` on a task under review, or None (F687).
+
+    Operator decision, 2026-10-18: the sweep started a reviewer with `task_id` on an `under_review`
+    task, and it ran in the author's checkout and completed the work it was judging (F693). Judging
+    work is `review_task_id`'s door; `task_id` is the author's, to revise it, so only the task's
+    author may be started on it. The author is the agent recorded completing it; failing that, the
+    agents that took it to in_progress/completed or recorded evidence for it (F708's reading).
+    """
+    if task.status != "under_review":
+        return None
+    completer = await agent_that_completed(session, task.id)
+    if completer is not None:
+        authors = {completer}
+    else:
+        edges = await session.execute(
+            select(TaskTransition.actor_agent)
+            .where(TaskTransition.task_id == task.id)
+            .where(TaskTransition.to_status.in_(("in_progress", "completed")))
+            .where(TaskTransition.actor_agent.isnot(None))
+            .distinct()
+        )
+        authors = {name for name in edges.scalars().all() if name}
+        authors |= await agents_that_recorded_evidence_for(session, task.id)
+    if agent in authors:
+        return None
+    named = ", ".join(repr(name) for name in sorted(authors))
+    return (
+        f"Task {task.id!r} is under review, and a turn started with task_id works the task, so "
+        f"{agent!r} would be changing work that is being judged. To have {agent!r} review it, "
+        f"start it with review_task_id={task.id!r} instead. "
+        + (
+            f"Only its author ({named}) may be started on it with task_id, to revise it."
+            if authors
+            else "No agent is recorded as its author, so none may be started on it with task_id; "
+            "send it back (revision_needed) to have it reworked."
+        )
     )
 
 

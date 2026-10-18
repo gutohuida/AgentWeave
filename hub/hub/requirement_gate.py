@@ -44,6 +44,12 @@ SATISFIED = requirement_coverage.VERIFIED
 
 # What to do about each state that is not `verified`. The wording is the feature: "the gate refused"
 # without it is unactionable.
+#: F706: `in_progress` because every accepted piece says `covers: partial`, not for want of evidence.
+REMEDY_PARTIAL_ONLY = (
+    "its accepted evidence covers only part of it (partial evidence only) — record evidence that "
+    "demonstrates all of it, with covers: full, and have it accepted"
+)
+
 REMEDY = {
     requirement_coverage.UNSERVED: "no task is linked to it — link the work that serves it",
     requirement_coverage.NOT_STARTED: "its linked work has not started",
@@ -94,6 +100,17 @@ ACCEPT_OR_GRANT = (
 REVIEWER_SENDS_BACK = (
     "If you are reviewing this task, resolving the conflict is its author's work, not yours: move "
     "the task to revision_needed with notes naming the conflict."
+)
+
+#: F681: commits on the task's branch that nothing approval merges holds. Recording evidence from the
+#: task's checkout is the author's move; a reviewer's is to send it back, the operator's to ask.
+REVIEWER_SENDS_BACK_UNLANDED = (
+    "If you are reviewing this task, recording that evidence is its author's work, not yours: move "
+    "the task to revision_needed with notes naming the commits."
+)
+OPERATOR_ON_UNLANDED = (
+    "Ask the task's author to record it, accept it, and approve again; or send the task back "
+    "(revision_needed) naming the commits."
 )
 
 #: A failing check is the author's to fix; a reviewer who meets it sends the work back
@@ -162,6 +179,10 @@ class GateRefusal:
     # (`approval-runs-the-projects-checks`). A sixth kind of claim: "this merges and breaks the
     # project", or "whether it does is not known yet". One entry, carrying the run's state.
     checks: List[Dict[str, Any]] = field(default_factory=list)
+    # F681: the task's own branch holds commits that are on neither main nor inside anything approval
+    # would merge. A seventh kind of claim: "approving records this work as good and lands none of
+    # it". One entry, naming the branch and the commits.
+    unlanded: List[Dict[str, Any]] = field(default_factory=list)
     # Set when the operator's stated reason cleared a failed or errored check result; the caller
     # records the reason on the transition.
     checks_overridden: bool = False
@@ -173,6 +194,7 @@ class GateRefusal:
             or self.diagnostics
             or self.unmergeable
             or self.unaccepted
+            or self.unlanded
             or self.unfinished
             or self.checks
         )
@@ -192,6 +214,7 @@ class GateRefusal:
                 self._unverified_detail(),
                 self._merge_detail(),
                 self._unaccepted_detail(),
+                self._unlanded_detail(),
                 self._unfinished_detail(),
                 self._checks_detail(),
             )
@@ -382,6 +405,32 @@ class GateRefusal:
             f"only accepted evidence is merged. To land it, {ACCEPT_OR_GRANT}."
         )
 
+    def _unlanded_detail(self) -> str:
+        """Name the branch and its commits, say why approving would leave them, and what clears it.
+
+        The remedy is evidence recorded from a checkout of the task's branch: a footprint's branch
+        and commit are read from the repository the recording is done in, so evidence recorded
+        anywhere else names a commit that does not hold this work (F681's sweep: task-less evidence
+        at main's tip, approved, merged nothing).
+        """
+        if not self.unlanded:
+            return ""
+        entry = self.unlanded[0]
+        branch = str(entry.get("branch") or "the task's branch")
+        target = str(entry.get("target_branch") or "the main branch")
+        shas = [str(sha)[:12] for sha in entry.get("commits") or [] if sha]
+        listed = ", ".join(shas[:10]) + (f" and {len(shas) - 10} more" if len(shas) > 10 else "")
+        one = len(shas) == 1
+        return (
+            f"This task's branch {branch} holds work approving would not merge: "
+            f"{'commit' if one else 'commits'} {listed} {'is' if one else 'are'} on neither "
+            f"{target} nor inside any commit the accepted evidence names, so approving would record "
+            f"the work as good and land none of it. What clears it is evidence recorded from the "
+            f"task's own checkout (a checkout of {branch}), so it names the task's commit, and then "
+            f"accepted. "
+            + (OPERATOR_ON_UNLANDED if self.for_operator else REVIEWER_SENDS_BACK_UNLANDED)
+        )
+
     def _unfinished_detail(self) -> str:
         """Name the agent, say the turn is still running, and say the refusal clears itself.
 
@@ -473,6 +522,7 @@ class GateRefusal:
             "diagnostics": list(self.diagnostics),
             "unmergeable": list(self.unmergeable),
             "unaccepted": list(self.unaccepted),
+            "unlanded": list(self.unlanded),
             "unfinished": list(self.unfinished),
             "reported": list(self.reported),
             "message": self.detail(),
@@ -725,6 +775,30 @@ def _merges_something_new(situation: _MergeSituation) -> bool:
     )
 
 
+async def _check_unlanded(task: Task, refusal: GateRefusal, situation: _MergeSituation) -> None:
+    """Refuse where the task's own branch holds commits approval would leave behind (F681).
+
+    Rigor-independent, as `_check_mergeable` is: this is not a claim that the work is unproven but
+    that approving would not land it. Silent where the task has no branch, where every commit on it
+    is already in main or inside a merge target (the branch-tip route's target *is* the tip), and
+    where git cannot answer; an unknown is not a reason to refuse.
+    """
+    from . import task_integration
+
+    branch, commits = await asyncio.to_thread(
+        task_integration.task_commits_nothing_merges,
+        situation.root,
+        task.id,
+        situation.main_branch,
+        [target.commit_sha for target in situation.will_merge],
+    )
+    if not commits:
+        return
+    refusal.unlanded.append(
+        {"branch": branch, "target_branch": situation.main_branch, "commits": commits}
+    )
+
+
 async def _check_live_turn(
     session: AsyncSession, task: Task, refusal: GateRefusal, *, acting_run_id: Optional[str]
 ) -> None:
@@ -914,6 +988,7 @@ async def evaluate(
     if situation is not None:
         await _check_mergeable(session, task, refusal, situation)
         await _check_unaccepted(session, task, refusal, situation)
+        await _check_unlanded(task, refusal, situation)
         await _check_checks(
             session,
             task,
@@ -991,7 +1066,11 @@ async def evaluate(
                     "identifier": entry.identifier,
                     "requirement_id": entry.requirement_id,
                     "state": entry.state,
-                    "remedy": REMEDY.get(entry.state, "it is not verified"),
+                    "remedy": (
+                        REMEDY_PARTIAL_ONLY
+                        if entry.reason == requirement_coverage.PARTIAL_ONLY
+                        else REMEDY.get(entry.state, "it is not verified")
+                    ),
                 }
                 # `gate` refuses on it; `contract` reports it and lets the transition through — the
                 # entire distinction between the two rigors lives in which list an entry lands in.

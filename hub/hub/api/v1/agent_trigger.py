@@ -128,6 +128,7 @@ from ...run_task_binding import (
     resolve_task_for_project,
     spec_document_for_task,
     tasks_held_by_a_running_turn,
+    under_review_refusal,
 )
 from ...runner_adapters import ADAPTERS, build_command, get_adapter, resolve_access_axes
 from ...runner_adapters.base import RpcCallbacks as TransportRpcCallbacks
@@ -2199,6 +2200,10 @@ async def trigger_agent(
         held = held_task_refusal(named_task, body.agent)
         if held is not None:
             raise HTTPException(status_code=409, detail=held)
+        # Work under review is judged through review_task_id; task_id is its author's (F687).
+        reviewing = await under_review_refusal(session, named_task, body.agent)
+        if reviewing is not None:
+            raise HTTPException(status_code=409, detail=reviewing)
         # The dependency gate, asked of the start rather than of the status move it implies
         # (F619): on the same edges `task_transition_service` gates, a run started here did the
         # whole task, every move was then refused, and its peer mail kept a chain of turns going.
