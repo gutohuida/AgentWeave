@@ -1,5 +1,4 @@
 """Sweep C: inbound queue & messages — hop-budget chain, operator injection, Withdraw/Continue."""
-import json
 import sys
 import time
 

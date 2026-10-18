@@ -1,7 +1,6 @@
 """Sweep C: loops without spend — stop with reason, archive, adopt leftovers, control, runnerless wait."""
 import json
 import sys
-import time
 import urllib.parse
 
 from s1018_C_flow import PAYLOAD

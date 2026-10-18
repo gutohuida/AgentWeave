@@ -1,6 +1,6 @@
 """Sweep D vault phase 5: re-distil keeps fact ids (F587/F617); resolve for the non-presumed side (F640);
 second resolve 409; re-distil the loser does not reopen (F586)."""
-import pathlib, sys, time
+import pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from s1018_D_common import mine, save, say, sc  # noqa: E402
 m = mine(); b = m["base"]

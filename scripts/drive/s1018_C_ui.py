@@ -125,7 +125,7 @@ def scene_panel(page, agent):
                 time.sleep(1)
                 print(f"LOOP-SETTINGS {i}:", text(page, "[data-testid='loop-tab']", 3000))
                 shot(page, f"panel_{agent}_loop_{i}_settings")
-            back = page.get_by_test_id("panel-launch-loops")
+            page.get_by_test_id("panel-launch-loops")
             tabs = page.get_by_test_id("panel-tab-strip").get_by_text("Loops", exact=True)
             if tabs.count():
                 tabs.first.click()

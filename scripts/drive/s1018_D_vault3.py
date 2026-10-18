@@ -1,5 +1,5 @@
 """Sweep D vault phase 3: F630 model refusals, cross-project runner, F610 other project, enable, uploads."""
-import json, pathlib, sys, time, urllib.parse
+import json, pathlib, sys, urllib.parse
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from s1018_D_common import SCRATCH, mine, save, say, sc  # noqa: E402
 m = mine(); base = m["base"]; R = m["runner"]

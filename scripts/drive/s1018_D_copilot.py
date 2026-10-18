@@ -1,5 +1,5 @@
 """Sweep D: a Copilot runner on the zero-spend stub provider (port 18034), one turn, then accounting."""
-import pathlib, sys, time
+import pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from s1018_D_common import mine, save, say, sc  # noqa: E402
 m = mine(); b = m["base"]

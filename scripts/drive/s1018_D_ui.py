@@ -4,7 +4,6 @@ record every console error. Usage: s1018_D_ui.py <phase>  (tour | vault | keyboa
 import json
 import pathlib
 import sys
-import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from s1018_D_common import SCRATCH, mine, sc  # noqa: E402

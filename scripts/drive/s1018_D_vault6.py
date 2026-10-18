@@ -1,5 +1,5 @@
 """Sweep D vault phase 6: a spec document citing facts (superseded one, private one), spec-vault-check on propose."""
-import json, pathlib, sys, time, urllib.parse
+import pathlib, sys, time, urllib.parse
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from s1018_D_common import mine, save, say, sc  # noqa: E402
 m = mine(); b = m["base"]; R = m["runner"]

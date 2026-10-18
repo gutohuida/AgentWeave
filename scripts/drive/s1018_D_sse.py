@@ -1,6 +1,6 @@
 """Sweep D SSE: a client that stops reading the operator stream while 4000 log events are published;
 does it get stream_gap when it reads again? Also /events/history paging and F419 stamping."""
-import json, pathlib, socket, sys, threading, time
+import pathlib, socket, sys, threading, time
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from s1018_D_common import mine, say, sc  # noqa: E402
 m = mine(); b = m["base"]

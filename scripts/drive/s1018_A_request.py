@@ -5,7 +5,6 @@ request (does it copy runner/charter/config but not grants?).
     py -3.11 scripts/drive/s1018_A_request.py <agent>
 """
 
-import json
 import sys
 
 sys.path.insert(0, __file__.rsplit("\\", 1)[0].rsplit("/", 1)[0])
