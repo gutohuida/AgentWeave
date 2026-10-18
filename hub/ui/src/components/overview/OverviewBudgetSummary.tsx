@@ -21,6 +21,20 @@ export function OverviewBudgetSummary() {
   }
 
   const credits = formatAiCredits(data.project.ai_nano_aiu)
+  // F722: the project total includes what the Hub's own workers spent (checkpoints, titles, vault
+  // jobs; F240), so without this line the rows below it never summed to it. One line, not one per
+  // kind -- Environment -> Budgets breaks it down. Null when every call ran unmeasured; absent when
+  // no worker ran at all.
+  const workers = (data.workers ?? []).filter(
+    (line) => line.measured_calls + (line.credited_calls ?? 0) + line.unmeasured_calls > 0,
+  )
+  const measuredWorkers = workers.filter((line) => line.total_tokens !== null)
+  const workerTokens: number | null | undefined =
+    workers.length === 0
+      ? undefined
+      : measuredWorkers.length === 0
+        ? null
+        : measuredWorkers.reduce((sum, line) => sum + (line.total_tokens ?? 0), 0)
 
   return (
     <div className="overview-budget-summary" aria-label="Budget summary">
@@ -51,6 +65,12 @@ export function OverviewBudgetSummary() {
           <strong>{formatTokens(agent.total_tokens)}</strong>
         </div>
       ))}
+      {workerTokens !== undefined && (
+        <div className="overview-budget-row" data-testid="overview-budget-workers">
+          <span className="truncate">Hub workers</span>
+          <strong>{formatTokens(workerTokens)}</strong>
+        </div>
+      )}
       {data.agents.length > 4 && (
         <p className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
           +{data.agents.length - 4} more agents

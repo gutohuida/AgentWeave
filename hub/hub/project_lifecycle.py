@@ -182,7 +182,9 @@ class ProjectLifecycleService:
             raise ProjectPathError("unknown project", code="project_not_found")
         marker = _read_marker(canonical.path)
         if marker is None or marker["project_id"] != project.id:
-            raise ProjectIdentityConflict("relocation target does not carry the project marker")
+            raise ProjectIdentityConflict(
+                await self._relocation_marker_refusal(project, canonical, marker)
+            )
         await self._guard_relocation(project, canonical)
         moved = project.path_key != canonical.path_key
         _observe(project, canonical)
@@ -250,9 +252,14 @@ class ProjectLifecycleService:
     async def _refuse_inside_another_project(
         self, canonical: CanonicalProjectPath, own_id: Optional[str]
     ) -> None:
-        """Refuse a directory inside another registered project's (F646): its marker would land in
-        that project's repository, and each project's agents could edit the other's files."""
+        """Refuse a directory nested with another registered project's, in either direction.
+
+        Inside one (F646): its marker would land in that project's repository, and each project's
+        agents could edit the other's files. Containing one (F685): the same sharing seen from the
+        outside -- and once accepted, every later project under it was refused as nested in it.
+        """
         separator = "\\" if canonical.path_key.startswith("windows:") else "/"
+        own_prefix = canonical.path_key.rstrip(separator) + separator
         rows = await self.session.execute(
             select(Project.id, Project.name, Project.path_key, Project.working_directory).where(
                 Project.path_key.isnot(None)
@@ -268,6 +275,43 @@ class ProjectLifecycleService:
                     "repository: open that project instead, or move this folder outside it.",
                     code="project_nested",
                 )
+            if path_key.startswith(own_prefix):
+                raise ProjectIdentityConflict(
+                    f"{canonical.path} contains the directory of project {name} ({other_id}, "
+                    f"{directory}). A project around another's directory shares its files and "
+                    "repository: open a folder that contains no project, or delete that project "
+                    "first.",
+                    code="project_nested",
+                )
+
+    async def _relocation_marker_refusal(
+        self,
+        project: Project,
+        canonical: CanonicalProjectPath,
+        marker: Optional[dict[str, Any]],
+    ) -> str:
+        """Say why *canonical* is not where *project* moved to, naming whose folder it is (F726)."""
+        remedy = (
+            f"Relocate to the folder {project.name} was moved to: the one whose "
+            f"{PROJECT_MARKER_PATH.as_posix()} names {project.id}."
+        )
+        if marker is None:
+            return (
+                f"{canonical.path} is not {project.name}'s folder: it has no "
+                f"{PROJECT_MARKER_PATH.as_posix()}. {remedy}"
+            )
+        owner_id = marker["project_id"]
+        owner = await self.session.get(Project, owner_id)
+        if owner is not None:
+            whose = f"project {owner.name} ({owner.id}, {owner.working_directory})"
+            other_way = f"open {owner.name} to work in it"
+        else:
+            whose = f"project {owner_id}, which this Hub does not have"
+            other_way = "open it as a project of its own"
+        return (
+            f"{canonical.path} belongs to {whose}: its {PROJECT_MARKER_PATH.as_posix()} names "
+            f"that project, not {project.name} ({project.id}). {remedy} Or {other_way}."
+        )
 
     async def _was_deleted(self, project_id: str) -> bool:
         """Whether this database deleted *project_id*: its folder's marker is then not adopted

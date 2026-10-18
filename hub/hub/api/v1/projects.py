@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, create_model, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.fields import FieldInfo
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import manager
@@ -536,6 +536,26 @@ async def _threshold_warnings(
     return warnings
 
 
+async def _agent_budget_warnings(
+    session: AsyncSession, project_id: str, merged: ProjectSettings
+) -> List[str]:
+    """An agent budget set below the agents already open (F728; warn, not refuse: the open
+    agents keep working, and only creating another is refused until enough are archived)."""
+    open_count = await session.scalar(
+        select(func.count())
+        .select_from(Agent)
+        .where(Agent.project_id == project_id, Agent.lifecycle != "archived")
+    )
+    if not open_count or open_count <= merged.agent_budget:
+        return []
+    to_archive = open_count - merged.agent_budget + 1
+    return [
+        f"The agent budget is now {merged.agent_budget}, but {open_count} agents are open. They "
+        f"keep working; no new agent can be created until {to_archive} "
+        f"{'is' if to_archive == 1 else 'are'} archived, or the budget is raised."
+    ]
+
+
 @router.put("/{project_id}/settings", response_model=ProjectSettingsSaved)
 async def update_project_settings(
     body: ProjectSettingsUpdate,  # type: ignore[valid-type]
@@ -687,7 +707,8 @@ async def update_project_settings(
     await sse_manager.broadcast(resolved_project_id, "project_settings_updated", settings_now)
     return ProjectSettingsSaved(
         **merged.model_dump(),
-        warnings=await _threshold_warnings(session, resolved_project_id, merged),
+        warnings=await _agent_budget_warnings(session, resolved_project_id, merged)
+        + await _threshold_warnings(session, resolved_project_id, merged),
     )
 
 

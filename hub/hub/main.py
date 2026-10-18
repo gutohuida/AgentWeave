@@ -370,6 +370,11 @@ class ContentSizeLimitMiddleware:
                 length = 0
             limit = self._limit(scope.get("path", ""))
             if length > limit:
+                # Read the body before answering (F734). A client that sends its whole body before
+                # reading -- Python's urllib, most SDKs -- otherwise meets a socket closed with its
+                # bytes unread: the peer resets and the client reports a connection abort, never
+                # this sentence. Bounded, so a client declaring gigabytes is not read forever.
+                await _discard_body(receive, _DRAIN_LIMIT_BYTES)
                 await send(
                     {
                         "type": "http.response.start",
@@ -392,6 +397,23 @@ class ContentSizeLimitMiddleware:
                 return
 
         await self.app(scope, receive, send)
+
+
+#: How much of an over-limit body `ContentSizeLimitMiddleware` reads and discards so its 413 can be
+#: read (F734). Beyond this the connection is closed unread, as before.
+_DRAIN_LIMIT_BYTES = 64 << 20
+
+
+async def _discard_body(receive, budget: int) -> None:
+    """Consume and drop request body messages until the body ends, the client goes, or *budget*."""
+    drained = 0
+    while drained <= budget:
+        message = await receive()
+        if message.get("type") != "http.request":
+            return
+        drained += len(message.get("body", b""))
+        if not message.get("more_body", False):
+            return
 
 
 def _size(limit: int) -> str:

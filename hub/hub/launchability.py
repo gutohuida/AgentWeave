@@ -727,6 +727,16 @@ async def is_read_only_agent(project_id: str, agent: str, db: AsyncSession) -> b
     return not worktrees.is_writing_agent(await get_agent_config(project_id, agent, db))
 
 
+def writing_agent_work_dir_sentence(agent: str) -> str:
+    """The refusal of a `work_dir` for a writing agent, with the two ways forward (F728)."""
+    return (
+        f"work_dir cannot override workspace isolation for a writing agent: {agent} writes, so "
+        f"each of its turns runs in its own checkout (.agentweave/worktrees/{agent}), never in a "
+        f"directory a request names. Send the turn without work_dir, or set read_only on {agent} "
+        "if it should only read, in which case work_dir places it inside the project."
+    )
+
+
 def read_only_work_sentence(agent: str, task_id: Optional[str]) -> str:
     """The one refusal every F425 door gives, so the operator meets the same remedy everywhere."""
     subject = f"task {task_id}" if task_id else "a task"

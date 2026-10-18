@@ -82,6 +82,11 @@ export function InstructionsPage() {
    * unreachable branch falls through to the ordinary save instead of to a dialog the render gate
    * would then decline to show.
    */
+  // F686: instructions are prepended to every agent turn, so their size is paid on each one. The
+  // Hub refuses a save over its limit; the count is on screen so that is never a surprise.
+  const maxChars = data?.max_chars
+  const overLimit = maxChars !== undefined && content.length > maxChars
+
   const handleSave = () => {
     if (data !== undefined && data.content.trim() !== '' && content.trim() === '') {
       setConfirmingClear(true)
@@ -97,7 +102,7 @@ export function InstructionsPage() {
       actions={data ? (
         <div className="flex items-center gap-3">
           {saved && <span role="status" className="flex items-center gap-1 text-xs" style={{ color: 'var(--green)' }}><Icon name="check" size={13} />Saved</span>}
-          <Button variant="primary" size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
+          <Button variant="primary" size="sm" onClick={handleSave} disabled={saveMutation.isPending || overLimit}>
             {saveMutation.isPending ? 'Saving...' : 'Save'}
           </Button>
         </div>
@@ -116,6 +121,19 @@ export function InstructionsPage() {
             }}
             spellCheck={false}
           />
+          {maxChars !== undefined && (
+            <p
+              data-testid="instructions-size"
+              role={overLimit ? 'alert' : undefined}
+              className="mt-2 text-xs"
+              style={{ color: overLimit ? 'var(--red)' : 'var(--text-3)' }}
+            >
+              {content.length.toLocaleString()} of {maxChars.toLocaleString()} characters.{' '}
+              {overLimit
+                ? 'Too long to save: these are sent with every agent turn, so shorten them or point to reference material in the project instead.'
+                : 'Sent with every agent turn, so every character is paid for on each one.'}
+            </p>
+          )}
           {/* A rejected PUT used to re-enable the button and say nothing at all, leaving the
               operator believing the save landed — a breach of *Saving reports its outcome*, which
               this component has always been bound by. */}

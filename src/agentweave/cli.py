@@ -82,7 +82,10 @@ def _hub_start_hint(profile: str, port: Optional[int]) -> str:
     default profile on the default port, which is not what a named profile's reader asked about."""
     command = "agentweave"
     if profile and profile != "default":
-        command += f" --profile {profile}"
+        # A named profile never defaults its port (`_hub_require_port_for_named_profile`), so its
+        # hint always names one -- even 8000 -- or a placeholder when none is known (F732: reset's
+        # "Run 'agentweave --profile X' to start fresh" was itself refused).
+        return f"{command} --profile {profile} --port {port if port is not None else '<port>'}"
     if port is not None and port != DEFAULT_HUB_PORT:
         command += f" --port {port}"
     return command
@@ -174,11 +177,17 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     from .diagnostics import collect_diagnostics, format_results, has_failures, summarize
 
     explicit_port = getattr(args, "port", None)
-    port = explicit_port or DEFAULT_HUB_PORT
     # The global `--profile` defaults to "default", so a parsed namespace never leaves it unset.
     # "default" with a port is treated as unspecified: one port has one Hub, and if a named
     # profile's live Hub is on it, the default profile's database is not what stands behind it.
     profile = getattr(args, "profile", None) or "default"
+    # F723: the same rule status/stop/start apply. A named profile with no port used to probe
+    # :8000 -- the default profile's instance -- and report it beside the named profile's database.
+    port_error = _hub_require_port_for_named_profile(profile, explicit_port)
+    if port_error:
+        print_error(port_error)
+        return 1
+    port = explicit_port or DEFAULT_HUB_PORT
     if profile == "default" and explicit_port:
         profile = _hub_profile_serving_port(port) or "default"
     results = collect_diagnostics(
@@ -226,6 +235,7 @@ def cmd_stop(args: argparse.Namespace) -> int:
             _hub_kill_pid(pid)
             with contextlib.suppress(OSError):
                 _hub_pid_file(port, profile).unlink()
+            _report_app_windows_closed(port)
             print_success("Hub stopped")
             return 0
         # PID is alive but nothing is serving the Hub on the recorded port — most
@@ -293,8 +303,15 @@ def cmd_stop(args: argparse.Namespace) -> int:
         print_error(f"Failed to stop Hub: {result.stderr}")
         return 1
 
+    _report_app_windows_closed(port)
     print_success("Hub stopped")
     return 0
+
+
+def _report_app_windows_closed(port: int) -> None:
+    closed = _app_windows_close(port)
+    if closed:
+        print_info(f"Closing {closed} app window(s) showing this Hub")
 
 
 HUB_DIR = Path.home() / ".agentweave" / "hub"
@@ -1082,11 +1099,68 @@ def _open_app_window_native(url: str) -> bool:
         # (F344). The app is a document as much as a control surface; it selects like a browser.
         window = webview.create_window("AgentWeave", url, text_select=True)
         _enable_default_context_menus(window)
-        webview.start(icon=_app_icon_path())
+        marker = _app_window_register(url, window)
+        try:
+            webview.start(icon=_app_icon_path())
+        finally:
+            if marker is not None:
+                with contextlib.suppress(OSError):
+                    marker.unlink()
         return True
     except Exception as exc:
         print_error(f"Native app window unavailable ({exc}); falling back to browser.")
         return False
+
+
+# How often an open app window checks whether `agentweave stop` has asked it to close (F724).
+_APP_WINDOW_POLL_SECONDS = 1.0
+
+
+def _app_window_markers(port: int) -> List[Path]:
+    """The open-window markers of every app window showing the Hub on `port`."""
+    return sorted(HUB_DIR.glob(f"window-{port}-*.open"))
+
+
+def _app_window_register(url: str, window: Any) -> Optional[Path]:
+    """Record that this process shows the Hub at `url`, and close `window` once the record goes.
+
+    F724: the window runs in the process that started the Hub, not in the Hub, so `agentweave
+    stop` killed the Hub and left the window open on a dead server. `stop` now deletes the
+    markers for its port (`_app_windows_close`); a watcher thread here sees its marker gone and
+    destroys the window. Deleting a file, not killing a PID, so a recycled PID is never at risk.
+    Best effort: a window that cannot be registered still opens, exactly as before.
+    """
+    import threading
+    import urllib.parse as _parse
+
+    try:
+        port = _parse.urlsplit(url).port or DEFAULT_HUB_PORT
+        HUB_DIR.mkdir(parents=True, exist_ok=True)
+        marker = HUB_DIR / f"window-{port}-{os.getpid()}-{threading.get_ident()}.open"
+        marker.write_text(url, encoding="utf-8")
+    except (OSError, ValueError):
+        return None
+
+    def _watch() -> None:
+        import time as _time
+
+        while marker.exists():
+            _time.sleep(_APP_WINDOW_POLL_SECONDS)
+        with contextlib.suppress(Exception):
+            window.destroy()
+
+    threading.Thread(target=_watch, name="aw-app-window-watch", daemon=True).start()
+    return marker
+
+
+def _app_windows_close(port: int) -> int:
+    """Ask every app window showing the Hub on `port` to close; return how many were asked."""
+    closed = 0
+    for marker in _app_window_markers(port):
+        with contextlib.suppress(OSError):
+            marker.unlink()
+            closed += 1
+    return closed
 
 
 def _wait_and_open_app(port: int, cwd: Optional[Path]) -> None:
@@ -1484,6 +1558,8 @@ def cmd_reset(args: argparse.Namespace) -> int:
         else:
             print_info(f"Stopping Hub (native, PID {pid}) before destroy...")
             _hub_kill_pid(pid)
+            if recorded_port is not None:
+                _report_app_windows_closed(recorded_port)
         with contextlib.suppress(OSError):
             pid_file.unlink()
 
@@ -1589,7 +1665,12 @@ For more help: https://github.com/gutohuida/AgentWeave
         "--json", action="store_true", help="Emit machine-readable JSON diagnostics"
     )
     doctor_parser.add_argument(
-        "--no-network", action="store_true", help="Skip network reachability checks"
+        "--no-network",
+        action="store_true",
+        help=(
+            "Accepted for compatibility; doctor contacts nothing beyond 127.0.0.1, "
+            "whose instance probe always runs"
+        ),
     )
     # F34: without these, `doctor` could only ever examine port 8000 and the default profile — so
     # run inside a project bound to another instance it described a Hub that project does not use

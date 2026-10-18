@@ -592,7 +592,10 @@ async def test_writing_agent_cannot_bypass_isolation_with_work_dir(
         )
 
     assert response.status_code == 400
-    assert "isolation" in response.json()["detail"].lower()
+    detail = response.json()["detail"]
+    assert "isolation" in detail.lower()
+    # F728 (2): the refusal names both ways forward, not just the rule.
+    assert "without work_dir" in detail and "read_only on writer" in detail
 
 
 @pytest.mark.usefixtures("no_agent_cli_spawn")

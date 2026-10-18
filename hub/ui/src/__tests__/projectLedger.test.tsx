@@ -80,5 +80,9 @@ describe('ProjectLedger', () => {
     const row = screen.getByTestId('ledger-notice-context_warning')
     expect(row.textContent).toContain('589')
     expect(row.textContent).toContain('Builder 400')
+    // F733: routine readings are not warnings.
+    expect(row.textContent).toContain('Context readings')
+    expect(row.textContent).not.toContain('warning')
+    expect(row.querySelector('.aw-pill')?.className).toContain('tone-neutral')
   })
 })

@@ -109,3 +109,23 @@ async def test_an_empty_body_is_refused_and_clearing_takes_an_explicit_empty_str
     assert (await app.get(url, headers=auth_headers)).json()["content"] == "Keep me."
     cleared = await app.put(url, json={"content": ""}, headers=auth_headers)
     assert cleared.status_code == 200 and cleared.json()["content"] == ""
+
+
+@pytest.mark.asyncio
+async def test_instructions_over_the_limit_are_refused_and_nothing_is_stored(app, auth_headers):
+    """F686: 300,000 characters were accepted and then rode every agent turn. A save over the
+    limit is refused with a sentence naming the size and the limit; what was stored stands."""
+    url = "/api/v1/projects/proj-test/project/instructions"
+    limit = (await app.get(url, headers=auth_headers)).json().get("max_chars")
+    assert limit == 40_000
+
+    at_limit = await app.put(url, json={"content": "x" * limit}, headers=auth_headers)
+    assert at_limit.status_code == 200
+
+    resp = await app.put(url, json={"content": "x" * 300_000}, headers=auth_headers)
+
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "instructions_too_long"
+    assert "300,000" in detail["message"] and "40,000" in detail["message"]
+    assert (await app.get(url, headers=auth_headers)).json()["content"] == "x" * limit

@@ -101,6 +101,9 @@ vi.mock('@/components/questions/QuestionsPanel', () => ({
 vi.mock('@/components/activity/ActivityLog', () => ({
   ActivityLog: () => <div data-testid="page-activity" />,
 }))
+vi.mock('@/components/activity/ProjectLedger', () => ({
+  ProjectLedger: () => <div data-testid="page-ledger" />,
+}))
 vi.mock('@/components/logs/LogsView', () => ({
   LogsView: () => <div data-testid="page-logs" />,
 }))
@@ -278,13 +281,19 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     expect(screen.queryByTestId('page-tasks-dependencies')).not.toBeInTheDocument()
   })
 
-  it('Activity contains Logs as an internal sub-view', () => {
+  it('Activity opens on the ledger and contains Activity and Logs as internal sub-views', () => {
     render(withQueryClient(<App />))
     fireEvent.click(screen.getByTestId('project-tab-activity'))
+    // F718: the ledger leads, whichever sub-view was open before the tab was clicked.
+    expect(screen.getByTestId('page-ledger')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('activity-subview-activity'))
     expect(screen.getByTestId('page-activity')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('activity-subview-logs'))
     expect(screen.queryByTestId('page-activity')).not.toBeInTheDocument()
     expect(screen.getByTestId('page-logs')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('project-tab-tasks'))
+    fireEvent.click(screen.getByTestId('project-tab-activity'))
+    expect(screen.getByTestId('page-ledger')).toBeInTheDocument()
   })
 
   it('Environment contains Quality, Instructions, Runners, Charters, Worktrees, Diagnostics, Budgets, and Settings', () => {

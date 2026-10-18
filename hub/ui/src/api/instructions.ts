@@ -4,6 +4,8 @@ import { useConfigStore } from '@/store/configStore'
 
 export interface Instructions {
   content: string
+  /** The most characters the Hub will store (F686): instructions ride every agent turn. */
+  max_chars?: number
 }
 
 export function useInstructions() {

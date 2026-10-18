@@ -58,7 +58,7 @@ def successor_title(previous: Optional[str]) -> str:
     return candidate[:CONVERSATION_TITLE_MAX_LENGTH]
 
 
-async def _handover_of(db, conversation_id: str) -> Optional[Tuple[str, str]]:
+async def handover_of(db, conversation_id: str) -> Optional[Tuple[str, str]]:
     """`(checkpoint id, successor id)` of the checkpoint that handed this conversation over."""
     row = (
         await db.execute(
@@ -94,7 +94,7 @@ async def _lost_the_race(
     An `IntegrityError` that names no handed-over checkpoint came from some other constraint, and
     is returned as itself rather than dressed as a refusal that names nothing.
     """
-    prior = await _handover_of(db, predecessor_id)
+    prior = await handover_of(db, predecessor_id)
     if prior is None:
         return (
             error
@@ -147,7 +147,7 @@ async def cut_over(
 
     # The handover record comes first, so "unarchive it first" is said only to a conversation that
     # was never handed over, where following it is correct (design D4).
-    prior = await _handover_of(db, predecessor.id)
+    prior = await handover_of(db, predecessor.id)
     if prior is not None:
         raise _already_handed_over(predecessor.id, checkpoint.id, prior)
 
