@@ -582,3 +582,61 @@ async def test_enabling_the_setting_answers_the_open_question_and_tells_the_agen
     )
     assert again.status_code == 200, again.text
     assert len(await records()) == 1
+
+
+async def _queued_count() -> int:
+    async with async_session_factory() as session:
+        return (
+            await session.execute(
+                select(func.count())
+                .select_from(InboundQueueEntry)
+                .where(InboundQueueEntry.project_id == PROJECT)
+            )
+        ).scalar_one()
+
+
+@pytest.mark.parametrize("second", [False, True], ids=["first-question", "last-question"])
+async def test_picking_the_enabling_option_with_the_setting_still_off_is_refused(
+    app, auth_headers, wakes, second
+):
+    """F727: "Enabled it — go ahead" read as a grant and granted nothing -- the answer woke the
+    agent, which paid a turn to be refused again and opened the second, last question. The
+    enabling option is accepted only once the setting is on; turning it on answers it anyway
+    (F597). Any other answer, typed or chosen, goes through as before."""
+    headers = await a_running_agent()
+    detail = await refuse(app, auth_headers, headers)
+    if second:
+        await answer(app, auth_headers, detail["question_id"], "Leave it off", ["Leave it off"])
+        detail = await refuse(app, auth_headers, headers)
+    record = next(r for r in await records() if r.id == detail["question_id"])
+    enabling = record.options[0]["label"]
+    async with async_session_factory() as session:
+        run = await session.get(Run, "run-refused")
+        run.status = "completed"
+        await session.commit()
+    wakes.clear()
+    queued_before = await _queued_count()
+
+    picked = await app.patch(
+        f"/api/v1/projects/{PROJECT}/questions/{record.id}",
+        headers=auth_headers,
+        json={"answer": enabling, "labels": [enabling]},
+    )
+
+    assert picked.status_code == 409, picked.text
+    message = picked.json()["detail"]
+    assert "allow_agent_jobs" in message and "Environment › Settings" in message
+    async with async_session_factory() as session:
+        still = await session.get(Question, record.id)
+    assert still.answered is False
+    assert await _queued_count() == queued_before and wakes == []
+
+    # Turned on, the same pick is true and goes through.
+    saved = await app.put(
+        f"/api/v1/projects/{PROJECT}/settings",
+        headers=auth_headers,
+        json={"allow_agent_jobs": True},
+    )
+    assert saved.status_code == 200, saved.text
+    async with async_session_factory() as session:
+        assert (await session.get(Question, record.id)).answered is True

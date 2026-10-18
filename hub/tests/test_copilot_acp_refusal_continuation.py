@@ -236,6 +236,21 @@ async def test_a_judge_refusal_that_ends_the_turn_is_continued_once_with_its_rea
     assert continued < reply, kinds
 
 
+async def test_the_continued_notice_says_why_the_call_was_refused(monkeypatch):
+    """F698: the notice said only "the Hub told it why" -- the reason (an F675 runner-config
+    refusal, measured) was in `permission_denied` but on no card the operator reads."""
+    script = _new_with() + _refused_root() + [END_TURN, _chunk("Staying inside instead."), END_TURN]
+    _fake, events, _outcome = await _drive(monkeypatch, script)
+    notice = next(
+        e
+        for e in events
+        if e.kind == "diagnostic" and e.payload.get("code") == "copilot.refusal_continued"
+    )
+    reason = notice.payload["facts"]["reason"]
+    assert reason and reason != "the operator did not approve it"
+    assert reason in notice.payload["summary"], notice.payload["summary"]
+
+
 async def test_an_operator_deny_that_ends_the_turn_is_continued_with_the_operator_named(
     monkeypatch,
 ):

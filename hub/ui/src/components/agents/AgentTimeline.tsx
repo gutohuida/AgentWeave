@@ -851,11 +851,28 @@ function callDetail(payload: unknown): string {
   }
   if (!parsed || typeof parsed !== 'object') return String(parsed)
   const fields = parsed as Record<string, unknown>
+  const subject = subjectField(fields)
+  if (subject) return subject
+  // F698: a Copilot row is `{title, rawInput, locations}` — the call's own arguments sit one level
+  // down, its files under `locations`, and the title Copilot wrote is the last resort.
+  const raw = fields.rawInput
+  if (raw && typeof raw === 'object') {
+    const rawSubject = subjectField(raw as Record<string, unknown>)
+    if (rawSubject) return rawSubject
+  }
+  const firstLocation = Array.isArray(fields.locations) ? fields.locations[0] : undefined
+  const locationPath = (firstLocation as Record<string, unknown> | undefined)?.path
+  if (typeof locationPath === 'string' && locationPath.trim()) return locationPath
+  if ('rawInput' in fields && typeof fields.title === 'string' && fields.title.trim()) return fields.title
+  return JSON.stringify(parsed, null, 2)
+}
+
+function subjectField(fields: Record<string, unknown>): string {
   for (const key of ['command', 'file_path', 'path', 'pattern', 'query', 'url', 'prompt']) {
     const value = fields[key]
     if (typeof value === 'string' && value.trim()) return value
   }
-  return JSON.stringify(parsed, null, 2)
+  return ''
 }
 
 /** F679: the delegation a subagent's call came from (`payload.subagent`), or null for the agent's

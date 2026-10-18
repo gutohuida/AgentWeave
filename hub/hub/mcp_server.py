@@ -3375,6 +3375,225 @@ def _ps_pattern_operands(arguments: List[str], shapes: List[_ArgumentShape]) -> 
     return exempt
 
 
+# --- A text tool's own operands (F696) -----------------------------------------------------------
+#
+# `sed 's|/usr|x|' f`, `awk -F/ '{print $1}' f`, `cut -d/ -f2 f`, `tr / _`: each
+# script, pattern or delimiter was read as a path, and a command that only reads was refused. Only
+# an operand the tool reads as text is exempt, and a sed or awk script only when it provably cannot
+# write a file or run a command (`_sed_reads_only`, `_awk_reads_only`); any other script stays
+# judged word by word, as before. A file operand -- every input, `sed -f`, `awk -f` -- is judged.
+# grep's pattern is not exempt: a quoted `$HOME` or `\.\./` in it is a cost the operator accepted
+# (`test_permission_approver.py` 1.5a2, `test_the_shell_judge_reads_a_word_whole.py` 1.7c1).
+
+_TEXT_TOOLS = {
+    "sed": "sed", "gsed": "sed", "awk": "awk", "gawk": "awk", "mawk": "awk", "nawk": "awk",
+    "cut": "cut", "tr": "tr",
+}  # fmt: skip
+# Options that take a value, per tool, and the subset whose value is text rather than a path.
+_TEXT_TOOL_VALUE_OPTIONS = {
+    "sed": {"-e", "--expression", "-f", "--file", "-l", "--line-length"},
+    "awk": {"-F", "--field-separator", "-f", "--file", "-v", "--assign"},
+    "cut": {
+        "-d", "--delimiter", "--output-delimiter", "-f", "--fields", "-b", "--bytes", "-c",
+        "--characters",
+    },
+    "tr": set(),
+}  # fmt: skip
+_TEXT_VALUES = {
+    "sed": {"-e", "--expression"},
+    "awk": {"-F", "--field-separator"},
+    "cut": {
+        "-d", "--delimiter", "--output-delimiter", "-f", "--fields", "-b", "--bytes", "-c",
+        "--characters",
+    },
+    "tr": set(),
+}  # fmt: skip
+# The options that supply the script or pattern, so no operand is one.
+_TEXT_SCRIPT_OPTIONS = {
+    "sed": {"-e", "--expression", "-f", "--file"},
+    "awk": {"-f", "--file"},
+}
+_SED_SIMPLE_COMMANDS = set("pPdDnNhHgGxlz=F")
+_SED_S_FLAGS = set("gpiImM0123456789")
+_AWK_UNSAFE_RE = re.compile(r"[>|@]|\b(?:system|getline|close|fflush|ARGV|ARGC)\b")
+
+
+def _sed_delimited(script: str, index: int, parts: int) -> int:
+    """The index after `parts` delimited parts starting at the delimiter at `index`, or -1."""
+    if index >= len(script) or script[index] in "\\\n":
+        return -1
+    delimiter, index = script[index], index + 1
+    for _ in range(parts):
+        while index < len(script) and script[index] != delimiter:
+            if script[index] == "\n":
+                return -1
+            index += 2 if script[index] == "\\" else 1
+        if index >= len(script):
+            return -1
+        index += 1
+    return index
+
+
+def _sed_reads_only(script: str) -> bool:
+    """Whether a sed script provably writes no file and runs no command: only addresses and the
+    commands that print, delete, hold, branch, quit or substitute (with no `w` or `e` flag).
+    Anything else -- `w`, `W`, `r`, `R`, `e`, an unknown command -- is not provable."""
+    index, length = 0, len(script)
+    while index < length:
+        char = script[index]
+        if char in " \t\n;{}!":
+            index += 1
+            continue
+        if char.isdigit() or char in "$,~+":
+            index += 1
+            continue
+        if char == "/" or char == "\\":
+            # An address regex: `/re/` or `\cREc`.
+            start = index + 1 if char == "\\" else index
+            index = _sed_delimited(script, start, 1)
+            if index < 0:
+                return False
+            while index < length and script[index] in "IM":
+                index += 1
+            continue
+        if char in ":btT":
+            # A label runs to the end of the command.
+            while index < length and script[index] not in ";\n}":
+                index += 1
+            continue
+        if char in "aic":
+            # Text to insert runs to the end of the line; it is output, not a command.
+            while index < length and script[index] != "\n":
+                index += 2 if script[index] == "\\" else 1
+            continue
+        if char in "sy":
+            index = _sed_delimited(script, index + 1, 2)
+            if index < 0:
+                return False
+            while index < length and script[index] not in ";\n} \t":
+                if char == "y" or script[index] not in _SED_S_FLAGS:
+                    return False
+                index += 1
+            continue
+        if char in _SED_SIMPLE_COMMANDS or char in "qQ":
+            index += 1
+            continue
+        return False
+    return True
+
+
+def _awk_reads_only(program: str) -> bool:
+    """Whether an awk program provably writes no file, runs no command and reads no file it was
+    not given: no redirection, pipe, `system`, `getline`, `close`, `fflush`, `ARGV`/`ARGC` or gawk
+    `@` directive. Conservative -- a comparison
+    `$1 > 5` is not provable, and is then judged as before."""
+    return not _AWK_UNSAFE_RE.search(program.replace(_LITERAL_DOLLAR, "$"))
+
+
+def _text_operand_ok(argument: str, shape: _ArgumentShape) -> bool:
+    """Whether an operand is plain text the shell does not change: no substitution, no brace the
+    shell expands, and no `$` unless it was quoted literally."""
+    if _SUBSTITUTION in argument or any(sentinel in argument for sentinel in _BRACE_RESTORE):
+        return False
+    return shape.literal or "$" not in argument
+
+
+def _text_script_ok(tool: str, script: str) -> bool:
+    if tool == "sed":
+        return _sed_reads_only(script)
+    if tool == "awk":
+        return _awk_reads_only(script)
+    return True
+
+
+def _text_operands(arguments: List[str], shapes: List[_ArgumentShape]) -> "set[int]":
+    """The indexes of arguments a text tool reads as its script, pattern or delimiter (F696)."""
+    exempt: "set[int]" = set()
+    tool: Optional[str] = None
+    awaiting_name = True
+    script_given = False
+    pending: Optional[str] = None  # the value option the next argument belongs to
+    options_ended = False
+    for index, (argument, shape) in enumerate(zip(arguments, shapes, strict=True)):
+        if shape.starts:
+            tool, awaiting_name, script_given, pending, options_ended = (
+                None,
+                True,
+                False,
+                None,
+                False,
+            )
+        if awaiting_name:
+            if argument.lower() in _STAGE_PREFIXES or re.match(
+                r"^[A-Za-z_][A-Za-z0-9_]*=", argument
+            ):
+                continue
+            awaiting_name = False
+            name = re.split(r"[\\/]", argument)[-1].lower()
+            tool = _TEXT_TOOLS.get(name[:-4] if name.endswith(".exe") else name)
+            continue
+        if tool is None:
+            continue
+        ok = _text_operand_ok(argument, shape)
+        if pending is not None:
+            option, pending = pending, None
+            if option in _TEXT_VALUES[tool] and ok and _text_script_ok_for(tool, option, argument):
+                exempt.add(index)
+            continue
+        if not options_ended and argument.startswith("-") and argument != "-":
+            if argument == "--":
+                options_ended = True
+                continue
+            option, equals, value = argument.partition("=")
+            if option in _TEXT_SCRIPT_OPTIONS.get(tool, ()):
+                script_given = True
+            if equals and option.startswith("--"):
+                if option in _TEXT_VALUES[tool] and ok and _text_script_ok_for(tool, option, value):
+                    exempt.add(index)
+                continue
+            if argument in _TEXT_TOOL_VALUE_OPTIONS[tool]:
+                pending = argument
+                continue
+            if argument.startswith("--"):
+                continue
+            # A cluster of short options (`-ne`, `-F/`, `-rnA3`): the first letter that takes a
+            # value takes the rest of the cluster, or the next argument when nothing is left.
+            for position in range(1, len(argument)):
+                option = "-" + argument[position]
+                if option not in _TEXT_TOOL_VALUE_OPTIONS[tool]:
+                    continue
+                if option in _TEXT_SCRIPT_OPTIONS.get(tool, ()):
+                    script_given = True
+                value = argument[position + 1 :]
+                if not value:
+                    pending = option
+                elif (
+                    position == 1
+                    and option in _TEXT_VALUES[tool]
+                    and ok
+                    and _text_script_ok_for(tool, option, value)
+                ):
+                    exempt.add(index)
+                break
+            continue
+        if tool == "tr":
+            if ok:
+                exempt.add(index)
+            continue
+        if tool in _TEXT_SCRIPT_OPTIONS and not script_given:
+            script_given = True
+            if ok and _text_script_ok(tool, argument):
+                exempt.add(index)
+    return exempt
+
+
+def _text_script_ok_for(tool: str, option: str, value: str) -> bool:
+    """A value given to `option` is acceptable text: a script option's value must read only."""
+    if option in _TEXT_SCRIPT_OPTIONS.get(tool, ()):
+        return _text_script_ok(tool, value)
+    return True
+
+
 def _read_command(
     command: str,
     root: str,
@@ -3405,9 +3624,12 @@ def _read_command(
         return None
     shapes: List[_ArgumentShape] = []
     arguments, nested = _lex(command, dialect == "bash", reading, shapes)
+    # F696: a text tool's script, pattern or delimiter is not a path in the command.
+    patterns = _text_operands(arguments, shapes)
     if dialect == "powershell":
         # F661: a comparison operator's pattern is not a path in the command, so it is not judged.
-        patterns = _ps_pattern_operands(arguments, shapes)
+        patterns |= _ps_pattern_operands(arguments, shapes)
+    if patterns:
         arguments = [argument for index, argument in enumerate(arguments) if index not in patterns]
     if dialect == "bash":
         # D1: each alternative a brace argument expands to is handed on to `_words` as its own
@@ -3935,6 +4157,36 @@ def _stage_words(text: str, bash: bool, reading: str) -> Tuple[str, List[str]]:
     return name, words[1:]
 
 
+# F696: what a `| while read` loop's body may run and still only print what it read.
+_LOOP_PRINTERS = {"echo", "printf", "true", ":", "test", "[", "[[", "continue", "break"}
+_SHELL_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _while_read_prints_only(
+    stages: List[Tuple[str, str]], index: int, bash: bool, reading: str
+) -> bool:
+    """Whether the `while` stage at `index` is `while read [-r] NAME...; do ...; done` whose body
+    only prints or tests (F696): `cat f | while read l; do echo "$l"; done` reads and prints, while
+    `... do rm "$l"` takes paths from the pipe and stays refused. A body with a redirection, a
+    substitution or any other command is not provable."""
+    if not bash:
+        return False
+    _, words = _stage_words(stages[index][1], bash, reading)
+    while words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]):
+        words = words[1:]  # `IFS= read -r l`
+    if not words or words[0] != "read":
+        return False
+    if not all(word == "-r" or _SHELL_NAME_RE.match(word) for word in words[1:]):
+        return False
+    for _before, text in stages[index + 1 :]:
+        name, _ = _stage_words(text, bash, reading)
+        if name == "done":
+            return True
+        if name not in _LOOP_PRINTERS or any(mark in text for mark in (">", "<", "$(", "`")):
+            return False
+    return False
+
+
 def _feeds_arguments(command: str, dialect: str, reading: str, depth: int = 0) -> Optional[str]:
     """The stage of `command` whose paths or code come from another command's output, or None."""
     if depth > _MAX_NESTING:
@@ -3963,6 +4215,8 @@ def _feeds_arguments(command: str, dialect: str, reading: str, depth: int = 0) -
         if not piped:
             continue
         if name in _PIPE_RUNNERS:
+            if name == "while" and _while_read_prints_only(stages, index, bash, reading):
+                continue  # F696
             return text.strip()
         if name in _PIPE_SHELLS and not {"-c", "-command", "-file", "-f"} & {
             w.lower() for w in words

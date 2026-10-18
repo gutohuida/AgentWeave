@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List, NoReturn, Optional, Tuple
+from typing import Any, List, NoReturn, Optional, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -104,6 +104,33 @@ AGENT_JOBS = SettingGate(
     ),
     retry_hint="create the job then",
 )
+
+
+#: Every gate, by the structural key its records carry.
+GATES = {AGENT_JOBS.subject_key: AGENT_JOBS}
+
+
+def enabling_answer_refusal(question: Question, labels: List[str], project: Any) -> Optional[str]:
+    """Why the operator's chosen answer cannot be accepted, or None (F727).
+
+    The first option of each question says the setting is on ("Enabled it — go ahead", "I'll
+    enable it now"). Answering does not flip the setting (D4), so picking it while the setting is
+    still off was a grant that granted nothing: the answer woke the refused agent, which paid a
+    turn to be refused again. It is accepted once it is true, and turning the setting on answers
+    it anyway (`settle_when_enabled`). Only a chosen label is read: typed text is never judged for
+    polarity (D13)."""
+    gate = GATES.get(question.subject_key or "")
+    if gate is None or project is None or getattr(project, gate.setting, False):
+        return None
+    enabling = {gate.first_options[0][0], gate.last_options[0][0]}
+    if not enabling.intersection(labels):
+        return None
+    return (
+        f"The project setting `{gate.setting}` is still {gate.current_value}, and this answer "
+        f"does not change it, so the agent would only be refused again. Turn it on at "
+        f"{gate.where_changed} — saving it there answers this question and tells the agent — or "
+        f"choose another answer."
+    )
 
 
 @dataclass(frozen=True)

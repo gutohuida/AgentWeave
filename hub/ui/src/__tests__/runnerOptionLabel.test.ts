@@ -73,6 +73,20 @@ describe('runnerOptionLabel (F268)', () => {
       .toBe('Claude Code — opus (latest) (claude)')
   })
 
+  // F725: a provider runner's model is a Claude API id, read from the `claude` catalog -- what the
+  // Hub's `model_unrecognised` and the composer's pill both read -- not from its CLI's catalog.
+  it('names a provider runner\'s model from the Claude catalog, as the Hub and composer do', () => {
+    const provider = runner({
+      name: 'copilot-stub',
+      cli: 'copilot' as const,
+      model: 'claude-haiku-4-5-20251001',
+      provider_config: { type: 'anthropic', base_url: 'http://127.0.0.1:9/v1', api_key_var: 'STUB_KEY' },
+    } as Partial<Parameters<typeof runnerOptionLabel>[0]>)
+    expect(runnerOptionLabel(provider, MODEL_CATALOG_FIXTURE)).toBe('copilot-stub — Haiku 4.5 (copilot)')
+    const stray = { ...provider, model: 'gpt-5' }
+    expect(runnerOptionLabel(stray, MODEL_CATALOG_FIXTURE)).toBe('copilot-stub — gpt-5 (unrecognised) (copilot)')
+  })
+
   it('does not double an alias for a runner the Hub named for itself', () => {
     const hubNamed = runner({ name: 'Claude Code — opus (latest)', model: 'opus' })
     const label = runnerOptionLabel(hubNamed, MODEL_CATALOG_FIXTURE)

@@ -1,5 +1,6 @@
 import type { ModelCatalogResponse } from '@/api/modelCatalog'
 import type { Runner } from '@/api/runners'
+import { providerRunnerModelLabel } from '@/lib/runnerProvider'
 
 function modelPartFor(
   modelId: string | null | undefined,
@@ -16,6 +17,16 @@ function modelPartFor(
   const aliasTarget = provider?.models.find((m) => m.aliases.includes(modelId))
   if (aliasTarget) return `${modelId} (latest)`
   return `${modelId} (unrecognised)`
+}
+
+/** A provider runner names an id, never an alias (`runner_provider.provider_model_ids`). */
+function providerModelPart(
+  modelId: string | null | undefined,
+  catalog: ModelCatalogResponse | undefined,
+): string {
+  if (!modelId) return 'Provider default'
+  if (!catalog) return modelId
+  return providerRunnerModelLabel(catalog, modelId) ?? `${modelId} (unrecognised)`
 }
 
 /** Renders a runner as one choice among many — the format every select that offers a runner
@@ -37,7 +48,11 @@ export function runnerOptionLabel(
   options?: { model?: string | null },
 ): string {
   const modelId = options?.model || runner.model
-  const modelPart = modelPartFor(modelId, runner.cli, catalog)
+  // F725: a provider runner's model is a Claude API id, from the catalog the Hub checks it
+  // against (`RunnerResponse._flag_unrecognised_model`), not from its CLI's own.
+  const modelPart = runner.provider_config
+    ? providerModelPart(modelId, catalog)
+    : modelPartFor(modelId, runner.cli, catalog)
   const suffix = ` — ${modelPart}`
   const base = runner.name.endsWith(suffix) ? runner.name : `${runner.name}${suffix}`
   return `${base} (${runner.cli})`

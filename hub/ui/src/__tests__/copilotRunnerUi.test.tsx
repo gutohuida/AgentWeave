@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { AgentSummary } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
@@ -59,5 +59,27 @@ describe('Copilot in the UI', () => {
       />,
     )
     expect(screen.queryByTitle(/^Wrote to/)).not.toBeInTheDocument()
+  })
+
+  // F698: a Copilot row's input is `{title, rawInput, locations}`, so the row printed the first
+  // line of the whole object -- `Edit {`, `Shell {` -- instead of the path or the command.
+  it.each([
+    ['edit', { title: 'Edit .mcp.json', rawInput: { path: '.mcp.json', new_str: 'x' }, locations: [] }, '.mcp.json'],
+    ['edit', { title: 'Edit it', rawInput: {}, locations: [{ path: 'C:/work/src/app.py' }] }, 'C:/work/src/app.py'],
+    ['shell', { title: 'Run tests', rawInput: { command: 'pytest -q', description: 'tests' }, locations: [] }, 'pytest -q'],
+    ['shell', { title: 'Look around', rawInput: null, locations: [] }, 'Look around'],
+  ])('names a Copilot %s row by its subject, not by its JSON', (tool, input, subject) => {
+    const { container } = render(
+      <AgentTimeline
+        agent={agent}
+        entries={[toolUse(tool, input)]}
+        roster={[agent]}
+        runs={{}}
+        isRunning={false}
+      />,
+    )
+    fireEvent.click(screen.getByText('Work · 1 step'))
+    expect(screen.getAllByText(subject).length).toBeGreaterThan(0)
+    expect(container.textContent).not.toContain('{')
   })
 })
