@@ -88,24 +88,42 @@ def test_a_released_branch_resumed_also_catches_up(repo):
     assert (again / "b.txt").exists()
 
 
-def test_a_conflicting_prerequisite_refuses_and_changes_nothing(repo):
-    """1.3 (D2) and 1.9 (D5): refused naming the prerequisite, the commit, the checkout and the
-    command; the branch tip and the files are byte-identical."""
+def test_a_conflicting_prerequisite_is_left_for_the_author_and_changes_nothing(repo, monkeypatch):
+    """1.3 (D2), as F695 changed it: the conflicting merge is abandoned and the checkout handed over
+    -- not refused -- with the branch tip and files byte-identical; the turn is told what to merge
+    (the note names the prerequisite, the full commit and the conflicting path)."""
     checkout = _b_started_before_a(repo, b_file="f.txt", b_body="b rewrote line one\n")
     a_commit = _commit_on_new_branch(repo, "agentweave/task/" + A, "f.txt", "a rewrote it too\n")
     before = _state(checkout)
 
-    with pytest.raises(IsolationUnavailableError) as refused:
-        ensure_task_worktree(repo, B, "main", (), approved=((A, a_commit),))
+    monkeypatch.setattr(worktrees, "ensure_task_worktree", ensure_task_worktree)
+    resolved = worktrees.resolve_turn_workspace(
+        repo, "builder", {}, task_id=B, base="main", approved=((A, a_commit),)
+    )
 
-    message = str(refused.value)
-    assert A in message
-    assert a_commit[:12] in message
-    assert str(checkout) in message
-    assert f"merge --no-ff {a_commit}" in message
-    assert "conflicts with its base" not in message
+    assert resolved.path == checkout
     assert _state(checkout) == before
     assert not worktrees._is_mid_merge(checkout)
+    assert worktrees.unmerged_prerequisites(checkout, ((A, a_commit),)) == [
+        worktrees.UnmergedPrerequisite(A, a_commit, ("f.txt",))
+    ]
+    (note,) = resolved.notes
+    assert A in note and f"git merge --no-ff {a_commit}" in note and "f.txt" in note
+
+
+def test_a_clean_top_up_leaves_no_note(repo, monkeypatch):
+    """The control for the note: a prerequisite that merges cleanly is brought in, and the turn is
+    told nothing about it."""
+    checkout = _b_started_before_a(repo)
+    a_commit = _commit_on_new_branch(repo, "agentweave/task/" + A, "a.txt", "a's work\n")
+
+    monkeypatch.setattr(worktrees, "ensure_task_worktree", ensure_task_worktree)
+    resolved = worktrees.resolve_turn_workspace(
+        repo, "builder", {}, task_id=B, base="main", approved=((A, a_commit),)
+    )
+
+    assert resolved.path == checkout and resolved.notes == ()
+    assert _is_ancestor(checkout, a_commit)
 
 
 def test_uncommitted_changes_refuse_without_touching_them(repo):

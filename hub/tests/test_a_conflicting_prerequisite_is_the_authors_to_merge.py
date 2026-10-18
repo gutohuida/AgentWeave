@@ -46,10 +46,6 @@ def _commit_in(checkout, name, body):
     return git(checkout, "rev-parse", "HEAD").stdout.strip()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="F695: a conflicting prerequisite refuses the author's turn instead of handing it the merge",
-)
 @pytest.mark.asyncio
 async def test_the_author_gets_its_turn_with_the_merge_and_approval_waits_for_it(
     app, auth_headers, bind_runner, tmp_path, monkeypatch

@@ -615,8 +615,15 @@ def _catch_up_prerequisites(
     - nothing missing -> nothing happens (one `merge-base` per approved commit, none when there are
       none);
     - uncommitted changes with something to merge -> refused, untouched;
-    - a conflict, or a merge git does not finish in time -> `merge --abort`, refused, the branch tip
-      and files as before.
+    - a merge git does not finish in time -> `merge --abort`, refused, the branch tip and files as
+      before;
+    - a conflict -> `merge --abort`, the branch tip and files as before, and **not** refused (F695).
+      Reconciling the two pieces of work is the author's job, and refusing the turn left the author
+      no turn to do it in -- only the operator, in a terminal. The checkout is handed over clean and
+      the turn's prompt carries the merge to do (`unmerged_prerequisites`, read by
+      `resolve_turn_workspace`); approval waits until the branch contains the commit
+      (`requirement_gate`). Clean rather than mid-merge: a mid-merge checkout is the state
+      `ensure_task_worktree` refuses, so an author that did not finish would lock the task.
 
     Every refusal names the prerequisite task, its commit, this checkout and the command that merges
     it, because the turn is refused until somebody does (D5); the trigger's task-checkout refusal
@@ -672,14 +679,86 @@ def _catch_up_prerequisites(
                 f"abandoned and nothing was changed. Retry it by hand with `{command}`."
             ) from exc
         if merged.returncode != 0:
+            # F695: abandoned, not refused. What the author is told is derived again from the
+            # checkout (`unmerged_prerequisites`), so nothing has to be carried out of here.
             with contextlib.suppress(OSError, subprocess.SubprocessError):
                 _run_git(worktree, "merge", "--abort", check=False)
-            raise IsolationUnavailableError(
-                f"the approved work of {prerequisite_id} (commit {sha[:12]}) conflicts with work "
-                f"already on {task_id}'s branch, so it could not be merged into the checkout at "
-                f"{worktree}; nothing was changed. Reconcile it there with `{command}`; this "
-                "task's turns are refused until it is in."
+            logger.info(
+                "approved work of %s (commit %s) conflicts with %s's branch; left for its author",
+                prerequisite_id,
+                sha[:12],
+                task_id,
             )
+
+
+@dataclass(frozen=True)
+class UnmergedPrerequisite:
+    """An approved prerequisite's commit that a task's branch does not contain (F695)."""
+
+    prerequisite_id: str
+    commit_sha: str
+    #: The paths `git merge-tree` says conflict; empty when the merge would now be clean.
+    paths: Tuple[str, ...] = ()
+
+
+def unmerged_prerequisites(
+    checkout: Path, approved: Sequence[Tuple[str, str]], ref: str = "HEAD"
+) -> List[UnmergedPrerequisite]:
+    """The `approved` `(prerequisite, commit)` pairs whose commit *ref* lacks (F695).
+
+    *ref* is the checkout's `HEAD` when a turn is told, and the task's branch when approval asks
+    (`requirement_gate`): one implementation of the question, so the prompt and the gate cannot
+    disagree. Read from the repository rather than remembered from `_catch_up_prerequisites`, so
+    the answer is what is true when it is asked. A commit the repository does not have is left out:
+    the catch-up refuses the turn over it with its own remedy, and approval cannot be held on work
+    nobody can merge. One `merge-base` per approved commit, and a `merge-tree` only for a missing one.
+    """
+    found: List[UnmergedPrerequisite] = []
+    for prerequisite_id, sha in approved:
+        known = _run_git(
+            checkout, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}", check=False
+        )
+        if known.returncode != 0:
+            continue
+        contained = _run_git(checkout, "merge-base", "--is-ancestor", sha, ref, check=False)
+        if contained.returncode == 0:
+            continue
+        paths = tuple(_merge_tree_conflicts(checkout, ref, sha))
+        found.append(UnmergedPrerequisite(prerequisite_id, sha, paths))
+    return found
+
+
+def prerequisite_merge_note(task_id: str, pending: Sequence[UnmergedPrerequisite]) -> str:
+    """The sentence a turn's prompt carries for *pending* (F695): what to merge, and that it is
+    this turn's work before anything else, since approval waits for it."""
+    pieces = []
+    for entry in pending:
+        piece = (
+            f"`git merge --no-ff {entry.commit_sha}` (the approved work of {entry.prerequisite_id}"
+        )
+        if entry.paths:
+            piece += ", conflicting in " + ", ".join(entry.paths[:10])
+        pieces.append(piece + ")")
+    return (
+        f"[AgentWeave] Approved work that {task_id} depends on is not on this task's branch yet, "
+        "because merging it conflicts with work already here; it was left for you, and this "
+        "checkout is clean. Before anything else this turn, run "
+        + "; then ".join(pieces)
+        + " in this checkout, resolve the conflicts, and commit the merge. This task cannot be "
+        "approved until that work is on its branch."
+    )
+
+
+@dataclass(frozen=True)
+class ResolvedWorkspace:
+    """Where a turn runs, and what its prompt has to say about that checkout (F695).
+
+    `notes` are complete sentences the prompt builder adds to the turn's notices. Provisioning is
+    the only party that knows them, and returning them is what keeps them out of a global.
+    """
+
+    path: Path
+    notes: Tuple[str, ...] = ()
 
 
 def catch_up_agent_worktree(repo_root: Path, worktree: Path, base: str) -> Optional[str]:
@@ -1092,8 +1171,9 @@ def resolve_turn_workspace(
     prerequisites: Sequence[str] = (),
     approved: Sequence[Tuple[str, str]] = (),
     catch_up_to: Optional[str] = None,
-) -> Path:
-    """Return the directory a spawned process should use as its cwd, for *this turn* (design D3).
+) -> ResolvedWorkspace:
+    """Return the directory a spawned process should use as its cwd, for *this turn* (design D3),
+    with the notes its prompt carries about that checkout (`ResolvedWorkspace`, F695).
 
     *catch_up_to* (F607): on the agent arm, the integration base the agent's own worktree is
     brought up to first (`catch_up_agent_worktree`). Ignored for a task checkout, a read-only
@@ -1130,14 +1210,18 @@ def resolve_turn_workspace(
             left_behind = catch_up_agent_worktree(repo_root, workspace, catch_up_to)
             if left_behind is not None:
                 logger.info("%s's worktree was not brought up to date: %s", agent, left_behind)
-        return workspace
+        return ResolvedWorkspace(workspace)
     if base is None:
         raise ValueError(f"a task workspace for {task_id} needs a base to be cut from")
     # `resolve_agent_workspace` seeds these on the path above, and states why it does it there
     # rather than only at registration. The task path is the same funnel and needs the same
     # seeding, before there is anything to ignore.
     seed_repo_excludes(repo_root)
-    return ensure_task_worktree(repo_root, task_id, base, prerequisites, approved)
+    path = ensure_task_worktree(repo_root, task_id, base, prerequisites, approved)
+    # F695: an approved prerequisite whose merge conflicted was left for the author, who is told.
+    pending = unmerged_prerequisites(path, approved) if approved else []
+    notes = (prerequisite_merge_note(task_id, pending),) if pending else ()
+    return ResolvedWorkspace(path, notes)
 
 
 def turn_branch_name(

@@ -566,7 +566,9 @@ def test_turn_branch_name_agrees_with_the_branch_the_resolver_provisions(repo, r
     base = _git(repo, "rev-parse", "HEAD").stdout.strip()
     config = {}
 
-    workspace = worktrees.resolve_turn_workspace(repo, "builder", config, task_id=TASK, base=base)
+    workspace = worktrees.resolve_turn_workspace(
+        repo, "builder", config, task_id=TASK, base=base
+    ).path
     branch = worktrees.turn_branch_name(repo, "builder", config, task_id=TASK)
 
     assert branch == worktrees.task_branch_name(TASK)
@@ -576,7 +578,7 @@ def test_turn_branch_name_agrees_with_the_branch_the_resolver_provisions(repo, r
 def test_turn_branch_name_answers_the_agent_branch_for_an_unbound_turn(repo, real_provisioning):
     config = {}
 
-    workspace = worktrees.resolve_turn_workspace(repo, "builder", config, task_id=None)
+    workspace = worktrees.resolve_turn_workspace(repo, "builder", config, task_id=None).path
     branch = worktrees.turn_branch_name(repo, "builder", config, task_id=None)
 
     assert branch == worktrees.branch_name("builder")
