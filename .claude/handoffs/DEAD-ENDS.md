@@ -2489,3 +2489,9 @@ disappears is indistinguishable from one that was forgotten.
 - **`capture_goldens.py` is still stale** (see 2026-10-17); stream-event goldens were updated in place by a script that refuses any difference except the new key. Do the same rather than fixing the capture script mid-change.
 - **A Python `read_text`/`write_text` edit on Windows rewrites LF files as CRLF**; with `core.autocrlf=true` git normalises it (warning only, diff stays small). For exact multi-line edits read bytes, normalise to `\n`, and write back with the file's own newline.
 - **A heredoc whose Python body contains `'''` breaks the Bash tool's quoting** ("unexpected EOF while looking for matching `'`"); write the script to a scratch file and run it instead.
+
+## 2026-10-18 -- parallel worktree agents: three traps
+
+- **Removing a `node_modules` junction with `rm -rf` (or `Remove-Item -Recurse`) deletes the target's contents.** A fix agent's cleanup emptied the main checkout's `hub/ui/node_modules`. Remove a junction with `cmd //c rmdir <path>` (link only). Recovery: `cd hub/ui && npm ci` (about a minute).
+- **`py -3.11 -c "import hub"` inside a worktree imports the MAIN checkout's `hub`.** pytest run from the worktree root picks up the worktree's code. When it matters, set `PYTHONPATH=<worktree>/hub;<worktree>/src`.
+- **`.claude/skills/e2e-loop/e2e.py hub-up` from a worktree serves the main checkout's code**, because `REPO` defaults to the main checkout (line ~61). Set `AW_REPO_ROOT=<worktree>` first.
