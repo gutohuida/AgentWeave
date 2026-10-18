@@ -242,6 +242,37 @@ async def test_a_failed_spawn_leaves_the_truncated_title(
     assert (await _title(conversation_id))[0] == "Investigate the flaky checkout test"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "spawn, reason",
+    [
+        (_Spawn("nonzero_exit", exit_code=1, error="exited 1: auth expired"), "auth expired"),
+        (_Spawn("ok", stdout="not json at all"), "no json envelope"),
+    ],
+)
+async def test_a_failed_firing_says_why_in_the_managers_activity(
+    app, auth_headers, bind_runner, monkeypatch, spawn, reason
+) -> None:
+    """F740: the vault jobs record their reason; a failed title firing said only "failed"."""
+    await _sync_agent(app, auth_headers)
+    conversation_id = await _conversation(app, auth_headers, bind_runner)
+    await _set_mode("generate")
+    monkeypatch.setattr(conversation_titles, "_run_titler", lambda cmd, cwd, env=None: spawn)
+
+    await conversation_titles.generate_conversation_title(
+        project_id="proj-test", conversation_id=conversation_id
+    )
+
+    listed = await app.get(
+        "/api/v1/projects/proj-test/manager/activity?job=conversation-titles",
+        headers=auth_headers,
+    )
+    assert listed.status_code == 200, listed.text
+    [firing] = listed.json()["firings"]
+    assert firing["outcome"] == "failed"
+    assert firing["detail"] and reason in firing["detail"].lower(), firing
+
+
 def test_an_unsupported_cli_is_unreachable_today_and_still_guarded() -> None:
     """`ck_runners_cli` and the runner API both refuse anything but claude/codex, so the
     titler's own check cannot fire from a stored row. It is kept for the day a third CLI is

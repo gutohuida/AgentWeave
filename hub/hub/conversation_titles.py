@@ -365,8 +365,10 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
         )
 
     if not title:
+        # F740: a failure says why (the spawn's or the envelope's error), as a vault job's does.
+        reason = (result.error or result.outcome) if failed else None
         async with async_session_factory() as db:
-            await _fired(db, "failed" if failed else "empty", None)
+            await _fired(db, "failed" if failed else "empty", reason)
         return None
 
     async with async_session_factory() as db:
