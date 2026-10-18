@@ -195,6 +195,8 @@ async def completion_attribution(session: AsyncSession, task_id: str) -> Complet
         select(TaskTransition.actor_kind, TaskTransition.actor_agent)
         .where(TaskTransition.task_id == task_id)
         .where(TaskTransition.to_status == "completed")
+        # SPIKE: a stage advance (`under_review -> completed`) is not authorship.
+        .where(TaskTransition.from_status != "under_review")
         # By `sequence`, not `created_at`: transitions staged in one flush share a timestamp, and
         # "most recent completion" must mean the last one that happened, not an arbitrary pick
         # among ties. This matters after a revision cycle, where an earlier completion by another
@@ -729,7 +731,25 @@ async def apply_transition(
     if not is_allowed(from_status, to_status, actor.kind):
         raise IllegalTransitionError(refusal_detail(from_status, to_status, actor.kind))
 
-    await _guard_author_is_not_reviewer(session, task, to_status, actor)
+    # SPIKE: `approved` on a stage that is not the last passes the task to the next stage. No
+    # gate, no evidence decision, no integration: those belong to the final approval. The edge it
+    # records, `under_review -> completed`, is not in TRANSITIONS; the stage list licenses it here.
+    stage_advanced = False
+    if to_status == "approved" and from_status == "under_review" and not actor.is_operator:
+        from .flow_stages import stages_of
+
+        stages = await stages_of(session, task)
+        if stages and (task.stage_index or 0) + 1 < len(stages):
+            await _guard_author_is_not_reviewer(session, task, to_status, actor)
+            task.stage_index = (task.stage_index or 0) + 1
+            to_status = "completed"
+            stage_advanced = True
+    if to_status == "revision_needed":
+        # SPIKE: sent back from any stage, the task restarts at the first stage.
+        task.stage_index = 0
+
+    if not stage_advanced:
+        await _guard_author_is_not_reviewer(session, task, to_status, actor)
 
     # Beside the author/reviewer guard for the same reason `_guard_run_holds_the_task` is: it asks
     # whether this actor may make this move, not whether the work is ready. It runs on the other
@@ -740,7 +760,8 @@ async def apply_transition(
     # Who is doing the work, before anything about whether the work may proceed (F27). Beside the
     # author/reviewer guard because it answers the same kind of question — is this actor entitled to
     # this move — rather than the gates below, which ask about the state of the work.
-    await _guard_run_holds_the_task(session, task, to_status, actor)
+    if not stage_advanced:
+        await _guard_run_holds_the_task(session, task, to_status, actor)
 
     # The dependency gate, on the edges that *begin* work: `pending -> in_progress` and
     # `assigned -> in_progress`. Not `-> assigned` and not `-> rejected`: a whole wave can be routed

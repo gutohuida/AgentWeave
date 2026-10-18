@@ -195,6 +195,13 @@ async def _declared_reviewer_name(
         if reviewer:
             return reviewer, "task"
         delivery = payload.get("delivery")
+        # SPIKE: a declared stage list names who works the task's current stage.
+        from .flow_stages import current_stage
+
+        stage = await current_stage(session, task)
+        if stage is not None:
+            agent = _name(stage.get("agent"))
+            return (agent, "stage") if agent else nobody
         # tester-amends D4: a named tester tests every task that names no reviewer of its own,
         # ahead of the document's default reviewer.
         tester = _name(delivery.get("tester")) if isinstance(delivery, dict) else None
@@ -224,6 +231,19 @@ async def test_duty_lines(session: AsyncSession, task: Task) -> List[str]:
     except (ProjectWorkspaceError, SpecPathError, OSError):
         return []
     delivery = payload.get("delivery") if isinstance(payload, dict) else None
+    # SPIKE: a declared stage carries its own duty in place of the tester's.
+    from .flow_stages import current_stage
+
+    stage = await current_stage(session, task)
+    if stage is not None:
+        lines = [
+            f"**This review is stage {stage['index'] + 1} of {stage['count']}: "
+            f"`{stage['key']}`.** Approving it passes the task to the next stage"
+            + (" and lands it." if stage["index"] + 1 == stage["count"] else ", not to main.")
+        ]
+        if stage.get("duty"):
+            lines.append(str(stage["duty"]))
+        return lines
     if not isinstance(delivery, dict) or delivery.get("mode") != "flow" or not testing_on(payload):
         return []
     path = document.path

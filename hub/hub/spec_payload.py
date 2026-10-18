@@ -193,6 +193,14 @@ class Evidence(_Part):
     )
 
 
+class Stage(_Part):
+    """SPIKE: one stage after the build. A review-shaped turn by `agent`, briefed with `duty`."""
+
+    key: str = Field(max_length=32, description="The stage's name, e.g. 'security' or 'test'.")
+    agent: Optional[str] = Field(default=None, max_length=32, description="Who works this stage, by name. Empty: any free non-author agent.")
+    duty: Optional[str] = Field(default=None, description="What this stage checks, as Markdown briefing text.")
+
+
 class Delivery(_Part):
     """How a change-spec document's tasks get worked, once approved.
 
@@ -218,6 +226,10 @@ class Delivery(_Part):
     tester: Optional[Literal[False] | Annotated[str, StringConstraints(max_length=32)]] = Field(
         default=None,
         description="Who tests each finished task by driving the running product, by name; tests every task whose own `reviewer` is empty, ahead of `reviewer`. Empty: testing is on and the reviewer (or any free agent) tests. false: no testing, review only.",
+    )
+    stages: Optional[List[Stage]] = Field(
+        default=None,
+        description="SPIKE: the stages after the build, in order. Absent: today's review/test slot. []: dev only, the flow lands each finished task itself.",
     )
     stop_when_queue_empties: bool = Field(
         default=False,

@@ -2138,6 +2138,25 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             awaiting_landing.append(task.id)
             continue
 
+        # SPIKE: a dev-only flow (`delivery.stages: []`) lands finished work itself. There is no
+        # Hub actor, so the landing is recorded as the operator's -- the same composition as the
+        # Land button (`api/v1/tasks.py` land_task). The gate still runs at `approved`.
+        if not wedged_review:
+            from .flow_stages import stages_of
+            from .task_transition_service import TransitionRefusedError
+
+            if await stages_of(session, task) == []:
+                try:
+                    async with session.begin_nested():
+                        task.assignee = None
+                        await apply_transition(session, task, "under_review", operator())
+                        await apply_transition(session, task, "approved", operator())
+                except TransitionRefusedError as exc:
+                    unstaffed.append((task.id, f"dev-only flow could not land it: {exc}"))
+                else:
+                    in_flight.append((task.id, "landed (dev only)"))
+                continue
+
         # Finished work. **The ladder decides, always** — not "the job's agent if it happens to be
         # eligible". A declared reviewer that resolves outranks the job's own agent, or the
         # declaration would be advisory; and D4 is the one statement of who reviews.

@@ -740,6 +740,8 @@ class Task(Base):
     # downgrade over a schema built from this model. Validated where it is written instead.
     spec_document_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     spec_task_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # SPIKE: position in the document's `delivery.stages` (flow_stages.py).
+    stage_index: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     # Which loop's queue this task belongs to, if any. Same "deliberately not a ForeignKey" reasoning
     # as `spec_document_id` above: a table-level CHECK naming a column makes that column undroppable
     # in SQLite, and this column sits on an already-live table, so an `ADD COLUMN` migration (`0075`)
