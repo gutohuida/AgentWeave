@@ -1411,7 +1411,9 @@ async def commit_for_task_review(session: AsyncSession, task_id: str) -> ReviewT
         else:
             reason = (
                 f"task {task_id} has no recorded evidence, so there is no commit to review. "
-                "Evidence naming a commit is what a review turn is given."
+                "Evidence naming a commit is what a review turn is given. Its author records it "
+                "with record_evidence from the task's own checkout, so the evidence names the "
+                "task's commit, and the review can then be requested again."
             )
         return ReviewTarget(refusal=reason)
 

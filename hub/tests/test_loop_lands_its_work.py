@@ -44,6 +44,7 @@ from .test_task_integration import (
     approve,
     commit_on_branch,
     commits_on,
+    drive_to,
     files_on,
     git,
     integrations,
@@ -311,6 +312,21 @@ async def test_an_ordinary_task_with_no_requirements_lands_its_branch_tip(
     assert "ordinary.py" in files_on(tmp_path, "main")
 
 
+async def assert_refused_for_the_tip_alone(app, auth_headers, task, root, tip, demonstrated=None):
+    """F681 (2026-10-18): a later commit on the task's branch that nothing approval merges holds
+    refuses approval, naming that commit -- and only that one. What approval *would* merge is still
+    the commit the evidence names (the guard each caller exists for), read from `merge_targets`."""
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    unlanded = refused.json()["detail"]["unlanded"]
+    assert [entry["commits"] for entry in unlanded] == [[tip]], unlanded
+    assert await integrations(app, auth_headers, task) == []
+    assert tip not in commits_on(root, "main")
+    async with async_session_factory() as session:
+        targets = await task_integration.merge_targets(session, await session.get(Task, task), root)
+    assert [target.commit_sha for target in targets] == ([demonstrated] if demonstrated else [])
+
+
 @pytest.mark.asyncio
 async def test_a_flow_task_merges_the_commit_its_evidence_names(
     app, auth_headers, builder, tmp_path
@@ -343,7 +359,11 @@ async def test_a_flow_task_merges_the_commit_its_evidence_names(
     git(tmp_path, "checkout", "-q", "main")
     assert tip != demonstrated
 
-    approved = await approve(app, auth_headers, task)
+    # F681: the undemonstrated tip refuses approval rather than being left behind silently.
+    await assert_refused_for_the_tip_alone(app, auth_headers, task, tmp_path, tip, demonstrated)
+    git(tmp_path, "branch", "-q", "-f", worktrees.task_branch_name(task), "main")
+
+    approved = await drive_to(app, auth_headers, task, "approved")
     assert approved.status_code == 200, approved.text
 
     recorded = await integrations(app, auth_headers, task)
@@ -386,7 +406,11 @@ async def test_a_documentless_loop_task_with_a_requirement_link_merges_its_evide
     git(tmp_path, "checkout", "-q", "main")
     assert tip != demonstrated
 
-    approved = await approve(app, auth_headers, task)
+    # F681: the undemonstrated tip refuses approval rather than being left behind silently.
+    await assert_refused_for_the_tip_alone(app, auth_headers, task, tmp_path, tip, demonstrated)
+    git(tmp_path, "branch", "-q", "-f", worktrees.task_branch_name(task), "main")
+
+    approved = await drive_to(app, auth_headers, task, "approved")
     assert approved.status_code == 200, approved.text
 
     recorded = await integrations(app, auth_headers, task)
@@ -429,7 +453,13 @@ async def test_a_loop_that_declares_it_needs_evidence_merges_nothing_without_any
     work = commit_on_task_branch(tmp_path, task, "feature.py", "print(1)\n")
     git(tmp_path, "checkout", "-q", "main")
 
-    approved = await approve(app, auth_headers, task)
+    # F681 (2026-10-18): this used to approve and skip with NOTHING_TO_MERGE, leaving the branch's
+    # work behind; the gate now refuses, naming it. Evidence still governs: nothing would merge.
+    await assert_refused_for_the_tip_alone(app, auth_headers, task, tmp_path, work)
+
+    # A branch holding nothing new approves as before, and the skip says why.
+    git(tmp_path, "branch", "-q", "-f", worktrees.task_branch_name(task), "main")
+    approved = await drive_to(app, auth_headers, task, "approved")
     assert approved.status_code == 200, approved.text
 
     recorded = await integrations(app, auth_headers, task)
