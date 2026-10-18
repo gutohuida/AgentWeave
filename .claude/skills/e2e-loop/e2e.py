@@ -610,7 +610,10 @@ def cmd_clean(project):
             print(f"  disabled manager job {j['key']}: HTTP {s2}")
     s, res = request("DELETE", f"/projects/{project}")
     print(f"  DELETE project: HTTP {s} {res if s >= 300 else ''}")
-    if directory and pathlib.Path(directory).resolve().is_relative_to(PROJECTS.resolve()):
+    # Strictly beneath PROJECTS: a project opened on ~/Documents itself (F685) must not take it.
+    if directory and pathlib.Path(directory).resolve() in (PROJECTS.resolve(), *PROJECTS.resolve().parents):
+        print(f"  left {directory} in place: it is {PROJECTS} or above it")
+    elif directory and pathlib.Path(directory).resolve().is_relative_to(PROJECTS.resolve()):
         _rmtree(directory)
     elif directory:
         print(f"  left {directory} in place: not under {PROJECTS}")
@@ -618,7 +621,7 @@ def cmd_clean(project):
     # inside the Hub's own vaults directory, never a custom location the drive chose.
     vaults = HOME / ".agentweave" / "hub" / "vaults"
     if private and pathlib.Path(private).exists():
-        if pathlib.Path(private).resolve().is_relative_to(vaults.resolve()):
+        if pathlib.Path(private).resolve().is_relative_to(vaults.resolve()) and pathlib.Path(private).resolve() != vaults.resolve():
             print(f"  F592: the Hub left {private} behind; removing it")
             _rmtree(private)
         else:
