@@ -84,7 +84,10 @@ async def test_transition_refuses_any_to_phase_for_a_capability_document(
             json={"reason": ""},
             headers=auth_headers,
         )
-        assert response.status_code == 409, f"to={to_phase} should be refused"
+        # `current` is no transition target at all: a malformed request (422, F730), not a
+        # conflict with the document's state.
+        expected_status = 422 if to_phase == "current" else 409
+        assert response.status_code == expected_status, f"to={to_phase} should be refused"
         code = response.json()["detail"]["code"]
         # `archived` is retiring it (F536), refused here only for want of a reason.
         expected = {"current": "unknown_phase", "archived": "retire_needs_reason"}.get(

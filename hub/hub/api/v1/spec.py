@@ -1562,14 +1562,31 @@ async def record_evidence(
     return view
 
 
+#: The review states evidence can be listed by (`requirement_evidence`).
+_REVIEW_STATES = (
+    requirement_evidence.AWAITING,
+    requirement_evidence.ACCEPTED,
+    requirement_evidence.REJECTED,
+)
+
+
 @router.get("/spec/evidence")
 async def list_evidence(
     identifier: Optional[str] = Query(None),
     document: Optional[str] = Query(None),
+    review_state: Optional[str] = Query(None),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    if review_state is not None and review_state not in _REVIEW_STATES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": f"review_state must be one of {', '.join(_REVIEW_STATES)}",
+                "code": "unknown_review_state",
+            },
+        )
     if identifier:
         requirement = await _requirement(session, project_id, identifier, document or "")
         rows = await requirement_evidence.for_requirement(session, requirement.id)
@@ -1589,6 +1606,9 @@ async def list_evidence(
         rows = list(
             (await session.execute(query.order_by(RequirementEvidence.produced_at))).scalars().all()
         )
+    if review_state is not None:
+        # F730: the agent route filtered by it and this one ignored it, answering every piece.
+        rows = [row for row in rows if row.review_state == review_state]
     return {"evidence": await _evidence_views(session, project_id, rows)}
 
 
@@ -2916,6 +2936,28 @@ async def set_phase(
             ),
         )
 
+    # F730: a phase that does not exist is a malformed request (422), as an unknown rigor is (F657),
+    # not a conflict with the document's state (409).
+    phases = (
+        spec_lifecycle.EXPLORING,
+        spec_lifecycle.PROPOSED,
+        spec_lifecycle.APPROVED,
+        spec_lifecycle.ARCHIVED,
+    )
+    if to not in phases:
+        what = (
+            "current is reached only by creating a capability document, never moved to"
+            if to == spec_lifecycle.CURRENT
+            else f"unknown phase {to!r}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": f"{what}: to must be one of {', '.join(phases)}",
+                "code": "unknown_phase",
+            },
+        )
+
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     document = await _require_document(session, project_id, path)
@@ -3379,6 +3421,7 @@ async def merge_document(
             "proposals": result.proposals,
             "unchanged": result.unchanged,
             "already_pending": result.already_pending,
+            "applied": False,
             "merged": 0,
         }
     else:
@@ -3386,6 +3429,9 @@ async def merge_document(
             **await _project_document_view(session, project_id, document),
             "blocking": result.blocking,
             "divergence": result.divergence,
+            # F730: whether the payload was written. `merged` counts the changes folded, so an
+            # operator edit naming none answered `merged: 0` and read as nothing having happened.
+            "applied": True,
             "merged": len(sources),
         }
 

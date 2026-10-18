@@ -534,12 +534,18 @@ def _write_index_text(workspace: ProjectWorkspace, text: str) -> Path:
     return resolved
 
 
-def repoint_index(workspace: ProjectWorkspace, swap: Callable[[str], str]) -> bool:
+def repoint_index(
+    workspace: ProjectWorkspace,
+    swap: Callable[[str], str],
+    *,
+    titles: Optional[Dict[str, str]] = None,
+) -> bool:
     """Rewrite the paths `spec/index.json` names (home, each path and parent) through `swap`.
 
-    The conversion's index step (FR-7). Read as JSON rather than through `load_manifest`, which
-    refuses the `.html` paths a legacy index holds; written in `dump_manifest`'s layout and
-    atomically. Returns whether anything changed; an absent or unparsable index is left alone.
+    The conversion's index step (FR-7), and a rename's (F730). Read as JSON rather than through
+    `load_manifest`, which refuses the `.html` paths a legacy index holds; written in
+    `dump_manifest`'s layout and atomically. `titles` maps a (swapped) path to the title its entry
+    now records. Returns whether anything changed; an absent or unparsable index is left alone.
     """
     try:
         resolved = workspace.resolve_relative(INDEX_RELATIVE)
@@ -560,6 +566,8 @@ def repoint_index(workspace: ProjectWorkspace, swap: Callable[[str], str]) -> bo
         if isinstance(entry, dict):
             entry["path"] = _swapped(entry.get("path"))
             entry["parent"] = _swapped(entry.get("parent"))
+            if titles and entry["path"] in titles:
+                entry["title"] = titles[entry["path"]]
     if json.dumps(raw) == before:
         return False
     _write_index_text(workspace, json.dumps(raw, indent=2, ensure_ascii=False) + "\n")

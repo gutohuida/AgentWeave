@@ -1180,6 +1180,18 @@ async def rename_document(
     document.title = subject.strip() or document.title
     await _repoint_pending_input(session, document.project_id, previous_path, new_path)
     spec_documents.move_document(workspace, previous_path, new_path)
+    # F730: the index follows the move. Without it the renamed document read as missing at its old
+    # path and unfiled (no title, no Place under) at its new one until somebody rebuilt the index.
+    # After the move, like it, because a file move does not roll back; a failed index write leaves
+    # what a rebuild repairs, never a refused rename of a file that already moved.
+    try:
+        spec_documents.repoint_index(
+            workspace,
+            lambda path: new_path if path == previous_path else path,
+            titles={new_path: document.title},
+        )
+    except OSError:
+        logger.warning("the index could not follow the rename of %s", previous_path, exc_info=True)
     await spec_lifecycle.record_event(
         session,
         document,
@@ -1536,7 +1548,9 @@ def _steps_skipped(
             "step",
             f"the document is at step {document.step!r}; this project's journey ({sized}) goes "
             f"on to {', '.join(ahead)}, which it never reached. If it already holds what those "
-            f"steps produce, record that: POST /project/documents/journey?path={document.path} "
+            # The full route (F730): without `/api/v1/projects/{id}` it named nothing callable.
+            f"steps produce, record that: POST /api/v1/projects/{document.project_id}/project/"
+            f"documents/journey?path={document.path} "
             f'{{"step": "{last}"}} (the step control on its phase bar)',
         )
     ]

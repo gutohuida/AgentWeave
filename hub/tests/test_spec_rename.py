@@ -115,6 +115,30 @@ async def test_the_file_moves_and_the_old_directory_does_not_linger(
 
 
 @pytest.mark.asyncio
+async def test_the_index_follows_the_rename(app, auth_headers, run_headers, tmp_path):
+    """F730: the index kept the old path, so the renamed document read as missing there and as
+    unfiled (no title, no Place under) at its new path until somebody rebuilt the index."""
+    await _create(app, auth_headers)
+    rebuilt = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
+    assert rebuilt.json()["index"]["written"]["home"] == PLACEHOLDER
+
+    assert (await _rename(app, run_headers)).status_code == 200
+
+    tree = (await app.get(f"{BASE}/specs", headers=auth_headers)).json()
+    [entry] = tree["specs"]
+    assert entry["path"] == NAMED
+    assert entry["state"] == "filed"
+    assert entry["title"] == SUBJECT
+    assert tree["home"] == NAMED
+    assert tree["missing"] == []
+    assert tree["manifest"]["state"] == "valid"
+    # Nothing about the move itself. (The file's payload title still reads what it was written
+    # with while the row and index carry the subject -- a separate, pre-existing gap a rebuild
+    # reports identically, so it is not asserted either way here.)
+    assert [d["code"] for d in tree["diagnostics"] if d.get("field") != "title"] == []
+
+
+@pytest.mark.asyncio
 async def test_the_renamed_document_is_the_one_that_is_listed(
     app, auth_headers, run_headers, tmp_path
 ):

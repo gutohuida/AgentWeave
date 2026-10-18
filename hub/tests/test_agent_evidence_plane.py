@@ -299,6 +299,12 @@ async def test_a_granted_agent_accepts_another_agents_evidence(
     )
     assert decided.status_code == 200, decided.text
     assert decided.json()["review_state"] == "accepted"
+    # F730: the agent's answer is the whole evidence view, as the operator's is (F657).
+    body = decided.json()
+    assert body["id"] == recorded["id"]
+    assert "footprint" in body
+    assert body["latest_review"]["decision"] == "accepted"
+    assert body["latest_review"]["reason"] == "reproduced the run myself"
 
 
 @pytest.mark.asyncio
