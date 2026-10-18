@@ -15,7 +15,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
-from ...checkpoint_cutover import CutoverRefusedError, cut_over
+from ...checkpoint_cutover import CutoverRefusedError, cut_over, handover_of
 from ...checkpoint_generation import generate_checkpoint, render_checkpoint
 from ...checkpoints import get_checkpoint_by_id
 from ...conversations import get_conversation_by_id
@@ -197,6 +197,21 @@ async def take_checkpoint(
     """
     project_id, _ = project
     conversation = await _conversation_or_404(session, project_id, conversation_id)
+
+    # F716: a checkpoint here could never be handed over -- `cut_over` refuses a conversation
+    # already handed over (design D6) -- so it is refused before the paid model call, as the
+    # automatic trigger already declines it.
+    prior = await handover_of(session, conversation_id)
+    if prior is not None:
+        handed_by, successor = prior
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Conversation {conversation_id} was already handed over to {successor} "
+                f"(checkpoint {handed_by}), so a checkpoint here could not be handed over again. "
+                "Continue in that conversation, and take its checkpoint when it needs one."
+            ),
+        )
 
     project_row = await session.get(Project, project_id)
     runner = (

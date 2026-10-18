@@ -1611,3 +1611,25 @@ async def test_a_reason_about_the_agent_is_still_reported_plainly(app, caplog):
         f"successor {successor.id} did not start immediately: agent is already running" == message
         for message in (record.getMessage() for record in caplog.records)
     )
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_now_on_a_conversation_already_handed_over_is_refused_unbilled(
+    app, auth_headers, monkeypatch
+):
+    """F716: the operator's Checkpoint now on a handed-over conversation made a paid checkpoint
+    that its own cutover then refused. It is refused before the model call, naming the successor."""
+    monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+    monkeypatch.setattr(subprocess, "run", _explode)
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        first_id, successor_id = await _handed_over_and_reopened(db, "conv-1")
+
+    response = await app.post(
+        f"/api/v1/projects/{PROJECT}/conversations/conv-1/checkpoint", headers=auth_headers
+    )
+
+    assert response.status_code == 409, response.text
+    assert successor_id in response.json()["detail"]
+    async with async_session_factory() as db:
+        assert [c.id for c in await _checkpoints_of(db, "conv-1")] == [first_id]
