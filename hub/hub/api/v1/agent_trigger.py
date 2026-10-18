@@ -121,6 +121,7 @@ from ...run_task_binding import (
     bind_run_to_task,
     checkout_held_sentence,
     decided_task_refusal,
+    held_task_refusal,
     rebind_conversation,
     resolve_bound_task,
     resolve_task_for_project,
@@ -2192,6 +2193,11 @@ async def trigger_agent(
         decided = decided_task_refusal(named_task)
         if decided is not None:
             raise HTTPException(status_code=409, detail=decided)
+        # Another agent's task, or finished work waiting on a review (F687): the binding this start
+        # makes skips the claim guard, so the same rule is asked of the start.
+        held = held_task_refusal(named_task, body.agent)
+        if held is not None:
+            raise HTTPException(status_code=409, detail=held)
         # The dependency gate, asked of the start rather than of the status move it implies
         # (F619): on the same edges `task_transition_service` gates, a run started here did the
         # whole task, every move was then refused, and its peer mail kept a chain of turns going.
