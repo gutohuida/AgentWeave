@@ -36240,7 +36240,7 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F681 (B) -- Land approves a task on evidence another, task-less run recorded at main's tip, then skips the merge: the task's own commit never reaches main while its requirement reads verified
 
-**Status:** open, needs operator decision 2026-10-18: refuse approval (recommended) or also merge the task branch tip when the task branch holds commits no merge target contains; see the 2026-10-18 fix report.
+**Status:** fixed db2ae99 2026-10-18 (Tier 0): approval (PATCH and Land) refuses with a new gate_unsatisfied category, unlanded, when the task's branch holds commits on neither main nor inside any merge target, naming them and asking for evidence recorded from the task's checkout (worded per for_operator); the review-dispatch "has no recorded evidence" 409 now names its remedy.
 
 **Found:** open 2026-10-18. Sweep group B (`:8032`). The builder recorded FR-1 evidence in a turn bound to no task (`ev-9493...`, footprint `agentweave/builder@efd83ab` = master's tip), then worked the task without recording evidence (commit `29d4830` on `agentweave/task/task-8735ec91be9e`). Dispatching a review was refused 409 "task ... has no recorded evidence, so there is no commit to review" (no remedy named; the app has no review control, F336). The operator accepted the evidence and Landed: 200, approved; `task_integrations` `skipped` "efd83abb1f37 is already in master; there was nothing to merge". README on master lacks the change; FR-1 reads verified. Rejecting `ev-9493...` afterwards left the task approved (task-less evidence reopens nothing). Defect; sibling of F622 (fixed only for tasks with no requirements). Seam: Requirements, evidence & coverage x Worktrees & integration. Tier guess: 1.
 
@@ -36258,7 +36258,7 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F684 (B) -- re-distilling the winning side of a resolved contradiction mints a new fact id, so the fact the resolution says "stands" is gone
 
-**Status:** open 2026-10-18, needs a Tier 1 spec change: FR-1 of a-redistilled-fact-keeps-its-id requires an equal quote, so matching a re-distilled fact by its line span alone needs that requirement amended first (recommended: a second pass matching leftover drafts on visibility + source/line spans, each earlier fact claimed once).
+**Status:** fixed f34c388 2026-10-18 (Tier 1, amends knowledge-vault distil-route / same-lines-same-id): after the exact citation match, a leftover re-distilled draft claims an unclaimed earlier fact with the same visibility and the same (source, line span) citations, each claimed once, so a re-quoted standing fact keeps its id and its resolution; acceptance test committed xfail first (9326a2e), drive on :8056 showed master re-minting and the build keeping the id.
 
 **Found:** open 2026-10-18. Sweep group D. First pass quoted "the public API rate limit is 100 ..."; the re-distil quoted "Decision: the public API rate limit is ..." on the same line 3. `citation_key` includes `loose_quote(quote)`, so `fct-fb32e8f38742` was deleted and `fct-d628e12bc1c8` created, unlinked from the decision. `ctr-ea180246ee9c` side reads `{"id":"fct-fb32e8f38742","claim":null,"missing":true}`; the Vault card "A fact no longer in the vault ... Resolved: one fact stands"; the spec warning "the fact that stands is fct-fb32e8f38742, which is no longer in the vault". The loser kept its id (quote matched). F587/F617 hold only while the model quotes identically. Defect. Seam: Knowledge vault (distil x contradictions x spec warnings). Tier guess: 1.
 
@@ -36276,7 +36276,7 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F687 (B) -- an operator trigger binds an agent to another agent's task, and that run then completes the task while it stays assigned to the other agent
 
-**Status:** fixed c978b9b 2026-10-18 (Tier 0): starting an agent on a task assigned to another agent is a 409 naming the holder and the remedy (outside completed/under_review, where the assignee is the reviewer; the under_review variant awaits an operator decision).
+**Status:** fixed c978b9b + 3e162d0 2026-10-18 (Tier 0): starting an agent on a task assigned to another agent is a 409 naming the holder; a task_id start on an under_review task is a 409 pointing at review_task_id, except for the task's author (recorded completer, else in_progress/completed edges or evidence recorders).
 
 **Found:** open 2026-10-18. Sweep groups A and C. `task-94234b3b55c8` (assignee `board`) + `POST /agent/trigger {"agent":"alpha","task_id":...}` -> 200; `task_transitions`: alpha moved it `pending->in_progress` (origin runtime) then `->completed` (origin actor), editing `calc`; the task ends completed with assignee `board`, which the board credits. `run_task_binding` keeps an existing assignee and the completion gate lets the bound run through; no warning at trigger. Group C saw the same with `task_id` on an under-review task (the reviewer ran in the author's checkout, which led to F693). The checklist says a run claims only an unassigned task or its own agent's. Defect or design gap (refuse with a sentence, or reassign visibly). Seam: Runs x Tasks. Tier guess: 0.
 
@@ -36306,7 +36306,7 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F692 (B) -- a decided piece of evidence has no control to reverse it, and a granted agent overturns a rejection silently
 
-**Status:** open, needs operator decision 2026-10-18: who may overturn a decided piece, and whether earlier-wording evidence may be accepted (recommend agents decide awaiting only; the operator overturns with a reason via a UI control; refuse accepting stale-digest evidence).
+**Status:** fixed bffb71a 2026-10-18 (Tier 1): agents decide only awaiting evidence (409 already_decided); the operator overturns a decided piece with a required reason via the Overturn control and POST .../spec/evidence/{id}/overturn; earlier-wording evidence is never accepted (409 evidence_stale); acceptance tests xfail-first at cb65db9.
 
 **Found:** open 2026-10-18. Sweep group B. `EvidencePieces.tsx` offers Accept/Reject only while `awaiting`; F672's "the operator rejecting an accepted piece of an approved task reopens it" works by API (`task-67fd...` approved -> revision_needed) with no screen. The granted tester called `decide_evidence(ev-da84..., accepted, "probe overturn")` on a piece its own review had rejected (an empty commit, stale digest): answer `{"id","review_state":"accepted"}`, no overturn note, no stale-digest refusal. Design gap. Seam: Requirements, evidence & coverage. Tier guess: 1.
 
@@ -36324,19 +36324,19 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F695 (B) -- a conflicting prerequisite refuses the author's turns, so only the operator, in a terminal, can resolve it
 
-**Status:** open, needs operator decision 2026-10-18 (Tier 1): give the author its turn with a merge instruction instead of refusing; needs a workspace-to-prompt note channel and a decision on clean vs mid-merge handover.
+**Status:** fixed 6d7ba49 + 0e1c0f5 2026-10-18 (Tier 1): a conflicting approved prerequisite is abandoned clean and the author's turn starts with a prompt note to run git merge --no-ff <sha> (naming the prerequisite task, commit and conflicting paths), via ResolvedWorkspace.notes from resolve_turn_workspace; the approval gate refuses (new unmerged_prerequisites category) naming the task and commit until the branch contains it; an unfinished conflicted merge is never auto-snapshotted and the next turn is told which paths are still conflicted; a dirty checkout is snapshotted before the catch-up instead of refused; acceptance test test_a_conflicting_prerequisite_is_the_authors_to_merge (xfail-first 9b4be5c).
 
 **Found:** open 2026-10-18. Sweep group C. Beta's turn refused: "approved work of task-31419f3604b8 ... conflicts with work already on task-436c2082fb8c's branch ... Reconcile it there with `git -C ... merge --no-ff ...`; this task's turns are refused until it is in." The gate's own sentence calls resolving it the author's work, but the author gets no turn to do it; the operator merged by hand, then Continue worked. A conflict with main (no prerequisite) was resolved by beta itself in its turn. Design gap in F158's remedy. Seam: Dependencies x Worktrees & integration. Tier guess: 1.
 
 ## F696 (C) -- "Workspace only" refuses ordinary read-only commands: sed/awk scripts read as paths, every `| while read` loop, `echo $PWD`
 
-**Status:** fixed d0a27d4 2026-10-18 (Tier 0), partly: sed/awk/cut/tr scripts and delimiters are no longer read as paths (a sed/awk script only when provably read-only), and a printing '| while read' loop passes F676; grep patterns (accepted cost 1.5a2/1.7c1) and bare $PWD (design D2) stay refused pending the operator's decision.
+**Status:** fixed d0a27d4 + 570e93d 2026-10-18 (Tier 0): sed/awk/cut/tr scripts and delimiters are no longer read as paths (a sed/awk script only when provably read-only) and a printing '| while read' loop passes F676; grep's pattern is text (-f/--file and file operands still judged; rows 1.5a2/1.7c1 flipped, 1.5a2b/1.7c1b added) and a bare whole-argument $PWD is judged as '.', while $PWD/.., $(dirname $PWD), (Split-Path $PWD), x=$PWD and any reassigned PWD stay refused.
 
 **Found:** open 2026-10-18. Sweep group A. In real turns: `pwd | sed 's/^/PWD=/'` refused "'/' is outside your workspace" (`run-99e650f426ce`); `cat README.md | while read l; do echo "$l"; done` refused by F676 "at 'while read l'"; `echo $PWD` refused "contains a variable...". In-process `_decide`: `sed 's|/usr|x|' a.txt` and `awk -F/ '{print $1}' a.txt` refused alike. `git status --short | sed ...` ran only because Claude's own read-only rule passed it first. F661 fixed PowerShell `-match` operands only; this is the bash counterpart plus a new F676 false positive. Defect (cost: turns spent rephrasing). Seam: Permissions & sandbox (shell judge). Tier guess: 0.
 
 ## F697 (C) -- a stopped Claude turn's spend is recorded nowhere
 
-**Status:** open, deferred 2026-10-18 (Tier 1): the interrupted call is in no CLI report, so only an estimate (the stopped turn's last context reading) is possible; needs a decision on showing estimates and whether they count toward the budget.
+**Status:** fixed 898a87d 2026-10-18 (Tier 1, migration 0134): a stopped Claude turn's unavailable row records its interrupted call as estimated_input_tokens (the turn's last context reading); Budgets shows it as "≈N input tokens, not measured — not counted against the budget", and it counts toward no measured total or budget; acceptance test xfail-first at eb1f366.
 
 **Found:** open 2026-10-18. Sweep group A. `run-02af114595bf` stopped mid-Bash: `turn_usage` `unavailable`, null cost. The next turn `run-7f0a832b742f` recorded 17,173 micros = exactly its own one call; session totals 316,982 -> 334,155. The CLI's totals never included the interrupted call (~333k cached tokens), so it is in no row and no difference. Accounting admits "unavailable turns" but never sizes them: about one model call lost per Stop. Confirms handoff 0202's untested crash path (F678). Design gap. Seam: Runs x Accounting & allowance. Tier guess: 1.
 
@@ -36354,7 +36354,7 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F700 (C) -- after `report_cannot_satisfy`, the operator's only response is "mark reviewed", which changes nothing
 
-**Status:** open, needs operator decision 2026-10-18: define the operator's responses to report_cannot_satisfy (amend / accept-and-unblock / reject-with-reason) so "reviewed" changes something.
+**Status:** fixed c730d0a 2026-10-18 (Tier 1): the operator answers a cannot_satisfy report with amend (criterion changed, task unblocked), accept (task unblocked) or reject (reason sent to the reporter, task stays blocked) via POST .../amendments/{id}/respond and the panel; Mark reviewed no longer answers a report; acceptance tests xfail-first at 0a05217.
 
 **Found:** open 2026-10-18. Sweep group B. `amd-06eb...` blocked `task-26c0...`; marking it reviewed left c2 unchanged in the file and the task `blocked`, with no pointer between the two. Design gap. Seam: Spec documents x Tasks. Tier guess: 1.
 
@@ -36378,7 +36378,7 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F704 (C) -- once an approved roadmap has an unclaimed slice, every unrelated change needs "Approve anyway"
 
-**Status:** open, needs operator decision 2026-10-18: make roadmap_slice_unclaimed a non-gating warning (recommended) and/or let a change declare it is no slice.
+**Status:** fixed 4765e0a 2026-10-18 (Tier 0): roadmap_slice_unclaimed is a non-gating note (proposal warnings; approval_notes on approval, no Approve anyway needed).
 
 **Found:** open 2026-10-18. Sweep group B. An agent-written change and a large catalogue document both got 409 `roadmap_slice_unclaimed` ("has slices no document names: printing"); there is no way to say "this change is not a slice". Design gap against "warn, don't gate" (F674's gap). Seam: Spec documents (roadmaps). Tier guess: 1.
 
@@ -36390,7 +36390,7 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F706 (C) -- evidence that says `covers: partial` alone makes a requirement Verified
 
-**Status:** open, needs operator decision 2026-10-18 (Tier 1): whether partial-only accepted evidence should read in_progress (recommended) instead of verified, which also changes what the gate blocks.
+**Status:** fixed 0fdd11f 2026-10-18 (Tier 1): a requirement whose accepted current evidence is all covers: partial reads in_progress with reason "partial evidence only" (full or absent covers still verify), so a gate document refuses approval until a full piece is accepted; acceptance test xfail-first at cfab18b.
 
 **Found:** open 2026-10-18. Sweep group B. FR-2 and the capability's FR-4 read verified though the only accepted current piece said `covers: partial`; `covers` is displayed, never weighed. Design gap (F673 data). Seam: Requirements, evidence & coverage. Tier guess: 1.
 
@@ -36534,7 +36534,7 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F730 (D) -- small spec/evidence echoes from the 2026-10-18 sweep
 
-**Status:** partly fixed 89afece 2026-10-18 (Tier 0): items 2-7 fixed (operator review_state filter, unknown phase 422, merge answers applied, agent decide answer carries footprint, full journey route, rename repoints the index); items 1 (specification_updated without rewording) and 8 (reopen on an archived folded change) await an operator decision.
+**Status:** fixed 2026-10-18 (Tier 0), all eight items: items 2-7 89afece (operator review_state filter, unknown phase 422, merge answers applied, agent decide answer carries footprint, full journey route, rename repoints the index); item 1 b96fd14 (a "specification updated" drift answer stores no fingerprint, so the next scan asks again unless the requirement was reworded); item 8 0012ceb (rejecting evidence of an approved task on an archived document keeps the rejection, leaves the task approved, and task_reopen says why).
 
 **Found:** open 2026-10-18. Sweep group B. (1) `specification_updated` drift answer accepted with no rewording, silencing that drift. (2) Operator `GET /spec/evidence?review_state=rejected` -> 200 with every piece (the agent route filters). (3) `to=nonsense` on `/documents/phase` -> 409 while an unknown rigor is 422 (F657). (4) A capability `merge` that applied the operator's edit answers `merged: 0`. (5) An agent's `decide_evidence` answer omits the footprint (F657 fixed the operator route only). (6) The `steps_skipped` message names the journey route without its `/projects/{id}` prefix. (7) After an agent's `rename_spec_document` the picker and tree show the slug, and Place under is hidden until a Rebuild. (8) Rejecting evidence of an approved task on an archived, folded change reopens the task on a document that cannot reopen. Seam: Spec documents x Evidence x Drift.
 
@@ -36570,13 +36570,13 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F736 (D) -- starting the Hub from a folder registers that folder as a project and rewrites its binding
 
-**Status:** open, needs operator decision 2026-10-18: registering the invocation folder is spec'd; the rewrite happens only when the marker's id was deleted in this database (F609 re-mint), which can strand another database's binding. Decide whether an implicit CLI start may overwrite such a marker (recommend: no, open without a project and say why).
+**Status:** fixed 459106a 2026-10-18 (Tier 0): a bare agentweave start opens implicitly and is refused (409 deleted_project_marker, marker untouched, reason printed by the CLI and logged) for a folder whose marker names a project this database deleted; an explicit open from the app keeps F609's re-mint.
 
 **Found:** open 2026-10-18. Sweep group D. `agentweave --profile sweepdcli --port 8035` run from `testbed/scratch` rewrote `testbed/scratch/.agentweave/project.json` to `proj-49aa617ace86` (a profile since reset); any earlier binding of that folder is gone. Seam: CLI & lifecycle x Projects.
 
 ## F737 (B) -- the workspace judge still reads commands as text: four shapes reach the runner's configuration or feed arguments without F675's or F676's rule seeing them
 
-**Status:** open 2026-10-18, needs operator decision: the four shapes reproduce on HEAD, but each text-rule narrowing leaves adjacent variants (git apply/checkout, archive extraction, cd/Join-Path, runtime substitutions), so the runner-config class needs a structural boundary — recommended: the Hub fingerprints the runner-config paths at each turn launch and asks the operator when they changed (Tier 2).
+**Status:** fixed 00d599e + 38f4e5a 2026-10-18 (Tier 2, migration 0133): every turn launch fingerprints the workspace's runner configuration (runner_config.RUNNER_CONFIG_PATHS, shared with the judge) and a change holds the turn (input kept, uncounted) and asks the operator once on the permission card naming the files — Allow records and starts, Deny keeps it held; a fresh checkout bringing config the project directory lacks is asked too; the pipe-fed shapes (3) launcher/option-only interpreters and (4) pipe-fed listings are refused by the judge. Acceptance: test_a_changed_runner_configuration_holds_the_next_turn.py (xfail-first 9339833).
 
 **Found:** open 2026-10-18. Sweep group A, found calling `_decide` in-process (deliberately not run as agent turns). Shapes neither rule sees: a copy or move whose destination is the runner-config directory without naming the file; a decoder writing a file that a later command substitution reads; an interpreter reached through a version launcher; a listing cmdlet piped into a path cmdlet. Same "text boundary" class F675's status concedes for `cd .claude && ...`, without needing `cd`. Grounded review points: the directory-as-destination match in `_RUNNER_CONFIG_PATHS`, the scope of `_PIPE_INTERPRETERS_RE` and `_PS_LISTING` (`hub/hub/mcp_server.py`). Defect (posture holes, not driven to effect). Seam: Permissions & sandbox (shell judge). Tier guess: 0 per shape; the class is the research question of a structural boundary.
 
@@ -36598,7 +36598,9 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F740 (D) -- a failed conversation-title firing does not say why
 
-**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass (vault group), by reading the code.
+**Status:** fixed b714c26 2026-10-18 (Tier 0): a failed conversation-title firing records why (the spawn's error, e.g. "exited 1: ...", or "claude produced no JSON envelope") as its detail.
+
+**Found:** open 2026-10-18. Filed from the 2026-10-18 fix pass (vault group), by reading the code.
 **Source:** review
 **Theme:** Manager jobs
 
@@ -36606,7 +36608,9 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F741 (D) -- a vault report on an unread file still gets the fixed "enable the job" note
 
-**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass (vault group), by reading the code.
+**Status:** fixed cddc65a 2026-10-18 (Tier 0): a report on an image/PDF held here but unread now tells the model what is in the way (F720's reason, e.g. the distillation job is disabled) instead of "the source is not on this machine"; the fixed note itself never reached the prompt.
+
+**Found:** open 2026-10-18. Filed from the 2026-10-18 fix pass (vault group), by reading the code.
 **Source:** review
 **Theme:** Knowledge vault
 
@@ -36638,3 +36642,69 @@ F720 replaced the fixed note on the entry-read route only. `vault_reports.py:136
 (2) The integration preview in `hub/hub/api/v1/tasks.py` treats an exception from workspace resolution as "git failed" and drops the conflict answer it already had.
 (3) `test_manager_jobs.py:275` uses a fake `next(...)` with no default, so a regression hangs the test instead of failing it.
 (4) `test_permission_approver.py` row 1.5a3 says `cp x $(dirname $PWD)` is refused because of the inner `$PWD`. But `cp x $(dirname "$(pwd)")` is already allowed as a runtime value, so the row protects less than it reads.
+
+## F745 (C) -- a command substitution's output is never judged: `cp x $(dirname $(pwd))` copies outside the workspace
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 decision pass (judge group, F696), by calling `_decide` in-process; not driven to effect.
+**Source:** review
+**Theme:** Permissions & sandbox
+
+The workspace judge does not judge the output of a command substitution. Each of these is allowed today:
+
+- `cp x $(dirname $(pwd))`
+- `dirname "$(pwd)" > f; cp x $(cat f)`
+- PowerShell `Copy-Item x (Split-Path (pwd))`
+
+The gap is at the `_decide` docstring, `hub/hub/mcp_server.py` around line 3967. Refusing `$(dirname $PWD)` (F696) is therefore consistent but not a real boundary.
+
+F737's launch-time fingerprint covers this class only for the runner's configuration, not for writes outside the workspace in general. Related: F696, F737, F676.
+
+## F746 (D) -- releasing a task checkout throws away a half-resolved prerequisite merge
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 decision pass (F695 group), by reading the code.
+**Source:** review
+**Theme:** Worktrees & integration
+
+`release_task_worktree` (`hub/hub/worktrees.py` around line 1440) force-removes the checkout after the snapshot declines to commit an unfinished conflicted merge (0e1c0f5). The author's partial resolution is lost. The branch keeps its commits, and the next provisioning retries the merge and sends the note again. Related: F695.
+
+## F747 (C) -- a delete/modify merge conflict has no markers, so the snapshot commits it as the files stand
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 decision pass (F695 group), by reading the code; not driven.
+**Source:** review
+**Theme:** Worktrees & integration
+
+`worktrees.unresolved_merge_paths` reads a merge as unfinished in two cases: when the index still has unmerged entries, or when a staged path carries conflict markers. One side deleting a file the other modified writes no markers. So once the agent stages the result, the auto-snapshot commits the merge as the files stand, whether or not the conflict was really resolved. Related: F695.
+
+## F748 (D) -- a runner that re-reads its settings mid-turn sees a write made earlier in the same turn
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 decision pass (F737 group); residual of the design, not a regression.
+**Source:** review
+**Theme:** Permissions & sandbox
+
+F737's fingerprint runs once per turn launch (`runner_config_guard.hold_if_changed`). A runner that reloads its configuration during a turn picks up a change written earlier in that same turn before any launch can hold it. Related: F737.
+
+## F749 (C) -- `e2e.py hub-up` from a worktree serves the main checkout's code
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 decision pass. One fix agent's first drive Hub served master's code without saying so.
+**Source:** drive
+**Theme:** CLI & lifecycle
+
+`.claude/skills/e2e-loop/e2e.py` (around line 61) defaults `REPO` to the main checkout. A drive started from a worktree therefore tests master unless `AW_REPO_ROOT` is set, and nothing warns.
+
+The harness should default to the git toplevel of the current directory, or refuse when the two differ. The workaround is recorded in `DEAD-ENDS.md`.
+
+## F750 (D) -- two processes pinning the same new tool-server digest race, and one fails with Access denied on Windows
+
+**Status:** open 2026-10-18. Seen in the 2026-10-18 full Hub suite run: `test_mcp_server_stdio_surface.py` failed collection on two xdist workers. A re-run, with the digest already pinned, passed.
+**Source:** drive
+**Theme:** Resilience
+
+`tool_server.py` (around lines 81-86) writes `<target>.<pid>.tmp` and then calls `os.replace(temp, target)`. When two processes pin a new digest at the same moment, the second replace onto a file the first has just written, and may hold open, raises `PermissionError: [WinError 5]`. Two Hubs starting together after an upgrade could hit the same race. An existing identical target should count as success.
+
+## F751 (D) -- a reviewer's verdict still accepts a task's own awaiting evidence recorded for an earlier wording
+
+**Status:** open 2026-10-18. Filed from the 2026-10-18 decision pass (F692 group).
+**Source:** review
+**Theme:** Requirements & evidence
+
+F692 refuses accepting evidence for an earlier wording on `decide` and `overturn`, but `decide_with_verdict` still accepts it. It does no harm, because coverage ignores stale acceptance, but the record reads "accepted" for evidence that no longer applies. Related: F692, F691.
