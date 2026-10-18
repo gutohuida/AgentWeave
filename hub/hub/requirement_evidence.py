@@ -1179,6 +1179,10 @@ async def decide(
     grant cannot decide, and an agent cannot decide about its own work. Both are
     checked on agent *identity*, because every turn an agent takes is a new run
     and a run-based check is satisfied by an agent simply continuing.
+
+    **A decided piece is the operator's to overturn, with a reason** (F692): an agent decides only
+    `awaiting` evidence, the same decision twice is refused, and **evidence recorded for an earlier
+    wording is never accepted** (its digest no longer matches the requirement's).
     """
     if decision not in (ACCEPTED, REJECTED):
         # Names what would work, the way `model_catalog.validate_overrides` names the permitted
@@ -1210,6 +1214,44 @@ async def decide(
             "an agent cannot accept evidence it produced; another agent or the operator decides",
             code="self_acceptance",
         )
+
+    previous = evidence.review_state
+    if previous != AWAITING:
+        # F692: a decided piece is decided. Only the operator reverses a decision, and only by
+        # saying why -- the sweep's granted tester flipped a rejection to accepted in silence.
+        if actor.kind != "operator":
+            raise EvidenceRefusedError(
+                f"{evidence.id} is already {previous}; an agent decides only evidence that is "
+                "awaiting. Only the operator overturns a decision.",
+                code="already_decided",
+                http_status=409,
+            )
+        if previous == decision:
+            raise EvidenceRefusedError(
+                f"{evidence.id} is already {previous}",
+                code="already_decided",
+                http_status=409,
+            )
+        if not reason.strip():
+            raise EvidenceRefusedError(
+                f"{evidence.id} is {previous}; overturning a decision needs a reason: say why "
+                "the earlier decision was wrong (set `reason`)",
+                code="overturn_needs_reason",
+                http_status=422,
+            )
+
+    if decision == ACCEPTED:
+        # F692: evidence recorded for an earlier wording demonstrates a requirement that no longer
+        # says that. Rejecting it stays open; accepting it would count a stale demonstration.
+        requirement = await session.get(SpecRequirement, evidence.requirement_id)
+        if requirement is not None and evidence.digest != requirement.digest:
+            raise EvidenceRefusedError(
+                f"{evidence.id} was recorded for an earlier wording of "
+                f"{requirement.identifier or 'its requirement'}, which has been reworded since; "
+                "it cannot be accepted. Record new evidence against the current wording.",
+                code="evidence_stale",
+                http_status=409,
+            )
 
     if decision == REJECTED and not reason.strip():
         # A rejection is the author's only signal of what to fix (it reads it back through

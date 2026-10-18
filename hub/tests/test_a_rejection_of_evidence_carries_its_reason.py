@@ -79,9 +79,10 @@ async def test_acceptance_and_a_reasoned_rejection_are_unchanged(app, auth_heade
         json={"decision": "rejected", "reason": "the test cites the wrong file"},
         headers=auth_headers,
     )
+    # Reversing a decided piece is an overturn, which needs a reason too (F692).
     accepted = await app.post(
         f"{BASE}/spec/evidence/{evidence_id}/decision",
-        json={"decision": "accepted"},
+        json={"decision": "accepted", "reason": "it cites the right file after all"},
         headers=auth_headers,
     )
 
@@ -89,5 +90,5 @@ async def test_acceptance_and_a_reasoned_rejection_are_unchanged(app, auth_heade
     assert accepted.status_code == 200, accepted.text
     assert [r["reason"] for r in await _reviews(app, auth_headers, evidence_id)] == [
         "the test cites the wrong file",
-        "",
+        "it cites the right file after all",
     ]

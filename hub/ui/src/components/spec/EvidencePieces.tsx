@@ -1,9 +1,17 @@
 import { useState } from 'react'
 import { readableApiError } from '@/api/client'
-import { useDecideEvidence, useSpecEvidence, type EvidencePiece } from '@/api/spec'
+import {
+  useDecideEvidence,
+  useOverturnEvidence,
+  useSpecEvidence,
+  type EvidenceDecisionResult,
+  type EvidencePiece,
+} from '@/api/spec'
 
 /**
- * The evidence recorded for one requirement, with the operator's decision on each awaiting piece.
+ * The evidence recorded for one requirement, with the operator's decision on each awaiting piece
+ * and an Overturn control on each decided one (F692: only the operator reverses a decision, and
+ * only with a reason).
  *
  * The coverage bar says "N awaiting review"; this is where the sentence is answered. Pieces are in
  * the route's order, oldest first, and the last is labelled *latest* — most recently recorded, which
@@ -37,8 +45,16 @@ function Piece({
   const decide = useDecideEvidence(path, identifier)
   const [rejecting, setRejecting] = useState(false)
   const [reason, setReason] = useState('')
+  const overturn = useOverturnEvidence(path, identifier)
+  const [overturning, setOverturning] = useState(false)
+  const [overturnReason, setOverturnReason] = useState('')
 
   const awaiting = piece.review_state === 'awaiting'
+  const decided = piece.review_state === 'accepted' || piece.review_state === 'rejected'
+  const reverse = piece.review_state === 'accepted' ? 'Reject' : 'Accept'
+  // What the last decision here did to an approved task (F730 item 8), said rather than implied.
+  const answered: EvidenceDecisionResult | undefined = overturn.data ?? decide.data
+  const reopen = answered?.task_reopen
   const held = piece.recording_run_live === true
   const commit = piece.footprint?.kind === 'git' ? piece.footprint.commit_sha : null
   const outside = (piece.footprint?.outside_workspace_writes ?? []).length > 0
@@ -105,6 +121,56 @@ function Piece({
               Reject…
             </button>
           )}
+        </div>
+      )}
+      {decided && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {overturning ? (
+            <>
+              <input
+                aria-label="Reason for overturning"
+                value={overturnReason}
+                onChange={(event) => setOverturnReason(event.target.value)}
+                placeholder="why the decision was wrong"
+              />
+              <button
+                type="button"
+                style={button}
+                disabled={overturn.isPending || overturnReason.trim() === ''}
+                onClick={() =>
+                  overturn.mutate(
+                    { id: piece.id, reason: overturnReason.trim() },
+                    {
+                      onSuccess: () => {
+                        setOverturning(false)
+                        setOverturnReason('')
+                      },
+                    },
+                  )
+                }
+              >
+                {reverse} instead
+              </button>
+            </>
+          ) : (
+            <button type="button" style={button} onClick={() => setOverturning(true)}>
+              Overturn…
+            </button>
+          )}
+        </div>
+      )}
+      {reopen && (
+        <div data-testid={`evidence-reopen-${piece.id}`} style={{ color: 'var(--text-3)' }}>
+          {reopen.reopened ? `${reopen.task} reopened for revision` : reopen.reason}
+        </div>
+      )}
+      {overturn.isError && (
+        <div
+          role="alert"
+          data-testid={`evidence-overturn-error-${piece.id}`}
+          style={{ color: 'var(--red)' }}
+        >
+          {readableApiError(overturn.error, 'The Hub refused to overturn this decision.')}
         </div>
       )}
       {decide.isError && (

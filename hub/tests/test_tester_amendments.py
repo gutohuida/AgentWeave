@@ -325,6 +325,9 @@ async def _accepted_evidence(app, auth_headers):
         headers=auth_headers,
     )
     assert recorded.status_code == 201, recorded.text
+    if recorded.json()["review_state"] == "accepted":
+        # The operator's own record is born accepted; deciding it again is refused (F692).
+        return
     decided = await app.post(
         f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
         json={"decision": "accepted", "reason": "ok"},

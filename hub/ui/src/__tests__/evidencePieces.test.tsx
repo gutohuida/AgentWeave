@@ -190,6 +190,64 @@ describe('evidence pieces on a requirement', () => {
     expect(screen.getByText('Reject…')).toBeDisabled()
   })
 
+  it('offers Overturn on a decided piece, needs a reason, and posts it to the overturn route', async () => {
+    // F692: the operator had no control to reverse a decision.
+    stubHub(
+      [
+        piece({
+          review_state: 'rejected',
+          latest_review: { decision: 'rejected', reason: 'empty', actor_kind: 'agent', actor: 'tester' },
+        }),
+      ],
+      {
+        status: 200,
+        body: {
+          ...piece({ review_state: 'accepted' }),
+          overturned: { from: 'rejected' },
+        },
+      },
+    )
+    mount()
+    await screen.findByTestId('evidence-piece-ev-1')
+    expect(screen.queryByText('Accept')).toBeNull()
+    fireEvent.click(screen.getByText('Overturn…'))
+    const reverse = screen.getByText('Accept instead')
+    expect(reverse).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Reason for overturning'), {
+      target: { value: 'the commit is not empty' },
+    })
+    fireEvent.click(reverse)
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true))
+    const post = calls.find((c) => c.method === 'POST')!
+    expect(post.url).toContain('/spec/evidence/ev-1/overturn')
+    expect(JSON.parse(post.body!)).toEqual({ reason: 'the commit is not empty' })
+  })
+
+  it('says when a rejection left an approved task as it was', async () => {
+    // F730 item 8: an archived document keeps its task approved, and the answer says why.
+    stubHub([piece({ review_state: 'accepted' })], {
+      status: 200,
+      body: {
+        ...piece({ review_state: 'rejected' }),
+        task_reopen: {
+          task: 'task-1',
+          reopened: false,
+          reason: 'spec/changes/demo/spec.json is archived and cannot reopen',
+        },
+      },
+    })
+    mount()
+    await screen.findByTestId('evidence-piece-ev-1')
+    fireEvent.click(screen.getByText('Overturn…'))
+    fireEvent.change(screen.getByLabelText('Reason for overturning'), {
+      target: { value: 'wrong list' },
+    })
+    fireEvent.click(screen.getByText('Reject instead'))
+    expect(await screen.findByTestId('evidence-reopen-ev-1')).toHaveTextContent(
+      'is archived and cannot reopen',
+    )
+  })
+
   it('invalidates coverage, evidence and the task keys when a decision lands', async () => {
     stubHub([piece()])
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })

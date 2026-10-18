@@ -647,6 +647,13 @@ class EvidenceDecision(RequestModel):
     reason: str = Field(default="", max_length=10000)
 
 
+class EvidenceOverturn(RequestModel):
+    """The operator reversing a decided piece (F692). The decision is the opposite of the current
+    one, so only the reason is sent, and it is required."""
+
+    reason: str = Field(default="", max_length=10000)
+
+
 class DriftResolution(RequestModel):
     resolution: str = Field(max_length=32)
 
@@ -1693,17 +1700,62 @@ async def decide_evidence(
 ):
     """The operator accepting or rejecting. An agent uses its own plane, and cannot reach this."""
     project_id, _ = project
+    evidence = await _operator_evidence(session, project_id, evidence_id)
+    return await _operator_decides(session, project_id, evidence, body.decision, body.reason)
+
+
+@router.post("/spec/evidence/{evidence_id}/overturn")
+async def overturn_evidence(
+    evidence_id: str,
+    body: EvidenceOverturn,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator reversing a decided piece, with a reason (F692): an accepted piece becomes
+    rejected and a rejected one accepted, with a first decision's consequences. 409 `not_decided`
+    for a piece still awaiting, 422 `overturn_needs_reason` with no reason, and 409
+    `evidence_stale` for accepting evidence recorded for an earlier wording."""
+    project_id, _ = project
+    evidence = await _operator_evidence(session, project_id, evidence_id)
+    current = evidence.review_state
+    if current not in (requirement_evidence.ACCEPTED, requirement_evidence.REJECTED):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": f"{evidence.id} is {current}, not decided; accept or reject it instead",
+                "code": "not_decided",
+            },
+        )
+    opposite = (
+        requirement_evidence.REJECTED
+        if current == requirement_evidence.ACCEPTED
+        else requirement_evidence.ACCEPTED
+    )
+    view = await _operator_decides(session, project_id, evidence, opposite, body.reason)
+    view["overturned"] = {"from": current}
+    return view
+
+
+async def _operator_evidence(session: AsyncSession, project_id: str, evidence_id: str):
     evidence = await session.get(RequirementEvidence, evidence_id)
     if evidence is None or evidence.project_id != project_id:
         raise HTTPException(status_code=404, detail="Evidence not found")
+    return evidence
+
+
+async def _operator_decides(
+    session: AsyncSession, project_id: str, evidence, decision: str, reason: str
+) -> Dict[str, Any]:
+    """One operator decision and everything it causes, for the decision and overturn routes."""
+    evidence_id = evidence.id
     # F621: a review this decision may release, asked before it is made.
     held_review = await run_divergence.held_review_before_a_decision(session, evidence)
     try:
         review = await requirement_evidence.decide(
             session,
             evidence,
-            decision=body.decision,
-            reason=body.reason,
+            decision=decision,
+            reason=reason,
             actor=spec_lifecycle.Actor(kind="operator", name="operator"),
         )
     except requirement_evidence.EvidenceRefusedError as exc:
@@ -1732,7 +1784,7 @@ async def decide_evidence(
     await run_divergence.release_held_review(session, held_review)
     # vis-D1: the operator left the evidence gate and kept the last word. Rejecting a piece whose
     # task an agent's verdict approved reopens that task (`operator-overturns`).
-    reopen = await _reopen_an_approved_task(session, project_id, evidence_id, body.decision)
+    reopen = await _reopen_an_approved_task(session, project_id, evidence_id, decision)
     if reopen is not None:
         # F730 item 8: what the rejection did to the approved task, said rather than left implied.
         view["task_reopen"] = reopen

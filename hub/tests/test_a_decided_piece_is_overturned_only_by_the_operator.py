@@ -31,7 +31,6 @@ from .test_task_integration import (
 
 AGENT_EVIDENCE = "/api/v1/agent-actions/spec/evidence"
 AGENT_TASKS = "/api/v1/agent-actions/tasks"
-F692 = pytest.mark.xfail(strict=True, reason="F692: not built yet")
 
 
 def _run(agent_id, name, run_id, secret, *, granted=False):
@@ -106,7 +105,6 @@ async def overturn(app, headers, evidence, reason):
     )
 
 
-@F692
 @pytest.mark.asyncio
 async def test_a_granted_agent_cannot_decide_a_decided_piece(
     app, auth_headers, builder, granted, tmp_path
@@ -151,7 +149,6 @@ async def test_a_granted_agent_still_decides_an_awaiting_piece(
     assert await state_of(evidence) == "accepted"
 
 
-@F692
 @pytest.mark.asyncio
 async def test_the_operator_overturns_only_with_a_reason(app, auth_headers, builder, tmp_path):
     """R2. FAILS before: there was no overturn route."""
@@ -178,7 +175,6 @@ async def test_the_operator_overturns_only_with_a_reason(app, auth_headers, buil
     ]
 
 
-@F692
 @pytest.mark.asyncio
 async def test_overturning_an_accepted_piece_reopens_the_approved_task(
     app, auth_headers, builder, tmp_path
@@ -207,7 +203,6 @@ async def test_overturning_an_accepted_piece_reopens_the_approved_task(
         assert (await session.get(Task, task)).status == "revision_needed"
 
 
-@F692
 @pytest.mark.asyncio
 async def test_overturning_an_awaiting_piece_is_refused(app, auth_headers, builder, tmp_path):
     await ready(app, auth_headers, builder, tmp_path)
@@ -220,7 +215,6 @@ async def test_overturning_an_awaiting_piece_is_refused(app, auth_headers, build
     assert await state_of(evidence) == "awaiting"
 
 
-@F692
 @pytest.mark.asyncio
 async def test_the_same_decision_again_is_refused(app, auth_headers, builder, tmp_path):
     """R2: a decided piece is decided; the operator's plain route needs a reason to reverse it."""
@@ -239,7 +233,6 @@ async def test_the_same_decision_again_is_refused(app, auth_headers, builder, tm
     assert [d for d, _k, _r in await reviews_of(evidence)] == ["accepted"]
 
 
-@F692
 @pytest.mark.asyncio
 async def test_evidence_for_an_earlier_wording_cannot_be_accepted(
     app, auth_headers, builder, tmp_path
