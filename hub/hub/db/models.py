@@ -1278,6 +1278,9 @@ class Run(Base):
     # an identical message, and matching commits to turns by timestamp is guesswork. Recorded per
     # run, the union over a conversation's runs is exact.
     snapshot_commit_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The CLI version the run's harness reported (Claude's `system/init` `claude_code_version`),
+    # NULL when it reported none. F678: what a Claude result's totals mean changed at 2.1.277.
+    runner_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # The directory this run *started* in, written at spawn from `effective_work_dir`
     # (`2026-08-27-work-is-isolated-per-task`, design D7).
     #
@@ -1396,6 +1399,10 @@ class TurnUsage(Base):
     premium_requests: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     session_nano_aiu_total: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     session_premium_requests_total: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # F678: the cost and token totals a Claude runner reported for its session at this turn's end
+    # (`usage_accounting.SESSION_TOTAL_FIELDS`), read back as the next turn's baseline by
+    # `settle_claude_session_totals`. NULL on every row written before it, and for other runners.
+    session_totals: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     project: Mapped["Project"] = relationship(back_populates="turn_usages")

@@ -151,6 +151,7 @@ from ...task_transition_service import (
 from ...usage_accounting import (
     project_budget_state,
     record_turn_usage,
+    settle_claude_session_totals,
     settle_copilot_credits,
 )
 from ...utils import persist_accepted_event, persist_event, short_id
@@ -3216,6 +3217,7 @@ async def _execute_run(
         session_id = known_session_id
         binding_conflict: Optional[str] = None
         accounting_sample: Optional[AccountingSample] = None
+        runner_version: Optional[str] = None
         sequence = 0
         buffer = ""
         plane_event_stored = False
@@ -3251,6 +3253,7 @@ async def _execute_run(
 
         async def _flush_line(raw_line: str) -> None:
             nonlocal accounting_sample, binding_conflict, plane_event_stored, session_id, sequence
+            nonlocal runner_version
             # ConPTY output is control-sequence-laden, not plain text (live-verified — see
             # pty_runner.strip_ansi_escapes's docstring) — every line needs stripping before
             # a JSON-parse attempt, not just the first (e.g. a trailing cursor-restore
@@ -3259,6 +3262,8 @@ async def _execute_run(
             if not line.strip():
                 return
             parsed = transport.map_events(line, model=model)
+            if parsed.runner_version:
+                runner_version = parsed.runner_version
             # Resolve session_id from *this* line before writing its own events, so the row
             # that establishes the session carries it too, not just subsequent rows.
             if parsed.session_id:
@@ -3466,6 +3471,17 @@ async def _execute_run(
                 # still read as answerable. In the same transaction as `ended_at`: the two facts
                 # must not be separable by a reader.
                 await expire_pending_for_run(db, run_id)
+                run.runner_version = runner_version
+                # F678: a resumed Claude turn reports its session's running totals; recorded as
+                # the difference from the session's previous turn, subagents included.
+                accounting_sample = await settle_claude_session_totals(
+                    db,
+                    accounting_sample,
+                    project_id=project_id,
+                    agent=agent,
+                    session_id=run.session_id,
+                    runner_version=runner_version,
+                )
                 usage = await record_turn_usage(
                     db,
                     run_id=run_id,

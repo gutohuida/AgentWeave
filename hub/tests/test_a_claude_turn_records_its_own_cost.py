@@ -233,3 +233,10 @@ async def test_a_session_whose_earlier_turns_carry_no_totals_records_no_cost_onc
     assert second_usage.session_totals is not None
     assert third_usage.api_equivalent_usd_micros == 304
     assert third_usage.output_tokens == 5
+
+
+def test_the_parser_restates_the_session_total_fields_exactly():
+    from hub.runner_parsing import _SESSION_TOTAL_FIELDS
+    from hub.usage_accounting import SESSION_TOTAL_FIELDS
+
+    assert _SESSION_TOTAL_FIELDS == SESSION_TOTAL_FIELDS

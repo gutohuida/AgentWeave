@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -71,10 +72,102 @@ async def record_turn_usage(
         session_premium_requests_total=(
             sample.session_premium_requests_total if sample is not None else None
         ),
+        session_totals=sample.session_totals if sample is not None else None,
     )
     db.add(row)
     await db.flush()
     return row
+
+
+# F678: what a Claude result reports for its session, in `AccountingSample`'s own field names.
+SESSION_TOTAL_FIELDS = (
+    "api_equivalent_usd_micros",
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "reasoning_tokens",
+)
+# The first CLI whose `total_cost_usd` and `modelUsage` run across `--resume` (its changelog: "a
+# headless resume ... starting the session's cost and usage totals at zero; headless sessions now
+# save their totals at exit"). Before it they are the process's own, which is the turn's.
+CLAUDE_CUMULATIVE_SINCE = (2, 1, 277)
+_VERSION_RE = re.compile(r"^\s*(\d+)\.(\d+)\.(\d+)")
+
+
+def _version(text: Optional[str]) -> Optional[Tuple[int, ...]]:
+    match = _VERSION_RE.match(text or "")
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
+def _as_turn(sample: AccountingSample, values: Dict[str, Optional[int]]) -> AccountingSample:
+    return dataclasses.replace(sample, **{name: values.get(name) for name in SESSION_TOTAL_FIELDS})
+
+
+async def settle_claude_session_totals(
+    db: AsyncSession,
+    sample: Optional[AccountingSample],
+    *,
+    project_id: str,
+    agent: str,
+    session_id: Optional[str],
+    runner_version: Optional[str],
+) -> Optional[AccountingSample]:
+    """This turn's own accounting, from the session totals its runner reported (F678, D2-D4).
+
+    On a CLI before 2.1.277 the totals are the process's, so the turn's, subagents included. On
+    2.1.277 or later, or an unknown version, they run across the session: the turn is the totals
+    minus the last recorded totals of the same `Run.session_id` (by insertion order, as
+    `copilot_session_baseline` reads), unless a total went down, which says counting restarted
+    and the totals are the turn's. A session's first turn is its totals. A session with earlier
+    turns but no recorded totals (written before the Hub kept them) has no baseline: the turn
+    keeps its own `usage` tokens and records no cost. A sample with no totals is returned as it
+    came. Never raises: on a failed read the sample is returned unchanged, logged.
+    """
+    if sample is None or not sample.session_totals:
+        return sample
+    totals = sample.session_totals
+    version = _version(runner_version)
+    if (version is not None and version < CLAUDE_CUMULATIVE_SINCE) or session_id is None:
+        return _as_turn(sample, totals)
+    try:
+        rows = (
+            await db.execute(
+                select(TurnUsage.session_totals)
+                .select_from(TurnUsage)
+                .join(Run, Run.id == TurnUsage.run_id)
+                .where(
+                    TurnUsage.project_id == project_id,
+                    TurnUsage.agent == agent,
+                    Run.session_id == session_id,
+                )
+                .order_by(literal_column("turn_usage.rowid").desc())
+            )
+        ).all()
+    except Exception:
+        logger.exception(
+            "settle_claude_session_totals failed for project=%s agent=%s session=%s",
+            project_id,
+            agent,
+            session_id,
+        )
+        return sample
+    if not rows:
+        return _as_turn(sample, totals)
+    baseline = next((row[0] for row in rows if isinstance(row[0], dict)), None)
+    if baseline is None:
+        return dataclasses.replace(sample, api_equivalent_usd_micros=None)
+    turn: Dict[str, Optional[int]] = {}
+    for name in SESSION_TOTAL_FIELDS:
+        now, before = totals.get(name), baseline.get(name)
+        if now is None or before is None:
+            turn[name] = now
+        elif now < before:
+            return _as_turn(sample, totals)
+        else:
+            turn[name] = now - before
+    return _as_turn(sample, turn)
 
 
 async def copilot_session_baseline(

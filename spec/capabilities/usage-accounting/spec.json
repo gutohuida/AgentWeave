@@ -330,6 +330,48 @@
       "requirement": "the-activity-tab-becomes-the-projects-ledger-notices-folded",
       "then": "they are one row naming the count",
       "when": "it renders"
+    },
+    {
+      "given": "a Claude run whose system/init reports claude_code_version 2.1.301",
+      "key": "maroon-dragon-version-recorded",
+      "requirement": "maroon-dragon-version",
+      "then": "runs.runner_version is 2.1.301",
+      "when": "the run finishes"
+    },
+    {
+      "given": "a Claude agent on CLI 2.1.301 whose three turns of one session report total_cost_usd 0.00272, 0.00303, 0.00333 and modelUsage output 31, 36, 41",
+      "key": "maroon-dragon-three-turns",
+      "requirement": "maroon-dragon-turn",
+      "then": "turn_usage reads cost 2721 / 309 / 304 micros and output 31 / 5 / 5, and each run records runner_version 2.1.301",
+      "when": "the three runs finish through the trigger"
+    },
+    {
+      "given": "a turn whose result.usage writes 9,156 cache tokens and whose modelUsage writes 25,753 (a subagent's 15,637 included)",
+      "key": "maroon-dragon-subagent",
+      "requirement": "maroon-dragon-subagents",
+      "then": "turn_usage.cache_write_tokens is 25,753",
+      "when": "it finishes"
+    },
+    {
+      "given": "the same three turns on CLI 2.1.270, where the figures are per process",
+      "key": "maroon-dragon-old-cli",
+      "requirement": "maroon-dragon-turn",
+      "then": "each is recorded as reported, not differenced",
+      "when": "they finish"
+    },
+    {
+      "given": "a session whose previous turn row has no session_totals",
+      "key": "maroon-dragon-legacy",
+      "requirement": "maroon-dragon-unknown",
+      "then": "it records result.usage's tokens and a null cost, and its own totals for the turn after",
+      "when": "its next turn finishes"
+    },
+    {
+      "given": "a scratch Hub and a Haiku agent",
+      "key": "maroon-dragon-drive",
+      "requirement": "maroon-dragon-turn",
+      "then": "turn 2's recorded cost equals the CLI's turn-2 total minus its turn-1 total",
+      "when": "two turns of one conversation run"
     }
   ],
   "algorithms": [],
@@ -356,11 +398,15 @@
       "FR-28": "66ec4fe5d8291cd3f9d1583bc29347ff16f186def0c3916a31066ab318b9cce0",
       "FR-29": "6ec5e5e6566794d842453fac2692ecb5b8c70e0f59d5eb17393a0e4cdc59de35",
       "FR-30": "56c8531eda5ea8157afee2da45f86a3aa667c37a6d6cbab3da9be6dfc4e0821c",
+      "FR-31": "9ac8fbcd05c5e8546985c4e98ff4b65a2efb46a8cbe06f997e67021ba2000399",
+      "FR-32": "42ef9f75204a14b2683d2d024d293ffb67e750e5cd10a8b9ae60eea7647d7724",
+      "FR-33": "7b73cc51554147fa0c669999c60d855777d3220d80983129311115bc0c0776ee",
+      "FR-34": "9afd6c399fad41271596c0d632078d955df5e1180164ea0599690f76eb424a7a",
       "FR-7": "0243dcae0b94bec3d8557b1d6fbe37b827f6ac81370c20aac02c926ddd800868",
       "FR-8": "a47401808ab90b647f8f27c6cfb33aa0b068daa8f6f20a22c5e66cc07a4af6e1",
       "FR-9": "f9b839718a1d5e35d1d0b3306acbf14f7d2ac72c331553511beb93cb06c0b0f4"
     },
-    "high_water": 30,
+    "high_water": 34,
     "requirements": {
       "a-copilot-one-shot-call-records-the-credits-its-session-repo": "FR-14",
       "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde": "FR-13",
@@ -370,6 +416,10 @@
       "copilot-spend-is-counted-in-its-own-units-worker-line-credits": "FR-25",
       "copilot-spend-is-counted-in-its-project-credits-include-workers": "FR-26",
       "every-hub-owned-turn-has-a-durable-accounting-outcome": "FR-7",
+      "maroon-dragon-subagents": "FR-33",
+      "maroon-dragon-turn": "FR-32",
+      "maroon-dragon-unknown": "FR-34",
+      "maroon-dragon-version": "FR-31",
       "n1-a-copilot-run-records-the-larger-lower-bound-of-its-tokens": "FR-15",
       "n2-a-conversation-has-its-own-usage-rollup": "FR-16",
       "n3-changing-the-budget-reschedules-queued-work": "FR-17",
@@ -577,6 +627,34 @@
       "party": null,
       "rationale": "Roadmap decision 4: half the log was one repeated notice.",
       "statement": "The live activity log MUST show context_warning events as one row counting them, not one row each."
+    },
+    {
+      "key": "maroon-dragon-version",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The meaning of the reported totals changed at 2.1.277; about fifteen research reports needed the version and could not read it.",
+      "statement": "A Claude run MUST record the CLI version its system/init event reports, on the run."
+    },
+    {
+      "key": "maroon-dragon-turn",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A per-session running total recorded per turn sums to the square of the turn count.",
+      "statement": "A resumed Claude turn on CLI 2.1.277 or later MUST record as its cost and tokens the session totals it reports minus the totals the previous recorded turn of the same session reported."
+    },
+    {
+      "key": "maroon-dragon-subagents",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The token budget is the figure the Hub enforces; result.usage leaves subagent calls out.",
+      "statement": "A Claude turn's tokens MUST include its subagents' tokens, as modelUsage reports them, whenever modelUsage is present."
+    },
+    {
+      "key": "maroon-dragon-unknown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A session whose earlier turns predate this change has no baseline; recording its whole running total as one turn would repeat the defect once more.",
+      "statement": "When a resumed session's previous turns carry no recorded totals, the turn MUST keep its per-turn token counts and record no cost, rather than the session's total."
     }
   ],
   "schema_version": 1,

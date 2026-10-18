@@ -521,6 +521,10 @@ class AccountingSample:
     premium_requests: Optional[float] = None
     session_nano_aiu_total: Optional[int] = None
     session_premium_requests_total: Optional[float] = None
+    #: F678: the cost and token totals a Claude runner reported for its session, keyed by the
+    #: field names above (`usage_accounting.SESSION_TOTAL_FIELDS`). The sample's own fields are
+    #: the per-turn `usage` reading until `settle_claude_session_totals` decides what the turn was.
+    session_totals: Optional[Dict[str, Optional[int]]] = None
     #: Not persisted. Set only by CopilotUsageLedger.finish (design D2); settle_copilot_credits
     #: reads it to decide whether to act on a sample at all.
     credit_session_new: Optional[bool] = None
@@ -542,6 +546,7 @@ class AccountingSample:
             "premium_requests",
             "session_nano_aiu_total",
             "session_premium_requests_total",
+            "session_totals",
             "credit_session_new",
         ):
             newer_value = getattr(newer, name)

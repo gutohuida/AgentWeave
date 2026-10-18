@@ -127,6 +127,7 @@
       "premium_requests": null,
       "session_nano_aiu_total": null,
       "session_premium_requests_total": null,
+      "session_totals": null,
       "credit_session_new": null
     },
     "session_id": "39ad524c-b7f7-4ae6-a480-2c57ee1180e2"
@@ -192,6 +193,15 @@
       "premium_requests": null,
       "session_nano_aiu_total": null,
       "session_premium_requests_total": null,
+      "session_totals": {
+        "api_equivalent_usd_micros": 12500,
+        "input_tokens": 999,
+        "output_tokens": 999,
+        "total_tokens": 1998,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      },
       "credit_session_new": null
     },
     "session_id": "sess-usage"
@@ -315,6 +325,7 @@
       "premium_requests": null,
       "session_nano_aiu_total": null,
       "session_premium_requests_total": null,
+      "session_totals": null,
       "credit_session_new": null
     },
     "session_id": null

@@ -58,7 +58,21 @@ class ParsedLine:
     # (`a-run-reaches-the-hub-without-mcp` D1): `connected`, `failed` or `absent`; None when the
     # line says nothing, including a vendor status the Hub does not recognise.
     harness_mcp_status: Optional[str] = None
+    # The CLI version the harness reported (Claude's `system/init` `claude_code_version`), F678.
+    runner_version: Optional[str] = None
 
+
+#: Restated from `usage_accounting.SESSION_TOTAL_FIELDS` (a test asserts they agree): this module
+#: imports nothing that reaches the database layer.
+_SESSION_TOTAL_FIELDS = (
+    "api_equivalent_usd_micros",
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "reasoning_tokens",
+)
 
 #: The name the Hub injects its tool server under (`runner_commands._claude_mcp_args`).
 HUB_MCP_SERVER_NAME = "agentweave"
@@ -367,10 +381,22 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
                 cost_usd=data.get("total_cost_usd"),
                 cache_is_separate_input=True,
             )
-        if accounting is None and isinstance(model_usage, dict):
-            accounting = _claude_model_accounting(
+        totals = (
+            _claude_model_accounting(
                 model_usage, source=source, cost_usd=data.get("total_cost_usd")
             )
+            if isinstance(model_usage, dict)
+            else None
+        )
+        if accounting is None:
+            accounting = totals
+        if accounting is not None and totals is not None and totals.total_tokens is not None:
+            # F678: `modelUsage` and `total_cost_usd` are the session's running totals since CLI
+            # 2.1.277 (per process before it), subagents included; `usage` is this turn's main
+            # thread only. Both are kept: the settle step decides which this turn was.
+            accounting.session_totals = {
+                name: getattr(totals, name) for name in _SESSION_TOTAL_FIELDS
+            }
         if data.get("is_error") is True or str(subtype).startswith("error"):
             event = error_event(
                 code="claude_result_error",
@@ -390,7 +416,12 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
         )
 
     if msg_type == "system" and data.get("subtype") == "init":
-        return ParsedLine(session_id=session_id, harness_mcp_status=_claude_init_mcp_status(data))
+        version = data.get("claude_code_version")
+        return ParsedLine(
+            session_id=session_id,
+            harness_mcp_status=_claude_init_mcp_status(data),
+            runner_version=version.strip()[:64] if isinstance(version, str) and version else None,
+        )
 
     if msg_type == "rate_limit_event":
         allowance = data.get("rate_limit_info") or data.get("rate_limit")

@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0131"
+HEAD_REVISION = "0132"
 
 
 # ---------------------------------------------------------------------------
@@ -5530,3 +5530,57 @@ def test_migration_0131_is_a_no_op_without_the_table(tmp_path) -> None:
         conn.commit()
     _upgrade_to(db_url, "0131")
     _downgrade_to(db_url, "0130")
+
+
+# ---------------------------------------------------------------------------
+# 0132 -- runs.runner_version, turn_usage.session_totals (F678, `spdoc-7f874f103d5b`)
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0132_adds_two_nullable_columns_and_keeps_old_rows(tmp_path) -> None:
+    db_file = tmp_path / "totals.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("ALTER TABLE runs DROP COLUMN runner_version")
+        conn.execute("ALTER TABLE turn_usage DROP COLUMN session_totals")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0131')")
+        conn.commit()
+        before = {
+            table: {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            for table in ("runs", "turn_usage")
+        }
+    assert "runner_version" not in before["runs"]
+    assert "session_totals" not in before["turn_usage"]
+
+    _upgrade_to(db_url, "0132")
+
+    with sqlite3.connect(db_file) as conn:
+        runs = {r[1]: r for r in conn.execute("PRAGMA table_info(runs)")}
+        usage = {r[1]: r for r in conn.execute("PRAGMA table_info(turn_usage)")}
+    assert runs["runner_version"][3] == 0  # nullable
+    assert usage["session_totals"][3] == 0
+
+    _downgrade_to(db_url, "0131")
+
+    with sqlite3.connect(db_file) as conn:
+        after = {
+            table: {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            for table in ("runs", "turn_usage")
+        }
+    assert after == before
+
+
+def test_migration_0132_is_a_no_op_without_the_tables(tmp_path) -> None:
+    db_file = tmp_path / "bare.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("DROP TABLE turn_usage")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0131')")
+        conn.commit()
+    _upgrade_to(db_url, "0132")
+    _downgrade_to(db_url, "0131")
