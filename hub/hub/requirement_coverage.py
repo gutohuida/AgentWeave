@@ -88,6 +88,11 @@ PRECEDENCE = (
 # demonstrably is not.
 NOT_STARTED_STATUSES = {"pending", "assigned"}
 
+#: `covers` saying the piece demonstrates only part of the requirement (vis-D5).
+PARTIAL = "partial"
+#: The reason an `in_progress` requirement carries when its accepted evidence is all partial (F706).
+PARTIAL_ONLY = "partial evidence only"
+
 INTEGRATED = "integrated"
 NOT_INTEGRATED = "not_integrated"
 INTEGRATION_UNKNOWN = "unknown"
@@ -110,6 +115,8 @@ class Coverage:
     linked_task_ids: List[str] = field(default_factory=list)
     #: The change requirement whose verification this one carries after a fold (F593), or None.
     served_by: Optional[Dict[str, str]] = None
+    #: Why the state is what it is, where the state alone does not say (F706: `PARTIAL_ONLY`).
+    reason: Optional[str] = None
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -124,6 +131,7 @@ class Coverage:
             "accepted_count": self.accepted_count,
             "linked_task_ids": list(self.linked_task_ids),
             "served_by": dict(self.served_by) if self.served_by else None,
+            "reason": self.reason,
         }
 
 
@@ -192,6 +200,12 @@ def _integration(footprints: List[EvidenceFootprint]) -> str:
     return INTEGRATION_UNKNOWN
 
 
+def partial_only(accepted: List[RequirementEvidence]) -> bool:
+    """Whether every accepted piece says `covers: partial` (F706). A piece that says `full`, or says
+    nothing (every piece recorded before `covers` existed), covers the requirement."""
+    return bool(accepted) and all((item.covers or "") == PARTIAL for item in accepted)
+
+
 def _state(
     *,
     drifting: bool,
@@ -216,8 +230,12 @@ def _state(
         return STALE
     if awaiting:
         return AWAITING_REVIEW
-    if accepted:
+    if accepted and not partial_only(accepted):
         return VERIFIED
+    if accepted:
+        # F706 (operator, 2026-10-18): every accepted current piece says it demonstrates only part
+        # of the requirement, so it is under way, not demonstrated (`PARTIAL_ONLY` is the reason).
+        return IN_PROGRESS
     if rejected:
         # Reached only when every current-digest row is rejected: `accepted`/`awaiting` above already
         # returned for any row in either of those states, so a rejection here is never shadowing a
@@ -387,6 +405,7 @@ async def requirement_coverage(
                 accepted_count=len(accepted),
                 linked_task_ids=[task.id for task in linked],
                 served_by=served_by,
+                reason=PARTIAL_ONLY if state == IN_PROGRESS and partial_only(accepted) else None,
             )
         )
 

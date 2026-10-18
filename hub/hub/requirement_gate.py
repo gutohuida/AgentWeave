@@ -44,6 +44,12 @@ SATISFIED = requirement_coverage.VERIFIED
 
 # What to do about each state that is not `verified`. The wording is the feature: "the gate refused"
 # without it is unactionable.
+#: F706: `in_progress` because every accepted piece says `covers: partial`, not for want of evidence.
+REMEDY_PARTIAL_ONLY = (
+    "its accepted evidence covers only part of it (partial evidence only) — record evidence that "
+    "demonstrates all of it, with covers: full, and have it accepted"
+)
+
 REMEDY = {
     requirement_coverage.UNSERVED: "no task is linked to it — link the work that serves it",
     requirement_coverage.NOT_STARTED: "its linked work has not started",
@@ -1060,7 +1066,11 @@ async def evaluate(
                     "identifier": entry.identifier,
                     "requirement_id": entry.requirement_id,
                     "state": entry.state,
-                    "remedy": REMEDY.get(entry.state, "it is not verified"),
+                    "remedy": (
+                        REMEDY_PARTIAL_ONLY
+                        if entry.reason == requirement_coverage.PARTIAL_ONLY
+                        else REMEDY.get(entry.state, "it is not verified")
+                    ),
                 }
                 # `gate` refuses on it; `contract` reports it and lets the transition through — the
                 # entire distinction between the two rigors lives in which list an entry lands in.

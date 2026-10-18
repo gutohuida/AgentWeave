@@ -167,6 +167,8 @@ export function SpecCoverageBar({ path, onOpenTasks }: SpecCoverageBarProps) {
                   {entry.identifier}
                 </a>{' '}
                 — {state?.label ?? entry.state}
+                {/* F706: in progress because every accepted piece covers only part of it. */}
+                {entry.reason ? ` (${entry.reason})` : ''}
                 {integration ? ` · ${integration}` : ''}
                 {' · '}
                 <RequirementLink

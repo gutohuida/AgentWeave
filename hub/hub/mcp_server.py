@@ -4805,7 +4805,8 @@ def record_evidence(
         output: What that command printed. Paste it as it came; the Hub keeps its last 4000
             characters, so the verdict line at the end is never lost.
         covers: `full` when this demonstrates the whole requirement, `partial` when only part of it
-            (say which part in the summary). Leave it empty only if you cannot tell.
+            (say which part in the summary). Leave it empty only if you cannot tell. A requirement
+            whose accepted evidence is all `partial` reads in progress, not verified.
 
     Recording the same requirement again in the same turn, on the same task, **revises** your
     undecided row rather than adding a second: the answer carries the same `id` and

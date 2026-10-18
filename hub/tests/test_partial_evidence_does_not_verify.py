@@ -43,7 +43,6 @@ async def _coverage(app, auth_headers):
     return next(row for row in response.json()["requirements"] if row["identifier"] == "FR-1")
 
 
-@pytest.mark.xfail(strict=True, reason="F706: partial-only evidence still reads verified")
 @pytest.mark.asyncio
 async def test_partial_evidence_alone_reads_in_progress_and_the_gate_refuses(
     app, auth_headers, builder  # noqa: F811
@@ -74,7 +73,6 @@ async def test_partial_evidence_alone_reads_in_progress_and_the_gate_refuses(
     assert approved.status_code == 200, approved.text
 
 
-@pytest.mark.xfail(strict=True, reason="F706: partial-only evidence still reads verified")
 @pytest.mark.asyncio
 async def test_evidence_that_does_not_say_still_verifies(app, auth_headers, builder):  # noqa: F811
     """`covers` absent is not partial: every piece recorded before vis-D5 reads as it did."""
