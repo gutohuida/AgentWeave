@@ -1367,6 +1367,9 @@ export interface DriftCandidate {
   resolution: string | null
   created_at: string | null
   requirement: { identifier: string; document: string | null } | null
+  /** The asked-for document's requirement this drift reaches through a fold (F690): the
+   *  candidate is on the change requirement whose evidence serves it. Absent or null otherwise. */
+  serves?: { identifier: string; document: string | null } | null
   evidence: { summary: string; locator: string | null; actor: string; actor_kind: string } | null
 }
 

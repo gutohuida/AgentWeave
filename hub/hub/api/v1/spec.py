@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import Field
-from sqlalchemy import func, literal_column, select
+from sqlalchemy import func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
@@ -1822,10 +1822,29 @@ async def list_drift(
     query = select(RequirementDrift).where(RequirementDrift.project_id == project_id)
     if state is not None:
         query = query.where(RequirementDrift.state == state)
+    # F690: a capability requirement served by a folded change's evidence (F593) answers that
+    # evidence's drift on its own page, keyed by the change requirement that holds it.
+    serves: Dict[str, Dict[str, Any]] = {}
     if document_id is not None:
+        report = await requirement_coverage.requirement_coverage(
+            session, project_id, document_id=document_id
+        )
+        serves = {
+            entry.served_by["requirement_id"]: {
+                "identifier": entry.identifier,
+                "document": document,
+            }
+            for entry in report.requirements
+            if entry.served_by
+        }
         query = query.join(
             SpecRequirement, SpecRequirement.id == RequirementDrift.requirement_id
-        ).where(SpecRequirement.document_id == document_id)
+        ).where(
+            or_(
+                SpecRequirement.document_id == document_id,
+                RequirementDrift.requirement_id.in_(list(serves) or [""]),
+            )
+        )
     rows = list(
         (await session.execute(query.order_by(RequirementDrift.created_at, RequirementDrift.id)))
         .scalars()
@@ -1883,6 +1902,9 @@ async def list_drift(
                 if requirement is not None
                 else None
             ),
+            # The requirement of the asked-for document this drift reaches through a fold (F690);
+            # null where the drift is on the document's own requirement.
+            "serves": serves.get(row.requirement_id),
             "evidence": (
                 {
                     "summary": item.summary,

@@ -97,6 +97,24 @@ describe('the drift panel', () => {
     expect(rows[0].textContent).toContain('checked FR-1')
   })
 
+  it('names the capability requirement a folded change’s drift reaches, and through what (F690)', () => {
+    state.drift = {
+      drift: [
+        {
+          ...candidate('drift-f', 'FR-2', '2026-10-07T10:00:00Z'),
+          requirement: { identifier: 'FR-2', document: 'spec/changes/scarlet-minotaur/spec.json' },
+          serves: { identifier: 'FR-4', document: 'spec/capabilities/interval/spec.json' },
+        },
+      ],
+      unwatched: [],
+    }
+    panel()
+    expect(screen.getByText(/Drifting: 1 to answer/)).toBeTruthy()
+    expect(screen.getByTestId('spec-drift-serves-drift-f').textContent).toBe(
+      'FR-4 · through FR-2 of spec/changes/scarlet-minotaur/spec.json',
+    )
+  })
+
   it('1.8 each answer sends its enum value and the candidate id; a refusal is shown on the row', () => {
     state.drift = { drift: [candidate('drift-1', 'FR-1', '2026-10-07T10:00:00Z')], unwatched: [] }
     panel()

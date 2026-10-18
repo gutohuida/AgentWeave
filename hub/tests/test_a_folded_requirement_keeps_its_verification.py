@@ -171,3 +171,56 @@ async def test_the_project_rollup_leaves_archived_documents_out_and_the_document
     assert not any(r.document_id == "doc-chg" for r in project.requirements)
     assert project.totals["verified"] == 1
     assert {r.identifier for r in history.requirements} == {"FR-1", "FR-2"}
+
+
+async def _drift_on_the_change() -> None:
+    from hub.db.models import RequirementDrift
+
+    async with async_session_factory() as session:
+        session.add(
+            RequirementDrift(
+                id="drift-folded",
+                project_id=P,
+                requirement_id="req-chg-1",
+                evidence_id="ev-req-chg-1",
+                state="candidate",
+                observed={"src/core.py": {"was": "aaaaaaa", "now": "bbbbbbb"}},
+                digest=SAME,
+            )
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_drift_on_the_serving_change_reaches_the_capability(app, auth_headers):
+    """F690: verification was carried across the fold, drift was not. The capability's FR-4 read
+    verified with "nothing to answer" while the archived change held the open candidate."""
+    await _seed()
+    await _drift_on_the_change()
+
+    async with async_session_factory() as session:
+        capability = _by_identifier(
+            await requirement_coverage(session, P, document_id="doc-cap"), "doc-cap"
+        )
+    assert capability["FR-4"].state == "drifting"
+    # A requirement the drifting evidence does not serve is untouched.
+    assert capability["FR-5"].state == "unserved"
+
+    response = await app.get(
+        "/api/v1/projects/proj-test/project/spec/drift",
+        params={"document": "spec/capabilities/calc/spec.json", "state": "candidate"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+    [row] = response.json()["drift"]
+    assert row["id"] == "drift-folded"
+    assert row["requirement"]["identifier"] == "FR-1"
+    assert row["serves"] == {"identifier": "FR-4", "document": "spec/capabilities/calc/spec.json"}
+
+    on_the_change = await app.get(
+        "/api/v1/projects/proj-test/project/spec/drift",
+        params={"document": "spec/changes/sub/spec.json"},
+        headers=auth_headers,
+    )
+    [own] = on_the_change.json()["drift"]
+    assert own["id"] == "drift-folded" and own["serves"] is None

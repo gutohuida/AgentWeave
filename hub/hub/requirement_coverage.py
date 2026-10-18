@@ -358,7 +358,11 @@ async def requirement_coverage(
                 "document_path": source_paths.get(source.document_id),
             }
         state = _state(
-            drifting=requirement.id in drifting,
+            # F690: a requirement served by a folded change's evidence drifts when that evidence
+            # does. The verification was carried across the fold (F593); its drift has to be too,
+            # or the capability reads verified while the files behind its proof have changed.
+            drifting=requirement.id in drifting
+            or (served_by is not None and source is not None and source.id in drifting),
             evidence=evidence,
             digest=requirement.digest,
             linked=linked,
