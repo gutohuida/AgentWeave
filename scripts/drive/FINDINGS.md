@@ -36590,7 +36590,7 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F739 (C) -- a request body sent without a Content-Length is not size-limited
 
-**Status:** open 2026-10-18. Filed from the 2026-10-18 fix pass (projects/CLI group), by reading the code; not driven.
+**Status:** fixed 66dba2a 2026-10-18 (Tier 0): with no Content-Length the middleware counts the bytes as they arrive; past the limit the app is told the client went away, its answer is dropped and the same 413 goes out. Test: hub/tests/test_oversized_body_reads_the_413.py (chunked over the limit red before the fix). Driven: real Hub on a scratch DB at :8125, a 3 MB chunked POST to /projects/open got the 413, a 10-byte one reached the route (422), no tracebacks.
 **Source:** review
 **Theme:** Resilience
 

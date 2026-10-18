@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 6,
+  "iteration": 7,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F739-impl",
-  "next_action": "Do queue item F739-impl: F739 (C), a request body without Content-Length is not size-limited. Tier 0: write the test that fails at the seam the finding names, fix, drive it against a scratch Hub (never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F743-impl.",
+  "current": "F743-impl",
+  "next_action": "Do queue item F743-impl: F743 (C), an operator PATCH to revision_needed naming an assignee silently ignores it. Tier 0: write the test that fails at the seam the finding names, fix, drive it against a scratch Hub (never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F742-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -47,9 +47,9 @@
     },
     {
       "id": "F739-impl",
-      "status": "open",
+      "status": "done",
       "title": "F739 (C): body without Content-Length is not size-limited",
-      "detail": "Test-first; fix; drive; Status."
+      "detail": "fixed 66dba2a; see log iteration 7"
     },
     {
       "id": "F743-impl",
