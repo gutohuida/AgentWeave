@@ -81,6 +81,18 @@ class JobUpdate(RequestModel):
             raise ValueError("session_mode must be 'new' or 'resume'")
         return v
 
+    @field_validator("stop_reason")
+    @classmethod
+    def validate_stop_reason(cls, v: Optional[str]) -> Optional[str]:
+        # F713: a blank reason ended the loop, and the real reason sent next was then refused as
+        # "this loop already ended" — the one stop an operator gets spent on nothing. Refused here,
+        # before anything is written, so the retry with a reason is still the first stop.
+        if v is not None and not v.strip():
+            raise ValueError(
+                "stop_reason cannot be blank: say why the loop stops. Nothing was changed."
+            )
+        return v.strip() if v is not None else None
+
 
 class JobRunResponse(BaseModel):
     id: str = Field(max_length=128)

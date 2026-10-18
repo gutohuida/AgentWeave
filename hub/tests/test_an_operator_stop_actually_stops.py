@@ -168,3 +168,31 @@ async def test_a_bare_job_with_no_loop_is_untouched_by_the_ending_path(app, auth
 
     job, _ = await _rows(job_id)
     assert job.enabled is True
+
+
+async def test_a_blank_stop_reason_is_refused_and_leaves_the_stop_for_a_real_reason(
+    app, auth_headers
+):
+    """F713: `{"stop_reason": "  "}` stopped the loop, and the real reason sent next got 409."""
+    job_id = await _loop_job(app, auth_headers)
+
+    blank = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"stop_reason": "  "},
+        headers=auth_headers,
+    )
+    assert blank.status_code == 422, blank.text
+    assert "cannot be blank" in blank.text
+    job, loop = await _rows(job_id)
+    assert job.enabled is True
+    assert loop.ending_state is None
+
+    real = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"stop_reason": "  the real reason  "},
+        headers=auth_headers,
+    )
+    assert real.status_code == 200, real.text
+    _, loop = await _rows(job_id)
+    assert loop.ending_state == "stopped"
+    assert loop.stop_reason == "the real reason"
