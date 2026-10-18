@@ -372,6 +372,33 @@
       "requirement": "maroon-dragon-turn",
       "then": "turn 2's recorded cost equals the CLI's turn-2 total minus its turn-1 total",
       "when": "two turns of one conversation run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Claude turn that streamed one assistant message whose usage reads 2 input + 333,000 cache-read + 100 cache-creation tokens",
+      "how_to_check": "pytest hub/tests/test_a_stopped_turns_interrupted_call_is_estimated.py::test_a_stopped_claude_turn_records_an_estimate_that_is_not_counted",
+      "key": "a-stopped-turns-call-is-estimated-stopped-row-estimate",
+      "requirement": "a-stopped-turns-call-is-estimated-stopped-turn-estimate",
+      "then": "its row is unavailable with estimated_input_tokens 333,102 and no measured tokens or cost",
+      "when": "the operator stops it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Claude turn that ends with its result",
+      "how_to_check": "pytest hub/tests/test_a_stopped_turns_interrupted_call_is_estimated.py::test_a_stopped_claude_turn_records_an_estimate_that_is_not_counted",
+      "key": "a-stopped-turns-call-is-estimated-completed-no-estimate",
+      "requirement": "a-stopped-turns-call-is-estimated-stopped-turn-estimate",
+      "then": "its row is measured and carries no estimate",
+      "when": "its accounting is recorded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the stopped turn above",
+      "how_to_check": "pytest hub/tests/test_a_stopped_turns_interrupted_call_is_estimated.py::test_a_stopped_claude_turn_records_an_estimate_that_is_not_counted; npx vitest run hub/ui/src/__tests__/accountingPresentation.test.tsx",
+      "key": "a-stopped-turns-call-is-estimated-snapshot-not-counted",
+      "requirement": "a-stopped-turns-call-is-estimated-estimate-never-counted",
+      "then": "project.estimated_input_tokens is 333,102, budget.used_tokens 0, project.total_tokens null; the panel reads '≈333,102 input tokens, not measured — not counted against the budget'",
+      "when": "GET /accounting is read and the Budgets panel renders"
     }
   ],
   "algorithms": [],
@@ -402,15 +429,19 @@
       "FR-32": "42ef9f75204a14b2683d2d024d293ffb67e750e5cd10a8b9ae60eea7647d7724",
       "FR-33": "7b73cc51554147fa0c669999c60d855777d3220d80983129311115bc0c0776ee",
       "FR-34": "9afd6c399fad41271596c0d632078d955df5e1180164ea0599690f76eb424a7a",
+      "FR-35": "8b9556465de5e79f6f79306082141ac2f776c9db78a51c127a3342f04dc05196",
+      "FR-36": "b83f18770e358911b2eb960543058b347673487cfa3fdbd52cb2279147b13b36",
       "FR-7": "0243dcae0b94bec3d8557b1d6fbe37b827f6ac81370c20aac02c926ddd800868",
       "FR-8": "a47401808ab90b647f8f27c6cfb33aa0b068daa8f6f20a22c5e66cc07a4af6e1",
       "FR-9": "f9b839718a1d5e35d1d0b3306acbf14f7d2ac72c331553511beb93cb06c0b0f4"
     },
-    "high_water": 34,
+    "high_water": 36,
     "requirements": {
       "a-copilot-one-shot-call-records-the-credits-its-session-repo": "FR-14",
       "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde": "FR-13",
       "a-project-token-budget-pauses-autonomy-but-not-the-operator": "FR-11",
+      "a-stopped-turns-call-is-estimated-estimate-never-counted": "FR-36",
+      "a-stopped-turns-call-is-estimated-stopped-turn-estimate": "FR-35",
       "allowance-and-currency-presentation-cannot-imply-billing": "FR-10",
       "copilot-spend-is-counted-in-its-own-units-credits-display-kind": "FR-27",
       "copilot-spend-is-counted-in-its-own-units-worker-line-credits": "FR-25",
@@ -655,6 +686,20 @@
       "party": null,
       "rationale": "A session whose earlier turns predate this change has no baseline; recording its whole running total as one turn would repeat the defect once more.",
       "statement": "When a resumed session's previous turns carry no recorded totals, the turn MUST keep its per-turn token counts and record no cost, rather than the session's total."
+    },
+    {
+      "key": "a-stopped-turns-call-is-estimated-stopped-turn-estimate",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Operator decision 2026-10-18: show the spend a Stop causes, marked as an estimate. The unavailable row's token columns are forbidden by ck_turn_usage_availability, and session_totals is F678's baseline, so the estimate has its own nullable column.",
+      "statement": "When a Claude turn ends stopped and its accounting is unavailable, the Hub SHALL record on its turn_usage row an estimated input-token figure equal to that turn's last context reading (context_tokens of the last measured reading the run streamed), and SHALL record none when the turn streamed no reading, ended any other way, or was measured."
+    },
+    {
+      "key": "a-stopped-turns-call-is-estimated-estimate-never-counted",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An estimate is a lower bound, not a measurement; counting it would let a guess pause autonomy.",
+      "statement": "The accounting snapshot SHALL report each turn's estimate and the sum of the estimates of unavailable turns, per project and per agent, separately from every measured figure; the Budgets panel SHALL show it as '≈N input tokens, not measured' and say it is not counted against the budget; and the estimate SHALL NOT count toward the project's used tokens, its budget state, or any measured total."
     }
   ],
   "schema_version": 1,

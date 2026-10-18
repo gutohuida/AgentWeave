@@ -1,0 +1,155 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "an agent turn that wrote .claude/settings.local.json with git apply",
+      "how_to_check": "pytest hub/tests/test_a_changed_runner_configuration_holds_the_next_turn.py::test_a_settings_write_by_git_apply_holds_the_next_turn_and_asks_the_operator",
+      "key": "git-apply-held",
+      "requirement": "launch-compares-fingerprint",
+      "then": "it does not start, and one pending RunnerConfiguration request names .claude/settings.local.json",
+      "when": "the next turn in that workspace is scheduled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a held turn and its pending request",
+      "how_to_check": "pytest hub/tests/test_a_changed_runner_configuration_holds_the_next_turn.py::test_a_settings_write_by_git_apply_holds_the_next_turn_and_asks_the_operator",
+      "key": "allow-releases",
+      "requirement": "changed-config-holds-turn",
+      "then": "the held turn starts, and the next turn is not asked about the same content; re-scheduling before the answer opens no second request",
+      "when": "the operator allows it, and the turn after it is scheduled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a held turn",
+      "how_to_check": "pytest hub/tests/test_a_changed_runner_configuration_holds_the_next_turn.py",
+      "key": "deny-holds",
+      "requirement": "changed-config-holds-turn",
+      "then": "the turn stays held and is not asked again; restoring the files releases it without an answer",
+      "when": "the operator denies it, then restores the files"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project directory holding .claude/settings.local.json, and a fresh checkout holding a .mcp.json the project directory does not",
+      "how_to_check": "pytest hub/tests/test_a_changed_runner_configuration_holds_the_next_turn.py",
+      "key": "first-launch",
+      "requirement": "first-launch-baseline",
+      "then": "the project directory's turn starts with nothing asked; the checkout's turn is asked about",
+      "when": "each launches its first turn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "both modules",
+      "how_to_check": "pytest hub/tests/test_a_changed_runner_configuration_holds_the_next_turn.py",
+      "key": "lists-equal",
+      "requirement": "one-config-path-list",
+      "then": "the two lists are equal",
+      "when": "the pinning test runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Workspace judge",
+      "how_to_check": "pytest hub/tests/test_arguments_from_another_commands_output_are_not_allowed_on_their_text.py",
+      "key": "pipe-fed-refused",
+      "requirement": "pipe-fed-shapes",
+      "then": "each is refused, while `x | python -m json.tool` stays allowed",
+      "when": "it reads `x | py -3.11`, `x | py -V:3.12`, `x | python -u` and `gc names.txt | Get-Item | Remove-Item`"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "e82424a784052193f0ee581cc331bea9bc453c2ad24924b87a28f392ace15ea7",
+      "FR-2": "1f9b96299175690547bae3f1328e47d0f22cac273cd6f82140f6c9548d3a5a3e",
+      "FR-3": "bbec96be08c38ca519dd4e849b05f3b88c362cda6431cafd0102101e9b1c3b75",
+      "FR-4": "234fd619592860dddf6a494e5ffa2d2eab86774ec629b0a1d359c7e503fcbf4a",
+      "FR-5": "6005e863f5556c66303622eed846012548b210506133f19c4eaac0b48beab9ee"
+    },
+    "high_water": 5,
+    "requirements": {
+      "changed-config-holds-turn": "FR-2",
+      "first-launch-baseline": "FR-3",
+      "launch-compares-fingerprint": "FR-1",
+      "one-config-path-list": "FR-4",
+      "pipe-fed-shapes": "FR-5"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 The check is per launch, in the Hub, not in the judge. D2 Asked once per content; Deny is remembered until new operator input or new content. Migration 0133_workspace_fingerprints adds one table (PK project_id, workspace_key); nothing existing changes. Hazard: it reaches the operator's :8000 database on its next restart; after it every workspace's first launch records a baseline. Rollback: alembic downgrade 0132 drops the table and launches start unchecked.",
+  "evidence": {
+    "checked": [
+      "Acceptance test committed xfail(strict) at 9339833, passing after the build",
+      "test_migration_0133_adds_workspace_fingerprints_and_round_trips"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "The workspace judge reads commands as text. F675 refuses writes to the runner's configuration it can see in a command's words, but the class is open by construction (git apply of a patch, git checkout, archive extraction, cd/Join-Path splits, a copy naming only the directory). An allow rule in .claude/settings.local.json runs ahead of --permission-prompt-tool on the next turn, and a hook runs with no check at all, so the boundary has to be structural: the Hub, which launches every turn, checks what the runner will read before it launches.",
+  "requirements": [
+    {
+      "key": "launch-compares-fingerprint",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A text judge cannot see every way a turn can write the configuration the next turn's runner reads; the launch can.",
+      "statement": "The Hub SHALL fingerprint the runner-config paths (runner_config.RUNNER_CONFIG_PATHS: the existence and content hash of each file, directories enumerated) in the directory a turn starts in (agent checkout, task checkout, review checkout or project directory) before the turn starts, and compare it with the fingerprint recorded for that workspace; an unchanged fingerprint SHALL let the turn start."
+    },
+    {
+      "key": "changed-config-holds-turn",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An allow rule or hook written by a turn must not take effect before the operator has seen it.",
+      "statement": "The Hub SHALL hold a turn whose workspace's runner configuration differs from its record (no run is created, its queued input stays queued and uncounted, and its waiting_reason names the files) and SHALL ask the operator once per content on the permission surface, as a run-less permission request with tool_name RunnerConfiguration and tool_input.paths naming each changed file. Allow SHALL record the new fingerprint and re-drain the queue so the held turn starts; Deny SHALL keep the turn held and not ask again until new operator input arrives or the files change; restoring the files SHALL release the turn without an answer."
+    },
+    {
+      "key": "first-launch-baseline",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Without the second condition a reviewer's fresh checkout of an agent's commit to .claude/settings.json would be accepted silently.",
+      "statement": "The Hub SHALL record a workspace's first fingerprint silently when the workspace is the project directory, or when every runner-config file in it is one the project directory already holds unchanged; otherwise the first launch SHALL be asked about like a change."
+    },
+    {
+      "key": "one-config-path-list",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "mcp_server.py is spawned standalone and restates the list; the judge and the fingerprint must read one list.",
+      "statement": "mcp_server._RUNNER_CONFIG_PATHS SHALL equal runner_config.RUNNER_CONFIG_PATHS, and a test SHALL pin them equal."
+    },
+    {
+      "key": "pipe-fed-shapes",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "F676: a pipe can carry a path the judge never reads. F737 rider: py -3.11, py -V:3.12 and python -u read code from their input, and gc names.txt | Get-Item | Remove-Item takes its paths from a file.",
+      "statement": "Under the Workspace posture the shell judge SHALL refuse a command whose stage takes paths or code from another command's output: xargs or parallel anywhere; after a pipe, a shell, eval or source, a while-read loop that does more than print, or an interpreter given no code of its own (options alone, or the py version selector); a decoder (base64 -d, xxd -r) feeding a pipe or a substitution; pwsh -EncodedCommand; and in PowerShell Invoke-Expression or iex, [scriptblock]::Create, FromBase64String, and a path cmdlet fed by a pipe (directly or in a ForEach-Object block using $_) unless a listing such as Get-ChildItem feeds it, where a pipe-fed listing does not exempt the stage after it. Reading stages (| wc, | head, | python -m json.tool) SHALL stay allowed."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "runner_config.RUNNER_CONFIG_PATHS fingerprints per workspace (migration 0133 workspace_fingerprints)",
+      "a held turn and its RunnerConfiguration permission request",
+      "mcp_server._decide pipe-fed interpreter and listing shapes"
+    ],
+    "non_goals": [
+      "A runner's own mid-turn hot-reload of its settings (the check is per launch)",
+      "Any Hub route writing these files"
+    ]
+  },
+  "summary": "Before every launch the Hub fingerprints the runner configuration in the turn's workspace and compares it with that workspace's last approved launch; a change holds the turn and asks the operator, naming the files (F737). Rider: pipe-fed interpreter and listing shapes in the shell judge.",
+  "tasks": [],
+  "title": "A changed runner configuration holds the next turn"
+}

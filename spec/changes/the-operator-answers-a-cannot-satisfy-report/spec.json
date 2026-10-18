@@ -1,0 +1,135 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the builder reported c1",
+      "how_to_check": "pytest hub/tests/test_the_operator_answers_a_cannot_satisfy_report.py::test_amending_changes_the_criterion_and_unblocks_the_task",
+      "key": "respond-amend",
+      "requirement": "respond-route",
+      "then": "the stored c1 carries the new then, the task is in_progress, and the report reads amended with the new amendment's id",
+      "when": "the operator amends c1's then"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a cannot-satisfy report",
+      "how_to_check": "pytest hub/tests/test_the_operator_answers_a_cannot_satisfy_report.py::test_accepting_unblocks_the_task_and_keeps_the_criterion",
+      "key": "respond-accept",
+      "requirement": "respond-route",
+      "then": "the task is in_progress, the criterion unchanged, and the report reads accepted",
+      "when": "the operator accepts it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a cannot-satisfy report",
+      "how_to_check": "pytest hub/tests/test_the_operator_answers_a_cannot_satisfy_report.py::test_rejecting_keeps_the_task_blocked_and_sends_the_reason_to_the_reporter",
+      "key": "respond-reject",
+      "requirement": "respond-route",
+      "then": "first 422 response_needs_reason; then the task stays blocked and a queued entry for the reporter names the criterion and carries the reason",
+      "when": "the operator rejects it with no reason, then with a reason"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an answered report",
+      "how_to_check": "pytest hub/tests/test_the_operator_answers_a_cannot_satisfy_report.py::test_a_report_is_answered_once",
+      "key": "respond-once",
+      "requirement": "respond-route",
+      "then": "409 report_answered",
+      "when": "the operator answers it again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an unanswered cannot-satisfy report",
+      "how_to_check": "pytest hub/tests/test_the_operator_answers_a_cannot_satisfy_report.py::test_mark_reviewed_does_not_answer_a_report",
+      "key": "reviewed-not-answer",
+      "requirement": "record-except-reports",
+      "then": "409 report_needs_response; the report stays unanswered",
+      "when": "the operator marks it reviewed by id, then marks the whole document reviewed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a cannot-satisfy row in the amendments panel",
+      "how_to_check": "npx vitest run hub/ui/src/__tests__/specAmendmentsPanel.test.tsx",
+      "key": "panel-answers",
+      "requirement": "page-offers-answers",
+      "then": "it offers Amend criterion, Accept and unblock and Reject, not Mark reviewed, and each posts to the respond route",
+      "when": "it renders"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "33c579a35e3c2754574f4f0690cdceb7d538c2b5128d28c02403278f634453db",
+      "FR-2": "b54c3c5d759b3b23ea238587377d10debd42621c4b27b6f61a405ccdd32878e3",
+      "FR-3": "a97d953620eeeefc652f345b65b92f4a886c7f1662c12a8533392f11eeb744a4"
+    },
+    "high_water": 3,
+    "requirements": {
+      "page-offers-answers": "FR-2",
+      "record-except-reports": "FR-1",
+      "respond-route": "FR-3"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 The respond route is the one place a report is answered; Mark reviewed refuses a report's id. D2 Every answer reaches the reporter as an inbound queue entry. No schema change.",
+  "evidence": {
+    "checked": [
+      "Acceptance tests written first (xfail strict, 0a05217) on both planes, built at c730d0a"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "A builder or tester that cannot meet a criterion calls report_cannot_satisfy: the Hub records a cannot_satisfy amendment and blocks the builder's task. The operator's only response was Mark reviewed, which changed nothing: the sweep's report left criterion c2 unchanged and its task blocked, with no pointer between the two.",
+  "requirements": [
+    {
+      "key": "record-except-reports",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agent-amendment provenance; mark reviewed per item or per document (roadmap slice). A cannot-satisfy report is a question to the operator, not provenance to acknowledge (F700).",
+      "statement": "Each amendment MUST be recorded with its operation, target, reason, how_to_check, author and run, as not reviewed, and MUST stay not reviewed until the operator marks it reviewed, either by its id or for the whole document, except a cannot_satisfy report, which is answered — amend, accept or reject — rather than marked reviewed."
+    },
+    {
+      "key": "page-offers-answers",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator decision 2026-10-18: three responses, each of which does something.",
+      "statement": "In the app, an approved document MUST list its amendments with operation, target, author, run, reason, how to check and whether reviewed, and MUST offer Mark reviewed per amendment and for all, and MUST offer Amend criterion, Accept and unblock, and Reject on a cannot-satisfy report in place of Mark reviewed."
+    },
+    {
+      "key": "respond-route",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Each answer does something the reporter is told about, so the report and the blocked task can no longer drift apart. No schema change: the response rides the amendment_reviewed event's detail.",
+      "statement": "The operator MUST answer an unanswered cannot_satisfy report through POST /api/v1/projects/{id}/project/documents/{path}/amendments/{amendment_id}/respond with exactly one of amend, accept or reject, and the answer MUST mark the report reviewed recording the response, its reason and, for amend, the amendment it produced. Amend MUST change the reported criterion in the approved document with the given fields (given, when, then, how_to_check, checked_by) as a change_criterion amendment by the operator that names the report and is born reviewed, refresh the open tasks serving its requirement, and unblock the blocked task (in_progress, its blocked reason cleared); accept MUST leave the criterion as written and unblock the task; reject MUST require a reason (422 response_needs_reason) and leave the task blocked. Every response MUST be sent to the reporting agent as operator input in its open conversation. A second answer MUST be refused 409 report_answered, an id that is not a cannot-satisfy report 422 not_a_report, and naming a report's id to Mark reviewed 409 report_needs_response; marking the whole document reviewed MUST leave unanswered reports as they are."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "POST /projects/{id}/project/documents/{path}/amendments/{amendment_id}/respond",
+      "Mark reviewed refusing a report",
+      "the amendments panel's three answers"
+    ],
+    "non_goals": [
+      "A schema change for the response"
+    ]
+  },
+  "summary": "A cannot_satisfy report is answered with amend, accept or reject through a respond route and the amendments panel; each answer does something and reaches the reporter, and Mark reviewed no longer answers a report (F700).",
+  "tasks": [],
+  "title": "The operator answers a cannot-satisfy report, and the answer does something"
+}

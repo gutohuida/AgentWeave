@@ -952,6 +952,96 @@
       "requirement": "how-a-requirement-changed-and-what-proved-it-story-view",
       "then": "every revision is listed with its actor, unrecorded wordings say so, and there is no console error",
       "when": "the story of a reworded requirement is opened from its coverage row"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a piece another reviewer rejected",
+      "how_to_check": "pytest hub/tests/test_a_decided_piece_is_overturned_only_by_the_operator.py::test_a_granted_agent_cannot_decide_a_decided_piece",
+      "key": "only-the-operator-overturns-evidence-agent-cannot-redecide",
+      "requirement": "only-the-operator-overturns-evidence-agents-decide-awaiting-only",
+      "then": "409 already_decided, the piece stays rejected and no review row is added",
+      "when": "a granted agent accepts it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "evidence recorded, then its requirement reworded",
+      "how_to_check": "pytest hub/tests/test_a_decided_piece_is_overturned_only_by_the_operator.py::test_evidence_for_an_earlier_wording_cannot_be_accepted",
+      "key": "only-the-operator-overturns-evidence-stale-not-accepted",
+      "requirement": "only-the-operator-overturns-evidence-agents-decide-awaiting-only",
+      "then": "409 evidence_stale and the piece stays awaiting",
+      "when": "the operator accepts it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a rejected piece",
+      "how_to_check": "pytest hub/tests/test_a_decided_piece_is_overturned_only_by_the_operator.py::test_the_operator_overturns_only_with_a_reason",
+      "key": "only-the-operator-overturns-evidence-overturn-needs-reason",
+      "requirement": "only-the-operator-overturns-evidence-overturn-route",
+      "then": "first 422 overturn_needs_reason; then 200, review_state accepted, overturned.from rejected, the reason on the latest review",
+      "when": "the operator overturns it with no reason, then with a reason"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an accepted piece of an approved task",
+      "how_to_check": "pytest hub/tests/test_a_decided_piece_is_overturned_only_by_the_operator.py::test_overturning_an_accepted_piece_reopens_the_approved_task",
+      "key": "only-the-operator-overturns-evidence-overturn-reopens",
+      "requirement": "only-the-operator-overturns-evidence-overturn-route",
+      "then": "the piece is rejected and the task is revision_needed",
+      "when": "the operator overturns it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an awaiting piece, and a decided one",
+      "how_to_check": "pytest hub/tests/test_a_decided_piece_is_overturned_only_by_the_operator.py::test_overturning_an_awaiting_piece_is_refused and ::test_the_same_decision_again_is_refused",
+      "key": "only-the-operator-overturns-evidence-overturn-awaiting-refused",
+      "requirement": "only-the-operator-overturns-evidence-overturn-route",
+      "then": "409 not_decided; 409 already_decided",
+      "when": "the operator overturns the awaiting piece, and decides the decided one the same way again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a decided piece in the evidence list",
+      "how_to_check": "npx vitest run hub/ui/src/__tests__/evidencePieces*.test.tsx",
+      "key": "only-the-operator-overturns-evidence-overturn-control",
+      "requirement": "only-the-operator-overturns-evidence-overturn-route",
+      "then": "it asks for a reason and posts it to the overturn route",
+      "when": "the operator uses Overturn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one accepted current piece saying covers: partial",
+      "how_to_check": "pytest hub/tests/test_partial_evidence_does_not_verify.py",
+      "key": "partial-evidence-does-not-verify-partial-reads-in-progress",
+      "requirement": "n16",
+      "then": "state in_progress, reason 'partial evidence only', accepted_count 1",
+      "when": "coverage is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same requirement with a second accepted piece saying full, or one accepted piece with no covers",
+      "how_to_check": "pytest hub/tests/test_partial_evidence_does_not_verify.py",
+      "key": "partial-evidence-does-not-verify-full-verifies",
+      "requirement": "n16",
+      "then": "state verified, reason null",
+      "when": "coverage is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a gate document whose task serves a partial-only requirement",
+      "how_to_check": "pytest hub/tests/test_partial_evidence_does_not_verify.py",
+      "key": "partial-evidence-does-not-verify-gate-partial",
+      "requirement": "partial-evidence-does-not-verify-gate-refuses-partial-only",
+      "then": "first 409 gate_unsatisfied naming the requirement and 'partial'; then 200",
+      "when": "the task is approved, then approved again after a full piece is accepted"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a drift candidate",
+      "how_to_check": "pytest hub/tests/test_requirement_drift.py",
+      "key": "sweep-1018-corrections-spec-updated-asks-again",
+      "requirement": "n25",
+      "then": "a new candidate is raised",
+      "when": "the operator resolves it as specification updated without rewording the requirement and scans again"
     }
   ],
   "algorithms": [
@@ -1007,7 +1097,7 @@
       "FR-33": "b8e53df1dbcd0e0a7de35d4fd3daca8c9d3ee1055bbabac70536da3718d563a2",
       "FR-34": "60ee812e9bd81450c9ea8e1434e4efa38cc666418e9aa33ab2717e5fef0bc4fc",
       "FR-35": "6dfd2992600a0506ccd9a6c2f7bbf2477c67d5aa804aed15877ec8b5af7e670b",
-      "FR-36": "8a7d191beb5e5c380196ac2565b196a9c714785a29260b7d7ede7b42695e1e16",
+      "FR-36": "66a80f67f8343cd8aad8619a31345146f706d3a6cf08de2c2fbdab7520dd7b72",
       "FR-37": "d1a08abb4dec3f9692120ebfc28028de5798e7d5dd394e15d6ea484a187b25d7",
       "FR-38": "950385c309fde264605580eb07ddde56f819bc4f5ed1e36608a1537ae8416d6f",
       "FR-39": "5363ae4bbdadbbdabbb0ea989d247dc6b726b6de5eeafb58ebf6a42c02cc207f",
@@ -1016,7 +1106,7 @@
       "FR-42": "f8afacb907d742c6b12bd269e88e151a5001d67b370f47123c5057e1ae8b3d05",
       "FR-43": "c31bd54f825b76000ca9f49e3edfb8dba87b174f5c216a945df36749be835c5d",
       "FR-44": "1b6d9bf68b50b63cd0fb448201c4256b5c768b3426c4441459e499181949755e",
-      "FR-45": "44e2f38df65b451e139c80bda3a58545c90d357da23e06c057c342a6bb723c7a",
+      "FR-45": "ec837578e6d4c1b28770ab7acf1c8502cde312d5a2f1fbe38d97cdfd794e7cb3",
       "FR-46": "7662745f7d81c11992c775f6186b546eed18f33ebef84086321d79d6f9a75a33",
       "FR-47": "720affb2c96085d3198bf7ed7bf8c978caf25c117e0cb6c1a277bd9eb5187123",
       "FR-48": "48875fdeb795740cb9fd56fd13d24232c662a92a7c45e7a20b0147b46aa6c705",
@@ -1045,10 +1135,13 @@
       "FR-70": "1519d9f8e4b8837e11509c10dd34cd98198af817e2c50316446030ce8a150291",
       "FR-71": "bb6c506097d310cd93074e04d039f0c4f40245a4c984576a3334659d8cf51991",
       "FR-72": "2f4ded375338b84576353999610d25edc712286b5f703e7b06fc9467d5c11302",
+      "FR-73": "a642bd1e6700a73ee2a92cea2f87c838ec3d5481eb2ec6c1d46f202f283b64dd",
+      "FR-74": "40ff9495c7b4d5bbe673e94e57da66c43199f3eda715840570c09e82be0dc2fd",
+      "FR-75": "6804c82acf1f930276c793a22fa0699e418fa0f0f67bb3ccd34376cb76d40549",
       "FR-8": "e320eebf6045fc12d206c38c7d6e54299432f7f6fe1c4948faddb267d400fea3",
       "FR-9": "da908b42a1d65c2b719f110fe3b3f6d9af59a64cde27ad8f1118a0164cdc9ee3"
     },
-    "high_water": 72,
+    "high_water": 75,
     "requirements": {
       "a-changed-implementation-raises-a-candidate-never-an-edit": "FR-11",
       "a-committed-turn-s-footprints-are-repointed-at-its-commit": "FR-55",
@@ -1113,6 +1206,9 @@
       "n8": "FR-28",
       "n9": "FR-29",
       "navigating-from-a-task-s-requirement-link-reaches-that-requi": "FR-49",
+      "only-the-operator-overturns-evidence-agents-decide-awaiting-only": "FR-73",
+      "only-the-operator-overturns-evidence-overturn-route": "FR-74",
+      "partial-evidence-does-not-verify-gate-refuses-partial-only": "FR-75",
       "the-screen-that-says-evidence-awaits-a-decision-can-take-it": "FR-16",
       "whether-work-has-reached-the-main-line-is-re-answered": "FR-53",
       "work-is-linked-to-the-requirements-it-serves": "FR-8"
@@ -1308,8 +1404,8 @@
       "key": "n16",
       "modal": "SHALL",
       "party": null,
-      "rationale": "The order ranks how much the evidence can be trusted, worst news first, so a reworded or drifting requirement is never reported verified. `rejected` is distinct so a refused demonstration is not mistaken for work not yet evidenced.",
-      "statement": "Coverage SHALL take the first state that applies, in this order: `drifting` (an open drift candidate), `stale` (evidence only against an earlier digest), `evidence_awaiting_review`, `verified` (accepted current-digest evidence), `rejected` (all current-digest evidence rejected), `in_progress` (linked work started or completed without evidence), `not_started`, `unserved` (no linked work)."
+      "rationale": "The order ranks how much the evidence can be trusted, worst news first, so a reworded or drifting requirement is never reported verified. `rejected` is distinct so a refused demonstration is not mistaken for work not yet evidenced. Evidence its own author says covers only part of a requirement does not verify it (F706); evidence that says full, or nothing about covers, counts as covering, so evidence recorded before covers existed verifies as before.",
+      "statement": "Coverage SHALL take the first state that applies, in this order: `drifting` (an open drift candidate), `stale` (evidence only against an earlier digest), `evidence_awaiting_review`, `verified` (accepted current-digest evidence, unless every accepted current piece says covers: partial, which reads `in_progress` with reason 'partial evidence only'), `rejected` (all current-digest evidence rejected), `in_progress` (linked work started or completed without evidence), `not_started`, `unserved` (no linked work)."
     },
     {
       "key": "n17",
@@ -1385,8 +1481,8 @@
       "key": "n25",
       "modal": "SHALL",
       "party": null,
-      "rationale": "\"Implementation corrected\" claims the change was undone; silencing it would turn a mistaken answer into a permanent blind spot, so the same change still present is drift again.",
-      "statement": "Only the operator SHALL resolve a drift candidate, as specification updated, implementation corrected, or no specification change required, recording the digest current at that moment; the first and third answers SHALL also record the current fingerprint so the same change is not raised again, and `implementation_corrected` SHALL NOT."
+      "rationale": "\"Implementation corrected\" claims the change was undone; silencing it would turn a mistaken answer into a permanent blind spot, so the same change still present is drift again. A specification update with nothing reworded silenced a change permanently; a rewording already silences the drift because the evidence's digest stops matching (F730 item 1).",
+      "statement": "Only the operator SHALL resolve a drift candidate, as specification updated, implementation corrected, or no specification change required, recording the digest current at that moment; no_change_required SHALL also record the current fingerprint so the same change is not raised again, and specification_updated and implementation_corrected SHALL NOT (a specification update is silenced by the rewording itself)."
     },
     {
       "key": "n26",
@@ -1604,6 +1700,27 @@
       "party": null,
       "rationale": "The operator's :8000 applies it on restart.",
       "statement": "Migration 0131 MUST add only a nullable column, leave existing rows unchanged, and downgrade by dropping that column."
+    },
+    {
+      "key": "only-the-operator-overturns-evidence-agents-decide-awaiting-only",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Operator decision 2026-10-18: a decision another reviewer took is not an agent's to reverse, and accepting evidence for an earlier wording verifies nothing the requirement says today. An agent deciding a decided piece is refused 409 already_decided naming its decision; accepting stale evidence is refused 409 evidence_stale for every actor; rejecting stale evidence stays allowed.",
+      "statement": "An agent SHALL decide only awaiting evidence; only the operator SHALL overturn a decided piece, with a reason; evidence whose digest is not its requirement's current digest SHALL NOT be accepted."
+    },
+    {
+      "key": "only-the-operator-overturns-evidence-overturn-route",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "F672's 'rejecting an accepted piece reopens the task' worked by API only; the reversal is a review row, so the history shows it by sequence with no schema change.",
+      "statement": "The operator SHALL overturn a decided piece through POST /api/v1/projects/{id}/project/spec/evidence/{evidence_id}/overturn with a non-empty reason, and through the Overturn control on a decided piece in the evidence list. The overturn SHALL record the opposite decision as a new review carrying the reason, SHALL answer the evidence view with overturned.from naming the previous decision, and SHALL have the consequences a first decision has: accepting integrates what waited on it, and rejecting a piece of an approved task reopens it. A missing reason SHALL be refused 422 overturn_needs_reason and an awaiting piece 409 not_decided. On the operator's plain decision route, the same decision again on a decided piece SHALL be refused 409 already_decided, and the opposite one SHALL need a reason (422 overturn_needs_reason)."
+    },
+    {
+      "key": "partial-evidence-does-not-verify-gate-refuses-partial-only",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The gate follows coverage: partial-only is in_progress.",
+      "statement": "A gate-rigor document SHALL refuse approval of a task serving a requirement whose accepted current evidence is partial only, with a remedy that names the partial evidence and asks for a piece with covers: full; contract SHALL report it and sketch SHALL stay silent, as for any in_progress requirement."
     }
   ],
   "schema_version": 1,

@@ -50,13 +50,6 @@
       "when": "A is approved and B is provisioned for its next turn"
     },
     {
-      "given": "an approved prerequisite's commit conflicts with commits already on the dependent's branch",
-      "key": "ac7",
-      "requirement": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
-      "then": "the turn is refused naming the prerequisite task, the commit, the checkout and the merge command, and the branch tip and working files are byte-identical to before",
-      "when": "the dependent is provisioned"
-    },
-    {
       "given": "",
       "key": "ac8",
       "requirement": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
@@ -497,6 +490,15 @@
       "requirement": "work-from-a-mid-turn-claim-reaches-the-task-never-destructive",
       "then": "created and carried, carried, untouched, untouched with the pick aborted",
       "when": "the turn's commits are carried into a missing, an existing, a dirty and a conflicting task checkout"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved prerequisite's commit conflicts with commits already on the dependent's branch",
+      "how_to_check": "pytest hub/tests/test_a_conflicting_prerequisite_is_the_authors_to_merge.py::test_the_author_gets_its_turn_with_the_merge_and_approval_waits_for_it",
+      "key": "a-conflicting-prerequisite-is-the-authors-provisioning-conflict",
+      "requirement": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
+      "then": "the merge is abandoned, the branch tip and working files are unchanged, and the turn starts with the merge instruction",
+      "when": "the dependent is provisioned"
     }
   ],
   "algorithms": [],
@@ -524,7 +526,7 @@
       "FR-27": "1fb8b07c4e89bd13a0c9b881fa6ad9dcf8186438ccd9222f813591b4560b1d8f",
       "FR-28": "1535af91a815283c417ee1651415e37dc1d7f2cee262529933c743e79f4e206a",
       "FR-29": "981fb6f795d75375ad833855062b94d71dd3c6e1958d5d2338897ed95400f1c5",
-      "FR-3": "578c57590967474c1d6097b5947ba8aa5c9b0b55a4f0e5ba74ac23d868def107",
+      "FR-3": "0c6cfc7027e0115bff28985ff293bea2b5000d3a44042ff23dfc2b329d597f5a",
       "FR-30": "4c3f0720eda2703c5ee76a37aa3b8a16d55b8c2ec5ab4916be23da575a03af96",
       "FR-4": "779c4ad1e9e50a999c045132129fb97926b8a2e6f3f0bbb6b9fe353dfb87913b",
       "FR-5": "06f5abef393dd426ff6c95abe633ce57112c8f62672e60577c0118d2a5dffb09",
@@ -612,8 +614,8 @@
       "key": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
       "modal": "SHALL",
       "party": null,
-      "rationale": "Repeated turns on one task must not rebuild it, and a dependent started before its prerequisite was approved must not go on without that work. The existing branch carries the task's own work, so nothing may be rewritten: the merge is aborted on failure and the refusal names the prerequisite task, the commit, the checkout and the command that merges it, so a person can reconcile it. A task released and worked again is re-provisioned from its retained branch, so it resumes with its prior work.",
-      "statement": "Provisioning a task checkout that already exists, correctly registered for its branch, SHALL return it without rebuilding it and SHALL then merge in, as merge commits, the commits of the task's approved prerequisites that its branch lacks; a merge that conflicts, a merge that does not finish in time, or a checkout with uncommitted changes when something must be merged SHALL refuse the turn and leave the branch tip and files unchanged."
+      "rationale": "Repeated turns on one task must not rebuild it, and a dependent started before its prerequisite was approved must not go on without that work. The existing branch carries the task's own work, so nothing may be rewritten. A conflict is the author's to merge (F695): the turn starts with the instruction and approval waits for the commit. A task released and worked again is re-provisioned from its retained branch, so it resumes with its prior work.",
+      "statement": "Provisioning a task checkout that already exists, correctly registered for its branch, SHALL return it without rebuilding it and SHALL then merge in, as merge commits, the commits of the task's approved prerequisites that its branch lacks. A conflicting approved prerequisite is abandoned with the checkout left clean and handed to the turn's author with a merge instruction, uncommitted changes are snapshotted before the catch-up, and a merge that does not finish in time SHALL refuse the turn and leave the branch tip and files unchanged."
     },
     {
       "key": "n2",

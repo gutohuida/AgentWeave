@@ -475,6 +475,15 @@
       "requirement": "the-reviewers-verdict-decides-the-tasks-evidence-approve-accepts",
       "then": "the approve leg ends approved, accepted by the tester and merged with nothing surfaced, and the send-back leg ends revision_needed with the evidence rejected by the tester",
       "when": "scripts/drive/d1017_agentic_evidence.py runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose branch holds a commit no merge target contains",
+      "how_to_check": "pytest hub/tests (F681, commit db2ae99)",
+      "key": "sweep-1018-corrections-unlanded-refused",
+      "requirement": "sweep-1018-corrections-approval-refuses-unlanded-commits",
+      "then": "409 naming the branch and the commit, and what clears it",
+      "when": "the operator Lands it"
     }
   ],
   "algorithms": [],
@@ -493,6 +502,7 @@
       "FR-19": "09b154b9022300549c07a063879de2dc34a44e18045d5b4f61bd463d8e3038fb",
       "FR-2": "29fcc5dfa17eabebcc5121d3f7d04d71b8b976d99f0471f3a9fab1d4172b4eb7",
       "FR-20": "b9abb02bf69102d020039af301ffcf8305216a31de651e3d517792133c17ff81",
+      "FR-21": "e91994722103dc84ed3645a19e54e8edd8a71f6c68730664ac6727d2690b5130",
       "FR-3": "ea10ae2d13ef75727bc347849a7e6b3da5a375f39022387639c3c47473f491da",
       "FR-4": "dedd86d802dec61781970f2c835757f62db654878b4c88a6b804e1553605cdd3",
       "FR-5": "01a4e34bc4cb9b1aa638c304b0ae3bdbcb9d4a6af9be3940c48cd438f0c1de34",
@@ -501,7 +511,7 @@
       "FR-8": "c83866d2addda80b7e8b19a54949421736b865b200977b576eb0272189c4cfb5",
       "FR-9": "6fd53c789afe39be13a8ea2194f05b787e9729d509c1b621a17150e6b4810303"
     },
-    "high_water": 20,
+    "high_water": 21,
     "requirements": {
       "accepting-evidence-attempts-the-integrations-that-wanted-it": "FR-9",
       "an-integration-that-cannot-proceed-does-not-block-approval": "FR-3",
@@ -514,6 +524,7 @@
       "every-integration-attempt-is-recorded": "FR-4",
       "n2": "FR-14",
       "naming-the-main-branch-attempts-the-integrations-that-wanted": "FR-7",
+      "sweep-1018-corrections-approval-refuses-unlanded-commits": "FR-21",
       "the-approval-preview-says-whether-the-work-would-merge-clean": "FR-10",
       "the-reviewers-verdict-decides-the-tasks-ev-refusal-keeps-nothing": "FR-17",
       "the-reviewers-verdict-decides-the-tasks-evide-operator-overturns": "FR-20",
@@ -681,6 +692,13 @@
       "party": null,
       "rationale": "The operator leaves the gate but keeps the last word.",
       "statement": "When the operator rejects an accepted piece of evidence whose task is approved, the task MUST move to revision_needed with the operator as actor."
+    },
+    {
+      "key": "sweep-1018-corrections-approval-refuses-unlanded-commits",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "F681: Land approved a task on evidence another, task-less run recorded at main's tip and skipped the merge, so the task's own commit never reached main while its requirement read verified.",
+      "statement": "The Hub SHALL refuse a move to approved, by PATCH and by Land, when the task's own branch holds commits on neither the main branch nor inside any merge target (gate category unlanded), naming the branch and the commits and saying what clears it: evidence recorded from the task's own checkout, then accepted."
     }
   ],
   "schema_version": 1,

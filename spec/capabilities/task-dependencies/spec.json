@@ -281,20 +281,6 @@
       "when": "the next turn is bound to the task"
     },
     {
-      "given": "an existing checkout with uncommitted changes and a missing approved prerequisite",
-      "key": "ac45",
-      "requirement": "n1",
-      "then": "the turn is refused and the changes are untouched",
-      "when": "a turn is bound to the task"
-    },
-    {
-      "given": "an approved prerequisite that conflicts with the task's branch",
-      "key": "ac46",
-      "requirement": "n1",
-      "then": "the merge is aborted, the branch tip and files are unchanged, and the refusal names the prerequisite and the merge command",
-      "when": "a turn is bound to the task"
-    },
-    {
       "given": "a dirty checkout that already contains every approved prerequisite",
       "key": "ac47",
       "requirement": "n1",
@@ -363,6 +349,42 @@
       "requirement": "a-dependency-may-name-a-task-in-another-document-by-importin",
       "then": "the reference is part of the document's own content",
       "when": "a document declares a dependency on an approved document's task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A approved with a commit that conflicts with B's committed work on f.txt",
+      "how_to_check": "pytest hub/tests/test_a_conflicting_prerequisite_is_the_authors_to_merge.py::test_the_author_gets_its_turn_with_the_merge_and_approval_waits_for_it",
+      "key": "a-conflicting-prerequisite-is-the-authors-t-conflict-handed-over",
+      "requirement": "n1",
+      "then": "B's checkout is not mid-merge, B's f.txt is unchanged, and B's prompt contains git merge --no-ff <A's sha>, A's task id and f.txt",
+      "when": "B's next turn starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an existing checkout with uncommitted changes and a missing approved prerequisite",
+      "how_to_check": "pytest hub/tests/test_a_conflicting_prerequisite_is_the_authors_to_merge.py",
+      "key": "a-conflicting-prerequisite-is-the-authors-to-m-dirty-snapshotted",
+      "requirement": "n1",
+      "then": "the changes are committed by an auto-snapshot, the prerequisite is merged and the turn starts",
+      "when": "a turn is bound to the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a checkout left mid-merge on an approved prerequisite commit with unresolved conflicts",
+      "how_to_check": "pytest hub/tests/test_a_conflicting_prerequisite_is_the_authors_to_merge.py",
+      "key": "a-conflicting-prerequisite-is-the-authors-mid-merge-handed-back",
+      "requirement": "n1",
+      "then": "the end-of-turn snapshot does not commit the conflicted merge and the next turn starts with a note saying the merge is unfinished",
+      "when": "the turn ends and the next turn is bound to the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "B's branch lacks approved prerequisite A's commit",
+      "how_to_check": "pytest hub/tests/test_a_conflicting_prerequisite_is_the_authors_to_merge.py::test_the_author_gets_its_turn_with_the_merge_and_approval_waits_for_it",
+      "key": "a-conflicting-prerequisite-is-the-approval-refused-then-allowed",
+      "requirement": "a-conflicting-prerequisite-is-th-approval-waits-for-prerequisite",
+      "then": "first 409 naming A and its commit with detail.unmerged_prerequisites[].commit_sha; then approval succeeds",
+      "when": "B is approved, then approved again after the author merges, resolves and commits"
     }
   ],
   "algorithms": [],
@@ -371,10 +393,11 @@
       "FR-1": "1c04db31e1a5e4e013851c353c691c49cf932d756e0447ff23850f71ee182ed9",
       "FR-10": "b940d2976a6d585db01a43ff75d812f8798365e418a93cf635948505532e298a",
       "FR-11": "7cb7722fd5ffe3cf79e37df6a1108182bc18b06b8a8a930a8726b67509302b14",
-      "FR-12": "c76bf7324b3d0094e2fa2136d2e2d8664be3cac395ea172c60a125a5a6150e11",
+      "FR-12": "2baba0e269eac9b8acc119b49cfefc66de84e29a6cfa03b847f6d80840a41817",
       "FR-13": "14250d3b3357b36c8a6e32ed6a97e8fc57bc1e462415029f177066b1c76a2493",
       "FR-14": "48c2eb1c297492c3a57b9e03584fbdfe1b26b2f13a9e0a4b9583733a63d60dd3",
       "FR-15": "6718d8b0958b63dd7b8d0807aa48459c155c63288206a052eb751d93db0d7136",
+      "FR-16": "a24992f0932eb20adb723844bd83f261a39d0c18a9560dca7ad88104358e6649",
       "FR-2": "e06e0cf40231cdb62d259e27730620a2573d06fdf11c21952be90944165d49e4",
       "FR-3": "d1ce3224dd5a7b5d792e5a8d79f4b6324da0ab0ffe6f958e7f8d149d06f4af63",
       "FR-4": "16c6de9956ddd8e2d794ef511be417948331663a33eeea844ed4f577b8d34217",
@@ -384,8 +407,9 @@
       "FR-8": "3fb5e227f6b0c8c3520637e631466e4b82c9ad3a69b53e083617d4e45bdf346f",
       "FR-9": "8ddd27372a23cf5456d89b0d9a2ba995e7632b24ebbf946a6a075365aaa563ca"
     },
-    "high_water": 15,
+    "high_water": 16,
     "requirements": {
+      "a-conflicting-prerequisite-is-th-approval-waits-for-prerequisite": "FR-16",
       "a-dependency-is-met-at-approval-not-at-completion": "FR-3",
       "a-dependency-may-name-a-task-in-another-document-by-importin": "FR-6",
       "a-dependency-on-rejected-work-is-surfaced-never-resolved": "FR-5",
@@ -494,8 +518,8 @@
       "key": "n1",
       "modal": "SHALL",
       "party": null,
-      "rationale": "A checkout seeded only at creation keeps whatever prerequisites happened to be approved then, while every surface reports the dependency as satisfied. The existing branch holds the task's own work, so the catch-up must never destroy it.",
-      "statement": "When a turn is bound to a task whose checkout already exists, the Hub SHALL first merge in the commit of each approved prerequisite the branch does not contain, without discarding anything; uncommitted changes, a conflict, or a merge that does not finish SHALL abort the merge, leave the branch and files as they were, and refuse the turn with a message naming the prerequisite, its commit, the checkout and the merge command."
+      "rationale": "A checkout seeded only at creation keeps whatever prerequisites happened to be approved then; the existing branch holds the task's own work, so the catch-up never destroys it. Reconciling two pieces of work is the author's job: refusing the turn left the author no turn to do it and only the operator could fix it by hand (F695), while a conflict with main was already the agent's to resolve in its own turn.",
+      "statement": "When a turn is bound to a task whose checkout already exists, the Hub SHALL first merge in the commit of each approved prerequisite the branch does not contain, without discarding anything. A conflicting approved prerequisite is abandoned with the checkout left clean, the turn starts with a merge instruction naming the prerequisite task, commit and conflicting paths, and approval is refused until the task's branch contains the commit; uncommitted changes are snapshotted before the catch-up rather than refused; a checkout mid-merge on an approved prerequisite commit is handed back with a note rather than refused, and a merge with unresolved conflicts is never auto-committed. A merge that does not finish in time SHALL abort the merge, leave the branch and files as they were, and refuse the turn with a message naming the prerequisite, its commit, the checkout and the merge command."
     },
     {
       "key": "n2",
@@ -517,6 +541,13 @@
       "party": null,
       "rationale": "An edge to a task that no longer exists is a hole in the graph, not a fact worth keeping; removing it releases dependents rather than gating them on nothing.",
       "statement": "Deleting a task SHALL delete every dependency edge naming it, in both directions, and its unhonoured references."
+    },
+    {
+      "key": "a-conflicting-prerequisite-is-th-approval-waits-for-prerequisite",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One implementation: the gate runs the same unmerged_prerequisites function the turn's notice is derived from, against refs/heads/<task branch>.",
+      "statement": "Moving a task with its own checkout to approved SHALL be refused while any approved prerequisite's commit is not contained in the task's branch; the refusal (gate_unsatisfied, category unmerged_prerequisites) SHALL name the prerequisite task and commit."
     }
   ],
   "schema_version": 1,

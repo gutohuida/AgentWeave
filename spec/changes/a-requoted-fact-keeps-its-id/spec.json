@@ -1,0 +1,81 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a resolved contradiction whose standing fact cites line 2 of a source quoted 'the refund limit is 300 euros.'",
+      "how_to_check": "pytest hub/tests/test_vault_contradictions.py::test_a_redistil_rewording_the_standing_facts_quote_keeps_it_standing",
+      "key": "standing-side-requoted",
+      "requirement": "requoted-same-lines",
+      "then": "the fact keeps its id, the resolution's stands still names a fact in the vault (no side missing), the overruled fact stays superseded_by the decision, nothing is marked disputed, and no contradiction check runs",
+      "when": "the source is distilled again and the model quotes line 2 as 'Dana: the refund limit is 300 euros'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one earlier fact on line 4",
+      "how_to_check": "pytest hub/tests/test_a_redistilled_fact_keeps_its_id.py::test_a_fact_requoted_from_the_same_lines_keeps_its_id_once",
+      "key": "each-earlier-fact-once",
+      "requirement": "requoted-same-lines",
+      "then": "one keeps the earlier fact's id and record unchanged and the other is stored as a new fact",
+      "when": "a re-distil draws two facts from line 4, one re-quoted and one quoted differently again"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "56e4b5319af295f49a09db21e2e3021e47ca4f9534dded2e53931d5ea0a901cb"
+    },
+    "high_water": 1,
+    "requirements": {
+      "requoted-same-lines": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 Two passes: exact citation match first, then (source, line span) set match, so a reworded draft never takes the fact an exactly quoted one would have kept. D2 Each earlier fact is claimed at most once, lowest id first. No migration, no Hub-restart hazard.",
+  "evidence": {
+    "checked": [
+      "Reproduced on scratch Hub :8056 (real Haiku): fct-4fbe1cf3bd51 re-minted as fct-27b22217efda before the build, kept after it",
+      "Acceptance test committed xfail(strict) at 9326a2e, passing at f34c388",
+      "Drive scripts/drive/d1015_f587_redistil_keeps_ids.py ALL PASS on :8056 over three Haiku distillations"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F587 matched a re-distilled draft to an earlier fact by citation set including the loose quote. Haiku re-quotes the same line differently between passes, so the earlier fact was deleted and an identical claim minted under a new id; a resolved contradiction's standing side then pointed at nothing (missing: true) and the Vault card and spec warning said the fact that stands is no longer in the vault.",
+  "requirements": [
+    {
+      "key": "requoted-same-lines",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A fact drawn again from the same lines is the same evidence; a new id orphans the decisions and requirements that cite it (F587). The model re-quotes the same line from another word on between passes, so the quote alone must not re-mint the fact (F684); the exact pass runs first so a reworded draft never takes the fact an exactly quoted one would have kept.",
+      "statement": "POST /api/v1/projects/{id}/vault/sources/{source_id}/distil MUST answer 202 and distil the source in the background. It MUST answer 404 for an unknown source, and 409 with a reason naming what to do when the job is disabled, has no runner, or the source's text is not on this machine. A distillation that stores at least one fact MUST replace the facts previously distilled from that source, except that a drawn fact MUST keep an earlier fact of the same visibility, unchanged and under its id, instead of storing a new one, when it matches it in one of two passes: first, its citations equal the earlier fact's as a set (the same source and line span, and the same quote ignoring case, runs of whitespace and trailing punctuation); then, for each drawn fact the first pass left unmatched, the set of its citations' (source, line span) pairs equals the earlier fact's, whatever the quotes. Each earlier fact MUST be kept at most once, and a kept fact keeps its resolution and supersession state. One that stores none MUST leave them as they were."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "vault.span_key and vault.facts_by_citations",
+      "distillation.Reusable: exact pass first, then by line span, each earlier fact once",
+      "_distil_piece runs the exact pass over all drafts before the span pass"
+    ],
+    "non_goals": []
+  },
+  "summary": "Match a re-distilled draft to an earlier fact by its cited line spans when its quotes differ, after an exact pass, so the standing side of a resolved contradiction survives a re-distil (F684).",
+  "tasks": [],
+  "title": "A re-distilled fact keeps its id however the model re-quotes its lines"
+}

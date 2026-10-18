@@ -1,0 +1,101 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a Claude turn that streamed one assistant message whose usage reads 2 input + 333,000 cache-read + 100 cache-creation tokens",
+      "how_to_check": "pytest hub/tests/test_a_stopped_turns_interrupted_call_is_estimated.py::test_a_stopped_claude_turn_records_an_estimate_that_is_not_counted",
+      "key": "stopped-row-estimate",
+      "requirement": "stopped-turn-estimate",
+      "then": "its row is unavailable with estimated_input_tokens 333,102 and no measured tokens or cost",
+      "when": "the operator stops it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Claude turn that ends with its result",
+      "how_to_check": "pytest hub/tests/test_a_stopped_turns_interrupted_call_is_estimated.py::test_a_stopped_claude_turn_records_an_estimate_that_is_not_counted",
+      "key": "completed-no-estimate",
+      "requirement": "stopped-turn-estimate",
+      "then": "its row is measured and carries no estimate",
+      "when": "its accounting is recorded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the stopped turn above",
+      "how_to_check": "pytest hub/tests/test_a_stopped_turns_interrupted_call_is_estimated.py::test_a_stopped_claude_turn_records_an_estimate_that_is_not_counted; npx vitest run hub/ui/src/__tests__/accountingPresentation.test.tsx",
+      "key": "snapshot-not-counted",
+      "requirement": "estimate-never-counted",
+      "then": "project.estimated_input_tokens is 333,102, budget.used_tokens 0, project.total_tokens null; the panel reads '≈333,102 input tokens, not measured — not counted against the budget'",
+      "when": "GET /accounting is read and the Budgets panel renders"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "8b9556465de5e79f6f79306082141ac2f776c9db78a51c127a3342f04dc05196",
+      "FR-2": "b83f18770e358911b2eb960543058b347673487cfa3fdbd52cb2279147b13b36"
+    },
+    "high_water": 2,
+    "requirements": {
+      "estimate-never-counted": "FR-2",
+      "stopped-turn-estimate": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Migration 0134_turn_usage_estimated_input_tokens: one nullable INTEGER column on turn_usage, plain ADD COLUMN guarded for a missing table and an existing column; nothing backfilled; downgrade drops the column. Revises 0133. Hazard: it reaches the operator's real database on their next :8000 restart.",
+  "evidence": {
+    "checked": [
+      "Acceptance test through the real trigger, a fake Claude PTY, the real stop route and GET /accounting",
+      "test_migrations.py 0134 round trip"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "A stopped Claude turn records its turn_usage row unavailable with no tokens and no cost, and the CLI's session totals never include the interrupted call, so F678's difference does not recover it either: about one model call is spent per Stop and appears nowhere (run-02af114595bf, sweep 2026-10-18). Only an estimate is possible: the interrupted call's input is at least the turn's last context reading.",
+  "requirements": [
+    {
+      "key": "stopped-turn-estimate",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Operator decision 2026-10-18: show the spend a Stop causes, marked as an estimate. The unavailable row's token columns are forbidden by ck_turn_usage_availability, and session_totals is F678's baseline, so the estimate has its own nullable column.",
+      "statement": "When a Claude turn ends stopped and its accounting is unavailable, the Hub SHALL record on its turn_usage row an estimated input-token figure equal to that turn's last context reading (context_tokens of the last measured reading the run streamed), and SHALL record none when the turn streamed no reading, ended any other way, or was measured."
+    },
+    {
+      "key": "estimate-never-counted",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An estimate is a lower bound, not a measurement; counting it would let a guess pause autonomy.",
+      "statement": "The accounting snapshot SHALL report each turn's estimate and the sum of the estimates of unavailable turns, per project and per agent, separately from every measured figure; the Budgets panel SHALL show it as '≈N input tokens, not measured' and say it is not counted against the budget; and the estimate SHALL NOT count toward the project's used tokens, its budget state, or any measured total."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "turn_usage.estimated_input_tokens (migration 0134)",
+      "GET /accounting estimate fields",
+      "the Budgets panel's estimate line"
+    ],
+    "non_goals": [
+      "Recovering the interrupted call's exact cost or output tokens",
+      "Counting the estimate toward the budget"
+    ]
+  },
+  "summary": "A Claude turn the operator stops mid-call records an estimate of its interrupted call's input tokens on its unavailable accounting row; the estimate is shown as an estimate and counts toward nothing (F697).",
+  "tasks": [],
+  "title": "A stopped turn's interrupted call is estimated, never counted"
+}

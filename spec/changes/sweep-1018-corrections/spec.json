@@ -1,0 +1,152 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a drift candidate",
+      "how_to_check": "pytest hub/tests/test_requirement_drift.py",
+      "key": "spec-updated-asks-again",
+      "requirement": "drift-answer-fingerprint",
+      "then": "a new candidate is raised",
+      "when": "the operator resolves it as specification updated without rewording the requirement and scans again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved roadmap with an unclaimed slice",
+      "how_to_check": "pytest hub/tests (F704, commit 4765e0a)",
+      "key": "slice-note-approves",
+      "requirement": "slice-unclaimed-is-a-note",
+      "then": "it is approved, and the answer's approval_notes lists roadmap_slice_unclaimed naming the slice",
+      "when": "a change document naming no slice is approved without approve_anyway"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a folder whose marker names a project this database deleted",
+      "how_to_check": "pytest hub/tests/test_a_deleted_project_stays_deleted.py::test_an_implicit_start_does_not_overwrite_a_deleted_projects_marker",
+      "key": "implicit-start-refused",
+      "requirement": "implicit-start-refuses-deleted-marker",
+      "then": "the implicit open is refused 409 deleted_project_marker with the marker bytes unchanged and nothing registered; the explicit open re-mints",
+      "when": "a bare agentweave start opens it implicitly, then the operator opens it from the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose branch holds a commit no merge target contains",
+      "how_to_check": "pytest hub/tests (F681, commit db2ae99)",
+      "key": "unlanded-refused",
+      "requirement": "approval-refuses-unlanded-commits",
+      "then": "409 naming the branch and the commit, and what clears it",
+      "when": "the operator Lands it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an under_review task",
+      "how_to_check": "pytest hub/tests (F687, commit 3e162d0)",
+      "key": "under-review-start",
+      "requirement": "under-review-start-author-only",
+      "then": "the first is refused 409 pointing at the task's review; the author's turn starts",
+      "when": "the operator starts a non-author agent on it, then its author"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "a36b87639aaf3dfcb0f8ccf0a9f177291ec06ffc639c9e2cd8702f5311184860",
+      "FR-2": "c3f863694108f26e2823fc3495ac5dba7aa35d39f317cb87cf1f8378722e9c20",
+      "FR-3": "535313aaa06fc62184d048ded37bb5d9cc51a7bdad1d7ac6ee6070bd9dbc91b5",
+      "FR-4": "e91994722103dc84ed3645a19e54e8edd8a71f6c68730664ac6727d2690b5130",
+      "FR-5": "e43aafb04a482df75ffe762235f17033e21e5d9f48cf2cbc4a03b3c2b169a49b"
+    },
+    "high_water": 5,
+    "requirements": {
+      "approval-refuses-unlanded-commits": "FR-4",
+      "drift-answer-fingerprint": "FR-1",
+      "implicit-start-refuses-deleted-marker": "FR-3",
+      "slice-unclaimed-is-a-note": "FR-2",
+      "under-review-start-author-only": "FR-5"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Six Tier 0 decisions, each built with a test on master; recorded together because each changes one capability sentence. F696 changes the judge's algorithm step and one criterion, written by a merge naming this change because a fold folds requirements only.",
+  "evidence": {
+    "checked": [
+      "F730 item 1 b96fd14",
+      "F704 4765e0a",
+      "F736 (msg736)",
+      "F696 test_a_grep_pattern_and_bare_pwd_are_not_paths.py",
+      "F681 db2ae99",
+      "F687 3e162d0"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "Each is a small decided behaviour change already built with tests on master; the capability text still described the earlier behaviour.",
+  "requirements": [
+    {
+      "key": "drift-answer-fingerprint",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "\"Implementation corrected\" claims the change was undone; silencing it would turn a mistaken answer into a permanent blind spot, so the same change still present is drift again. A specification update with nothing reworded silenced a change permanently; a rewording already silences the drift because the evidence's digest stops matching (F730 item 1).",
+      "statement": "Only the operator SHALL resolve a drift candidate, as specification updated, implementation corrected, or no specification change required, recording the digest current at that moment; no_change_required SHALL also record the current fingerprint so the same change is not raised again, and specification_updated and implementation_corrected SHALL NOT (a specification update is silenced by the rewording itself)."
+    },
+    {
+      "key": "slice-unclaimed-is-a-note",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F674; approvals are scarce, so this warns and does not gate. As a gap it made every unrelated change need Approve anyway (F704); as a note, an approval passes it, records it on the phase event and answers it as approval_notes.",
+      "statement": "Proposing or approving a change document that names no roadmap slice, in a project with an approved roadmap that has slices no document claims, MUST tell a roadmap_slice_unclaimed note naming the roadmap, those slices and the roadmap field, and MUST NOT refuse nor require approving over it."
+    },
+    {
+      "key": "implicit-start-refuses-deleted-marker",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A folder registered in another database should come back as itself; a project this database deleted must not, or deleted private content returns (F609, fix-D1). A bare start cannot tell a deleted project's marker from another database's binding, so it must not mint a new id over it (F736); the refusal is 409 deleted_project_marker and an explicit open from the app keeps the re-mint.",
+      "statement": "Opening a directory whose marker names a project ID this database has no record of SHALL register it under the marker's own ID, seeded like a new project, and SHALL record a `project_adopted` event, unless this database deleted that ID: then it SHALL register a new project under a newly minted ID and rewrite the marker to name it, bringing back no record or private entry of the deleted project; an open made implicitly by a bare agentweave start SHALL instead refuse such a folder, leaving its marker untouched and registering nothing, and say why and how to open it from the app."
+    },
+    {
+      "key": "approval-refuses-unlanded-commits",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "F681: Land approved a task on evidence another, task-less run recorded at main's tip and skipped the merge, so the task's own commit never reached main while its requirement read verified.",
+      "statement": "The Hub SHALL refuse a move to approved, by PATCH and by Land, when the task's own branch holds commits on neither the main branch nor inside any merge target (gate category unlanded), naming the branch and the commits and saying what clears it: evidence recorded from the task's own checkout, then accepted."
+    },
+    {
+      "key": "under-review-start-author-only",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "F687: an operator trigger bound a reviewer into the author's checkout of an under-review task, and that run approved the task from inside it (leading to F693). The author's revision turn stays allowed.",
+      "statement": "Starting an agent with a task_id naming a task that is under_review (POST /agent/trigger) SHALL be refused 409 pointing at that task's review, unless the agent is the task's author: the agent recorded completing it or, failing that, an agent on its in_progress or completed transitions or that recorded evidence for it; with no author recorded, the remedy SHALL be revision_needed."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "requirement-traceability n25 (F730 item 1)",
+      "spec-roadmaps unclaimed-slice gap (F704)",
+      "local-project-workspace n2 (F736)",
+      "agent-run-sandboxing judge algorithm step and regression criterion (F696)",
+      "approval-integration (F681)",
+      "run-task-binding (F687)"
+    ],
+    "non_goals": [
+      "Any behaviour beyond what each decision states"
+    ]
+  },
+  "summary": "Tier 0 corrections the operator decided on 2026-10-18, recorded in the capabilities they touch: drift answers and fingerprints (F730 item 1), an unclaimed roadmap slice is a note (F704), a bare start never overwrites a deleted project's marker (F736), the shell judge's grep pattern and bare $PWD (F696), approval refuses unlanded task commits (F681), and an under-review task is started only by its author (F687).",
+  "tasks": [],
+  "title": "Sweep 2026-10-18 corrections"
+}

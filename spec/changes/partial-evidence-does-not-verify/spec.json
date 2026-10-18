@@ -1,0 +1,99 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "one accepted current piece saying covers: partial",
+      "how_to_check": "pytest hub/tests/test_partial_evidence_does_not_verify.py",
+      "key": "partial-reads-in-progress",
+      "requirement": "partial-only-in-progress",
+      "then": "state in_progress, reason 'partial evidence only', accepted_count 1",
+      "when": "coverage is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same requirement with a second accepted piece saying full, or one accepted piece with no covers",
+      "how_to_check": "pytest hub/tests/test_partial_evidence_does_not_verify.py",
+      "key": "full-verifies",
+      "requirement": "partial-only-in-progress",
+      "then": "state verified, reason null",
+      "when": "coverage is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a gate document whose task serves a partial-only requirement",
+      "how_to_check": "pytest hub/tests/test_partial_evidence_does_not_verify.py",
+      "key": "gate-partial",
+      "requirement": "gate-refuses-partial-only",
+      "then": "first 409 gate_unsatisfied naming the requirement and 'partial'; then 200",
+      "when": "the task is approved, then approved again after a full piece is accepted"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "e0076d99947be25fdd1aed8ff0eb2407f1795731cf20f24675003f6eac5cc024",
+      "FR-2": "6804c82acf1f930276c793a22fa0699e418fa0f0f67bb3ccd34376cb76d40549"
+    },
+    "high_water": 2,
+    "requirements": {
+      "gate-refuses-partial-only": "FR-2",
+      "partial-only-in-progress": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Coverage.reason (API field reason) carries 'partial evidence only'; requirement_gate.REMEDY_PARTIAL_ONLY. No migration.",
+  "evidence": {
+    "checked": [
+      "Acceptance test committed xfail(strict) at cfab18b, passing after the build"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "covers (vis-D5) was recorded and displayed but never weighed, so a requirement read verified though the only accepted current evidence said covers: partial, and a gate document approved work its own author said demonstrated only part of the requirement (sweep 2026-10-18, group B).",
+  "requirements": [
+    {
+      "key": "partial-only-in-progress",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The order ranks how much the evidence can be trusted, worst news first, so a reworded or drifting requirement is never reported verified. `rejected` is distinct so a refused demonstration is not mistaken for work not yet evidenced. Evidence its own author says covers only part of a requirement does not verify it (F706); evidence that says full, or nothing about covers, counts as covering, so evidence recorded before covers existed verifies as before.",
+      "statement": "Coverage SHALL take the first state that applies, in this order: `drifting` (an open drift candidate), `stale` (evidence only against an earlier digest), `evidence_awaiting_review`, `verified` (accepted current-digest evidence, unless every accepted current piece says covers: partial, which reads `in_progress` with reason 'partial evidence only'), `rejected` (all current-digest evidence rejected), `in_progress` (linked work started or completed without evidence), `not_started`, `unserved` (no linked work)."
+    },
+    {
+      "key": "gate-refuses-partial-only",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The gate follows coverage: partial-only is in_progress.",
+      "statement": "A gate-rigor document SHALL refuse approval of a task serving a requirement whose accepted current evidence is partial only, with a remedy that names the partial evidence and asks for a piece with covers: full; contract SHALL report it and sketch SHALL stay silent, as for any in_progress requirement."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "requirement_coverage state and reason",
+      "requirement_gate partial-only remedy",
+      "the Spec coverage list showing the reason"
+    ],
+    "non_goals": [
+      "Weighing covers beyond partial-only versus any full or unstated piece"
+    ]
+  },
+  "summary": "A requirement whose accepted current evidence all says covers: partial reads in_progress with reason 'partial evidence only', not verified; a gate document refuses approval on it (F706).",
+  "tasks": [],
+  "title": "Partial evidence does not verify"
+}

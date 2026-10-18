@@ -650,6 +650,15 @@
       "requirement": "the-response-to-a-divergence-is-a-policy-set-per-task",
       "then": "each divergence is answered by its own task's policy",
       "when": "two tasks in one project state different policies"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an under_review task",
+      "how_to_check": "pytest hub/tests (F687, commit 3e162d0)",
+      "key": "sweep-1018-corrections-under-review-start",
+      "requirement": "sweep-1018-corrections-under-review-start-author-only",
+      "then": "the first is refused 409 pointing at the task's review; the author's turn starts",
+      "when": "the operator starts a non-author agent on it, then its author"
     }
   ],
   "algorithms": [],
@@ -682,9 +691,10 @@
       "FR-40": "d449b76b3c377ef1b4d598260cce3b4a5bcafefeb93f34fbd75a6e60a1aec5d4",
       "FR-41": "125f6f720cf4521e8780c907c58d40d20ecb85596f5ddc0b3d08694c5a58cd43",
       "FR-42": "5794505816c6fb64c42f157da5b353a2ba9da64fab18b0349b8e03e38aaaba2f",
-      "FR-43": "7e5c8c64b66b685418d07bf7109af95dcb96c673a0dc5159ee8ea7dc24044259"
+      "FR-43": "7e5c8c64b66b685418d07bf7109af95dcb96c673a0dc5159ee8ea7dc24044259",
+      "FR-44": "e43aafb04a482df75ffe762235f17033e21e5d9f48cf2cbc4a03b3c2b169a49b"
     },
-    "high_water": 43,
+    "high_water": 44,
     "requirements": {
       "a-conversation-carries-the-binding-and-its-runs-inherit-it": "FR-30",
       "a-conversation-s-binding-can-be-released": "FR-31",
@@ -709,6 +719,7 @@
       "only-the-runtime-binds-a-run-to-a-task": "FR-17",
       "resolving-a-divergence-is-as-visible-as-opening-one": "FR-27",
       "starting-a-run-does-not-release-a-waiting-task": "FR-33",
+      "sweep-1018-corrections-under-review-start-author-only": "FR-44",
       "the-operator-can-start-a-bound-run-from-a-task": "FR-20",
       "the-operator-sets-and-sees-divergence-handling-where-the-tas": "FR-29",
       "the-response-to-a-divergence-is-a-policy-set-per-task": "FR-24"
@@ -926,6 +937,13 @@
       "party": null,
       "rationale": "A queue entry with no conversation can never be scheduled, and a conversation belongs to one agent. Continuing the same agent's thread keeps the retry in the history that explains it and its resumable provider session.",
       "statement": "The system SHALL deliver a divergence response into a conversation: a retry continues the diverged run's own open conversation, and a response for a different agent opens a new conversation with origin 'divergence'."
+    },
+    {
+      "key": "sweep-1018-corrections-under-review-start-author-only",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "F687: an operator trigger bound a reviewer into the author's checkout of an under-review task, and that run approved the task from inside it (leading to F693). The author's revision turn stays allowed.",
+      "statement": "Starting an agent with a task_id naming a task that is under_review (POST /agent/trigger) SHALL be refused 409 pointing at that task's review, unless the agent is the task's author: the agent recorded completing it or, failing that, an agent on its in_progress or completed transitions or that recorded evidence for it; with no author recorded, the remedy SHALL be revision_needed."
     }
   ],
   "schema_version": 1,

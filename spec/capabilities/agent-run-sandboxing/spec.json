@@ -1102,7 +1102,7 @@
       "how_to_check": "pytest hub/tests/test_permission_approver.py hub/tests/test_the_shell_judge_reads_a_word_whole.py hub/tests/test_copilot_acp_decide.py",
       "key": "the-workspace-judge-reads-paths-not-patterns-regressions",
       "requirement": "the-workspace-judge-reads-paths-not-patterns-unchanged",
-      "then": "no existing row changes, including 1.7c1 (grep -rn '\\.\\./' src, bash, refused)",
+      "then": "no existing row changes beyond the two F696 allowed (1.5a2, 1.7c1), including 1.7c1b (grep -rn x '\\.\\./', bash, refused)",
       "when": "they run"
     },
     {
@@ -1267,6 +1267,60 @@
       "requirement": "opal-phoenix-resolve",
       "then": "the listed permission request names the subagent's description",
       "when": "the agent delegates a file write to a subagent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent turn that wrote .claude/settings.local.json with git apply",
+      "how_to_check": "pytest hub/tests/test_a_changed_runner_configuration_holds_the_next_turn.py::test_a_settings_write_by_git_apply_holds_the_next_turn_and_asks_the_operator",
+      "key": "a-changed-runner-configuration-holds-the-turn-git-apply-held",
+      "requirement": "a-changed-runner-configuration-holds-launch-compares-fingerprint",
+      "then": "it does not start, and one pending RunnerConfiguration request names .claude/settings.local.json",
+      "when": "the next turn in that workspace is scheduled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a held turn and its pending request",
+      "how_to_check": "pytest hub/tests/test_a_changed_runner_configuration_holds_the_next_turn.py::test_a_settings_write_by_git_apply_holds_the_next_turn_and_asks_the_operator",
+      "key": "a-changed-runner-configuration-holds-the-turn-allow-releases",
+      "requirement": "a-changed-runner-configuration-holds-t-changed-config-holds-turn",
+      "then": "the held turn starts, and the next turn is not asked about the same content; re-scheduling before the answer opens no second request",
+      "when": "the operator allows it, and the turn after it is scheduled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a held turn",
+      "how_to_check": "pytest hub/tests/test_a_changed_runner_configuration_holds_the_next_turn.py",
+      "key": "a-changed-runner-configuration-holds-the-turn-deny-holds",
+      "requirement": "a-changed-runner-configuration-holds-t-changed-config-holds-turn",
+      "then": "the turn stays held and is not asked again; restoring the files releases it without an answer",
+      "when": "the operator denies it, then restores the files"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project directory holding .claude/settings.local.json, and a fresh checkout holding a .mcp.json the project directory does not",
+      "how_to_check": "pytest hub/tests/test_a_changed_runner_configuration_holds_the_next_turn.py",
+      "key": "a-changed-runner-configuration-holds-the-turn-first-launch",
+      "requirement": "a-changed-runner-configuration-holds-the-t-first-launch-baseline",
+      "then": "the project directory's turn starts with nothing asked; the checkout's turn is asked about",
+      "when": "each launches its first turn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "both modules",
+      "how_to_check": "pytest hub/tests/test_a_changed_runner_configuration_holds_the_next_turn.py",
+      "key": "a-changed-runner-configuration-holds-the-turn-lists-equal",
+      "requirement": "a-changed-runner-configuration-holds-the-tu-one-config-path-list",
+      "then": "the two lists are equal",
+      "when": "the pinning test runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Workspace judge",
+      "how_to_check": "pytest hub/tests/test_arguments_from_another_commands_output_are_not_allowed_on_their_text.py",
+      "key": "a-changed-runner-configuration-holds-the-turn-pipe-fed-refused",
+      "requirement": "a-changed-runner-configuration-holds-the-turn-pipe-fed-shapes",
+      "then": "each is refused, while `x | python -m json.tool` stays allowed",
+      "when": "it reads `x | py -3.11`, `x | py -V:3.12`, `x | python -u` and `gc names.txt | Get-Item | Remove-Item`"
     }
   ],
   "algorithms": [
@@ -1277,7 +1331,7 @@
         "Lex into words as the shell produces them: remove quotes and escapes, join adjacent pieces, decode `$'...'`, and read nested `bash -c`/`powershell -Command` text as an inner shell would, including quoted braces and globs that inner shell would expand.",
         "Expand bash brace patterns into every alternative (bounded at 256 words per argument, 1024 per decision; past that, refuse as uncheckable).",
         "For each word: a network address is decided by the network rule (own Hub only) and is then still judged as the path it spells.",
-        "A word holding a variable, a substitution, or `~` together with a separator, or a separator-less `~`, `~user`, `~+`/`~-`, or a variable that names a directory for every process (home, profile, temp, app data, program and system directories, PowerShell's `$HOME`/`$PWD`/`$PSHOME`/`$PROFILE`), in any spelling the dialect accepts, including quoted or escaped: refuse as uncheckable.",
+        "A word holding a variable, a substitution, or `~` together with a separator, or a separator-less `~`, `~user`, `~+`/`~-`, or a variable that names a directory for every process (home, profile, temp, app data, program and system directories, PowerShell's `$HOME`/`$PWD`/`$PSHOME`/`$PROFILE`), in any spelling the dialect accepts, including quoted or escaped: refuse as uncheckable, except grep's pattern operand, which is text, and a bare whole-argument $PWD/${PWD} that the command names nowhere else, judged as '.'.",
         "A word whose text before its first expansion, or with every expansion removed, is `..`: refuse as uncheckable.",
         "Split a word into pieces only where a path can start: after a shell boundary character, a quote, a colon gluing a path to a host, revision or field name, or a leading short option. Judge each piece, and the whole word's value with and without inner-shell quotes, as a path resolved against the workspace.",
         "On a platform without drive letters, also judge a word with backslashes at each escape-removal level.",
@@ -1328,7 +1382,7 @@
       "FR-46": "46c8e11d1d0b78a0ee7880d6ccb2007dcd85596bec4c6dbd7c174be58d4a9786",
       "FR-47": "538223d86d4c7d6f1aa23d805e1d2dd6853b525733f0e1a12fb2bc5336629788",
       "FR-48": "69d5567f044cd32ffa71230a7072635d4845203d1a8e174568fd25bc55905534",
-      "FR-49": "f5806223c136306a2df59b13001bb77d519159914361b98faac9d5aca1206652",
+      "FR-49": "6b847c14f30e64b002f9826283adc9ed0b90b9a5dc50805b1f3a5e08943a793d",
       "FR-50": "ddf7143579779558c8811ed0eb3393c01dc9945ba5872968aab13aeaaab35f5c",
       "FR-51": "fbeb2027d2c64773e0e4ada366df891b115cd5ace21cdc929b9ffdb71e1ce500",
       "FR-52": "1e131a36315939c805df8d38891f14a9bc2bc07c38aa2154f2b270216b18e325",
@@ -1342,14 +1396,24 @@
       "FR-60": "2b39468dd7a0aa422d7d430a22a838b57562884b216bfcae75763f4df517a0f8",
       "FR-61": "aa0b138c0d640aeec5986f85260d6fe39b7b3a4e72c6bffae12dd29c7ec6f9ea",
       "FR-62": "5d48c9bf8988010c59c9a4e2a2f99559e686b34fb4709a6179614c8ecd4843f3",
+      "FR-63": "e82424a784052193f0ee581cc331bea9bc453c2ad24924b87a28f392ace15ea7",
+      "FR-64": "1f9b96299175690547bae3f1328e47d0f22cac273cd6f82140f6c9548d3a5a3e",
+      "FR-65": "bbec96be08c38ca519dd4e849b05f3b88c362cda6431cafd0102101e9b1c3b75",
+      "FR-66": "234fd619592860dddf6a494e5ffa2d2eab86774ec629b0a1d359c7e503fcbf4a",
+      "FR-67": "6005e863f5556c66303622eed846012548b210506133f19c4eaac0b48beab9ee",
       "FR-8": "8cfbe18bf3d8194ee817d7c2752711d6c5a3e8e6fc3922082df2174afb6c9b6b"
     },
-    "high_water": 62,
+    "high_water": 67,
     "requirements": {
       "a-brace-pattern-is-judged-as-the-words-it-expands-to": "FR-39",
       "a-call-mode-turn-starts-with-an-empty-call-isolated-starts-empty": "FR-55",
       "a-call-mode-turn-starts-with-an-empty-calls-d-shared-not-emptied": "FR-56",
       "a-call-mode-turn-starts-with-an-empty-calls-emptying-best-effort": "FR-57",
+      "a-changed-runner-configuration-holds-launch-compares-fingerprint": "FR-63",
+      "a-changed-runner-configuration-holds-t-changed-config-holds-turn": "FR-64",
+      "a-changed-runner-configuration-holds-the-t-first-launch-baseline": "FR-65",
+      "a-changed-runner-configuration-holds-the-tu-one-config-path-list": "FR-66",
+      "a-changed-runner-configuration-holds-the-turn-pipe-fed-shapes": "FR-67",
       "a-claude-run-pre-allows-the-hub-s-call-command": "FR-38",
       "a-copilot-run-receives-no-github-token-or-permission-overrid": "FR-34",
       "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp": "FR-33",
@@ -1763,6 +1827,41 @@
       "party": null,
       "rationale": "The operator decides in seconds; who is asking is part of what they decide.",
       "statement": "The permission card MUST say a request is from a subagent and show the delegation's description, and the conversation MUST mark a subagent's tool call as one."
+    },
+    {
+      "key": "a-changed-runner-configuration-holds-launch-compares-fingerprint",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A text judge cannot see every way a turn can write the configuration the next turn's runner reads; the launch can.",
+      "statement": "The Hub SHALL fingerprint the runner-config paths (runner_config.RUNNER_CONFIG_PATHS: the existence and content hash of each file, directories enumerated) in the directory a turn starts in (agent checkout, task checkout, review checkout or project directory) before the turn starts, and compare it with the fingerprint recorded for that workspace; an unchanged fingerprint SHALL let the turn start."
+    },
+    {
+      "key": "a-changed-runner-configuration-holds-t-changed-config-holds-turn",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An allow rule or hook written by a turn must not take effect before the operator has seen it.",
+      "statement": "The Hub SHALL hold a turn whose workspace's runner configuration differs from its record (no run is created, its queued input stays queued and uncounted, and its waiting_reason names the files) and SHALL ask the operator once per content on the permission surface, as a run-less permission request with tool_name RunnerConfiguration and tool_input.paths naming each changed file. Allow SHALL record the new fingerprint and re-drain the queue so the held turn starts; Deny SHALL keep the turn held and not ask again until new operator input arrives or the files change; restoring the files SHALL release the turn without an answer."
+    },
+    {
+      "key": "a-changed-runner-configuration-holds-the-t-first-launch-baseline",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Without the second condition a reviewer's fresh checkout of an agent's commit to .claude/settings.json would be accepted silently.",
+      "statement": "The Hub SHALL record a workspace's first fingerprint silently when the workspace is the project directory, or when every runner-config file in it is one the project directory already holds unchanged; otherwise the first launch SHALL be asked about like a change."
+    },
+    {
+      "key": "a-changed-runner-configuration-holds-the-tu-one-config-path-list",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "mcp_server.py is spawned standalone and restates the list; the judge and the fingerprint must read one list.",
+      "statement": "mcp_server._RUNNER_CONFIG_PATHS SHALL equal runner_config.RUNNER_CONFIG_PATHS, and a test SHALL pin them equal."
+    },
+    {
+      "key": "a-changed-runner-configuration-holds-the-turn-pipe-fed-shapes",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "F676: a pipe can carry a path the judge never reads. F737 rider: py -3.11, py -V:3.12 and python -u read code from their input, and gc names.txt | Get-Item | Remove-Item takes its paths from a file.",
+      "statement": "Under the Workspace posture the shell judge SHALL refuse a command whose stage takes paths or code from another command's output: xargs or parallel anywhere; after a pipe, a shell, eval or source, a while-read loop that does more than print, or an interpreter given no code of its own (options alone, or the py version selector); a decoder (base64 -d, xxd -r) feeding a pipe or a substitution; pwsh -EncodedCommand; and in PowerShell Invoke-Expression or iex, [scriptblock]::Create, FromBase64String, and a path cmdlet fed by a pipe (directly or in a ForEach-Object block using $_) unless a listing such as Get-ChildItem feeds it, where a pipe-fed listing does not exempt the stage after it. Reading stages (| wc, | head, | python -m json.tool) SHALL stay allowed."
     }
   ],
   "schema_version": 1,

@@ -674,6 +674,24 @@
       "requirement": "a-report-with-news-reaches-the-operator-news-is-referred",
       "then": "it names outside information as disputed, keeps answered for what the source settles, and carries the new prompt version",
       "when": "it is built for a report"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a resolved contradiction whose standing fact cites line 2 of a source quoted 'the refund limit is 300 euros.'",
+      "how_to_check": "pytest hub/tests/test_vault_contradictions.py::test_a_redistil_rewording_the_standing_facts_quote_keeps_it_standing",
+      "key": "a-requoted-fact-keeps-its-id-standing-side-requoted",
+      "requirement": "the-manager-distils-vault-sources-into-cited-facts-distil-route",
+      "then": "the fact keeps its id, the resolution's stands still names a fact in the vault (no side missing), the overruled fact stays superseded_by the decision, nothing is marked disputed, and no contradiction check runs",
+      "when": "the source is distilled again and the model quotes line 2 as 'Dana: the refund limit is 300 euros'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one earlier fact on line 4",
+      "how_to_check": "pytest hub/tests/test_a_redistilled_fact_keeps_its_id.py::test_a_fact_requoted_from_the_same_lines_keeps_its_id_once",
+      "key": "a-requoted-fact-keeps-its-id-each-earlier-fact-once",
+      "requirement": "the-manager-distils-vault-sources-into-cited-facts-distil-route",
+      "then": "one keeps the earlier fact's id and record unchanged and the other is stored as a new fact",
+      "when": "a re-distil draws two facts from line 4, one re-quoted and one quoted differently again"
     }
   ],
   "algorithms": [],
@@ -682,7 +700,7 @@
       "FR-1": "8e77cc5af44755559235be747d1bc7e8c2177c9f9414e9c88c93b142bd2c199d",
       "FR-10": "e479d875b0020d0eb97bb8bdbc47f600a42f4ac997e61f01278863f04d7acfa0",
       "FR-11": "fab9e6a51d9dac9b9334ae4875e0f4c33117eb771db657f0728080fdf3d206b1",
-      "FR-12": "e05957b41571f720628bcda35c6677a67f226713d955863e397ac6e2ddc127c1",
+      "FR-12": "e3d1dad872d814373c1f12165c732e24416c66a7a67710eadbd3d058530e1300",
       "FR-13": "a3fd47bd17cdb1aea843bf2c4579b90d011d4cba26b64afdde20c56550d37dae",
       "FR-14": "c4ac641caa69f1c642cb180a507d45a097c6c387849aca2ac129efa7eb1232de",
       "FR-15": "8273a111fc932d78ac862b477e5b3c5f3006c985c238b90a65e04d87f90bcbda",
@@ -892,8 +910,8 @@
       "key": "the-manager-distils-vault-sources-into-cited-facts-distil-route",
       "modal": "MUST",
       "party": null,
-      "rationale": "A fact drawn again from the same lines is the same evidence; a new id orphans the decisions and requirements that cite it (F587).",
-      "statement": "POST /api/v1/projects/{id}/vault/sources/{source_id}/distil MUST answer 202 and distil the source in the background. It MUST answer 404 for an unknown source, and 409 with a reason naming what to do when the job is disabled, has no runner, or the source's text is not on this machine. A distillation that stores at least one fact MUST replace the facts previously distilled from that source, except that a drawn fact whose citations equal an earlier fact's as a set (the same source and line span, and the same quote ignoring case, runs of whitespace and trailing punctuation) and whose visibility is the same MUST keep that earlier fact, each earlier fact at most once,, unchanged and under its id, instead of storing a new one; one that stores none MUST leave them as they were."
+      "rationale": "A fact drawn again from the same lines is the same evidence; a new id orphans the decisions and requirements that cite it (F587). The model re-quotes the same line from another word on between passes, so the quote alone must not re-mint the fact (F684); the exact pass runs first so a reworded draft never takes the fact an exactly quoted one would have kept.",
+      "statement": "POST /api/v1/projects/{id}/vault/sources/{source_id}/distil MUST answer 202 and distil the source in the background. It MUST answer 404 for an unknown source, and 409 with a reason naming what to do when the job is disabled, has no runner, or the source's text is not on this machine. A distillation that stores at least one fact MUST replace the facts previously distilled from that source, except that a drawn fact MUST keep an earlier fact of the same visibility, unchanged and under its id, instead of storing a new one, when it matches it in one of two passes: first, its citations equal the earlier fact's as a set (the same source and line span, and the same quote ignoring case, runs of whitespace and trailing punctuation); then, for each drawn fact the first pass left unmatched, the set of its citations' (source, line span) pairs equals the earlier fact's, whatever the quotes. Each earlier fact MUST be kept at most once, and a kept fact keeps its resolution and supersession state. One that stores none MUST leave them as they were."
     },
     {
       "key": "the-manager-distils-vault-sources-into-cited-facts-fact-cited",

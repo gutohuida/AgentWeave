@@ -460,6 +460,15 @@
       "requirement": "n2-an-orphaned-marker-is-adopted-under-its-own-id",
       "then": "the deleted one gets a new id and marker; the foreign one is adopted under its own id",
       "when": "each is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a folder whose marker names a project this database deleted",
+      "how_to_check": "pytest hub/tests/test_a_deleted_project_stays_deleted.py::test_an_implicit_start_does_not_overwrite_a_deleted_projects_marker",
+      "key": "sweep-1018-corrections-implicit-start-refused",
+      "requirement": "n2-an-orphaned-marker-is-adopted-under-its-own-id",
+      "then": "the implicit open is refused 409 deleted_project_marker with the marker bytes unchanged and nothing registered; the explicit open re-mints",
+      "when": "a bare agentweave start opens it implicitly, then the operator opens it from the app"
     }
   ],
   "algorithms": [],
@@ -487,7 +496,7 @@
       "FR-39": "c9a99f295b6f2f241dfe6b1f0f62442cb39c7837ea8385611b9c7d1aceae3e3a",
       "FR-40": "636b3fb1313bf81d2c80e3bba678b73ca5d23d8bb4f9a64f169453c652f69cf5",
       "FR-41": "987353a723002c5f9f0dd6edd2387eb34591aca2a7b39f2b20e1425e555e881b",
-      "FR-42": "f50b799805154504f953c8b4cddf58982471cf62728a6d68ec69d48261fee5a0",
+      "FR-42": "f7616463725293dafa17cc154da804b96c21618bd626ae27c9ec228ffc2e2cc6",
       "FR-43": "a869b67c9652553f6f332c7e66a09b63ea15d990df7c65731b32fb1e9e989040",
       "FR-44": "bb41a05ca1a46f5d70d2517139f6dd2859dee5544a2d5614e2cc2f991f4b8e53",
       "FR-45": "bcce20ff07decb236d8405cad38c62b4064efe5e1a1df200d07e93f35240462a",
@@ -577,8 +586,8 @@
       "key": "n2-an-orphaned-marker-is-adopted-under-its-own-id",
       "modal": "SHALL",
       "party": null,
-      "rationale": "A folder registered in another database should come back as itself; a project this database deleted must not, or deleted private content returns (F609, fix-D1).",
-      "statement": "Opening a directory whose marker names a project ID this database has no record of SHALL register it under the marker's own ID, seeded like a new project, and SHALL record a `project_adopted` event, unless this database deleted that ID: then it SHALL register a new project under a newly minted ID and rewrite the marker to name it, bringing back no record or private entry of the deleted project."
+      "rationale": "A folder registered in another database should come back as itself; a project this database deleted must not, or deleted private content returns (F609, fix-D1). A bare start cannot tell a deleted project's marker from another database's binding, so it must not mint a new id over it (F736); the refusal is 409 deleted_project_marker and an explicit open from the app keeps the re-mint.",
+      "statement": "Opening a directory whose marker names a project ID this database has no record of SHALL register it under the marker's own ID, seeded like a new project, and SHALL record a `project_adopted` event, unless this database deleted that ID: then it SHALL register a new project under a newly minted ID and rewrite the marker to name it, bringing back no record or private entry of the deleted project; an open made implicitly by a bare agentweave start SHALL instead refuse such a folder, leaving its marker untouched and registering nothing, and say why and how to open it from the app."
     },
     {
       "key": "project-paths-are-resolved-safely-by-the-server",

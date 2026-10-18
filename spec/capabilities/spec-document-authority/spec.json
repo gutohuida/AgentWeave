@@ -1826,6 +1826,60 @@
       "requirement": "the-rest-of-what-the-hub-records-becomes-reach-proposals-history",
       "then": "each shows its outcome, resolver and reason",
       "when": "the panel renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the builder reported c1",
+      "how_to_check": "pytest hub/tests/test_the_operator_answers_a_cannot_satisfy_report.py::test_amending_changes_the_criterion_and_unblocks_the_task",
+      "key": "the-operator-answers-a-cannot-satisfy-report-respond-amend",
+      "requirement": "the-operator-answers-a-cannot-satisfy-report-respond-route",
+      "then": "the stored c1 carries the new then, the task is in_progress, and the report reads amended with the new amendment's id",
+      "when": "the operator amends c1's then"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a cannot-satisfy report",
+      "how_to_check": "pytest hub/tests/test_the_operator_answers_a_cannot_satisfy_report.py::test_accepting_unblocks_the_task_and_keeps_the_criterion",
+      "key": "the-operator-answers-a-cannot-satisfy-report-respond-accept",
+      "requirement": "the-operator-answers-a-cannot-satisfy-report-respond-route",
+      "then": "the task is in_progress, the criterion unchanged, and the report reads accepted",
+      "when": "the operator accepts it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a cannot-satisfy report",
+      "how_to_check": "pytest hub/tests/test_the_operator_answers_a_cannot_satisfy_report.py::test_rejecting_keeps_the_task_blocked_and_sends_the_reason_to_the_reporter",
+      "key": "the-operator-answers-a-cannot-satisfy-report-respond-reject",
+      "requirement": "the-operator-answers-a-cannot-satisfy-report-respond-route",
+      "then": "first 422 response_needs_reason; then the task stays blocked and a queued entry for the reporter names the criterion and carries the reason",
+      "when": "the operator rejects it with no reason, then with a reason"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an answered report",
+      "how_to_check": "pytest hub/tests/test_the_operator_answers_a_cannot_satisfy_report.py::test_a_report_is_answered_once",
+      "key": "the-operator-answers-a-cannot-satisfy-report-respond-once",
+      "requirement": "the-operator-answers-a-cannot-satisfy-report-respond-route",
+      "then": "409 report_answered",
+      "when": "the operator answers it again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an unanswered cannot-satisfy report",
+      "how_to_check": "pytest hub/tests/test_the_operator_answers_a_cannot_satisfy_report.py::test_mark_reviewed_does_not_answer_a_report",
+      "key": "the-operator-answers-a-cannot-satisfy-report-reviewed-not-answer",
+      "requirement": "a-tester-drives-the-built-product-and-keeps-the-spe-amend-record",
+      "then": "409 report_needs_response; the report stays unanswered",
+      "when": "the operator marks it reviewed by id, then marks the whole document reviewed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a cannot-satisfy row in the amendments panel",
+      "how_to_check": "npx vitest run hub/ui/src/__tests__/specAmendmentsPanel.test.tsx",
+      "key": "the-operator-answers-a-cannot-satisfy-report-panel-answers",
+      "requirement": "a-tester-drives-the-built-product-and-keeps-the-spec-true-page",
+      "then": "it offers Amend criterion, Accept and unblock and Reject, not Mark reviewed, and each posts to the respond route",
+      "when": "it renders"
     }
   ],
   "algorithms": [
@@ -1919,10 +1973,10 @@
       "FR-172": "c7f8855b401250feed04714c276431902aec35a6e649493dba6d30078bfc66fb",
       "FR-173": "725ad0c869ad9e52aeb1013b6a9b498575643369aad67afd2243da59ae283d18",
       "FR-174": "9ceb40d62fd10fe59cc82a346e7b92ac48d091dcfdaa6f38fb16cd46edc5dc1a",
-      "FR-175": "d747525c888a331e394347ec962e4dd7b96a61ed3169c6c8d5976d61c5ad7df4",
+      "FR-175": "046d45b04f161bc4336a21511c2fa6b66357d8eb53584fb25d0efd5a9b823a25",
       "FR-176": "1f998e5c40993ff3d755e8766f69a6df4c0e7f5e87f6b4f40e2f2045d66f96ff",
       "FR-177": "acb118b3f691e6c2d7206bc78925334d079264373bd63c8cd3125d118bdd273a",
-      "FR-178": "9a73c7cef034148e1c96668be7cf4dc0921200eb3bb09bfdd6552ecdf7309d94",
+      "FR-178": "b37e64887d8357f862429b800c4e56be833567e05dae76106a2a52cc67bc3810",
       "FR-179": "195ecccf3fc5fa0b810bd31bfa909dbdaceddc483104430fe040454436c3704f",
       "FR-180": "813e9ba7b7f154fe46540f71e52aded18298709dd2f8f7c89411d6feca6da7d1",
       "FR-181": "1025555acbcff09fc6ac5cfafdc7fbeb1a383aa3268fddccab0087818cd74fbb",
@@ -1931,6 +1985,7 @@
       "FR-184": "7d414dcfe64404c7a0656efd7c503af07fad5fccfe8c0658c6be400d3b5b13fa",
       "FR-185": "251ed055e03cc1afe843819037b55aeac5c86ec549c72e1303403854d0aa0009",
       "FR-186": "995c6382e942a35b6741fc5678c3cf7cab6c3f7db4ae73461121eb4c8ade1f68",
+      "FR-187": "a97d953620eeeefc652f345b65b92f4a886c7f1662c12a8533392f11eeb744a4",
       "FR-39": "bbd4e97f468c77548f230f318d682f8d061e41f6cd8ddffd2863264e6715039b",
       "FR-40": "77600ef42b7181d6b33c20ea6a1a12f814e8d6dce4e32d030f372a46c4f58dce",
       "FR-41": "936b6c50917eaa5d2816907e84de1a332baf568b8313a5c9ef2594e7667a2b0a",
@@ -1993,7 +2048,7 @@
       "FR-98": "d60b4096b6e56a0ff6f7d32a686d005a80f72f0f5b082afe029f554d73291a76",
       "FR-99": "e7bbabeed4bb05de59733e94a0b7512c30c5784ba4fa62152dce7263fb048d91"
     },
-    "high_water": 186,
+    "high_water": 187,
     "requirements": {
       "a-capability-can-be-retired-app": "FR-137",
       "a-capability-can-be-retired-frozen": "FR-135",
@@ -2101,6 +2156,7 @@
       "rigor-is-only-raised-on-a-document-that-can-be-enforced": "FR-66",
       "the-agent-submits-a-structured-payload-and-the-hub-renders-t": "FR-41",
       "the-hub-mints-requirement-identifiers-and-they-are-stable": "FR-43",
+      "the-operator-answers-a-cannot-satisfy-report-respond-route": "FR-187",
       "the-operator-can-delete-a-document-a-task-or-an-archive-document": "FR-119",
       "the-operator-can-delete-a-document-a-task-or-an-archived-age-app": "FR-120",
       "the-operator-can-write-a-document-s-content": "FR-79",
@@ -2901,8 +2957,8 @@
       "key": "a-tester-drives-the-built-product-and-keeps-the-spe-amend-record",
       "modal": "MUST",
       "party": null,
-      "rationale": "Agent-amendment provenance; mark reviewed per item or per document (roadmap slice).",
-      "statement": "Each amendment MUST be recorded with its operation, target, reason, how_to_check, author and run, as not reviewed, and MUST stay not reviewed until the operator marks it reviewed, either by its id or for the whole document."
+      "rationale": "Agent-amendment provenance; mark reviewed per item or per document (roadmap slice). A cannot-satisfy report is a question to the operator, not provenance to acknowledge (F700).",
+      "statement": "Each amendment MUST be recorded with its operation, target, reason, how_to_check, author and run, as not reviewed, and MUST stay not reviewed until the operator marks it reviewed, either by its id or for the whole document, except a cannot_satisfy report, which is answered — amend, accept or reject — rather than marked reviewed."
     },
     {
       "key": "a-tester-drives-the-built-product-and-keeps-the-s-cannot-satisfy",
@@ -2922,8 +2978,8 @@
       "key": "a-tester-drives-the-built-product-and-keeps-the-spec-true-page",
       "modal": "MUST",
       "party": null,
-      "rationale": null,
-      "statement": "In the app, an approved document MUST list its amendments with operation, target, author, run, reason, how to check and whether reviewed, and MUST offer Mark reviewed per amendment and for all."
+      "rationale": "Operator decision 2026-10-18: three responses, each of which does something.",
+      "statement": "In the app, an approved document MUST list its amendments with operation, target, author, run, reason, how to check and whether reviewed, and MUST offer Mark reviewed per amendment and for all, and MUST offer Amend criterion, Accept and unblock, and Reject on a cannot-satisfy report in place of Mark reviewed."
     },
     {
       "key": "a-change-is-reconciled-with-its-code-before-it-reconcile-record",
@@ -2980,6 +3036,13 @@
       "party": null,
       "rationale": null,
       "statement": "The spec proposals panel MUST list resolved proposals with their outcome, who resolved them, when and the reason."
+    },
+    {
+      "key": "the-operator-answers-a-cannot-satisfy-report-respond-route",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Each answer does something the reporter is told about, so the report and the blocked task can no longer drift apart. No schema change: the response rides the amendment_reviewed event's detail.",
+      "statement": "The operator MUST answer an unanswered cannot_satisfy report through POST /api/v1/projects/{id}/project/documents/{path}/amendments/{amendment_id}/respond with exactly one of amend, accept or reject, and the answer MUST mark the report reviewed recording the response, its reason and, for amend, the amendment it produced. Amend MUST change the reported criterion in the approved document with the given fields (given, when, then, how_to_check, checked_by) as a change_criterion amendment by the operator that names the report and is born reviewed, refresh the open tasks serving its requirement, and unblock the blocked task (in_progress, its blocked reason cleared); accept MUST leave the criterion as written and unblock the task; reject MUST require a reason (422 response_needs_reason) and leave the task blocked. Every response MUST be sent to the reporting agent as operator input in its open conversation. A second answer MUST be refused 409 report_answered, an id that is not a cannot-satisfy report 422 not_a_report, and naming a report's id to Mark reviewed 409 report_needs_response; marking the whole document reviewed MUST leave unanswered reports as they are."
     }
   ],
   "schema_version": 1,

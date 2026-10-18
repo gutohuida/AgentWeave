@@ -1,0 +1,126 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a piece another reviewer rejected",
+      "how_to_check": "pytest hub/tests/test_a_decided_piece_is_overturned_only_by_the_operator.py::test_a_granted_agent_cannot_decide_a_decided_piece",
+      "key": "agent-cannot-redecide",
+      "requirement": "agents-decide-awaiting-only",
+      "then": "409 already_decided, the piece stays rejected and no review row is added",
+      "when": "a granted agent accepts it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "evidence recorded, then its requirement reworded",
+      "how_to_check": "pytest hub/tests/test_a_decided_piece_is_overturned_only_by_the_operator.py::test_evidence_for_an_earlier_wording_cannot_be_accepted",
+      "key": "stale-not-accepted",
+      "requirement": "agents-decide-awaiting-only",
+      "then": "409 evidence_stale and the piece stays awaiting",
+      "when": "the operator accepts it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a rejected piece",
+      "how_to_check": "pytest hub/tests/test_a_decided_piece_is_overturned_only_by_the_operator.py::test_the_operator_overturns_only_with_a_reason",
+      "key": "overturn-needs-reason",
+      "requirement": "overturn-route",
+      "then": "first 422 overturn_needs_reason; then 200, review_state accepted, overturned.from rejected, the reason on the latest review",
+      "when": "the operator overturns it with no reason, then with a reason"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an accepted piece of an approved task",
+      "how_to_check": "pytest hub/tests/test_a_decided_piece_is_overturned_only_by_the_operator.py::test_overturning_an_accepted_piece_reopens_the_approved_task",
+      "key": "overturn-reopens",
+      "requirement": "overturn-route",
+      "then": "the piece is rejected and the task is revision_needed",
+      "when": "the operator overturns it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an awaiting piece, and a decided one",
+      "how_to_check": "pytest hub/tests/test_a_decided_piece_is_overturned_only_by_the_operator.py::test_overturning_an_awaiting_piece_is_refused and ::test_the_same_decision_again_is_refused",
+      "key": "overturn-awaiting-refused",
+      "requirement": "overturn-route",
+      "then": "409 not_decided; 409 already_decided",
+      "when": "the operator overturns the awaiting piece, and decides the decided one the same way again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a decided piece in the evidence list",
+      "how_to_check": "npx vitest run hub/ui/src/__tests__/evidencePieces*.test.tsx",
+      "key": "overturn-control",
+      "requirement": "overturn-route",
+      "then": "it asks for a reason and posts it to the overturn route",
+      "when": "the operator uses Overturn"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "a642bd1e6700a73ee2a92cea2f87c838ec3d5481eb2ec6c1d46f202f283b64dd",
+      "FR-2": "40ff9495c7b4d5bbe673e94e57da66c43199f3eda715840570c09e82be0dc2fd"
+    },
+    "high_water": 2,
+    "requirements": {
+      "agents-decide-awaiting-only": "FR-1",
+      "overturn-route": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 An overturn is an ordinary evidence_reviews row; no schema change. D2 One rule for both planes: a decided piece is the operator's to reverse, with a reason.",
+  "evidence": {
+    "checked": [
+      "Acceptance tests written first (xfail strict) through the real routes on both planes, then built"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "The evidence list offered Accept/Reject only while a piece was awaiting, so the operator had no screen to reverse a decision, while a granted agent could overturn any decision silently: the 2026-10-18 sweep's tester accepted a piece its own review had rejected, recorded against an earlier wording, and got review_state accepted back with no note and no stale-digest refusal.",
+  "requirements": [
+    {
+      "key": "agents-decide-awaiting-only",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Operator decision 2026-10-18: a decision another reviewer took is not an agent's to reverse, and accepting evidence for an earlier wording verifies nothing the requirement says today. An agent deciding a decided piece is refused 409 already_decided naming its decision; accepting stale evidence is refused 409 evidence_stale for every actor; rejecting stale evidence stays allowed.",
+      "statement": "An agent SHALL decide only awaiting evidence; only the operator SHALL overturn a decided piece, with a reason; evidence whose digest is not its requirement's current digest SHALL NOT be accepted."
+    },
+    {
+      "key": "overturn-route",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "F672's 'rejecting an accepted piece reopens the task' worked by API only; the reversal is a review row, so the history shows it by sequence with no schema change.",
+      "statement": "The operator SHALL overturn a decided piece through POST /api/v1/projects/{id}/project/spec/evidence/{evidence_id}/overturn with a non-empty reason, and through the Overturn control on a decided piece in the evidence list. The overturn SHALL record the opposite decision as a new review carrying the reason, SHALL answer the evidence view with overturned.from naming the previous decision, and SHALL have the consequences a first decision has: accepting integrates what waited on it, and rejecting a piece of an approved task reopens it. A missing reason SHALL be refused 422 overturn_needs_reason and an awaiting piece 409 not_decided. On the operator's plain decision route, the same decision again on a decided piece SHALL be refused 409 already_decided, and the opposite one SHALL need a reason (422 overturn_needs_reason)."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Agent-plane and operator-plane evidence decisions",
+      "POST /projects/{id}/project/spec/evidence/{evidence_id}/overturn",
+      "The Overturn control in the evidence list"
+    ],
+    "non_goals": [
+      "decide_with_verdict (a reviewer's verdict) still accepts a task's awaiting stale-digest piece; coverage counts only current-digest acceptance (backlog)"
+    ]
+  },
+  "summary": "Agents decide awaiting evidence only; the operator overturns a decided piece with a required reason through a route and an Overturn control; evidence recorded for an earlier wording is never accepted (F692).",
+  "tasks": [],
+  "title": "A decided piece of evidence is overturned only by the operator, with a reason"
+}
