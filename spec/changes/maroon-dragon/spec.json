@@ -1,0 +1,186 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a Claude run whose system/init reports claude_code_version 2.1.301",
+      "key": "version-recorded",
+      "requirement": "version",
+      "then": "runs.runner_version is 2.1.301",
+      "when": "the run finishes"
+    },
+    {
+      "given": "a Claude agent on CLI 2.1.301 whose three turns of one session report total_cost_usd 0.00272, 0.00303, 0.00333 and modelUsage output 31, 36, 41",
+      "key": "three-turns",
+      "requirement": "turn",
+      "then": "turn_usage reads cost 2721 / 309 / 304 micros and output 31 / 5 / 5, and each run records runner_version 2.1.301",
+      "when": "the three runs finish through the trigger"
+    },
+    {
+      "given": "a turn whose result.usage writes 9,156 cache tokens and whose modelUsage writes 25,753 (a subagent's 15,637 included)",
+      "key": "subagent",
+      "requirement": "subagents",
+      "then": "turn_usage.cache_write_tokens is 25,753",
+      "when": "it finishes"
+    },
+    {
+      "given": "the same three turns on CLI 2.1.270, where the figures are per process",
+      "key": "old-cli",
+      "requirement": "turn",
+      "then": "each is recorded as reported, not differenced",
+      "when": "they finish"
+    },
+    {
+      "given": "a session whose previous turn row has no session_totals",
+      "key": "legacy",
+      "requirement": "unknown",
+      "then": "it records result.usage's tokens and a null cost, and its own totals for the turn after",
+      "when": "its next turn finishes"
+    },
+    {
+      "given": "a scratch Hub and a Haiku agent",
+      "key": "drive",
+      "requirement": "turn",
+      "then": "turn 2's recorded cost equals the CLI's turn-2 total minus its turn-1 total",
+      "when": "two turns of one conversation run"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "9ac8fbcd05c5e8546985c4e98ff4b65a2efb46a8cbe06f997e67021ba2000399",
+      "FR-2": "42ef9f75204a14b2683d2d024d293ffb67e750e5cd10a8b9ae60eea7647d7724",
+      "FR-3": "7b73cc51554147fa0c669999c60d855777d3220d80983129311115bc0c0776ee",
+      "FR-4": "9afd6c399fad41271596c0d632078d955df5e1180164ea0599690f76eb424a7a"
+    },
+    "high_water": 4,
+    "requirements": {
+      "subagents": "FR-3",
+      "turn": "FR-2",
+      "unknown": "FR-4",
+      "version": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 Mirror Copilot's credits: store the runner-reported session totals on turn_usage (a JSON column, cost micros plus each token dimension) and read the previous row of the same Run.session_id by rowid, as copilot_session_baseline does. D2 Gate on the recorded version (runs.runner_version, from system/init): 2.1.277 or later differences; earlier is per process and recorded as reported; unknown differences only when every total is at least the baseline's. D3 The parser builds the sample from modelUsage summed across models and keeps today's result.usage reading as the fallback for D4. D4 A resumed session with turns but no recorded totals records usage tokens and a null cost once. D5 The Hub never runs --fork-session (grep 0), so a session's turns share one session id; measured today, a fork would inherit its parent's totals under a new id. Hazard: migration (two nullable columns, additive; downgrade drops them). :8000 runs this checkout, so its next restart applies it to the operator's database; nothing is backfilled or rewritten.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F678 (research 2026-09-27 §1, re-measured 2026-10-18 on CC 2.1.301): the Hub resumes one Claude session per turn and reads total_cost_usd as that turn's cost (runner_parsing.py, result branch), so every later turn of a session records the whole session's cost again; a replay of :8000's history reads $1,134 where $419 was spent. Tokens come from result.usage, which is per turn but leaves out subagent calls, so the token budget the scheduler enforces undercounts every turn that delegated, and a run with two results (a subagent, or 2.1.292's background second turn) keeps only the last one's tokens. Measured today: three turns read cost 0.00272 / 0.00303 / 0.00333 and modelUsage output 31 / 36 / 41, where usage reads 31 / 5 / 5. The CLI's version arrives in system/init and is discarded, so the Hub cannot tell a per-process figure (before 2.1.277) from a per-session one.",
+  "requirements": [
+    {
+      "key": "version",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The meaning of the reported totals changed at 2.1.277; about fifteen research reports needed the version and could not read it.",
+      "statement": "A Claude run MUST record the CLI version its system/init event reports, on the run."
+    },
+    {
+      "key": "turn",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A per-session running total recorded per turn sums to the square of the turn count.",
+      "statement": "A resumed Claude turn on CLI 2.1.277 or later MUST record as its cost and tokens the session totals it reports minus the totals the previous recorded turn of the same session reported."
+    },
+    {
+      "key": "subagents",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The token budget is the figure the Hub enforces; result.usage leaves subagent calls out.",
+      "statement": "A Claude turn's tokens MUST include its subagents' tokens, as modelUsage reports them, whenever modelUsage is present."
+    },
+    {
+      "key": "unknown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A session whose earlier turns predate this change has no baseline; recording its whole running total as one turn would repeat the defect once more.",
+      "statement": "When a resumed session's previous turns carry no recorded totals, the turn MUST keep its per-turn token counts and record no cost, rather than the session's total."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "runs.runner_version from system/init's claude_code_version",
+      "turn_usage.session_totals: the runner-reported cumulative cost and token dimensions",
+      "a Claude turn's accounting built from modelUsage (subagents included), differenced against the previous turn of the same session on 2.1.277 or later"
+    ],
+    "non_goals": [
+      "backfilling history (old rows carry no totals and stay as recorded)",
+      "showing the version or cache writes in the UI",
+      "Codex and Copilot accounting (Copilot already differences its credits)"
+    ]
+  },
+  "summary": "Since Claude Code 2.1.277 a resumed session's total_cost_usd and modelUsage are cumulative, and result.usage omits subagent tokens. Record the runner's version per run and each turn's session totals, and store each turn as the difference from the previous turn of its session.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Migration: runs.runner_version and turn_usage.session_totals, both nullable",
+      "from": null,
+      "key": "migration",
+      "requirements": [
+        "version",
+        "turn"
+      ],
+      "reviewer": null,
+      "title": ""
+    },
+    {
+      "depends_on": [
+        "migration"
+      ],
+      "description": "Parser: the version from system/init; the result's sample from modelUsage with its session totals kept",
+      "from": null,
+      "key": "parse",
+      "requirements": [
+        "version",
+        "subagents"
+      ],
+      "reviewer": null,
+      "title": ""
+    },
+    {
+      "depends_on": [
+        "parse"
+      ],
+      "description": "Record the version on the run and difference a turn against its session's previous totals before record_turn_usage",
+      "from": null,
+      "key": "settle",
+      "requirements": [
+        "turn",
+        "unknown"
+      ],
+      "reviewer": null,
+      "title": ""
+    },
+    {
+      "depends_on": [
+        "settle"
+      ],
+      "description": "Drive two turns of one conversation on a scratch Hub (Haiku) and compare turn 2 with the CLI's own difference",
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "turn"
+      ],
+      "reviewer": null,
+      "title": ""
+    }
+  ],
+  "title": "A Claude turn records its own cost, not its session's running total"
+}
