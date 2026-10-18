@@ -26,7 +26,7 @@ from .base import (
     StreamTransport,
     probe_binary,
 )
-from .one_shot import WorkerUsage, _int_or_none, extract_json_object
+from .one_shot import OneShotCommand, WorkerUsage, _int_or_none, extract_json_object
 
 
 def parse_claude_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
@@ -177,7 +177,8 @@ class ClaudeAdapter(RunnerAdapter):
             cmd = [self.binary, "--tools", "", "--strict-mcp-config", "--output-format", "json"]
         if model:
             cmd += ["--model", model]
-        return cmd + ["-p", neutralise_file_mentions(prompt)]
+        # On stdin, not after `-p`: an argument is capped by the command line (F682).
+        return OneShotCommand(cmd + ["-p"], stdin=neutralise_file_mentions(prompt))
 
     def read_one_shot(self, *, model: Optional[str], prompt: str) -> Optional[List[str]]:
         """The Read tool alone, no MCP server, and an explicit `--permission-mode default`: in -p
@@ -195,7 +196,8 @@ class ClaudeAdapter(RunnerAdapter):
         ]
         if model:
             cmd += ["--model", model]
-        return cmd + ["-p", neutralise_file_mentions(prompt)]
+        # On stdin, not after `-p`: an argument is capped by the command line (F682).
+        return OneShotCommand(cmd + ["-p"], stdin=neutralise_file_mentions(prompt))
 
     def parse_one_shot(self, stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
         return parse_claude_envelope(stdout)

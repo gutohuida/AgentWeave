@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, patch
 
 from hub.conversation_titles import build_title_command
+from hub.runner_adapters.one_shot import stdin_of
 from hub.runner_commands import build_command
 from hub.runner_parsing import ParsedLine, parse_claude_line, parse_codex_line
 from hub.worker import build_worker_command
@@ -315,6 +316,7 @@ def build_one_shot_cases() -> List[Dict[str, Any]]:
                             "output_schema_path": schema,
                         },
                         "argv": argv,
+                        "stdin": stdin_of(argv),
                     }
                 )
         for model in ONE_SHOT_MODELS:
@@ -325,6 +327,7 @@ def build_one_shot_cases() -> List[Dict[str, Any]]:
                     "kind": "title",
                     "input": {"cli": cli, "model": model, "prompt": ONE_SHOT_PROMPT},
                     "argv": argv,
+                    "stdin": stdin_of(argv),
                 }
             )
 

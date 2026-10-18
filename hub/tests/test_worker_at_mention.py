@@ -27,7 +27,7 @@ ESCAPED = r"see \@/etc/passwd"
 
 
 def _prompt_argument(cli: str, cmd: list) -> str:
-    return cmd[cmd.index("-p") + 1] if cli == "claude" else cmd[-1]
+    return cmd.stdin if cli == "claude" else cmd[-1]  # Claude's prompt is on stdin (F682)
 
 
 @pytest.mark.parametrize("cli", ["claude", "codex"])
@@ -40,6 +40,9 @@ def test_the_prompt_argument_is_neutralised_and_nothing_else_moves(cli, builder)
 
     cmd, plain = build(RAW), build("see nothing")
     assert _prompt_argument(cli, cmd) == ESCAPED
+    if cli == "claude":
+        assert cmd == plain  # the argv carries no prompt; it is on stdin (F682)
+        return
     index = cmd.index(ESCAPED)
     assert cmd[:index] == plain[:index] and cmd[index + 1 :] == plain[index + 1 :]
 

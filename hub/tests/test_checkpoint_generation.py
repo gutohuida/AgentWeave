@@ -499,7 +499,7 @@ async def test_a_second_checkpoint_does_not_replay_what_the_first_already_covere
     captured = []
 
     def fake_run(cmd, **kwargs):
-        captured.append(cmd[-1])
+        captured.append(kwargs.get("input") or cmd[-1])  # F682: Claude reads stdin
         return subprocess.CompletedProcess(cmd, 0, stdout=_claude_stdout(GOOD_BODY), stderr="")
 
     # Timestamps are set explicitly rather than left to the wall clock. Letting them fall where
@@ -570,7 +570,7 @@ async def test_a_turn_recorded_in_the_same_instant_as_the_checkpoint_is_not_lost
     captured = []
 
     def fake_run(cmd, **kwargs):
-        captured.append(cmd[-1])
+        captured.append(kwargs.get("input") or cmd[-1])  # F682: Claude reads stdin
         return subprocess.CompletedProcess(cmd, 0, stdout=_claude_stdout(GOOD_BODY), stderr="")
 
     instant = datetime.now(timezone.utc)
@@ -617,7 +617,7 @@ async def test_a_reader_given_only_the_checkpoint_can_answer_the_probe(app, monk
     seen_by_probe = {}
 
     def fake_run(cmd, **kwargs):
-        prompt = cmd[-1]
+        prompt = kwargs.get("input") or cmd[-1]  # F682: Claude reads stdin
         if "You have not seen the conversation" in prompt:
             seen_by_probe["prompt"] = prompt
             # Answer strictly from what the prompt contains — which is the whole point.

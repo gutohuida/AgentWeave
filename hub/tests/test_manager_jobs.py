@@ -272,7 +272,7 @@ def _fake_spawn(monkeypatch, outputs: dict, calls: list) -> None:
 
     def _run(cmd, cwd, env=None):
         calls.append(cmd)
-        prompt = cmd[-1]
+        prompt = cmd.stdin  # F682: Claude reads stdin
         return _answered(next(out for word, out in outputs.items() if word in prompt))
 
     monkeypatch.setattr(conversation_titles, "_run_titler", _run)

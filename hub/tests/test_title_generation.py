@@ -36,8 +36,8 @@ def test_claude_command_is_a_one_shot_prompt() -> None:
         "--model",
         "claude-opus-5",
         "-p",
-        "P",
     ]
+    assert cmd.stdin == "P"  # on stdin, so no command-line cap applies (F682)
     # One JSON envelope, so the call's usage is counted (F240); none of an agent turn's
     # apparatus: no streaming JSON, no MCP server, no permission mode.
     assert "stream-json" not in cmd
@@ -502,7 +502,7 @@ async def test_a_first_reply_arriving_later_is_worth_one_more_title(
     prompts = []
 
     def _run(cmd, cwd, env=None):
-        prompts.append(cmd[-1])
+        prompts.append(cmd.stdin)  # F682: Claude reads stdin
         return _answered(f"Title {len(prompts)}")
 
     monkeypatch.setattr(conversation_titles, "_run_titler", _run)
@@ -549,7 +549,7 @@ async def test_a_later_runs_text_does_not_become_the_first_reply(
     prompts = []
 
     def _run(cmd, cwd, env=None):
-        prompts.append(cmd[-1])
+        prompts.append(cmd.stdin)  # F682: Claude reads stdin
         return _answered(f"Title {len(prompts)}")
 
     monkeypatch.setattr(conversation_titles, "_run_titler", _run)

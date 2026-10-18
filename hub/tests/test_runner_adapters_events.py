@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from hub.runner_adapters import get_adapter
+from hub.runner_adapters.one_shot import stdin_of
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "runner_adapters"
 STREAM_EVENTS_GOLDEN_PATH = FIXTURES_DIR / "stream_events_golden.json"
@@ -96,6 +97,7 @@ def test_one_shot_matches_golden(case):
     argv = adapter.one_shot(case["kind"], **kwargs)
 
     assert argv == case["argv"]
+    assert stdin_of(argv) == case["stdin"]  # F682: Claude's prompt is written to stdin
 
 
 def test_one_shot_golden_covers_both_kinds_and_runners():

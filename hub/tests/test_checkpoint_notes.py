@@ -238,7 +238,7 @@ async def test_notes_reach_the_generator_and_are_marked_as_one_input(app, monkey
     captured = []
 
     def fake_run(cmd, **kwargs):
-        captured.append(cmd[-1])
+        captured.append(kwargs.get("input") or cmd[-1])  # F682: Claude reads stdin
         return subprocess.CompletedProcess(cmd, 0, stdout=_claude_stdout(GOOD_BODY), stderr="")
 
     async with async_session_factory() as db:
@@ -267,7 +267,7 @@ async def test_notes_are_consumed_once_and_not_reused_by_a_later_checkpoint(app,
     captured = []
 
     def fake_run(cmd, **kwargs):
-        captured.append(cmd[-1])
+        captured.append(kwargs.get("input") or cmd[-1])  # F682: Claude reads stdin
         return subprocess.CompletedProcess(cmd, 0, stdout=_claude_stdout(GOOD_BODY), stderr="")
 
     async with async_session_factory() as db:
@@ -303,7 +303,7 @@ async def test_notes_passed_over_are_retired_with_the_one_taken(app, monkeypatch
     captured = []
 
     def fake_run(cmd, **kwargs):
-        captured.append(cmd[-1])
+        captured.append(kwargs.get("input") or cmd[-1])  # F682: Claude reads stdin
         return subprocess.CompletedProcess(cmd, 0, stdout=_claude_stdout(GOOD_BODY), stderr="")
 
     base = datetime.now(timezone.utc) - timedelta(minutes=10)

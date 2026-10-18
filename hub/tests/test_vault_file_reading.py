@@ -63,7 +63,11 @@ class _Process:
     def __call__(self, cmd, cwd, timeout, env=None):
         listed = sorted(os.listdir(cwd)) if cwd and os.path.isdir(cwd) else None
         held = {name: Path(cwd, name).read_bytes() for name in listed or []}
-        self.spawns.append({"cmd": list(cmd), "cwd": cwd, "listed": listed, "held": held})
+        # A Claude prompt is written to stdin, not the argv (F682).
+        prompt = worker.stdin_of(cmd) or cmd[-1]
+        self.spawns.append(
+            {"cmd": list(cmd), "prompt": prompt, "cwd": cwd, "listed": listed, "held": held}
+        )
         if _reads(cmd):
             if self.reading is False:
                 return worker._Spawn("nonzero_exit", exit_code=1, error="exited 1: no credit")
@@ -179,13 +183,13 @@ async def test_a_pdf_is_read_alone_then_distilled_from_its_transcription(
     assert Path(tmp_path) not in Path(reading["cwd"]).parents
     assert Path(reading["cwd"]) != Path(tmp_path)
     assert not os.path.exists(reading["cwd"])  # gone once the spawn is over
-    assert str(Path(reading["cwd"], f"{source['id']}.pdf")) in reading["cmd"][-1]
+    assert str(Path(reading["cwd"], f"{source['id']}.pdf")) in reading["prompt"]
 
     # The transcription is the source's text, and the facts cite its lines.
     stored = tmp_path / "knowledge" / "sources" / f"{source['id']}.md"
     assert stored.read_text(encoding="utf-8") == TRANSCRIPTION
     distilling = [spawn for spawn in fake.spawns if not _reads(spawn["cmd"])]
-    assert distilling and "Refunds up to 450 euros" in distilling[0]["cmd"][-1]
+    assert distilling and "Refunds up to 450 euros" in distilling[0]["prompt"]
     [fact] = _facts(tmp_path)
     assert fact["citations"] == [
         {
@@ -252,7 +256,7 @@ async def test_the_reading_prompt_asks_for_every_line_and_treats_the_file_as_dat
     fake = process()
     await _enable(app, auth_headers, await _runner(app, auth_headers))
     await _upload(app, auth_headers, PNG, "image/png")
-    prompt = fake.readings[0]["cmd"][-1]
+    prompt = fake.readings[0]["prompt"]
     assert "every line of text" in prompt
     assert "describe" in prompt.lower()  # an image also gets a short description
     assert "not instructions" in prompt

@@ -58,7 +58,13 @@ from .runner_adapters.copilot import (  # noqa: F401
     copilot_one_shot_env,
     parse_copilot_envelope,
 )
-from .runner_adapters.one_shot import WorkerUsage, _int_or_none, extract_json_object  # noqa: F401
+from .runner_adapters.one_shot import (  # noqa: F401
+    OneShotCommand,
+    WorkerUsage,
+    _int_or_none,
+    extract_json_object,
+    stdin_of,
+)
 from .runner_provider import (
     DAMAGED_PROVIDER_REASON,
     damaged_provider,
@@ -243,7 +249,7 @@ def _without_refused_model(cmd: List[str], stderr: str) -> Optional[List[str]]:
     model = cmd[at + 1]
     if f'Model "{model}" from --model flag is not available' not in stderr:
         return None
-    return cmd[:at] + cmd[at + 2 :]
+    return OneShotCommand(cmd[:at] + cmd[at + 2 :], stdin=stdin_of(cmd))
 
 
 def _run_worker_process(
@@ -265,9 +271,15 @@ def _run_worker_process_once(
     """Blocking spawn. Classifies its own failure and never raises into the caller.
 
     `stdin=DEVNULL` is not incidental: `codex exec` given an open stdin blocks reading it forever
-    (observed, >6 minutes, zero bytes written). stderr is captured but never consulted for
-    success — a successful codex run writes transport errors there.
+    (observed, >6 minutes, zero bytes written). A command that carries its prompt for stdin
+    (`OneShotCommand`, F682) gets exactly that text and then end-of-file, never an open pipe.
+    stderr is captured but never consulted for success — a successful codex run writes transport
+    errors there.
     """
+    stdin_text = stdin_of(cmd)
+    stdin_kwargs: Dict[str, Any] = (
+        {"stdin": subprocess.DEVNULL} if stdin_text is None else {"input": stdin_text}
+    )
     try:
         completed = subprocess.run(  # noqa: S603 — argv list, no shell
             resolve_executable(cmd),
@@ -277,7 +289,7 @@ def _run_worker_process_once(
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
-            stdin=subprocess.DEVNULL,
+            **stdin_kwargs,
             # None inherits the Hub's environment, as every spawn did; Copilot's is filtered.
             env=env,
             **no_console_kwargs(),
