@@ -114,3 +114,44 @@ async def test_a_folded_requirement_says_which_change_it_came_from(app, auth_hea
         f"{BASE}/spec/requirements/{by_key['widgets-exist']}?document={CAP}", headers=auth_headers
     )
     assert [r["folded_from"] for r in own.json()["revisions"]] == [None]
+
+
+async def test_evidence_says_whether_it_was_recorded_for_the_current_wording(
+    app, auth_headers, builder, tmp_path  # noqa: F811
+):
+    """F691: evidence accepted before a rewording kept reading "accepted" under the new wording in
+    the requirement story and the evidence browser, while coverage called it stale. Each piece
+    now says whether it was recorded against what the requirement says now."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    earlier = await app.post(
+        f"{BASE}/spec/evidence",
+        json={"identifier": "FR-1", "document": PATH, "summary": "before the rewording"},
+        headers=auth_headers,
+    )
+    assert earlier.status_code == 201, earlier.text
+    assert earlier.json()["for_current_wording"] is True
+
+    reworded = await app.put(
+        f"{BASE}/documents/{PATH}/content",
+        json={"document": document([{**ALPHA, "statement": REWORDED}])},
+        headers=auth_headers,
+    )
+    assert reworded.status_code == 200, reworded.text
+    later = await app.post(
+        f"{BASE}/spec/evidence",
+        json={"identifier": "FR-1", "document": PATH, "summary": "after the rewording"},
+        headers=auth_headers,
+    )
+    assert later.status_code == 201, later.text
+
+    body = await detail(app, auth_headers)
+    assert [(e["summary"], e["for_current_wording"]) for e in body["evidence"]] == [
+        ("before the rewording", False),
+        ("after the rewording", True),
+    ]
+    listed = await app.get(f"{BASE}/spec/evidence", params={"document": PATH}, headers=auth_headers)
+    assert {e["summary"]: e["for_current_wording"] for e in listed.json()["evidence"]} == {
+        "before the rewording": False,
+        "after the rewording": True,
+    }

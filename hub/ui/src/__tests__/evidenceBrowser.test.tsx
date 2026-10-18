@@ -58,11 +58,13 @@ const EVIDENCE: EvidencePiece[] = [
   }),
 ]
 
+let served: EvidencePiece[] = EVIDENCE
+
 vi.mock('@/api/spec', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/spec')>()
   return {
     ...actual,
-    useProjectEvidence: () => ({ data: { evidence: EVIDENCE }, isLoading: false, isError: false }),
+    useProjectEvidence: () => ({ data: { evidence: served }, isLoading: false, isError: false }),
     useEvidenceReviews: () => ({ data: { reviews: [] }, isError: false }),
     useEvidenceDiff: () => ({ data: undefined, isLoading: false, isError: false }),
   }
@@ -114,6 +116,30 @@ describe('EvidenceBrowser', () => {
     expect(screen.getByTestId('evidence-filter-awaiting').textContent).toContain('1')
     await userEvent.click(screen.getByTestId('evidence-filter-rejected'))
     expect(rowIds()).toEqual(['ev-3'])
+  })
+
+  it('counts a piece recorded for an earlier wording apart from accepted evidence (F691)', async () => {
+    served = [
+      piece({
+        id: 'ev-0', summary: 'rename worked before the rewording', produced_at: '2026-10-16T10:00:00Z',
+        review_state: 'accepted', for_current_wording: false,
+        requirement_id: 'spreq-watch-1',
+        requirement: { identifier: 'FR-1', statement: 'A watched folder can be renamed.', document: WATCH },
+      }),
+      ...EVIDENCE.map((p) => ({ ...p, for_current_wording: true })),
+    ]
+    try {
+      browse()
+      expect(screen.getByTestId('evidence-filter-accepted').textContent).toContain('1')
+      expect(screen.getByTestId('evidence-filter-earlier').textContent).toContain('1')
+      expect(screen.getByTestId('evidence-row-earlier-ev-0').textContent).toContain('earlier wording')
+      await userEvent.click(screen.getByTestId('evidence-filter-accepted'))
+      expect(rowIds()).toEqual(['ev-1'])
+      await userEvent.click(screen.getByTestId('evidence-filter-earlier'))
+      expect(rowIds()).toEqual(['ev-0'])
+    } finally {
+      served = EVIDENCE
+    }
   })
 
   it('a requirement focus narrows to that document’s FR-1 only, and names it', async () => {

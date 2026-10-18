@@ -3,7 +3,12 @@ import { Icon } from '@/components/common/Icon'
 import { StatePill } from '@/components/common/StatePill'
 import { Expander } from '@/components/common/Expander'
 import { EvidenceProof, EvidenceReviews } from '@/components/evidence/EvidenceProof'
-import { useEvidenceReviews, useProjectEvidence, type EvidencePiece } from '@/api/spec'
+import {
+  forEarlierWording,
+  useEvidenceReviews,
+  useProjectEvidence,
+  type EvidencePiece,
+} from '@/api/spec'
 import { useTasks } from '@/api/tasks'
 import { evidenceTone, statusTone } from '@/lib/storyTones'
 import { hubDate } from '@/lib/hubTime'
@@ -18,7 +23,13 @@ import { RequirementLink } from '@/components/spec/RequirementLink'
  * requirement identifier, from the URL) narrows it to what a link elsewhere meant.
  */
 
-type StateFilter = 'all' | 'awaiting' | 'accepted' | 'rejected'
+type StateFilter = 'all' | 'awaiting' | 'accepted' | 'rejected' | 'earlier'
+
+/** Which chip a piece counts under. One recorded for an earlier wording is its own state (F691):
+ *  its verdict is about words the requirement no longer says, so it is not "accepted" evidence. */
+function stateOf(piece: EvidencePiece): StateFilter {
+  return forEarlierWording(piece) ? 'earlier' : (piece.review_state as StateFilter)
+}
 
 /** What a focus names: a task (`task-…`), a requirement by its durable id (`spreq-…`, what links
  *  send, since `FR-n` repeats in every document), or a bare identifier (an older link). */
@@ -38,6 +49,7 @@ const STATE_LABEL: Record<StateFilter, string> = {
   awaiting: 'Waiting',
   accepted: 'Accepted',
   rejected: 'Rejected',
+  earlier: 'Earlier wording',
 }
 
 function relative(value: string): string {
@@ -96,9 +108,20 @@ function PieceRow({
         <span className="aw-evidence-tags">
           {piece.covers === 'partial' ? <StatePill tone="amber">partial</StatePill> : null}
           {piece.superseded_by ? <span className="aw-tl-meta">replaced</span> : null}
-          <StatePill key={piece.review_state} tone={evidenceTone(piece.review_state)}>
-            {piece.review_state === 'awaiting' ? 'waiting' : piece.review_state}
-          </StatePill>
+          {forEarlierWording(piece) ? (
+            <StatePill
+              key={`earlier-${piece.review_state}`}
+              tone="neutral"
+              title="Recorded for an earlier wording of the requirement, so it does not count for what it says now"
+              testId={`evidence-row-earlier-${piece.id}`}
+            >
+              {piece.review_state === 'awaiting' ? 'waiting' : piece.review_state} · earlier wording
+            </StatePill>
+          ) : (
+            <StatePill key={piece.review_state} tone={evidenceTone(piece.review_state)}>
+              {piece.review_state === 'awaiting' ? 'waiting' : piece.review_state}
+            </StatePill>
+          )}
         </span>
       </button>
       <div className="aw-evidence-meta aw-tl-meta">
@@ -170,16 +193,23 @@ export function EvidenceBrowser({
     [pieces, focus],
   )
   const counts = useMemo(() => {
-    const result: Record<StateFilter, number> = { all: focused.length, awaiting: 0, accepted: 0, rejected: 0 }
+    const result: Record<StateFilter, number> = {
+      all: focused.length,
+      awaiting: 0,
+      accepted: 0,
+      rejected: 0,
+      earlier: 0,
+    }
     for (const piece of focused) {
-      if (piece.review_state in result) result[piece.review_state as StateFilter] += 1
+      const key = stateOf(piece)
+      if (key in result) result[key] += 1
     }
     return result
   }, [focused])
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return focused.filter((p) => {
-      if (state !== 'all' && p.review_state !== state) return false
+      if (state !== 'all' && stateOf(p) !== state) return false
       if (agent && (p.actor_kind === 'operator' ? 'you' : p.actor) !== agent) return false
       if (!needle) return true
       return [p.summary, p.locator, p.requirement?.identifier, p.requirement?.statement, p.command]
@@ -244,7 +274,9 @@ export function EvidenceBrowser({
               type="button"
               aria-pressed={state === key}
               onClick={() => setState(key)}
-              className={`aw-filter-chip tone-${key === 'all' ? 'neutral' : evidenceTone(key)}`}
+              className={`aw-filter-chip tone-${
+                key === 'all' || key === 'earlier' ? 'neutral' : evidenceTone(key)
+              }`}
               data-testid={`evidence-filter-${key}`}
             >
               {STATE_LABEL[key]} <span className="aw-filter-count">{counts[key]}</span>

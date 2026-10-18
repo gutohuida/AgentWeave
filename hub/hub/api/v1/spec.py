@@ -1960,7 +1960,13 @@ async def resolve_drift(
 
 
 def _evidence_view(
-    evidence, footprint=None, latest_review=None, *, requirement=None, superseded_by=None
+    evidence,
+    footprint=None,
+    latest_review=None,
+    *,
+    requirement=None,
+    superseded_by=None,
+    for_current_wording=None,
 ) -> dict:
     return {
         # Still being recorded: the run that recorded it is running, so its commit is about to be
@@ -2008,6 +2014,11 @@ def _evidence_view(
         # (`says-what-it-demonstrates`). Built by `_evidence_views`; null where it was not asked.
         "requirement": requirement,
         "superseded_by": superseded_by,
+        # Whether it was recorded against what the requirement says now (F691): its digest is the
+        # requirement's. False is coverage's `stale` for this piece -- its review state is about an
+        # earlier wording, so a surface must not count it as the requirement's evidence. Null where
+        # the requirement could not be read.
+        "for_current_wording": for_current_wording,
     }
 
 
@@ -2112,6 +2123,9 @@ async def _evidence_views(
                     else None
                 ),
                 superseded_by=latest.id if latest is not None and latest.id != row.id else None,
+                for_current_wording=(
+                    row.digest == requirement.digest if requirement is not None else None
+                ),
             )
         )
     return views
