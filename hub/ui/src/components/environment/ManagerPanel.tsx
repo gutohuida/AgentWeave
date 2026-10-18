@@ -35,7 +35,7 @@ export function ManagerPanel() {
   const { data: catalog, error: catalogError } = useModelCatalog()
   const update = useUpdateManagerJob()
   // Names for the vault entries a firing worked on (F719); ids alone when the map is unavailable.
-  const { data: vaultEntries } = useVaultMap()
+  const { data: vaultEntries, error: vaultError } = useVaultMap()
   const entryNames = new Map((vaultEntries ?? []).map((entry) => [entry.id, entry.name]))
 
   const noManager = isNoManager(jobs.error) || isNoManager(activity.error)
@@ -82,6 +82,11 @@ export function ManagerPanel() {
             </p>
           )}
           <h3 className="settings-group-heading">Activity</h3>
+          {vaultError && (
+            <p className="text-xs" style={{ color: 'var(--text-3)' }} role="status">
+              {readableApiError(vaultError, 'The vault could not be read')}, so vault entries below are named by id.
+            </p>
+          )}
           <Activity
             firings={activity.data}
             error={activity.error}

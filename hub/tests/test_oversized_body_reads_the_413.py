@@ -26,6 +26,13 @@ LIMIT = 64 * 1024
 async def _echo(scope, receive, send):
     if scope["type"] != "http":
         return
+    # Read the body first, as every Hub route does: answering an unread 64 KiB body lets the server
+    # close while the client is still sending, a reset under load (WinError 10054) that is the echo
+    # app's, not the middleware's.
+    while True:
+        message = await receive()
+        if message["type"] != "http.request" or not message.get("more_body"):
+            break
     await send({"type": "http.response.start", "status": 200, "headers": []})
     await send({"type": "http.response.body", "body": b"ok"})
 
