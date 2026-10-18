@@ -189,6 +189,22 @@ describe('slice remaining-hidden-data — transitions and runs open their conver
   })
 })
 
+describe('F731 — a flow is named a flow, as the Details history names it', () => {
+  it('reads "Flow <job>" for a move a flow made', () => {
+    const transition = STORY.events.find((e) => e.kind === 'transition')!
+    storyOverride.current = {
+      ...STORY,
+      events: [{ ...transition, id: 'ttr-flow', origin: 'job', job: 'build', job_kind: 'flow' }],
+    }
+    try {
+      render(<TaskStory taskId="task-1" />)
+      expect(screen.getByTestId('story-event-ttr-flow').textContent).toContain('Flow build')
+    } finally {
+      storyOverride.current = null
+    }
+  })
+})
+
 describe('F711 — a jammed task tells its jam', () => {
   it('shows a refused turn with its refusal and a failed checkout release with its reason', () => {
     storyOverride.current = {

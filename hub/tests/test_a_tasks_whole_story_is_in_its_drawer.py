@@ -291,4 +291,57 @@ async def test_refused_turns_and_a_failed_checkout_release_are_in_the_story(
     assert stamps == sorted(stamps), "still oldest first"
 
 
+@pytest.mark.asyncio
+async def test_a_flows_move_names_its_job_kind_as_the_details_history_does(
+    app, auth_headers, builder, tmp_path
+):
+    """F731(1): the story said "Loop <job> moved it" where Details said "Flow <job> moved" for the
+    same move; both now read the job's kind from the same join."""
+    from sqlalchemy import select
+
+    from hub.db.models import AIJob, Loop, SpecDocument
+    from hub.task_transition_service import apply_transition
+    from hub.task_transitions import operator
+
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    task_id = await linked_task(app, auth_headers)
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        document_id = (await session.execute(select(SpecDocument.id))).scalars().first()
+        session.add(
+            AIJob(
+                id="job-story-flow",
+                project_id="proj-test",
+                name="build-flow",
+                agent="builder",
+                message="work",
+                cron="*/5 * * * *",
+                session_mode="new",
+                enabled=True,
+            )
+        )
+        await session.flush()
+        session.add(
+            Loop(
+                id="loop-story-flow",
+                project_id="proj-test",
+                job_id="job-story-flow",
+                purpose="p",
+                stop_when_queue_empties=True,
+                spec_document_id=document_id,
+            )
+        )
+        await apply_transition(
+            session, task, "assigned", operator(), origin="job", job_id="job-story-flow"
+        )
+        await session.commit()
+
+    body = await story(app, auth_headers, task_id)
+    (move,) = [event for event in body["events"] if event["kind"] == "transition"]
+    assert (move["job"], move["job_kind"]) == ("build-flow", "flow")
+    details = await app.get(f"{TASKS}/{task_id}/transitions", headers=auth_headers)
+    assert details.json()["transitions"][0]["job_kind"] == move["job_kind"]
+
+
 assert BASE

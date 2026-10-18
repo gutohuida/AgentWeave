@@ -208,7 +208,7 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
       const who =
         event.origin === 'job'
           ? event.job
-            ? `Loop ${event.job}`
+            ? `${event.job_kind === 'flow' ? 'Flow' : 'Loop'} ${event.job}`
             : 'A scheduled job'
           : event.actor_kind === 'operator'
             ? 'You'

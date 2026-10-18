@@ -292,6 +292,8 @@ export type StoryEvent =
       actor: string | null
       origin: string
       job: string | null
+      /** "flow" when the job's loop draws from a document, else "loop" (F731). */
+      job_kind?: 'flow' | 'loop' | null
       run_id: string | null
       override_reason: string | null
     }

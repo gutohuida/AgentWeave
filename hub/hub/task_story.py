@@ -25,6 +25,7 @@ from .db.models import (
     EventLog,
     EvidenceReview,
     InboundQueueEntry,
+    Loop,
     Question,
     RequirementEvidence,
     Run,
@@ -140,12 +141,19 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
         ),
     )
     job_names: Dict[str, str] = {}
+    # "flow" for a job whose loop draws from a document, else "loop": the same word the drawer's
+    # Details history uses for the same move (F731), from the same join.
+    job_kinds: Dict[str, str] = {}
     job_ids = {row.job_id for row in transitions if row.job_id}
     if job_ids:
-        job_names = {
-            job.id: job.name
-            for job in await _all(session, select(AIJob).where(AIJob.id.in_(job_ids)))
-        }
+        found = await session.execute(
+            select(AIJob.id, AIJob.name, Loop.spec_document_id)
+            .outerjoin(Loop, Loop.job_id == AIJob.id)
+            .where(AIJob.id.in_(job_ids))
+        )
+        for job_id, name, spec_document_id in found.all():
+            job_names[job_id] = name
+            job_kinds[job_id] = "flow" if spec_document_id else "loop"
 
     events: List[Dict[str, Any]] = [
         {
@@ -169,6 +177,7 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
                 or ("operator" if row.actor_kind == "operator" else None),
                 "origin": row.origin,
                 "job": job_names.get(row.job_id or "") if row.job_id else None,
+                "job_kind": job_kinds.get(row.job_id or "") if row.job_id else None,
                 "run_id": row.run_id,
                 "override_reason": row.override_reason,
             }
