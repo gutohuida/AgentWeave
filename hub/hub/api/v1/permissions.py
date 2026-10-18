@@ -5,16 +5,16 @@ These are the operator's side of the same rows.
 """
 
 from datetime import datetime, timezone
-from typing import List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import PermissionRequest
+from ...db.models import AgentOutput, PermissionRequest
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...utils import persist_event
@@ -37,6 +37,10 @@ class PermissionRequestResponse(BaseModel):
     tool_input: dict
     # Advice for the card: what "Workspace only" would decide, or null (design D3).
     workspace_verdict: dict | None = None
+    # F679: the subagent whose tool call this is ({parent_call_id, description, type}), or null
+    # for the agent's own call. Resolved when the list is read, from the run's streamed tool
+    # call: the line can arrive after the request opens, and the card polls.
+    subagent: dict | None = None
     status: str
     dismissed: bool
     created_at: datetime
@@ -73,7 +77,39 @@ async def list_permission_requests(
             PermissionRequest.dismissed.is_(False),
         )
     query = query.order_by(PermissionRequest.created_at.desc()).limit(100)
-    return list((await session.execute(query)).scalars().all())
+    rows = list((await session.execute(query)).scalars().all())
+    subagents = await _subagents_of(session, project_id, rows)
+    return [
+        PermissionRequestResponse.model_validate(row).model_copy(
+            update={"subagent": subagents.get((row.run_id, row.tool_use_id))}
+        )
+        for row in rows
+    ]
+
+
+async def _subagents_of(
+    session: AsyncSession, project_id: str, rows: List[PermissionRequest]
+) -> Dict[Tuple[Optional[str], str], Dict[str, Any]]:
+    """(run_id, tool_use_id) -> the `subagent` its streamed `tool_use` carries (F679), for the
+    requests that have one. One query over the listed runs' tool calls."""
+    wanted = {(row.run_id, row.tool_use_id) for row in rows if row.run_id and row.tool_use_id}
+    if not wanted:
+        return {}
+    call_id = func.json_extract(AgentOutput.payload, "$.call_id")
+    found = await session.execute(
+        select(AgentOutput.run_id, call_id, AgentOutput.payload).where(
+            AgentOutput.project_id == project_id,
+            AgentOutput.kind == "tool_use",
+            AgentOutput.run_id.in_({run for run, _ in wanted}),
+            call_id.in_({call for _, call in wanted}),
+        )
+    )
+    out: Dict[Tuple[Optional[str], str], Dict[str, Any]] = {}
+    for run_id, call, payload in found:
+        subagent = payload.get("subagent") if isinstance(payload, dict) else None
+        if (run_id, call) in wanted and isinstance(subagent, dict):
+            out[(run_id, call)] = subagent
+    return out
 
 
 @router.post("/{request_id}/decide", response_model=PermissionRequestResponse)

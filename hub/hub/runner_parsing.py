@@ -267,6 +267,24 @@ def _claude_usage_sample(
     )
 
 
+def _mark_subagent(data: Dict[str, Any], events: List[RunEvent]) -> None:
+    """F679: a line a subagent made names the parent's `Agent` call (`parent_tool_use_id`) and the
+    delegation (`task_description`, `subagent_type`), measured on CC 2.1.301. Its tool calls and
+    results carry that as `payload.subagent`, so the operator is told who asked."""
+    parent = data.get("parent_tool_use_id")
+    if not isinstance(parent, str) or not parent:
+        return
+    description, kind = data.get("task_description"), data.get("subagent_type")
+    subagent = {
+        "parent_call_id": parent,
+        "description": description if isinstance(description, str) and description else None,
+        "type": kind if isinstance(kind, str) and kind else None,
+    }
+    for event in events:
+        if event.kind in ("tool_use", "tool_result") and isinstance(event.payload, dict):
+            event.payload["subagent"] = dict(subagent)
+
+
 def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
     """Parse one JSONL line from `claude --output-format stream-json`."""
     try:
@@ -325,6 +343,7 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
         )
         if usage_sample is not None:
             usage_sample.session_id = session_id
+        _mark_subagent(data, events)
         return ParsedLine(events=events, usage=usage_sample, session_id=session_id)
 
     if msg_type == "user":
@@ -343,6 +362,7 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
                         is_error=bool(block.get("is_error")),
                     )
                 )
+        _mark_subagent(data, events)
         return ParsedLine(events=events, session_id=session_id)
 
     if msg_type == "result":

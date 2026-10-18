@@ -1296,3 +1296,25 @@ describe('AgentTimeline — the outbound message folds (conversations-continue p
     expect(screen.queryByText('second line stays hidden until expanded')).not.toBeInTheDocument()
   })
 })
+
+// F679 (`spdoc-48a94dbf4a02`): a subagent's call says so in the conversation.
+describe('a subagent’s tool call', () => {
+  it('is marked with the delegation it came from; the agent’s own call is not', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({ id: 'own', kind: 'agent_output', output_kind: 'tool_use', content: 'Called Agent', payload: { call_id: 'p1', tool: 'Agent' }, run_id: 'run-s', timestamp: '2026-10-18T00:00:00Z' }),
+          entry({ id: 'sub', kind: 'agent_output', output_kind: 'tool_use', content: 'Called Bash', payload: { call_id: 'c1', tool: 'Bash', subagent: { parent_call_id: 'p1', description: 'count files', type: 'general-purpose' } }, run_id: 'run-s', timestamp: '2026-10-18T00:00:01Z' }),
+        ]}
+        roster={[agent]}
+        runs={{}}
+        isRunning={false}
+      />,
+    )
+    for (const block of screen.queryAllByText(/^Work · \d+ steps?/)) fireEvent.click(block)
+    const marks = screen.getAllByTestId('work-row-subagent')
+    expect(marks).toHaveLength(1)
+    expect(marks[0]).toHaveTextContent('subagent: count files')
+  })
+})

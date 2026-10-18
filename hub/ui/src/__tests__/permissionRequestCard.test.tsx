@@ -373,3 +373,34 @@ describe('permission card wears the composer’s chrome', () => {
     expect(screen.queryByText(/stays inside/)).not.toBeInTheDocument()
   })
 })
+
+// F679 (`spdoc-48a94dbf4a02`): a subagent's call is named as the subagent's. In the order
+// `GET /permission-requests` returns them: newest first.
+describe('a subagent’s request', () => {
+  it('says it is from a subagent and names the delegation; an own call says nothing', () => {
+    const fromSubagent = request({
+      id: 'perm-sub',
+      created_at: '2026-10-18T12:01:00Z',
+      tool_name: 'Bash',
+      tool_input: { command: 'ls' },
+      subagent: { parent_call_id: 'toolu_parent', description: 'count files', type: 'general-purpose' },
+    })
+    const own = request({ id: 'perm-own', created_at: '2026-10-18T12:00:00Z', subagent: null })
+    render(<PermissionRequestCard requests={[fromSubagent, own]} agent="haiku-1" />)
+
+    const line = screen.getByTestId('permission-subagent-perm-sub')
+    expect(line).toHaveTextContent('From a subagent: count files')
+    expect(screen.getByTestId('permission-request-perm-sub')).toContainElement(line)
+    expect(screen.queryByTestId('permission-subagent-perm-own')).not.toBeInTheDocument()
+  })
+
+  it('names the subagent’s type when the delegation has no description', () => {
+    render(
+      <PermissionRequestCard
+        requests={[request({ subagent: { parent_call_id: 'p', description: null, type: 'Explore' } })]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByTestId('permission-subagent-perm-1')).toHaveTextContent('From a subagent: Explore')
+  })
+})

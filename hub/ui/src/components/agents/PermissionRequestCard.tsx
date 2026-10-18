@@ -115,6 +115,16 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
                 </button>
               )}
             </div>
+            {/* F679: a subagent's prompt was written by the agent, not by the operator, so who is
+                asking is part of what they decide. */}
+            {request.subagent && (
+              <p
+                data-testid={`permission-subagent-${request.id}`}
+                style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}
+              >
+                From a subagent: {request.subagent.description || request.subagent.type || 'unnamed'}
+              </p>
+            )}
             <code
               className={`permission-detail${expired ? ' is-stale' : ''}`}
               aria-label={`${kind.label}: ${describe(request)}`}

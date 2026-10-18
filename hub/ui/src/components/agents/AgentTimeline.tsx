@@ -858,6 +858,17 @@ function callDetail(payload: unknown): string {
   return JSON.stringify(parsed, null, 2)
 }
 
+/** F679: the delegation a subagent's call came from (`payload.subagent`), or null for the agent's
+ *  own call. */
+function subagentOf(payload: unknown): string | null {
+  const subagent = (payload as Record<string, unknown> | null | undefined)?.subagent
+  if (!subagent || typeof subagent !== 'object') return null
+  const { description, type } = subagent as Record<string, unknown>
+  if (typeof description === 'string' && description) return description
+  if (typeof type === 'string' && type) return type
+  return 'unnamed'
+}
+
 function WorkRow({
   entry,
   paired,
@@ -882,6 +893,7 @@ function WorkRow({
         ? entry.content || 'Tool call'
         : entry.content || 'Tool result'
   const toolName = (entry.payload as Record<string, unknown> | null | undefined)?.tool
+  const subagent = subagentOf(entry.payload)
   const visual = entry.output_kind === 'thinking' ? { icon: 'psychology' } : toolVisual(toolName)
   const iconName = visual.icon
   const displayLabel = visual.label ?? label
@@ -917,6 +929,17 @@ function WorkRow({
         <span className="flex gap-[.55rem] items-baseline w-full min-w-0">
           <Icon name={iconName} size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
           <b style={{ color: 'var(--text)', fontWeight: 500 }}>{displayLabel}</b>
+          {/* F679: a subagent's call, whose prompt the agent wrote. */}
+          {subagent && (
+            <span
+              data-testid="work-row-subagent"
+              className="flex-shrink-0"
+              title="Made by a subagent this agent delegated to"
+              style={{ color: 'var(--text-3)' }}
+            >
+              subagent: {subagent}
+            </span>
+          )}
           {/* The call's own subject, inline and truncated. Scanning a run of six `shell` calls is
               impossible when every row says only "shell". */}
           {detail && !expanded && (

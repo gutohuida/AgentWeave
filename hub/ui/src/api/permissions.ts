@@ -13,6 +13,9 @@ export interface PermissionRequest {
   /** What "Workspace only" would decide for this call, as advice; null when none was worked out,
    *  and absent from a Hub older than the field (both mean: say nothing). */
   workspace_verdict?: { allow: boolean; reason: string } | null
+  /** F679: the subagent whose call this is, resolved from the run's stream; null for the agent's
+   *  own call, and absent from a Hub older than the field. */
+  subagent?: { parent_call_id: string; description: string | null; type: string | null } | null
   status: 'pending' | 'allowed' | 'denied' | 'expired'
   /** The operator has seen this expired request and cleared it from view. */
   dismissed: boolean

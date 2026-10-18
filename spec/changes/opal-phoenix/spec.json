@@ -1,0 +1,161 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the stream lines measured today: an Agent tool_use, then a Bash tool_use and its tool_result with parent_tool_use_id set to the Agent call's id",
+      "key": "parse",
+      "requirement": "carry",
+      "then": "the Bash tool_use and tool_result payloads carry parent_call_id; the Agent call's payload carries none",
+      "when": "they are parsed"
+    },
+    {
+      "given": "a run whose agent_outputs hold that Agent call (description 'count files') and the subagent's Bash call, and a pending permission request for the Bash call's tool_use_id",
+      "key": "route",
+      "requirement": "resolve",
+      "then": "the request's subagent is {call_id: the Agent call's id, description: 'count files'}; a request for an ordinary call reads subagent null",
+      "when": "the operator lists permission requests"
+    },
+    {
+      "given": "a pending request whose subagent description is 'count files'",
+      "key": "card",
+      "requirement": "show",
+      "then": "it reads 'From a subagent: count files'; a request with no subagent shows no such line",
+      "when": "the card renders"
+    },
+    {
+      "given": "a scratch Hub and a Haiku agent under Ask me",
+      "key": "drive",
+      "requirement": "resolve",
+      "then": "the listed permission request names the subagent's description",
+      "when": "the agent delegates a file write to a subagent"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "2b39468dd7a0aa422d7d430a22a838b57562884b216bfcae75763f4df517a0f8",
+      "FR-2": "aa0b138c0d640aeec5986f85260d6fe39b7b3a4e72c6bffae12dd29c7ec6f9ea",
+      "FR-3": "5d48c9bf8988010c59c9a4e2a2f99559e686b34fb4709a6179614c8ecd4843f3"
+    },
+    "high_water": 3,
+    "requirements": {
+      "carry": "FR-1",
+      "resolve": "FR-2",
+      "show": "FR-3"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 Read-time join, no column: agent_outputs already holds every tool_use with its call_id and input; the list route reads the run's tool_use rows once and maps request.tool_use_id -> parent_call_id -> the Agent call's input description. D2 parent_call_id is set by parse_claude_line on the events it builds from a line, so every Claude path gets it. D3 The card line sits under the kind label, muted, so a subagent request is recognisable at a glance and an ordinary one is unchanged.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F679 (research 2026-10-01 §2, re-measured 2026-10-18 on CC 2.1.301): every tool call a Claude subagent makes streams with a top-level parent_tool_use_id naming the parent's Agent call, and since CC 2.1.285 a subagent's permission request reaches --permission-prompt-tool, so under Ask me the operator answers it. The Hub reads parent_tool_use_id nowhere (0 hits in hub/hub): the card and the conversation show a subagent's Write or Bash as the agent's own call, though its prompt was written by the agent, not the operator. The paper Approval Laundering (arXiv 2609.38983) names this Delegation laundering.",
+  "requirements": [
+    {
+      "key": "carry",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The join key exists in the stream and is the only record of who made the call.",
+      "statement": "A Claude tool_use or tool_result event from a line carrying parent_tool_use_id MUST record it as parent_call_id in its payload."
+    },
+    {
+      "key": "resolve",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The stream line can arrive after the request opens, so a value fixed at write time could be missing; the card polls every 3 s.",
+      "statement": "A permission request listed for the operator MUST carry a subagent field naming the parent call's id and its description when its tool call was made by a subagent, resolved when the list is read, and null otherwise."
+    },
+    {
+      "key": "show",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator decides in seconds; who is asking is part of what they decide.",
+      "statement": "The permission card MUST say a request is from a subagent and show the delegation's description, and the conversation MUST mark a subagent's tool call as one."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The Claude parser carries parent_tool_use_id as parent_call_id on tool_use and tool_result payloads",
+      "GET /permission-requests resolves, at read time, the subagent a request's tool call came from: the parent Agent call's id and description",
+      "The permission card says 'From a subagent' with that description; the conversation's tool row is marked as a subagent's"
+    ],
+    "non_goals": [
+      "Nesting a subagent's calls under the Agent call in the timeline (backlog)",
+      "Copilot subagents (its ACP client has its own path)",
+      "Any change to what is approved or refused: this is attribution, not enforcement",
+      "A database column: the join is resolved on read from agent_outputs"
+    ]
+  },
+  "summary": "A Claude subagent's tool calls carry the Agent call they came from; the permission card says it is from a subagent and names the delegation, and the conversation's call row says so too.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Parser carries parent_call_id; parser test",
+      "from": null,
+      "key": "parse",
+      "requirements": [
+        "carry"
+      ],
+      "reviewer": null,
+      "title": ""
+    },
+    {
+      "depends_on": [
+        "parse"
+      ],
+      "description": "List route resolves subagent; route test with the route's own ordering",
+      "from": null,
+      "key": "route",
+      "requirements": [
+        "resolve"
+      ],
+      "reviewer": null,
+      "title": ""
+    },
+    {
+      "depends_on": [
+        "route"
+      ],
+      "description": "Card line and conversation marker; UI tests; bundle refreshed with src",
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "show"
+      ],
+      "reviewer": null,
+      "title": ""
+    },
+    {
+      "depends_on": [
+        "ui"
+      ],
+      "description": "Drive a Haiku agent under Ask me delegating a write to a subagent",
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "resolve"
+      ],
+      "reviewer": null,
+      "title": ""
+    }
+  ],
+  "title": "A subagent's call reaches the operator as the subagent's"
+}
