@@ -117,10 +117,26 @@ describe('SpecProposalsPanel', () => {
     })
   })
 
-  it('shows the metadata unit distinctly from a requirement', () => {
-    proposals = [proposal({ unit_kind: 'metadata', unit_key: 'metadata', change_kind: 'modify' })]
+  it('names and shows only the document fields a metadata proposal changes (F707)', () => {
+    // The shape the Hub stores: the whole metadata bundle before and after, and only
+    // `lifecycle` differs (an unset `scope` is spelled differently on each side).
+    proposals = [
+      proposal({
+        id: 'spprop-meta',
+        unit_kind: 'metadata',
+        unit_key: 'metadata',
+        change_kind: 'modify',
+        previous_payload: { summary: 'S', problem: 'P', lifecycle: 'one-off', scope: null },
+        proposed_payload: { summary: 'S', problem: 'P', lifecycle: '', scope: [] },
+      }),
+    ]
     renderPanel()
-    expect(screen.getByText('Summary / problem / scope')).toBeInTheDocument()
+    expect(screen.getByText('Document fields: lifecycle')).toBeInTheDocument()
+    expect(screen.queryByText(/Summary \/ problem \/ scope/)).not.toBeInTheDocument()
+    const fields = screen.getByTestId('proposal-fields-spprop-meta')
+    expect(fields).toHaveTextContent('lifecycle: “one-off” → (empty)')
+    expect(fields).not.toHaveTextContent('summary')
+    expect(fields).not.toHaveTextContent('scope')
   })
 
   it('shows a refusal message on a failed accept', async () => {
