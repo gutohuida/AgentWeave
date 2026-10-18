@@ -86,3 +86,34 @@ async def test_an_agent_still_starts_on_its_own_or_an_unassigned_task(
 
     assert response.status_code == 200, response.text
     assert [e.task_id for e in await _entries()] == ["task-f687-ok"]
+
+
+async def test_reviewing_a_pending_task_is_refused_for_its_status(app, auth_headers, add_agent):
+    """F731(5): the refusal said the task "has no branch to review", not why it cannot be reviewed."""
+    await add_agent("rev")
+    await _task("task-f731-pending", status="pending")
+
+    response = await app.post(
+        TRIGGER,
+        json={"agent": "rev", "message": "review", "review_task_id": "task-f731-pending"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409, response.text
+    assert "not a status a review starts from" in response.json()["detail"]
+
+
+async def test_reviewing_a_task_that_does_not_exist_says_so_to_the_operator(
+    app, auth_headers, add_agent
+):
+    await add_agent("rev")
+
+    response = await app.post(
+        TRIGGER,
+        json={"agent": "rev", "message": "review", "review_task_id": "task-f731-nope"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404, response.text
+    assert "task-f731-nope" in response.json()["detail"]
+    assert "delegation" not in response.json()["detail"]

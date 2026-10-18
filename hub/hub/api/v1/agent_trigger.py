@@ -2213,7 +2213,19 @@ async def trigger_agent(
         # Same reasoning, and one refusal more: a task with no evidence naming a commit cannot be
         # reviewed at all, and the operator should learn that here rather than by watching a run
         # start and immediately fail.
-        review_target = await resolve_task_for_project(session, body.review_task_id, project_id)
+        review_target = await session.get(Task, body.review_task_id)
+        if review_target is None or review_target.project_id != project_id:
+            # The operator's sentence, not the delegation one `resolve_task_for_project` speaks to
+            # an agent (F731).
+            raise HTTPException(
+                status_code=404,
+                detail=f"There is no task {body.review_task_id!r} in this project to review.",
+            )
+        # The status first (F731): a pending task was refused as "has no branch to review", true
+        # but beside the point -- nothing about it is awaiting a review yet.
+        early = await review_dispatch_refusal(session, review_target, reviewer=body.agent)
+        if early is not None:
+            raise HTTPException(status_code=early[0], detail=early[1])
         from ...task_integration import review_target as resolve_review_target
 
         target = await resolve_review_target(session, review_target)
@@ -2229,10 +2241,8 @@ async def trigger_agent(
         # field named for something else. An operator who asks for a review that can never happen
         # is told it succeeded. Duplicated rather than moved: the flow path reaches
         # `trigger_agent_directly` without passing through this route, so the checks below are the
-        # operator's answer and the ones there remain the authority.
-        refusal = await review_dispatch_refusal(session, review_target, reviewer=body.agent)
-        if refusal is not None:
-            raise HTTPException(status_code=refusal[0], detail=refusal[1])
+        # operator's answer and the ones there remain the authority. Asked above, before the
+        # target, so the status speaks first.
 
     if body.overrides:
         agent_row_result = await session.execute(
