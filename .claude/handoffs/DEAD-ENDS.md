@@ -2495,3 +2495,7 @@ disappears is indistinguishable from one that was forgotten.
 - **Removing a `node_modules` junction with `rm -rf` (or `Remove-Item -Recurse`) deletes the target's contents.** A fix agent's cleanup emptied the main checkout's `hub/ui/node_modules`. Remove a junction with `cmd //c rmdir <path>` (link only). Recovery: `cd hub/ui && npm ci` (about a minute).
 - **`py -3.11 -c "import hub"` inside a worktree imports the MAIN checkout's `hub`.** pytest run from the worktree root picks up the worktree's code. When it matters, set `PYTHONPATH=<worktree>/hub;<worktree>/src`.
 - **`.claude/skills/e2e-loop/e2e.py hub-up` from a worktree serves the main checkout's code**, because `REPO` defaults to the main checkout (line ~61). Set `AW_REPO_ROOT=<worktree>` first.
+
+## 2026-10-18 -- the first full Hub suite after an `mcp_server.py` change can crash collection
+
+When `hub/hub/mcp_server.py` changes, its tool-server digest is new, and several xdist workers race to pin `~/.agentweave/hub/tool-server/<digest>/mcp_server.py` at once. `os.replace` then fails with `PermissionError: [WinError 5]`, and `test_mcp_server_stdio_surface.py` fails collection ("Different tests were collected between gw2 and gw4"). Re-run the suite: the digest is pinned now. Filed as F750.
