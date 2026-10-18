@@ -2779,6 +2779,8 @@ _SUBSTITUTION_OPENERS = {")": "(", "}": "{"}  # the opener a `closer` nests on (
 def _substitution(text: str, start: int, closer: str) -> Tuple[str, int]:
     """The command text of a substitution opened just before `start`, and where lexing resumes.
     Unbalanced, it runs to the end of the text."""
+    if closer == "`":
+        return _backtick_substitution(text, start)
     opener = _SUBSTITUTION_OPENERS.get(closer)
     depth, index = 1, start
     while index < len(text):
@@ -2791,6 +2793,25 @@ def _substitution(text: str, start: int, closer: str) -> Tuple[str, int]:
                 return text[start:index], index + 1
         index += 1
     return text[start:], len(text)
+
+
+def _backtick_substitution(text: str, start: int) -> Tuple[str, int]:
+    """A bash backtick substitution's command text. Inside backticks a backslash before `$`, a
+    backtick or a backslash is removed (F745), so `` `dirname \\`pwd\\`` `` holds a nested
+    substitution rather than ending at its first escaped backtick."""
+    content: List[str] = []
+    index = start
+    while index < len(text):
+        char = text[index]
+        if char == "\\" and text[index + 1 : index + 2] in ("$", "`", "\\"):
+            content.append(text[index + 1])
+            index += 2
+            continue
+        if char == "`":
+            return "".join(content), index + 1
+        content.append(char)
+        index += 1
+    return "".join(content), len(text)
 
 
 def _brace_sequence(content: str) -> Optional[List[str]]:
@@ -3647,6 +3668,75 @@ def _bare_pwd_arguments(
     return bare
 
 
+# --- The working directory spelled as a command (F745) -------------------------------------------
+#
+# `$(pwd)` is `$PWD` by another spelling, so it gets F696's boundary: a substitution that is
+# exactly a location command and a whole top-level argument is judged as `.`; anything else that
+# consumes a location command's output is refused -- `$(dirname $(pwd))`, `d=$(pwd)`, PowerShell's
+# `(Split-Path (pwd))` and `$d = Get-Location`. As for `$PWD`, the exemption holds only when every
+# mention of the command is one (`pwd() { echo /; }` redefines it). What another command computes
+# from a path (`$(dirname $(realpath .))`), or a value handed on through a file, stays the conceded
+# class in `_decide`'s docstring.
+
+_LOCATION_COMMAND_RE = {
+    "bash": re.compile(r"^(?:\S*/)?pwd$"),
+    "powershell": re.compile(
+        r"(?i)^(?:microsoft\.powershell\.management\\)?(?:pwd|gl|get-location)$"
+    ),
+}
+_LOCATION_MENTION_RE = {
+    "bash": re.compile(r"pwd"),
+    "powershell": re.compile(r"(?i)pwd|get-location|(?<![\w-])gl(?![\w-])"),
+}
+_WORKING_DIRECTORY = (
+    "is the directory the command runs in, and a path computed from it cannot be checked against "
+    "your workspace; write a path relative to your workspace instead"
+)
+
+
+def _names_the_location(command: str, dialect: str, reading: str) -> bool:
+    """Whether `command` runs a location command. In bash only a command word counts, so a
+    heredoc's prose saying "pwd" mid-line is text; PowerShell reads any argument, since an
+    expression (`$d = pwd`) runs a command that is not first."""
+    shapes: List[_ArgumentShape] = []
+    arguments, _ = _lex(command, dialect == "bash", reading, shapes)
+    pattern = _LOCATION_COMMAND_RE[dialect]
+    command_word = True
+    for argument, shape in zip(arguments, shapes, strict=True):
+        command_word = dialect == "powershell" or shape.starts or command_word
+        if command_word and pattern.match(argument):
+            return True
+        # A prefix (`command pwd`, `sudo pwd`) leaves the next word the command.
+        command_word = argument in _STAGE_PREFIXES and command_word
+    return False
+
+
+def _whole_location_substitutions(
+    command: str, arguments: List[str], nested: List[str], dialect: str
+) -> Dict[int, int]:
+    """For each substitution judged as `.`, its index in `nested` mapped to its argument's index
+    -- none unless every mention of a location command in the text is one of them."""
+    owners = [
+        index
+        for index, argument in enumerate(arguments)
+        for _ in range(argument.count(_SUBSTITUTION))
+    ]
+    if len(owners) != len(nested):
+        return {}
+    pattern = _LOCATION_COMMAND_RE[dialect]
+    whole = {
+        position: owner
+        for position, owner in enumerate(owners)
+        if arguments[owner] == _SUBSTITUTION and pattern.match(nested[position].strip())
+    }
+    if not whole or len(_LOCATION_MENTION_RE[dialect].findall(command)) != len(whole):
+        return {}
+    if dialect == "powershell" and (command.count("(") != len(whole) or "{" in command):
+        # A group or script block elsewhere could hand a location on, as for a bare `$PWD`.
+        return {}
+    return whole
+
+
 def _read_command(
     command: str,
     root: str,
@@ -3677,10 +3767,20 @@ def _read_command(
         return None
     shapes: List[_ArgumentShape] = []
     arguments, nested = _lex(command, dialect == "bash", reading, shapes)
+    working_directory: Dict[int, int] = {}
     if depth == 0:
         # F696: a bare `$PWD` names the directory the command runs in, the same as `.`.
         for index in _bare_pwd_arguments(command, arguments, shapes, dialect):
             arguments[index] = "."
+        # F745: so does a whole-argument `$(pwd)`.
+        working_directory = _whole_location_substitutions(command, arguments, nested, dialect)
+        for index in working_directory.values():
+            arguments[index] = "."
+    if dialect == "powershell" and re.search(r"[({=]", command):
+        # F745: a group, script block or assignment hands a location command's output on.
+        location = next((a for a in arguments if _LOCATION_COMMAND_RE[dialect].match(a)), None)
+        if location:
+            return _refuse(location, _WORKING_DIRECTORY)
     # F696: a text tool's script, pattern or delimiter is not a path in the command.
     patterns = _text_operands(arguments, shapes)
     if dialect == "powershell":
@@ -3739,7 +3839,12 @@ def _read_command(
             )
             if refusal:
                 return refusal
-    for inner in nested:
+    for position, inner in enumerate(nested):
+        if position in working_directory:
+            continue
+        if _names_the_location(inner, dialect, reading):
+            # F745: what consumes a location command's output is a path computed from it.
+            return _refuse("$(" + inner + ")", _WORKING_DIRECTORY)
         refusal = _read_command(inner, root, dialect, reading, budget, depth + 1, hub_url)
         if refusal:
             return refusal
@@ -4024,7 +4129,10 @@ def _decide(
     A variable that names a directory (`$HOME`, `$env:USERPROFILE`, `%CD%`, ...; F401, design D2)
     and a drive that exists (`D:`, `Temp:`; F402, D1) are judged. A bare reference to any other
     variable, and a substitution, are not: `cp x $tmp` and `cp x $(git rev-parse --show-toplevel)`
-    are allowed, with a reason saying the shell decides that value when it runs.
+    are allowed, with a reason saying the shell decides that value when it runs. The working
+    directory is the exception (F696, F745): a whole-argument `$PWD` or `$(pwd)` is judged as `.`,
+    and a path computed from either is refused. What another command computes from a path
+    (`$(dirname $(realpath .))`), or a value handed on through a file, is not seen.
 
     `workspace` and `hub_url` default to this process's `AW_WORKSPACE_DIR` and `HUB_URL`, which are
     the run's own in the spawned MCP process. A caller judging in the Hub process (Copilot's ACP

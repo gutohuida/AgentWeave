@@ -526,6 +526,28 @@ _TABLE = [
     _row("1.5a3", "cp x $(dirname $PWD)", False, _UNCHECKED),
     _row("1.5a3b", "echo $PWD", True),
     _row("1.5a3c", "cp x $PWD/..", False, _UNCHECKED),
+    # F745: the working directory spelled as a command is judged as `$PWD` is. A whole-argument
+    # `$(pwd)` (or `Get-Location`) is `.`; one whose output anything else consumes is refused.
+    # The first three FAIL before the fix (allowed: a substitution's output was never judged).
+    _row("F745a", "cp x $(dirname $(pwd))", False, _UNCHECKED),
+    _row("F745b", "cp x `dirname \\`pwd\\``", False, _UNCHECKED),
+    _row("F745c", "Copy-Item x (Split-Path (pwd))", False, _UNCHECKED, tool="PowerShell"),
+    _row("F745d", "d=$(pwd); cp x $d", False, _UNCHECKED),
+    _row("F745e", "pwd() { echo sub; }; cp x $(pwd)", False, _UNCHECKED),
+    _row("F745f", "$d = Get-Location; Copy-Item x $d", False, _UNCHECKED, tool="PowerShell"),
+    _row("F745g", "Copy-Item x $(Split-Path (Get-Location))", False, _UNCHECKED, tool="PowerShell"),
+    _row("F745h", "cp x $(pwd)", True),
+    _row("F745i", 'cp x "$(pwd)"', True),
+    _row("F745j", "cp x `pwd`", True),
+    _row("F745k", "Copy-Item x $(Get-Location)", True, tool="PowerShell"),
+    _row("F745l", "pwd; ls", True),
+    _row("F745m", "echo $(date)", True),
+    _row("F745m2", "cp x $(dirname $(command pwd))", False, _UNCHECKED),
+    _row("F745m3", "git commit -m \"$(cat <<'EOF'\nprint the pwd here\nEOF\n)\"", True),
+    # The conceded class (`_decide`'s docstring): a value handed on through a file, or computed
+    # from a path by another command, is not seen. Asserted so a change of mind is visible.
+    _row("F745n", 'dirname "$(pwd)" > f; cp x $(cat f)', True),
+    _row("F745o", "cp x $(dirname $(realpath .))", True),
     _row(
         "1.5a4",
         "git commit -m \"$(cat <<'EOF'\nuse $HOME for config\nEOF\n)\"",
