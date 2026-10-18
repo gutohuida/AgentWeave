@@ -190,3 +190,40 @@ async def test_reopening_a_deleted_projects_folder_registers_a_new_project(
     async with async_session_factory() as session:
         assert await session.get(DeletedProject, project) is not None
         assert await session.get(DeletedProject, reopened) is None
+
+
+@pytest.mark.asyncio
+async def test_an_implicit_start_does_not_overwrite_a_deleted_projects_marker(
+    app, auth_headers, tmp_path
+) -> None:
+    """F736: a bare `agentweave` start registers its invocation folder (`implicit`). When that
+    folder's marker names a project this database deleted, the start must not re-mint it -- the
+    marker may be another database's binding. The open is refused with the reason and how to open
+    it explicitly, the marker is untouched and no project is registered; an explicit open from the
+    app keeps F609's behaviour (the test above)."""
+    directory = tmp_path / "bound-elsewhere"
+    project = await _open(app, auth_headers, directory)
+    deleted = await app.delete(f"/api/v1/projects/{project}", headers=auth_headers)
+    assert deleted.status_code == 204, deleted.text
+    marker_path = directory / PROJECT_MARKER_PATH
+    before = marker_path.read_bytes()
+
+    refused = await app.post(
+        "/api/v1/projects/open",
+        json={"path": str(directory), "implicit": True},
+        headers=auth_headers,
+    )
+
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["code"] == "deleted_project_marker"
+    assert project in detail["message"]
+    assert "from the app" in detail["message"]
+    assert marker_path.read_bytes() == before
+    listed = await app.get("/api/v1/projects", headers=auth_headers)
+    assert listed.status_code == 200, listed.text
+    assert listed.json() == []
+
+    # The same folder opened explicitly from the app is registered anew (F609), as before.
+    reopened = await _open(app, auth_headers, directory)
+    assert reopened != project

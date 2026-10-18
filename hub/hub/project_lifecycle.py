@@ -57,8 +57,16 @@ class ProjectLifecycleService:
         *,
         name: Optional[str] = None,
         register_copy_as_new: bool = False,
+        implicit: bool = False,
         _allow_legacy_binding: bool = True,
     ) -> Project:
+        """Open *directory* as a project, registering it when this Hub does not have it.
+
+        `implicit` is a bare `agentweave` start registering the folder it was run from (F736): it
+        refuses, rather than re-registers, a folder whose marker names a project this database
+        deleted -- that marker may be another database's binding, and the operator did not ask
+        for this folder. Only an open the operator asks for re-registers it under a new id (F609).
+        """
         canonical = canonicalize_project_directory(
             directory,
             hub_data_directory=self.hub_data_directory,
@@ -94,7 +102,21 @@ class ProjectLifecycleService:
                     if moved:
                         _repair_checkout_registrations(canonical.path)
                     return marked_project
-            elif not register_copy_as_new and not await self._was_deleted(marker["project_id"]):
+            elif not register_copy_as_new and await self._was_deleted(marker["project_id"]):
+                if implicit:
+                    message = (
+                        f"{canonical.path} is marked as project {marker['project_id']}, which "
+                        "this Hub deleted, so starting AgentWeave there did not register it again "
+                        "(its marker may belong to another Hub's database). To register it as a "
+                        "new project, open the folder from the app."
+                    )
+                    logger.warning(
+                        "implicit_open_refused project_id=%s path=%s reason=deleted_project_marker",
+                        marker["project_id"],
+                        canonical.path,
+                    )
+                    raise ProjectIdentityConflict(message, code="deleted_project_marker")
+            elif not register_copy_as_new:
                 project = Project(
                     id=marker["project_id"],
                     name=name or canonical.path.name,

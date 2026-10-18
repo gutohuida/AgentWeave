@@ -3274,6 +3274,8 @@ async def _execute_run(
         binding_conflict: Optional[str] = None
         accounting_sample: Optional[AccountingSample] = None
         runner_version: Optional[str] = None
+        # F697: the turn's last context reading, which estimates a stopped turn's interrupted call.
+        last_context_tokens: Optional[int] = None
         sequence = 0
         buffer = ""
         plane_event_stored = False
@@ -3309,7 +3311,7 @@ async def _execute_run(
 
         async def _flush_line(raw_line: str) -> None:
             nonlocal accounting_sample, binding_conflict, plane_event_stored, session_id, sequence
-            nonlocal runner_version
+            nonlocal runner_version, last_context_tokens
             # ConPTY output is control-sequence-laden, not plain text (live-verified — see
             # pty_runner.strip_ansi_escapes's docstring) — every line needs stripping before
             # a JSON-parse attempt, not just the first (e.g. a trailing cursor-restore
@@ -3394,6 +3396,8 @@ async def _execute_run(
                     )
             await _record_events(events)
             if parsed.usage is not None:
+                if isinstance(parsed.usage.context_tokens, int):
+                    last_context_tokens = parsed.usage.context_tokens
                 usage_payload = parsed.usage.to_payload(agent)
                 await _record_observation(
                     lambda db: record_context_usage(db, project_id, agent, usage_payload),
@@ -3545,6 +3549,13 @@ async def _execute_run(
                     agent=agent,
                     runner=runner,
                     sample=accounting_sample,
+                    # F697: a stopped Claude turn's interrupted call is in no CLI report; its input
+                    # is at least the turn's last context reading. Kept only if unmeasured.
+                    estimated_input_tokens=(
+                        last_context_tokens
+                        if final_status == "stopped" and runner == "claude"
+                        else None
+                    ),
                 )
                 # Inside `if run`, deliberately (D2, D5): only a *recorded* reading holds the
                 # queue, because the hold is derived from this row. A run whose row the finalizing

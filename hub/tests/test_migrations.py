@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0133"
+HEAD_REVISION = "0134"
 
 
 # ---------------------------------------------------------------------------
@@ -5658,3 +5658,59 @@ def test_migration_0133_is_a_no_op_without_the_projects_table(tmp_path) -> None:
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert "workspace_fingerprints" not in tables
     _downgrade_to(db_url, "0132")
+
+
+# ---------------------------------------------------------------------------
+# 0134 -- turn_usage.estimated_input_tokens (F697: a stopped turn's interrupted call, estimated)
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0134_adds_a_nullable_estimate_and_keeps_old_rows(tmp_path) -> None:
+    db_file = tmp_path / "estimate.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("ALTER TABLE turn_usage DROP COLUMN estimated_input_tokens")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0133')")
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute(
+            "INSERT INTO turn_usage (id, run_id, project_id, agent, status, observed_at) "
+            "VALUES ('usage-old', 'run-old', 'proj-old', 'a', 'unavailable', "
+            "'2026-10-18T00:00:00')"
+        )
+        conn.commit()
+        before = {r[1] for r in conn.execute("PRAGMA table_info(turn_usage)")}
+    assert "estimated_input_tokens" not in before
+
+    _upgrade_to(db_url, "0134")
+
+    with sqlite3.connect(db_file) as conn:
+        usage = {r[1]: r for r in conn.execute("PRAGMA table_info(turn_usage)")}
+        old = conn.execute(
+            "SELECT status, estimated_input_tokens FROM turn_usage WHERE id = 'usage-old'"
+        ).fetchone()
+    assert usage["estimated_input_tokens"][3] == 0  # nullable
+    assert old == ("unavailable", None)  # nothing backfilled
+
+    _downgrade_to(db_url, "0133")
+
+    with sqlite3.connect(db_file) as conn:
+        after = {r[1] for r in conn.execute("PRAGMA table_info(turn_usage)")}
+        kept = conn.execute("SELECT count(*) FROM turn_usage").fetchone()
+    assert after == before
+    assert kept == (1,)
+
+
+def test_migration_0134_is_a_no_op_without_the_table(tmp_path) -> None:
+    db_file = tmp_path / "bare.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("DROP TABLE turn_usage")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0133')")
+        conn.commit()
+    _upgrade_to(db_url, "0134")
+    _downgrade_to(db_url, "0133")

@@ -1427,6 +1427,10 @@ class TurnUsage(Base):
     # (`usage_accounting.SESSION_TOTAL_FIELDS`), read back as the next turn's baseline by
     # `settle_claude_session_totals`. NULL on every row written before it, and for other runners.
     session_totals: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # F697: on an `unavailable` row of a stopped Claude turn, the interrupted call's input as
+    # estimated from the turn's last context reading -- an estimate, never a measurement: no
+    # measured total, used-token figure or budget reads it. NULL on every other row.
+    estimated_input_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     project: Mapped["Project"] = relationship(back_populates="turn_usages")

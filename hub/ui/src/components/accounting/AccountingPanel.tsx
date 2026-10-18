@@ -22,6 +22,14 @@ function creditsLine(nano: number | null | undefined, premium: number | null | u
   return `${credits}${requests} (Copilot) — not counted against the budget`
 }
 
+/** A stopped turn's interrupted call, estimated from its last context reading (F697). Marked as
+ *  an estimate wherever it is shown; null when no turn was estimated. */
+function estimateText(tokens: number | null | undefined): string | null {
+  return typeof tokens === 'number' && tokens > 0
+    ? `≈${tokens.toLocaleString()} input tokens, not measured`
+    : null
+}
+
 /** A worker kind as the operator knows it; an unknown kind (a future job) shows as recorded. */
 const WORKER_LABELS: Record<string, string> = {
   checkpoint: 'Checkpoints',
@@ -109,6 +117,7 @@ export function AccountingPanel() {
     : null
 
   const projectCredits = creditsLine(data.project.ai_nano_aiu, data.project.premium_requests)
+  const projectEstimate = estimateText(data.project.estimated_input_tokens)
   const workers = data.workers ?? []
   // The headline includes the worker calls (F240), so the caption says so; without them it would
   // read as if the measured turns alone made the total.
@@ -130,6 +139,11 @@ export function AccountingPanel() {
         {projectCredits && (
           <div style={{ color: 'var(--text-3)', fontSize: 11, marginTop: 2 }}>{projectCredits}</div>
         )}
+        {projectEstimate && (
+          <div style={{ color: 'var(--text-3)', fontSize: 11, marginTop: 2 }}>
+            {`${projectEstimate} — not counted against the budget`}
+          </div>
+        )}
         <div style={{ color: 'var(--text-2)', fontSize: 12, marginTop: 6 }}>
           <PreferredDisplay />
         </div>
@@ -149,6 +163,9 @@ export function AccountingPanel() {
                 {agent.agent}: {formatTokens(agent.total_tokens)}
                 {formatAiCredits(agent.ai_nano_aiu) ? ` · ${formatAiCredits(agent.ai_nano_aiu)}` : ''}
                 {agent.unavailable_turns > 0 ? ` · ${agent.unavailable_turns} unavailable` : ''}
+                {estimateText(agent.estimated_input_tokens)
+                  ? ` (${estimateText(agent.estimated_input_tokens)})`
+                  : ''}
               </span>
             ))}
           </div>

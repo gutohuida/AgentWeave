@@ -354,14 +354,20 @@ def _hub_open_project(port: int, directory: Path, token: Optional[str]) -> Optio
 
     Returns the project summary dict on success, or None on any failure (missing
     token, network error, or Hub-side rejection) — the caller must treat this as
-    non-fatal and fall back to opening the bare Hub URL.
+    non-fatal and fall back to opening the bare Hub URL. A rejection's own message
+    is printed, so the operator learns why and what to do (F736: a folder marked
+    as a project this Hub deleted is not re-registered by a bare start).
+
+    The open is `implicit`: the operator ran `agentweave` here, they did not ask
+    the app to open this folder.
     """
     import json as _json
+    import urllib.error as _err
     import urllib.request as _req
 
     if not token:
         return None
-    body = _json.dumps({"path": str(directory)}).encode("utf-8")
+    body = _json.dumps({"path": str(directory), "implicit": True}).encode("utf-8")
     request = _req.Request(
         f"{_hub_projects_url(port)}/open",
         data=body,
@@ -371,6 +377,14 @@ def _hub_open_project(port: int, directory: Path, token: Optional[str]) -> Optio
     try:
         with _req.urlopen(request, timeout=10) as resp:
             return _json.loads(resp.read())
+    except _err.HTTPError as exc:
+        try:
+            detail = _json.loads(exc.read()).get("detail")
+        except Exception:
+            detail = None
+        if isinstance(detail, dict) and isinstance(detail.get("message"), str):
+            print_warning(detail["message"])
+        return None
     except Exception:
         return None
 

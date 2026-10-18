@@ -381,7 +381,40 @@ class TestOpenProjectCall:
         assert captured_request["url"] == "http://localhost:8000/api/v1/projects/open"
         assert captured_request["method"] == "POST"
         assert captured_request["headers"]["Authorization"] == "Bearer aw_live_test"
-        assert json.loads(captured_request["body"]) == {"path": str(tmp_path)}
+        # F736: a bare start's open is implicit -- it never re-registers a deleted project's folder.
+        assert json.loads(captured_request["body"]) == {"path": str(tmp_path), "implicit": True}
+
+    def test_open_project_prints_the_hubs_reason_when_refused(self, tmp_path, capsys):
+        """F736: a refused implicit open (a folder marked as a project this Hub deleted) says
+        why and how to open it explicitly, then the caller opens the app without a project."""
+        import io
+        import json
+        import urllib.error
+
+        reason = (
+            f"{tmp_path} is marked as project proj-gone, which this Hub deleted, so starting "
+            "AgentWeave there did not register it again. To register it as a new project, open "
+            "the folder from the app."
+        )
+        refusal = urllib.error.HTTPError(
+            "http://localhost:8000/api/v1/projects/open",
+            409,
+            "Conflict",
+            {},
+            io.BytesIO(
+                json.dumps(
+                    {"detail": {"code": "deleted_project_marker", "message": reason}}
+                ).encode()
+            ),
+        )
+        with patch("agentweave.cli._fetch_setup_token", return_value="aw_live_test"):
+            with patch("agentweave.cli.urllib.request.urlopen", side_effect=refusal):
+                url = _hub_resolve_launch_url(8000, tmp_path)
+
+        assert url == "http://localhost:8000"
+        out = " ".join(capsys.readouterr().out.split())
+        assert "proj-gone, which this Hub deleted" in out
+        assert "open the folder from the app" in out
 
     def test_open_project_returns_none_without_a_token(self, tmp_path):
         assert _hub_open_project(8000, tmp_path, None) is None

@@ -34,10 +34,13 @@ async def record_turn_usage(
     # An outcome recorded without one is still an outcome; refusing to record it was the defect.
     runner: Optional[str],
     sample: Optional[AccountingSample],
+    estimated_input_tokens: Optional[int] = None,
 ) -> TurnUsage:
     """Add one accounting outcome for a run, returning the existing row on retry.
 
     The caller owns the transaction so run completion and accounting can commit together.
+    `estimated_input_tokens` (F697) is kept only on an `unavailable` row: a measured turn has its
+    own figures, and an estimate is never one of them.
     """
     result = await db.execute(select(TurnUsage).where(TurnUsage.run_id == run_id))
     existing = result.scalar_one_or_none()
@@ -73,6 +76,7 @@ async def record_turn_usage(
             sample.session_premium_requests_total if sample is not None else None
         ),
         session_totals=sample.session_totals if sample is not None else None,
+        estimated_input_tokens=None if measured else estimated_input_tokens,
     )
     db.add(row)
     await db.flush()
@@ -364,6 +368,11 @@ def _summary_from_row(row: Any, *, agent: Optional[str] = None) -> Dict[str, Any
         ),
         "measured_turns": measured_turns,
         "unavailable_turns": int(row.unavailable_turns or 0),
+        # F697: the estimated input of unavailable turns' interrupted calls. Apart from every
+        # measured figure above, and never counted toward the budget; null when none was made.
+        "estimated_input_tokens": (
+            int(row.estimated_input_tokens) if row.estimated_input_tokens is not None else None
+        ),
         "api_equivalent_usd_micros": (
             int(row.api_equivalent_usd_micros)
             if row.api_equivalent_usd_micros is not None
@@ -390,6 +399,9 @@ def _aggregate_columns() -> tuple[Any, ...]:
         func.sum(case((measured, TurnUsage.total_tokens), else_=None)).label("total_tokens"),
         func.sum(case((measured, 1), else_=0)).label("measured_turns"),
         func.sum(case((unavailable, 1), else_=0)).label("unavailable_turns"),
+        func.sum(case((unavailable, TurnUsage.estimated_input_tokens), else_=None)).label(
+            "estimated_input_tokens"
+        ),
         func.sum(TurnUsage.api_equivalent_usd_micros).label("api_equivalent_usd_micros"),
         func.sum(case((TurnUsage.api_equivalent_usd_micros.is_(None), 1), else_=0)).label(
             "unpriced_turns"
@@ -574,6 +586,7 @@ async def accounting_snapshot(
             "cache_read_tokens": row.cache_read_tokens,
             "cache_write_tokens": row.cache_write_tokens,
             "reasoning_tokens": row.reasoning_tokens,
+            "estimated_input_tokens": row.estimated_input_tokens,
             "api_equivalent_usd_micros": row.api_equivalent_usd_micros,
             "allowance": row.allowance if isinstance(row.allowance, dict) else None,
             "observed_at": row.observed_at.isoformat(),

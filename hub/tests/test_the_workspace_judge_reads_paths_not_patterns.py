@@ -200,8 +200,9 @@ def test_a_quoted_operator_is_not_an_operator(workspace):
 
 
 def test_the_bash_reading_of_a_pattern_is_unchanged(workspace):
-    """Row 1.7c1's shape: a bash pattern holding a traversal stays refused."""
-    assert _decide("Bash", {"command": r"grep -rn '\.\./' src"})["allow"] is False
+    """Row 1.7c1b's shape: a bash file operand holding a traversal stays refused (F696 made grep's
+    pattern itself text, row 1.7c1)."""
+    assert _decide("Bash", {"command": r"grep -rn x '\.\./'"})["allow"] is False
 
 
 def test_a_refusal_quotes_a_path_as_written(workspace):
