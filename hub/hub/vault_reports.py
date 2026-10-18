@@ -34,7 +34,7 @@ from pydantic import BaseModel, Field
 from . import manager, project_workspace, vault
 from .db.engine import async_session_factory
 from .db.models import Runner
-from .distillation import locate
+from .distillation import locate, unread_note
 from .worker import run_worker
 
 logger = logging.getLogger(__name__)
@@ -104,6 +104,8 @@ class Plan:
     runner_id: str
     cli: str
     model: Optional[str]
+    # Why the source has no text, when that is known (F741); else it is not on this machine.
+    source_note: Optional[str] = None
 
 
 def _entry_text(entry: Dict[str, Any]) -> str:
@@ -129,28 +131,45 @@ async def prepare(project_id: str, report_id: str) -> Plan:
         raise CannotReviewError("The vault reports job has no runner.", no_runner=True)
     root, private = workspace.root, Path(settings["effective_private_location"])
 
-    def read() -> Tuple[Optional[Dict], Optional[Dict], Optional[str], Optional[str]]:
+    def read() -> (
+        Tuple[Optional[Dict], Optional[Dict], Optional[str], Optional[str], Optional[Dict]]
+    ):
         report = vault.get_report(root, private, report_id)
         if report is None:
-            return None, None, None, None
+            return None, None, None, None, None
         entry = vault.read_entry(root, private, report["entry"])
         if entry is None:
-            return report, None, None, None
+            return report, None, None, None, None
         source_id = entry["citations"][0]["source"] if entry["kind"] == "fact" else entry["id"]
         found = vault.source_text(root, private, source_id)
-        return report, entry, source_id, (found[1] if found is not None else None)
+        text = found[1] if found is not None else None
+        if text is not None:
+            return report, entry, source_id, text, None
+        # No text: a file held here and not read yet says so in its note (F741).
+        source = entry if source_id == entry["id"] else vault.read_entry(root, private, source_id)
+        return report, entry, source_id, None, source
 
-    report, entry, source_id, text = await asyncio.to_thread(read)
+    report, entry, source_id, text, source = await asyncio.to_thread(read)
     if report is None or report["status"] != "pending":
         raise CannotReviewError(f"No pending report '{report_id}'.")
     if entry is None:
         raise CannotReviewError(f"Report {report_id} names an entry that is gone.")
+    # F741: a file held here and not read yet is not "not on this machine"; the model hears what
+    # is actually in the way, as the entry route says it (F720), else the entry's general note.
+    word = vault.unread_word(source) if source is not None else None
+    note = source.get("note") if word is not None and source is not None else None
+    if word is not None and source_id is not None:
+        try:
+            note = await unread_note(project_id, source_id, word)
+        except Exception:  # noqa: BLE001 -- a note that cannot be refined keeps the general one
+            logger.warning("could not say why %s is unread", source_id, exc_info=True)
     return Plan(
         project_id=project_id,
         report=report,
         entry=entry,
         source_id=source_id,
         source_text=text,
+        source_note=note,
         project_root=root,
         private_root=private,
         runner_id=runner.id,
@@ -236,7 +255,10 @@ async def review(plan: Plan) -> str:
     """Spawn the model once on the planned report and record the firing. Answers the outcome."""
     report = plan.report
     text = plan.source_text
-    source = text[:SOURCE_CHARS] if text is not None else "(the source is not on this machine)"
+    if text is not None:
+        source = text[:SOURCE_CHARS]
+    else:
+        source = f"({plan.source_note or 'the source is not on this machine'})"
     result = await run_worker(
         project_id=plan.project_id,
         kind=manager.REPORTS,

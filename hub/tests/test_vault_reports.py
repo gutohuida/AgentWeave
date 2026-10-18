@@ -523,3 +523,31 @@ def test_vault_report_is_on_every_runners_surface_and_vault_read_points_to_it() 
     assert operation.method == "POST" and operation.path == "/vault/reports"
     assert set(operation.fields) == {"entry_id", "message"}
     assert "vault_report" in (mcp_server._CALLABLE_TOOLS["vault_read"].__doc__ or "")
+
+
+@pytest.mark.asyncio
+async def test_a_report_on_an_unread_file_tells_the_model_what_is_in_the_way(
+    app, auth_headers, worker
+) -> None:
+    """F741: the reports job read the entry itself, so an image held here but not yet read reached
+    the model as "the source is not on this machine". It now gets the reason the entry route gives
+    (F720): here, the distillation job is off."""
+    fake = worker(("disputed", "The image has no text yet.", None, []))
+    await _enable(app, auth_headers)
+    created = await app.post(
+        f"{BASE}/vault/files",
+        params={"name": "Refund poster", "type": "document"},
+        content=b"\x89PNG\r\n\x1a\n" + b"\x00" * 32,
+        headers={**auth_headers, "Content-Type": "image/png"},
+    )
+    assert created.status_code == 201, created.text
+    agent = await _run_headers("run-unread", "helper")
+
+    await _filed(app, agent, created.json()["id"])
+
+    [call] = fake.calls
+    prompt = call["prompt"]
+    start, end = prompt.index(vault_reports.SOURCE_START), prompt.index(vault_reports.SOURCE_END)
+    source = prompt[start:end]
+    assert "has not been read yet" in source and "job is disabled" in source, source
+    assert "not on this machine" not in source
