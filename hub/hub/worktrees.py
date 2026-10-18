@@ -1434,6 +1434,8 @@ class ReleaseResult:
     #: Whether this agent also had a review checkout, and it was removed (task 1.4). Independent of
     #: `released`: an agent that only ever reviewed has one of these and no working worktree.
     review_checkout_released: bool = False
+    #: Why a checkout that exists was left in place (F746); `None` when nothing was held back.
+    kept_reason: Optional[str] = None
 
     @property
     def has_unmerged_work(self) -> bool:
@@ -1489,12 +1491,27 @@ def release_task_worktree(repo_root: Path, task_id: str) -> ReleaseResult:
     Returns a `ReleaseResult` like `release_worktree`, with `review_checkout_released` always
     false: review checkouts are keyed by the reviewing agent, not by a task, so there is never
     one to release here.
+
+    **A checkout whose merge is half-resolved is kept** (F746): the snapshot declines to commit it
+    (F695), so removing the directory would be the only copy of the author's partial resolution
+    going. `released` is `False` and `kept_reason` names the paths.
     """
     path = task_worktree_path(repo_root, task_id)
     branch = task_branch_name(task_id)
 
     if not path.exists():
         return ReleaseResult(released=False, branch=branch)
+
+    # The snapshot declines a merge that still has conflicts in it (F695), so removing the checkout
+    # here would be the only copy of the author's partial resolution going with it. Kept instead:
+    # the next turn on the task is told about the merge, and a release after it is resolved works.
+    unresolved = unresolved_merge_paths(path)
+    if unresolved:
+        return ReleaseResult(
+            released=False,
+            branch=branch,
+            kept_reason=("its merge is unfinished, still conflicted in " + ", ".join(unresolved)),
+        )
 
     had_uncommitted = _has_uncommitted_changes(path)
     snapshot_commit = (

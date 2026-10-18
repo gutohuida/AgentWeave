@@ -451,6 +451,38 @@ async def test_a_release_that_raises_is_recorded_and_the_transition_stands(
 
 
 @pytest.mark.asyncio
+async def test_a_half_resolved_merge_keeps_its_checkout_and_says_so(app, auth_headers, tmp_path):
+    """F746. A decision releases the checkout (approval cannot reach it with a conflict: the gate
+    refuses, so it is a rejection that does); a merge still conflicted in it is the author's
+    unfinished work, and removing the directory was the only copy of it going. Held back, with a
+    warn event naming the paths, and the decision still stands."""
+    make_repo(tmp_path)
+    await set_main_branch("main")
+
+    task = await make_task(app, auth_headers)
+    checkout = worktrees.ensure_task_worktree(tmp_path, task, "main")
+    work_in(checkout, "README.md", "task side\n", "the task's work")
+    (tmp_path / "README.md").write_text("main side\n", encoding="utf-8")
+    git(tmp_path, "-c", "user.email=t@e.com", "-c", "user.name=T", "commit", "-qam", "main moved")
+    assert git(checkout, "merge", "main").returncode != 0
+    assert worktrees.unresolved_merge_paths(checkout) == ["README.md"]
+
+    rejected = await drive_to(
+        app, auth_headers, task, "assigned", "in_progress", "completed", "under_review", "rejected"
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "rejected"
+
+    assert checkout.exists()
+    assert worktrees._is_mid_merge(checkout)
+    assert await events_of_type("task_worktree_released") == []
+    skipped = await events_of_type("task_worktree_release_skipped")
+    assert len(skipped) == 1, skipped
+    assert skipped[0].severity == "warn"
+    assert task in str(skipped[0].data) and "README.md" in str(skipped[0].data)
+
+
+@pytest.mark.asyncio
 async def test_a_grandfathered_task_has_no_checkout_to_release(app, auth_headers, tmp_path):
     """A task stamped `agent` by migration 0095 worked in the shared per-agent checkout, which
     belongs to the agent and outlives every task on it. Releasing it here would take a workspace

@@ -1025,6 +1025,17 @@ async def release_task_workspace(session: AsyncSession, task: Task) -> None:
         )
         return
 
+    if result.kept_reason:
+        await persist_event(
+            session,
+            task.project_id,
+            "task_worktree_release_skipped",
+            {"task_id": task.id, "branch": result.branch, "reason": result.kept_reason},
+            severity="warn",
+            commit=False,
+        )
+        return
+
     if not result.released:
         return
 

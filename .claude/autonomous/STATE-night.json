@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 12,
+  "iteration": 13,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F746-impl",
-  "next_action": "Do queue item F746-impl: F746 (D), releasing a checkout discards a half-resolved prerequisite merge. Test-first, fix, drive (scratch Hub, never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F751-impl.",
+  "current": "F751-impl",
+  "next_action": "Do queue item F751-impl: F751 (D), verdict accepts awaiting evidence recorded for earlier wording. Test-first, fix, drive (scratch Hub, never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F750-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -84,9 +84,9 @@
     },
     {
       "id": "F746-impl",
-      "status": "open",
+      "status": "done",
       "title": "F746 (D): releasing a checkout discards half-resolved prerequisite merge",
-      "detail": "Test-first; fix; drive; Status."
+      "detail": "fixed (kept, not saved elsewhere); see log iteration 13"
     },
     {
       "id": "F751-impl",

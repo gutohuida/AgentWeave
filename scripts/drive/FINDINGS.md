@@ -36663,7 +36663,7 @@ F737's launch-time fingerprint covers this class only for the runner's configura
 
 ## F746 (D) -- releasing a task checkout throws away a half-resolved prerequisite merge
 
-**Status:** open 2026-10-18. Filed from the 2026-10-18 decision pass (F695 group), by reading the code.
+**Status:** fixed 2026-10-19 (Tier 0), not as filed in one respect: the checkout is kept, not the merge saved. `release_task_worktree` now holds back a checkout whose merge is still conflicted (`ReleaseResult.kept_reason`), and `release_task_workspace` records a warn `task_worktree_release_skipped` event naming the paths; a release after the merge is resolved works. Reached by rejection only: approval is refused with a conflict (`gate_unsatisfied`). Not changed: `release_worktree` (the per-agent path) has the same shape, and the UI has no summary line for the new event (its generic fallback shows). Tests: `test_releasing_a_checkout_keeps_a_half_resolved_merge.py` (2) and `test_a_half_resolved_merge_keeps_its_checkout_and_says_so` (real route, real git); all red without the fix.
 **Source:** review
 **Theme:** Worktrees & integration
 
