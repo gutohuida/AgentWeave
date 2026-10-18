@@ -874,6 +874,13 @@ export interface SpecAmendment {
   relaxing: boolean
   change: Record<string, unknown> | null
   before: Record<string, unknown> | null
+  /** F700: how a cannot-satisfy report was answered, why, and the amendment an `amended` answer
+   *  produced. Absent from a Hub before F700. */
+  response?: 'amended' | 'accepted' | 'rejected' | null
+  response_reason?: string | null
+  answered_by?: string | null
+  /** The report an operator's amendment answers. */
+  responds_to?: string | null
 }
 
 export function useSpecAmendments(path: string | null, enabled = true) {
@@ -897,6 +904,27 @@ export function useReviewSpecAmendments() {
         `/api/v1/projects/${projectId}/project/documents/${path}/amendments/review`,
         ids ? { ids } : {},
       ),
+  )
+}
+
+/** The operator's answer to a cannot-satisfy report (F700): amend the criterion, accept the
+ *  report (the task resumes), or reject it with a reason (the task stays blocked). */
+export function useRespondToReport() {
+  return useSpecMutation<
+    {
+      path: string
+      id: string
+      response: 'amend' | 'accept' | 'reject'
+      reason: string
+      change?: Record<string, string>
+    },
+    { response: string; task_unblocked: boolean }
+  >((projectId, { path, id, response, reason, change }) =>
+    postJson(`/api/v1/projects/${projectId}/project/documents/${path}/amendments/${id}/respond`, {
+      response,
+      reason,
+      ...(change ? { change } : {}),
+    }),
   )
 }
 

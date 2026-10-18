@@ -15,8 +15,6 @@ from hub.db.models import InboundQueueEntry, Task
 from .test_spec_documents_api import PATH
 from .test_tester_amendments import BASE, CANNOT, _amendments, _approved, _run, _stored
 
-F700 = pytest.mark.xfail(strict=True, reason="F700: not built yet")
-
 
 @pytest.fixture
 async def author_headers():
@@ -73,7 +71,6 @@ def row(amendments, amendment_id):
     return next(a for a in amendments if a["id"] == amendment_id)
 
 
-@F700
 @pytest.mark.asyncio
 async def test_amending_changes_the_criterion_and_unblocks_the_task(
     app, auth_headers, author_headers, tmp_path
@@ -105,7 +102,6 @@ async def test_amending_changes_the_criterion_and_unblocks_the_task(
     assert "c1" in note and "within 2s" in note, note
 
 
-@F700
 @pytest.mark.asyncio
 async def test_accepting_unblocks_the_task_and_keeps_the_criterion(
     app, auth_headers, author_headers, tmp_path
@@ -125,7 +121,6 @@ async def test_accepting_unblocks_the_task_and_keeps_the_criterion(
     assert "c1" in note and "accepted" in note, note
 
 
-@F700
 @pytest.mark.asyncio
 async def test_rejecting_keeps_the_task_blocked_and_sends_the_reason_to_the_reporter(
     app, auth_headers, author_headers
@@ -149,7 +144,6 @@ async def test_rejecting_keeps_the_task_blocked_and_sends_the_reason_to_the_repo
     assert "c1" in note and "cache the index; it fits" in note, note
 
 
-@F700
 @pytest.mark.asyncio
 async def test_mark_reviewed_does_not_answer_a_report(app, auth_headers, author_headers):
     task_id, report_id = await reported(app, auth_headers, author_headers)
@@ -171,7 +165,6 @@ async def test_mark_reviewed_does_not_answer_a_report(app, auth_headers, author_
     assert (await status_of(task_id))[0] == "blocked"
 
 
-@F700
 @pytest.mark.asyncio
 async def test_a_report_is_answered_once(app, auth_headers, author_headers):
     _task_id, report_id = await reported(app, auth_headers, author_headers)

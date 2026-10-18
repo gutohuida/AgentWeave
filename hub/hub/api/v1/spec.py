@@ -1038,6 +1038,15 @@ class AmendmentReviewRequest(RequestModel):
     ids: Optional[List[str]] = None
 
 
+class ReportResponse(RequestModel):
+    """The operator's answer to a cannot-satisfy report (F700): `amend` with the criterion fields
+    to change, `accept`, or `reject` with a reason."""
+
+    response: str = Field(max_length=16)
+    reason: str = Field(default="", max_length=2000)
+    change: Optional[Dict[str, Any]] = None
+
+
 @router.get("/documents/{path:path}/amendments")
 async def list_amendments(
     path: str,
@@ -1083,6 +1092,59 @@ async def review_amendments(
     )
     return {
         "marked": marked,
+        "amendments": [
+            amendment.to_dict()
+            for amendment in await spec_amendments.list_amendments(session, document)
+        ],
+    }
+
+
+@router.post("/documents/{path:path}/amendments/{amendment_id}/respond")
+async def respond_to_report(
+    path: str,
+    amendment_id: str,
+    body: ReportResponse,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator's answer to a cannot-satisfy report (F700): amend the criterion, accept the
+    report, or reject it. Each answer does something, is recorded on the report, and is sent to the
+    reporter as input."""
+    from ... import spec_amendments
+    from ...turn_scheduler import schedule_accepted
+
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    try:
+        answer = await spec_amendments.respond_to_report(
+            session,
+            workspace,
+            document,
+            amendment_id,
+            response=body.response,
+            reason=body.reason,
+            change=body.change,
+            actor=_operator(),
+        )
+    except spec_amendments.AmendmentRefused as exc:
+        detail: Dict[str, Any] = {"message": str(exc), "code": exc.code}
+        if exc.field:
+            detail["field"] = exc.field
+        raise HTTPException(status_code=exc.status, detail=detail) from exc
+    reporter = answer.pop("reporter")
+    note = answer.pop("note")
+    await spec_amendments.queue_note_to_reporter(session, project_id, reporter, note)
+    document_path, phase = document.path, document.phase
+    await session.commit()
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": document_path, "phase": phase})
+    if answer.get("task_id"):
+        await sse_manager.broadcast(project_id, "task_updated", {"id": answer["task_id"]})
+    # The note is committed: a failed start is logged and retried by the Hub, never this answer's
+    # failure (`schedule_accepted`).
+    await schedule_accepted(project_id, reporter)
+    return {
+        **answer,
         "amendments": [
             amendment.to_dict()
             for amendment in await spec_amendments.list_amendments(session, document)

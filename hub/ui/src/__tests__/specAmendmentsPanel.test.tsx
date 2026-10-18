@@ -12,6 +12,7 @@ import { SpecAmendmentsPanel } from '@/components/spec/SpecAmendmentsPanel'
  * that order.
  */
 const review = vi.fn()
+const respond = vi.fn()
 let amendments: unknown[] = []
 let documents: unknown[] = []
 
@@ -22,6 +23,7 @@ vi.mock('@/api/spec', async (importOriginal) => {
     useSpecDocuments: () => ({ data: { documents } }),
     useSpecAmendments: () => ({ data: { amendments }, error: null }),
     useReviewSpecAmendments: () => ({ mutate: review, isPending: false }),
+    useRespondToReport: () => ({ mutate: respond, isPending: false, isError: false }),
   }
 })
 
@@ -109,6 +111,79 @@ describe('SpecAmendmentsPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Mark all reviewed' }))
 
     expect(review).toHaveBeenCalledWith({ path: PATH })
+  })
+
+  it('answers a cannot-satisfy report three ways instead of Mark reviewed (F700)', async () => {
+    amendments = [
+      amendment({
+        id: 'amd-3',
+        op: 'cannot_satisfy',
+        target: 'c1',
+        relaxing: true,
+        author: 'dev',
+        before: { key: 'c1', given: 'g', when: 'w', then: 'within 200ms' },
+      }),
+    ]
+    renderPanel()
+    const row = screen.getByTestId('spec-amendment-amd-3')
+    expect(within(row).queryByRole('button', { name: 'Mark reviewed' })).not.toBeInTheDocument()
+
+    await userEvent.click(within(row).getByRole('button', { name: 'Accept and unblock' }))
+    expect(respond).toHaveBeenLastCalledWith(
+      { path: PATH, id: 'amd-3', response: 'accept', reason: '' },
+      expect.anything(),
+    )
+
+    await userEvent.click(within(row).getByRole('button', { name: 'Reject…' }))
+    const reject = within(row).getByRole('button', { name: 'Reject and tell the reporter' })
+    expect(reject).toBeDisabled()
+    await userEvent.type(within(row).getByLabelText('Reason for rejecting the report'), 'cache it')
+    await userEvent.click(reject)
+    expect(respond).toHaveBeenLastCalledWith(
+      { path: PATH, id: 'amd-3', response: 'reject', reason: 'cache it' },
+      expect.anything(),
+    )
+  })
+
+  it('amends the reported criterion with the changed field', async () => {
+    amendments = [
+      amendment({
+        id: 'amd-3',
+        op: 'cannot_satisfy',
+        target: 'c1',
+        relaxing: true,
+        before: { key: 'c1', given: 'g', when: 'w', then: 'within 200ms' },
+      }),
+    ]
+    renderPanel()
+    const row = screen.getByTestId('spec-amendment-amd-3')
+    await userEvent.click(within(row).getByRole('button', { name: 'Amend criterion…' }))
+    const then = within(row).getByLabelText('Criterion then')
+    await userEvent.clear(then)
+    await userEvent.type(then, 'within 2s')
+    await userEvent.click(within(row).getByRole('button', { name: 'Amend and unblock' }))
+    expect(respond).toHaveBeenLastCalledWith(
+      { path: PATH, id: 'amd-3', response: 'amend', reason: '', change: { then: 'within 2s' } },
+      expect.anything(),
+    )
+  })
+
+  it('names how an answered report was answered', () => {
+    amendments = [
+      amendment({
+        id: 'amd-3',
+        op: 'cannot_satisfy',
+        target: 'c1',
+        reviewed: true,
+        reviewed_by: 'operator',
+        response: 'rejected',
+        response_reason: 'cache it',
+      }),
+    ]
+    renderPanel()
+    const row = screen.getByTestId('spec-amendment-amd-3')
+    expect(row).toHaveTextContent('Answered: report rejected by operator')
+    expect(row).toHaveTextContent('Answer: cache it')
   })
 
   it('renders nothing for a document with no amendments', () => {
