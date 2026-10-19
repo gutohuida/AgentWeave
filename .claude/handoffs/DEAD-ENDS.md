@@ -2499,3 +2499,7 @@ disappears is indistinguishable from one that was forgotten.
 ## 2026-10-18 -- the first full Hub suite after an `mcp_server.py` change can crash collection
 
 When `hub/hub/mcp_server.py` changes, its tool-server digest is new, and several xdist workers race to pin `~/.agentweave/hub/tool-server/<digest>/mcp_server.py` at once. `os.replace` then fails with `PermissionError: [WinError 5]`, and `test_mcp_server_stdio_surface.py` fails collection ("Different tests were collected between gw2 and gw4"). Re-run the suite: the digest is pinned now. Filed as F750.
+
+## 2026-10-19 (interactive)
+
+- **Copilot at home is now signed in to the operator's licensed work account** (supersedes the 2026-10-16 "Auto-only plan" entry). A no-prompt `copilot_session_start_probe.py none none none` lists 22 models (claude-haiku-4.5/5.5, sonnet-5/5.5, opus-5/5.5, gpt-5.x/6, gemini) with `currentModelId: claude-sonnet-5`. Note the probe hard-codes the npm `copilot.exe` (1.0.91) while `copilot --version` on PATH answers 1.0.98: two installs. Prompted turns now spend the work licence's premium requests: say the count before a drive. (2026-10-19)
