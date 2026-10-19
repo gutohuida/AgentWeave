@@ -4,7 +4,6 @@ come apart as `standing_warnings`. Real routes on a Hub from `e2e.py hub-up`.
   py -3.11 scripts/drive/d1019_night_recheck_f754.py <project-id>
 """
 
-import json
 import pathlib
 import sys
 
