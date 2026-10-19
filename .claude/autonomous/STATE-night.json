@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 21,
+  "iteration": 22,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F757-impl",
-  "next_action": "Do queue item F757-impl: F757 (D), Tier 0. A fold renames a change's requirements and the change's own algorithm steps or rationale still name the old keys. Test first at spec_service.fold_draft (hub/hub/spec_service.py): the draft (and the fold) should warn when folded text names a change key the fold renames, or keep the key. Read the FINDINGS entry, drive on a fresh Hub (e2e.py hub-up), set its Status. Then the queue is finished: set next_action to null.",
+  "current": null,
+  "next_action": null,
   "queue": [
     {
       "id": "F738-impl",
@@ -141,9 +141,9 @@
     },
     {
       "id": "F757-impl",
-      "status": "open",
+      "status": "done",
       "title": "F757 (D): a fold renames a change's requirements and the change's own text still names the old keys",
-      "detail": "Tier 0: the fold draft (and fold) should warn when a folded algorithm step or rationale names a change key the fold renames, or keep the key; test first at spec_service.fold_draft; Status."
+      "detail": "fixed; see log iteration 22"
     }
   ],
   "decisions_for_user": [

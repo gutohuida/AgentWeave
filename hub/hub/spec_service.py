@@ -9,9 +9,10 @@ so nothing touches disk until everything that can be refused has been.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -979,6 +980,58 @@ class FoldDraft:
     #: `{name, steps}` per capability algorithm, and `{from, name, replaces}` per folded one.
     capability_algorithms: List[Dict[str, Any]] = field(default_factory=list)
     algorithms: List[Dict[str, Any]] = field(default_factory=list)
+    #: Gaps the draft itself introduces (F757): `{code, where, message}`, shaped like a save's.
+    warnings: List[Dict[str, Any]] = field(default_factory=list)
+
+
+def _strings(value: Any) -> Iterator[Tuple[str, str]]:
+    """Every string under `value`, with the field it sits in (`steps[1]`, `rationale`)."""
+    if isinstance(value, str):
+        yield "", value
+    elif isinstance(value, dict):
+        for name, inner in value.items():
+            if name in ("key", "requirement", "name", "modal", "requirements"):
+                continue
+            for where, text in _strings(inner):
+                yield name + where, text
+    elif isinstance(value, list):
+        for index, inner in enumerate(value):
+            for where, text in _strings(inner):
+                yield f"[{index}]" + where, text
+
+
+def _names_key(text: str, key: str) -> bool:
+    """Whether `text` names `key` as a key and not as a word.
+
+    A hyphenated key is a key wherever it stands alone; a one-word key only when marked up
+    (`*key*`, `` `key` ``, quotes), since `glow` in a sentence is just the word.
+    """
+    edge = r"(?<![A-Za-z0-9-])" + re.escape(key) + r"(?![A-Za-z0-9-])"
+    if "-" in key:
+        return re.search(edge, text) is not None
+    return re.search(r"[*`'\"_]" + re.escape(key) + r"[*`'\"_]", text) is not None
+
+
+def _renamed_key_warnings(
+    renamed: Dict[str, str], texts: Iterable[Tuple[str, str, str]]
+) -> List[Dict[str, Any]]:
+    """A warning for each folded `(what, where, text)` that names a key the fold renames (F757)."""
+    found = []
+    for what, where, text in texts:
+        for old, new in renamed.items():
+            if old != new and _names_key(text, old):
+                found.append(
+                    {
+                        "code": "fold_renamed_key_named",
+                        "where": f"{what}.{where}" if where else what,
+                        "message": (
+                            f"{what} names {old!r}, which this fold files as {new!r}; in the "
+                            f"capability the name points at nothing. Keep the key (as_key) or "
+                            f"reword the text"
+                        ),
+                    }
+                )
+    return found
 
 
 def fold_key(change_path: str, key: str) -> str:
@@ -1221,6 +1274,25 @@ def fold_draft(
     names = [a["name"] for a in algorithm_list]
     collisions.extend(dict.fromkeys(n for n in names if names.count(n) > 1 and n not in collisions))
 
+    carried = [
+        (f"requirement {key!r}", where, text)
+        for key, entry in ((e["key"], e) for e in requirements if e["key"] in renamed.values())
+        for where, text in _strings(entry)
+    ]
+    carried += [
+        (f"algorithm {a['name']!r}", where, text)
+        for a in algorithm_list
+        if a["name"] in {f["name"] for f in folded_algorithms}
+        for where, text in _strings(a)
+    ]
+    carried += [
+        (f"criterion {c['key']!r}", where, text)
+        for c in capability_criteria
+        if c.get("requirement") in renamed.values() and c["key"] not in existing_criteria
+        for where, text in _strings(c)
+    ]
+    warnings = _renamed_key_warnings(renamed, carried)
+
     payload = {**target, "requirements": requirements, "acceptance_criteria": capability_criteria}
     if algorithm_list or "algorithms" in target:
         payload["algorithms"] = algorithm_list
@@ -1241,6 +1313,7 @@ def fold_draft(
             for a in target.get("algorithms") or []
         ],
         algorithms=folded_algorithms,
+        warnings=warnings,
     )
 
 
@@ -1302,6 +1375,7 @@ async def fold(
     if isinstance(result, SaveResult):
         result.standing_warnings = [w for w in result.warnings if _identity(w) in standing]
         result.warnings = [w for w in result.warnings if _identity(w) not in standing]
+        result.warnings.extend(draft.warnings)
     if isinstance(result, ProposeResult) or not archive or change.phase == spec_lifecycle.ARCHIVED:
         return result, False
     await spec_lifecycle.transition(

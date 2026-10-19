@@ -3735,6 +3735,7 @@ async def fold_draft(
         "requirements": draft.requirements,
         "algorithms": draft.algorithms,
         "collisions": draft.collisions,
+        "warnings": draft.warnings,
         "capability_requirements": draft.capability_requirements,
         "capability_criteria": draft.capability_criteria,
         "capability_algorithms": draft.capability_algorithms,

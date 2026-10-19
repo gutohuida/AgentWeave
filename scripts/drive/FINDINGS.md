@@ -36755,7 +36755,7 @@ With `up` a link to a directory outside the workspace, `ls up/..`, `ls up*/..` a
 
 ## F757 (D) -- a fold renames a change's requirements, and the change's own text still names the old keys
 
-**Status:** open 2026-10-19. Found while folding F755.
+**Status:** fixed 2026-10-19 (Tier 0). The fold draft and the fold now warn (`fold_renamed_key_named`) when a folded requirement, algorithm or criterion names, as a key, a requirement the fold files under another key; keeping the key (`as_key`) reports nothing. Test: `hub/tests/test_a_fold_warns_when_text_names_a_key_it_renames.py`; drive: `scripts/drive/d1019_f757_renamed_key_drive.py`. Found while folding F755.
 **Source:** drive
 **Theme:** Spec authoring
 
