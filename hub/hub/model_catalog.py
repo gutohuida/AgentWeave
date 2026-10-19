@@ -392,6 +392,9 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                 default="medium",
                 apply=ApplySpec(style="flag", template="--reasoning-effort {value}"),
             ),
+            # No context-tier control (F780): `copilot --help` offers `--context long_context`, but
+            # over ACP neither it nor a persisted `contextTier` changes the window (drive
+            # 2026-10-19, CLI 1.0.99), and ACP's session offers no option for it.
             # Codex's four values and labels, applied by the Hub over ACP rather than on argv.
             # The default is Workspace only, not Codex's Edit files: Copilot has no sandbox of its
             # own to fall back on, so an unset posture is judged as `workspace` (D8), and the
@@ -649,7 +652,11 @@ class OverrideRejection:
 
 
 def validate_overrides(
-    provider: str, overrides: Dict[str, str], *, stored_model: Optional[str] = None
+    provider: str,
+    overrides: Dict[str, str],
+    *,
+    stored_model: Optional[str] = None,
+    stored_controls: Optional[Dict[str, str]] = None,
 ) -> Tuple[Dict[str, str], Optional[OverrideRejection]]:
     """Validate *overrides* (control id -> value, plus the special key ``"model"``) against
     *provider*'s catalog entry.
@@ -665,6 +672,10 @@ def validate_overrides(
     *stored_model* is the model already stored on the conversation: equal to it, an undeclared
     model is accepted, because a model that left the catalog keeps working where it is stored
     (`the-copilot-catalog-tracks-the-cli`, fix-D5 wpc3-b). Only a newly chosen one is refused.
+
+    *stored_controls* are the conversation's stored overrides: a control the provider no longer
+    declares, sent with the value already stored, is dropped rather than refused (F780), because
+    the composer sends the stored overrides back with every message.
     """
     entry = get_provider(provider)
     if entry is None:
@@ -682,6 +693,8 @@ def validate_overrides(
             continue
         control = entry.control(key)
         if control is None:
+            if stored_controls is not None and stored_controls.get(key) == value:
+                continue
             return {}, OverrideRejection(
                 control=key,
                 reason=f"{provider!r} does not declare a {key!r} control",

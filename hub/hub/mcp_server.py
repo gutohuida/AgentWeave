@@ -3456,6 +3456,79 @@ def _ps_pattern_operands(arguments: List[str], shapes: List[_ArgumentShape]) -> 
     return exempt
 
 
+# --- Select-String's own pattern (F781) ----------------------------------------------------------
+#
+# `Select-String -Path f -Pattern '- \[ \]'` was refused as "'\' is outside your workspace": the
+# regular expression was read as a path. F661 exempted an expression-mode `-match` operand; this is
+# the same pattern in command mode, as `-Pattern`'s value or, when `-Pattern` is not named, the
+# first positional argument (Select-String binds Pattern at position 0, Path at 1). Read in both
+# dialects, since a Copilot shell call is judged in both. Exempt only a quoted literal, only where
+# the parameter is unambiguously Pattern, and no positional at all after a parameter this reading
+# does not know (it may take the next argument). `-Path`, `-LiteralPath` and every other operand
+# are judged as before.
+
+_SELECT_STRING_NAMES = {"select-string", "sls", "microsoft.powershell.utility\\select-string"}
+_SELECT_STRING_VALUE_PARAMETERS = (
+    "path", "literalpath", "pspath", "lp", "pattern", "include", "exclude", "encoding", "context",
+    "culture", "inputobject", "erroraction", "ea", "warningaction", "wa", "informationaction",
+    "infa", "progressaction", "proga", "errorvariable", "ev", "warningvariable", "wv",
+    "informationvariable", "iv", "outvariable", "ov", "outbuffer", "ob", "pipelinevariable", "pv",
+)  # fmt: skip
+_SELECT_STRING_SWITCHES = (
+    "allmatches", "casesensitive", "list", "noemphasis", "notmatch", "quiet", "raw",
+    "simplematch", "verbose", "vb", "debug", "db",
+)  # fmt: skip
+
+
+def _select_string_parameter(argument: str) -> Optional[str]:
+    """The Select-String parameter an unquoted `-name` binds to: its full name, `""` for one
+    this reading does not know or cannot tell apart (`-Pa`: Path or Pattern), None for a word
+    that is not a parameter. A `-name:value` binds its value in the same argument."""
+    if len(argument) < 2 or argument[0] != "-":
+        return None
+    if ":" in argument:
+        return ""
+    name = argument[1:].lower()
+    names = _SELECT_STRING_VALUE_PARAMETERS + _SELECT_STRING_SWITCHES
+    if name in names:
+        return name
+    matches = [candidate for candidate in names if candidate.startswith(name)]
+    return matches[0] if len(matches) == 1 else ""
+
+
+def _select_string_patterns(arguments: List[str], shapes: List[_ArgumentShape]) -> "set[int]":
+    """The indexes of arguments that are Select-String's pattern (F781)."""
+    exempt: "set[int]" = set()
+    active = False
+    pending: Optional[str] = None  # the value parameter the next argument belongs to
+    named_pattern = positional_taken = unknown = False
+    for index, (argument, shape) in enumerate(zip(arguments, shapes, strict=True)):
+        if shape.starts:
+            active = argument.lower() in _SELECT_STRING_NAMES and shape.unquoted
+            pending, named_pattern, positional_taken, unknown = None, False, False, False
+            continue
+        if not active:
+            continue
+        if pending is not None:
+            if pending == "pattern" and shape.literal:
+                exempt.add(index)
+            pending = None
+            continue
+        parameter = _select_string_parameter(argument) if shape.unquoted else None
+        if parameter is not None:
+            if parameter == "":
+                unknown = True
+            elif parameter in _SELECT_STRING_VALUE_PARAMETERS:
+                pending = parameter
+                named_pattern = named_pattern or parameter == "pattern"
+            continue
+        if not positional_taken:
+            positional_taken = True
+            if not named_pattern and not unknown and shape.literal:
+                exempt.add(index)
+    return exempt
+
+
 # --- A text tool's own operands (F696) -----------------------------------------------------------
 #
 # `sed 's|/usr|x|' f`, `awk -F/ '{print $1}' f`, `cut -d/ -f2 f`, `tr / _`: each
@@ -3841,6 +3914,8 @@ def _read_command(
             return _refuse(location, _WORKING_DIRECTORY)
     # F696: a text tool's script, pattern or delimiter is not a path in the command.
     patterns = _text_operands(arguments, shapes)
+    # F781: nor is Select-String's pattern, in either dialect (a Copilot shell call is read in both).
+    patterns |= _select_string_patterns(arguments, shapes)
     if dialect == "powershell":
         # F661: a comparison operator's pattern is not a path in the command, so it is not judged.
         patterns |= _ps_pattern_operands(arguments, shapes)
