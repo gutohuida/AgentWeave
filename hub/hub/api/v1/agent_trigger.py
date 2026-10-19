@@ -2308,6 +2308,7 @@ async def trigger_agent(
             runner_row.cli,
             body.overrides,
             stored_model=(conversation.runtime_overrides or {}).get("model"),
+            stored_controls=dict(conversation.runtime_overrides or {}),
         )
         if rejection is not None:
             raise HTTPException(status_code=400, detail=rejection.reason)

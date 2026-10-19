@@ -207,6 +207,26 @@ class TestCopilotCatalog:
         ]
         assert render_control_config("copilot", {"effort": "high"}) == {}
 
+    def test_copilot_declares_no_context_tier(self):
+        # F780: Copilot's ACP mode ignores `--context` and a persisted `contextTier` (drive
+        # 2026-10-19, CLI 1.0.99: claude-sonnet-5 reported 200,000 either way), so a choice the
+        # composer offered would change nothing.
+        assert get_provider("copilot").control("context") is None
+
+    def test_a_stored_control_that_left_the_catalog_is_dropped_not_refused(self):
+        # F780: the composer sends a conversation's stored overrides back with every message, so
+        # a conversation that stored `context` must keep working once the control is gone.
+        accepted, rejection = validate_overrides(
+            "copilot",
+            {"effort": "high", "context": "long_context"},
+            stored_controls={"context": "long_context"},
+        )
+        assert rejection is None and accepted == {"effort": "high"}
+        accepted, rejection = validate_overrides(
+            "copilot", {"context": "long_context"}, stored_controls={"context": "default"}
+        )
+        assert accepted == {} and rejection is not None and rejection.control == "context"
+
     def test_an_undeclared_copilot_model_is_refused(self):
         # `session/set_model` accepts anything and `--model` on Free is silently replaced, so the
         # Hub's own validation is the only backstop.
