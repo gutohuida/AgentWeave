@@ -7,6 +7,7 @@ and operator-gated scheduled-work mutations.
 
 import codecs
 import contextlib
+import contextvars
 import fnmatch
 import inspect
 import json
@@ -1516,9 +1517,114 @@ def _in_shared_dependency(resolved: str, root: str) -> bool:
     return False
 
 
+# --- What the operator granted beyond the workspace (reach-1019, design D2/D3) -------------------
+#
+# The boundary is a guardrail against an agent's mistakes, not containment: the judge reads what a
+# call says, not what its process does. The operator can widen it with grants -- extra roots, each
+# read or read/write, and hosts -- which the Hub hands the run as one JSON value in
+# `AW_REACH_GRANTS` (`hub/hub/reach.py` writes it, with `{temp}`/`{project}` already resolved).
+# They are consulted only where the judge would otherwise refuse: a path landing outside the
+# workspace (`_judge_resolved`) and a network address (`_judge_url`, `_judge_word`).
+
+#: Claude's tools that only read, and the name Copilot's `read` requests are judged under. A read
+#: root covers these; every other tool, a shell command among them, needs a read/write root,
+#: because a shell word cannot say whether it reads or writes.
+_READ_TOOLS = frozenset({"Read", "Glob", "Grep", "LS", "NotebookRead"})
+
+#: A granted host, as `hub/hub/reach.py` validates it (restated; a test pins the two).
+_GRANT_HOST_RE = re.compile(
+    r"^(?P<wild>\*\.)?(?P<host>[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*|\[[0-9A-Fa-f:.]+\])"
+    r"(?::(?P<port>\*|[0-9]{1,5}))?$"
+)
+
+
+class _Reach(NamedTuple):
+    """One decision's grants: the roots this tool may reach, and the hosts any address may name.
+    Each host is `(name, wildcard, port)`; a `None` port is any port."""
+
+    roots: Tuple[str, ...] = ()
+    hosts: Tuple[Tuple[str, bool, Optional[int]], ...] = ()
+
+
+#: Nothing granted: today's boundary. A tuple, so the shared default cannot be mutated.
+_NO_REACH = _Reach()
+_REACH: "contextvars.ContextVar[_Reach]" = contextvars.ContextVar("_REACH", default=_NO_REACH)
+
+
+def _parse_reach(value: Any, tool_name: str) -> _Reach:
+    """`AW_REACH_GRANTS` (a JSON text, or the object itself) as `_Reach` for one tool. Total:
+    anything that is not the shape the Hub writes grants nothing, which is today's boundary."""
+    try:
+        data = json.loads(value) if isinstance(value, str) else value
+        if not isinstance(data, dict):
+            return _Reach()
+        roots: List[str] = []
+        for entry in data.get("roots") or []:
+            if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+                continue
+            access = entry.get("access")
+            if access == "readwrite" or (access == "read" and tool_name in _READ_TOOLS):
+                path = entry["path"]
+                if os.path.isabs(path):
+                    roots.append(os.path.realpath(path))
+        hosts: List[Tuple[str, bool, Optional[int]]] = []
+        for entry in data.get("hosts") or []:
+            match = _GRANT_HOST_RE.match(entry) if isinstance(entry, str) else None
+            if match is None:
+                continue
+            port = match.group("port")
+            hosts.append(
+                (
+                    match.group("host").lower(),
+                    bool(match.group("wild")),
+                    None if port in (None, "*") else int(port),
+                )
+            )
+        return _Reach(tuple(roots), tuple(hosts))
+    except (ValueError, TypeError, OSError):
+        return _Reach()
+
+
+def _in_granted_root(resolved: str) -> bool:
+    """Whether `resolved` (already a real path) is, or lies beneath, a root granted to this call."""
+    for granted in _REACH.get().roots:
+        try:
+            shared = os.path.commonpath([granted, resolved])
+        except ValueError:  # different drives on Windows
+            continue
+        if os.path.normcase(shared) == os.path.normcase(granted):
+            return True
+    return False
+
+
+def _host_granted(host: Optional[str], port: Optional[int]) -> bool:
+    """Whether an address's host and (effective) port are named by a granted host."""
+    if not host:
+        return False
+    name = host.lower()
+    if ":" in name and not name.startswith("["):
+        name = f"[{name}]"  # `urlsplit` drops an IPv6 host's brackets; a grant spells them
+    for granted, wild, granted_port in _REACH.get().hosts:
+        named = name.endswith("." + granted) if wild else name == granted
+        if named and (granted_port is None or granted_port == port):
+            return True
+    return False
+
+
+def _schemeless_host_granted(word: str) -> bool:
+    """`_host_granted` for a schemeless address (`host:port/x`, `user@host:path`)."""
+    if "@" in word.split(":", 1)[0]:
+        host = word.split("@", 1)[1].split(":", 1)[0]
+        return _host_granted(host, 22)
+    host, _, rest = word.partition(":")
+    digits = re.match(r"[0-9]+", rest)
+    return _host_granted(host, int(digits.group(0)) if digits else None)
+
+
 def _judge_resolved(absolute: str, resolved: str, root: str) -> Optional[str]:
     """Why `resolved` -- a lexical or (D12) physical reading of `absolute` -- lands outside `root`,
-    or None when it is inside (F444: a path beneath a shared dependency link is inside)."""
+    or None when it is inside (F444: a path beneath a shared dependency link is inside), or inside
+    a root the operator granted this call (reach-1019)."""
     # `commonpath` compares path components, so it cannot be fooled the way a string prefix
     # can (`/work-other` does not start inside `/work`). Both sides are already real paths,
     # so `..` and symlinks have been collapsed before this comparison.
@@ -1527,7 +1633,7 @@ def _judge_resolved(absolute: str, resolved: str, root: str) -> Optional[str]:
     except ValueError:  # different drives on Windows
         shared = None
     if shared is None or os.path.normcase(shared) != os.path.normcase(root):
-        if _in_shared_dependency(resolved, root):
+        if _in_shared_dependency(resolved, root) or _in_granted_root(resolved):
             return None
         return _resolves_elsewhere(absolute, resolved)
     return None
@@ -2357,6 +2463,14 @@ def _is_own_hub(url: str, hub_url: Optional[str] = None) -> bool:
         return False
 
 
+def _url_host_granted(parts: urllib.parse.SplitResult) -> bool:
+    """reach-1019: whether a URL's host and effective port are granted. Total."""
+    try:
+        return _host_granted(parts.hostname, _effective_port(parts))
+    except ValueError:  # a port that does not parse
+        return False
+
+
 def _judge_url(
     word: str, root: str, argument: str, continues: bool, hub_url: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
@@ -2376,7 +2490,7 @@ def _judge_url(
         except (OSError, ValueError):
             return _refuse(word, _UNRESOLVED)
         return _judge_path(path, root, word, argument, continues)
-    if not _is_own_hub(word, hub_url):
+    if not _is_own_hub(word, hub_url) and not _url_host_granted(parts):
         return _refuse(word, _NETWORK)
     if _expands(word):
         return _refuse(word, _UNCHECKED)
@@ -2464,8 +2578,13 @@ def _judge_word(
             return _judge_path(base + rest, root, word, argument, continues)
         return _refuse(word, _UNCHECKED)
     if _SCP_ADDRESS_RE.match(word) or _HOST_PORT_RE.match(word):  # D5: a schemeless network address
-        return _refuse(word, _NETWORK)
-    if trailing_colon and _SCP_ADDRESS_RE.match(word + ":"):  # D5, R5: the colon `_words` trimmed
+        if not _schemeless_host_granted(word):  # reach-1019: unless its host is granted
+            return _refuse(word, _NETWORK)
+    elif (
+        trailing_colon
+        and _SCP_ADDRESS_RE.match(word + ":")  # D5, R5: the colon `_words` trimmed
+        and not _schemeless_host_granted(word + ":")
+    ):
         return _refuse(word + ":", _NETWORK)
     if dialect == "powershell":  # F601: a provider drive names no file in the workspace
         joined = _COLON_OPTION_RE.match(word)
@@ -4240,6 +4359,28 @@ def _hub_own_call(
 
 
 def _decide(
+    tool_name: str,
+    tool_input: Dict[str, Any],
+    *,
+    workspace: Optional[str] = None,
+    hub_url: Optional[str] = None,
+    grants: Any = None,
+) -> Dict[str, Any]:
+    """`_decide_within` under the grants the operator gave this run (reach-1019).
+
+    `grants` defaults to this process's `AW_REACH_GRANTS`, the run's own in the spawned MCP
+    process; a caller in the Hub process (Copilot's ACP client) passes the run's, or `""` for none.
+    """
+    if grants is None:
+        grants = os.environ.get("AW_REACH_GRANTS", "")
+    token = _REACH.set(_parse_reach(grants, tool_name) if grants else _Reach())
+    try:
+        return _decide_within(tool_name, tool_input, workspace=workspace, hub_url=hub_url)
+    finally:
+        _REACH.reset(token)
+
+
+def _decide_within(
     tool_name: str,
     tool_input: Dict[str, Any],
     *,

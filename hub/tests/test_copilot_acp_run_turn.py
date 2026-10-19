@@ -1698,17 +1698,15 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
             "its own args file (D9 item 1)"
         )
 
-    async def test_full_access_never_sets_allow_all_and_judges_execute_as_workspace(
-        self, monkeypatch
-    ):
-        """D8 full-access bullet + D9 item 1a's closing paragraph (design.md:807-813, 904-908;
-        operator decision 2026-09-28, open question 13, option (c)): a spec turn under full access
-        never attempts `session/set_config_option allow_all=on` -- it reads `off` off both
-        `session/new`'s and `session/set_config_option agent`'s own `configOptions` and leaves it
-        there -- and its non-`edit` requests are judged as `workspace`, never the defensive ALLOW
-        an ordinary full-access turn would give. Reusing `test_copilot_acp_decide.py::TestSpecTurn.
-        test_spec_turn_under_full_access_judges_powershell_as_workspace`'s own outside-workspace
-        command (`"Remove-Item ..\\..\\x"`) rather than inventing a new one."""
+    async def test_full_access_never_sets_allow_all_and_allows_execute(self, monkeypatch):
+        """D8 full-access bullet + D9 item 1a's closing paragraph (design.md:807-813, 904-908): a
+        spec turn under full access never attempts `session/set_config_option allow_all=on` -- it
+        reads `off` off both `session/new`'s and `session/set_config_option agent`'s own
+        `configOptions` and leaves it there, so each request still reaches the Hub, which refuses
+        its edits. Its other requests are allowed: reach-D2 (operator, 2026-10-19, "allow-all means
+        all") supersedes option (c), which judged them as `workspace`. Driven 2026-10-19: the run
+        loop's own posture state still downgraded a spec turn after `_decide_permission` stopped
+        doing so, so this pins the run, not only the decision function."""
         events = []
         sessions_bound = []
 
@@ -1744,7 +1742,6 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
                     "usage": {"inputTokens": 1, "outputTokens": 1},
                 }
             },  # session/prompt
-            *_CONTINUATION_ANSWERED,  # F660: the Hub's follow-up
         ]
         fake = _FakeACPSession(script)
         _patch_spawn(monkeypatch, fake)
@@ -1780,8 +1777,8 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
         )
 
         assert fake.sent_responses == [
-            (1, {"outcome": {"outcome": "selected", "optionId": "reject_once"}})
-        ], "an outside-workspace execute must be REJECTed once judged as workspace, not ALLOWed"
+            (1, {"outcome": {"outcome": "selected", "optionId": "allow_once"}})
+        ], "reach-D2: a spec turn's execute under Full access is allowed, not judged as workspace"
 
         assert sessions_bound == [SESSION_ID]
         assert outcome == TurnOutcome(
@@ -1789,9 +1786,8 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
             status="completed",
             error=None,
             stop_reason="end_turn",
-            refusal_continuations=1,
         )
-        assert len(_prompts_sent(fake)) == 2, "F660: one follow-up after the refusal"
+        assert len(_prompts_sent(fake)) == 1, "nothing was refused, so no follow-up"
 
     async def test_create_edit_is_rejected_and_recorded_through_on_refusal(self, monkeypatch):
         """D9 item 1a (design.md:896-908): until slice 3 lands there is no step-3 allow, so every

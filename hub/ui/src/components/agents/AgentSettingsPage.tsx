@@ -15,6 +15,7 @@ import {
   CheckpointOverrideSetting,
   DescriptionSetting,
   PermissionDefaultSetting,
+  ReachGrantsSetting,
   RunnerPicker,
   WaitingSetting,
 } from './AgentSettingsControls'
@@ -120,6 +121,12 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
             description="What this agent may do when a conversation has not chosen a posture. The composer's Permissions pill overrides it for one conversation; this is what everything else starts from."
           >
             <PermissionDefaultSetting agent={agent} />
+          </SettingsRow>
+          <SettingsRow
+            label="Granted reach"
+            description="What this agent may reach beyond its workspace under Workspace only: the project's grants, or its own in their place."
+          >
+            <ReachGrantsSetting agent={agent} />
           </SettingsRow>
           {agent.runner === 'copilot' && (
             <SettingsRow

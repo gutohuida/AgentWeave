@@ -1,8 +1,16 @@
 # Permission postures
 
 A **posture** is what a run may do without asking you. You pick one per turn from the composer's
-Permissions pill, or set an agent's default in its settings; a run that states none falls back to
-the built-in default described below.
+Permissions pill, set an agent's default in its settings, or set the **project's default** for
+every agent in the project's settings. The order is: the conversation's choice, then the agent's
+default, then the project's, then the built-in default described below. An agent's default wins
+over the project's in either direction, so one agent can be narrowed below a generous project or
+widened above a careful one.
+
+**The boundary is a guardrail against an agent's mistakes, not containment.** The Hub's judge reads
+what a call *says* -- its path argument, its command text -- not what the process then does. It
+stops an agent that reaches for the wrong directory; it does not stop a process that is trying to
+get out. Choose the posture with that in mind.
 
 This page states, **per posture**, whether a file write is checked against the run's own workspace.
 It deliberately does not state it per execution mode — see [Why this is not stated by
@@ -21,8 +29,9 @@ under two of the four postures below nothing does.
 
 Where no posture is checking, **you are the boundary**. The Hub's answer to that is not a wall it
 does not have: a write that leaves the workspace is **recorded rather than prevented**. The run row
-keeps the destinations, and you get one notice per destination in the agent's activity — after the
-write, saying where it went.
+keeps the destinations, shown beneath that run in the conversation, and you get one notice per
+destination in the agent's activity — after the write, saying where it went. That holds under every
+posture, Full access and granted roots included.
 
 ## What each posture checks
 
@@ -37,6 +46,26 @@ The built-in default for a Claude run that states no posture is **Workspace only
 most operators run under *does* check, and the common claim that a natively-executed agent is
 entirely unchecked is false. The one exception is a run with no Hub tool server configured: there is
 no approver to answer, so it falls back to **Edit files**, which checks nothing.
+
+**Full access means all of it**, for Claude and Copilot alike, and for a turn opened on a
+specification document too: its requests other than file edits are allowed. A specification turn
+still writes no file, under any posture -- that is the specification turn's role, not a reach limit.
+
+### Granted reach: between Workspace only and Full access
+
+Under **Workspace only** you can grant more without giving up the check. In the project's
+settings (or an agent's, which then replaces the project's grants whole -- an empty list narrows
+the agent back to its workspace) list:
+
+- **Roots**, each **read** or **read/write**: an absolute path, `{temp}` (the machine's temporary
+  directory) or `{project}` (the project's own directory, useful for an agent working in a
+  worktree). A read root covers the read tools (`Read`, `Glob`, `Grep`, `LS`, Copilot's read); a
+  shell command needs a read/write root, because a shell word cannot say whether it reads or writes.
+- **Hosts** a shell command may name: `localhost:*`, `127.0.0.1:8000`, `registry.npmjs.org`,
+  `*.pypi.org`. A bare host allows any port.
+
+Everything not granted is refused exactly as before. Grants apply to Claude and Copilot runs;
+Codex runs keep Codex's own sandbox.
 
 **Docker mode confines at the mount, whatever the posture is.** A containerized Hub can only see
 what is mounted beneath its configured workspace root, so a path outside it does not resolve to

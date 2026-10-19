@@ -499,23 +499,16 @@ class TestSpecTurn:
         result = _decide(params, MANUAL, tmp_path)
         assert result["outcome"] == "ASK_OPERATOR"
 
-    @pytest.mark.parametrize(
-        "command,expected",
-        [
-            (TRAVERSAL_COMMAND, "REJECT"),
-            ("Set-Content .\\x", "ALLOW"),
-        ],
-    )
-    def test_spec_turn_under_full_access_judges_powershell_as_workspace(
-        self, tmp_path, command, expected
-    ):
-        """(bullet 2) Under full access, a spec turn's non-`edit` requests are judged as
-        `workspace`, never ALLOW on full access's own account."""
+    @pytest.mark.parametrize("command", [TRAVERSAL_COMMAND, "Set-Content .\\x"])
+    def test_spec_turn_under_full_access_allows_its_commands(self, tmp_path, command):
+        """reach-D2 (operator, 2026-10-19) supersedes bullet 2's option (c): "allow-all means
+        all", so a spec turn's non-`edit` requests under Full access are allowed, not judged as
+        `workspace`. Its edits stay refused (the test above)."""
         params = _params(kind="execute", raw_input={"command": command})
         result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path, spec_turn=True)
-        assert result["outcome"] == expected
+        assert result["outcome"] == "ALLOW"
 
-    def test_spec_turn_under_full_access_judges_a_foreign_mcp_server_as_workspace(self, tmp_path):
+    def test_spec_turn_under_full_access_allows_a_foreign_mcp_server(self, tmp_path):
         params = _params(
             tool_call_id="call_m2",
             kind="other",
@@ -527,16 +520,22 @@ class TestSpecTurn:
             )
         }
         result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path, calls, spec_turn=True)
-        assert result["outcome"] == "REJECT"
+        assert result["outcome"] == "ALLOW"
 
-    def test_spec_turn_under_full_access_rejects_an_unidentified_mcp_request(self, tmp_path):
-        params = _params(tool_call_id="call_m4", kind="other", raw_input={})
+    @pytest.mark.parametrize(
+        "kind,call_id", [("other", "call_m4"), ("memory", "call_1")], ids=["unidentified", "memory"]
+    )
+    def test_spec_turn_under_full_access_allows_what_full_access_allows(
+        self, tmp_path, kind, call_id
+    ):
+        params = _params(tool_call_id=call_id, kind=kind, raw_input={})
         result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path, spec_turn=True)
-        assert result["outcome"] == "REJECT"
+        assert result["outcome"] == "ALLOW"
 
-    def test_spec_turn_under_full_access_rejects_memory(self, tmp_path):
-        params = _params(kind="memory", raw_input={})
-        result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path, spec_turn=True)
+    def test_spec_turn_under_workspace_still_judges_its_commands(self, tmp_path):
+        """Only Full access changed: under Workspace only a spec turn is judged as before."""
+        params = _params(kind="execute", raw_input={"command": TRAVERSAL_COMMAND})
+        result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path, spec_turn=True)
         assert result["outcome"] == "REJECT"
 
     @pytest.mark.parametrize(

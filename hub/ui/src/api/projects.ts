@@ -103,6 +103,23 @@ export interface ProjectSettings {
   /** Commands the Hub runs on the work a task's approval would merge; approval is refused until
    *  they pass. Null means no checks, and approval is unchanged. Only the operator sets these. */
   checks: ProjectCheck[] | null
+  /** The posture every agent's run gets when neither its conversation nor the agent states one
+   *  (reach-1019). Null is the runner's built-in posture; an agent's own default wins either way. */
+  default_permission_mode?: string | null
+  /** Roots and hosts the workspace judge allows beyond the workspace; an agent's own replace them. */
+  reach_grants?: ReachGrants | null
+}
+
+/** One root granted beyond the workspace: an absolute path, `{temp}` or `{project}`. */
+export interface ReachRoot {
+  path: string
+  access: 'read' | 'readwrite'
+}
+
+/** What an agent may reach beyond its workspace under Workspace only (reach-1019). */
+export interface ReachGrants {
+  roots: ReachRoot[]
+  hosts: string[]
 }
 
 /** What a settings save answers: the stored settings, plus what the operator should know about

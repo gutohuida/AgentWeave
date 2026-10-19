@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -39,28 +40,31 @@ def _copilot_installed(tmp_path_factory, monkeypatch):
 
 
 def _fake_copilot_turn():
+    # A session id of its own per run: each `_copilot_run` starts a new conversation.
+    session_id = f"sess-{uuid.uuid4().hex[:8]}"
+
     async def _run(**kwargs):
-        await kwargs["on_session"]("sess-1")
+        await kwargs["on_session"](session_id)
         await kwargs["on_event"](text_event("hello from copilot"))
-        return TurnOutcome(session_id="sess-1", status="completed")
+        return TurnOutcome(session_id=session_id, status="completed")
 
     return AsyncMock(side_effect=_run)
 
 
-async def _agent(app, auth_headers, bind_runner, name: str, cli: str) -> None:
+async def _agents(app, auth_headers, bind_runner, **clis: str) -> None:
+    """One sync naming every agent (a sync replaces the roster it describes), then a runner each."""
     sync = await app.post(
         f"/api/v1/projects/{PROJECT}/session/sync",
-        json={"data": {"agents": {name: {"runner": cli}}}},
+        json={"data": {"agents": {name: {"runner": cli} for name, cli in clis.items()}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200, sync.text
-    await bind_runner(name, cli=cli)
+    for name, cli in clis.items():
+        await bind_runner(name, cli=cli)
 
 
 async def _settings(app, auth_headers, **body):
-    resp = await app.put(
-        f"/api/v1/projects/{PROJECT}/settings", json=body, headers=auth_headers
-    )
+    resp = await app.put(f"/api/v1/projects/{PROJECT}/settings", json=body, headers=auth_headers)
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -122,6 +126,14 @@ def _read(path: str, call_id: str = "call_1") -> dict:
     }
 
 
+def _told(run: dict) -> str:
+    """Every context text the Copilot run was handed."""
+    return "\n".join(
+        str(run.get(name) or "")
+        for name in ("per_turn_context", "tool_surface_context", "stable_context", "prompt")
+    )
+
+
 def _copilot_decides(run: dict, params: dict, *, spec_turn: bool = False) -> str:
     return decide_permission(
         params,
@@ -150,14 +162,16 @@ async def test_allow_all_at_project_level_reaches_copilot_a_spec_turn_and_claude
 ):
     """reach-D2: one project setting, every agent -- Copilot and a spec turn included."""
     outside = str(tmp_path_factory.mktemp("elsewhere") / "notes.txt")
-    await _agent(app, auth_headers, bind_runner, "reach-cop", "copilot")
-    await _agent(app, auth_headers, bind_runner, "reach-cla", "claude")
+    await _agents(app, auth_headers, bind_runner, **{"reach-cop": "copilot", "reach-cla": "claude"})
 
     saved = await _settings(app, auth_headers, default_permission_mode=FULL_ACCESS_PERMISSION_MODE)
     assert saved["default_permission_mode"] == FULL_ACCESS_PERMISSION_MODE
 
     run = await _copilot_run(app, auth_headers, "reach-cop")
     assert run["permission_mode"] == FULL_ACCESS_PERMISSION_MODE
+    # And the agent is told so: told "files outside it are refused", a Copilot agent refused itself
+    # the work without trying (drive 2026-10-19).
+    assert "posture is Full access" in _told(run)
     assert _copilot_decides(run, _read(outside)) == "ALLOW"
     # Supersedes ghcp-a-spec-turn-full-access: a spec turn is no longer judged as Workspace only.
     assert _copilot_decides(run, _read(outside), spec_turn=True) == "ALLOW"
@@ -186,8 +200,7 @@ async def test_the_middle_setting_allows_what_is_granted_and_refuses_the_rest(
     writable = tmp_path_factory.mktemp("granted-rw")
     readable = tmp_path_factory.mktemp("granted-ro")
     ungranted = tmp_path_factory.mktemp("not-granted")
-    await _agent(app, auth_headers, bind_runner, "reach-mid", "claude")
-    await _agent(app, auth_headers, bind_runner, "reach-mcp", "copilot")
+    await _agents(app, auth_headers, bind_runner, **{"reach-mid": "claude", "reach-mcp": "copilot"})
 
     grants = {
         "roots": [
@@ -221,6 +234,7 @@ async def test_the_middle_setting_allows_what_is_granted_and_refuses_the_rest(
 
     # The same grants reach a Copilot run's in-process judge.
     copilot = await _copilot_run(app, auth_headers, "reach-mcp")
+    assert str(writable) in _told(copilot) and "localhost:*" in _told(copilot)
     assert _copilot_decides(copilot, _read(r)) == "ALLOW"
     assert _copilot_decides(copilot, _read(u)) == "REJECT"
 
@@ -247,3 +261,53 @@ async def test_a_grant_that_is_not_an_absolute_root_is_refused(app, auth_headers
             headers=auth_headers,
         )
         assert resp.status_code == 422, (bad, resp.text)
+
+
+def test_the_judge_restates_the_hubs_host_pattern():
+    """`mcp_server` imports only the stdlib, so it restates `reach.GRANT_HOST_RE`."""
+    from hub import reach
+
+    assert mcp_server._GRANT_HOST_RE.pattern == reach.GRANT_HOST_RE.pattern
+
+
+@pytest.mark.parametrize(
+    "hosts,command,allowed",
+    [
+        (["localhost:5173"], "curl http://localhost:5173/x", True),
+        (["localhost:5173"], "curl http://localhost:8000/x", False),
+        (["registry.npmjs.org"], "curl https://registry.npmjs.org/react", True),
+        (["*.npmjs.org"], "curl https://registry.npmjs.org/react", True),
+        (["*.npmjs.org"], "curl https://npmjs.org.evil.com/", False),
+        (["localhost:*"], "curl localhost:3000/health", True),
+        ([], "curl http://localhost:5173/", False),
+    ],
+)
+def test_a_granted_host_is_matched_by_name_and_port(tmp_path, hosts, command, allowed):
+    grants = json.dumps({"roots": [], "hosts": hosts})
+    decided = mcp_server._decide(
+        "Bash", {"command": command}, workspace=str(tmp_path), hub_url=HUB_URL, grants=grants
+    )
+    assert bool(decided["allow"]) is allowed, decided
+
+
+def test_grants_render_tokens_and_nothing_granted_writes_no_variable(tmp_path):
+    import tempfile
+
+    from hub.reach import effective_grants, grants_env_value
+
+    tokens = {
+        "roots": [
+            {"path": "{temp}", "access": "read"},
+            {"path": "{project}", "access": "readwrite"},
+        ]
+    }
+    rendered = json.loads(grants_env_value(tokens, project_root=str(tmp_path)))
+    assert rendered["roots"] == [
+        {"path": tempfile.gettempdir(), "access": "read"},
+        {"path": str(tmp_path), "access": "readwrite"},
+    ]
+    assert grants_env_value({"roots": [], "hosts": []}, project_root=str(tmp_path)) is None
+    assert grants_env_value(None, project_root=str(tmp_path)) is None
+    project = {"roots": [], "hosts": ["localhost"]}
+    assert effective_grants(project, None) == project
+    assert effective_grants(project, {"roots": [], "hosts": []}) == {"roots": [], "hosts": []}

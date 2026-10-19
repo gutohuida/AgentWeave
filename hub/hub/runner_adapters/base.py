@@ -285,6 +285,9 @@ class RunnerAdapter(ABC):
     # Variables a run of this runner gets unless its environment already names them (an agent's
     # `env_vars` win). Claude: background tasks off (F677).
     run_env_defaults: ClassVar[Mapping[str, str]] = {}
+    # Whether the Hub's workspace judge, and so the operator's reach grants (reach-1019), decide
+    # this runner's calls. Codex is decided by its own sandbox instead.
+    applies_reach_grants: ClassVar[bool] = True
     # The percentage of the context window at which this runner's CLI compacts by itself
     # (`a-copilot-run-shows-its-credits` D9). No base default: an adapter that omits it fails
     # the conformance test that every `ADAPTERS` entry declares it.

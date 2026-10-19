@@ -5,7 +5,7 @@ import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
 import { ToolEditDiff } from '@/components/agents/ToolEditDiff'
 import { editDiffStat } from '@/lib/editDiff'
 import { formatElapsedSeconds, useElapsedSeconds } from '@/hooks/useElapsedSeconds'
-import type { AgentRunFacts, AgentSummary, RunLifecycleStatus } from '@/api/agents'
+import type { AgentRunFacts, AgentSummary, OutsideWrite, RunLifecycleStatus } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import type { QueueStatus } from '@/api/queue'
 import type { TurnUsage } from '@/api/accounting'
@@ -99,6 +99,28 @@ function runDurationSeconds(facts: AgentRunFacts | undefined): number | undefine
   const end = Date.parse(facts.ended_at)
   if (Number.isNaN(start) || Number.isNaN(end) || end < start) return undefined
   return Math.round((end - start) / 1000)
+}
+
+/** Where this run wrote outside its workspace, under the run, out of the way (reach-4): a quiet
+ *  line, not a card, under every posture, Full access included. Says a write *landed* elsewhere --
+ *  recorded, not prevented -- in the same words as the activity notice. Nothing for a run with no
+ *  record (`null`) or a clean one (`[]`). */
+export function OutsideWritesLine({ writes }: { writes: OutsideWrite[] | null | undefined }) {
+  if (!writes || writes.length === 0) return null
+  const destinations = writes.filter((entry) => entry.kind !== 'overflow')
+  const overflow = writes.find((entry) => entry.kind === 'overflow')?.destinations ?? 0
+  const shown = destinations.map((entry) => entry.path).filter(Boolean).join(', ')
+  return (
+    <div
+      data-testid="run-outside-writes"
+      className="text-[11px] text-center"
+      style={{ color: 'var(--text-3)' }}
+      title="Recorded, not prevented. The agent's activity has one notice per destination."
+    >
+      Wrote outside its workspace: {shown}
+      {overflow > 0 && ` and ${overflow} more`}
+    </div>
+  )
 }
 
 type ColorLookup = Map<string, number | null | undefined>
@@ -343,6 +365,7 @@ export function AgentTimeline({
                 <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
               </div>
             )}
+            <OutsideWritesLine writes={turn.runId ? runs[turn.runId]?.outside_workspace_writes : undefined} />
           </div>
         )
       })}

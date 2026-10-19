@@ -602,16 +602,19 @@ def _decision(outcome: str, reason: str, **extra: Any) -> Dict[str, Any]:
 
 
 def _judge(
-    pairs: List[Tuple[str, Dict[str, Any]]], *, workspace: str, hub_url: str
+    pairs: List[Tuple[str, Dict[str, Any]]], *, workspace: str, hub_url: str, grants: str = ""
 ) -> Dict[str, Any]:
-    """Step 4's judge: every pair through `mcp_server._decide`; any refusal refuses the request."""
+    """Step 4's judge: every pair through `mcp_server._decide`, under the run's reach grants
+    (reach-1019); any refusal refuses the request."""
     # Function-local: importing `mcp_server` builds its FastMCP instance (as `agents.py` does).
     from . import mcp_server
 
     if not pairs:
         return _decision(REJECT, "the request names nothing this Hub could check")
     for tool_name, tool_input in pairs:
-        verdict = mcp_server._decide(tool_name, tool_input, workspace=workspace, hub_url=hub_url)
+        verdict = mcp_server._decide(
+            tool_name, tool_input, workspace=workspace, hub_url=hub_url, grants=grants
+        )
         if not verdict.get("allow"):
             return _decision(REJECT, str(verdict.get("reason") or "refused by the workspace check"))
     return _decision(ALLOW, "inside your workspace")
@@ -627,14 +630,18 @@ def _decide_permission(
     spec_turn: bool,
     servers: Optional[Mapping[str, Sequence[Mapping[str, Any]]]],
     github_mcp: bool = False,
+    grants: str = "",
 ) -> Dict[str, Any]:
     tool_call = _tool_call(params)
     kind = tool_call.get("kind")
     raw = _raw_input(tool_call)
     facts = _facts_for(tool_call, calls)
     posture = _canonical_posture(posture)
-    # A spec turn never answers ALLOW on Full access's account (open question 13, option (c)).
-    judged = WORKSPACE_PERMISSION_MODE if (spec_turn and posture == _FULL) else posture
+    # A spec turn is judged under its own posture, Full access included (reach-D2, superseding
+    # ghcp-a-spec-turn-full-access's option (c)): allow-all means all. It still writes no file --
+    # its edits are refused below in every posture, and it never asks Copilot for allow-all, so
+    # each request still reaches this judge.
+    judged = posture
 
     # Step 1, identify. An MCP request whose server Copilot did not report is answered here, so no
     # server-specific rule ever sees it: a card under `manual`, the defensive allow under genuine
@@ -708,7 +715,10 @@ def _decide_permission(
 
     if judged == _ACCEPT_EDITS:
         if kind in ("edit", "read"):
-            return {**_judge(pairs, workspace=workspace, hub_url=hub_url), **extra}
+            return {
+                **_judge(pairs, workspace=workspace, hub_url=hub_url, grants=grants),
+                **extra,
+            }
         return _decision(
             REJECT, "Edit files allows file changes inside the workspace only", **extra
         )
@@ -719,7 +729,7 @@ def _decide_permission(
     if kind == "fetch" and facts is not None and facts.tool_name == "web_fetch":
         # Claude's `WebFetch` parity: `_decide` reads no fetch URL.
         return _decision(ALLOW, "a web fetch", **extra)
-    return {**_judge(pairs, workspace=workspace, hub_url=hub_url), **extra}
+    return {**_judge(pairs, workspace=workspace, hub_url=hub_url, grants=grants), **extra}
 
 
 def decide_permission(
@@ -732,6 +742,7 @@ def decide_permission(
     spec_turn: bool = False,
     servers: Optional[Mapping[str, Sequence[Mapping[str, Any]]]] = None,
     github_mcp: bool = False,
+    grants: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Decide one `session/request_permission` (D8). Pure and total: returns
     `{"outcome": ALLOW|REJECT|ASK_OPERATOR, "reason": str}`, plus `hub_server_unverified` when an
@@ -743,7 +754,8 @@ def decide_permission(
     `hub_url` are the run's: an absent one refuses rather than reading the Hub process's own
     environment. Call it through `asyncio.to_thread` (review, finding 7). `github_mcp` is the
     agent's own toggle (D9): with it on, a request whose reported server is not `agentweave` is
-    the operator's call under `workspace`.
+    the operator's call under `workspace`. `grants` is the run's `AW_REACH_GRANTS` (reach-1019);
+    absent grants nothing, and the Hub process's own environment is never read for it.
     """
     try:
         return _decide_permission(
@@ -755,6 +767,7 @@ def decide_permission(
             spec_turn=bool(spec_turn),
             servers=servers,
             github_mcp=bool(github_mcp),
+            grants=grants or "",
         )
     except Exception as exc:  # noqa: BLE001 - a judge that raises must still answer
         logger.warning("Deciding a Copilot permission request failed: %s", exc, exc_info=True)
@@ -769,6 +782,7 @@ def workspace_verdict(
     calls: Optional[Mapping[str, CallFacts]] = None,
     servers: Optional[Mapping[str, Sequence[Mapping[str, Any]]]] = None,
     github_mcp: bool = False,
+    grants: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """What Workspace only would decide for this request, for an Ask me card
     (`an-ask-me-card-says-what-workspace-only-would-decide`): `{"allow": bool, "reason": str}`, or
@@ -799,6 +813,7 @@ def workspace_verdict(
             calls=calls or {},
             servers=servers,
             github_mcp=github_mcp,
+            grants=grants,
         )
         verdict = {"allow": decided["outcome"] == ALLOW, "reason": decided["reason"]}
         if verdict["allow"] and _tool_call(params).get("kind") == "execute":
@@ -2252,6 +2267,8 @@ async def run_turn(
     """
     posture = posture_for(permission_mode, yolo=yolo)
     spec_turn = bool(restrict_spec_writes)
+    # The run's reach grants (reach-1019), from the env the trigger built -- never the Hub's own.
+    run_grants = (env or {}).get("AW_REACH_GRANTS") or ""
     github_mcp = (agent_config or {}).get("copilot_github_mcp") is True
     session_cwd = cwd or workspace
     if not session_cwd:
@@ -2506,6 +2523,7 @@ async def run_turn(
             spec_turn=spec_turn,
             servers={k: [dict(e) for e in v] for k, v in servers.items()},
             github_mcp=github_mcp,
+            grants=run_grants,
         )
 
     def record_refusal(subject: Mapping[str, Any], *, operator: bool, no_channel: bool) -> None:
@@ -2564,6 +2582,7 @@ async def run_turn(
                         calls=dict(calls),
                         servers={k: [dict(e) for e in v] for k, v in servers.items()},
                         github_mcp=github_mcp,
+                        grants=run_grants,
                     )
                     allowed = bool(await request_approval(PERMISSION_METHOD, subject))
             else:
@@ -2865,8 +2884,9 @@ async def run_turn(
             after = _option(_options_of(turned), "allow_all")
             if after is not None and after.get("currentValue") == "on":
                 raise CopilotACPError(kept_on)
-        if spec_turn and posture == _FULL:
-            state["judged_posture"] = WORKSPACE_PERMISSION_MODE
+        # A spec turn under Full access is judged as Full access (reach-D2, superseding
+        # ghcp-a-spec-turn-full-access): allow-all stays off for it above, so each request still
+        # reaches the judge, which refuses its edits and allows the rest.
 
         blocks: List[Dict[str, Any]] = []
         if use_resource_block and stable_context:

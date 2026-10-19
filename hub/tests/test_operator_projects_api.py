@@ -362,6 +362,9 @@ async def test_project_settings_update_is_validated_and_atomic(app, auth_headers
         "checkpoint_threshold_value": None,
         "checkpoint_notes_value": None,
         "checkpoint_runner_id": None,
+        # reach-1019: no project default posture and no grants until the operator sets them.
+        "default_permission_mode": None,
+        "reach_grants": None,
         "checkpoint_model": None,
         # Off: a successor waits for an explicit Continue rather than starting a turn nobody
         # asked for. Off must not mean "type a message to get it moving", which was the friction

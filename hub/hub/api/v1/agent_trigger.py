@@ -96,6 +96,7 @@ from ...launchability import (
     writing_agent_work_dir_sentence,
 )
 from ...model_catalog import (
+    FULL_ACCESS_PERMISSION_MODE,
     PERMISSION_MODE_CONTROL,
     render_control_config,
     validate_overrides,
@@ -117,6 +118,7 @@ from ...pty_runner import (
     strip_ansi_escapes,
     terminate_process_tree,
 )
+from ...reach import REACH_GRANTS_ENV, describe_reach, effective_grants, grants_env_value
 from ...run_divergence import evaluate_run_end, record_response_run
 from ...run_task_binding import (
     TaskBindingError,
@@ -1194,6 +1196,18 @@ async def _trigger_agent_directly(
     # exactly the runs where "what may this agent do unattended" is the question being asked.
     if agent_row.default_permission_mode and PERMISSION_MODE_CONTROL not in control_overrides:
         control_overrides[PERMISSION_MODE_CONTROL] = agent_row.default_permission_mode
+    # Then the project's, for every agent with none of its own (reach-1019, D1), and the reach
+    # grants this agent's judge decides with: its own, replacing the project's whole, or theirs.
+    project_row = await session.get(Project, project_id)
+    if (
+        project_row is not None
+        and project_row.default_permission_mode
+        and PERMISSION_MODE_CONTROL not in control_overrides
+    ):
+        control_overrides[PERMISSION_MODE_CONTROL] = project_row.default_permission_mode
+    run_grants = effective_grants(
+        project_row.reach_grants if project_row is not None else None, agent_row.reach_grants
+    )
     try:
         workspace_root = await project_workspace.resolve_project_workspace(session, project_id)
     except project_workspace.ProjectWorkspaceError as exc:
@@ -1204,6 +1218,9 @@ async def _trigger_agent_directly(
             directory_state=exc.directory_state,
         ) from exc
     repo_root = workspace_root.root
+    # The run's `AW_REACH_GRANTS`, with `{temp}`/`{project}` resolved: what the judge decides with
+    # and what the turn context tells the agent, from one value so the two cannot disagree.
+    granted = grants_env_value(run_grants, project_root=str(repo_root))
 
     # Which task this turn is about, answered before *anything* is provisioned for it (D2) —
     # before the review checkout, before the worktree, and before the turn context is rendered.
@@ -1625,6 +1642,15 @@ async def _trigger_agent_directly(
         # A reviewer that is not told it is reviewing will helpfully fix the bug itself and report
         # the work as verified.
         review=review_context,
+        # reach-1019: what the agent is told about reaching outside the workspace must be what
+        # the judge will decide, or it refuses itself work it was granted (drive 2026-10-19).
+        reach=describe_reach(
+            (control_overrides or {}).get(PERMISSION_MODE_CONTROL)
+            or (FULL_ACCESS_PERMISSION_MODE if config.get("yolo") else None),
+            # Codex keeps its own sandbox; grants are not applied to it (design D4).
+            granted if adapter.applies_reach_grants else None,
+            spec_turn=bool(spec_document),
+        ),
     )
     rendered_context = await _render_hub_agent_context(**render_kwargs)
     # D9: a run that tests itself is told after its test, so both surfaces' renderings are made
@@ -1815,6 +1841,12 @@ async def _trigger_agent_directly(
     # the agent is *told* about and the one that is *enforced* must come from one value, or an
     # agent can be refused at a line it was never shown.
     env["AW_WORKSPACE_DIR"] = effective_work_dir
+    # What the operator granted beyond it (reach-1019, D3), read by the same judge. Always written
+    # or removed: a value inherited from the Hub's own environment must never stand in for it.
+    if granted:
+        env[REACH_GRANTS_ENV] = granted
+    else:
+        env.pop(REACH_GRANTS_ENV, None)
     # The runner's own defaults (F677: Claude's background tasks off). An agent's `env_vars` win.
     for name, value in adapter.run_env_defaults.items():
         env.setdefault(name, value)

@@ -8,10 +8,17 @@ import {
   useUpdateProjectSettings,
   type ProjectSettings,
 } from '@/api/projects'
-import { useModelCatalog, catalogModelLabel, resolveCatalogModel } from '@/api/modelCatalog'
+import {
+  useModelCatalog,
+  catalogModelLabel,
+  permissionModeValues,
+  resolveCatalogModel,
+} from '@/api/modelCatalog'
 import { useRunners } from '@/api/runners'
 import { Button } from '@/components/ui/button'
 import { ProjectChecksEditor } from '@/components/environment/ProjectChecksEditor'
+import { ReachGrantsEditor } from '@/components/environment/ReachGrantsEditor'
+import { EMPTY_GRANTS, cleanGrants } from '@/lib/reachGrants'
 import { Select } from '@/components/ui/input'
 import { DeleteProjectDialog } from '@/components/environment/DeleteProjectDialog'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
@@ -159,6 +166,7 @@ export function ProjectSettingsPanel({ onNavigate }: { onNavigate?: (page: strin
       checkpoint_threshold_mode: value === null ? null : (thresholdMode as 'percent' | 'tokens'),
       checkpoint_threshold_value: value,
       checkpoint_notes_value: value === null ? null : notes,
+      reach_grants: cleanGrants(form.reach_grants ?? null),
     })
   }
 
@@ -196,6 +204,38 @@ export function ProjectSettingsPanel({ onNavigate }: { onNavigate?: (page: strin
         <Button type="button" variant="outline" size="sm" onClick={() => onNavigate?.('budgets')}>
           Set in Budgets
         </Button>
+      </SettingsRow>
+
+      <GroupHeading>Reach</GroupHeading>
+      {/* reach-1019: what every agent may do when neither its conversation nor the agent says,
+          and what Workspace only grants beyond the workspace. An agent's own settings win. */}
+      <SettingsRow
+        label="Default permissions"
+        description="The posture every agent's run gets when its conversation and the agent itself have not chosen one. An agent's own default wins, in either direction. Full access allows everything, Copilot and specification turns included."
+      >
+        <Select
+          aria-label="Default permissions"
+          value={form.default_permission_mode ?? ''}
+          onChange={(event) => set('default_permission_mode', event.target.value || null)}
+          wrapperClassName="w-48"
+          className="px-2 py-1.5 text-xs"
+        >
+          <option value="">Each runner's built-in default</option>
+          {permissionModeValues(catalog).map((option) => (
+            <option key={option.id} value={option.id}>{option.label}</option>
+          ))}
+        </Select>
+      </SettingsRow>
+      <SettingsRow
+        label="Granted reach"
+        description="Under Workspace only, what an agent may reach beyond its workspace: roots it may read, or read and write (a shell command needs read and write), and hosts a command may name, such as localhost:* or registry.npmjs.org. Everything else is refused as before. A guardrail against mistakes, not a sandbox. Writes outside the workspace are still recorded on the run."
+      >
+        <ReachGrantsEditor
+          grants={form.reach_grants ?? EMPTY_GRANTS}
+          onChange={(grants) =>
+            set('reach_grants', grants.roots.length || grants.hosts.length ? grants : null)
+          }
+        />
       </SettingsRow>
 
       <GroupHeading>Integration</GroupHeading>
