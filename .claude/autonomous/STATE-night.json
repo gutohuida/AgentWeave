@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 15,
+  "iteration": 16,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F752-spec",
-  "next_action": "Do queue item F752-spec: F752/F753/F754/F755 spec-flow friction + shell-judge spec gap. Group by seam; one finding per commit; spec flow on trial Hub :8010. Then F444-impl.",
+  "current": "F444-impl",
+  "next_action": "Do queue item F444-impl: F444 (B), worktree shared dependency links make reads refused. Reproduce first; fix or confirm by driving; set its Status line. Then F752-impl, F753-impl, F755-spec.",
   "queue": [
     {
       "id": "F738-impl",
@@ -101,16 +101,37 @@
       "detail": "fixed; see log iteration 15"
     },
     {
-      "id": "F752-spec",
-      "status": "open",
-      "title": "F752/F753/F754/F755 (C/D): spec-flow friction + shell-judge spec gap",
-      "detail": "Group by seam; one finding per commit. Spec flow on trial Hub :8010."
+      "id": "F754-impl",
+      "status": "done",
+      "title": "F754 (D): fold reports the capability's old gaps as the change's",
+      "detail": "fixed ada98e4; see log iteration 16"
     },
     {
       "id": "F444-impl",
       "status": "open",
       "title": "F444 (B): worktree shared dependency links make reads refused",
       "detail": "Reproduce first; fix or -drive confirm; Status."
+    },
+    {
+      "id": "F752-impl",
+      "status": "open",
+      "model": "opus",
+      "title": "F752 (C): already-built work recorded as a change cannot be approved without Approve anyway",
+      "detail": "No record-only path: requirement_without_task blocks every requirement of a change built through tests, not tasks. Pick the tier first; if the shape is genuinely the operator's (approvals-are-scarce), OPEN row in DECISIONS.md and move on. Related F704."
+    },
+    {
+      "id": "F753-impl",
+      "status": "open",
+      "model": "opus",
+      "title": "F753 (C): a fold can change requirements but not an algorithm step or a criterion's text",
+      "detail": "fold_draft (hub/hub/spec_service.py) folds requirements and retires criteria only. Also: multi-capability folds need archive:false on all but the last, unguided. Tier 1 likely: short change on :8010 first."
+    },
+    {
+      "id": "F755-spec",
+      "status": "open",
+      "model": "opus",
+      "title": "F755 (C): the shell judge's rules (F675/F676 text rules, sed/awk/grep exemptions) are not specified",
+      "detail": "Author them into agent-run-sandboxing through the Hub on :8010 (change + fold), from code and test_permission_approver.py's row table. Commit the files the Hub writes."
     }
   ],
   "decisions_for_user": [
