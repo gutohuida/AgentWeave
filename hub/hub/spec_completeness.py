@@ -146,6 +146,8 @@ def check(
     hand-creates board tasks before proposing gets `requirement_without_task` anyway, and then
     `materialise()` mints a second, overlapping set of tasks on approval — two decompositions with
     nothing reconciling them. The document's own `tasks[]` and the real board converge here instead.
+    The caller also counts a requirement accepted evidence already demonstrates (F752,
+    `spec_service.served_keys`): work built before its change was written has no task to name.
 
     `approved_document_paths` is the set of this project's currently-approved document paths,
     supplied the same way `board_served` is — this module stays a pure function of its inputs,
@@ -247,7 +249,8 @@ def check(
                     "requirement_without_task",
                     where,
                     f"{requirement.key!r} is in neither the document's own tasks[] nor a task "
-                    "already on the board, so nothing implements it",
+                    "already on the board, and no accepted evidence demonstrates it, so nothing "
+                    "implements it (for work already built, record its evidence)",
                 )
             )
 

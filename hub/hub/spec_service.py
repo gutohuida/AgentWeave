@@ -17,6 +17,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import (
+    requirement_coverage,
     requirement_links,
     spec_completeness,
     spec_digest,
@@ -28,7 +29,13 @@ from . import (
     spec_naming,
     spec_rigor,
 )
-from .db.models import InboundQueueEntry, SpecDocument, SpecDocumentMerge, SpecEditProposal
+from .db.models import (
+    InboundQueueEntry,
+    SpecDocument,
+    SpecDocumentMerge,
+    SpecEditProposal,
+    SpecRequirement,
+)
 from .project_workspace import ProjectWorkspace
 from .spec_manifest import Manifest
 from .spec_payload import (
@@ -347,6 +354,42 @@ async def _apply_and_write(
     )
 
 
+async def served_keys(session: AsyncSession, document: SpecDocument, payload: SpecPayload) -> set:
+    """Keys of `payload`'s requirements something already serves, for `requirement_without_task`.
+
+    A hand-made board task (`requirement_links.served_keys`), or accepted evidence at the wording
+    `payload` gives the requirement (F752): work built with tests and recorded as a change after
+    the fact has no task, and its demonstrated requirements are not "implemented by nothing".
+    Coverage decides what is demonstrated (`verified`, so partial-only evidence is not); the digest
+    comparison keeps evidence for an earlier wording from serving a payload that rewords it.
+    """
+    served = await requirement_links.served_keys(session, document.id)
+    report = await requirement_coverage.document_coverage(session, document.project_id, document.id)
+    verified = {
+        entry.requirement_id
+        for entry in report.requirements
+        if entry.state == requirement_coverage.VERIFIED
+    }
+    if not verified:
+        return served
+    rows = (
+        (await session.execute(select(SpecRequirement).where(SpecRequirement.id.in_(verified))))
+        .scalars()
+        .all()
+    )
+    criteria: Dict[str, list] = {}
+    for criterion in payload.acceptance_criteria:
+        criteria.setdefault(criterion.requirement, []).append(criterion)
+    by_key = {requirement.key: requirement for requirement in payload.requirements}
+    for row in rows:
+        requirement = by_key.get(row.key)
+        if requirement is not None and row.digest == spec_digest.semantic_digest(
+            requirement, criteria.get(row.key, [])
+        ):
+            served.add(row.key)
+    return served
+
+
 async def _completeness_report(
     session: AsyncSession,
     workspace: ProjectWorkspace,
@@ -354,7 +397,7 @@ async def _completeness_report(
     payload: SpecPayload,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """What a write of `payload` to `document` reports: `(blocking, warnings)`."""
-    board_served = await requirement_links.served_keys(session, document.id)
+    board_served = await served_keys(session, document, payload)
     approved_paths = await spec_lifecycle.approved_document_paths(session, document.project_id)
     roadmaps = await roadmap_states(session, workspace, document.project_id, payload)
     # F703: split exactly as a proposal splits them, so a write and a propose of the same
@@ -1559,7 +1602,7 @@ async def _completeness(
     except PayloadError as exc:
         raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
 
-    board_served = await requirement_links.served_keys(session, document.id)
+    board_served = await served_keys(session, document, payload)
     approved_paths = await spec_lifecycle.approved_document_paths(session, document.project_id)
     roadmaps = await roadmap_states(session, workspace, document.project_id, payload)
     findings = spec_completeness.check(
@@ -1600,15 +1643,22 @@ def _steps_skipped(
     # The way out, named (F574): a document written whole in one go never moves its step, so it
     # meets this on every approval. The journey call records where it really stands.
     last = ahead[-1]
+    # The full route (F730): without `/api/v1/projects/{id}` it named nothing callable.
+    routes = f"POST /api/v1/projects/{document.project_id}/project/documents"
+    # Only an exploring document's step moves, and approval meets this on a proposed one (F752),
+    # where the journey call alone answers 409 `no_journey`.
+    back = (
+        ""
+        if document.phase == spec_lifecycle.EXPLORING
+        else f"send it back first, {routes}/phase?path={document.path}&to=exploring, then "
+    )
     return [
         spec_completeness.Finding(
             "steps_skipped",
             "step",
             f"the document is at step {document.step!r}; this project's journey ({sized}) goes "
             f"on to {', '.join(ahead)}, which it never reached. If it already holds what those "
-            # The full route (F730): without `/api/v1/projects/{id}` it named nothing callable.
-            f"steps produce, record that: POST /api/v1/projects/{document.project_id}/project/"
-            f"documents/journey?path={document.path} "
+            f"steps produce, record that: {back}{routes}/journey?path={document.path} "
             f'{{"step": "{last}"}} (the step control on its phase bar)',
         )
     ]
