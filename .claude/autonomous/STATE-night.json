@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 20,
+  "iteration": 21,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F756-impl",
-  "next_action": "Do queue item F756-impl: F756 (C), `ls up*/../*` is allowed through a link out of the workspace. Reproduce with a junction via _decide, test first at _glob_tail_walk (hub/hub/mcp_server.py), fix, drive, set its Status. Permission-judge change: assert the refusal and the allows that must stay. Then F757-impl.",
+  "current": "F757-impl",
+  "next_action": "Do queue item F757-impl: F757 (D), Tier 0. A fold renames a change's requirements and the change's own algorithm steps or rationale still name the old keys. Test first at spec_service.fold_draft (hub/hub/spec_service.py): the draft (and the fold) should warn when folded text names a change key the fold renames, or keep the key. Read the FINDINGS entry, drive on a fresh Hub (e2e.py hub-up), set its Status. Then the queue is finished: set next_action to null.",
   "queue": [
     {
       "id": "F738-impl",
@@ -135,9 +135,9 @@
     },
     {
       "id": "F756-impl",
-      "status": "open",
+      "status": "done",
       "title": "F756 (C): a glob in the last component after `..` through a link out is allowed",
-      "detail": "`ls up*/../*` allowed; reproduce with a junction via _decide; test first at _glob_tail_walk; Status."
+      "detail": "fixed (wider than filed: any second glob after a link); see log iteration 21"
     },
     {
       "id": "F757-impl",

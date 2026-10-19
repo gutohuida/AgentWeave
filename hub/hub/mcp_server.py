@@ -2028,9 +2028,9 @@ def _glob_links(
     component is `**` beside other characters (`a**b`), `**` is read as `*` (fnmatch does not
     tell the two apart), one level, as it already was before this was built.
 
-    A piece holding more than one glob-holding component is left to a further slice of this same
-    task -- this returns None for those rather than guess. An extglob group (D3) in the one
-    glob-holding component is masked to `*` before matching (`_mask_extglob_as_star`, design D8
+    A piece holding more than one glob-holding component is walked on (F756): the first is matched
+    here and each later one by `_glob_tail_walk`, against the directory its branch has reached.
+    An extglob group (D3) in a glob-holding component is masked to `*` before matching (`_mask_extglob_as_star`, design D8
     step 2's own words, "each extglob group becomes `*`"): `fnmatch` cannot express the shell's own
     alternation, so this is wider than the shell's real expansion for `@(...)`/`?(...)` (an
     enumerable, narrower translation is possible but not what the design asks for) -- an accepted
@@ -2061,7 +2061,7 @@ def _glob_links(
     glob_positions = [
         index for index, component in enumerate(components) if _holds_glob_character(component)
     ]
-    if len(glob_positions) != 1:
+    if not glob_positions:
         return None
     glob_index = glob_positions[0]
     pattern = components[glob_index]
@@ -2072,8 +2072,28 @@ def _glob_links(
         base = _physical(listed_base)
     except (OSError, ValueError):
         return None
+    return _match_glob_component(pattern, tail, base, listed_base, root, shown, budget, bash)
+
+
+def _match_glob_component(
+    pattern: str,
+    tail: List[str],
+    base: str,
+    listed_base: str,
+    root: str,
+    shown: str,
+    budget: "_Budget",
+    bash: bool,
+) -> Optional[Dict[str, Any]]:
+    """One glob-holding component, `pattern`, matched against the entries of `base` (the real
+    directory a branch has reached; `listed_base` is the same branch as written, R7), then the
+    `tail` after it walked from each match (`_glob_tail_walk`). The first glob component of a piece
+    comes here from `_glob_links`; a later one comes here from `_glob_tail_walk`, which is what
+    keeps a second glob after a `..` or a link from being read as the literal text it is written
+    as (F756: `up*/../*`, `up` a link out, was allowed). The rules `_glob_links` states for `**`,
+    extglob groups and the bash dot rule are this function's."""
     if pattern == "**" and budget.globstar_named:
-        refusal = _glob_tail_walk(tail, base, listed_base, root, shown)
+        refusal = _glob_tail_walk(tail, base, listed_base, root, shown, budget, bash)
         if refusal:
             return refusal
         return _globstar_walk(base, listed_base, tail, root, shown, budget, bash)
@@ -2108,14 +2128,20 @@ def _glob_links(
                 continue
         elif not tail:
             continue
-        refusal = _glob_tail_walk(tail, real, listed, root, shown)
+        refusal = _glob_tail_walk(tail, real, listed, root, shown, budget, bash)
         if refusal:
             return refusal
     return None
 
 
 def _glob_tail_walk(
-    tail: List[str], real: str, listed: str, root: str, shown: str
+    tail: List[str],
+    real: str,
+    listed: str,
+    root: str,
+    shown: str,
+    budget: "_Budget",
+    bash: bool,
 ) -> Optional[Dict[str, Any]]:
     """D8 step 4: walk the literal components after a matched (or globstar-skipped) glob
     component, one at a time, from `real`/`listed` (R7's two paths for the same branch, kept in
@@ -2123,7 +2149,11 @@ def _glob_tail_walk(
     `_globstar_walk` finds, so both read the design's one rule the same way. None ends the branch
     without a refusal -- a raise from a followed link's `realpath`, or from `..`'s, does the same,
     per design "What each changed route returns"."""
-    for component in tail:
+    for index, component in enumerate(tail):
+        if _holds_glob_character(component):
+            return _match_glob_component(
+                component, tail[index + 1 :], real, listed, root, shown, budget, bash
+            )
         listed = os.path.join(listed, component)
         if component == "..":
             try:
@@ -2190,7 +2220,7 @@ def _globstar_walk(
                 real = os.path.realpath(real)
             except (OSError, ValueError):
                 continue
-        refusal = _glob_tail_walk(tail, real, listed, root, shown)
+        refusal = _glob_tail_walk(tail, real, listed, root, shown, budget, bash)
         if refusal:
             return refusal
         if is_link:

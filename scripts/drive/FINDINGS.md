@@ -36747,7 +36747,7 @@ No capability states F675's or F676's text rules: the interpreter and pipe-fed r
 
 ## F756 (C) -- a glob in the last component after `..` through a link out is allowed
 
-**Status:** open 2026-10-19. Found while writing the F444 test.
+**Status:** fixed 2026-10-19 (Tier 0): wider than filed. `_glob_links` returned None for any piece with a second glob-holding component, so `ls */*` and `ls sub*/../*` were allowed too when a glob matched a link out; the walk now goes on (`_match_glob_component`, called from `_glob_tail_walk` for each later glob component). Test `hub/tests/test_a_second_glob_after_a_link_is_judged_where_it_resolves.py`, 7 refusals red before, 15 green after. Earlier: open 2026-10-19. Found while writing the F444 test.
 **Source:** drive
 **Theme:** Permissions & sandbox
 
