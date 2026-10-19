@@ -36705,7 +36705,7 @@ The harness should default to the git toplevel of the current directory, or refu
 
 ## F751 (D) -- a reviewer's verdict still accepts a task's own awaiting evidence recorded for an earlier wording
 
-**Status:** open 2026-10-18. Filed from the 2026-10-18 decision pass (F692 group).
+**Status:** fixed 2026-10-19 (Tier 0, night window): `decide_with_verdict` leaves an awaiting piece whose digest differs from its requirement's when accepting (rejecting stays open, as in `decide`). Tests in `hub/tests/test_the_reviewers_verdict_decides_the_tasks_evidence.py`, the accept case red first. Filed 2026-10-18 from the decision pass (F692 group).
 **Source:** review
 **Theme:** Requirements & evidence
 

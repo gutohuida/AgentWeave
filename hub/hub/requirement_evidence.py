@@ -1317,9 +1317,10 @@ async def decide_with_verdict(
     Approving a task accepts every piece recorded for it that is still awaiting; sending it back
     rejects them. The verdict is the judgement, so the `can_accept_evidence` grant is not asked:
     the reviewer has just judged the work the evidence demonstrates, and a second decision by
-    someone else is what stalled F672. Two pieces are left as they are, for `decide`'s own reasons:
-    one the acting agent recorded itself, and one whose recording run is still live (its commit is
-    about to be re-pointed). Only the task's own pieces (D2): another task serving the same
+    someone else is what stalled F672. Three pieces are left as they are, for `decide`'s own reasons:
+    one the acting agent recorded itself, one whose recording run is still live (its commit is
+    about to be re-pointed), and, when accepting, one recorded for an earlier wording of its
+    requirement (F751: `decide` refuses it as `evidence_stale`; rejecting it stays open). Only the task's own pieces (D2): another task serving the same
     requirement keeps its evidence for its own reviewer.
 
     Stages the reviews in the caller's transaction; the caller commits, or rolls back with it.
@@ -1356,6 +1357,10 @@ async def decide_with_verdict(
             continue
         if evidence.run_id and run_liveness.run_is_live(evidence.run_id):
             continue
+        if decision == ACCEPTED:
+            requirement = await session.get(SpecRequirement, evidence.requirement_id)
+            if requirement is not None and evidence.digest != requirement.digest:
+                continue
         review = EvidenceReview(
             id=f"evr-{short_id()}",
             project_id=evidence.project_id,

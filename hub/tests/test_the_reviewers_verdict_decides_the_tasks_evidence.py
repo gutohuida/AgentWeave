@@ -14,6 +14,7 @@ from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, EvidenceReview, RequirementEvidence, Run, Task
 from hub.spec_lifecycle import Actor
+from hub.spec_payload import SCHEMA_VERSION
 
 from .test_approval_refuses_unaccepted_evidence import (
     a_task_with_awaiting_evidence,
@@ -21,7 +22,10 @@ from .test_approval_refuses_unaccepted_evidence import (
 )
 from .test_task_integration import (
     AGENT_BRANCH,
+    ALPHA,
     BASE,
+    PATH,
+    SUBMIT,
     TASKS,
     commit_on_branch,
     commits_on,
@@ -441,3 +445,74 @@ async def test_rejecting_on_a_live_document_says_the_task_reopened(
     assert rejected.status_code == 200, rejected.text
     assert rejected.json()["task_reopen"] == {"task": task, "reopened": True}
     assert await status_of(task) == "revision_needed"
+
+
+async def reword_the_requirement(app, builder):
+    reworded = await app.post(
+        SUBMIT,
+        json={
+            "path": PATH,
+            "document": {
+                "schema_version": SCHEMA_VERSION,
+                "kind": "change-spec",
+                "title": "Integration demo",
+                "requirements": [{**ALPHA, "statement": "It lists what is due this week"}],
+            },
+        },
+        headers=builder,
+    )
+    assert reworded.status_code == 200, reworded.text
+
+
+async def verdict(task, decision):
+    from hub import requirement_evidence
+
+    async with async_session_factory() as session:
+        decided = await requirement_evidence.decide_with_verdict(
+            session,
+            await session.get(Task, task),
+            actor=Actor(kind="agent", name="reviewer", run_id="run-verdict-r"),
+            decision=decision,
+            reason="ok",
+        )
+        await session.commit()
+    return decided
+
+
+@pytest.mark.asyncio
+async def test_an_approval_leaves_a_piece_recorded_for_an_earlier_wording(
+    app, auth_headers, builder, reviewer, tmp_path
+):
+    """F751: `decide` refuses accepting it (`evidence_stale`); the verdict must not do what the
+    single decision refuses. FAILS before: the record read `accepted`."""
+    from hub import requirement_evidence
+
+    await ready(app, auth_headers, builder, tmp_path)
+    task, evidence, _work = await a_task_with_awaiting_evidence(
+        app, auth_headers, builder, tmp_path
+    )
+    await reword_the_requirement(app, builder)
+
+    decided = await verdict(task, requirement_evidence.ACCEPTED)
+
+    assert decided == []
+    assert await state_of(evidence) == "awaiting"
+    assert await reviews_of(evidence) == []
+
+
+@pytest.mark.asyncio
+async def test_sending_back_still_rejects_a_piece_for_an_earlier_wording(
+    app, auth_headers, builder, reviewer, tmp_path
+):
+    """Control: `decide` leaves rejecting a stale piece open, so the verdict does too."""
+    from hub import requirement_evidence
+
+    await ready(app, auth_headers, builder, tmp_path)
+    task, evidence, _work = await a_task_with_awaiting_evidence(
+        app, auth_headers, builder, tmp_path
+    )
+    await reword_the_requirement(app, builder)
+
+    await verdict(task, requirement_evidence.REJECTED)
+
+    assert await state_of(evidence) == "rejected"
