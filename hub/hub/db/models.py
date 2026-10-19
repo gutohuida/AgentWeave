@@ -126,6 +126,15 @@ class Project(Base):
     # merge. Set only by the operator. Null or empty means no checks, and approval is unchanged.
     checks: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
+    # --- Reach (reach-1019, `hub/hub/reach.py`) ---
+    # The posture every agent's run gets when neither its conversation nor the agent states one;
+    # NULL is the runner's built-in posture. An agent's own `default_permission_mode` wins over it
+    # in either direction.
+    default_permission_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Extra roots (`read`/`readwrite`) and hosts the workspace judge allows: `{"roots": [...],
+    # "hosts": [...]}`. NULL grants nothing beyond the workspace.
+    reach_grants: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+
     # --- Checkpointing ---
     # "off" | "offered" | "automatic".
     #
@@ -244,6 +253,9 @@ class Agent(Base):
     # This is the same choice the composer's Permissions pill makes, applied when no run states
     # one, which is why it is not a vocabulary of its own.
     default_permission_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # This agent's own reach grants (reach-1019), replacing the project's whole; NULL inherits the
+    # project's, and an empty object narrows this agent to its workspace.
+    reach_grants: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     # Per-agent overrides of the project's checkpoint policy. All three are NULL for an agent
     # that inherits.
     #

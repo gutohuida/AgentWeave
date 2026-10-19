@@ -8,9 +8,14 @@ import {
   useUpdateAgentGithubMcp,
   useUpdateAgentGrant,
   useUpdateAgentPermissionDefault,
+  useUpdateAgentReachGrants,
   useUpdateAgentReviewAgents,
   useAgentLaunchability,
 } from '@/api/agents'
+import type { ReachGrants } from '@/api/projects'
+import { Button } from '@/components/ui/button'
+import { ReachGrantsEditor } from '@/components/environment/ReachGrantsEditor'
+import { EMPTY_GRANTS, cleanGrants, describeGrants } from '@/lib/reachGrants'
 import { permissionModeValues, useModelCatalog } from '@/api/modelCatalog'
 import { useBindAgentCharter, useCharters } from '@/api/charters'
 import {
@@ -191,6 +196,8 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
   const builtInLabel = builtIn
     ? (options.find((option) => option.id === builtIn)?.label ?? builtIn)
     : 'depends on the runner'
+  // reach-1019: when the project states a default, clearing this agent's gives the project's.
+  const inherited = agent.permission_mode_from_project ? 'Project default' : 'Built-in default'
 
   if (isLoading) {
     return <span className="text-xs" style={{ color: 'var(--text-3)' }}>Loading postures...</span>
@@ -208,7 +215,7 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
           opacity: update.isPending ? 0.6 : 1,
         }}
       >
-        <option value="">Built-in default ({builtInLabel})</option>
+        <option value="">{inherited} ({builtInLabel})</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>{option.label}</option>
         ))}
@@ -228,6 +235,67 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
       {update.isError && (
         <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
           Could not update the default posture.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** What this agent may reach beyond its workspace under Workspace only (reach-1019).
+ *
+ * Either the project's grants, inherited, or the agent's own, which replace them whole -- so an
+ * empty list narrows this agent back to its workspace while the project's other agents keep theirs.
+ * Edited as a draft and saved with a button, since a list is not one value to commit on blur.
+ */
+export function ReachGrantsSetting({ agent }: { agent: AgentSummary }) {
+  const update = useUpdateAgentReachGrants()
+  const own = agent.reach_grants ?? null
+  const [draft, setDraft] = useState<ReachGrants>(own ?? EMPTY_GRANTS)
+
+  useEffect(() => {
+    setDraft(own ?? EMPTY_GRANTS)
+  }, [own])
+
+  const projectGrants = agent.project_reach_grants ?? null
+
+  return (
+    <div>
+      <Select
+        aria-label={`Granted reach for ${agent.name}`}
+        value={own === null ? 'inherit' : 'own'}
+        onChange={(event) =>
+          update.mutate({
+            agent: agent.name,
+            grants: event.target.value === 'inherit' ? null : (projectGrants ?? EMPTY_GRANTS),
+          })
+        }
+        disabled={update.isPending}
+        className="control-field w-full px-3 py-2 rounded-md text-sm"
+      >
+        <option value="inherit">The project's ({describeGrants(projectGrants)})</option>
+        <option value="own">This agent's own</option>
+      </Select>
+      {own !== null && (
+        <div className="mt-2 space-y-2">
+          <ReachGrantsEditor grants={draft} onChange={setDraft} label={`Granted reach for ${agent.name}`} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={update.isPending}
+            onClick={() => update.mutate({ agent: agent.name, grants: cleanGrants(draft) ?? EMPTY_GRANTS })}
+          >
+            Save granted reach
+          </Button>
+        </div>
+      )}
+      <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+        Applies under Workspace only, to Claude and Copilot runs. Everything not granted is refused as
+        before; writes outside the workspace are still recorded on the run.
+      </p>
+      {update.isError && (
+        <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
+          Could not save the granted reach.
         </p>
       )}
     </div>

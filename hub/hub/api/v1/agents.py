@@ -64,6 +64,7 @@ from ...model_catalog import (
     undeclared_model_reason,
 )
 from ...output_recording import record_agent_output
+from ...reach import validated_grants
 from ...review_turn import ReviewContext, verdict_evidence_sentence
 from ...runner_adapters import get_adapter, resolve_access_axes
 from ...runner_provider import has_provider, runner_probe_config
@@ -326,6 +327,11 @@ async def list_agents(
     if not session_agents_meta:
         return []
 
+    # reach-1019: the project's default posture sits between an agent's own and the runner's.
+    project_row = await session.get(Project, project_id)
+    project_posture = project_row.default_permission_mode if project_row is not None else None
+    project_grants = project_row.reach_grants if project_row is not None else None
+
     agent_names = list(session_agents_meta.keys())
 
     # Bulk fetch latest heartbeat per agent (ordered by agent, then timestamp desc)
@@ -481,10 +487,16 @@ async def list_agents(
             axes = resolve_access_axes(
                 _bound_adapter, hub_client=spawn_config.get("hub_client"), flags=bound_runner.flags
             )
-            permission_mode_at_rest = _bound_adapter.posture_at_rest(
-                axes, yolo=bool(spawn_config.get("yolo"))
+            # Clearing the agent's default gives the project's when it has one (reach-1019), the
+            # runner's own otherwise; the agent's own (and `yolo`, its older spelling) wins.
+            permission_mode_built_in = project_posture or _bound_adapter.posture_at_rest(
+                axes, yolo=False
             )
-            permission_mode_built_in = _bound_adapter.posture_at_rest(axes, yolo=False)
+            permission_mode_at_rest = (
+                _bound_adapter.posture_at_rest(axes, yolo=True)
+                if spawn_config.get("yolo")
+                else permission_mode_built_in
+            )
 
         _runner = agent_meta.get("runner", "native")
         _runner_adapter = get_adapter(_runner)
@@ -525,6 +537,7 @@ async def list_agents(
                 runner_id=agent_row.runner_id if agent_row else None,
                 permission_mode_at_rest=permission_mode_at_rest,
                 permission_mode_built_in=permission_mode_built_in,
+                permission_mode_from_project=bool(project_posture and _bound_adapter is not None),
                 charter_id=agent_row.charter_id if agent_row else None,
                 permission_timeout_seconds=(
                     agent_row.permission_timeout_seconds if agent_row else None
@@ -533,6 +546,8 @@ async def list_agents(
                     agent_row.question_timeout_seconds if agent_row else None
                 ),
                 default_permission_mode=(agent_row.default_permission_mode if agent_row else None),
+                reach_grants=(agent_row.reach_grants if agent_row else None),
+                project_reach_grants=project_grants,
                 checkpoint_mode=agent_row.checkpoint_mode if agent_row else None,
                 checkpoint_threshold_mode=(
                     agent_row.checkpoint_threshold_mode if agent_row else None
@@ -1963,6 +1978,7 @@ async def _render_hub_agent_context(
     access_path: str = "mcp",
     runner: Optional[str] = None,
     question_timeout: Optional[int] = None,
+    reach: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Render the canonical model-facing context for one agent.
 
@@ -2243,8 +2259,11 @@ async def _render_hub_agent_context(
             )
         else:
             lines.append("- This is the project's shared checkout, not an isolated worktree.")
+        # `reach` (reach-1019) is the run's own posture and grants, as `reach.describe_reach`
+        # states them; a context read outside any run gets today's sentence.
         lines.append(
-            "- Resolve every path against this directory. Files outside it are normally refused."
+            reach
+            or "- Resolve every path against this directory. Files outside it are normally refused."
         )
         lines.append("")
 
@@ -3022,6 +3041,7 @@ _PATCH_AGENT_FIELDS = frozenset(
         "charter_id",
         "config",
         "default_permission_mode",
+        "reach_grants",
         *WAITING_SETTING_FIELDS,
         *CHECKPOINT_OVERRIDE_FIELDS,
         *GRANT_FIELDS,
@@ -3069,6 +3089,7 @@ async def patch_agent(
         "charter_id",
         "description",
         "default_permission_mode",
+        "reach_grants",
         *CHECKPOINT_OVERRIDE_FIELDS,
         *WAITING_SETTING_FIELDS,
     }
@@ -3160,6 +3181,13 @@ async def patch_agent(
     if "default_permission_mode" in body:
         _apply_default_permission_mode(agent_row, body["default_permission_mode"])
 
+    if "reach_grants" in body:
+        # reach-1019: this agent's own grants replace the project's whole; null inherits them.
+        try:
+            agent_row.reach_grants = validated_grants(body["reach_grants"])
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"reach_grants: {exc}") from exc
+
     bound_runner = (
         await session.get(Runner, agent_row.runner_id) if agent_row.runner_id is not None else None
     )
@@ -3211,6 +3239,7 @@ async def patch_agent(
         "permission_timeout_seconds": agent_row.permission_timeout_seconds,
         "question_timeout_seconds": agent_row.question_timeout_seconds,
         "default_permission_mode": agent_row.default_permission_mode,
+        "reach_grants": agent_row.reach_grants,
         **{field: getattr(agent_row, field) for field in CHECKPOINT_OVERRIDE_FIELDS},
         **{field: getattr(agent_row, field) for field in GRANT_FIELDS},
     }

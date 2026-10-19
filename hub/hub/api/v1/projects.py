@@ -22,7 +22,7 @@ from ...auth import get_operator, get_operator_project
 from ...checkpoint_policy import agent_window, threshold_error
 from ...db.engine import get_session
 from ...db.models import Agent, AgentHeartbeat, OperatorCredential, Project, Run, Runner
-from ...model_catalog import undeclared_model_reason
+from ...model_catalog import permission_mode_values, undeclared_model_reason
 from ...project_lifecycle import ProjectLifecycleService
 from ...project_workspace import (
     ProjectPathError,
@@ -30,6 +30,7 @@ from ...project_workspace import (
     raise_workspace_http_error,
     resolve_project_workspace,
 )
+from ...reach import ReachGrants
 from ...runner_provider import has_provider, provider_model_problem
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
@@ -143,7 +144,26 @@ class ProjectSettings(BaseModel):
     # result. Null means no checks, and approval is unchanged.
     checks: Optional[List[ProjectCheck]] = Field(default=None, max_length=20)
 
+    # --- Reach (reach-1019, `hub/hub/reach.py`) ---
+    # The posture every agent's run gets when neither its conversation nor the agent states one.
+    # Null is the runner's built-in posture; an agent's own default wins over it either way.
+    default_permission_mode: Optional[str] = Field(default=None, max_length=32)
+    # Roots and hosts the workspace judge allows beyond the workspace; an agent's own replace them.
+    reach_grants: Optional[ReachGrants] = None
+
     model_config = {"extra": "forbid"}
+
+    @field_validator("default_permission_mode")
+    @classmethod
+    def known_posture(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        permitted = {item.id for item in permission_mode_values()}
+        if value not in permitted:
+            raise ValueError(
+                "default_permission_mode must be null or one of: " + ", ".join(sorted(permitted))
+            )
+        return value
 
     @field_validator("checks")
     @classmethod

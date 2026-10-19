@@ -5714,3 +5714,72 @@ def test_migration_0134_is_a_no_op_without_the_table(tmp_path) -> None:
         conn.commit()
     _upgrade_to(db_url, "0134")
     _downgrade_to(db_url, "0133")
+
+
+# ---------------------------------------------------------------------------
+# 0135 -- projects.default_permission_mode, projects.reach_grants, agents.reach_grants (reach-1019)
+# ---------------------------------------------------------------------------
+
+_REACH_COLUMNS = {
+    "projects": ("default_permission_mode", "reach_grants"),
+    "agents": ("reach_grants",),
+}
+
+
+def test_migration_0135_adds_nullable_reach_columns_and_keeps_old_rows(tmp_path) -> None:
+    db_file = tmp_path / "reach.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        for table, columns in _REACH_COLUMNS.items():
+            for column in columns:
+                conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0134')")
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('proj-old', 'old', "
+            "'2026-10-19T00:00:00')"
+        )
+        conn.commit()
+        before = {
+            table: {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            for table in _REACH_COLUMNS
+        }
+
+    _upgrade_to(db_url, "0135")
+
+    with sqlite3.connect(db_file) as conn:
+        for table, columns in _REACH_COLUMNS.items():
+            info = {r[1]: r for r in conn.execute(f"PRAGMA table_info({table})")}
+            for column in columns:
+                assert info[column][3] == 0, (table, column)  # nullable
+        old = conn.execute(
+            "SELECT default_permission_mode, reach_grants FROM projects WHERE id = 'proj-old'"
+        ).fetchone()
+    assert old == (None, None)  # nothing backfilled
+
+    _downgrade_to(db_url, "0134")
+
+    with sqlite3.connect(db_file) as conn:
+        after = {
+            table: {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            for table in _REACH_COLUMNS
+        }
+        kept = conn.execute("SELECT count(*) FROM projects WHERE id = 'proj-old'").fetchone()
+    assert after == before
+    assert kept == (1,)
+
+
+def test_migration_0135_is_a_no_op_without_the_tables(tmp_path) -> None:
+    db_file = tmp_path / "bare.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("DROP TABLE agents")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0134')")
+        conn.commit()
+    _upgrade_to(db_url, "0135")
+    _downgrade_to(db_url, "0134")

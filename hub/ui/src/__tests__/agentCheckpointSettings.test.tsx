@@ -58,6 +58,7 @@ vi.mock('@/api/agents', async (importOriginal) => {
     useAgents: () => ({ data: roster, isLoading: false }),
     useArchiveAgent: () => ({ mutate: vi.fn(), isPending: false, error: null }),
     useUpdateAgentDescription: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+    useUpdateAgentReachGrants: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     useUpdateAgentPermissionDefault: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     useUpdateAgentCheckpointOverride: () => ({
       mutate: thresholdMutate, isPending: false, isError: false,

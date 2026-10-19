@@ -212,7 +212,7 @@ describe('phase 5 project settings and locate repair', () => {
   it('groups its rows under headings, Collaboration first and Project last', () => {
     render(<ProjectSettingsPanel />)
     expect(screen.getAllByTestId('settings-group-heading').map((h) => h.textContent)).toEqual([
-      'Collaboration', 'Integration', 'Checkpointing', 'Project',
+      'Collaboration', 'Reach', 'Integration', 'Checkpointing', 'Project',
     ])
     const rows = Array.from(document.querySelectorAll('.settings-row'))
     expect(rows[rows.length - 1]).toHaveTextContent('Delete project')

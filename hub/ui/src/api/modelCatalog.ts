@@ -76,7 +76,7 @@ export const PERMISSION_MODE_CONTROL = 'permission_mode'
 export function permissionModeValues(catalog: ModelCatalogResponse | undefined): ControlValue[] {
   const seen = new Map<string, ControlValue>()
   for (const provider of catalog?.providers ?? []) {
-    const control = provider.controls.find((c) => c.id === PERMISSION_MODE_CONTROL)
+    const control = (provider.controls ?? []).find((c) => c.id === PERMISSION_MODE_CONTROL)
     for (const value of control?.values ?? []) {
       if (!seen.has(value.id)) seen.set(value.id, value)
     }

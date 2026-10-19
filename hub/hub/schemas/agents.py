@@ -92,6 +92,8 @@ class AgentSummary(BaseModel):
     # would give (the same with `yolo` off). Null with no runner bound: there is no run to describe.
     permission_mode_at_rest: Optional[str] = Field(default=None, max_length=32)
     permission_mode_built_in: Optional[str] = Field(default=None, max_length=32)
+    # Whether that built-in posture is the project's default (reach-1019) rather than the runner's.
+    permission_mode_from_project: bool = False
     runner_options: Optional[Dict[str, Any]] = (
         None  # Runner-specific options (e.g., memory for Codex)
     )
@@ -105,6 +107,10 @@ class AgentSummary(BaseModel):
     # or None for the built-in default. The composer reads it so its Permissions pill shows what
     # will actually happen rather than the catalog default.
     default_permission_mode: Optional[str] = Field(default=None, max_length=32)
+    # This agent's own reach grants (reach-1019), replacing the project's; None inherits them.
+    reach_grants: Optional[Dict[str, Any]] = None
+    # The project's grants, which the agent has when `reach_grants` is None.
+    project_reach_grants: Optional[Dict[str, Any]] = None
     # Per-agent checkpoint overrides. All None means this agent inherits the project's policy;
     # a stated threshold replaces the project's whole threshold, mode and value together.
     checkpoint_mode: Optional[str] = Field(default=None, max_length=16)

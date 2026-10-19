@@ -5,6 +5,7 @@ import { useConfigStore } from '@/store/configStore'
 import { onSseReconnect, useSSE, SSEEvent } from '@/hooks/useSSE'
 import { hubDate } from '@/lib/hubTime'
 import { PERMISSION_MODE_CONTROL } from './modelCatalog'
+import type { ReachGrants } from './projects'
 
 export interface AgentSummary {
   name: string
@@ -35,6 +36,12 @@ export interface AgentSummary {
    *  bound; absent from a Hub older than F283's fix, which a reader treats as unknown. */
   permission_mode_at_rest?: string | null
   permission_mode_built_in?: string | null
+  /** Whether `permission_mode_built_in` is the project's default rather than the runner's own. */
+  permission_mode_from_project?: boolean
+  /** This agent's own reach grants, replacing the project's whole; null inherits them. */
+  reach_grants?: ReachGrants | null
+  /** The project's grants, which this agent has when `reach_grants` is null. */
+  project_reach_grants?: ReachGrants | null
   /** Per-agent checkpoint overrides. All null means "inherit the project's". */
   checkpoint_mode?: 'off' | 'offered' | 'automatic' | null
   checkpoint_threshold_mode?: 'percent' | 'tokens' | null
@@ -150,6 +157,19 @@ export interface AgentRunFacts {
   started_at: string
   ended_at?: string | null
   error?: string | null
+  /** Where this run wrote outside its workspace, `Run.outside_workspace_writes` verbatim: null is
+   *  "not observed", `[]` "observed, nothing left". Each element carries `kind`; one destination
+   *  is `{kind, name, tool, path, calls}`, and past the bound one `{kind: "overflow", destinations}`. */
+  outside_workspace_writes?: OutsideWrite[] | null
+}
+
+export interface OutsideWrite {
+  kind: string
+  name?: string | null
+  tool?: string
+  path?: string
+  calls?: number
+  destinations?: number
 }
 
 /** The timeline response: the events, and the facts of the runs those events name.
@@ -294,6 +314,25 @@ export function useUpdateAgentPermissionDefault() {
       patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, {
         default_permission_mode: mode,
       }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'project' &&
+          query.queryKey[1] === projectId &&
+          query.queryKey[2] === 'agents',
+      })
+    },
+  })
+}
+
+/** An agent's own reach grants (reach-1019): an object replaces the project's whole, null
+ *  inherits them again. */
+export function useUpdateAgentReachGrants() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, grants }: { agent: string; grants: ReachGrants | null }) =>
+      patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { reach_grants: grants }),
     onSuccess: () => {
       queryClient.invalidateQueries({
         predicate: (query) =>

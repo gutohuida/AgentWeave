@@ -1,0 +1,200 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project set to Full access through the settings route, a Copilot and a Claude agent with no default",
+      "how_to_check": "pytest hub/tests/test_an_operator_sets_how_far_an_agent_reaches.py (written first, failing on HEAD)",
+      "key": "seam-test",
+      "requirement": "project-default",
+      "then": "the Copilot run gets bypassPermissions and a spec-turn read outside the workspace is allowed; the Claude argv says bypassPermissions; an agent default of workspace narrows it",
+      "when": "each is triggered through the real trigger route, and the Copilot request it receives is judged as a spec turn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "project grants of one readwrite root, one read root and localhost:*, posture Workspace only",
+      "how_to_check": "pytest hub/tests/test_an_operator_sets_how_far_an_agent_reaches.py",
+      "key": "grants-test",
+      "requirement": "grants",
+      "then": "the run's env carries AW_REACH_GRANTS; a write in the readwrite root, a Read in the read root and curl to localhost are allowed; a shell write in the read root, an ungranted root and an ungranted host are refused; an agent's empty grants narrow it back",
+      "when": "a Claude run is triggered and its judge decides with the env it received"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8120 with a Copilot agent (claude-haiku-4.5) and a Claude agent (Haiku)",
+      "how_to_check": "scripts/drive/d1019_reach.py on :8120, at most 6 Copilot turns",
+      "key": "drive",
+      "requirement": "allow-all-copilot",
+      "then": "the Copilot turn and a spec turn reach outside the workspace under Full access; the narrowed agent is refused; the granted root and host are allowed and an ungranted one refused; the outside write shows on the run",
+      "when": "the project is set to Full access, then one agent is narrowed, then the project is set to Workspace only with a granted root and host"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "b6d4ac52d562676e96e84b31184c0585c1f8f33e9a6b377ce787b6f553861832",
+      "FR-2": "b7e6739023bc04a60db203afa687fec22e34dec0bd23d52104c3c7aceb5bed07",
+      "FR-3": "1326e6a67b664cedf2a35f92f63a478fbd62373da60bd5469f117f368155009f",
+      "FR-4": "9986de9468235e6392995b0bbe45559e87fa29a3fd5d920da81c9071d13bd67a",
+      "FR-5": "62ba0b98d5494d9b5b9b391b82dc175311b932dc70e434506df5b80c42261bb4",
+      "FR-6": "ea34adb6e880a85a97c29548132de8e8f5ac23cde0c5ed4d6819d4beb02f394a"
+    },
+    "high_water": 6,
+    "requirements": {
+      "allow-all-copilot": "FR-3",
+      "allow-all-spec-turn": "FR-4",
+      "grants": "FR-5",
+      "guardrail": "FR-1",
+      "outside-record": "FR-6",
+      "project-default": "FR-2"
+    },
+    "retired": {}
+  },
+  "design": "Tier 2 (permission posture, security, a migration).\nD1. Allow-all is the existing Full access (`bypassPermissions`); no fifth posture. Resolution: conversation, then agent default, then project default (new), then the runner's posture at rest.\nD2. Grants are data, not a posture: Workspace only with no grants is today's Workspace only; with grants it is the middle setting. An agent's grants replace the project's whole, as a checkpoint override does.\nD3. The Hub resolves `{temp}`/`{project}` and the agent-or-project choice at trigger time and hands the judge one JSON value in `AW_REACH_GRANTS` (mcp_server.py is stdlib-only; Copilot's in-process judge reads the same variable from the run env). The judge consults grants only where it would refuse a path as outside (`_judge_resolved`) or an address as a network address (`_judge_url`, schemeless host:port).\nD4. Codex is out of scope: its sandbox is Codex's own, and Codex is not drivable here.\nHazard: migration 0135 adds three nullable columns (projects.default_permission_mode, projects.reach_grants, agents.reach_grants), no backfill, so every existing project and agent behaves as before; it reaches :8000 on the operator's next restart. Rollback: downgrade drops the three columns; revert the commit. A wider posture is only ever the operator's choice.",
+  "evidence": {
+    "checked": [
+      "agent_trigger.py:1195 applies only the agent's default",
+      "copilot_acp.py _decide_permission judges a Full-access spec turn as workspace",
+      "mcp_server._judge_resolved is the one place a path is ruled outside",
+      "outside_write_record records under every posture; the UI shows it only as an activity event"
+    ],
+    "limits": [
+      "Codex is not drivable here"
+    ]
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "On 2026-10-16 :8000 recorded 48 refusals, all from the Workspace judge; about 12 were by design (temp, the project root, localhost) and the operator escalated QA and Architect to Full access to get work done. Posture is per agent only (`Agent.default_permission_mode`, applied at `agent_trigger.py:1195`), so there is no project-wide setting. A Copilot spec turn under Full access is judged as Workspace (`copilot_acp._decide_permission`, `judged = WORKSPACE if spec_turn and posture == _FULL`). Between Workspace only and Full access there is nothing: the judge (`mcp_server._judge_resolved`, `_judge_url`) refuses every path outside the workspace and every address but the run's own Hub.",
+  "requirements": [
+    {
+      "key": "guardrail",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "reach-D1 (operator, 2026-10-19).",
+      "statement": "The capability MUST say that the workspace boundary is a guardrail against an agent's mistakes, not containment: the judge reads what a call says, not what the process does."
+    },
+    {
+      "key": "project-default",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "reach-D2: settable for every agent in a project or for specific agents.",
+      "statement": "A project MUST have a default posture, `default_permission_mode` on PUT /projects/{id}/settings (a catalog posture or null), that a run of any of its agents receives when neither the conversation nor the agent states one; the agent's own default MUST win over it in either direction, and the agent roster's at-rest posture MUST report it."
+    },
+    {
+      "key": "allow-all-copilot",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "reach-D2 supersedes fix-D11 / wpc-obs-4.",
+      "statement": "Full access MUST be offered and honoured for a Copilot agent, set on the agent or the project: the run asks Copilot for allow-all, and the Hub allows whatever Copilot still asks."
+    },
+    {
+      "key": "allow-all-spec-turn",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "reach-D2 supersedes ghcp-a-spec-turn-full-access.",
+      "statement": "A Copilot specification turn under Full access MUST have its requests other than edits allowed, not judged as Workspace only; it still writes no file and keeps its runner's widening flags stripped (the F4 role boundary, not reach)."
+    },
+    {
+      "key": "grants",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "reach-D3: the middle setting, project level with a per-agent override. A shell word cannot say whether it reads or writes, so a shell command needs a readwrite root.",
+      "statement": "A project MUST hold reach grants (`reach_grants`: roots, each `read` or `readwrite`, an absolute path or `{temp}` / `{project}`; hosts as `host`, `host:port`, `host:*` or `*.domain`), and an agent MAY hold its own, which replaces the project's whole (null inherits). Wherever the workspace judge decides for a Claude or Copilot run, a path inside a readwrite root MUST be allowed, a path inside a read root only for a read tool (Read, Glob, Grep, LS, Copilot read), and a shell address whose host a grant names MUST be allowed; every other outside path and address MUST be refused as today."
+    },
+    {
+      "key": "outside-record",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "reach-4, the recommendation: keep the record, out of the way.",
+      "statement": "Under every posture, Full access and granted roots included, a write outside the workspace MUST still be recorded on the run, and the run's row in the conversation MUST show it, with no card."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "project default posture",
+      "Copilot and spec-turn Full access",
+      "reach grants for Claude and Copilot",
+      "the outside-write line on a run"
+    ],
+    "non_goals": [
+      "reach-5: the three judge false positives (on hold)",
+      "Codex grants",
+      "a fifth posture id"
+    ]
+  },
+  "summary": "The operator can give agents more room (reach-1019): a project-wide default posture with a per-agent override either way, Full access (allow-all) that really covers Copilot and spec turns, and a middle setting, Workspace only plus granted roots and hosts. The boundary is a guardrail against an agent's mistakes, not containment, and writes outside the workspace stay recorded on the run under every posture.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "hub/tests/test_an_operator_sets_how_far_an_agent_reaches.py",
+      "files": [
+        "hub/tests/test_an_operator_sets_how_far_an_agent_reaches.py"
+      ],
+      "from": null,
+      "key": "test",
+      "requirements": [
+        "project-default",
+        "allow-all-copilot",
+        "allow-all-spec-turn",
+        "grants"
+      ],
+      "reviewer": null,
+      "title": "Acceptance test, failing first"
+    },
+    {
+      "depends_on": [
+        "test"
+      ],
+      "description": "migration 0135; projects.py and agents.py settings; agent_trigger.py resolution and AW_REACH_GRANTS; mcp_server.py grants; copilot_acp.py spec turn and grants; settings UI and the run's outside-write line",
+      "files": [
+        "hub/hub/migrations/versions/0135_reach_settings.py",
+        "hub/hub/db/models.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/hub/api/v1/agent_trigger.py",
+        "hub/hub/reach.py",
+        "hub/hub/mcp_server.py",
+        "hub/hub/copilot_acp.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "guardrail",
+        "project-default",
+        "allow-all-copilot",
+        "allow-all-spec-turn",
+        "grants",
+        "outside-record"
+      ],
+      "reviewer": null,
+      "title": "Columns, settings, trigger, judge, UI"
+    },
+    {
+      "depends_on": [
+        "build"
+      ],
+      "description": "scripts/drive/d1019_reach.py",
+      "files": [
+        "scripts/drive/d1019_reach.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "allow-all-copilot",
+        "allow-all-spec-turn",
+        "grants",
+        "outside-record"
+      ],
+      "reviewer": null,
+      "title": "Drive on :8120"
+    }
+  ],
+  "title": "An operator sets how far an agent reaches"
+}

@@ -118,6 +118,7 @@ vi.mock('@/api/agents', async (importOriginal) => {
     ...actual,
     useAgentSessions: () => ({ data: { sessions: [] }, isLoading: false }),
     useAgentLaunchability: () => ({ data: undefined }),
+    useUpdateAgentReachGrants: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     useUpdateAgentPermissionDefault: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     useAgents: () => ({
       data: [
