@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "d7b552c",
     "stop_at": "2026-10-19T17:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-10-19-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-7",
-    "next_action": "Do the 'D-7' item: the playbook's merge gate (.claude/loops/day-window.md). Wait on CI for the exact tip sha, then close with usage_report --windows --since 2026-10-19 and set next_action null.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -64,7 +64,7 @@
         },
         {
             "id": "D-7",
-            "status": "open",
+            "status": "done",
             "title": "Merge gate and closing entry",
             "detail": "Playbook 'The merge gate'. No migration in master..branch (checked at compose), no DIRECTION section dated today, rev-list branch..master was 0. Wait on CI for the exact tip sha. Close with usage_report --windows --since 2026-10-19 and next_action null."
         }
