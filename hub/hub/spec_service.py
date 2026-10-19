@@ -52,6 +52,9 @@ class SaveResult:
     blocking: List[Dict[str, Any]] = field(default_factory=list)
     divergence: Optional[Dict[str, str]] = None
     warnings: List[Dict[str, Any]] = field(default_factory=list)
+    # Set by a fold only: the capability's warnings from before the fold, which `warnings` no
+    # longer repeats, so the change is not reported for gaps it did not introduce (F754).
+    standing_warnings: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -333,6 +336,24 @@ async def _apply_and_write(
         source=spec_index.SOURCE_HUB,
     )
 
+    blocking, warnings = await _completeness_report(session, workspace, document, payload)
+    return SaveResult(
+        path=document.path,
+        phase=document.phase,
+        identifiers=identifiers,
+        blocking=blocking,
+        divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
+        warnings=warnings,
+    )
+
+
+async def _completeness_report(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    document: SpecDocument,
+    payload: SpecPayload,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """What a write of `payload` to `document` reports: `(blocking, warnings)`."""
     board_served = await requirement_links.served_keys(session, document.id)
     approved_paths = await spec_lifecycle.approved_document_paths(session, document.project_id)
     roadmaps = await roadmap_states(session, workspace, document.project_id, payload)
@@ -347,23 +368,16 @@ async def _apply_and_write(
             roadmaps=roadmaps,
         )
     )
-    return SaveResult(
-        path=document.path,
-        phase=document.phase,
-        identifiers=identifiers,
-        blocking=[finding.to_dict() for finding in refusals],
-        divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
-        warnings=[
-            f.to_dict()
-            for f in (
-                *gaps,
-                *spec_completeness.overlap_warnings(payload),
-                *spec_completeness.undeclared_files_warnings(payload),
-                *spec_completeness.test_only_task_warnings(payload),
-                *spec_completeness.reviewer_undeclared_warnings(payload),
-            )
-        ],
-    )
+    return [finding.to_dict() for finding in refusals], [
+        f.to_dict()
+        for f in (
+            *gaps,
+            *spec_completeness.overlap_warnings(payload),
+            *spec_completeness.undeclared_files_warnings(payload),
+            *spec_completeness.test_only_task_warnings(payload),
+            *spec_completeness.reviewer_undeclared_warnings(payload),
+        )
+    ]
 
 
 # The non-requirement fields treated as one unit (design D2): everything a submission carries
@@ -1097,9 +1111,13 @@ async def fold(
             "requirement, or name the one it replaces",
             code="fold_key_collision",
         )
+    standing = await _standing_warnings(session, workspace, capability)
     result = await merge_document(
         session, workspace, capability, [change], draft.payload, actor=actor, note=note
     )
+    if isinstance(result, SaveResult):
+        result.standing_warnings = [w for w in result.warnings if _identity(w) in standing]
+        result.warnings = [w for w in result.warnings if _identity(w) not in standing]
     if isinstance(result, ProposeResult) or not archive:
         return result, False
     await spec_lifecycle.transition(
@@ -1114,6 +1132,23 @@ async def fold(
     # transition, and a fold that archives must too.
     await rerender_phase(session, workspace, change)
     return result, True
+
+
+def _identity(warning: Dict[str, Any]) -> Tuple[str, str]:
+    # Not `where`: it is an index, and a retired requirement shifts the ones after it.
+    return warning["code"], warning["message"]
+
+
+async def _standing_warnings(
+    session: AsyncSession, workspace: ProjectWorkspace, capability: SpecDocument
+) -> set:
+    """The warnings a write of the capability's stored payload reports, before a fold."""
+    try:
+        payload = validate_payload(_read(workspace, capability))
+    except PayloadError:
+        return set()
+    _, warnings = await _completeness_report(session, workspace, capability, payload)
+    return {_identity(w) for w in warnings}
 
 
 async def rename_document(

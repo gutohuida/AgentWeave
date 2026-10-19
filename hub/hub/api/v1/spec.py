@@ -3767,7 +3767,12 @@ async def fold_document(
     if isinstance(result, spec_service.ProposeResult):
         response.update(merged=0, proposals=result.proposals)
     else:
-        response.update(merged=1, blocking=result.blocking, warnings=result.warnings)
+        response.update(
+            merged=1,
+            blocking=result.blocking,
+            warnings=result.warnings,
+            standing_warnings=result.standing_warnings,
+        )
     await session.commit()
     for document in (capability, change):
         await sse_manager.broadcast(

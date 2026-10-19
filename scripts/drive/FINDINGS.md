@@ -36731,7 +36731,7 @@ Folding one change into several capabilities works, but only with `archive:false
 
 ## F754 (D) -- every fold into some capabilities reports the capability's old gaps as if they were the change's
 
-**Status:** open 2026-10-18. Spec-flow friction from the same authoring.
+**Status:** fixed 2026-10-19 (Tier 0, night window): the fold's `warnings` name only what the fold introduced; the capability's warnings from before it are returned apart as `standing_warnings` (matched by code and message; `where` is an index that shifts). Test `hub/tests/test_a_fold_reports_only_the_gaps_it_introduced.py`, red first. Driven on a fresh Hub (:8031): `warnings` named only the folded `widgets-glow-pulse`, `standing_warnings` the capability's own `widgets-exist`. Not as filed: since F703 (5486070) these were already `warnings`, not `blocking`. Spec-flow friction from the same authoring.
 **Source:** drive
 **Theme:** Spec documents
 
