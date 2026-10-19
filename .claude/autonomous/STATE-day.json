@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "d7b552c",
     "stop_at": "2026-10-19T17:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-19-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-ledger-sweep",
-    "next_action": "Do the 'sweep-ledger-sweep' item: read .claude/skills/e2e-loop/SKILL.md in full, then drive its detail on a scratch Hub >=8110; file findings with Ready/Tier lines; set current to the next open item.",
+    "current": "ledger-tidy",
+    "next_action": "Do the 'ledger-tidy' item: run py -3.11 scripts/backlog_page.py, then check every finding filed today (F758-F779) carries **Ready:** and **Tier:** lines; set current to D-7.",
     "queue": [
         {
             "id": "compose",
@@ -52,7 +52,7 @@
         },
         {
             "id": "sweep-ledger-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Logs, events & SSE x Checkpoints x Agents (unreached paths)",
             "detail": "New paths first: the Activity tab's Ledger view (GET /ledger, ProjectLedger) against Accounting and the task story; a conversation's Checkpoints sheet (CheckpointsPanel) and GET /conversations/{id}/checkpoint-notes after a real cut-over with notes. Unreached until 2026-10-19: POST /session/sync deletes every agent it omits -- drive it at an agent holding a task and a live run; GET /workspace/paths and /workspace/file (outside path, binary, huge file); GET /fs/roots and /fs/list."
         },

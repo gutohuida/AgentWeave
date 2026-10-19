@@ -36963,3 +36963,73 @@ Expected: when every unlanded commit is named by an awaiting piece in `unaccepte
 The project has one check configured (`py -3.11 -m pytest -q tests`) and `main_branch: master`. A flow task completed by a real turn got no check run: `GET /tasks/{id}/checks` stayed `{"configured": true, "runs": []}` through three build-and-review rounds of t-clamp, and the drawer read "Checks have not run". `project_checks._after_run` calls `request_run`, which takes its targets from `task_integration.merge_targets`. Where evidence governs, that is **accepted** evidence only (`task_integration.py:516-518`), and a just-completed flow task's evidence is awaiting, so `request_run` returns `None` before creating a run. The first run starts only from the approval gate. rev's verdict `approved` (`run-40aaf30388a5`) was refused: "The approval is blocked because checks are still running. Let me wait for them to complete and retry". The check ran at 08:58:28, after the verdict, and the approval landed on retry at 08:58:39. A documentless task in the same project got its run at the end of the turn, as `project_checks`' docstring says ("when a turn bound to a completed task ends").
 
 Expected: at the end of a run bound to a completed, evidence-governed task, the checks run on the commit the review will be given (`review_target`, the newest evidence naming a commit). The reviewer's briefing and the drawer then carry a result, and the verdict is not refused for a run nobody started. Failing test: `project_checks._after_run` for a completed flow task with one awaiting piece naming a commit on the task branch creates a `TaskCheckRun`. Seam: Worktrees & integration (project checks) x Flows & review.
+
+## F774 (B) -- `POST /session/sync` deletes an agent that holds an in-progress task and a live run, answers 200, and a payload with no `agents` key deletes every agent
+
+**Status:** open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger_p4.py`, scratch Hub :8180, real Haiku turns).
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+builder held `task-06d192c080c9` (`in_progress`) and was 8 s into a live run (`run-468c7ab733a3`, a 100 s sleep) when `POST /api/v1/projects/<p>/session/sync {"data": {"agents": {"rev": {}}}}` answered `200 {"ok": true, "agents": ["rev"]}`. builder's `agents` row was gone (`GET /agents` -> `["rev"]`). Nothing refused, and nothing named the task or the run. The run went on: it committed, and its `update_task` moved the task to `completed` as an agent that no longer existed. The task still reads `assignee: builder`, and builder's two open conversations stay open. A trigger for builder then answers 409 "builder is not an agent in this project". Re-creating builder with `POST /agents` (201) re-attaches all of it by name. The worse case is `{"data": {"mode": "peer"}}`: no `agents` key, so `agents_data = body.data.get("agents", {})` is empty, and the route answers `200 {"ok": true, "agents": []}` with **every** agent deleted. Re-syncing the names (`{"agents": {"builder": {}, "rev": {}}}`) brings the rows back with `runner_id: null, charter_id: null`: each agent's binding is lost.
+
+The route's own docstring says no caller remains except tests (`hub/hub/api/v1/session_sync.py:1-17`). The F242 fix added `isolation_change_refusal` for agents the payload *names* (`:68-91`), but omitted agents are deleted with no check (`:136-142`).
+
+Expected: deleting an agent through sync is refused, 409 with the same shape as `isolation_change_under_held_work`, while it has a live run or an unfinished task, naming them. A payload without `agents` is either refused (422) or leaves the roster alone; it never empties it. (Retiring the route's delete half altogether is the cleaner alternative, since no caller needs it. That choice is the operator's if the night prefers it.) Failing test: in `hub/tests/test_session_sync*.py`, sync omitting an agent with an `in_progress` task, and a running `Run`, -> 409 with the row kept; `{"data": {}}` -> roster unchanged. Seam: Agents x Runs x Tasks.
+
+## F775 (B) -- a checkpoint says "No files recorded as changed" when the agent committed its own work, because `files_changed` reads only the Hub's auto-snapshot commit
+
+**Status:** open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger_p2.py`, `_p3.py`).
+**Source:** drive
+**Theme:** Checkpoints
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+builder's real turn (`run-af8019ec2ad9`, bound to `task-5f15fb870841`) fixed `src/calc.py` and committed it (`f8ee91b Fix add()...`, 1 file changed, on `agentweave/task/task-5f15fb870841`), as it was asked to. `POST /conversations/conv-bfc7c908389f/checkpoint` -> 201 with `"files_changed": []`. The rendered checkpoint, which is what the successor receives, reads "## Files changed\n\n_No files recorded as changed._", and the Checkpoints sheet shows the same. The DB has `runs.snapshot_commit_sha = NULL` for all three runs. `_files_from_runs` (`hub/hub/checkpoints.py:227-255`) reads only that column, and it is set only when `snapshot_worktree` commits a dirty tree (`hub/hub/api/v1/agent_trigger.py:3509-3512`, "NULL when the turn changed nothing"). An agent that commits its own work leaves the tree clean, so its turn "changed nothing" to the checkpoint. Agents are routinely told to commit, and Haiku does.
+
+Expected: a turn's changed files include its own commits. For example, take the commits on the run's branch between `started_at` and `ended_at` (`git log <branch> --since --until --name-only`, from the repo root as the docstring argues), plus the snapshot commit. No migration is needed for that reading. Failing test: a run whose agent commits in its checkout with a clean tree at the end; `generate_checkpoint(...).files_changed` names the file. Seam: Checkpoints x Worktrees.
+
+## F776 (C) -- a turn bound to a task already `completed` (waiting for its reviewer) records an open divergence, "builder ended completed with Fix add() still completed"
+
+**Status:** open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger_p2.py`, `_p3.py`, `_ui.py`).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+builder completed `task-5f15fb870841` and messaged rev "no reply needed"; rev replied anyway. builder's acknowledgement turn (`run-85c693116220`, 9 s, bound to the same task through its conversation) ended with the task still `completed`. That recorded `div-71d745fc8951` (`policy_applied: surface`, `outcome: surfaced`, `task_status_at_end: completed`, never resolved). The Activity tab's Ledger counts it as "Divergences 1, 1 open" and shows "builder ended completed with Fix add() still completed", and the task story lists it too. Nothing was neglected: a completed task waits for a reviewer, and its author can make no move on it (`completed` -> `under_review`/`rejected` are not the author's). `evaluate_run_end` (`hub/hub/run_divergence.py:920-1062`) excludes `blocked` and terminal statuses, but not the awaiting-handoff band (`completed`, `under_review`) for a run that is not a review.
+
+Expected: a non-review run whose task is in `completed`/`under_review` at its end records no divergence (the same reasoning as the F548 terminal exclusion). Failing test: in `hub/tests/test_run_divergence*.py`, a run bound to a `completed` task, by its author, not a review entry -> `evaluate_run_end` returns None and no `RunDivergence` row exists. Seam: Runs x Tasks (divergence) x the Ledger.
+
+## F777 (B) -- a non-ASCII file name reaches the `@` picker git-quoted (`"notes caf\303\251.md"`), and neither that string nor the real name can be read
+
+**Status:** open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger.py`, `_ui.py`).
+**Source:** drive
+**Theme:** Conversations & composer
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+A project file `notes café.md` (untracked, not ignored). `GET /workspace/paths` -> `["\"notes caf\\303\\251.md\"", ".gitignore", "README.md", ...]`. `GET /workspace/file?path=notes%20caf%C3%A9.md` -> 404 "path not found in this workspace", and so does `?path=` the listed string itself (404: it passes membership, then no such file exists). In the browser, typing `@notes` in the composer offers `"notes caf\303\251.md"`, and picking it writes `look at @"\"notes caf\303\251.md\""` into the composer. `list_workspace_paths` (`hub/hub/workspace_paths.py:31-38`) runs `git ls-files` with `core.quotepath` left on and `text=True` with no `encoding` (cp1252 here). This is the same root cause as F760, in a different module: F760's fix sketch names only `requirement_evidence._git`.
+
+Expected: `git -c core.quotepath=off ls-files ...` (or `-z`), decoded as UTF-8, so the listing carries `notes café.md`, and `/workspace/file` and the `@` insert work with it. Failing test: `hub/tests/test_workspace_paths*.py`, a repo with `café.md` -> the listing contains `"café.md"`, and `read_workspace_file` returns its content. Seam: Conversations & composer x the workspace listing.
+
+## F778 (D) -- a UTF-16 text file (what PowerShell 5.1's `>` writes) is reported `binary` by `/workspace/file`, so the files tab cannot show it
+
+**Status:** open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger.py`).
+**Source:** drive
+**Theme:** Conversations & composer
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+`utf16.txt` written with `encoding="utf-16"` (BOM + "hello in utf-16"), tracked. `GET /workspace/file?path=utf16.txt` -> `200 {"binary": true, "size": 36, "content": null}`. `read_workspace_file` (`hub/hub/workspace_file.py:84`) treats any NUL in the first 8000 bytes as binary, and every ASCII character in UTF-16 carries one. On Windows PowerShell 5.1, `echo x > notes.txt` produces exactly this. Expected: a UTF-16 BOM (`FF FE` / `FE FF`) is decoded as text before the NUL sniff. Failing test beside the existing workspace-file tests. Seam: Conversations & composer (files tab).
+
+## F779 (D) -- `send_message` from a task-bound run does not record the task, so the Ledger's "Between agents" lane has no task link for a message sent mid-task
+
+**Status:** open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger_p2.py`, `_p3.py`).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+builder's run `run-af8019ec2ad9` was bound to `task-5f15fb870841` when it sent rev "add fixed". `messages.task_id` is NULL, so `GET /ledger` -> `messages[].task_id: null, task_title: null`, and the Ledger's "Between agents" rows link nowhere. rev's reply, from a run bound to no task, is NULL as well. `send_message`'s `task_id` is optional (`hub/hub/mcp_server.py:271`), and the Hub does not default it from the sending run's bound task. Expected: when omitted, `task_id` defaults to the sending run's `task_id`. Failing test: an agent-actions `send_message` from a run bound to a task, with no `task_id` -> `Message.task_id` equals the run's task, and the ledger's message row carries `task_title`. Seam: Inbound queue & messages x the Ledger.
