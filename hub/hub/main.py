@@ -1,6 +1,7 @@
 """FastAPI application factory + lifespan."""
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -593,7 +594,14 @@ async def lifespan(app: FastAPI):
     warning = _ui_staleness_warning()
     if warning:
         logger.warning(warning)
+    # Ended spans to each project's OTLP endpoint, when one is enabled (trace-1019, D4).
+    from .trace_export import run_pusher
+
+    trace_pusher = asyncio.create_task(run_pusher())
     yield
+    trace_pusher.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await trace_pusher
     await terminate_all_active_runs()
     await shutdown_scheduler()
     await _settle_background_runs()

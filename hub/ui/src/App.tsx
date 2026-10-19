@@ -16,6 +16,7 @@ import { DiagnosticsPanel } from '@/components/environment/DiagnosticsPanel'
 import { ManagerPanel } from '@/components/environment/ManagerPanel'
 import { ProjectSettingsPanel } from '@/components/environment/ProjectSettingsPanel'
 import { SpecStepsSection } from '@/components/environment/SpecStepsSection'
+import { TracesSection } from '@/components/environment/TracesSection'
 import { WorktreesPanel } from '@/components/environment/WorktreesPanel'
 import { PaneResizer } from '@/components/layout/PaneResizer'
 import { ProjectHeader } from '@/components/layout/ProjectHeader'
@@ -572,6 +573,7 @@ export default function App() {
           <>
             <ProjectSettingsPanel onNavigate={navigate} />
             <SpecStepsSection />
+            <TracesSection />
           </>
         ),
       }
