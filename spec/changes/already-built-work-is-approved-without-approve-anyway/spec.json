@@ -1,0 +1,79 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a change with no tasks whose only requirement has accepted operator evidence at its current wording",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_demonstrated_requirement_needs_no_task.py",
+      "key": "evidence-serves",
+      "requirement": "gap-set",
+      "then": "requirement_without_task is not among its gaps; with the evidence partial, or the requirement reworded after it, it is",
+      "when": "it is proposed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "that change proposed at its first journey step",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_demonstrated_requirement_needs_no_task.py; acceptance drive on the trial Hub: this change approved through that path",
+      "key": "record-only-path",
+      "requirement": "gap-set",
+      "then": "409 with steps_skipped alone, whose message names to=exploring; after the send-back, the journey call and a new proposal with no warnings, approval answers 200 approved",
+      "when": "approval is requested without approve_anyway, and each step the answer names is then followed"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "34ca370ccd403e8d53f4908849c8290f9513c2329d17f809b92602631c027504"
+    },
+    "high_water": 1,
+    "requirements": {
+      "gap-set": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "spec_service.served_keys: board-served keys plus keys whose document coverage is verified and whose index digest equals semantic_digest of the payload's requirement, used by both the write report and the phase checks (F703). No migration.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "Work built with tests, not tasks, recorded as a change had no tasks, so every requirement raised requirement_without_task and every approval needed Approve anyway; steps_skipped named a journey call that a proposed document refuses with 409 no_journey (F752, 2026-10-18 authoring of eight changes).",
+  "requirements": [
+    {
+      "key": "gap-set",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Accepted evidence at the current wording is the strongest answer to what implements a requirement; a way out that is refused is not a way out. Approvals are scarce: a gap that every record-only change raises trains approving over gaps.",
+      "statement": "The gaps MUST be: a MUST or SHALL requirement with no criterion (requirement_without_criterion), a criterion with no how_to_check or no checked_by (criterion_without_check), a change-spec of two or more tasks whose first task depends on another or is not a direct or transitive dependency of every other task (no_acceptance_drive), a requirement that no task serves and that no accepted evidence at its current wording demonstrates (requirement_without_task; coverage `verified`, so evidence for an earlier wording or saying only `covers: partial` does not serve it), a task with no requirement, an unresolved question, a clarification marker, empty non-goals, no requirements, a roadmap slice with no done, and, for a change document with a step, the steps of its project's journey for its size after its recorded step (steps_skipped, naming them and the call that records the step, preceded, on a document that is not exploring, by the call that sends it back to exploring, since only an exploring document's step moves); a SHOULD or MAY requirement with no criterion MUST NOT be a gap."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "spec_service.served_keys crediting verified requirements",
+      "the requirement_without_task and steps_skipped messages"
+    ],
+    "non_goals": [
+      "Letting a proposed document move its journey step",
+      "Restating n4's older list of blocking findings, which still names requirement_without_task as blocking"
+    ]
+  },
+  "summary": "A requirement demonstrated by accepted evidence at its current wording needs no task; steps_skipped on a proposed document names the send-back that its journey call needs (F752).",
+  "tasks": [],
+  "title": "Already-built work is approved without Approve anyway"
+}

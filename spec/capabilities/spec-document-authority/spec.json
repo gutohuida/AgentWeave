@@ -1880,6 +1880,24 @@
       "requirement": "a-tester-drives-the-built-product-and-keeps-the-spec-true-page",
       "then": "it offers Amend criterion, Accept and unblock and Reject, not Mark reviewed, and each posts to the respond route",
       "when": "it renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change with no tasks whose only requirement has accepted operator evidence at its current wording",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_demonstrated_requirement_needs_no_task.py",
+      "key": "already-built-work-is-approved-without-approve-a-evidence-serves",
+      "requirement": "approve-lists-what-is-missing-and-can-approve-anyway-gap-set",
+      "then": "requirement_without_task is not among its gaps; with the evidence partial, or the requirement reworded after it, it is",
+      "when": "it is proposed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "that change proposed at its first journey step",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_demonstrated_requirement_needs_no_task.py; acceptance drive on the trial Hub: this change approved through that path",
+      "key": "already-built-work-is-approved-without-approve-record-only-path",
+      "requirement": "approve-lists-what-is-missing-and-can-approve-anyway-gap-set",
+      "then": "409 with steps_skipped alone, whose message names to=exploring; after the send-back, the journey call and a new proposal with no warnings, approval answers 200 approved",
+      "when": "approval is requested without approve_anyway, and each step the answer names is then followed"
     }
   ],
   "algorithms": [
@@ -1965,7 +1983,7 @@
       "FR-164": "31f05e004911affa82d21a091ba2fdc442ceec15e81a201b04460aeed096dfae",
       "FR-165": "fb4385fae80fabd7daebda1bf56a852cf68d2a534a0923f6a62760a90bcbf17e",
       "FR-166": "c00583462d384bcf0d2512162a048cb539b1ffb6cf07673c9ee80ed49f97b375",
-      "FR-167": "d9d7697a48a960bc28c63eb667e55e733037ae4b59f3ca40f717c017df95659d",
+      "FR-167": "f5a71fe3ac000d46e847da141668c1476e8191c1e93bcf745c7f52f8cde54933",
       "FR-168": "354d4827ef750d63b281c69a2550482410d84a97927bec6c54f4281c4335f428",
       "FR-169": "0665d2edd7f6f2441b97c007095f776945ae7bc96804dd96013427a855864d26",
       "FR-170": "89ef921afc2a88a24ac1703934b948763a970c2fd920a3fe0409f31ce7a475e9",
@@ -2901,8 +2919,8 @@
       "key": "approve-lists-what-is-missing-and-can-approve-anyway-gap-set",
       "modal": "MUST",
       "party": null,
-      "rationale": "The roadmap slice's list, minus unreviewed amendments (tester-amends).",
-      "statement": "The gaps MUST be: a MUST or SHALL requirement with no criterion (requirement_without_criterion), a criterion with no how_to_check or no checked_by (criterion_without_check), a change-spec of two or more tasks whose first task depends on another or is not a direct or transitive dependency of every other task (no_acceptance_drive), a requirement with no task, a task with no requirement, an unresolved question, a clarification marker, empty non-goals, no requirements, a roadmap slice with no done, and, for a change document with a step, the steps of its project's journey for its size after its recorded step (steps_skipped, naming them); a SHOULD or MAY requirement with no criterion MUST NOT be a gap."
+      "rationale": "Accepted evidence at the current wording is the strongest answer to what implements a requirement; a way out that is refused is not a way out. Approvals are scarce: a gap that every record-only change raises trains approving over gaps.",
+      "statement": "The gaps MUST be: a MUST or SHALL requirement with no criterion (requirement_without_criterion), a criterion with no how_to_check or no checked_by (criterion_without_check), a change-spec of two or more tasks whose first task depends on another or is not a direct or transitive dependency of every other task (no_acceptance_drive), a requirement that no task serves and that no accepted evidence at its current wording demonstrates (requirement_without_task; coverage `verified`, so evidence for an earlier wording or saying only `covers: partial` does not serve it), a task with no requirement, an unresolved question, a clarification marker, empty non-goals, no requirements, a roadmap slice with no done, and, for a change document with a step, the steps of its project's journey for its size after its recorded step (steps_skipped, naming them and the call that records the step, preceded, on a document that is not exploring, by the call that sends it back to exploring, since only an exploring document's step moves); a SHOULD or MAY requirement with no criterion MUST NOT be a gap."
     },
     {
       "key": "approve-lists-what-is-missing-and-can-approve-anyw-refusals-stay",

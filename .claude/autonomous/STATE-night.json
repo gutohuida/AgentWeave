@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 17,
+  "iteration": 18,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F752-impl",
-  "next_action": "Do queue item F752-impl: F752 (C), already-built work recorded as a change cannot be approved without Approve anyway. Pick the tier first; if the shape is genuinely the operator's, OPEN row in DECISIONS.md and move on. Then F753-impl, F755-spec, F756-impl.",
+  "current": "F753-impl",
+  "next_action": "Do queue item F753-impl: F753 (C), a fold can change requirements but not an algorithm step or a criterion's text. Tier 1 likely: short change on :8010 first (:8010 now serves this branch, PID 21084). Then F755-spec, F756-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -114,10 +114,10 @@
     },
     {
       "id": "F752-impl",
-      "status": "open",
+      "status": "done",
       "model": "opus",
       "title": "F752 (C): already-built work recorded as a change cannot be approved without Approve anyway",
-      "detail": "No record-only path: requirement_without_task blocks every requirement of a change built through tests, not tasks. Pick the tier first; if the shape is genuinely the operator's (approvals-are-scarce), OPEN row in DECISIONS.md and move on. Related F704."
+      "detail": "fixed 97be062 (Tier 1, change folded into spec-document-authority); see log iteration 18"
     },
     {
       "id": "F753-impl",

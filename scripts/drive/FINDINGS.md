@@ -36713,7 +36713,7 @@ F692 refuses accepting evidence for an earlier wording on `decide` and `overturn
 
 ## F752 (C) -- recording already-built work as a spec change cannot be approved without "Approve anyway"
 
-**Status:** open 2026-10-18. Spec-flow friction from authoring the 2026-10-18 decisions on the trial Hub (eight changes).
+**Status:** fixed 97be062 2026-10-19 (Tier 1, night window; change `spec/changes/already-built-work-is-approved-without-approve-anyway`, approved and folded into `spec-document-authority`'s gap set): a requirement whose coverage is `verified` at the payload's wording is served, so `requirement_without_task` is not raised (`spec_service.served_keys`, used by the write report and the phase checks); partial-only evidence and evidence for an earlier wording still raise it. Found on the way: `steps_skipped` named the journey call, which answers 409 `no_journey` on a proposed document (where approval meets it); its message now names the send-back to exploring first. Test `hub/tests/test_a_demonstrated_requirement_needs_no_task.py`, red first. Driven on the trial Hub :8010: the change itself, with no tasks, recorded test evidence, was proposed with no `requirement_without_task`, refused once on `steps_skipped`, and after following the message was approved without `approve_anyway`. Spec-flow friction from authoring the 2026-10-18 decisions on the trial Hub (eight changes).
 **Source:** drive
 **Theme:** Spec documents
 
