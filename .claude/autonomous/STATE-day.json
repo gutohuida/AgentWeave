@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "d7b552c",
     "stop_at": "2026-10-19T17:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-19-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "night-recheck-drive",
-    "next_action": "Do the 'night-recheck-drive' item: one scratch Hub >=8110 on a fresh db under testbed/, re-drive each id in its detail, log CONFIRMED/REOPENED per id, set current to the next open item.",
+    "current": "sweep-evidence-sweep",
+    "next_action": "Do the 'sweep-evidence-sweep' item: read .claude/skills/e2e-loop/SKILL.md in full, then drive its detail on a scratch Hub >=8110; file findings with Ready/Tier lines; set current to the next open item.",
     "queue": [
         {
             "id": "compose",
@@ -28,7 +28,7 @@
         },
         {
             "id": "night-recheck-drive",
-            "status": "open",
+            "status": "done",
             "title": "Re-drive last night's route/run/gate fixes live",
             "detail": "One item, scratch Hub >=8110 on a fresh db. Drive F738 (reset --profile stops that port's Hub), F739 (no Content-Length body limit), F742 (spec rename title in file), F743 (send-back keeps assignee), F745 (cwd command judged like $PWD), F746/F747 (checkout release with half-resolved/keep-ours merge), F750 (identical pinned tool replace), F751/F752 (verdict evidence), F753/F754 (fold), F444 (worktree dep link path), F756/F757. Log CONFIRMED/REOPENED per id."
         },

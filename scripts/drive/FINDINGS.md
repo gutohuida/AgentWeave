@@ -36760,3 +36760,13 @@ With `up` a link to a directory outside the workspace, `ls up/..`, `ls up*/..` a
 **Theme:** Spec authoring
 
 With no `as_key`, the fold draft gives each folded requirement a prefixed key (`the-shell-jud-runner-configuration-is-not-written-by-a-tool-call` for `runner-configuration-is-not-written-by-a-tool-call`; measured on `GET .../fold-draft` on :8010), and criterion keys gain the change's whole name. An algorithm step or rationale in the change that names one of its own requirements by key (`(*a-text-tools-script-is-not-a-path*)`) is folded verbatim, so in the capability it names a key that does not exist. Neither the draft nor the fold warns. Worked around with `as_key` on every requirement. Related: F753.
+
+## F758 (D) -- the approval gate's remedy for an awaiting piece recorded for an earlier wording is one the Hub refuses
+
+**Status:** open 2026-10-19. Found re-driving F751 (`scripts/drive/d1019_night_recheck_spec.py`, scratch Hub :8140).
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes -- repro below; wording is a Tier 0 text change.
+**Tier:** 0
+
+A task serves FR-1, a builder records evidence for it (`awaiting`), the requirement is then reworded, and a reviewer approves the task. F751's fix correctly leaves the stale piece `awaiting`, so the approval answers 409 `gate_unsatisfied` with `unaccepted: [{kind: awaiting_evidence, ...}]` and the remedy "accept the evidence, or grant an agent the capability to accept it" (`hub/hub/requirement_gate.py:93`). But `POST .../project/spec/evidence/{id}/decision {accepted}` answers 409 `evidence_stale` ("cannot be accepted. Record new evidence against the current wording"), and so would an agent granted the capability. What worked: the operator **rejecting** the piece (200), after which the PATCH to `approved` answered 200. The gate should name the piece as an earlier-wording one and say "reject it or record new evidence", not offer an action that is refused. Related: F751, F692.
