@@ -8,25 +8,25 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-19-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "trace-hub-wide-spec",
-    "next_action": "Do queue item trace-hub-wide-spec: author the Tier 2 change document on trial Hub :8010 (see night-window.md 'Tier 1 and Tier 2 at night' and APPROVALS 2026-10-19), approve_anyway, then write the acceptance drive and show it failing. If :8010 is down, restart it from hub/ per .claude/reference/hubs.md. Log it, update STATE, commit, push.",
+    "current": "trace-hub-wide-1-impl",
+    "next_action": "Do queue item trace-hub-wide-1-impl: build slice 1 of spec/changes/everything-the-hub-does-is-in-a-trace (request spans, D1 queue writer + flush_spans/_write_spans, D3/D4, migration 0138 round-tripped on a copy of the trial DB). Turn its xfail tests in hub/tests/test_the_hub_is_traced.py green and drop their markers; drive on a scratch Hub. Log it, update STATE, commit, push.",
     "queue": [
         {
             "id": "trace-hub-wide-spec",
-            "status": "open",
+            "status": "done",
             "title": "Tier 2 change doc on :8010 + failing acceptance drive",
-            "detail": "APPROVALS 2026-10-19 scope 1-4 (request spans, events, background work, log records). Author spec/changes doc on :8010 (proj-d85a82bf4216), approve_anyway; name hazard (volume, indexes, migration rollback); write the acceptance drive and show it failing. Extends hub/hub/traces.py, trace-D4 in DECISIONS.",
+            "detail": "Done iter 2: spdoc-19e17276aeac approved anyway; acceptance test 6 strict-xfail.",
             "model": "opus"
         },
         {
             "id": "trace-hub-wide-1-impl",
             "status": "open",
             "title": "Slice 1: per-request ASGI span, parented under run tool span",
-            "detail": "Mutating, agent-credential, error and slow requests recorded; read polling and SSE skipped unless project setting. Test-first, then drive on scratch Hub (fresh port).",
+            "detail": "Slice 1 of everything-the-hub-does-is-in-a-trace: ASGI middleware, actor from get_agent_actor, span queue + lifespan writer (traces.flush_spans, traces._write_spans, dropped_spans), migration 0138 (record_reads + ix_trace_spans_project_operation; round-trip on a trial-DB copy), list operation= filter. Unmark xfail on the nests/dropped tests (requests test also needs slice 2). test_a_run_is_one_trace lists unfiltered: fix. Drive on scratch Hub.",
             "model": "opus"
         },
         {

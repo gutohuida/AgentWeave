@@ -1,0 +1,193 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "proj-test",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "requests-recorded",
+      "requirement": "a-hub-request-is-a-span",
+      "then": "GET /traces?operation=aw.request lists the POST and the 404 with method, route template, status and actor operator, and not the 200 GET",
+      "when": "the operator creates a task (POST), reads the task list (GET) and reads a task that does not exist (GET, 404)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project above",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "reads-when-asked",
+      "requirement": "read-polling-is-recorded-only-when-asked",
+      "then": "that GET is listed as an aw.request trace",
+      "when": "PUT /traces/settings sets record_reads true and the task list is read again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running run with a credential whose trace has an open execute_tool span for a Bash call",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "agent-request-nests",
+      "requirement": "an-agents-request-nests-under-its-tool-call",
+      "then": "GET /traces/by-run/{run} holds an aw.request span for /agent-actions/permission-decisions whose parent is that tool span, actor run",
+      "when": "the run posts a permission decision with its credential"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task created with a dependency the Hub records an event for, and persist_event called with no trace current",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "events-in-traces",
+      "requirement": "every-event-is-in-a-trace",
+      "then": "the request span carries the event it emitted as a span event, and the lone event is an aw.event trace of its own",
+      "when": "the traces are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with work and a project with two checks, one failing (the test_project_checks_run fixtures)",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "check-run-traced",
+      "requirement": "a-command-the-hub-runs-is-a-span",
+      "then": "an aw.work trace of kind check_run holds aw.command spans for the git plumbing and each check, the failing one with exit code 3 and error status",
+      "when": "project_checks.request_run runs to the end"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check run whose merge raises an error naming an aw_live_ key",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "warning-on-trace",
+      "requirement": "hub-warnings-are-on-their-trace",
+      "then": "the check_run trace carries a log event at WARNING with the exception, the key appears nowhere, and the export's resourceLogs holds that record with the trace's traceId",
+      "when": "the run ends and the day is downloaded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the span writer made to raise",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "span-write-isolated",
+      "requirement": "a-span-write-never-holds-a-request",
+      "then": "the request answers 201 as before and the settings payload counts a dropped span",
+      "when": "the operator creates a task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub whose project pushes to a local OTLP receiver",
+      "how_to_check": "scripts/drive/d1020_hub_wide_trace_drive.py on a scratch Hub with otlp_receiver.py",
+      "key": "drive-hub-wide",
+      "requirement": "background-work-is-a-trace",
+      "then": "the receiver gets request spans nested under the MCP tool span, the check_run and job traces, and the logs on /v1/logs; no polling spans; spans and bytes per item are measured and stated",
+      "when": "real Haiku turns run (one calling a Hub MCP tool, one bound to a task that completes and runs its checks), a manager job fires, and the app is left polling for a minute"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "01322a43498ba9f6bea6826e6b4c8ae9f92f7f6582768a0cd61771a9f944114f",
+      "FR-2": "c460ed3cbdf7003394110a211f6c9ab76a9da6c2b6509abaaf8c1bce306b12b5",
+      "FR-3": "f64cf508f6cb0305f8253ac91901e3e65d482d30a6819e296262c01aeda93209",
+      "FR-4": "ebc65080a8e4793b1b369de10026cf19937146b9a39b04785d998cb2917b9bc3",
+      "FR-5": "cded3ba88806bbfcbbe1f82ac540afd5426c62fdf8ce9b8afd68b967695876fc",
+      "FR-6": "2b05957576688d9ffa993dc930a08c49488b1ea6dd0d033ea2f593f74c5057b6",
+      "FR-7": "c15d9e61b1e8bc3f62a02822e588479dd77b58130e11a82b3475dbbc8ddbf4de",
+      "FR-8": "e11710982b7b14a1f6b79713c2ad949e443670bf6df3b169cd239d6935b8cbee"
+    },
+    "high_water": 8,
+    "requirements": {
+      "a-command-the-hub-runs-is-a-span": "FR-6",
+      "a-hub-request-is-a-span": "FR-1",
+      "a-span-write-never-holds-a-request": "FR-8",
+      "an-agents-request-nests-under-its-tool-call": "FR-3",
+      "background-work-is-a-trace": "FR-5",
+      "every-event-is-in-a-trace": "FR-4",
+      "hub-warnings-are-on-their-trace": "FR-7",
+      "read-polling-is-recorded-only-when-asked": "FR-2"
+    },
+    "retired": {}
+  },
+  "design": "Tier 2. Hazard 1, migration 0138 runs on the operator's real :8000 data at its next restart: it adds trace_settings.record_reads (boolean, server default false) and one index ix_trace_spans_project_operation (project_id, operation, start_time) for kind-filtered listing. No data is rewritten. Rollback: downgrade drops the index and the column (batch alter); traces already written stay valid. Round-tripped (upgrade, downgrade, upgrade) on a copy of the trial profile's database, never :8000's. Hazard 2, volume: kept forever by trace-D3, so the drive measures spans and bytes per request, event, job and warning and states the growth; listing stays keyset-paged and filterable by kind. Hazard 3, the request path: a span write must never slow, fail or lock a request.\n\nD1 One writer, off the request path. traces.py stays the only writer of trace_spans. Request, event, background and command spans are put on an in-memory queue and written in batches by one lifespan writer every ~1 s (the OTLP outbox pattern). A request never waits for its span; a writer error is logged and never reaches a request; a full queue (10 000) drops and counts the drop in the settings payload. The existing run spans keep their in-transaction writes (trace-1019 D1).\n\nD2 The current trace is a contextvar. The ASGI middleware, a run's executor and each background entry point set it; persist_event, the command wrapper and the log handler read it. asyncio.to_thread copies context, so a check command run in a thread lands under its check.\n\nD3 Requests (trace-D4). Operation aw.request, named \"METHOD <route template>\", attributes http.request.method, http.route, http.response.status_code, url.path, aw.actor (operator or run), aw.project.id, aw.run.id. Recorded: every non-GET/HEAD request, every request made with a run credential, every 4xx/5xx, every request slower than 1 s. Skipped by default: the operator's other GET/HEAD requests (the app's polling) and the SSE stream; trace_settings.record_reads records them too. Status error only for 5xx (OTel server-span convention). Project-less requests are not recorded (no project to file them under). The actor comes from get_agent_actor, which stashes the run it resolved on the request scope, so there is no second token lookup.\n\nD4 An agent's request nests. A request made with a run credential is a span in that run's trace (run_id, trace_id, trace_started_at copied), parented under the run's newest execute_tool span that has not ended, else under the run's root (the stream may not have delivered the tool_use line before the MCP call arrives). It is never a trace of its own.\n\nD5 Events. persist_event adds a span event (name = event type; aw.event.id, severity, agent, loop and the redacted data, bounded 8 KiB) to the current span when there is one; otherwise it stages a short ended span of its own (operation aw.event) in its own session, so the event and its span commit together. A run's executor sets the run's root as current, so events emitted during a run land on the run's trace.\n\nD6 Background work. traces.work(kind, project_id, **attributes) opens a root span (operation aw.work, attribute aw.work.kind) around: a job firing, a loop tick, flow staffing and review staffing, inbound queue processing, worktree create/merge/release and task integration, a project check run, a spec fold, a distil batch. traces.command(argv) wraps the subprocess call sites the Hub owns (project_checks, worktrees, task_integration, requirement_evidence): operation aw.command, process.command_args (redacted), process.exit.code, duration; error status on a non-zero exit.\n\nD7 Logs. A logging.Handler at WARNING on the hub logger appends a span event named log to the current span: severity, logger name, message, and an exception's type, message and traceback, redacted, bounded 8 KiB. A record with no current trace is not stored (stderr still has it). The OTLP download gains resourceLogs built from those events (traceId and spanId set); the push posts them to <endpoint>/v1/logs beside /v1/traces.\n\nD8 Listing. GET /traces takes operation= (invoke_agent, chat, aw.request, aw.event, aw.work) filtering roots; the app's Traces list gains that filter. Settings answers the span count by kind and the dropped count, and takes record_reads.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "trace-1019 traces what an agent does, but not what the Hub does around it. An agent's MCP call into the Hub, the operator's request that started the work, the event it emitted, the flow staffing or loop tick that followed, the git merge and check run, and the warning the Hub logged when one failed each leave a row in a different place or nothing at all. Operator, 2026-10-19: \"Can we add traces for a broader surface area? Like everything that happens in the hub?\"; for requests, \"All but UI polling\" (DECISIONS trace-D4).",
+  "requirements": [
+    {
+      "key": "a-hub-request-is-a-span",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "trace-D4: all mutating, all agent-credential, all errors and slow requests.",
+      "statement": "The Hub SHALL record a project's API request as an `aw.request` span carrying its method, route template, status code, duration, actor and project when the request is not a GET or HEAD, was made with a run credential, answered 4xx or 5xx, or took longer than one second."
+    },
+    {
+      "key": "read-polling-is-recorded-only-when-asked",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "trace-D4: the app's routine read polling and the SSE stream are skipped by default, behind a setting.",
+      "statement": "The operator's other GET and HEAD requests and the SSE stream SHALL NOT be recorded unless the project's trace settings turn `record_reads` on, in which case they SHALL be."
+    },
+    {
+      "key": "an-agents-request-nests-under-its-tool-call",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "APPROVALS 2026-10-19 scope 1: an agent's calls into the Hub nest under the tool call that made them.",
+      "statement": "A request made with a run's credential SHALL be a span in that run's trace, parented under the run's newest unended `execute_tool` span, or under the run's root when none is open."
+    },
+    {
+      "key": "every-event-is-in-a-trace",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "APPROVALS 2026-10-19 scope 2; persist_event is the one writer of event_logs.",
+      "statement": "Every event `persist_event` records SHALL appear in a trace: as a span event on the current span when there is one, else as an `aw.event` span of its own committed with the event."
+    },
+    {
+      "key": "background-work-is-a-trace",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "APPROVALS 2026-10-19 scope 3.",
+      "statement": "A job firing, a loop tick, flow and review staffing, inbound queue processing, worktree create, merge and release, task integration, a project check run, a spec fold and a distil batch SHALL each be recorded as an `aw.work` trace naming its kind."
+    },
+    {
+      "key": "a-command-the-hub-runs-is-a-span",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "APPROVALS 2026-10-19 scope 3: git and check commands as child spans.",
+      "statement": "Each git or check command the Hub runs SHALL be an `aw.command` child span of the current trace carrying its redacted arguments, exit code and duration, with error status on a non-zero exit."
+    },
+    {
+      "key": "hub-warnings-are-on-their-trace",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "APPROVALS 2026-10-19 scope 4.",
+      "statement": "A WARNING-or-higher record the Hub logs while a trace is current SHALL be stored on that trace's current span, redacted as span content is, and the download and the OTLP push SHALL carry it as an OTLP log record with its trace and span ids."
+    },
+    {
+      "key": "a-span-write-never-holds-a-request",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Hazard 3: the request path.",
+      "statement": "Recording a request, event, background or command span SHALL NOT delay, fail or change the answer of the request or work it records; a span that cannot be written SHALL be counted as dropped."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "An ASGI middleware recording aw.request spans (D3, D4), the actor stashed by get_agent_actor",
+      "persist_event attaching events to the current trace or its own aw.event span (D5)",
+      "traces.work and traces.command around the named background entry points and subprocess sites (D6)",
+      "A WARNING log handler and OTLP logs in the download and the push (D7)",
+      "Migration 0138: trace_settings.record_reads and ix_trace_spans_project_operation; list filter and settings counts (D8); the Traces list's kind filter in the app"
+    ],
+    "non_goals": [
+      "Project-less requests and Hub-level work (GET /projects, /health, startup), which have no project to file them under",
+      "Retention or pruning (trace-D3 stands); metrics",
+      "The runner CLIs' own telemetry (trace-4 stays OPEN)",
+      "Backfilling events, requests or logs from before the migration"
+    ]
+  },
+  "summary": "Tier 2 (trace-hub-wide, decision trace-D4). Extends a-run-is-a-trace-you-can-export from agent turns to the whole Hub: a span per API request (an agent's request nested under the tool call that made it), every event in a trace, background work as traces with the git and check commands it runs as child spans, and the Hub's own WARNING-and-up log records on their trace, exported as OTLP logs. The app's routine read polling and the SSE stream are skipped unless the project asks for them.",
+  "tasks": [],
+  "title": "Everything the Hub does is in a trace"
+}
