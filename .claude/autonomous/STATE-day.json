@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "d7b552c",
     "stop_at": "2026-10-19T17:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-19-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "plan-review",
-    "next_action": "Do the 'plan-review' item per .claude/loops/day-window.md 'The pretask', then insert sweep items before ledger-tidy and set current to the next open item.",
+    "current": "night-recheck-drive",
+    "next_action": "Do the 'night-recheck-drive' item: one scratch Hub >=8110 on a fresh db under testbed/, re-drive each id in its detail, log CONFIRMED/REOPENED per id, set current to the next open item.",
     "queue": [
         {
             "id": "compose",
@@ -22,7 +22,7 @@
         },
         {
             "id": "plan-review",
-            "status": "open",
+            "status": "done",
             "title": "Check the e2e checklist against the code; choose 3-4 sweep areas",
             "detail": "Playbook 'The pretask'. Run the skill's Step 0 inventory, write unreached/new/gone into SKILL.md's checklist, commit it alone, log PLAN: line, then insert sweep-<area>-sweep items before ledger-tidy. Last night touched: spec fold/evidence (F752-F757), merge/checkout release (F746,F747), reset --profile, request body limits, shell judge."
         },
@@ -31,6 +31,30 @@
             "status": "open",
             "title": "Re-drive last night's route/run/gate fixes live",
             "detail": "One item, scratch Hub >=8110 on a fresh db. Drive F738 (reset --profile stops that port's Hub), F739 (no Content-Length body limit), F742 (spec rename title in file), F743 (send-back keeps assignee), F745 (cwd command judged like $PWD), F746/F747 (checkout release with half-resolved/keep-ours merge), F750 (identical pinned tool replace), F751/F752 (verdict evidence), F753/F754 (fold), F444 (worktree dep link path), F756/F757. Log CONFIRMED/REOPENED per id."
+        },
+        {
+            "id": "sweep-evidence-sweep",
+            "status": "open",
+            "title": "Sweep: Requirements, evidence & coverage x Drift",
+            "detail": "New paths first (2026-10-17/18): the Spec tab's Evidence view (view=evidence, EvidenceBrowser, focus by URL), a piece's diff (GET /spec/evidence/{id}/diff), the requirement story (RequirementStory: wording changes and what proved each); agents decide awaiting evidence only, the operator overturns a decided piece with a reason (POST /spec/evidence/{id}/overturn, F692); earlier-wording evidence never accepted; all-partial covers reads in_progress (F706). Then a drift scan over overturned/reworded evidence. Render the Evidence view in a browser."
+        },
+        {
+            "id": "sweep-spec-sweep",
+            "status": "open",
+            "title": "Sweep: Spec documents x Corpus & folding",
+            "detail": "New paths first: an agent's report_cannot_satisfy answered by the operator with amend / accept / reject (POST /documents/{path}/amendments/{id}/respond, F700, 2026-10-18) -- check each reaches the reporter as input and is recorded; decided proposals on the spec page (GET /documents/{path}/proposals?status=resolved, SpecResolvedProposals); PUT /documents/{path}/roadmap (API only: no screen or tool calls it -- a finding unless the ledger has it). Then the fold of a change that had a cannot-satisfy amend."
+        },
+        {
+            "id": "sweep-tasks-sweep",
+            "status": "open",
+            "title": "Sweep: Tasks x Flows & review x Worktrees & integration",
+            "detail": "New paths first: the task drawer's story (GET /tasks/{id}/story, TaskStory, 2026-10-17) through a real flow with a review, a send-back and project checks; run and transition links to conversations; the checks row's earlier runs (exit code, duration). Does the story agree with task_history and the transitions that happened? Least-driven: a verdict withdrawing waiting reviews, integration Retry."
+        },
+        {
+            "id": "sweep-ledger-sweep",
+            "status": "open",
+            "title": "Sweep: Logs, events & SSE x Checkpoints x Agents (unreached paths)",
+            "detail": "New paths first: the Activity tab's Ledger view (GET /ledger, ProjectLedger) against Accounting and the task story; a conversation's Checkpoints sheet (CheckpointsPanel) and GET /conversations/{id}/checkpoint-notes after a real cut-over with notes. Unreached until 2026-10-19: POST /session/sync deletes every agent it omits -- drive it at an agent holding a task and a live run; GET /workspace/paths and /workspace/file (outside path, binary, huge file); GET /fs/roots and /fs/list."
         },
         {
             "id": "ledger-tidy",
