@@ -37,7 +37,7 @@ def test_0137_adds_the_trace_tables_and_changes_nothing_else(tmp_path) -> None:
         conn.execute("DROP TABLE trace_spans")
         conn.execute("DROP TABLE trace_settings")
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
-        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0134')")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0135')")
         conn.execute(
             "INSERT INTO turn_usage (id, run_id, project_id, agent, status, observed_at) "
             "VALUES ('usage-old', 'run-old', 'proj-old', 'a', 'unavailable', "
@@ -62,7 +62,7 @@ def test_0137_adds_the_trace_tables_and_changes_nothing_else(tmp_path) -> None:
     assert columns["end_time"][3] == 0  # nullable: a span still open
     assert indexes >= INDEXES
 
-    _downgrade_to(db_url, "0134")
+    _downgrade_to(db_url, "0135")
 
     assert _tables(db_file) == before
 
@@ -73,7 +73,7 @@ def test_0137_is_a_no_op_over_tables_create_all_built(tmp_path) -> None:
     _run(_create_all_at(db_url))
     with sqlite3.connect(db_file) as conn:
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
-        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0134')")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0135')")
         conn.commit()
     before = _tables(db_file)
     _upgrade_to(db_url, "0137")

@@ -621,11 +621,29 @@ async def file_vault_report(
     return report
 
 
-async def granted_vault_roots(session: AsyncSession, project_id: str, agent: str) -> List[Path]:
-    """Extra roots the operator granted this agent for adding to the vault. None yet: this is
-    the seam `reach-1019` (operator-granted roots) fills, and `vault_intake.agent_reach` already
-    accepts what it answers."""
-    return []
+async def granted_vault_roots(
+    session: AsyncSession, project_id: str, agent: str, project_root: Path
+) -> List[Path]:
+    """Extra roots the operator granted this agent (reach-1019): its own grants, else the
+    project's, with `{temp}`/`{project}` resolved as its run's judge sees them. Any access counts,
+    `read` included: the Hub reads the file, the agent writes nothing."""
+    from ...reach import effective_grants, grants_env_value
+
+    project_row = await session.get(Project, project_id)
+    agent_row = (
+        await session.execute(
+            select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
+        )
+    ).scalar_one_or_none()
+    if project_row is None:
+        return []
+    granted = grants_env_value(
+        effective_grants(project_row.reach_grants, agent_row.reach_grants if agent_row else None),
+        project_root=str(project_root),
+    )
+    if not granted:
+        return []
+    return [Path(root["path"]) for root in json.loads(granted)["roots"]]
 
 
 @router.post("/vault/paths")
@@ -652,7 +670,7 @@ async def add_vault_paths(
     reach = vault_intake.agent_reach(
         workspace,
         project_root,
-        await granted_vault_roots(session, actor.project_id, actor.agent),
+        await granted_vault_roots(session, actor.project_id, actor.agent, project_root),
     )
     answer = await vault_routes.add_paths(
         session, background, actor.project_id, body, reach=reach, added_by=actor.agent

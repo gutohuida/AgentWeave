@@ -282,3 +282,41 @@ def test_the_tools_restated_values_agree_with_the_vaults() -> None:
 
     assert set(get_args(mcp_server.VaultSourceType)) == set(vault.TYPES) - {vault.DECISION}
     assert set(get_args(mcp_server.VaultVisibility)) == set(vault.VISIBILITIES)
+
+
+@pytest.mark.asyncio
+async def test_a_folder_the_operator_granted_is_in_an_agents_reach(
+    app, auth_headers, tmp_path, tmp_path_factory
+) -> None:
+    """reach-1019 fills the vault's seam: a granted root outside the project is addable, `read`
+    access is enough (the Hub reads it), and an agent's own grants replace the project's."""
+    workspace = tmp_path / ".agentweave" / "worktrees" / "alpha"
+    workspace.mkdir(parents=True)
+    dump = tmp_path_factory.mktemp("dump")
+    (dump / "notes.md").write_bytes(b"# Dumped\n\nThe launch is in March.\n")
+    headers = await _run_headers("run-ingest-grant", "alpha", workspace)
+    body = {"paths": [str(dump / "notes.md")], "distil": False}
+
+    refused = await app.post(AGENT_ROUTE, json=body, headers=headers)
+    assert [r["status"] for r in refused.json()["results"]] == ["refused"]
+
+    granted = await app.put(
+        f"{BASE}/settings",
+        json={"reach_grants": {"roots": [{"path": str(dump), "access": "read"}], "hosts": []}},
+        headers=auth_headers,
+    )
+    assert granted.status_code == 200, granted.text
+    added = await app.post(AGENT_ROUTE, json=body, headers=headers)
+    assert [r["status"] for r in added.json()["results"]] == ["added"]
+
+    narrowed = await app.patch(
+        f"{BASE}/agents/alpha",
+        json={"reach_grants": {"roots": [], "hosts": []}},
+        headers=auth_headers,
+    )
+    assert narrowed.status_code == 200, narrowed.text
+    (dump / "more.md").write_bytes(b"# More\n\nAnother fact.\n")
+    again = await app.post(
+        AGENT_ROUTE, json={"paths": [str(dump / "more.md")], "distil": False}, headers=headers
+    )
+    assert [r["status"] for r in again.json()["results"]] == ["refused"]
