@@ -36770,3 +36770,43 @@ With no `as_key`, the fold draft gives each folded requirement a prefixed key (`
 **Tier:** 0
 
 A task serves FR-1, a builder records evidence for it (`awaiting`), the requirement is then reworded, and a reviewer approves the task. F751's fix correctly leaves the stale piece `awaiting`, so the approval answers 409 `gate_unsatisfied` with `unaccepted: [{kind: awaiting_evidence, ...}]` and the remedy "accept the evidence, or grant an agent the capability to accept it" (`hub/hub/requirement_gate.py:93`). But `POST .../project/spec/evidence/{id}/decision {accepted}` answers 409 `evidence_stale` ("cannot be accepted. Record new evidence against the current wording"), and so would an agent granted the capability. What worked: the operator **rejecting** the piece (200), after which the PATCH to `approved` answered 200. The gate should name the piece as an earlier-wording one and say "reject it or record new evidence", not offer an action that is refused. Related: F751, F692.
+
+## F759 (B) -- an open drift candidate on evidence the operator overturned to rejected hides the rejection from the approval gate
+
+**Status:** open 2026-10-19. Found in the evidence sweep (`scripts/drive/s1019_evidence.py` + `s1019_evidence_p2.py`, scratch Hub :8150).
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes -- repro below, control included.
+**Tier:** 0
+
+FR-3 (sketch rigor) has one operator piece with `locator: todo/other.py` (accepted). Change `todo/other.py`, commit, `POST .../spec/drift/detect` -> `raised: [drift-…]`. Then `POST .../spec/evidence/{id}/overturn {reason}` -> 200 `rejected`. The drift candidate stays `candidate` (`GET .../spec/drift?document=…`), and since `DRIFTING` outranks `REJECTED` in `requirement_coverage.PRECEDENCE` (`hub/hub/requirement_coverage.py:73`), FR-3 reads `drifting` with `accepted_count: 0`. Walking FR-3's task to `under_review` and PATCHing `approved` as the operator answers **200** -- `_rejected_entries` (`hub/hub/requirement_gate.py:937`) only sees `state == rejected`. Control, same walk on a requirement whose only piece was overturned with no drift: **409 `gate_unsatisfied`**, `blocking: [{state: rejected}]` (D2: a rejected requirement blocks approval at every rigor). On screen the coverage bar says "Drifting — The implementation changed after this was verified" and the requirement story shows two rejected pieces beside an approved task. Answering the drift `no_change_required` afterwards flips FR-3 to `rejected`, but the task stays approved. Two seams: the overturn (`_operator_decides`, `hub/hub/api/v1/spec.py`) leaves the piece's open candidate standing (the scan itself only reads accepted evidence, `requirement_evidence.detect_drift`), and `open_drift_for` counts candidates whose evidence is no longer accepted. A failing test: `hub/tests/` -- accept, raise drift, overturn, approve task -> expect 409 rejected. Related: F692, F730.
+
+## F760 (B) -- the evidence diff reads git output as cp1252: a 500 on some non-ASCII content, mojibake on the rest, and non-ASCII paths quoted with no patch
+
+**Status:** open 2026-10-19. Found in the evidence sweep (`scripts/drive/s1019_evidence.py`, scratch Hub :8150), seen in a browser.
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes -- three repros below, one seam.
+**Tier:** 0
+
+`requirement_evidence._git` (`hub/hub/requirement_evidence.py:729`) runs `subprocess.run(..., text=True)` with no `encoding`, so on this machine (locale cp1252) git's UTF-8 output is decoded as cp1252, and `core.quotepath` is left on. Each repro records operator evidence with `commit: <sha>` and reads `GET .../spec/evidence/{id}/diff`: (1) a file containing `"Ángel → café"` (UTF-8 byte 0x81) -> **500**; the reader thread dies with `UnicodeDecodeError: 'charmap' codec can't decode byte 0x81`, `result.stdout` is None and `.strip()` raises (`work_diff`, line 851). The Evidence view shows "The diff of this work could not be read." (2) A file containing `café` -> 200 with `+drink = "cafÃ©"`, on screen too. (3) A file named `todo/ñandú.py` -> `path: "\"todo/\303\261and\303\272.py\""`, `patch: ""` (`work_diff`'s `diff --git` regex does not match the quoted header); the view shows that path with +0 -0. Fix sketch: `encoding="utf-8", errors="replace"` and `-c core.quotepath=off` on `_git`. Check the other `_git` callers that compare paths (`tree_entries`, `_commit_paths`, `branch_paths`) agree once quoting changes: today they agree only because they are all quoted. Failing test: a diff route test with a non-ASCII file name and content, under `PYTHONUTF8=0` and a cp1252 locale.
+
+## F761 (B) -- a piece that names no commit shows, as its work, whatever commit HEAD happened to be
+
+**Status:** open 2026-10-19. Found in the evidence sweep (`scripts/drive/s1019_evidence.py`, scratch Hub :8150), seen in a browser.
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+The operator records `{identifier: FR-2, summary: "watched it sort", covers: partial}` with no `commit` and no locator. Its footprint takes HEAD on master (`b51a700`, which was the commit made for FR-1, `watched_from: []`). `GET .../spec/evidence/{id}/diff` answers 200 with `files: [todo/list.py]` and that commit's patch (`+    return ['a', 'b']  # today`), and the Evidence view shows it under FR-2's proof as the work. `work_diff` treats the footprint's commit as "the piece's commit". The commit is already on main, so `_line_of_work_base` finds no merge and falls back to `commit^` (`hub/hub/requirement_evidence.py:833`). By the same code path (not measured) this should also apply to an agent piece recorded on master, or recorded in a task checkout before its first commit there. The route's own docstring promises "200 with no files and a `reason` where there is no commit". Expected: a piece that named no commit and whose footprint commit was already on the main line at recording answers no files and a reason saying what the checkout was at. The fallback to `commit^` is right only for a commit the piece named (`watched_from` holds `commit`, or a task line that has since merged). Failing test: record operator evidence with no commit after an unrelated commit, then read the diff, which should have no files.
+
+## F762 (C) -- the coverage bar offers Accept, and "Accept instead", on a piece recorded for an earlier wording, which the Hub always refuses
+
+**Status:** open 2026-10-19. Found in the evidence sweep (scratch Hub :8150, real browser, `scripts/drive/s1019_evidence_ui.py` and an inline Playwright check).
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+FR-1 was reworded after its pieces were recorded. On the document's coverage bar, **Evidence (3)** lists the awaiting earlier-wording piece with an **Accept** button and a merge note. Pressing it shows the Hub's 409 `evidence_stale` sentence, which is legible. A rejected earlier-wording piece offers **Overturn… -> Accept instead**, which is refused the same way. `EvidencePieces` (`hub/ui/src/components/spec/EvidencePieces.tsx:52-54`) never reads `for_current_wording`, though the Evidence view marks the same pieces "earlier wording" and the API carries it. Expected: no accept control on an earlier-wording piece, an "earlier wording" mark as in the Evidence view, and Reject left available. The UI twin of F758, which is the gate's remedy text for the same piece.

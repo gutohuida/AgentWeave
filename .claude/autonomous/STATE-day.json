@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "d7b552c",
     "stop_at": "2026-10-19T17:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-10-19-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-evidence-sweep",
-    "next_action": "Do the 'sweep-evidence-sweep' item: read .claude/skills/e2e-loop/SKILL.md in full, then drive its detail on a scratch Hub >=8110; file findings with Ready/Tier lines; set current to the next open item.",
+    "current": "sweep-spec-sweep",
+    "next_action": "Do the 'sweep-spec-sweep' item: read .claude/skills/e2e-loop/SKILL.md in full, then drive its detail on a scratch Hub >=8110; file findings with Ready/Tier lines; set current to the next open item.",
     "queue": [
         {
             "id": "compose",
@@ -34,7 +34,7 @@
         },
         {
             "id": "sweep-evidence-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Requirements, evidence & coverage x Drift",
             "detail": "New paths first (2026-10-17/18): the Spec tab's Evidence view (view=evidence, EvidenceBrowser, focus by URL), a piece's diff (GET /spec/evidence/{id}/diff), the requirement story (RequirementStory: wording changes and what proved each); agents decide awaiting evidence only, the operator overturns a decided piece with a reason (POST /spec/evidence/{id}/overturn, F692); earlier-wording evidence never accepted; all-partial covers reads in_progress (F706). Then a drift scan over overturned/reworded evidence. Render the Evidence view in a browser."
         },
