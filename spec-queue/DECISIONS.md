@@ -33,6 +33,25 @@ From the operator's 2026-10-18 brief (`APPROVALS.md` `## 2026-10-18`: "dev -> te
 - OPEN      flow-1018-7  Where is the editor: the project page beside Spec steps, the document's Delivery section, or both? Recommended: both, one shared component, and the board shows each card's stage.
 - OPEN      flow-1018-8  How is a stage staffed? (Added from the spike: the test agent was given the build and then could not test it.) Recommended: by agent name or by charter. Agents named by a later stage are kept out of that flow's build pool, and the unstaffed sentence names the stage.
 
+### vault-1019: agents add to the vault, in bulk -- DECIDED 2026-10-19
+
+Interactive session, 2026-10-19 ~19:00. "I want agent to be able to add files in the vault via mcp or api/cli. Because I can then dump a bunch of files in a folder and ask AI to ingest that data." Today agents have only `vault_map`/`vault_read`/`vault_report` (`mcp_server.py:727-753`); adding is operator-only (`api/v1/vault.py:167,212`); the CLI has no vault command.
+
+- DECIDED   vault-D1  An agent adds a file **by naming its path**; the Hub reads it (the agent never reads or pastes the content). The Hub's existing checks apply (types, 10 MiB, private vs tracked). (operator, 2026-10-19)
+- DECIDED   vault-D2  A **bulk insert** (many paths or a folder) that can distil everything at once. Whether to distil is an **explicit parameter** of the MCP tool, the API and the CLI. (operator, 2026-10-19: "It should be a question proposed by the mcp server cli/api a parameter")
+- DECIDED   vault-D3  Available over **MCP, API and CLI**. The CLI command is an operator-requested exception to "the CLI does only what cannot be done from the app" (a local folder dump). (operator, 2026-10-19)
+- DECIDED   vault-D4  Agent-added sources are marked **added by <agent>**, visible, with no approval step. (operator, 2026-10-19)
+- ASSUMED   vault-A1  Tracked vs private is a parameter too, defaulting to the project's vault setting. A folder outside the project needs reach (reach-1019).
+
+### trace-1019: traces and logs of everything -- DECIDED 2026-10-19
+
+Interactive session, 2026-10-19 ~19:00. "we should start adding traces and logs. Just like telemetry... I want to trace and log everything and be able to have that information." Today: `runs`, `agent_outputs`, `event_logs`, Ledger/Accounting, the task story; no trace model, no export (an old trace/span attempt survives only as stale `__pycache__`).
+
+- DECIDED   trace-D1  OpenTelemetry-shaped traces (GenAI semantic conventions): a run is a trace; model calls, tool calls, judge decisions, permission waits, retries, deliveries are spans. Viewed **both** in the app and exported over **OTLP** to an external tool. (operator, 2026-10-19)
+- DECIDED   trace-D2  **Everything**, including full prompt and response content (with secret redaction). (operator, 2026-10-19)
+- DECIDED   trace-D3  Kept **forever** by default; the operator can **export and clear** (by project, by date range). (operator, 2026-10-19)
+- OPEN      trace-4   Capture the runner CLIs' own telemetry too (Claude Code's OTel export, if Copilot has one): verify what each emits before designing on it.
+
 ### reach-1019: what an agent can reach -- DECIDED 2026-10-19
 
 Interactive session, 2026-10-19 ~18:30, after a read-only study of :8000 (48 refusals on 10-16, all from the Workspace judge; ~36 were judge false positives: heredoc/inline-script text read as paths, msys `/c/...` paths, a relative path after `cd` in one command; ~12 by design: temp, parent, localhost, `$PWD`). The operator escalated QA and Architect to Full access instead. "the environment seems to tight... Hub is blocking too much."
