@@ -465,6 +465,16 @@ class FoldItemRequest(RequestModel):
     replaces: Optional[str] = Field(default=None, max_length=64)
 
 
+class FoldAlgorithmRequest(RequestModel):
+    name: str = Field(max_length=200, description="The change's algorithm name.")
+    replaces: Optional[str] = Field(default=None, max_length=200)
+
+
+class FoldCriterionRequest(RequestModel):
+    key: str = Field(max_length=64, description="The change's criterion key.")
+    replaces: str = Field(max_length=64, description="The capability criterion it replaces.")
+
+
 class FoldRequest(RequestModel):
     """The operator folding an approved change into a capability document, then archiving it."""
 
@@ -477,6 +487,12 @@ class FoldRequest(RequestModel):
     # removed in the same merge (F533).
     retire: list[str] = Field(default_factory=list, max_length=256)
     retire_criteria: list[str] = Field(default_factory=list, max_length=256)
+    # F753. None folds every change algorithm; a name the capability holds collides unless it is
+    # named in `replaces`.
+    algorithms: Optional[list[FoldAlgorithmRequest]] = Field(default=None, max_length=64)
+    retire_algorithms: list[str] = Field(default_factory=list, max_length=64)
+    # Change criteria folded in place of a named capability criterion, under its key.
+    criteria: list[FoldCriterionRequest] = Field(default_factory=list, max_length=256)
 
 
 def _document_view(document, steps: Optional[spec_journey.ProjectSteps] = None) -> dict:
@@ -3705,16 +3721,23 @@ async def fold_draft(
     change = await _require_document(session, project_id, path)
     capability = await _require_document(session, project_id, into)
     try:
-        draft = spec_service.fold_draft(workspace, change, capability)
+        draft = spec_service.fold_draft(
+            workspace,
+            change,
+            capability,
+            folded_into=await spec_lifecycle.merged_into(session, change),
+        )
     except spec_service.FoldRefusedError as exc:
         raise _fold_refused(exc) from exc
     return {
         "into": capability.path,
         "payload": draft.payload,
         "requirements": draft.requirements,
+        "algorithms": draft.algorithms,
         "collisions": draft.collisions,
         "capability_requirements": draft.capability_requirements,
         "capability_criteria": draft.capability_criteria,
+        "capability_algorithms": draft.capability_algorithms,
     }
 
 
@@ -3749,6 +3772,13 @@ async def fold_document(
             note=body.note,
             retire=body.retire,
             retire_criteria=body.retire_criteria,
+            algorithms=(
+                None
+                if body.algorithms is None
+                else [spec_service.FoldAlgorithm(**a.model_dump()) for a in body.algorithms]
+            ),
+            retire_algorithms=body.retire_algorithms,
+            criteria=[spec_service.FoldCriterion(**c.model_dump()) for c in body.criteria],
         )
     except (spec_service.FoldRefusedError, spec_lifecycle.PhaseError) as exc:
         raise _fold_refused(exc) from exc

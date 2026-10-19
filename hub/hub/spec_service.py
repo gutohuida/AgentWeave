@@ -950,6 +950,22 @@ class FoldItem:
 
 
 @dataclass
+class FoldAlgorithm:
+    """One change algorithm to fold, by name, optionally in place of a named capability one."""
+
+    name: str
+    replaces: Optional[str] = None
+
+
+@dataclass
+class FoldCriterion:
+    """A change criterion folded in place of a named capability criterion, under its key (F753)."""
+
+    key: str
+    replaces: str
+
+
+@dataclass
 class FoldDraft:
     payload: Dict[str, Any]
     #: One entry per folded requirement: `from` (the change's key), `key` (the capability's), the
@@ -960,6 +976,9 @@ class FoldDraft:
     #: `{key, statement}` per requirement, `{key, requirement, then}` per criterion.
     capability_requirements: List[Dict[str, Any]] = field(default_factory=list)
     capability_criteria: List[Dict[str, Any]] = field(default_factory=list)
+    #: `{name, steps}` per capability algorithm, and `{from, name, replaces}` per folded one.
+    capability_algorithms: List[Dict[str, Any]] = field(default_factory=list)
+    algorithms: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def fold_key(change_path: str, key: str) -> str:
@@ -978,11 +997,25 @@ def _read(workspace: ProjectWorkspace, document: SpecDocument) -> Dict[str, Any]
     return payload
 
 
-def _require_approved_change(change: SpecDocument) -> None:
-    """The draft and the fold both refuse a change that is not an approved change-spec (F547)."""
+def _require_approved_change(
+    change: SpecDocument, capability_path: str = "", folded_into: Sequence[str] = ()
+) -> None:
+    """The draft and the fold both refuse a change that is not an approved change-spec (F547).
+
+    One exception (F753): a change archived after a fold is still folded into a capability no merge
+    has folded it into, since the default archives on the first fold of a change touching two.
+    """
+    if change.kind == "change-spec" and change.phase == spec_lifecycle.ARCHIVED and folded_into:
+        if capability_path in folded_into:
+            raise FoldRefusedError(
+                f"{change.path} is already folded into {capability_path}",
+                code="fold_already_folded",
+            )
+        return
     if change.kind != "change-spec" or change.phase != spec_lifecycle.APPROVED:
         raise FoldRefusedError(
-            f"{change.path} is {change.phase!r}; only an approved change is folded",
+            f"{change.path} is {change.phase!r}; only an approved change, or an archived one "
+            "already folded into another capability, is folded",
             code="fold_change_not_approved",
         )
 
@@ -994,6 +1027,11 @@ def fold_draft(
     items: Optional[List[FoldItem]] = None,
     retire: Sequence[str] = (),
     retire_criteria: Sequence[str] = (),
+    *,
+    algorithms: Optional[Sequence[FoldAlgorithm]] = None,
+    retire_algorithms: Sequence[str] = (),
+    criteria: Sequence[FoldCriterion] = (),
+    folded_into: Sequence[str] = (),
 ) -> FoldDraft:
     """The capability's payload with the change's requirements appended, and what collides.
 
@@ -1006,8 +1044,13 @@ def fold_draft(
     `retire_criteria` removes single criteria (F533): amending a criterion is retiring the old one
     and folding the new. Both name what the capability holds today, and a requirement cannot be
     replaced and retired in one fold.
+
+    Algorithms fold the same way (F753): `None` folds every change algorithm, a name the capability
+    holds collides unless named in `replaces`, and `retire_algorithms` removes capability ones.
+    `criteria` puts a change criterion in place of a named capability criterion, under its key.
+    `folded_into` is where merges have already folded the change (`_require_approved_change`).
     """
-    _require_approved_change(change)
+    _require_approved_change(change, capability.path, folded_into)
     if capability.kind != "capability":
         raise FoldRefusedError(
             f"{capability.path} is not a capability document", code="fold_target_not_capability"
@@ -1026,7 +1069,7 @@ def fold_draft(
     existing_criteria = {c["key"] for c in target.get("acceptance_criteria") or []}
 
     requirements = [dict(r) for r in target.get("requirements") or []]
-    criteria = [dict(c) for c in target.get("acceptance_criteria") or []]
+    capability_criteria = [dict(c) for c in target.get("acceptance_criteria") or []]
     folded: List[Dict[str, Any]] = []
     collisions: List[str] = []
     renamed: Dict[str, str] = {}
@@ -1071,26 +1114,96 @@ def fold_draft(
             requirements.append(entry)
         renamed[item.key] = key
 
+    source_criteria = {c["key"]: c for c in source.get("acceptance_criteria") or []}
+    replacing: Dict[str, str] = {}
+    for criterion_item in criteria:
+        if criterion_item.key not in source_criteria:
+            raise FoldRefusedError(
+                f"{change.path} has no criterion {criterion_item.key!r}",
+                code="fold_unknown_criterion",
+            )
+        if criterion_item.replaces not in existing_criteria:
+            raise FoldRefusedError(
+                f"{capability.path} has no criterion {criterion_item.replaces!r} to replace",
+                code="fold_replaces_unknown",
+            )
+        if criterion_item.replaces in replacing.values():
+            collisions.append(criterion_item.replaces)
+        replacing[criterion_item.key] = criterion_item.replaces
+
     for criterion in source.get("acceptance_criteria") or []:
         new_requirement = renamed.get(criterion.get("requirement"))
+        replaced_key = replacing.get(criterion["key"])
+        if replaced_key is not None:
+            # Under the capability's key, on the requirement its own was folded as, else on the
+            # one the replaced criterion demonstrated.
+            capability_criteria = [
+                (
+                    {
+                        **criterion,
+                        "key": replaced_key,
+                        "requirement": new_requirement or c.get("requirement"),
+                    }
+                    if c["key"] == replaced_key
+                    else c
+                )
+                for c in capability_criteria
+            ]
+            continue
         if new_requirement is None:
             continue
         key = fold_key(change.path, criterion["key"])
         if key in existing_criteria:
             collisions.append(key)
             continue
-        criteria.append({**criterion, "key": key, "requirement": new_requirement})
+        capability_criteria.append({**criterion, "key": key, "requirement": new_requirement})
 
-    unknown = [key for key in retire if key not in existing] + [
-        key for key in retire_criteria if key not in existing_criteria
-    ]
+    source_algorithms = {a["name"]: a for a in source.get("algorithms") or []}
+    existing_algorithms = [a["name"] for a in target.get("algorithms") or []]
+    if algorithms is None:
+        algorithms = [FoldAlgorithm(name=name) for name in source_algorithms]
+    algorithm_list = [dict(a) for a in target.get("algorithms") or []]
+    folded_algorithms: List[Dict[str, Any]] = []
+    for algorithm in algorithms:
+        original_algorithm = source_algorithms.get(algorithm.name)
+        if original_algorithm is None:
+            raise FoldRefusedError(
+                f"{change.path} has no algorithm {algorithm.name!r}",
+                code="fold_unknown_algorithm",
+            )
+        if algorithm.replaces is not None and algorithm.replaces not in existing_algorithms:
+            raise FoldRefusedError(
+                f"{capability.path} has no algorithm {algorithm.replaces!r} to replace",
+                code="fold_replaces_unknown",
+            )
+        folded_algorithms.append({"name": algorithm.name, "replaces": algorithm.replaces})
+        if algorithm.replaces is not None:
+            algorithm_list = [
+                dict(original_algorithm) if a["name"] == algorithm.replaces else a
+                for a in algorithm_list
+            ]
+        elif algorithm.name in existing_algorithms:
+            collisions.append(algorithm.name)
+        else:
+            algorithm_list.append(dict(original_algorithm))
+
+    unknown = (
+        [key for key in retire if key not in existing]
+        + [key for key in retire_criteria if key not in existing_criteria]
+        + [name for name in retire_algorithms if name not in existing_algorithms]
+    )
     if unknown:
         raise FoldRefusedError(
             f"{capability.path} has nothing to retire under " + ", ".join(unknown),
             code="fold_retire_unknown",
         )
     replaced = {item.replaces for item in items if item.replaces is not None}
-    both = [key for key in retire if key in replaced]
+    replaced_algorithms = {a.replaces for a in algorithms if a.replaces is not None}
+    both = (
+        [key for key in retire if key in replaced]
+        + [key for key in retire_criteria if key in replacing.values()]
+        + [name for name in retire_algorithms if name in replaced_algorithms]
+    )
     if both:
         raise FoldRefusedError(
             ", ".join(both) + " is both replaced and retired by this fold; choose one",
@@ -1098,14 +1211,21 @@ def fold_draft(
         )
     retired = set(retire)
     requirements = [r for r in requirements if r["key"] not in retired]
-    criteria = [
+    capability_criteria = [
         c
-        for c in criteria
+        for c in capability_criteria
         if c["key"] not in set(retire_criteria) and c.get("requirement") not in retired
     ]
+    algorithm_list = [a for a in algorithm_list if a["name"] not in set(retire_algorithms)]
+    # A replacement under another name can meet a capability algorithm of that name.
+    names = [a["name"] for a in algorithm_list]
+    collisions.extend(dict.fromkeys(n for n in names if names.count(n) > 1 and n not in collisions))
 
+    payload = {**target, "requirements": requirements, "acceptance_criteria": capability_criteria}
+    if algorithm_list or "algorithms" in target:
+        payload["algorithms"] = algorithm_list
     return FoldDraft(
-        payload={**target, "requirements": requirements, "acceptance_criteria": criteria},
+        payload=payload,
         requirements=folded,
         collisions=collisions,
         capability_requirements=[
@@ -1116,6 +1236,11 @@ def fold_draft(
             {"key": c["key"], "requirement": c.get("requirement"), "then": c.get("then", "")}
             for c in target.get("acceptance_criteria") or []
         ],
+        capability_algorithms=[
+            {"name": a["name"], "steps": list(a.get("steps") or [])}
+            for a in target.get("algorithms") or []
+        ],
+        algorithms=folded_algorithms,
     )
 
 
@@ -1131,15 +1256,20 @@ async def fold(
     note: str = "",
     retire: Sequence[str] = (),
     retire_criteria: Sequence[str] = (),
+    algorithms: Optional[Sequence[FoldAlgorithm]] = None,
+    retire_algorithms: Sequence[str] = (),
+    criteria: Sequence[FoldCriterion] = (),
 ) -> Tuple[SaveResult | ProposeResult, bool]:
     """Fold a finished change into a capability through the merge, then archive the change.
 
     Every refusal is decided before the merge writes anything. Returns the merge's result and
     whether the change was archived: where the merge only proposes (a non-operator actor at
     `contract`/`gate` rigor; the operator's writes since fix-D8), nothing was folded yet, and the
-    change stays approved for the archive guard to keep honest.
+    change stays approved for the archive guard to keep honest. A change already archived after a
+    fold into another capability is folded and stays archived (F753).
     """
-    _require_approved_change(change)
+    folded_into = await spec_lifecycle.merged_into(session, change)
+    _require_approved_change(change, capability.path, folded_into)
     open_tasks = await spec_lifecycle.open_task_ids(session, change)
     if open_tasks:
         raise FoldRefusedError(
@@ -1147,11 +1277,22 @@ async def fold(
             "folded once its work is decided",
             code="fold_tasks_open",
         )
-    draft = fold_draft(workspace, change, capability, items, retire, retire_criteria)
+    draft = fold_draft(
+        workspace,
+        change,
+        capability,
+        items,
+        retire,
+        retire_criteria,
+        algorithms=algorithms,
+        retire_algorithms=retire_algorithms,
+        criteria=criteria,
+        folded_into=folded_into,
+    )
     if draft.collisions:
         raise FoldRefusedError(
-            f"{capability.path} already has " + ", ".join(draft.collisions) + "; rename the folded "
-            "requirement, or name the one it replaces",
+            f"{capability.path} already has " + ", ".join(draft.collisions) + "; rename what is "
+            "folded, or name what it replaces",
             code="fold_key_collision",
         )
     standing = await _standing_warnings(session, workspace, capability)
@@ -1161,7 +1302,7 @@ async def fold(
     if isinstance(result, SaveResult):
         result.standing_warnings = [w for w in result.warnings if _identity(w) in standing]
         result.warnings = [w for w in result.warnings if _identity(w) not in standing]
-    if isinstance(result, ProposeResult) or not archive:
+    if isinstance(result, ProposeResult) or not archive or change.phase == spec_lifecycle.ARCHIVED:
         return result, False
     await spec_lifecycle.transition(
         session,
