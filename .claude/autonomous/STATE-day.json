@@ -1,98 +1,40 @@
 {
-    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today's DIRECTION.md section names one under an operator's DECISIONS.md row (day-window.md, 'A day that builds').",
-    "playbook": ".claude/loops/day-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-24-daily",
-    "parent_branch": "master",
-    "parent_sha": "4052c33",
-    "stop_at": "2026-09-23T17:00:00+01:00",
-    "iteration": 11,
-    "log_file": ".claude/autonomous/2026-09-23-day-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "queue finished",
-    "next_action": null,
-    "queue": [
-        {
-            "id": "compose",
-            "status": "done",
-            "title": "Compose this window's queue from the playbook",
-            "detail": "Done iteration 1: tree hygiene commit b661766, backlog refreshed, gate not due (CI on inherited sha not concluded), research copied, drain count 0 -> clear column, two spec loops today. Full account in the log."
-        },
-        {
-            "id": "d1-drive",
-            "status": "done",
-            "title": "Drive last night's build",
-            "detail": "Done iteration 2: re-observed the database-refusal fix live from a second angle (.env present vs absent, port 8011/profiles/drive0923d1) -- no new defect, confirms group 6. Lighter but real check of the unstaffed-review change: regression suite fresh on HEAD (65 passed), UI bundle-deferral decision re-confirmed still deliberate. No new findings. Full account: FINDINGS.md 'D-1, 2026-09-23 (day window)'."
-        },
-        {
-            "id": "d2-r1",
-            "status": "done",
-            "title": "Spec loop A, R1 - explore and propose",
-            "detail": "Done iteration 3: research candidate #1 filed as F409 (A) and proposed as openspec/changes/an-at-mention-an-agent-wrote-reads-no-file (validate --strict passes). Re-measured independently on claude 2.1.280 via CLI session transcripts; client_composed rejected on measurement (hides all 27 mcp__agentweave tools); U+FEFF forced D2 to escape every at-sign. Probe: scripts/drive/d2_0923_at_mention_tokeniser.py. Full account in the log."
-        },
-        {
-            "id": "d3-r2",
-            "status": "done",
-            "title": "Spec loop A, R2 - independent re-derivation",
-            "detail": "Done iteration 4: R2 widened scope -- the checkpoint worker and conversation titler also put agent text on claude -p and were measured to expand (checkpoint reply carried the file's contents); added D7 (neutralise whole worker prompt at build_worker_command/build_title_command, generation-template rule + checkpoint/2, grade_probe undoes \\@ before _normalise). D6 trigger moved to 'blocks contain \\@' (catches the question echo). Notices, divergence, spec paths, context file (measured: no expansion) closed. F410 filed (checkpoint/divergence labelled Agent \"None\"). Probe: scripts/drive/d3_0923_worker_at_mention.py."
-        },
-        {
-            "id": "d4-r3",
-            "status": "done",
-            "title": "Spec loop A, R3 - independent re-derivation",
-            "detail": "Done iteration 5: R3 added D8 (board Start work posts an agent-authorable task title as operator text; escaped in the UI, Q3 offers dropping it), replaced D7's template rule with a code-side exact inverse (restore_file_mentions in worker._interpret + titler), made _normalise symmetric. Probe scripts/drive/d4_0923_worker_json_escape.py: 9 Haiku turns, 0 unparseable. validate --strict valid."
-        },
-        {
-            "id": "d2b-r1",
-            "status": "done",
-            "title": "Spec loop B, R1 - explore and propose",
-            "detail": "Done iteration 6: F400+F373 proposed as pressing-run-names-the-reason-that-held (validate --strict valid); both re-measured on dcdf723 (probe scripts/drive/d2b_0923_run_answer_probe.py); identity-map trap in F373's sketch found; F411 filed (Run button shows no error). F325 skipped (Codex-only)."
-        },
-        {
-            "id": "d3b-r2",
-            "status": "done",
-            "title": "Spec loop B, R2 - independent re-derivation",
-            "detail": "Done iteration 7: decline table rebuilt from grep (agrees on 9 rows); two paths R1 missed measured -- a firing raising before its row exists answered an hour-old stall (409), one raising after its turn started answered 'already being worked' over its own failed row. D3 widened (written row is the answer whatever its status), tasks 1.12/1.13, spec paragraph + 2 scenarios; held->condition; 1.7/1.8 seeded sentinel; :793 needs no delta. F412 filed (terminal schedule failure answers 200 success), Open Question 3. validate --strict valid."
-        },
-        {
-            "id": "d4b-r3",
-            "status": "done",
-            "title": "Spec loop B, R3 - independent re-derivation",
-            "detail": "Done iteration 8: re-derived _do_fire_job's exits before reading R2 (agreed on 10, found an 11th: raise after run was discarded). Measured 4 cases: pre-row crash on in-flight flow -> 'nothing is wrong'; pre-row crash on busy loop -> busy sentence; post-discard crash -> 'nothing is wrong' + job_run_failed naming a nonexistent run; concurrent tick's in_progress row -> 500 today. F413 filed (B), Open Question 4 (default separate). D3 else->500 replaced by named statuses (task 1.14). Precedence a total order. Proposal overclaim corrected. validate --strict valid."
-        },
-        {
-            "id": "d5",
-            "status": "done",
-            "title": "Write the review page",
-            "detail": "Done iteration 9: spec-queue/review/review-2026-09-23.html written per day-window.md D-5's six-point order (previous gate reported: 09-22's D-7, ff 72cfb99..6c0a467; both today's changes covered with each round's changes named; tonight's default queue worked out -- no specced work buildable absent an approval). Appended ## 2026-09-23 to spec-queue/APPROVALS.md, one row per change, no status token. Backlog regenerated first (nothing moved)."
-        },
-        {
-            "id": "d6",
-            "status": "done",
-            "title": "Repairs that need no spec, if the day has room",
-            "detail": "Done iteration 10: added gpt-6-sol to hub/hub/model_catalog.py (research candidate #2's remaining half, commit b8d30f2). Cleared the D-6 bar (no spec requirement, no migration/API/schema change, fully described by spec-queue/research/2026-09-23.md candidate #2). ruff/black/mypy clean, 28 existing tests pass unchanged, check_model_catalog.py's drift is expected (same shape gpt-6-luna already carried). Drove the real GET /api/v1/model-catalog route via TestClient against the trial database with the trial bootstrap key (no mocks): codex models now ['gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5']. No F-numbered finding existed for this (it was a research-file candidate, not a filed finding), so no Status line to set. Candidate #2 fully closed."
-        },
-        {
-            "id": "d7-gate",
-            "status": "done",
-            "title": "Merge gate - always last",
-            "detail": "Done iteration 11: exact HEAD sha 4052c33 (two commits ahead of iteration 10's b8d30f2 -- this window's own fc30866, plus the sidequest window's 4052c33 DEAD-ENDS entry). CI run 35847644164 success, rev-list HEAD..master=0, HEAD==@{u}, no HOLD MERGE. Fast-forwarded master 6c0a467..4052c33, pushed. Started autonomous/2026-09-24-daily from the new master, pushed -u. Full account in the log."
-        }
-    ],
-    "decisions_for_user": [],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "DRIVE. Operator, 2026-10-18: drive AgentWeave end to end and file everything wrong with it, as ready findings (repro, severity, seam, tier) for the night to fix. Open with plan-review (the e2e checklist checked against the code: unreached, new, gone), then anything today\u0027s DIRECTION.md adds, then re-drive last night\u0027s fixes, then 3-4 full-surface sweep areas. Close with the merge gate. No product code unless DIRECTION.md asks. Playbook: .claude/loops/day-window.md",
+    "playbook":  ".claude/loops/day-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-10-18-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "d7b552c",
+    "stop_at":  "2026-10-19T17:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-10-19-day-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window\u0027s merge-gate item (.claude/loops/day-window.md, \u0027The merge gate\u0027), which may fast-forward master to this branch with \u0027git fetch . \u003cbranch\u003e:master\u0027 and \u0027git push origin master\u0027 when all four gate conditions hold and the branch adds no migration -- operator, 2026-10-11 and 2026-10-18. Never a merge commit, never a conflict resolved.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, \u0027Something new\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
