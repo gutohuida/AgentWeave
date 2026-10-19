@@ -1,179 +1,47 @@
 {
-  "purpose": "FIX. Operator, 2026-10-18: fix everything the day window found, at every tier (Tier 1/2 author their own short change on trial Hub :8010 and approve_anyway; Tier 2 writes its acceptance drive failing first). Red CI first, then what the operator added in APPROVALS.md, then today's day-log findings, then every other open finding, severity first. Test-first, drive each fix, set its Status line. Never merges.",
-  "playbook": ".claude/loops/night-window.md",
-  "runner": "claude",
-  "model": "opus",
-  "permission_mode": "unattended-full-access",
-  "branch": "autonomous/2026-10-18-daily",
-  "parent_branch": "master",
-  "parent_sha": "d7b552c",
-  "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 22,
-  "log_file": ".claude/autonomous/2026-10-18-night-log.md",
-  "findings_file": "scripts/drive/FINDINGS.md",
-  "approvals_file": "spec-queue/APPROVALS.md",
-  "current": null,
-  "next_action": null,
-  "queue": [
-    {
-      "id": "F738-impl",
-      "status": "done",
-      "title": "F738 (B): `agentweave reset --profile X` cannot find X's running Hub",
-      "detail": "fixed; see log iteration 2"
-    },
-    {
-      "id": "flow-stages-map",
-      "status": "done",
-      "model": "opus",
-      "effort": "high",
-      "title": "Explore editable flow stages: map how a flow runs today (file:line)",
-      "detail": "part 1 written; see log iteration 4"
-    },
-    {
-      "id": "flow-stages-spike",
-      "status": "done",
-      "model": "opus",
-      "effort": "high",
-      "title": "Spike: dev->test, dev only, dev->security->test driven with Haiku",
-      "detail": "done in one firing; tracer spike/2026-10-18-flow-stages@6a13a15; part 2 written; see log iteration 5"
-    },
-    {
-      "id": "flow-stages-spec",
-      "status": "done",
-      "model": "opus",
-      "effort": "high",
-      "title": "Author the editable-flow-stages change on :8010 as exploring + OPEN rows",
-      "detail": "exploring document spdoc-9e407ca6ffe8 on :8010; OPEN rows flow-1018-1..8; see log iteration 6"
-    },
-    {
-      "id": "F739-impl",
-      "status": "done",
-      "title": "F739 (C): body without Content-Length is not size-limited",
-      "detail": "fixed 66dba2a; see log iteration 7"
-    },
-    {
-      "id": "F743-impl",
-      "status": "done",
-      "title": "F743 (C): operator PATCH to revision_needed naming an assignee silently ignores it",
-      "detail": "fixed; see log iteration 8"
-    },
-    {
-      "id": "F742-impl",
-      "status": "done",
-      "title": "F742 (C): renaming a spec doc changes index title but not the file's",
-      "detail": "fixed; see log iteration 9"
-    },
-    {
-      "id": "F745-impl",
-      "status": "done",
-      "title": "F745 (C): command substitution output never judged",
-      "detail": "fixed c22b861; see log iteration 10",
-      "model": "opus"
-    },
-    {
-      "id": "F749-impl",
-      "status": "done",
-      "title": "F749 (C): e2e.py hub-up from a worktree serves main checkout code",
-      "detail": "fixed 353b67a; see log iteration 11"
-    },
-    {
-      "id": "F747-impl",
-      "status": "done",
-      "title": "F747 (C): delete/modify merge conflict has no markers",
-      "detail": "fixed bdb3801 (not as filed; see log iteration 12)"
-    },
-    {
-      "id": "F746-impl",
-      "status": "done",
-      "title": "F746 (D): releasing a checkout discards half-resolved prerequisite merge",
-      "detail": "fixed (kept, not saved elsewhere); see log iteration 13"
-    },
-    {
-      "id": "F751-impl",
-      "status": "done",
-      "title": "F751 (D): verdict accepts awaiting evidence recorded for earlier wording",
-      "detail": "fixed; see log iteration 14"
-    },
-    {
-      "id": "F750-impl",
-      "status": "done",
-      "title": "F750 (D): tool-server digest pin race, Access denied on Windows",
-      "detail": "fixed; see log iteration 15"
-    },
-    {
-      "id": "F754-impl",
-      "status": "done",
-      "title": "F754 (D): fold reports the capability's old gaps as the change's",
-      "detail": "fixed ada98e4; see log iteration 16"
-    },
-    {
-      "id": "F444-impl",
-      "status": "done",
-      "title": "F444 (B): worktree shared dependency links make reads refused",
-      "detail": "fixed; see log iteration 17"
-    },
-    {
-      "id": "F752-impl",
-      "status": "done",
-      "model": "opus",
-      "title": "F752 (C): already-built work recorded as a change cannot be approved without Approve anyway",
-      "detail": "fixed 97be062 (Tier 1, change folded into spec-document-authority); see log iteration 18"
-    },
-    {
-      "id": "F753-impl",
-      "status": "done",
-      "model": "opus",
-      "title": "F753 (C): a fold can change requirements but not an algorithm step or a criterion's text",
-      "detail": "fixed 213e169 (Tier 1, change folded into spec-document-authority); see log iteration 19"
-    },
-    {
-      "id": "F755-spec",
-      "status": "done",
-      "model": "opus",
-      "title": "F755 (C): the shell judge's rules (F675/F676 text rules, sed/awk/grep exemptions) are not specified",
-      "detail": "done (Tier 1 spec-only, spdoc-7251e74e6ba7 folded into agent-run-sandboxing; check f172275); see log iteration 20"
-    },
-    {
-      "id": "F756-impl",
-      "status": "done",
-      "title": "F756 (C): a glob in the last component after `..` through a link out is allowed",
-      "detail": "fixed (wider than filed: any second glob after a link); see log iteration 21"
-    },
-    {
-      "id": "F757-impl",
-      "status": "done",
-      "title": "F757 (D): a fold renames a change's requirements and the change's own text still names the old keys",
-      "detail": "fixed; see log iteration 22"
-    }
-  ],
-  "decisions_for_user": [
-    "flow-1018-1",
-    "flow-1018-2",
-    "flow-1018-3",
-    "flow-1018-4",
-    "flow-1018-5",
-    "flow-1018-6",
-    "flow-1018-7",
-    "flow-1018-8"
-  ],
-  "limits": [
-    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. Only the day window's merge gate (day-window.md, 'The merge gate') may fast-forward master. This window never merges.",
-    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-    "Every claim is measured or labelled unverified.",
-    "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, 'Something new'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-  ],
-  "closeout": {
-    "briefing": "claude-doc",
-    "model": "sonnet",
-    "skill": ".claude/skills/night-briefing/SKILL.md"
-  },
-  "armed_at": "2026-10-18T22:41:33+01:00",
-  "driver_log": ".claude/autonomous/driver-night.log",
-  "briefing_url": "https://claude.ai/code/artifact/9256ee5b-9cc0-4049-a5ae-ce68943dd631"
+    "purpose":  "FIX. Operator, 2026-10-18: fix everything the day window found, at every tier (Tier 1/2 author their own short change on trial Hub :8010 and approve_anyway; Tier 2 writes its acceptance drive failing first). Red CI first, then what the operator added in APPROVALS.md, then today\u0027s day-log findings, then every other open finding, severity first. Test-first, drive each fix, set its Status line. Never merges.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-10-18-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "75e6edb",
+    "stop_at":  "2026-10-20T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-10-19-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. Only the day window\u0027s merge gate (day-window.md, \u0027The merge gate\u0027) may fast-forward master. This window never merges.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, \u0027Something new\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ],
+    "closeout":  {
+                     "briefing":  "claude-doc",
+                     "model":  "sonnet",
+                     "skill":  ".claude/skills/night-briefing/SKILL.md"
+                 },
+    "armed_at":  "2026-10-19T21:24:17+01:00",
+    "driver_log":  ".claude/autonomous/driver-night.log"
 }
