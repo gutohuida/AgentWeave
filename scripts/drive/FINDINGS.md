@@ -36810,3 +36810,66 @@ The operator records `{identifier: FR-2, summary: "watched it sort", covers: par
 **Tier:** 0
 
 FR-1 was reworded after its pieces were recorded. On the document's coverage bar, **Evidence (3)** lists the awaiting earlier-wording piece with an **Accept** button and a merge note. Pressing it shows the Hub's 409 `evidence_stale` sentence, which is legible. A rejected earlier-wording piece offers **Overturn… -> Accept instead**, which is refused the same way. `EvidencePieces` (`hub/ui/src/components/spec/EvidencePieces.tsx:52-54`) never reads `for_current_wording`, though the Evidence view marks the same pieces "earlier wording" and the API carries it. Expected: no accept control on an earlier-wording piece, an "earlier wording" mark as in the Evidence view, and Reject left available. The UI twin of F758, which is the gate's remedy text for the same piece.
+
+## F763 (B) -- after the operator rejects a cannot-satisfy report, the task stays blocked and only the operator can move it, while the reporter is told to "try again" and the operator's page reads "all reviewed"
+
+**Status:** open 2026-10-19. Found in the spec sweep (`scripts/drive/s1019_spec.py`, `s1019_spec_p2.py`, `s1019_spec_ui.py`, scratch Hub :8160; seeded running runs bound to each task stand in for the builder's turn), seen in a browser.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes -- repro below; the fix is a choice between two options, recommendation given.
+**Tier:** 1 (the capability specifies "rejecting keeps the task blocked": `spec-document-authority`, criterion `the-operator-answers-a-cannot-satisfy-report-respond-reject`)
+
+A change with one task, approved; the task is assigned to `builder` and in progress. A run bound to it reports that `c-alpha` cannot be satisfied (201, `task_blocked: true`). The operator answers `reject` with "warm the cache in setup" (200, `task_unblocked: false`). The note queued to builder ends "...the task stays blocked. Their reason: warm the cache in setup Try again with that in mind, or report back what still stands in the way." (`spec_amendments._note_to_reporter`; the full stop after the reason is missing too). What the reporter can then do, measured with the same run's credential:
+- `PATCH /agent-actions/tasks/{id} {"status":"in_progress"}` -> 403 "A task waiting on a person is released when the wait actually ends -- the operator answers or declines the question, or your own wait for it expires and ask_user reports that." (`hub/hub/api/v1/tasks.py:1719-1724`). That sentence is about `ask_user`, and here it is false: the operator *has* answered.
+- `{"status":"completed"}` -> 409 "From 'blocked' the available transitions are: in_progress."
+- Recording evidence works (201 awaiting), and so does reporting again (201). The task stays blocked either way.
+
+On the operator's side, the task's `blocked_reason` still reads "cannot satisfy criterion c-alpha: cold cache". The spec page's Amendments panel reads **all reviewed**: "Answered: report rejected by operator ... Answer: warm the cache in setup". Nothing anywhere says the task now waits on the operator, so the work stalls until someone happens to open the task and move it.
+
+**Fix shape (recommended):** a rejection returns the task to `in_progress` (the criterion stands as written, so keep working), and the note says so. **Alternative:** keep the task blocked, but rewrite `blocked_reason` to "report rejected -- waiting on the operator to unblock", show it on the panel as an open item, and make the agent's 403 name the cannot-satisfy wait instead of `ask_user`. Either way, the note and the task's state have to agree. Seam: Spec documents (cannot-satisfy) x Tasks.
+
+## F764 (C) -- a cannot-satisfy report is not tied to its task's criteria, repeats are not recognised, and answering any one report on a task unblocks it
+
+**Status:** open 2026-10-19. Found in the spec sweep (`scripts/drive/s1019_spec.py`, scratch Hub :8160).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+The setup is one approved change with tasks t-alpha..t-delta, each with one requirement and one criterion, and a run bound to t-alpha:
+- The run reports `c-beta`, which is t-beta's criterion: 201, and **t-alpha** is blocked with "cannot satisfy criterion c-beta: not my task's". `spec_amendments.report_cannot_satisfy` checks only that the run's task belongs to the document, never that the criterion serves the task's requirements.
+- It then reports its own `c-alpha`: 201 with `task_blocked: false`, since the task was already blocked. `blocked_reason` still names c-beta.
+- It reports `c-alpha` a second time while the first is unanswered: 201, a new report. Proposals answer the same kind of repeat with `already_pending`; reports have nothing like it.
+- The operator rejects the `c-alpha` report ("task stays blocked"), then accepts the cross report. t-alpha goes to `in_progress`, which undoes the rejection, while two `c-alpha` reports are still on the task (one rejected, one unanswered).
+
+The spec page's **Defects by step** then counts the change as "build 7". That count includes the repeat, the cross report and the rejected report, because `spec_defects.py:126-135` counts every `cannot_satisfy` event, whatever its answer.
+
+Expected: refuse (or at least flag) a criterion that serves none of the run's task's requirements; answer a repeat on the same criterion with the pending report's id; unblock a task only when none of its reports is still unanswered or rejected. Seam: Spec documents (cannot-satisfy) x Tasks.
+
+## F765 (C) -- a fold archives a change with unanswered cannot-satisfy reports without a word, and reports keep landing on the archived change
+
+**Status:** open 2026-10-19. Found in the spec sweep (`scripts/drive/s1019_spec.py`, `s1019_spec_ui.py`, scratch Hub :8160), seen in a browser.
+**Source:** drive
+**Theme:** Corpus & folding
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+The change in F764 had two unanswered reports on `c-alpha` ("cannot finish under 1ms"), so its FR-1 read `amendment_unreviewed`. With all four tasks approved, `GET .../fold-draft?into=<capability>` answered `warnings: []`, and `POST .../fold` answered 200 (`merged: 1`, archived, `warnings: []`). The capability now carries `c-alpha` "alpha finishes under 1ms" verbatim. A builder had said twice that this cannot be met, and nobody was asked. After the archive:
+- The run still bound to t-delta reports `c-delta` on the **archived** change: 201. The archived change's FR-4 coverage turns `amendment_unreviewed`.
+- The Amendments panel offers **Amend criterion...** on the archived change, which the Hub refuses legibly: "... is archived; only an approved document is amended". It also offers **Accept and unblock** (200, `task_unblocked: false`), and says "FR-1 cannot be verified until you review this." on a document that is closed.
+
+Expected (warn, not gate): the fold draft and the fold each list every unanswered cannot-satisfy report as a warning naming its criterion. `report_cannot_satisfy` refuses a document that is no longer approved, saying it is archived and naming the capability where the behaviour now lives. The panel shows Amend only on an approved document. Seam: Spec documents (cannot-satisfy) x Corpus & folding.
+
+## F766 (D) -- a change's roadmap slice can be named after the fact only through the API: no screen or tool calls `PUT .../roadmap`
+
+**Status:** open 2026-10-19. Found in the spec sweep (`scripts/drive/s1019_spec.py`, `s1019_spec_ui.py`, scratch Hub :8160), seen in a browser.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes.
+**Tier:** 0
+
+`PUT /projects/{id}/project/documents/{path}/roadmap` (F674's backfill, `hub/hub/api/v1/spec.py:882`) works, and every refusal it gave was legible: an unapproved roadmap, an unknown slice (the message names the slices), a roadmap linking itself, an unknown roadmap, a path escape (400), and a different link ("already names slice 'first' of ...; reopen it to change its slice"). The same link twice is a no-op (`changed: false`), on an archived change too. The roadmap page shows the result: "first -- archived in spec/changes/cs-sweep-.../spec.json", "second -- not started".
+
+But nothing in `hub/ui/src` calls the route (`hub/ui/src/api/spec.ts` has no roadmap write), and no MCP tool or `/agent-actions` route does either. A "not started" slice offers no way to name the change that built it, and a change's own page has no such control. The visibility roadmap's backfill was done with a script (`d1017_roadmap_backfill.py`).
+
+Expected: a "Roadmap slice" control on a change document's page, or "Link a change..." on a not-started slice, that calls the route and shows its refusal sentence. Seam: Spec documents (roadmaps).

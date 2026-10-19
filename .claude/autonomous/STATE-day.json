@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "d7b552c",
     "stop_at": "2026-10-19T17:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-19-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-spec-sweep",
-    "next_action": "Do the 'sweep-spec-sweep' item: read .claude/skills/e2e-loop/SKILL.md in full, then drive its detail on a scratch Hub >=8110; file findings with Ready/Tier lines; set current to the next open item.",
+    "current": "sweep-tasks-sweep",
+    "next_action": "Do the 'sweep-tasks-sweep' item: read .claude/skills/e2e-loop/SKILL.md in full, then drive its detail on a scratch Hub >=8110; file findings with Ready/Tier lines; set current to the next open item.",
     "queue": [
         {
             "id": "compose",
@@ -40,7 +40,7 @@
         },
         {
             "id": "sweep-spec-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Spec documents x Corpus & folding",
             "detail": "New paths first: an agent's report_cannot_satisfy answered by the operator with amend / accept / reject (POST /documents/{path}/amendments/{id}/respond, F700, 2026-10-18) -- check each reaches the reporter as input and is recorded; decided proposals on the spec page (GET /documents/{path}/proposals?status=resolved, SpecResolvedProposals); PUT /documents/{path}/roadmap (API only: no screen or tool calls it -- a finding unless the ledger has it). Then the fold of a change that had a cannot-satisfy amend."
         },
