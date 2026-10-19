@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 19,
+  "iteration": 20,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F755-spec",
-  "next_action": "Do queue item F755-spec: F755 (C), the shell judge's rules are not specified. Author them into agent-run-sandboxing through the Hub on :8010 (change + fold), from code and test_permission_approver.py's row table; commit the files the Hub writes. :8010 serves 213e169 code (server pid 24880). Then F756-impl.",
+  "current": "F756-impl",
+  "next_action": "Do queue item F756-impl: F756 (C), `ls up*/../*` is allowed through a link out of the workspace. Reproduce with a junction via _decide, test first at _glob_tail_walk (hub/hub/mcp_server.py), fix, drive, set its Status. Permission-judge change: assert the refusal and the allows that must stay. Then F757-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -128,16 +128,22 @@
     },
     {
       "id": "F755-spec",
-      "status": "open",
+      "status": "done",
       "model": "opus",
       "title": "F755 (C): the shell judge's rules (F675/F676 text rules, sed/awk/grep exemptions) are not specified",
-      "detail": "Author them into agent-run-sandboxing through the Hub on :8010 (change + fold), from code and test_permission_approver.py's row table. Commit the files the Hub writes."
+      "detail": "done (Tier 1 spec-only, spdoc-7251e74e6ba7 folded into agent-run-sandboxing; check f172275); see log iteration 20"
     },
     {
       "id": "F756-impl",
       "status": "open",
       "title": "F756 (C): a glob in the last component after `..` through a link out is allowed",
       "detail": "`ls up*/../*` allowed; reproduce with a junction via _decide; test first at _glob_tail_walk; Status."
+    },
+    {
+      "id": "F757-impl",
+      "status": "open",
+      "title": "F757 (D): a fold renames a change's requirements and the change's own text still names the old keys",
+      "detail": "Tier 0: the fold draft (and fold) should warn when a folded algorithm step or rationale names a change key the fold renames, or keep the key; test first at spec_service.fold_draft; Status."
     }
   ],
   "decisions_for_user": [

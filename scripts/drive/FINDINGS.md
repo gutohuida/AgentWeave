@@ -36739,7 +36739,7 @@ Folding into `requirement-traceability` or `workspace-isolation` answers `blocki
 
 ## F755 (C) -- Tier 0 judge fixes leave the spec corpus behind: the shell judge's rules are not specified
 
-**Status:** open 2026-10-18. Found while folding F696/F737.
+**Status:** fixed 2026-10-19 (Tier 1, spec-only, `spdoc-7251e74e6ba7`, `spec/changes/the-shell-judges-text-rules-are-specified/`, folded into agent-run-sandboxing): three requirements stated from the code (`runner-configuration-is-not-written-by-a-tool-call` for F675, `a-text-tools-script-is-not-a-path` for F696's sed/awk/cut/tr/grep exemptions, `the-working-directory-by-name-is-judged-as-the-workspace-root` for F696's `$PWD` and F745's `$(pwd)`), six criteria, and the shell-text algorithm replaced: a pipe-fed step and a runner-configuration step added, and step 5's exceptions amended. F676's rule was already `pipe-fed-shapes`. Every criterion example is checked against the real `_decide` by `scripts/drive/d1019_f755_judge_rules_check.py` (44/44). No judge behaviour changed. Earlier: open 2026-10-18. Found while folding F696/F737.
 **Source:** drive
 **Theme:** Permissions & sandbox
 
@@ -36753,3 +36753,10 @@ No capability states F675's or F676's text rules: the interpreter and pipe-fed r
 
 With `up` a link to a directory outside the workspace, `ls up/..`, `ls up*/..` and `ls up/../*` are refused, but `ls up*/../*` is allowed (`{'allow': True, 'reason': 'inside your workspace'}`, measured on a junction through `_decide`), though it lists the link target's parent. Probably the glob walk (`_glob_tail_walk`, `hub/hub/mcp_server.py`) judges the `..` it walks to and then the final glob component as inside the listed path, not the resolved one. Reads only as filed; a write form (`cp n up*/../*`) is not measured. Related: F444.
 
+## F757 (D) -- a fold renames a change's requirements, and the change's own text still names the old keys
+
+**Status:** open 2026-10-19. Found while folding F755.
+**Source:** drive
+**Theme:** Spec authoring
+
+With no `as_key`, the fold draft gives each folded requirement a prefixed key (`the-shell-jud-runner-configuration-is-not-written-by-a-tool-call` for `runner-configuration-is-not-written-by-a-tool-call`; measured on `GET .../fold-draft` on :8010), and criterion keys gain the change's whole name. An algorithm step or rationale in the change that names one of its own requirements by key (`(*a-text-tools-script-is-not-a-path*)`) is folded verbatim, so in the capability it names a key that does not exist. Neither the draft nor the fold warns. Worked around with `as_key` on every requirement. Related: F753.

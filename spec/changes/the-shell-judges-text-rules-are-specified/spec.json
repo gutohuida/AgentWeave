@@ -1,0 +1,156 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "Workspace only, a workspace with no runner configuration",
+      "how_to_check": "py -3.11 scripts/drive/d1019_f755_judge_rules_check.py; hub/tests/test_an_agent_cannot_write_its_runners_configuration.py",
+      "key": "config-refused",
+      "requirement": "runner-configuration-is-not-written-by-a-tool-call",
+      "then": "each is refused with a reason saying the path configures the runner and naming `ask_user`",
+      "when": "a run calls Write on `.claude/settings.local.json`, Edit on `.mcp.json`, NotebookEdit under `.codex/`, Write on `.github/hooks/hooks.json`, or Bash `cp allow.json .claude/settings.json`, `printf x > .claude/hooks/a.sh`, `touch .codex`, `cat .claude/settings.json`, or PowerShell `Set-Content -Path .claude/settings.local.json`"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Workspace only",
+      "how_to_check": "py -3.11 scripts/drive/d1019_f755_judge_rules_check.py",
+      "key": "config-ordinary-work",
+      "requirement": "runner-configuration-is-not-written-by-a-tool-call",
+      "then": "each is allowed as inside the workspace",
+      "when": "a run calls Read on `.claude/settings.json`, Write on `CLAUDE.md`, `.claude/skills/x/SKILL.md` or `sub/.claude/settings.json`, or Bash `printf x > .claude/notes.md` or `ls .claude`"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Workspace only",
+      "how_to_check": "py -3.11 scripts/drive/d1019_f755_judge_rules_check.py; hub/tests/test_a_text_tools_script_is_not_a_path.py",
+      "key": "text-allowed",
+      "requirement": "a-text-tools-script-is-not-a-path",
+      "then": "each is allowed",
+      "when": "a run's Bash command is `sed 's|/usr|x|' a.txt`, `awk -F/ '{print $1}' a.txt`, `cut -d/ -f2 a.txt`, `tr / _ < a.txt`, `grep -rn '\\.\\./' src` or `grep '$HOME' a.txt`"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Workspace only, the workspace's parent outside it",
+      "how_to_check": "py -3.11 scripts/drive/d1019_f755_judge_rules_check.py",
+      "key": "text-files-judged",
+      "requirement": "a-text-tools-script-is-not-a-path",
+      "then": "each is refused",
+      "when": "a run's Bash command is `sed 's/x/y/w ../out' a.txt`, `awk '{print > \"../out\"}' a.txt`, `awk '$1 > 5' ../a.txt`, `sed s/a/b/ ../a.txt`, `grep -f ../patterns a.txt`, `grep x ../a.txt`, `grep x --exclude-from ../x a.txt` or `sed \"s/x/$(cat ../y)/\" a.txt`"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Workspace only",
+      "how_to_check": "py -3.11 scripts/drive/d1019_f755_judge_rules_check.py",
+      "key": "pwd-allowed",
+      "requirement": "the-working-directory-by-name-is-judged-as-the-workspace-root",
+      "then": "each is allowed, saying the shell decides a value when it runs",
+      "when": "a run's command is Bash `echo $PWD`, `ls \"${PWD}\"`, `ls $(pwd)` or ``ls `pwd` ``, or PowerShell `Get-ChildItem $(Get-Location)`"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Workspace only",
+      "how_to_check": "py -3.11 scripts/drive/d1019_f755_judge_rules_check.py",
+      "key": "pwd-derived-refused",
+      "requirement": "the-working-directory-by-name-is-judged-as-the-workspace-root",
+      "then": "each is refused",
+      "when": "a run's command is Bash `ls $PWD/..`, `ls ${PWD%/*}`, `x=$PWD; ls $x`, `PWD=/ cp x $PWD`, `ls $(dirname $(pwd))`, `d=$(pwd); ls $d` or `pwd() { echo /; }; ls $(pwd)`, or PowerShell `ls (Split-Path (pwd))`, `$d = Get-Location; ls $d` or `ls (Split-Path $PWD)`"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "How a shell command's text is judged (Workspace only)",
+      "steps": [
+        "Before reading words, refuse a command whose stage takes paths or code from another command's output (*a-changed-runner-configuration-holds-the-turn-pipe-fed-shapes*).",
+        "Read the command in the dialect of the tool carrying it (Bash: bash; PowerShell: powershell; unknown: both), twice per dialect for locale-dependent `$'...'` escapes; any refusal in any reading refuses the command.",
+        "Lex into words as the shell produces them: remove quotes and escapes, join adjacent pieces, decode `$'...'`, and read nested `bash -c`/`powershell -Command` text as an inner shell would, including quoted braces and globs that inner shell would expand.",
+        "Expand bash brace patterns into every alternative (bounded at 256 words per argument, 1024 per decision; past that, refuse as uncheckable).",
+        "For each word: a network address is decided by the network rule (own Hub only) and is then still judged as the path it spells.",
+        "A word holding a variable, a substitution, or `~` together with a separator, or a separator-less `~`, `~user`, `~+`/`~-`, or a variable that names a directory for every process (home, profile, temp, app data, program and system directories, PowerShell's `$HOME`/`$PWD`/`$PSHOME`/`$PROFILE`), in any spelling the dialect accepts, including quoted or escaped: refuse as uncheckable, except an operand a text tool reads as its script, pattern or delimiter (*a-text-tools-script-is-not-a-path*) and the working directory named whole (*the-working-directory-by-name-is-judged-as-the-workspace-root*).",
+        "A word whose text before its first expansion, or with every expansion removed, is `..`: refuse as uncheckable.",
+        "Split a word into pieces only where a path can start: after a shell boundary character, a quote, a colon gluing a path to a host, revision or field name, or a leading short option. Judge each piece, and the whole word's value with and without inner-shell quotes, as a path resolved against the workspace.",
+        "On a platform without drive letters, also judge a word with backslashes at each escape-removal level.",
+        "On a platform with drive letters, a letter and colon starting a word or piece name that drive; a drive that exists (or whose existence check fails) is judged at its current location; a non-existent drive is an ordinary name. PowerShell's `temp:` is the temporary directory. `Provider::path` is judged by the path.",
+        "Judge `..` alone, `..` as an option value (`-C..`, `/x:..`), `..*`-style globs and extglob groups with a dot alternative as the parent directory; a separator-less `.*` is not.",
+        "Judge globs by their text and by the filesystem entries they match (bounded at 8192 entries; past that, refuse); a matched link and a `..` after it are judged where the link points.",
+        "Judge a separator-less word that names a link in the shell's directory where the link resolves.",
+        "A UNC or device path on a drive-letter platform is decided on its spelling without being resolved.",
+        "`/dev/null` and the standard streams are not destinations in bash; on Windows only as a whole word or redirect target.",
+        "A path, as written or through its links, that names the runner's configuration at the workspace root is refused, whether or not it exists (*runner-configuration-is-not-written-by-a-tool-call*).",
+        "Allow with a reason saying the shell decides some value at run time when any word expands; otherwise allow as inside the workspace."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "ba6d7957c619241c229f93b5fc2639b392a27fe2c6485b1b9a2a9f43ecada131",
+      "FR-2": "5d195e8dcfdf7d92c5f33844612e3b3bbb3d0874771392332b8e68e8844ba49e",
+      "FR-3": "eb809e84c61405bb847d5c508ab24a8f3b3d5b2d00c07c03c0181a24a6173d6a"
+    },
+    "high_water": 3,
+    "requirements": {
+      "a-text-tools-script-is-not-a-path": "FR-2",
+      "runner-configuration-is-not-written-by-a-tool-call": "FR-1",
+      "the-working-directory-by-name-is-judged-as-the-workspace-root": "FR-3"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Spec-only. Each requirement is written from the code that decides it (_runner_config via _judge_path and the write-tool keys in _decide; _text_operands, _sed_reads_only, _awk_reads_only; _bare_pwd_arguments and _whole_location_substitutions), and its criteria use only examples the real judge was run on. The algorithm replaces the capability's own, adding the pipe-fed and runner-configuration steps and amending step 5's exceptions. Acceptance drive: scripts/drive/d1019_f755_judge_rules_check.py runs every criterion's example through hub.mcp_server._decide in a throwaway workspace and fails if any is decided otherwise than stated.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Tier 0 fixes to the shell judge (F675's, d0a27d4, 570e93d, c22b861) changed what Workspace only allows and refuses, but agent-run-sandboxing states none of it: the rules live only in hub/hub/mcp_server.py and its tests, and the capability's algorithm still says every directory variable is refused, with grep the only text exception.",
+  "requirements": [
+    {
+      "key": "runner-configuration-is-not-written-by-a-tool-call",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "F675: an allow rule a turn writes into a project or local settings file runs ahead of the permission prompt tool on the next turn, and a hook runs with no check at all. A shell word cannot say whether it reads or writes, so naming the files at all is refused (`cat .claude/settings.json` too). On Windows names match in any letter case, and a trailing dot or space and a `:stream` are dropped. This is a text rule: a write that reaches the files without naming them (`cd .claude && ...`, a copy into `.claude/`) is caught by the launch fingerprint instead (a-changed-runner-configuration-holds-launch-compares-fingerprint).",
+      "statement": "Under Workspace only the Hub SHALL refuse a write tool's path (Write, Edit, MultiEdit, NotebookEdit) and any shell word that names, at the workspace root, `.claude/settings.json`, `.claude/settings.local.json`, `.mcp.json`, or anything beneath `.claude/hooks/`, `.codex/` or `.github/hooks/`, as written or through its links, existing or not, with a reason that says it configures the runner and sends the agent to `ask_user`; a file tool reading them, and every other file (`CLAUDE.md`, `.claude/skills/`, other `.claude/` files, a nested project's `.claude/settings.json`), SHALL stay ordinary work."
+    },
+    {
+      "key": "a-text-tools-script-is-not-a-path",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "F696: `sed 's|/usr|x|' a.txt`, `awk -F/ ...` and `grep -rn '\\.\\./' src` were refused as naming `/` or `..`, costing turns spent rephrasing. Unchanged means no substitution, no brace the shell expands, and no `$` unless it was quoted literally. Provably read-only sed: addresses, labels and branches, `a`/`i`/`c` text, `p P d D n N h H g G x l z = F q Q`, and `s`/`y` with no `w` or `e` flag; awk: no redirection, pipe, `system`, `getline`, `close`, `fflush`, `ARGV`/`ARGC` or `@` directive, so a comparison `$1 > 5` is not provable and its words are judged. Every grep option that takes a separate value is known, so a value such as `--exclude-from ../x` is never read as the pattern.",
+      "statement": "Under Workspace only, the operand that sed, awk, cut, tr or grep (and gsed, gawk, mawk, nawk, egrep, fgrep) reads as its script, pattern, field separator, delimiter, field list or character set SHALL NOT be judged as a path when the shell passes it unchanged, and a sed or awk script only when it provably writes no file, reads no other file and runs no command; every file operand, a script or pattern file (`-f`/`--file`) and every other option's value SHALL still be judged."
+    },
+    {
+      "key": "the-working-directory-by-name-is-judged-as-the-workspace-root",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "F696 and F745: `echo $PWD` and `ls $(pwd)` were refused like any directory variable. Named whole, the working directory has the boundary `.` already has (a `cd` earlier in the command is not seen for either). `$PWD/..`, `${PWD%/*}`, `x=$PWD`, `$(dirname $(pwd))`, `d=$(pwd)`, `(Split-Path (pwd))` and `$d = Get-Location` hand on another path; a command that names `PWD` or the location command elsewhere (`PWD=/ cp x $PWD`, `pwd() { echo /; }`) can redefine it. Conceded, and allowed: what another command computes from a path (`$(dirname $(realpath .))`) and a value handed on through a file.",
+      "statement": "Under Workspace only, a whole-argument `$PWD` or `${PWD}`, and a substitution that is exactly a location command (bash `pwd`; PowerShell `pwd`, `gl`, `Get-Location`) as a whole top-level argument, SHALL be judged as `.`, only when every mention of `PWD` or of the location command in the command is such an argument and, in PowerShell, the command has no other group, subexpression or script block; anything else that derives a path from the working directory or consumes a location command's output SHALL be refused."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "agent-run-sandboxing: three requirements and the shell-text algorithm, stated from hub/hub/mcp_server.py as it is at 4ed3f86"
+    ],
+    "non_goals": [
+      "Changing any judge behaviour: a disagreement found while stating it is filed as a finding",
+      "The pipe-fed rule (F676): already stated as pipe-fed-shapes",
+      "A structural boundary replacing the text judge (F737's research question)"
+    ]
+  },
+  "summary": "States what the Workspace-only judge already does and no capability said (F755): it refuses a tool call naming the runner's configuration (F675), reads a text tool's script, pattern or delimiter as text (F696), and judges the working directory named whole as the workspace root (F696, F745). No code changes.",
+  "tasks": [],
+  "title": "The shell judge's text rules are specified"
+}
