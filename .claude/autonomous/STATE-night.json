@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-10-19-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "trace-hub-wide-2-impl",
-    "next_action": "Do queue item trace-hub-wide-2-impl: slice 2 of spec/changes/everything-the-hub-does-is-in-a-trace -- persist_event puts its event on traces.current_span() or writes its own aw.event span (D5). Turn the two slice-2 xfail tests in hub/tests/test_the_hub_is_traced.py green and drop their markers; extend scripts/drive/d1020_hub_wide_trace_drive.py with an events step and drive it on a scratch Hub. Log it, update STATE, commit, push.",
+    "current": "trace-hub-wide-3-impl",
+    "next_action": "Do queue item trace-hub-wide-3-impl: slice 3 of spec/changes/everything-the-hub-does-is-in-a-trace -- traces.work(kind, project_id, **attrs) opens an aw.work root (D6) and is current while the work runs (so persist_event's events land on it), around a project check run first (the acceptance test), then jobs, loop ticks, flow/review staffing, inbound queue, worktree ops, task integration, spec fold, distil; traces.command(argv) wraps the Hub's git/check subprocess sites as aw.command children. Turn test_a_check_run_is_a_trace_of_its_commands green and drop its marker; extend scripts/drive/d1020_hub_wide_trace_drive.py with a work step and drive it on a scratch Hub. Log it, update STATE, commit, push.",
     "queue": [
         {
             "id": "trace-hub-wide-spec",
@@ -31,16 +31,16 @@
         },
         {
             "id": "trace-hub-wide-2-impl",
-            "status": "open",
+            "status": "done",
             "title": "Slice 2: persist_event attaches a span event / short span",
-            "detail": "One writer persist_event: attach a span event to traces.current_span() (the request's PendingSpan, mutable until enqueued) else stage an aw.event span in persist_event's own session. Unmark test_mutating_and_failing_requests... and test_an_event_with_no_trace_current... Note D5: a run's executor sets the run's root as current -- PendingSpan has no form for an already-written root; design it (event appended to the root row in the event's session). Test-first.",
+            "detail": "Done iter 4: traces.record_event called from persist_event: on the current request PendingSpan until enqueued (keep=True so a read that emitted is recorded), on the run root under traces.within_run (wraps _execute_run at its one create_task), else an aw.event span staged in the event's session. Drive events step green on scratch :8027: 8/8 event rows in a trace.",
             "model": "opus"
         },
         {
             "id": "trace-hub-wide-3-impl",
             "status": "open",
             "title": "Slice 3: background work traces + git/check child spans",
-            "detail": "Jobs, loop ticks, flow staffing/review, inbound queue, worktree ops, checks, spec fold, distil.",
+            "detail": "Jobs, loop ticks, flow staffing/review, inbound queue, worktree ops, checks, spec fold, distil. Note from slice 2: a task spawned inside a request or run inherits its current (request span falls back once enqueued; RunTrace persists, e.g. turn_scheduler._retry, _queue_decision_notes): traces.work must set its own current so background work stops attaching to whatever spawned it.",
             "model": "opus"
         },
         {

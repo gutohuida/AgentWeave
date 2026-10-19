@@ -74,7 +74,6 @@ def _requests(roots, method: str, route_end: str) -> List[Dict[str, Any]]:
 # --- 1. requests ---------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="trace-hub-wide slice 2 not built")
 @pytest.mark.asyncio
 async def test_mutating_and_failing_requests_are_spans_and_reads_only_when_asked(app, auth_headers):
     created = await app.post(f"{BASE}/tasks", json={"title": "Traced work"}, headers=auth_headers)
@@ -181,7 +180,6 @@ async def test_a_span_that_cannot_be_written_never_fails_the_request(app, auth_h
 # --- 2. events -----------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="trace-hub-wide slice 2 not built")
 @pytest.mark.asyncio
 async def test_an_event_with_no_trace_current_is_a_trace_of_its_own(app, auth_headers):
     async with async_session_factory() as db:
@@ -194,6 +192,85 @@ async def test_an_event_with_no_trace_current_is_a_trace_of_its_own(app, auth_he
     ]
     assert probe["root"]["ended"] is True
     assert SECRET not in json.dumps(probe)
+
+
+@pytest.mark.asyncio
+async def test_an_event_a_run_emits_is_on_the_runs_root(app, auth_headers):
+    """D5: the executor runs inside its run's trace (`traces.within_run`), so an event it emits is
+    a span event on the run's root, not a trace of its own."""
+    run_id = f"run-{short_id()}"
+    async with async_session_factory() as db:
+        run = Run(id=run_id, project_id=PROJECT, agent="tracer", status="running", turn_depth=0)
+        db.add(run)
+        traces.start_run(db, run, prompt="Work.", runner="claude", model=None)
+        await db.commit()
+
+    async def _executor() -> None:
+        async with async_session_factory() as db:
+            await persist_event(db, PROJECT, "run_probe", {"note": f"key {SECRET}"}, agent="tracer")
+
+    await traces.within_run(PROJECT, run_id, _executor())
+    await _flush()
+
+    by_run = await app.get(f"{BASE}/traces/by-run/{run_id}", headers=auth_headers)
+    spans = by_run.json()["spans"]
+    [root] = [span for span in spans if span["parent_span_id"] is None]
+    [probe] = [event for event in root["events"] if event["name"] == "run_probe"]
+    assert probe["attributes"]["aw.agent"] == "tracer"
+    assert SECRET not in json.dumps(probe)
+    assert [
+        r
+        for r in await _roots(app, auth_headers, "aw.event")
+        if r["root"]["attributes"].get("aw.event.type") == "run_probe"
+    ] == []
+
+
+@pytest.mark.asyncio
+async def test_an_event_after_its_request_was_recorded_is_a_trace_of_its_own(app, auth_headers):
+    """Work a request spawned inherits its span; once the request's span is handed to the writer,
+    an event appended to it would be lost, so the event gets a span of its own instead."""
+    span = traces.PendingSpan(
+        project_id=PROJECT,
+        name="POST /x",
+        operation="aw.request",
+        start_time=datetime.now(timezone.utc),
+    )
+    token = traces.set_current(span)
+    try:
+        traces.enqueue(span)
+        async with async_session_factory() as db:
+            await persist_event(db, PROJECT, "late_probe", {})
+    finally:
+        traces.reset_current(token)
+    await _flush()
+
+    events = await _roots(app, auth_headers, "aw.event")
+    assert [r for r in events if r["root"]["attributes"].get("aw.event.type") == "late_probe"]
+
+
+@pytest.mark.asyncio
+async def test_a_read_that_emits_an_event_is_recorded(app, auth_headers):
+    """A routine read is not recorded, but one that emitted an event did something: the request
+    is kept so the event is in a trace (`every-event-is-in-a-trace`)."""
+    from hub import trace_requests
+    from hub.auth import PROJECT_SCOPE_KEY
+
+    span = traces.PendingSpan(
+        project_id="", name="", operation="aw.request", start_time=datetime.now(timezone.utc)
+    )
+    token = traces.set_current(span)
+    try:
+        async with async_session_factory() as db:
+            await persist_event(db, PROJECT, "read_probe", {})
+    finally:
+        traces.reset_current(token)
+    scope = {"method": "GET", "path": f"{BASE}/tasks", PROJECT_SCOPE_KEY: PROJECT}
+    trace_requests._finish(scope, span, status=200, stream=False, elapsed=0.01)
+    await _flush()
+
+    roots = await _roots(app, auth_headers, "aw.request")
+    [read] = [r["root"] for r in roots if "read_probe" in [e["name"] for e in r["root"]["events"]]]
+    assert read["attributes"]["http.request.method"] == "GET"
 
 
 # --- 3. background work and 4. logs --------------------------------------------------------------

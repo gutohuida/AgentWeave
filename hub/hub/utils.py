@@ -57,7 +57,12 @@ async def persist_event(
     caller's still-in-flight write early, ahead of the "the caller commits" contract
     `apply_transition` states of itself. Every other caller keeps the default: an event usually is
     the transaction, not a passenger in someone else's.
+
+    The event is also put in a trace (`traces.record_event`, `everything-the-hub-does-is-in-a-trace`
+    D5): on the current request's span or run's root, else as an `aw.event` span of its own staged
+    in *session*, so it commits (or does not) with the event.
     """
+    from . import traces
     from .db.models import EventLog
 
     normalised_severity = severity if severity in KNOWN_SEVERITIES else "warn"
@@ -72,6 +77,19 @@ async def persist_event(
         severity=normalised_severity,
     )
     session.add(entry)
+    try:
+        await traces.record_event(
+            session,
+            project_id=project_id,
+            event_id=entry.id,
+            event_type=event_type,
+            data=data,
+            agent=agent,
+            severity=normalised_severity,
+            loop_id=loop_id,
+        )
+    except Exception:  # noqa: BLE001 -- an event's trace never stops the event (D5)
+        logger.debug("putting event %s in a trace failed", event_type, exc_info=True)
     if commit:
         await session.commit()
     return normalised_severity

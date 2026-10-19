@@ -2010,55 +2010,61 @@ async def _trigger_agent_directly(
     # Register execution immediately after the atomic Run + delivery commit. Event rows are
     # observability; a transient failure while writing one must never strand a running Run
     # whose queue entries are already marked delivered but which has no process task.
+    # The executor runs inside the run's trace, not the request that started it (trace-hub-wide
+    # D5): an event it emits lands on the run's root.
     task = asyncio.create_task(
-        _execute_run(
-            project_id=project_id,
-            agent=agent,
-            run_id=run_id,
-            conversation_id=conversation.id,
-            runner=runner,
-            cmd=cmd,
-            model=model,
-            work_dir=effective_work_dir,
-            known_session_id=resume_session_id,
-            # The project root, already resolved above for the worktree work. `_execute_run` needs
-            # it to tell one of this project's other checkouts from somewhere else entirely when a
-            # tool call declares an absolute path (task 4.3).
-            repo_root=str(repo_root),
-            env=env,
-            # A **review** turn passes None, deliberately. `_execute_run` snapshots this directory
-            # when the turn ends, and a reviewer is not an author: there is nothing of its to
-            # preserve, and committing on a detached HEAD moves the checkout off the very commit
-            # the review was about. Observed live on 2026-08-24 — `critic` reviewed `90aa643` and
-            # the checkout ended at `886124f`, an orphan commit of three `.pyc` files that running
-            # the tests had touched.
-            worktree=None if review_context is not None else isolated_workspace,
-            copilot_turn=copilot_turn,
-            setup_events=setup_events,
-            adapter=adapter,
-            transport=run_transport,
-            # A run told the MCP form by declaration keeps being told it; D12's event says so.
-            declared_mcp=hub_client == "mcp",
-            told_access_path=described_path,
-            # The stream transports carry it in `cmd`; an RPC transport reads no argv, so the
-            # restriction has to arrive by its own parameter or it reaches nothing (F462).
-            restrict_spec_writes=bool(spec_document),
-            cli=probe["cli"],
-            prompt=prompt,
-            yolo=yolo,
-            mcp_command=mcp_command,
-            permission_mode=(control_overrides or {}).get("permission_mode"),
-            # Config-style controls (Codex's Effort) render to `-c KEY=VALUE` in `cmd`, and `cmd`
-            # is unused on the app-server transport — so they reached nothing there until this was
-            # passed separately (F99). Rendered from the same catalog declaration `build_command`
-            # renders above; the app-server path merges it into `thread/start`'s `config`.
-            config_overrides=(
-                render_control_config(
-                    adapter.catalog_provider,
-                    control_overrides,
-                )
-                if control_overrides
-                else {}
+        traces.within_run(
+            project_id,
+            run_id,
+            _execute_run(
+                project_id=project_id,
+                agent=agent,
+                run_id=run_id,
+                conversation_id=conversation.id,
+                runner=runner,
+                cmd=cmd,
+                model=model,
+                work_dir=effective_work_dir,
+                known_session_id=resume_session_id,
+                # The project root, already resolved above for the worktree work. `_execute_run` needs
+                # it to tell one of this project's other checkouts from somewhere else entirely when a
+                # tool call declares an absolute path (task 4.3).
+                repo_root=str(repo_root),
+                env=env,
+                # A **review** turn passes None, deliberately. `_execute_run` snapshots this directory
+                # when the turn ends, and a reviewer is not an author: there is nothing of its to
+                # preserve, and committing on a detached HEAD moves the checkout off the very commit
+                # the review was about. Observed live on 2026-08-24 — `critic` reviewed `90aa643` and
+                # the checkout ended at `886124f`, an orphan commit of three `.pyc` files that running
+                # the tests had touched.
+                worktree=None if review_context is not None else isolated_workspace,
+                copilot_turn=copilot_turn,
+                setup_events=setup_events,
+                adapter=adapter,
+                transport=run_transport,
+                # A run told the MCP form by declaration keeps being told it; D12's event says so.
+                declared_mcp=hub_client == "mcp",
+                told_access_path=described_path,
+                # The stream transports carry it in `cmd`; an RPC transport reads no argv, so the
+                # restriction has to arrive by its own parameter or it reaches nothing (F462).
+                restrict_spec_writes=bool(spec_document),
+                cli=probe["cli"],
+                prompt=prompt,
+                yolo=yolo,
+                mcp_command=mcp_command,
+                permission_mode=(control_overrides or {}).get("permission_mode"),
+                # Config-style controls (Codex's Effort) render to `-c KEY=VALUE` in `cmd`, and `cmd`
+                # is unused on the app-server transport — so they reached nothing there until this was
+                # passed separately (F99). Rendered from the same catalog declaration `build_command`
+                # renders above; the app-server path merges it into `thread/start`'s `config`.
+                config_overrides=(
+                    render_control_config(
+                        adapter.catalog_provider,
+                        control_overrides,
+                    )
+                    if control_overrides
+                    else {}
+                ),
             ),
         )
     )

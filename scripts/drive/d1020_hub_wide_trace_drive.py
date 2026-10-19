@@ -8,10 +8,13 @@ trace routes.
       exist; the POST and the 404 are request traces with their route templates, the poll is not;
       with `record_reads` on, the poll is. Then a real Haiku turn calls a Hub MCP tool, and the
       request its tool server made is a span in the run's trace, under that tool call.
+  events (slice 2): the event a request emits is a span event on its request's span; the events a
+      real run's executor emits are on the run's root; an event with neither is an `aw.event`
+      trace of its own. Every event row of the window is found in some trace.
 
 Usage (after `e2e.py hub-up <profile> <port>` and `e2e.py setup <name>`):
   py -3.11 scripts/drive/d1020_hub_wide_trace_drive.py <project-id> [step]
-Steps: all (default), requests, nested.
+Steps: all (default), requests, nested, events.
 """
 
 from __future__ import annotations
@@ -135,6 +138,70 @@ def nested(project: str) -> None:
     print("  settings:", json.dumps({k: settings.get(k) for k in ("dropped_spans", "spans_by_operation")}))
 
 
+def _all_spans(project: str, operation: str, since: str) -> list:
+    listed = e2e.call("GET", f"/projects/{project}/traces?operation={operation}&limit=200")
+    out = []
+    for row in listed["traces"]:
+        trace = e2e.call("GET", f"/projects/{project}/traces/{row['trace_id']}?limit=2000")
+        if trace["root"]["start_time"] >= since:
+            out.extend(trace["spans"])
+    return out
+
+
+def events(project: str) -> None:
+    since = _now()
+    created = e2e.call("POST", f"/projects/{project}/tasks", {"title": "Event drive"})
+    time.sleep(SETTLE)
+    [post] = [
+        s for s in _requests(project, since)
+        if s["attributes"]["http.request.method"] == "POST"
+        and s["attributes"]["http.route"].endswith("/tasks")
+    ]
+    names = [e["name"] for e in post["events"]]
+    print(f"\n[4] POST /tasks request span events: {names} (expect task_created)")
+
+    print("\n[5] a real Haiku turn: its executor's events")
+    e2e.cmd_agent(project, AGENT, "-", "claude", "claude-haiku-4-5-20251001")
+    run = e2e.cmd_turn(project, AGENT, "Reply with the single word: done.", fresh=True)
+    print("  turn:", e2e.wait_for(run, 6))
+    time.sleep(SETTLE)
+    trace = e2e.call("GET", f"/projects/{project}/traces/by-run/{run}?limit=2000")
+    [root] = [s for s in trace["spans"] if s["parent_span_id"] is None]
+    print("  run root events:", [e["name"] for e in root["events"]])
+    for s in trace["spans"]:
+        if s["operation"] == "aw.request" and s["events"]:
+            print(f"  run request {s['name']} events:", [e["name"] for e in s["events"]])
+
+    print("\n[6] every event row of the window is in a trace")
+    spans = []
+    for operation in ("aw.request", "aw.event", "invoke_agent"):
+        spans += _all_spans(project, operation, since)
+    traced = {
+        e["attributes"].get("aw.event.id") for s in spans for e in s["events"]
+    } - {None}
+    own = [s for s in spans if s["operation"] == "aw.event"]
+    print("  aw.event traces of their own:", sorted({s["name"] for s in own}))
+    from datetime import datetime, timezone
+
+    def _at(value) -> datetime:
+        at = datetime.fromisoformat(str(value).replace(" ", "T"))
+        return at if at.tzinfo else at.replace(tzinfo=timezone.utc)
+
+    rows = [
+        (r["id"], r["event_type"])
+        for r in e2e.ro().execute(
+            "SELECT id, event_type, timestamp FROM event_logs WHERE project_id = ?", (project,)
+        )
+        if _at(r["timestamp"]) >= _at(since)
+    ]
+    missing = [r for r in rows if r[0] not in traced]
+    print(f"  event rows in the window: {len(rows)}, in a trace: {len(rows) - len(missing)}")
+    print("  missing (must be empty):", missing)
+    settings = e2e.call("GET", f"/projects/{project}/traces/settings")
+    print("  settings:", json.dumps({k: settings.get(k) for k in ("dropped_spans", "spans_by_operation")}))
+    del created
+
+
 def main() -> None:
     project = sys.argv[1]
     step = sys.argv[2] if len(sys.argv) > 2 else "all"
@@ -142,7 +209,9 @@ def main() -> None:
         requests(project)
     if step in ("nested", "all"):
         nested(project)
-    if step not in ("requests", "nested", "all"):
+    if step in ("events", "all"):
+        events(project)
+    if step not in ("requests", "nested", "events", "all"):
         raise SystemExit(f"unknown step {step}")
 
 

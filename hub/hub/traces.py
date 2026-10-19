@@ -44,7 +44,18 @@ import secrets
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+)
 
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.exc import OperationalError
@@ -286,10 +297,11 @@ def _append_part(span: TraceSpan, part: Dict[str, Any], at: datetime) -> None:
 
 async def _add_event(
     db: AsyncSession, run_id: str, name: str, at: datetime, attributes: Dict[str, Any]
-) -> None:
+) -> bool:
+    """Append an event to *run_id*'s root; False when the run has no trace."""
     root = await db.get(TraceSpan, root_span_id(run_id))
     if root is None:
-        return
+        return False
     root.events = [
         *(root.events or []),
         {
@@ -298,6 +310,7 @@ async def _add_event(
             "attributes": {k: v for k, v in attributes.items() if v is not None},
         },
     ]
+    return True
 
 
 async def observe_output(
@@ -789,6 +802,19 @@ class PendingSpan:
     trace_id: str = field(default_factory=lambda: secrets.token_hex(16))
     #: Writer passes a locked database refused this span (`flush_spans`).
     write_attempts: int = 0
+    #: Handed to the writer (`enqueue`): what is appended now would never be written (D5).
+    enqueued: bool = False
+    #: Recorded even if its request would not be (a read that emitted an event, D5).
+    keep: bool = False
+
+
+@dataclass(frozen=True)
+class RunTrace:
+    """The current trace while a run's executor works (D5): the run's root, already written, so
+    what attaches to it goes on the row, in the attaching session."""
+
+    project_id: str
+    run_id: str
 
 
 #: Spans waiting for the writer; past `MAX_QUEUE` a span is dropped and counted, never waited on.
@@ -802,20 +828,135 @@ _dropped: Dict[str, int] = {}
 #: request path, which never queries for it, and refreshed by the writer and the settings route.
 _record_reads: Dict[str, bool] = {}
 
-_current: ContextVar[Optional[PendingSpan]] = ContextVar("aw_current_span", default=None)
+Current = Optional[PendingSpan | RunTrace]
+_current: ContextVar[Current] = ContextVar("aw_current_span", default=None)
 
 
-def current_span() -> Optional[PendingSpan]:
-    """The span of the work this code runs inside (a request), if any (D2)."""
+def current_span() -> Current:
+    """The span of the work this code runs inside (a request, a run), if any (D2)."""
     return _current.get()
 
 
-def set_current(span: Optional[PendingSpan]) -> Token:
+def set_current(span: Current) -> Token:
     return _current.set(span)
 
 
 def reset_current(token: Token) -> None:
     _current.reset(token)
+
+
+T = TypeVar("T")
+
+
+async def within_run(project_id: str, run_id: str, work: Awaitable[T]) -> T:
+    """Await *work* with *run_id*'s trace current (D5): the run's executor, so what it records
+    lands on the run's trace instead of the request that started it (which it would inherit)."""
+    token = set_current(RunTrace(project_id=project_id, run_id=run_id))
+    try:
+        return await work
+    finally:
+        reset_current(token)
+
+
+#: The bound on an event's data stored on a span (D5), in characters of its JSON.
+EVENT_DATA_LIMIT = 8 * 1024
+
+
+def _event_record(
+    run_id: Optional[str],
+    *,
+    event_id: str,
+    event_type: str,
+    data: Optional[Dict[str, Any]],
+    agent: Optional[str],
+    severity: str,
+    loop_id: Optional[str],
+    at: datetime,
+) -> Dict[str, Any]:
+    text = json.dumps(redact(run_id, data or {}), default=str, ensure_ascii=False)
+    if len(text) > EVENT_DATA_LIMIT:
+        text = text[:EVENT_DATA_LIMIT] + "... [truncated]"
+    attributes = {
+        "aw.event.id": event_id,
+        "aw.event.severity": severity,
+        "aw.agent": agent,
+        "aw.loop.id": loop_id,
+        "aw.event.data": text,
+    }
+    return {
+        "name": event_type,
+        "time": at.isoformat(),
+        "attributes": {k: v for k, v in attributes.items() if v is not None},
+    }
+
+
+async def record_event(
+    session: AsyncSession,
+    *,
+    project_id: str,
+    event_id: str,
+    event_type: str,
+    data: Optional[Dict[str, Any]],
+    agent: Optional[str],
+    severity: str,
+    loop_id: Optional[str],
+) -> None:
+    """Put the event `persist_event` is writing in a trace (D5, `every-event-is-in-a-trace`).
+
+    On the current request's span while it is still being recorded; on the run's root while a
+    run's executor is current; else a short ended `aw.event` span of its own, staged in *session*
+    so the event and its span commit together."""
+    at = _now()
+    current = current_span()
+
+    def _record(run_id: Optional[str]) -> Dict[str, Any]:
+        return _event_record(
+            run_id,
+            event_id=event_id,
+            event_type=event_type,
+            data=data,
+            agent=agent,
+            severity=severity,
+            loop_id=loop_id,
+            at=at,
+        )
+
+    if isinstance(current, PendingSpan) and not current.enqueued:
+        current.events.append(_record(current.run_id))
+        current.keep = True
+        current.project_id = current.project_id or project_id
+        return
+    if isinstance(current, RunTrace) and current.project_id == project_id:
+        attached = _record(current.run_id)["attributes"]
+        if await _add_event(session, current.run_id, event_type, at, attached):
+            return
+    record = _record(None)
+    attributes = {
+        "aw.event.type": event_type,
+        "aw.event.id": event_id,
+        "aw.event.severity": severity,
+        "aw.project.id": project_id,
+        "aw.agent": agent,
+        "aw.loop.id": loop_id,
+    }
+    session.add(
+        TraceSpan(
+            span_id=secrets.token_hex(8),
+            trace_id=secrets.token_hex(16),
+            parent_span_id=None,
+            project_id=project_id,
+            run_id=None,
+            name=event_type[:256],
+            operation="aw.event",
+            status="error" if severity == "error" else "unset",
+            start_time=at,
+            end_time=at,
+            ended=True,
+            trace_started_at=at,
+            attributes={k: v for k, v in attributes.items() if v is not None},
+            events=[record],
+        )
+    )
 
 
 def records_reads(project_id: str) -> bool:
@@ -837,6 +978,7 @@ def _drop(spans: Iterable[PendingSpan]) -> None:
 
 def enqueue(span: PendingSpan) -> None:
     """Hand *span* to the writer. Never blocks and never raises into the caller's work."""
+    span.enqueued = True
     if len(_queue) >= MAX_QUEUE:
         _drop([span])
         return

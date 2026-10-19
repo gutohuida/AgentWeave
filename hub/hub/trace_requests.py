@@ -61,12 +61,16 @@ def _finish(
     stream: bool,
     elapsed: float,
 ) -> None:
-    project_id = scope.get(PROJECT_SCOPE_KEY)
+    # A request nothing authenticated for a project is recorded only if it emitted an event, which
+    # names its project (D5: every event is in a trace).
+    project_id = scope.get(PROJECT_SCOPE_KEY) or span.project_id
     if not project_id:
         return
     run_id = scope.get(RUN_SCOPE_KEY)
     method = scope.get("method", "")
-    keep = _keep(method=method, run_id=run_id, status=status, stream=stream, elapsed=elapsed)
+    keep = span.keep or _keep(
+        method=method, run_id=run_id, status=status, stream=stream, elapsed=elapsed
+    )
     if not keep and not traces.records_reads(project_id):
         return
     route = _route_template(scope)
@@ -79,7 +83,7 @@ def _finish(
         "http.route": route,
         "http.response.status_code": status,
         "url.path": traces.redact(run_id, scope.get("path", "")),
-        "aw.actor": "run" if run_id else "operator",
+        "aw.actor": "run" if run_id else ("operator" if scope.get(PROJECT_SCOPE_KEY) else None),
         "aw.project.id": project_id,
         "aw.run.id": run_id,
         **span.attributes,
