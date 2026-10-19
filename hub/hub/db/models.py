@@ -1487,6 +1487,82 @@ class AgentOutput(Base):
     )
 
 
+TRACE_SPAN_STATUSES = ("unset", "ok", "error")
+
+
+class TraceSpan(Base):
+    """One span of an OpenTelemetry-shaped trace (migration 0137, `a-run-is-a-trace-you-can-export`).
+
+    A run is a trace (its root is the `invoke_agent` span); a worker invocation is a trace of one
+    `chat` span. Written only by `hub/hub/traces.py`, from the seam that already records each fact,
+    in that seam's transaction (design D1). Ids are OTLP's: 32 hex characters for a trace, 16 for a
+    span, derived deterministically from the run and the call so a retried write rewrites rather
+    than duplicates. Content lives in `attributes` already redacted (D2).
+
+    `trace_started_at` is the root's start, copied onto every span, so export and clear select a
+    trace whole by when it began (D3). `ended` is whether the span is final; only an ended span is
+    pushed over OTLP, and `exported_at` is that push's outbox mark (D4). No foreign key to `runs`:
+    a trace outlives nothing it does not own, and a cleared trace leaves the run untouched.
+    """
+
+    __tablename__ = "trace_spans"
+
+    span_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trace_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    parent_span_id: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    # `invoke_agent`, `chat`, `execute_tool`, `aw.judge`, `aw.permission_wait`, `aw.ask_user`,
+    # `aw.deliver` -- what `gen_ai.operation.name` says, or the Hub's own operation.
+    operation: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(8), default="unset", server_default="unset", nullable=False
+    )
+    status_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    start_time: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    end_time: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    ended: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    trace_started_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    attributes: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    events: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    exported_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('unset', 'ok', 'error')", name="ck_trace_spans_status"),
+        Index("ix_trace_spans_trace_start", "trace_id", "start_time"),
+        Index("ix_trace_spans_project_trace_started", "project_id", "trace_started_at"),
+        Index("ix_trace_spans_project_roots", "project_id", "parent_span_id", "start_time"),
+        Index("ix_trace_spans_run", "run_id"),
+        Index("ix_trace_spans_outbox", "project_id", "ended", "exported_at"),
+    )
+
+
+class TraceSettings(Base):
+    """A project's OTLP push choice (migration 0137). No row: nothing is pushed (trace-D1, off by
+    default). `otlp_headers` may carry a credential, so no route ever returns its values."""
+
+    __tablename__ = "trace_settings"
+
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), primary_key=True)
+    otlp_endpoint: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    otlp_headers: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    export_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # Spans that ended before this are not pushed: enabling export is not a request to replay
+    # history (the download is for that).
+    enabled_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    last_export_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    exported_spans: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
+    )
+
+
 class AIJob(Base):
     """Scheduled AI job for recurring agent tasks."""
 

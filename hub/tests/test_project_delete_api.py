@@ -10,6 +10,8 @@ non-blocking cases (terminal run, open conversation) tasks.md's phase 3 calls fo
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 from sqlalchemy import func, select
 
@@ -58,6 +60,8 @@ from hub.db.models import (
     TaskRequirementLink,
     TaskRequirementReference,
     TaskTransition,
+    TraceSettings,
+    TraceSpan,
     TurnUsage,
     VaultFetch,
     VaultSettings,
@@ -111,6 +115,8 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "manager_jobs",
     "vault_settings",
     "vault_fetches",
+    "trace_spans",
+    "trace_settings",
     "event_logs",
     "conversations",
     "checkpoint_notes",
@@ -271,6 +277,20 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
     session.add(EventLog(id=f"event-{tag}", project_id=project_id, event_type="test_event"))
     session.add(ManagerJob(project_id=project_id, job=f"job-{tag}", enabled=True))
     session.add(VaultSettings(project_id=project_id, private_location=f"/vault-{tag}"))
+    session.add(TraceSettings(project_id=project_id, otlp_headers={}))
+    session.add(
+        TraceSpan(
+            span_id=f"{tag}span"[:16],
+            trace_id=f"{tag}trace"[:32],
+            project_id=project_id,
+            name="chat",
+            operation="chat",
+            start_time=datetime.now(timezone.utc),
+            trace_started_at=datetime.now(timezone.utc),
+            attributes={},
+            events=[],
+        )
+    )
     session.add(VaultFetch(project_id=project_id, entry_id=f"entry-{tag}", count=2))
     session.add(AgentHeartbeat(id=f"heartbeat-{tag}", project_id=project_id, agent=f"agent-{tag}"))
     session.add(

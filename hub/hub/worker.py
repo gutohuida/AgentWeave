@@ -344,11 +344,33 @@ async def record_invocation(
     model: Optional[str],
     conversation_id: Optional[str],
     result: WorkerResult,
+    prompt: Optional[str] = None,
 ) -> Optional[str]:
-    """Persist the invocation. A recording failure never fails the call it is recording."""
+    """Persist the invocation. A recording failure never fails the call it is recording.
+
+    Its trace, one `chat` span carrying *prompt* and the answer, is written beside it in the same
+    transaction (trace-1019): every worker call -- a manager job, a title, a checkpoint, a
+    distillation, a vault report -- passes here, so here is the one place it is traced."""
+    from . import traces
+
     invocation_id = f"wrk-{short_id()}"
     try:
         async with async_session_factory() as db:
+            try:
+                db.add(
+                    traces.worker_span(
+                        invocation_id=invocation_id,
+                        project_id=project_id,
+                        kind=kind,
+                        cli=cli,
+                        model=model,
+                        conversation_id=conversation_id,
+                        prompt=prompt,
+                        result=result,
+                    )
+                )
+            except Exception:  # noqa: BLE001 -- the trace never costs the accounting row
+                logger.warning("tracing worker invocation %s failed", invocation_id, exc_info=True)
             db.add(
                 WorkerInvocation(
                     id=invocation_id,
@@ -487,6 +509,7 @@ async def run_worker(
         model=model,
         conversation_id=conversation_id,
         result=result,
+        prompt=prompt,
     )
     if not result.ok:
         logger.info("worker %s finished %s: %s", kind, result.outcome, result.error)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Iterable, List, Optional, Sequence, Set, Tuple
@@ -14,6 +15,8 @@ from .conversations import get_conversation_by_id
 from .db.models import InboundQueueEntry, Project, Run
 from .file_mentions import MENTION_NOTICE, neutralise_file_mentions
 from .utils import short_id
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .provider_allowance import AllowanceRefusal
@@ -308,6 +311,13 @@ async def deliver_entries_with_run(
         set_committed_value(entry, "delivered_in_run_id", run.id)
         set_committed_value(entry, "delivered_at", now)
         set_committed_value(entry, "waiting_reason", None)
+    # Each delivery is a span of the run's trace, in this transaction (trace-1019, D1).
+    from . import traces
+
+    try:
+        await traces.record_deliveries(db, run=run, entries=entries, at=now)
+    except Exception:  # noqa: BLE001 -- bookkeeping never refuses a delivery
+        logger.warning("tracing the delivery into run %s failed", run.id, exc_info=True)
     await db.commit()
     return entries
 

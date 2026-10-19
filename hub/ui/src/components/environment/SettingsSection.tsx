@@ -12,6 +12,7 @@ const SECTION_ICONS: Record<string, string> = {
   Diagnostics: 'monitoring',
   Budgets: 'bar_chart',
   Settings: 'settings',
+  Traces: 'monitoring',
   // Agent-scoped sections. Without these all seven fell through to the generic gear, in the same
   // pass that gave the rail nav seven distinct glyphs for the very same sections.
   Identity: 'badge',

@@ -279,6 +279,7 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
             model=model,
             conversation_id=conversation_id,
             result=result,
+            prompt=_PROMPT.format(excerpt=excerpt),
         )
 
     # Always autonomous: nobody asked for this title. At a spent budget it is not spawned and the

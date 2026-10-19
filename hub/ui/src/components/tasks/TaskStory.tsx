@@ -6,6 +6,7 @@ import { Expander } from '@/components/common/Expander'
 import { EvidenceProof as Proof, EvidenceReviews as Reviews } from '@/components/evidence/EvidenceProof'
 import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import { ConversationLink } from '@/components/agents/ConversationLink'
+import { TraceButton } from '@/components/traces/TraceDrawer'
 import { useTaskStory, type StoryEvent, type TaskStory as Story } from '@/api/tasks'
 import { hubDate } from '@/lib/hubTime'
 import { evidenceTone, statusTone } from '@/lib/storyTones'
@@ -288,6 +289,10 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
                   </ConversationLink>
                 </>
               ) : null}
+              {/* A run event's id is the run's own id (`task_story.py`), which is what a trace
+                  is keyed by. */}
+              {' · '}
+              <TraceButton runId={event.id} label="trace" testId={`story-run-trace-${event.id}`} />
             </>
           }
         >

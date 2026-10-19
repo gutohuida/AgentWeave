@@ -1228,7 +1228,12 @@ async def record_permission_decision(
 
     Returns 202 rather than 201: the caller is not waiting on this and discards the response.
     """
+    # Every decision is traced, allowed ones too: this report is the only place the Hub sees an
+    # allowed call's decision (trace-1019). Before the de-duplication below, which is about the
+    # Activity line, not about what was decided.
+    await _trace_decision(session, actor, body)
     if not body.allowed and await _operator_already_refused(session, actor, body.tool_use_id):
+        await session.commit()
         return {"recorded": False}
     if not body.allowed:
         await persist_event(
@@ -1251,7 +1256,44 @@ async def record_permission_decision(
             "permission_denied",
             {"agent": actor.agent, "tool_name": body.tool_name, "reason": body.reason},
         )
+    await session.commit()
     return {"recorded": not body.allowed}
+
+
+async def _trace_decision(
+    session: AsyncSession, actor: AgentActor, body: PermissionDecisionCreate
+) -> None:
+    """Stage the decision's `aw.judge` span. Its source is the operator when a card for this call
+    exists (the operator answered it), else the Hub's own judge in the tool server."""
+    from ... import traces
+    from ...db.models import PermissionRequest
+
+    try:
+        carded = (
+            bool(body.tool_use_id)
+            and (
+                await session.execute(
+                    select(PermissionRequest.id).where(
+                        PermissionRequest.project_id == actor.project_id,
+                        PermissionRequest.run_id == actor.run_id,
+                        PermissionRequest.tool_use_id == body.tool_use_id,
+                    )
+                )
+            ).first()
+            is not None
+        )
+        await traces.record_judge(
+            session,
+            project_id=actor.project_id,
+            run_id=actor.run_id,
+            tool_name=body.tool_name,
+            tool_use_id=body.tool_use_id,
+            allowed=body.allowed,
+            reason=body.reason,
+            source="operator" if carded else "judge",
+        )
+    except Exception:  # noqa: BLE001 -- the report is observational; its trace is too
+        logger.warning("tracing a permission decision failed", exc_info=True)
 
 
 class WorkspaceVerdict(RequestModel):

@@ -8,12 +8,13 @@ agent already produces — one path, not two that can drift.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import run_secrets
+from . import run_secrets, traces
 from .conversations import latest_open_conversation, new_conversation
 from .db.models import AgentOutput, Conversation, EventLog, Run
 from .model_catalog import context_window_for_model
@@ -98,6 +99,9 @@ async def record_agent_output(
         )
         is_new_session = count_result.scalar() is None
 
+    # One instant for the row and its span (`traces.observe_output`), set here rather than left
+    # to the column default, which is applied only at the flush the span is written before.
+    recorded_at = datetime.now(timezone.utc)
     row = AgentOutput(
         id=f"out-{short_id()}",
         project_id=project_id,
@@ -109,8 +113,25 @@ async def record_agent_output(
         payload=payload,
         run_id=run_id,
         sequence=sequence,
+        timestamp=recorded_at,
     )
     db.add(row)
+    # The run's trace, from the same scrubbed values and in the same transaction, so the span and
+    # the row commit together and the locked-database retry rewrites both (trace-1019, D1).
+    # A trace is the Hub's bookkeeping about the run: a defect in it is logged, never allowed to
+    # lose the row it describes.
+    try:
+        await traces.observe_output(
+            db,
+            project_id=project_id,
+            run_id=run_id,
+            kind=kind,
+            content=content,
+            payload=payload,
+            at=recorded_at,
+        )
+    except Exception:  # noqa: BLE001 -- see above
+        logger.warning("tracing output for run %s failed", run_id, exc_info=True)
     await db.commit()
 
     # No `db.refresh(row)` here, deliberately (F287). It was one extra SELECT by primary key on

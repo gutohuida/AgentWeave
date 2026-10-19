@@ -1,0 +1,143 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a Claude turn through POST /agent/trigger (spawn faked) whose stream carries a text with an aw_live_ key, a Bash tool call, and whose run reports a refused permission decision for that call",
+      "how_to_check": "hub/tests/test_a_run_is_one_trace.py (failed before the build)",
+      "key": "one-turn-one-trace",
+      "requirement": "a-run-is-one-trace",
+      "then": "there is one trace: invoke_agent root with the prompt, a chat span, an execute_tool Bash span with error status, and an aw.judge span under it with allowed=false; the key appears nowhere in the trace",
+      "when": "the turn ends and GET /traces/by-run/{run} is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trace above",
+      "how_to_check": "hub/tests/test_a_run_is_one_trace.py",
+      "key": "export-then-clear",
+      "requirement": "traces-export-and-clear",
+      "then": "the export is OTLP JSON naming the trace's traceId and every span; after the clear the trace and the export are empty, and the run's conversation rows are untouched",
+      "when": "GET /traces/export then DELETE /traces for the day"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub with a project whose OTLP endpoint is a local receiver (scripts/drive/otlp_receiver.py)",
+      "how_to_check": "acceptance drive on a scratch Hub (:8140)",
+      "key": "drive-real-turns",
+      "requirement": "ended-spans-are-pushed-over-otlp",
+      "then": "the receiver gets each run's spans under its traceId, the trace view renders the waterfall in a browser, and export and clear behave as above",
+      "when": "real Haiku turns run: one with a tool call and a refusal, one bound to a task, and one manager-job worker call"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "8b4d00405e9a027b20568713945a052d4db83e7928182678adb481451d77511c",
+      "FR-2": "3a5ba26e0e297573cc04129631ed2e928a1acf39801276f54214d6685a29f109",
+      "FR-3": "c7e3d877c358b27434f95bcab8120b286c19685bfd4ed80225f82d1d488407de",
+      "FR-4": "c1f00a27b718880f4134ca379689b2629723622858d3c036d37a81dc89872950",
+      "FR-5": "e477e20f12b0ec6320a09e8f58c95782203995a4104cee429d00299adac9f191",
+      "FR-6": "b170793e6f35c61d8e236118b238d9144fc6395a964726a7e427346e827fd3db"
+    },
+    "high_water": 6,
+    "requirements": {
+      "a-run-is-one-trace": "FR-1",
+      "a-worker-call-is-a-trace": "FR-2",
+      "ended-spans-are-pushed-over-otlp": "FR-6",
+      "trace-content-is-redacted": "FR-3",
+      "traces-are-viewable": "FR-4",
+      "traces-export-and-clear": "FR-5"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2. Hazard: migration 0137 runs on the operator's real :8000 data at its next restart. It only creates two tables (trace_spans, trace_settings) and four indexes; no existing table is touched and nothing is backfilled. Rollback: downgrade drops both tables (losing only traces). Second hazard: database growth. A trace stores each run's prompt and its (already bounded: 64 KiB text, 8 KiB tool I/O) output a second time, kept forever by decision; the operator's control is clear by date range, and the settings panel shows the span count.\n\nD1 One writer per fact. hub/hub/traces.py is the only writer of trace_spans and is called from the seam that already records the fact, inside that seam's transaction: run creation (root, with the prompt), record_agent_output (chat/execute_tool spans, status and error events), /permission-decisions (aw.judge, the only place allowed decisions are seen), deliver_entries_with_run (aw.deliver), record_turn_usage (run end: closes open spans, sets usage, and derives permission_wait and ask_user spans from permission_requests and questions, which are already the record), worker.record_invocation (worker traces). Span ids are deterministic (run id + call id / segment), so a judge decision that arrives before its tool span still lands under it, and a locked-database retry rewrites rather than duplicates.\n\nD2 Content is stored in the span (not referenced), so a trace survives conversation deletion and an export is self-contained; it is the already-scrubbed value, scrubbed again for the prompt and judge reason.\n\nD3 Export and clear select by trace start (trace_started_at on every span), so a trace is never split. Export streams OTLP JSON keyset-paged.\n\nD4 OTLP push: an outbox (exported_at) drained every few seconds by a lifespan task posting OTLP/HTTP JSON with urllib in a thread. No SDK dependency: OTLP/HTTP JSON is one POST and the Hub has no HTTP client of its own (httpx is dev-only). Headers are write-only (they may hold a token).\n\nD5 trace-4 (stays OPEN). Claude Code 2.1.301 measured: with CLAUDE_CODE_ENABLE_TELEMETRY=1, OTEL_TRACES_EXPORTER=otlp, CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1 and http/json it exports traces (claude_code.interaction, llm_request, tool, tool.execution, tool.blocked_on_user), logs (user_prompt, api_request, tool_decision, tool_result, assistant_response) and metrics, and it honours TRACEPARENT, parenting its interaction span under the given span. It also stamps user.email and account ids. Seam: the Hub sets TRACEPARENT to the run's root and points the CLI's OTLP endpoint at a Hub route authenticated by the run token, which scrubs and strips identity attributes before storing. Copilot 1.0.98 documents GenAI-convention traces but refuses a cleartext http endpoint, so it would need its file exporter read at run end. Not built here.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "trace-4: ingest the runner CLIs' own telemetry through the TRACEPARENT seam (D5)?",
+      "resolved": false
+    }
+  ],
+  "problem": "Today a run leaves agent_outputs (raw stream rows), event_logs, permission_requests, questions, turn_usage and worker_invocations, each in its own shape. Nothing ties a turn's model calls, tool calls, judge decisions and waits into one timed tree, nothing carries the prompt the agent was given, and nothing can be handed to an external tracing tool. The operator asked to trace and log everything and keep it (spec-queue/DECISIONS.md trace-1019).",
+  "requirements": [
+    {
+      "key": "a-run-is-one-trace",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "trace-D1. Derived at the seam that already records each fact, in the same transaction, so the trace cannot disagree with the record it came from.",
+      "statement": "The Hub SHALL record each agent run as one trace whose root `invoke_agent` span carries the run's prompt, agent, conversation, task, model and final status and usage, and whose child spans are each model call (`chat`), each tool call (`execute_tool`), each permission decision the run reports (`aw.judge`), each permission and `ask_user` wait, and each delivery of queued input; a runner's `retrying` status and errors SHALL be span events."
+    },
+    {
+      "key": "a-worker-call-is-a-trace",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "trace-D1 names manager-job worker calls and checkpoints; all of them pass worker.record_invocation.",
+      "statement": "Each worker invocation (manager jobs, conversation titles, checkpoints, distillation, vault reports) SHALL be recorded as a trace of one `chat` span carrying its kind, model, prompt, answer, outcome and usage."
+    },
+    {
+      "key": "trace-content-is-redacted",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "trace-D2: everything, including full content, with secret redaction. Reuses run_secrets.scrub and runner_events.redact_text_secrets.",
+      "statement": "Every string a span stores or exports SHALL first pass the redaction recorded output passes: the run's registered secret values and the named secret patterns."
+    },
+    {
+      "key": "traces-are-viewable",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "trace-D1: viewed in the app.",
+      "statement": "The app SHALL show a run's trace as a paged waterfall of its spans with their attributes and collapsible content, reachable from the run in its conversation and from the task story."
+    },
+    {
+      "key": "traces-export-and-clear",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "trace-D3: forever by default, export and clear by project and date range.",
+      "statement": "The operator SHALL be able to download a project's traces as OTLP JSON for a date range, and clear them for a date range, from the app and the API; a trace is selected by when its root started, so it is exported or cleared whole."
+    },
+    {
+      "key": "ended-spans-are-pushed-over-otlp",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "trace-D1: exported over OTLP, operator-configured, off by default.",
+      "statement": "When the operator configures and enables an OTLP/HTTP endpoint for a project, the Hub SHALL push each span that has ended since it was enabled to `<endpoint>/v1/traces` as OTLP JSON, retrying on failure and showing the last error, without delaying any run."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "trace_spans and trace_settings tables (migration 0137), written by one module (hub/hub/traces.py) called at the seams that already record each fact: run creation, record_agent_output, /permission-decisions, deliver_entries_with_run, record_turn_usage (run end, which also derives the permission and ask_user wait spans from their rows), worker.record_invocation",
+      "Routes under /projects/{id}/traces: list (paged), one trace (paged spans), by run, export (OTLP JSON, date range), clear (date range), settings (OTLP endpoint, headers write-only, enabled)",
+      "A background OTLP/HTTP JSON pusher using the stdlib (no new dependency), off by default",
+      "UI: trace view (waterfall, attributes, collapsible content), entry from a run in the conversation and from the task story, a Traces settings panel with endpoint, export and clear",
+      "trace-4 investigation: what Claude Code and Copilot emit, and the seam for ingesting it"
+    ],
+    "non_goals": [
+      "Ingesting the runner CLIs' own telemetry (trace-4 stays OPEN; the seam is designed, see design)",
+      "Retention or automatic pruning (trace-D3: forever unless the operator clears)",
+      "OTLP gRPC or protobuf; metrics and logs signals",
+      "Rewriting or backfilling traces for runs that ended before the migration"
+    ]
+  },
+  "summary": "Tier 2 (trace-1019, decisions trace-D1..D3). The Hub records every agent run as one OpenTelemetry-shaped trace (GenAI semantic conventions) and every worker call as its own trace, with full prompt and response content passed through the Hub's existing secret redaction. The app shows a trace per run as a waterfall; the operator downloads traces as OTLP JSON and clears them by project and date range, and may configure an OTLP/HTTP endpoint the Hub pushes ended spans to. Kept forever unless cleared.",
+  "tasks": [],
+  "title": "A run is a trace you can view, export and clear"
+}

@@ -51,6 +51,7 @@ from ... import (
     runner_config_guard,
     task_workspace,
     tool_server,
+    traces,
     worktrees,
 )
 from ...agent_auth import hash_run_token, mint_run_token
@@ -1923,6 +1924,20 @@ async def _trigger_agent_directly(
 
     if bound_task is not None:
         await bind_run_to_task(session, run, bound_task)
+
+    # The run's trace root, carrying the prompt it was given, staged beside the run so the two
+    # commit together and a refused delivery takes both back (trace-1019, D1).
+    try:
+        traces.start_run(
+            session,
+            run,
+            prompt=prompt,
+            runner=runner,
+            model=model,
+            task_id=bound_task.id if bound_task is not None else None,
+        )
+    except Exception:  # noqa: BLE001 -- a defect in the bookkeeping never refuses the turn
+        logger.warning("starting the trace of run %s failed", run_id, exc_info=True)
 
     delivered = []
     if queue_entry_ids:

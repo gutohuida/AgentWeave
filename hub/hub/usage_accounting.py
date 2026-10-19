@@ -80,6 +80,14 @@ async def record_turn_usage(
     )
     db.add(row)
     await db.flush()
+    # Every end of every run records its accounting here, in the transaction that ends the run, so
+    # this is where its trace is closed (trace-1019, D1): one place, not one per end site.
+    from . import traces
+
+    try:
+        await traces.finish_run(db, run_id, row)
+    except Exception:  # noqa: BLE001 -- the run's end is recorded whatever its trace does
+        logger.warning("closing the trace of run %s failed", run_id, exc_info=True)
     return row
 
 

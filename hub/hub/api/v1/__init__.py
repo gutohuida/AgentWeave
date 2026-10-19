@@ -32,6 +32,7 @@ from .setup import router as setup_router
 from .spec import router as spec_router
 from .status import router as status_router
 from .tasks import router as tasks_router
+from .traces import router as traces_router
 from .vault import router as vault_router
 from .workspace import router as workspace_router
 from .worktrees import router as worktrees_router
@@ -70,6 +71,7 @@ project_resources_router.include_router(runners_router)
 project_resources_router.include_router(charters_router)
 project_resources_router.include_router(manager_router)
 project_resources_router.include_router(vault_router)
+project_resources_router.include_router(traces_router)
 v1_router.include_router(project_resources_router)
 
 v1_router.include_router(agent_actions_router)

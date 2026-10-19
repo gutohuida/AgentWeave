@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
 import { ToolEditDiff } from '@/components/agents/ToolEditDiff'
+import { TraceButton } from '@/components/traces/TraceDrawer'
 import { editDiffStat } from '@/lib/editDiff'
 import { formatElapsedSeconds, useElapsedSeconds } from '@/hooks/useElapsedSeconds'
 import type { AgentRunFacts, AgentSummary, RunLifecycleStatus } from '@/api/agents'
@@ -311,15 +312,27 @@ export function AgentTimeline({
             {/* Every turn is foldable, including the last. Nothing folds on its own any more,
                 so gating this on `!isLastTurn` would leave a single-turn conversation with no
                 way to fold at all. */}
-            <button
-              onClick={() => setFoldOverride((old) => ({ ...old, [key]: true }))}
-              className="fold-control self-start flex items-center gap-1 rounded px-1.5 py-1 text-[10.5px]"
-              style={{ color: 'var(--text-3)', opacity: 0.55 }}
-              title="Fold this turn"
-            >
-              <Icon name="expand_more" size={13} />
-              fold
-            </button>
+            <div className="self-start flex items-center gap-1">
+              <button
+                onClick={() => setFoldOverride((old) => ({ ...old, [key]: true }))}
+                className="fold-control flex items-center gap-1 rounded px-1.5 py-1 text-[10.5px]"
+                style={{ color: 'var(--text-3)', opacity: 0.55 }}
+                title="Fold this turn"
+              >
+                <Icon name="expand_more" size={13} />
+                fold
+              </button>
+              {/* The run's trace: every model call, tool call and decision it made, timed. */}
+              {turn.runId && (
+                <TraceButton
+                  runId={turn.runId}
+                  label="trace"
+                  className="fold-control flex items-center gap-1 rounded px-1.5 py-1 text-[10.5px]"
+                  style={{ color: 'var(--text-3)', opacity: 0.55 }}
+                  testId={`turn-trace-${turn.runId}`}
+                />
+              )}
+            </div>
             <TurnBody
               turn={turn}
               turnKey={key}
