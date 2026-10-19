@@ -1,0 +1,159 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a capability with algorithms Hover and Idle, and an approved change with Hover (new steps) and Blink",
+      "how_to_check": "hub/tests/test_a_fold_carries_algorithms_and_criterion_rewrites.py; drive on a fresh Hub",
+      "key": "algorithms-written",
+      "requirement": "fold-algorithms",
+      "then": "the capability holds Hover with the change's steps then Blink, and no Idle; by default it holds every change algorithm",
+      "when": "the change is folded with Hover replacing Hover, Blink, and Idle retired; and, into a capability with none, with no algorithms named"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same capability and change",
+      "how_to_check": "hub/tests/test_a_fold_carries_algorithms_and_criterion_rewrites.py",
+      "key": "algorithms-refused",
+      "requirement": "fold-algorithms",
+      "then": "each is refused with its own code and the capability's digest is unchanged",
+      "when": "folding an unknown algorithm, Hover without replaces, every algorithm by default, a replaces or retire naming no capability algorithm, or Hover replaced and retired"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a capability criterion exist-c on widgets-exist",
+      "how_to_check": "hub/tests/test_a_fold_carries_algorithms_and_criterion_rewrites.py; the acceptance fold of this change on :8010",
+      "key": "criterion-written",
+      "requirement": "fold-criterion-replaces",
+      "then": "exist-c carries the change criterion's text on widgets-exist, and no drafted key holds it",
+      "when": "a change criterion is folded naming exist-c in replaces, its own requirement not folded; and again with its requirement folded as widgets-exist"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same capability",
+      "how_to_check": "hub/tests/test_a_fold_carries_algorithms_and_criterion_rewrites.py",
+      "key": "criterion-refused",
+      "requirement": "fold-criterion-replaces",
+      "then": "each is refused with its own code and the capability's digest is unchanged",
+      "when": "folding a criterion the change does not have, one replacing a key the capability does not have, or replacing a criterion also retired"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved change with its tasks decided",
+      "how_to_check": "hub/tests/test_a_finished_change_is_folded_into_its_capability.py",
+      "key": "fold-unchanged",
+      "requirement": "fold",
+      "then": "the existing fold tests pass unchanged",
+      "when": "it is folded as before, and refused as before"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change folded into one capability with the default archive",
+      "how_to_check": "hub/tests/test_a_fold_carries_algorithms_and_criterion_rewrites.py; drive on a fresh Hub",
+      "key": "second-capability",
+      "requirement": "fold-into-a-second-capability",
+      "then": "the second fold writes and the change stays archived with both capabilities in fold_state; the other two are refused (fold_already_folded, fold_change_not_approved) writing nothing",
+      "when": "it is folded into a second capability, then into the first again; and an archived change no merge names is folded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a capability with requirements, criteria and algorithms, and a change with algorithms",
+      "how_to_check": "hub/tests/test_a_fold_can_retire_what_the_change_supersedes.py and hub/tests/test_a_fold_carries_algorithms_and_criterion_rewrites.py",
+      "key": "lists",
+      "requirement": "draft-lists",
+      "then": "it lists every requirement with its statement, every criterion with its requirement and every algorithm with its steps, in the capability's order, and the change algorithms it would fold",
+      "when": "the operator reads the fold draft"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "25afa5da76e0e2bb514ed8382a111d21e68029176118a5d7facc319c83a8738e",
+      "FR-2": "13cd4c3bf2ca77cff50d424e93b4318d42e9ed206ef659c9f95b5294ae7f48b3",
+      "FR-3": "101cd3060d71747893221a0ee5d5214637763f7db17b72568d6490c66619f096",
+      "FR-4": "f84635e6e66c34b2dae7a00c62dd99e0ad1b7276d833818d2fa59f9fd2175b9b",
+      "FR-5": "ea1a942981dc2b5d1aefdf7cc0845973e646392cefb7de1d2a7a6359d68f39e7"
+    },
+    "high_water": 5,
+    "requirements": {
+      "draft-lists": "FR-5",
+      "fold": "FR-3",
+      "fold-algorithms": "FR-1",
+      "fold-criterion-replaces": "FR-2",
+      "fold-into-a-second-capability": "FR-4"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "FoldDraft gains algorithm items (name, replaces) and criterion items (key, replaces) beside the requirement items; the existing collision and retire refusals extend to them, all decided before the merge writes. A second fold of an archived change is allowed when a merge already names the change and none names it with this capability; the fold then writes through the merge and skips the archive transition. Acceptance drive: this change folded into spec-document-authority on :8010 with `fold` and `draft-lists` replacing their capability requirements and `lists` replacing the capability's criterion through the new criterion item; the algorithm and second-capability halves driven on a fresh Hub.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "fold_draft (hub/hub/spec_service.py) folds requirements and retires criteria only. A change's algorithms are dropped without a word, and a criterion's wording can change only by retiring it and folding a new one under a drafted key, so F696's correction to an algorithm step and a criterion needed a full-payload merge of the capability. A change touching two capabilities folds only if every fold but the last passes archive:false; the default archives on the first, after which the second is refused as not approved, and nothing says so beforehand.",
+  "requirements": [
+    {
+      "key": "fold-algorithms",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An algorithm is content of the change like a requirement; dropping it silently left the capability describing behaviour the change replaced. Its name is its identity, so a same-named one collides unless replacement is said.",
+      "statement": "A fold MUST carry the change's algorithms, every one by default or those named, each appended or replacing a named capability algorithm, and MUST accept capability algorithm names to retire; it MUST be refused before writing when a named algorithm is not the change's, a name the capability holds is folded without naming it in `replaces`, a replaced or retired name is not the capability's, or one is both replaced and retired."
+    },
+    {
+      "key": "fold-criterion-replaces",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A rewording keeps the criterion's identity, as `replaces` keeps a requirement's.",
+      "statement": "A fold MUST accept change criteria each naming a capability criterion it replaces, writing it under the capability criterion's key, demonstrating the capability requirement its change requirement was folded as, or the replaced criterion's requirement when that was not folded, and not again under a drafted key; it MUST be refused before writing when the criterion is not the change's, the replaced key is not the capability's, or one is both replaced and retired."
+    },
+    {
+      "key": "fold",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The refusal for a change that is not approved now has the one exception below.",
+      "statement": "The operator MUST be able to fold an approved change into a capability in one request, choosing which requirements to fold (default all), each optionally with an edited key, statement or modal or replacing a named capability requirement; the fold writes through the merge and, unless told not to, archives the change in the same transaction; it MUST be refused before anything is written when the change is not approved (save as `fold-into-a-second-capability` allows), a task of it is open, a named requirement is not the change's, a key collides without naming what it replaces, a replaced key is not the capability's, or the target is not a capability."
+    },
+    {
+      "key": "fold-into-a-second-capability",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The default archives on the first fold, so a change touching two capabilities could reach the second only if the operator knew beforehand to pass archive:false. Its content was approved either way.",
+      "statement": "A change archived after a fold MUST still be foldable into a capability no merge has folded it into, writing through the merge and staying archived; folding it into a capability it is already folded into, and folding an archived change that no merge names, MUST be refused before writing."
+    },
+    {
+      "key": "draft-lists",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "What can be replaced or retired has to be visible before the fold.",
+      "statement": "The fold draft MUST list the capability's current requirements (key and statement), criteria (key, requirement and then) and algorithms (name and steps), in the capability's order, and the change algorithms it would fold."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The fold route and its draft: algorithms, criterion replacement, a second capability after the archive"
+    ],
+    "non_goals": [
+      "The app's fold dialog: these choices are reachable through the route; offering them in the dialog is a later slice",
+      "Editing an algorithm's steps or a criterion's wording inside the fold request: the change carries the new text"
+    ]
+  },
+  "summary": "A fold carries the change's algorithms (appended, replacing a named capability algorithm, or retiring one), puts a change criterion in place of a named capability criterion under the capability's key, and a change already folded and archived can still be folded into a capability it is not yet in (F753).",
+  "tasks": [],
+  "title": "A fold carries algorithms and criterion rewrites"
+}

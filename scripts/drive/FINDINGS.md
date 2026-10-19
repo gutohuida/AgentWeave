@@ -36721,7 +36721,7 @@ A change whose work was built with tests, not through tasks, has no tasks. Every
 
 ## F753 (C) -- a fold can change requirements but not an algorithm or a criterion's text
 
-**Status:** open 2026-10-18. Spec-flow friction from the same authoring.
+**Status:** fixed 2026-10-19 (Tier 1, night window, 213e169): a fold carries the change's algorithms (all by default or named, appended, replacing a named capability algorithm, or retiring one; a same name without `replaces` collides), and `criteria` items put a change criterion in place of a named capability criterion under its key. A change archived after a fold is still folded into a capability no merge names it with, staying archived (`fold_already_folded` for the same one), so the default archive no longer strands a second fold. Change `spec/changes/a-fold-carries-algorithms-and-criterion-rewrites` (spdoc-7dff3813cc51) on :8010, approved without Approve anyway, folded into `spec-document-authority` with a criterion replaced through the new item. Test `hub/tests/test_a_fold_carries_algorithms_and_criterion_rewrites.py`, 16 red first. Drive `scripts/drive/d1019_f753_fold_drive.py` on a fresh Hub (:8032). Not as filed: the change's algorithms were not only unamendable but dropped without a word. Spec-flow friction from the same authoring.
 **Source:** drive
 **Theme:** Spec documents
 

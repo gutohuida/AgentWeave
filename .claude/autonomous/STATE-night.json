@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 18,
+  "iteration": 19,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F753-impl",
-  "next_action": "Do queue item F753-impl: F753 (C), a fold can change requirements but not an algorithm step or a criterion's text. Tier 1 likely: short change on :8010 first (:8010 now serves this branch, PID 21084). Then F755-spec, F756-impl.",
+  "current": "F755-spec",
+  "next_action": "Do queue item F755-spec: F755 (C), the shell judge's rules are not specified. Author them into agent-run-sandboxing through the Hub on :8010 (change + fold), from code and test_permission_approver.py's row table; commit the files the Hub writes. :8010 serves 213e169 code (server pid 24880). Then F756-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -121,10 +121,10 @@
     },
     {
       "id": "F753-impl",
-      "status": "open",
+      "status": "done",
       "model": "opus",
       "title": "F753 (C): a fold can change requirements but not an algorithm step or a criterion's text",
-      "detail": "fold_draft (hub/hub/spec_service.py) folds requirements and retires criteria only. Also: multi-capability folds need archive:false on all but the last, unguided. Tier 1 likely: short change on :8010 first."
+      "detail": "fixed 213e169 (Tier 1, change folded into spec-document-authority); see log iteration 19"
     },
     {
       "id": "F755-spec",
