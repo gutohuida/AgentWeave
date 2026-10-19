@@ -1624,6 +1624,108 @@ def cmd_reset(args: argparse.Namespace) -> int:
     return 0
 
 
+def _project_id_for(directory: Path) -> Optional[str]:
+    """The project id recorded by the nearest `.agentweave/project.json` at or above *directory*.
+
+    The home directory is passed over: `~/.agentweave` is the Hub's own folder, so a marker there
+    would make every folder under home that is not a project silently name that one."""
+    home = Path.home().resolve()
+    for folder in (directory, *directory.parents):
+        if folder == home:
+            continue
+        marker = folder / ".agentweave" / "project.json"
+        if marker.is_file():
+            try:
+                value = json.loads(marker.read_text(encoding="utf-8")).get("project_id")
+            except (OSError, ValueError, AttributeError):
+                return None
+            return value if isinstance(value, str) and value else None
+    return None
+
+
+def cmd_vault(args: argparse.Namespace) -> int:
+    """`agentweave vault add PATH... --distil|--no-distil`: add local files to a project's vault.
+
+    An operator-approved exception (vault-D3, 2026-10-19) to "the CLI does only what cannot be
+    done from the app": dumping a local folder into the vault. The Hub reads the files; the CLI
+    only resolves each path against its own directory and posts them to `POST /vault/paths`.
+    """
+    import urllib.error as _uerr
+
+    port = getattr(args, "port", None)
+    profile = getattr(args, "profile", "default")
+    port_error = _hub_require_port_for_named_profile(profile, port)
+    if port_error:
+        print_error(port_error)
+        return 1
+    port = port if port is not None else DEFAULT_HUB_PORT
+    project_id = args.project or _project_id_for(Path.cwd())
+    if not project_id:
+        print_error(
+            "No project here: run this inside a project folder the Hub opened, or pass --project."
+        )
+        return 1
+    token = os.environ.get("AW_KEY") or _fetch_setup_token(port)
+    if not token:
+        print_error(f"Could not get the Hub's key from {_hub_url(port)}; is the Hub running?")
+        return 1
+    body: Dict[str, Any] = {
+        "paths": [str(Path(p).expanduser().resolve()) for p in args.paths],
+        "distil": args.distil,
+        "type": args.type,
+    }
+    if args.visibility:
+        body["visibility"] = args.visibility
+    if args.dated:
+        body["dated"] = args.dated
+    request = urllib.request.Request(
+        f"{_hub_projects_url(port)}/{project_id}/vault/paths",
+        data=json.dumps(body).encode("utf-8"),
+        method="POST",
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=120) as resp:
+            answer = json.loads(resp.read().decode("utf-8"))
+    except _uerr.HTTPError as exc:
+        try:
+            detail: Any = json.loads(exc.read().decode("utf-8")).get("detail")
+        except Exception:
+            detail = None
+        print_error(f"The Hub refused the add (HTTP {exc.code}): {detail or exc.reason}")
+        return 1
+    except (_uerr.URLError, OSError) as exc:
+        print_error(f"Could not reach the Hub at {_hub_url(port)}: {exc}")
+        return 1
+    if args.json:
+        print(json.dumps(answer, indent=2))
+    else:
+        for result in answer.get("results", []):
+            status = result.get("status", "?")
+            source = result.get("source") or {}
+            if status == "added":
+                print(f"added    {source.get('id')}  {result.get('path')}")
+            elif status == "skipped":
+                print(f"skipped  {result.get('path')}: {result.get('reason')}")
+            else:
+                print(f"refused  {result.get('path')}: {result.get('reason')}")
+        counts = answer.get("counts", {})
+        print(
+            f"[VAULT] {counts.get('added', 0)} added, {counts.get('skipped', 0)} skipped, "
+            f"{counts.get('refused', 0)} refused"
+        )
+        plan = answer.get("distillation") or {}
+        if plan.get("note"):
+            print(f"[VAULT] {plan['note']}")
+        calls = plan.get("paid_calls")
+        if calls:
+            print(
+                f"[VAULT] Distillation costs {calls.get('at_least')} to {calls.get('at_most')} "
+                "paid model calls."
+            )
+    return 1 if answer.get("counts", {}).get("refused") else 0
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser.
 
@@ -1644,6 +1746,8 @@ Examples:
   agentweave status          Check whether the Hub is running
   agentweave stop            Stop a running Hub instance
   agentweave reset           Destroy local Hub state and start clean
+  agentweave vault add ./inbox --no-distil
+                             Add a folder of files to this project's knowledge vault
 
 For more help: https://github.com/gutohuida/AgentWeave
         """,
@@ -1768,6 +1872,51 @@ For more help: https://github.com/gutohuida/AgentWeave
         "--all", action="store_true", help="Also remove the .env config and API key"
     )
 
+    vault_parser = subparsers.add_parser("vault", help="Add local files to a project's vault")
+    vault_commands = vault_parser.add_subparsers(dest="vault_command")
+    vault_add = vault_commands.add_parser(
+        "add",
+        help="Add files and folders to the vault by path; the Hub reads them",
+        description=(
+            "Add files and folders (recursively) to a project's knowledge vault. The Hub reads "
+            "each file; text up to 1 MiB, PDFs and images up to 10 MiB, at most 200 files. "
+            "Prints one line per file: added, skipped (a duplicate) or refused (with the reason)."
+        ),
+    )
+    vault_add.add_argument("paths", nargs="+", help="Files or folders to add")
+    distil = vault_add.add_mutually_exclusive_group(required=True)
+    distil.add_argument(
+        "--distil",
+        dest="distil",
+        action="store_true",
+        help="Queue the manager's distillation of everything added (a paid model call each)",
+    )
+    distil.add_argument(
+        "--no-distil", dest="distil", action="store_false", help="Add without distilling"
+    )
+    visibility = vault_add.add_mutually_exclusive_group()
+    visibility.add_argument(
+        "--private", dest="visibility", action="store_const", const="private", default=None
+    )
+    visibility.add_argument("--tracked", dest="visibility", action="store_const", const="tracked")
+    vault_add.add_argument(
+        "--type",
+        default="document",
+        choices=["transcript", "document", "rules", "example", "note"],
+        help="The sources' type (default: document)",
+    )
+    vault_add.add_argument("--dated", default=None, help="The day the files were said, YYYY-MM-DD")
+    vault_add.add_argument(
+        "--project", default=None, help="Project id (default: this folder's project)"
+    )
+    vault_add.add_argument("--json", action="store_true", help="Print the Hub's answer as JSON")
+    vault_add.add_argument(
+        "--port", type=int, default=argparse.SUPPRESS, help="Port of the Hub (default: 8000)"
+    )
+    vault_add.add_argument(
+        "--profile", type=str, default=argparse.SUPPRESS, help="Named Hub instance"
+    )
+
     return parser
 
 
@@ -1804,6 +1953,8 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_stop(parsed_args)
         elif parsed_args.command == "reset":
             return cmd_reset(parsed_args)
+        elif parsed_args.command == "vault" and getattr(parsed_args, "vault_command", None):
+            return cmd_vault(parsed_args)
         else:
             parser.print_help()
             return 0

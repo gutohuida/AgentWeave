@@ -686,3 +686,63 @@ async def distil_in_background(project_id: str, source_id: str, *, trigger: str)
         await distil(plan, trigger=trigger)
     except Exception:  # noqa: BLE001 -- a background task must not raise
         logger.warning("vault distillation failed for %s", source_id, exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# A batch (`agents-add-files-to-the-vault-by-path`)
+# ---------------------------------------------------------------------------
+
+BATCH_NOT_READY_HINT = "Or add the files with distil set to false, and distil them later."
+
+
+async def check_ready(project_id: str, *, reads_files: bool) -> None:
+    """`CannotDistilError` (409) unless the job could distil a batch now: enabled, with a runner of
+    this project, and, when the batch holds a PDF or an image, a runner whose CLI can read one.
+    Checked before a bulk add writes anything, so `distil: true` is never silently dropped."""
+    async with async_session_factory() as db:
+        job = await manager.get_job_row(db, project_id, manager.DISTILLATION)
+        runner = await db.get(Runner, job.runner_id) if job is not None and job.runner_id else None
+    if job is None or not job.enabled:
+        raise CannotDistilError(
+            "Cannot distil: the vault distillation job is disabled. Enable it on the Manager "
+            f"page. {BATCH_NOT_READY_HINT}"
+        )
+    if runner is None or runner.project_id != project_id:
+        raise CannotDistilError(
+            "Cannot distil: the vault distillation job has no runner. Choose one on the Manager "
+            f"page. {BATCH_NOT_READY_HINT}"
+        )
+    if reads_files:
+        adapter = get_adapter(runner.cli)
+        if adapter is None or not adapter.one_shot_reads_files:
+            raise CannotDistilError(
+                f"Cannot distil: the batch holds a PDF or an image, and the job's runner is a "
+                f"{runner.cli} runner, which cannot read one. Choose a Claude runner for the job "
+                f"on the Manager page. {BATCH_NOT_READY_HINT}"
+            )
+
+
+def paid_calls(sources: List[Dict[str, Any]], texts: Dict[str, str]) -> Dict[str, Any]:
+    """What distilling *sources* will cost in model calls: one per piece of text (`texts`, by
+    source id; a PDF or image has none yet and counts one read plus one piece), and up to one
+    contradiction check each after it."""
+    at_least = 0
+    for source in sources:
+        text = texts.get(source["id"])
+        at_least += 2 if text is None else max(1, len(pieces(text)))
+    return {
+        "at_least": at_least,
+        "at_most": at_least + len(sources),
+        "explained": (
+            "One call per 50,000 characters of text, one more to read each PDF or image (more "
+            "when its text runs past 50,000 characters), and up to one contradiction check per "
+            "source that yields facts."
+        ),
+    }
+
+
+async def distil_batch(project_id: str, source_ids: List[str], *, trigger: str) -> None:
+    """Distil a batch one source after another, in one background task, so a folder of sources
+    never spawns its model calls all at once. Each is `distil_in_background`, which never raises."""
+    for source_id in source_ids:
+        await distil_in_background(project_id, source_id, trigger=trigger)

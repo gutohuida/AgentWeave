@@ -82,6 +82,28 @@ describe('the Vault tab', () => {
     expect(rows[1]).toHaveTextContent('Kickoff meeting with Acme Retail.')
   })
 
+  it('says which agent added a source by path, and nothing for the operator\'s own', async () => {
+    // `agents-add-files-to-the-vault-by-path`: the map carries added_by, null for an upload.
+    const added = { ...ENTRIES[1], id: 'src-cccccccccccc', name: 'inbox/notes.md', added_by: 'alpha' }
+    const routed = vault
+    vault = (url, init) => {
+      if (url.endsWith('/vault/map')) {
+        return { status: 200, body: { entries: [added, { ...ENTRIES[1], added_by: null }] } }
+      }
+      if (url.includes('/vault/entries/src-cccccccccccc?offset=0')) {
+        return { status: 200, body: { ...added, content: 'Kickoff.', next_offset: null, note: null } }
+      }
+      return routed(url, init)
+    }
+    render(<VaultPage />, { wrapper })
+    expect(await screen.findByTestId('vault-added-by-src-cccccccccccc')).toHaveTextContent('added by alpha')
+    expect(screen.queryByTestId('vault-added-by-src-aaaaaaaaaaaa')).toBeNull()
+    expect(screen.getByTestId('vault-entry-src-aaaaaaaaaaaa')).not.toHaveTextContent('added by')
+    fireEvent.click(screen.getByTestId('vault-entry-src-cccccccccccc'))
+    expect(await screen.findByRole('heading', { name: 'inbox/notes.md' })).toBeInTheDocument()
+    expect(screen.getByRole('article')).toHaveTextContent('added by alpha')
+  })
+
   it('opens an entry and reads every page of its text', async () => {
     const routed = vault
     vault = (url, init) => {

@@ -24,7 +24,7 @@ vault (`vault_spec_check.py`), and checking a document again now.
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import (
     APIRouter,
@@ -45,6 +45,7 @@ from ... import (
     spec_lifecycle,
     vault,
     vault_access,
+    vault_intake,
     vault_spec_check,
 )
 from ...auth import get_project
@@ -249,6 +250,98 @@ async def upload_vault_file(
     except vault.VaultError as exc:
         raise _refused(exc) from exc
     return _distil_after_upload(background, project_id, entry)
+
+
+class PathsAdd(BaseModel):
+    """A bulk add by path (`agents-add-files-to-the-vault-by-path`). `distil` has no default: the
+    caller states whether the batch is distilled (vault-D2)."""
+
+    paths: List[str] = Field(min_length=1, max_length=vault_intake.MAX_BATCH_FILES)
+    distil: bool
+    visibility: Optional[str] = Field(default=None, max_length=16)
+    type: str = Field(default="document", max_length=64)
+    dated: Optional[str] = Field(default=None, max_length=64)
+
+    model_config = {"extra": "forbid"}
+
+
+async def add_paths(
+    session: AsyncSession,
+    background: BackgroundTasks,
+    project_id: str,
+    body: PathsAdd,
+    *,
+    reach: vault_intake.Reach,
+    added_by: Optional[str],
+) -> Dict[str, Any]:
+    """The bulk add both doors share: 400 for a field that would refuse every file or a batch past
+    the limit, 409 when `distil` is true and the job could not run, both before anything is
+    written; otherwise one result per file, and the batch's distillation queued as one task."""
+    root, private = await roots(session, project_id)
+    visibility = body.visibility
+    if visibility is None:
+        visibility = (await vault.get_settings(session, project_id))["default_visibility"]
+    try:
+        vault_intake.check_fields(body.type, visibility, body.dated)
+        batch = await asyncio.to_thread(vault_intake.expand, body.paths, reach)
+    except vault_intake.IntakeError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    if body.distil:
+        try:
+            await distillation.check_ready(project_id, reads_files=batch.reads_files)
+        except distillation.CannotDistilError as exc:
+            raise HTTPException(status_code=exc.status, detail=exc.reason) from exc
+    results, texts = await asyncio.to_thread(
+        vault_intake.add_all,
+        root,
+        private,
+        batch,
+        type=body.type,
+        visibility=visibility,
+        dated=body.dated,
+        added_by=added_by,
+    )
+    added = [result["source"] for result in results if result["status"] == "added"]
+    plan: Dict[str, Any] = {"requested": body.distil, "queued": 0}
+    if not body.distil:
+        plan["note"] = "Not distilled: distil was false. Distil a source from the Vault tab later."
+    elif not added:
+        plan["note"] = "Nothing new to distil: no file was added."
+    else:
+        plan["queued"] = len(added)
+        plan["paid_calls"] = distillation.paid_calls(added, texts)
+        # An agent's batch is autonomous work, paused by a spent budget; the operator's is theirs.
+        trigger = distillation.UPLOADED if added_by is not None else distillation.REQUESTED
+        background.add_task(
+            distillation.distil_batch,
+            project_id,
+            [source["id"] for source in added],
+            trigger=trigger,
+        )
+        plan["note"] = (
+            f"{len(added)} source(s) queued for distillation, one after another, in the "
+            "background; their facts appear in the map as each finishes."
+        )
+    return {"results": results, "counts": vault_intake.counts(results), "distillation": plan}
+
+
+@router.post("/paths")
+async def add_vault_paths(
+    body: PathsAdd,
+    background: BackgroundTasks,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Add files and folders by absolute path, read by the Hub: any path it can read natively,
+    beneath AW_WORKSPACE_ROOT in Docker mode. One result per file; see `add_paths`."""
+    return await add_paths(
+        session,
+        background,
+        project[0],
+        body,
+        reach=vault_intake.operator_reach(),
+        added_by=None,
+    )
 
 
 @router.get("/sources/{source_id}/file")

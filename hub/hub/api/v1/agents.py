@@ -1469,6 +1469,23 @@ def _operations() -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="vault_add",
+            args="paths, distil, visibility=None, type='document', dated=None",
+            method="POST",
+            path="/vault/paths",
+            fields=("paths", "distil", "visibility", "type", "dated"),
+            required=("paths", "distil"),
+            text=(
+                "add files to the vault by naming their paths (files or folders, relative to "
+                "your working directory or absolute, inside your workspace or the project "
+                "directory); the Hub reads them, so never read or paste their content. Text up to "
+                "1 MiB, PDFs and images up to 10 MiB, at most 200 files a call. `distil` (true or "
+                "false) is required: true queues the manager's distillation of everything added, "
+                "a paid model call per source. The answer is one result per file: added, skipped "
+                "as a duplicate, or refused with the reason. What you add is marked as yours."
+            ),
+        ),
+        _Operation(
             tool="request_agent",
             args="name, template, task",
             method="POST",

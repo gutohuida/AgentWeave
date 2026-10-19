@@ -225,6 +225,16 @@ function EntryRow({
           <Badge variant="default">{fileKindOf(entry.media_type) === 'pdf' ? 'PDF' : 'image'}</Badge>
         )}
         {entry.visibility === 'private' && <Badge variant="warning">private</Badge>}
+        {entry.added_by && (
+          <span
+            data-testid={`vault-added-by-${entry.id}`}
+            title="An agent added this source by path"
+            className="shrink-0 text-xs"
+            style={{ color: 'var(--text-2)' }}
+          >
+            added by {entry.added_by}
+          </span>
+        )}
         {(entry.fetches ?? 0) > 0 && (
           <span
             data-testid={`vault-fetches-${entry.id}`}
@@ -279,6 +289,7 @@ function EntryView({
             {entry.type} · {entry.visibility === 'private' ? `private, held on ${entry.holder ?? 'another machine'}` : 'tracked in the repository'}
             {' · '}
             {entry.dated ? `said ${entry.dated} · ` : ''}
+            {entry.added_by ? `added by ${entry.added_by} · ` : ''}
             {hubDate(entry.created_at).toLocaleString()} · <code>{entry.id}</code>
           </p>
           {entry.fetches !== undefined && (

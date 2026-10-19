@@ -35,6 +35,9 @@ export interface VaultEntry {
   media_type?: string
   /** A source's: the day it was said, `YYYY-MM-DD`, when the operator gave one. */
   dated?: string | null
+  /** A source's: the agent whose run added it by path (`vault_add`); null for the operator's own
+   *  uploads. Absent on a Hub that predates adding by path. */
+  added_by?: string | null
   /** A fact's, derived by the Hub from its contradictions: an open one cites it. Absent on a Hub
    *  that predates contradictions. */
   disputed?: boolean

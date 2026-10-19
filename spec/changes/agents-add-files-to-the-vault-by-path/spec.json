@@ -1,0 +1,197 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a Hub test client, a project, an agent with an active run whose workspace holds inbox/ with a.md, b.txt, c.pdf, d.png, e.exe, a 11 MiB f.pdf and a copy of a.md",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_paths.py",
+      "key": "seam",
+      "requirement": "added-by",
+      "then": "four sources exist with added_by the agent; the copy is skipped naming a.md's source, e.exe and f.pdf refused with reasons; nothing was distilled on the first call; the second queued its sources and answered queued and paid_calls. Fails before the build (404).",
+      "when": "the run calls POST /agent-actions/vault/paths with paths ['inbox'] and distil false, then again with another folder and distil true with the job on a runner"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub from this branch, a project under ~/Documents with inbox/ holding md, txt, pdf, png, an .exe, an 11 MiB pdf and a duplicate, a Claude runner on Haiku and one agent",
+      "how_to_check": "drive on a scratch Hub (e2e.py hub-up), recorded in the change's commit message",
+      "key": "drive",
+      "requirement": "three-doors",
+      "then": "the map holds the agent's sources marked added_by, the refusals and the skip are in the tool's answer, distillation firings appear only for the distil=true batch, the API and CLI answer per-path results, and the Vault tab shows 'added by <agent>'",
+      "when": "the agent is asked to ingest the files in ./inbox with distil false, then a second folder with distil true (vault-distillation on a Haiku runner, at most six sources, then off); the operator posts /vault/paths and runs agentweave vault add"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a map with one source added_by alpha and one without",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/vaultTab.test.tsx",
+      "key": "ui",
+      "requirement": "added-by",
+      "then": "the first row shows 'added by alpha', the second shows nothing of the kind",
+      "when": "the Vault page renders"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1185544f76f35ab7054985309dbcc659146e928e823f29ec8df9e08fb3de962c",
+      "FR-2": "7ad2fb4b6a9934e869724f1f5adbf14e1a1c5954f23e58dc4a95fb6c911ec26c",
+      "FR-3": "4fe94ef6ff96e864da612461dce215226f47794227ff3169a2611e47c9ed5e3c",
+      "FR-4": "128cecb97ca95ad13c81249ad3db5f7cbec851614ccf2f5200fdaea9d8c75000",
+      "FR-5": "4ba122734389470b0af70b46e2908410918ea0ea1e65d0765775cb77fef39977",
+      "FR-6": "715441d1ea65af9f0146cbecfc63984e0b148e3b5554efff830c6ee1730d4c7b"
+    },
+    "high_water": 6,
+    "requirements": {
+      "added-by": "FR-5",
+      "agent-reach": "FR-3",
+      "by-path": "FR-1",
+      "distil-explicit": "FR-4",
+      "per-path": "FR-2",
+      "three-doors": "FR-6"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1. No migration: a source's metadata file is its record, so added_by is one more key in sources/<id>.json (and its private stub).\n\nD1 By path, read by the Hub (vault-D1). The agent names paths; the Hub reads the bytes. Text by extension (.md .markdown .txt .text .rst .vtt .srt .csv .tsv .json .yaml .yml .xml .html .htm .log, the Vault tab's own text-file list plus a few) must be UTF-8 and at most 1 MiB, as a pasted source is; .pdf .png .jpg .jpeg .gif .webp go through add_file's checks (magic bytes, 10 MiB). Anything else is refused by name.\n\nD2 Where an agent may point (seam for reach-1019). A relative path resolves against the run's workspace (Run.workspace_dir), then the project directory when nothing is there; an absolute path must resolve inside one of those two. The allowed roots come from one function, so reach grants add roots there. The operator's API and CLI may name any path the Hub can read, except beneath AW_WORKSPACE_ROOT only in Docker mode.\n\nD3 Bulk, per-path results. Paths and folders (recursive, hidden names skipped) expand to at most 200 files; more is a 400 before anything is written. Each file is added, skipped (same bytes as an existing source or an earlier file in the batch, by sha256 kept in the metadata; older sources are hashed on read), or refused with its reason. Never all-or-nothing.\n\nD4 distil is required, true or false (vault-D2). With true the job's readiness is checked first (enabled, a runner, a runner that can read files when the batch holds one); a job not ready is a 409 before anything is written, naming what to do or distil=false. Then one background task distils the added sources one after another, and the answer gives the count and the paid calls: at least one per 50,000-character piece of text plus one read per PDF or image, up to one contradiction check per source more. distil=false never distils, even when the job is on. An agent's batch is autonomous work (budget-paused); the operator's is operator work.\n\nD5 Marked, not gated (vault-D4). added_by names the agent on every source it added, listed in the map, shown in the Vault tab as 'added by <agent>'. No approval step. visibility is optional and defaults to the project's vault setting (vault-A1).\n\nD6 CLI exception (vault-D3). `agentweave vault add PATH... --distil|--no-distil` resolves paths against its own cwd and posts them to the Hub; stdlib only.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "When closed, this change folds into the knowledge-vault capability.",
+  "open_questions": [],
+  "problem": "Adding to the vault is operator-only and one source at a time: paste text or upload one PDF or image in the Vault tab (POST /vault/sources, POST /vault/files). The operator wants to drop a folder of files and ask an agent to ingest it (vault-1019). An agent has only vault_map, vault_read and vault_report; pasting file contents through a tool call would cost tokens and could alter the text.",
+  "requirements": [
+    {
+      "key": "by-path",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "vault-D1: the agent never reads or pastes the content.",
+      "statement": "The bulk add MUST take file and folder paths and read each file's bytes in the Hub, applying the vault's existing checks: text by extension as UTF-8 up to 1 MiB, PDF and images by add_file's type, magic-byte and 10 MiB checks, the source type, dated and visibility checks. A file of any other extension MUST be refused naming the accepted extensions."
+    },
+    {
+      "key": "per-path",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Partial failure must be visible, never silent.",
+      "statement": "A bulk add MUST answer one result per file reached, in path order, each with status added (and the source), skipped (a duplicate, naming the source it duplicates) or refused (with the reason). A file whose bytes equal an existing source's or an earlier file's in the same call MUST be skipped. One refused file MUST NOT stop the others. A batch past 200 files MUST be refused before anything is written."
+    },
+    {
+      "key": "agent-reach",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A guardrail until reach-1019 lands its grants; never the Hub's cwd.",
+      "statement": "On the agent route, a relative path MUST resolve against the run's workspace, else the project directory when nothing exists there, and any path MUST resolve inside the run's workspace or the project directory (resolved through ProjectWorkspace), else be refused naming both roots. The operator's route MUST accept any absolute path the Hub can read, and in Docker mode only beneath AW_WORKSPACE_ROOT."
+    },
+    {
+      "key": "distil-explicit",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "vault-D2: the caller states whether to distil; distillation is a paid call per source.",
+      "statement": "distil MUST be a required boolean on the MCP tool, both routes and the CLI. With false nothing added MUST be distilled, even with the job on. With true, a job that is off, has no runner, or cannot read a file in the batch MUST be refused with 409 before anything is written; otherwise one call MUST queue distillation of every added source and answer how many were queued and the estimated paid calls."
+    },
+    {
+      "key": "added-by",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "vault-D4: visible, no approval step.",
+      "statement": "A source added through the agent route MUST record added_by as the run's agent, taken from its credential and never from the body, and the map and the Vault tab MUST show it ('added by <agent>'). A source the operator added MUST have no added_by."
+    },
+    {
+      "key": "three-doors",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "vault-D3.",
+      "statement": "The bulk add MUST be reachable as the MCP tool vault_add (and its aw-tool call mode), POST /vault/paths and agentweave vault add PATH... --distil|--no-distil, whose code imports only the stdlib. visibility MUST default to the project's vault setting."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "POST /vault/paths (operator) and POST /agent-actions/vault/paths (agent run)",
+      "MCP tool vault_add(paths, distil, visibility, type, dated) and its call-mode operation",
+      "agentweave vault add (CLI)",
+      "added_by and sha256 in source metadata; added_by in the map",
+      "Vault tab shows added by <agent>"
+    ],
+    "non_goals": [
+      "Reach grants beyond the run workspace and project directory (reach-1019)",
+      "Deleting or editing sources",
+      "An approval step for agent-added sources",
+      "Extracting text from .docx or other office formats"
+    ]
+  },
+  "summary": "An agent, the operator's API and a new CLI command add files to the knowledge vault by naming paths (files or folders). The Hub reads each file itself, applies the vault's existing checks, and answers one result per file: added, skipped as a duplicate, or refused with the reason. Whether to distil is a required parameter; when asked, one call queues distillation for the whole batch and says how many paid model calls it will cost. A source an agent added says which agent added it, in the map and in the Vault tab.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "hub/tests/test_vault_paths.py: the agent route with a folder, distil false then true; recorded failing first.",
+      "files": [
+        "hub/tests/test_vault_paths.py"
+      ],
+      "from": null,
+      "key": "test-first",
+      "requirements": [
+        "by-path",
+        "per-path",
+        "added-by",
+        "distil-explicit"
+      ],
+      "reviewer": null,
+      "title": "Seam test, failing before the build"
+    },
+    {
+      "depends_on": [
+        "test-first"
+      ],
+      "description": "hub/hub/vault_intake.py; vault.py added_by/sha256; api/v1/vault.py and agent_actions.py routes; mcp_server.vault_add plus its _Operation and copilot_acp registry; src/agentweave/cli.py vault add; VaultPage shows added by.",
+      "files": [
+        "hub/hub/vault_intake.py",
+        "hub/hub/vault.py",
+        "hub/hub/api/v1/vault.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/mcp_server.py",
+        "src/agentweave/cli.py",
+        "hub/ui/src/components/vault/VaultPage.tsx"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "by-path",
+        "per-path",
+        "agent-reach",
+        "distil-explicit",
+        "added-by",
+        "three-doors"
+      ],
+      "reviewer": null,
+      "title": "vault_intake module, routes, MCP tool, CLI, Vault tab"
+    },
+    {
+      "depends_on": [
+        "build"
+      ],
+      "description": "Haiku agent ingests ./inbox with distil false and true; API and CLI; Vault tab in Chromium.",
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "three-doors",
+        "added-by"
+      ],
+      "reviewer": null,
+      "title": "Drive on a scratch Hub"
+    }
+  ],
+  "title": "Agents add files to the vault by path, in bulk"
+}
