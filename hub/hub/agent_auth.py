@@ -5,13 +5,13 @@ import secrets
 from dataclasses import dataclass
 from typing import Optional
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import instance_identity
-from .auth import bearer_scheme
+from .auth import RUN_SCOPE_KEY, bearer_scheme, stamp_project
 from .db.engine import get_session
 from .db.models import Run
 
@@ -40,6 +40,9 @@ def hash_run_token(token: str) -> str:
 async def get_agent_actor(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
     session: AsyncSession = Depends(get_session),
+    # Last and optional, so a direct call `get_agent_actor(credentials, session)` still works;
+    # FastAPI injects it by its annotation.
+    request: Request = None,  # type: ignore[assignment]
 ) -> AgentActor:
     """Resolve an active Run from its credential without trusting caller identity."""
     if not credentials or not credentials.credentials.startswith(_RUN_TOKEN_PREFIX):
@@ -77,4 +80,9 @@ async def get_agent_actor(
             detail="Run credential was issued by a different Hub instance",
         )
 
+    # For the request's span, which nests in this run's trace (`everything-the-hub-does-is-in-a-trace`
+    # D4): stamped here so the middleware never looks the token up a second time.
+    if request is not None:
+        stamp_project(request, run.project_id)
+        request.scope[RUN_SCOPE_KEY] = run.id
     return AgentActor(project_id=run.project_id, agent=run.agent, run_id=run.id)

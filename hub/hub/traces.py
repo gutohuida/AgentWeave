@@ -15,6 +15,13 @@ transaction: `start_run` from the run's creation, `observe_output` from `record_
 `worker.record_invocation`. Nothing here keeps a second account that could drift: the permission and
 `ask_user` waits are read from their own rows when the run ends.
 
+**What the Hub does around the runs (`everything-the-hub-does-is-in-a-trace`, D1).** A request
+(`aw.request`, recorded by `trace_requests.RequestTraceMiddleware`) is not written in the
+transaction of what it records: it is put on an in-memory queue and written in batches by one
+lifespan writer (`run_span_writer`), so a request never waits for its span and a span that cannot
+be written never reaches the request; it is counted as dropped instead. The span being recorded is
+the current one (`current_span`, a contextvar, D2), for what later attaches to it.
+
 Ids are OTLP's (32 hex for a trace, 16 for a span) and deterministic: a run's trace id comes from
 its run id, a tool span's from the run and the call, a model call's from the run and its position.
 So a judge decision reported before its tool call was recorded still lands under it, and a write
@@ -29,18 +36,22 @@ have them here.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
-from dataclasses import dataclass
+import secrets
+from contextvars import ContextVar, Token
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import __version__, run_secrets
-from .db.models import PermissionRequest, Question, Run, TraceSpan
+from .db.models import PermissionRequest, Question, Run, TraceSettings, TraceSpan
 from .runner_events import redact_text_secrets
 
 logger = logging.getLogger(__name__)
@@ -753,6 +764,225 @@ def worker_span(
     )
 
 
+# --- the Hub's own work: the span queue (everything-the-hub-does-is-in-a-trace, D1-D4) ---------
+
+
+@dataclass
+class PendingSpan:
+    """A span of the Hub's own work, held in memory until the writer stores it.
+
+    A span with `run_id` set nests in that run's trace (D4): the writer copies the run's trace id
+    and start and parents it under the run's tool call open at `start_time`, else the run's root.
+    Any other span is the root of a trace of its own."""
+
+    project_id: str
+    name: str
+    operation: str
+    start_time: datetime
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    events: List[Dict[str, Any]] = field(default_factory=list)
+    end_time: Optional[datetime] = None
+    status: str = "unset"
+    status_message: Optional[str] = None
+    run_id: Optional[str] = None
+    span_id: str = field(default_factory=lambda: secrets.token_hex(8))
+    trace_id: str = field(default_factory=lambda: secrets.token_hex(16))
+    #: Writer passes a locked database refused this span (`flush_spans`).
+    write_attempts: int = 0
+
+
+#: Spans waiting for the writer; past `MAX_QUEUE` a span is dropped and counted, never waited on.
+MAX_QUEUE = 10_000
+#: Seconds between the writer's passes.
+WRITE_INTERVAL_SECONDS = 1.0
+_queue: List[PendingSpan] = []
+#: Spans that could not be written, per project, since this process started (the settings show it).
+_dropped: Dict[str, int] = {}
+#: Projects that record the operator's routine reads (`trace_settings.record_reads`): read by the
+#: request path, which never queries for it, and refreshed by the writer and the settings route.
+_record_reads: Dict[str, bool] = {}
+
+_current: ContextVar[Optional[PendingSpan]] = ContextVar("aw_current_span", default=None)
+
+
+def current_span() -> Optional[PendingSpan]:
+    """The span of the work this code runs inside (a request), if any (D2)."""
+    return _current.get()
+
+
+def set_current(span: Optional[PendingSpan]) -> Token:
+    return _current.set(span)
+
+
+def reset_current(token: Token) -> None:
+    _current.reset(token)
+
+
+def records_reads(project_id: str) -> bool:
+    return _record_reads.get(project_id, False)
+
+
+def set_record_reads(project_id: str, value: bool) -> None:
+    _record_reads[project_id] = bool(value)
+
+
+def dropped_spans(project_id: str) -> int:
+    return _dropped.get(project_id, 0)
+
+
+def _drop(spans: Iterable[PendingSpan]) -> None:
+    for span in spans:
+        _dropped[span.project_id] = _dropped.get(span.project_id, 0) + 1
+
+
+def enqueue(span: PendingSpan) -> None:
+    """Hand *span* to the writer. Never blocks and never raises into the caller's work."""
+    if len(_queue) >= MAX_QUEUE:
+        _drop([span])
+        return
+    _queue.append(span)
+
+
+def reset_spans() -> None:
+    """Forget every queued span and count (a fresh database: the test suite's reset)."""
+    _queue.clear()
+    _dropped.clear()
+    _record_reads.clear()
+
+
+async def _tool_span_during(
+    db: AsyncSession, run_id: str, start: datetime, end: datetime
+) -> Optional[str]:
+    """The run's newest tool call whose span overlaps [*start*, *end*] (D4).
+
+    Overlap rather than "open when the request began": the runner's stream can deliver a tool
+    call's line after the call into the Hub has started (measured on Claude: 50 ms later), and a
+    tool span starts when its line is recorded. One that overlaps the request was recorded by the
+    time the request ended, so the writer, which runs later, always sees it."""
+    return (
+        await db.execute(
+            select(TraceSpan.span_id)
+            .where(
+                TraceSpan.run_id == run_id,
+                TraceSpan.operation == "execute_tool",
+                TraceSpan.start_time <= end,
+                or_(TraceSpan.ended.is_(False), TraceSpan.end_time >= start),
+            )
+            .order_by(TraceSpan.start_time.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+async def _write_spans(batch: Sequence[PendingSpan]) -> None:
+    """Store *batch* in one transaction: the writer's only database write."""
+    from .db.engine import async_session_factory
+
+    async with async_session_factory() as db:
+        for pending in batch:
+            parent: Optional[str] = None
+            trace_id, trace_started_at = pending.trace_id, pending.start_time
+            if pending.run_id:
+                root = await db.get(TraceSpan, root_span_id(pending.run_id))
+                if root is None:
+                    continue  # a run with no trace; its request is never a trace of its own
+                trace_id, trace_started_at = root.trace_id, root.trace_started_at
+                end = pending.end_time or pending.start_time
+                parent = (
+                    await _tool_span_during(db, pending.run_id, pending.start_time, end)
+                    or root.span_id
+                )
+            db.add(
+                TraceSpan(
+                    span_id=pending.span_id,
+                    trace_id=trace_id,
+                    parent_span_id=parent,
+                    project_id=pending.project_id,
+                    run_id=pending.run_id,
+                    name=pending.name[:256],
+                    operation=pending.operation,
+                    status=pending.status,
+                    status_message=pending.status_message,
+                    start_time=pending.start_time,
+                    end_time=pending.end_time or pending.start_time,
+                    ended=True,
+                    trace_started_at=trace_started_at,
+                    attributes={k: v for k, v in pending.attributes.items() if v is not None},
+                    events=list(pending.events),
+                )
+            )
+        await db.commit()
+
+
+#: Passes a batch the locked database refused is offered again before it is dropped.
+LOCKED_ATTEMPTS = 3
+
+
+def _locked(exc: BaseException) -> bool:
+    return isinstance(exc, OperationalError) and "database is locked" in str(exc)
+
+
+async def flush_spans() -> int:
+    """Write every queued span now. Returns how many were handed to the store.
+
+    A batch the database refused because another writer held it past the busy timeout goes back on
+    the queue for the next pass (a run's start can hold it that long), up to `LOCKED_ATTEMPTS`
+    passes; any other failure, or the last of those, is logged and counted as dropped. Never
+    raised."""
+    if not _queue:
+        return 0
+    batch = list(_queue)
+    _queue.clear()
+    try:
+        await _write_spans(batch)
+    except Exception as exc:  # noqa: BLE001 -- a span write must never reach the work it records
+        dropped = batch
+        if _locked(exc):
+            for span in batch:
+                span.write_attempts += 1
+            retry = [span for span in batch if span.write_attempts < LOCKED_ATTEMPTS]
+            room = max(0, MAX_QUEUE - len(_queue))
+            _queue[:0] = retry[:room]  # ahead of what arrived meanwhile: oldest first
+            dropped = [span for span in batch if span.write_attempts >= LOCKED_ATTEMPTS]
+            dropped += retry[room:]
+        _drop(dropped)
+        logger.warning(
+            "writing %d trace spans failed (%s); %d dropped, the rest retried",
+            len(batch),
+            type(exc).__name__,
+            len(dropped),
+            exc_info=not _locked(exc),
+        )
+        return 0
+    return len(batch)
+
+
+async def _refresh_record_reads() -> None:
+    from .db.engine import async_session_factory
+
+    async with async_session_factory() as db:
+        rows = (
+            await db.execute(select(TraceSettings.project_id, TraceSettings.record_reads))
+        ).all()
+    for project_id, value in rows:
+        _record_reads[project_id] = bool(value)
+
+
+async def run_span_writer() -> None:
+    """The lifespan writer (D1): drain the queue every `WRITE_INTERVAL_SECONDS` until cancelled,
+    then once more, so a clean shutdown loses nothing queued."""
+    try:
+        await _refresh_record_reads()
+    except Exception:  # noqa: BLE001 -- reads stay unrecorded until the next refresh
+        logger.warning("reading the trace settings failed", exc_info=True)
+    try:
+        while True:
+            await asyncio.sleep(WRITE_INTERVAL_SECONDS)
+            await flush_spans()
+    finally:
+        await flush_spans()
+
+
 # --- reading ----------------------------------------------------------------------------------
 
 
@@ -773,6 +1003,14 @@ def span_dict(span: TraceSpan) -> Dict[str, Any]:
     }
 
 
+#: What a trace is, by its root's operation; a run's (`invoke_agent`) is told by its run id.
+_KINDS = {"chat": "worker", "aw.request": "request", "aw.event": "event", "aw.work": "work"}
+
+
+def trace_kind(root: TraceSpan) -> str:
+    return "run" if root.run_id else _KINDS.get(root.operation, root.operation)
+
+
 def _summary(root: TraceSpan, span_count: int) -> Dict[str, Any]:
     attributes = root.attributes or {}
     return {
@@ -781,7 +1019,7 @@ def _summary(root: TraceSpan, span_count: int) -> Dict[str, Any]:
         "run_id": root.run_id,
         "name": root.name,
         "operation": root.operation,
-        "kind": "run" if root.run_id else "worker",
+        "kind": trace_kind(root),
         "agent": attributes.get("gen_ai.agent.name"),
         "conversation_id": attributes.get("gen_ai.conversation.id"),
         "task_id": attributes.get("aw.task.id"),
@@ -806,11 +1044,15 @@ async def list_traces(
     limit: int = 50,
     before: Optional[str] = None,
     run_ids: Optional[Iterable[str]] = None,
+    operation: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """The project's traces, newest first, one page (keyset on the root's start)."""
+    """The project's traces, newest first, one page (keyset on the root's start); with
+    *operation*, only the traces whose root is that operation (D8)."""
     query = select(TraceSpan).where(
         TraceSpan.project_id == project_id, TraceSpan.parent_span_id.is_(None)
     )
+    if operation:
+        query = query.where(TraceSpan.operation == operation)
     if run_ids is not None:
         query = query.where(TraceSpan.run_id.in_(list(run_ids)))
     if before:
@@ -887,7 +1129,7 @@ async def get_trace(
     )
     return {
         "trace_id": trace_id,
-        "kind": "run" if root.run_id else "worker",
+        "kind": trace_kind(root),
         "run_id": root.run_id,
         "root": span_dict(root),
         "spans": [span_dict(span) for span in spans],
@@ -911,10 +1153,21 @@ async def trace_counts(db: AsyncSession, project_id: str) -> Dict[str, Any]:
         oldest = datetime.fromisoformat(oldest)
     if oldest is not None and oldest.tzinfo is None:
         oldest = oldest.replace(tzinfo=timezone.utc)
+    by_operation = dict(
+        (
+            await db.execute(
+                select(TraceSpan.operation, func.count())
+                .where(TraceSpan.project_id == project_id)
+                .group_by(TraceSpan.operation)
+            )
+        ).all()
+    )
     return {
         "span_count": spans,
         "trace_count": traces,
         "oldest_trace_at": oldest.isoformat() if oldest else None,
+        "spans_by_operation": by_operation,
+        "dropped_spans": dropped_spans(project_id),
     }
 
 

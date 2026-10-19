@@ -37107,3 +37107,17 @@ Expected: when the refusal is a path outside the workspace, the continuation say
 `turn_usage.premium_requests` is NULL for all five timed-out runs (`run-c2e1184edfe9`, `run-d1044857d61a`, `run-23d84ec23d71`, `run-68747a9a68a2`, `run-88ac0afdf99c`) and for the restart-interrupted `run-187ca67f997a`. Each sent a `session/prompt` on `claude-haiku-4.5` (0.33 each, as every completed turn in the drive recorded). A stopped run, by contrast, did record 0.33 (`run-c7ca5e821643`). The difference is in `_send_and_wait` (`hub/hub/copilot_acp.py:2976-2979`). On Stop, the loop sends `session/cancel` and keeps polling up to `CANCEL_GRACE_SECONDS` (10 s) for the prompt's result, whose `usage` goes to the ledger. On the deadline it sends the cancel and `break`s at once, then cancels the prompt task, so the result that carries the usage is thrown away. In this drive, 1.65 of about 5 premium requests went uncounted. That is the same F665 gap in another place, and it falls exactly on the turns that fail (F782).
 
 Expected: on the deadline, wait the same grace for the cancelled prompt's result before closing, as Stop does, so its `usage` is observed. Failing test: in `hub/tests/test_copilot_acp*.py`, a fake session that answers `session/cancel` with a result carrying `usage` after the deadline gives a ledger reading (premium requests not None). Seam: Runs (Copilot deadline) x Accounting & allowance.
+
+## F787 (B) -- the first trigger of a new agent held the database write lock for over 30 s; every other Hub writer waited and the trace writer's insert failed `database is locked`
+
+**Status:** open 2026-10-20. Found by the trace-hub-wide slice 1 drive (scratch Hub :8027). It happened once and was not reproduced.
+**Source:** drive
+**Theme:** Runs & runtime
+**Ready:** no -- needs a repro; the measurements are below.
+**Tier:** 0
+
+The request span the new middleware recorded for `POST /api/v1/projects/{project_id}/agent/trigger` ran from 22:27:54.959 to 22:28:38.198 (43 s). That was the first turn of a freshly created Claude agent (`claude-haiku-4-5-20251001`) on a fresh project and profile. The run's root span starts at 22:28:37.943, so 43 s passed between the trigger arriving and the run starting. During that window, the span writer's one-row `INSERT INTO trace_spans` failed with `sqlite3.OperationalError: database is locked`, which only happens after the 30 s busy timeout (`SQLITE_BUSY_TIMEOUT_SECONDS`). So something held the write lock for at least 30 s while the trigger was in flight. The journal mode is `delete` (F627), so readers were blocked too.
+
+Two later triggers of the same agent took 3 s each. A probe that tried `BEGIN IMMEDIATE` (then `ROLLBACK`) once a second throughout the second one found the lock free every time. So the hold is on a first-time path. Candidates, all unverified: tool-server pin or MCP registration on an agent's first run, and runner launchability checks. Any of them, run while a session has an uncommitted write open, would fit.
+
+Expected: no request holds the write lock across a subprocess or a CLI's start. Repro to try: a fresh profile, `e2e.py setup`, `agent <p> a - claude claude-haiku-4-5-20251001`, then `turn` while `testbed`-style `BEGIN IMMEDIATE` probes run at 1 Hz. Any LOCKED sample longer than a second names the window, and a stack dump of the Hub (py-spy) at that moment names the holder. Since slice 1, the trace writer retries a batch the locked database refused (`traces.LOCKED_ATTEMPTS`), so this no longer loses spans. Seam: Runs (trigger) x the database.

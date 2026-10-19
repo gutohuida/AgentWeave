@@ -1526,7 +1526,7 @@ class TraceSpan(Base):
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     # `invoke_agent`, `chat`, `execute_tool`, `aw.judge`, `aw.permission_wait`, `aw.ask_user`,
-    # `aw.deliver` -- what `gen_ai.operation.name` says, or the Hub's own operation.
+    # `aw.deliver`, `aw.request` -- what `gen_ai.operation.name` says, or the Hub's own operation.
     operation: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(
         String(8), default="unset", server_default="unset", nullable=False
@@ -1547,6 +1547,8 @@ class TraceSpan(Base):
         Index("ix_trace_spans_project_roots", "project_id", "parent_span_id", "start_time"),
         Index("ix_trace_spans_run", "run_id"),
         Index("ix_trace_spans_outbox", "project_id", "ended", "exported_at"),
+        # Listing one kind of trace (migration 0138, `everything-the-hub-does-is-in-a-trace` D8).
+        Index("ix_trace_spans_project_operation", "project_id", "operation", "start_time"),
     )
 
 
@@ -1569,6 +1571,11 @@ class TraceSettings(Base):
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     exported_spans: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
+    )
+    # Whether the operator's routine GET/HEAD requests and the SSE stream are recorded as request
+    # spans too (migration 0138, trace-D4: skipped by default).
+    record_reads: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False

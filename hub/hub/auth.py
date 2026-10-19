@@ -17,6 +17,18 @@ from .db.models import OperatorCredential, Project
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
+#: The request scope keys an authentication dependency stamps with what it resolved, for the request
+#: span (`trace_requests`, `everything-the-hub-does-is-in-a-trace` D3): the project the request was
+#: authenticated for, and the run whose credential made it. A request no dependency stamped has no
+#: project to file it under and is not recorded.
+PROJECT_SCOPE_KEY = "aw.project_id"
+RUN_SCOPE_KEY = "aw.run_id"
+
+
+def stamp_project(request: Request, project_id: str) -> None:
+    request.scope[PROJECT_SCOPE_KEY] = project_id
+
+
 _TICKET_PREFIX = "aw_ticket_"
 _OPERATOR_TICKET_PREFIX = "aw_optick_"
 # Use a configured secret or generate an ephemeral one per process.
@@ -119,6 +131,7 @@ async def get_operator(
 
 
 async def get_operator_project(
+    request: Request,
     project_id: str,
     operator: OperatorCredential = Depends(get_operator),
     session: AsyncSession = Depends(get_session),
@@ -128,6 +141,7 @@ async def get_operator_project(
     project = await session.get(Project, project_id)
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    stamp_project(request, project.id)
     return project.id, project.name
 
 
@@ -156,6 +170,7 @@ async def get_project(
     project = await session.get(Project, explicit_project_id)
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    stamp_project(request, project.id)
     return project.id, project.name
 
 
@@ -179,6 +194,7 @@ async def get_project_for_sse(
         project = await session.get(Project, explicit_project_id)
         if project is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        stamp_project(request, project.id)
         return project.id, project.name
 
     if credentials:
@@ -205,6 +221,7 @@ async def get_project_for_sse(
         project = await session.get(Project, project_id)
         if project is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        stamp_project(request, project.id)
         return project.id, project.name
 
     raise HTTPException(

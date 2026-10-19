@@ -881,6 +881,12 @@ async def app(monkeypatch):
             _f292_report(_f292_before_dispose, _f292_before_drop, _f292_snapshot("at failure"))
         )
         raise
+    # The Hub's own spans wait in memory for a writer the suite never starts (ASGITransport runs no
+    # lifespan); a test flushes them itself (`traces.flush_spans`), and none may reach the next
+    # test's fresh database (`everything-the-hub-does-is-in-a-trace`, D1).
+    from hub import traces as _traces
+
+    _traces.reset_spans()
     await seed_test_project()
     await init_db()
     async with AsyncClient(

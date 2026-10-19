@@ -42,6 +42,7 @@ from .run_task_binding import TaskBindingError
 from .scheduler import init_scheduler, shutdown_scheduler
 from .subprocess_windows import no_console_kwargs
 from .task_transition_service import TransitionRefusedError
+from .trace_requests import RequestTraceMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -598,10 +599,18 @@ async def lifespan(app: FastAPI):
     from .trace_export import run_pusher
 
     trace_pusher = asyncio.create_task(run_pusher())
+    # The one writer of the Hub's own spans, off every request's path
+    # (`everything-the-hub-does-is-in-a-trace`, D1).
+    from .traces import run_span_writer
+
+    span_writer = asyncio.create_task(run_span_writer())
     yield
     trace_pusher.cancel()
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await trace_pusher
+    span_writer.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await span_writer
     await terminate_all_active_runs()
     await shutdown_scheduler()
     await _settle_background_runs()
@@ -659,6 +668,10 @@ def create_app() -> FastAPI:
             if run_reconciliation.has_deferred_schedules():
                 asyncio.create_task(run_reconciliation.drain_deferred_schedules())
         return await call_next(request)
+
+    # Added last, so it is outermost: the span covers every layer's answer, the size limit's and the
+    # scrubber's included (`everything-the-hub-does-is-in-a-trace`, D3).
+    app.add_middleware(RequestTraceMiddleware)
 
     # One handler rather than a try/except at each of the four call sites — the two task routes
     # times create-and-update. `detail` is written for a reader who has to correct themselves, and

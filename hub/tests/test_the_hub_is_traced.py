@@ -74,7 +74,7 @@ def _requests(roots, method: str, route_end: str) -> List[Dict[str, Any]]:
 # --- 1. requests ---------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="trace-hub-wide slices 1 and 2 not built")
+@pytest.mark.xfail(strict=True, reason="trace-hub-wide slice 2 not built")
 @pytest.mark.asyncio
 async def test_mutating_and_failing_requests_are_spans_and_reads_only_when_asked(app, auth_headers):
     created = await app.post(f"{BASE}/tasks", json={"title": "Traced work"}, headers=auth_headers)
@@ -112,7 +112,6 @@ async def test_mutating_and_failing_requests_are_spans_and_reads_only_when_asked
     assert len(_requests(roots, "GET", "/tasks")) == 1, "recorded once the project asks"
 
 
-@pytest.mark.xfail(strict=True, reason="trace-hub-wide slice 1 not built")
 @pytest.mark.asyncio
 async def test_a_runs_request_nests_under_its_open_tool_span(app, auth_headers):
     token = mint_run_token()
@@ -163,7 +162,6 @@ async def test_a_runs_request_nests_under_its_open_tool_span(app, auth_headers):
     assert _requests(roots, "POST", "/permission-decisions") == [], "never a trace of its own"
 
 
-@pytest.mark.xfail(strict=True, reason="trace-hub-wide slice 1 not built")
 @pytest.mark.asyncio
 async def test_a_span_that_cannot_be_written_never_fails_the_request(app, auth_headers):
     def _refuse(*_args, **_kwargs):
@@ -264,3 +262,72 @@ async def test_a_warning_the_hub_logs_is_on_its_trace_and_exported_as_a_log(
     ]
     assert any(record["traceId"] == check["trace_id"] for record in records)
     assert SECRET not in exported.text
+
+
+@pytest.mark.asyncio
+async def test_a_batch_the_locked_database_refused_is_written_on_the_next_pass(app, auth_headers):
+    """Found by the slice-1 drive: a trigger held the write lock past the 30 s busy timeout and
+    the writer dropped the span it was writing. A lock is waited out, not a reason to drop."""
+    from sqlalchemy.exc import OperationalError
+
+    real = traces._write_spans
+    calls = []
+
+    async def _locked_once(batch):
+        calls.append(len(batch))
+        if len(calls) == 1:
+            raise OperationalError("INSERT", {}, Exception("database is locked"))
+        await real(batch)
+
+    with patch.object(traces, "_write_spans", _locked_once):
+        created = await app.post(f"{BASE}/tasks", json={"title": "Waits"}, headers=auth_headers)
+        assert created.status_code == 201, created.text
+        assert await traces.flush_spans() == 0
+        assert await traces.flush_spans() == 1
+    roots = await _roots(app, auth_headers, "aw.request")
+    assert len(_requests(roots, "POST", "/tasks")) == 1
+    settings = await app.get(f"{BASE}/traces/settings", headers=auth_headers)
+    assert settings.json()["dropped_spans"] == 0
+
+
+@pytest.mark.asyncio
+async def test_a_request_nests_under_a_tool_call_whose_line_arrived_after_it_began(
+    app, auth_headers
+):
+    """Found by the slice-1 drive on a real Claude turn: `mcp__agentweave__list_tasks`'s line was
+    recorded 50 ms after its `GET /agent-actions/tasks` began, and the request fell to the root."""
+    run_id = f"run-{short_id()}"
+    async with async_session_factory() as db:
+        run = Run(id=run_id, project_id=PROJECT, agent="tracer", status="running", turn_depth=0)
+        db.add(run)
+        traces.start_run(db, run, prompt="List the tasks.", runner="claude", model=None)
+        await db.commit()
+    began = datetime.now(timezone.utc)
+    async with async_session_factory() as db:
+        await record_agent_output(
+            db,
+            PROJECT,
+            "tracer",
+            content="mcp__agentweave__list_tasks",
+            session_id=None,
+            kind="tool_use",
+            payload={"call_id": CALL, "tool": "mcp__agentweave__list_tasks", "input": {}},
+            run_id=run_id,
+        )
+    traces.enqueue(
+        traces.PendingSpan(
+            project_id=PROJECT,
+            name="GET /api/v1/agent-actions/tasks",
+            operation="aw.request",
+            start_time=began - timedelta(milliseconds=50),
+            end_time=datetime.now(timezone.utc) + timedelta(milliseconds=100),
+            run_id=run_id,
+        )
+    )
+    await _flush()
+
+    by_run = await app.get(f"{BASE}/traces/by-run/{run_id}", headers=auth_headers)
+    spans = by_run.json()["spans"]
+    [tool] = [span for span in spans if span["operation"] == "execute_tool"]
+    [request] = [span for span in spans if span["operation"] == "aw.request"]
+    assert request["parent_span_id"] == tool["span_id"]

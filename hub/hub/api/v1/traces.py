@@ -45,11 +45,16 @@ async def list_project_traces(
     run_id: Optional[str] = Query(None),
     task_id: Optional[str] = Query(None),
     conversation_id: Optional[str] = Query(None),
+    operation: Optional[str] = Query(
+        None,
+        max_length=32,
+        description="Only traces whose root is this operation: invoke_agent, chat, aw.request, ...",
+    ),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
     """The project's traces, newest first. `task_id`/`conversation_id` select the traces of the
-    runs that worked that task or ran in that conversation."""
+    runs that worked that task or ran in that conversation; `operation` one kind of trace."""
     project_id, _ = project
     run_ids = None
     if run_id or task_id or conversation_id:
@@ -63,7 +68,7 @@ async def list_project_traces(
         run_ids = list((await session.execute(query)).scalars().all())
     try:
         return await traces.list_traces(
-            session, project_id, limit=limit, before=before, run_ids=run_ids
+            session, project_id, limit=limit, before=before, run_ids=run_ids, operation=operation
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"`before` is not a cursor: {exc}") from exc
@@ -109,6 +114,8 @@ class TraceSettingsUpdate(RequestModel):
     #: Replaces the whole set when given; values are never returned.
     otlp_headers: Optional[Dict[str, str]] = None
     export_enabled: Optional[bool] = None
+    #: Record the operator's routine reads (the app's polling) and the SSE stream too (trace-D4).
+    record_reads: Optional[bool] = None
 
 
 async def _settings_body(session: AsyncSession, project_id: str) -> dict:
@@ -122,6 +129,7 @@ async def _settings_body(session: AsyncSession, project_id: str) -> dict:
         "last_export_at": row.last_export_at.isoformat() if row and row.last_export_at else None,
         "last_error": row.last_error if row else None,
         "exported_spans": row.exported_spans if row else 0,
+        "record_reads": bool(row.record_reads) if row else False,
         **counts,
     }
 
@@ -169,9 +177,12 @@ async def update_trace_settings(
             row.enabled_at = datetime.now(timezone.utc)
             row.last_error = None
         row.export_enabled = body.export_enabled
+    if "record_reads" in fields and body.record_reads is not None:
+        row.record_reads = body.record_reads
     if row.export_enabled and not row.otlp_endpoint:
         raise HTTPException(status_code=422, detail="Set an OTLP endpoint before enabling export")
     await session.commit()
+    traces.set_record_reads(project_id, bool(row.record_reads))
     return await _settings_body(session, project_id)
 
 

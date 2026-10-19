@@ -243,7 +243,12 @@ async def test_one_turn_is_one_redacted_trace_that_exports_and_clears(
     assert "<redacted>" in prompt_text
 
     # Listed as a trace of the project.
-    listed = await app.get(f"/api/v1/projects/{PROJECT}/traces", headers=auth_headers)
+    # The run's own kind of trace: the requests that started it are traces too.
+    listed = await app.get(
+        f"/api/v1/projects/{PROJECT}/traces",
+        params={"operation": "invoke_agent"},
+        headers=auth_headers,
+    )
     assert listed.status_code == 200, listed.text
     assert [row["trace_id"] for row in listed.json()["traces"]] == [trace_id]
 

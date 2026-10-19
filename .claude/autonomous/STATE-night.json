@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-19-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "trace-hub-wide-1-impl",
-    "next_action": "Do queue item trace-hub-wide-1-impl: build slice 1 of spec/changes/everything-the-hub-does-is-in-a-trace (request spans, D1 queue writer + flush_spans/_write_spans, D3/D4, migration 0138 round-tripped on a copy of the trial DB). Turn its xfail tests in hub/tests/test_the_hub_is_traced.py green and drop their markers; drive on a scratch Hub. Log it, update STATE, commit, push.",
+    "current": "trace-hub-wide-2-impl",
+    "next_action": "Do queue item trace-hub-wide-2-impl: slice 2 of spec/changes/everything-the-hub-does-is-in-a-trace -- persist_event puts its event on traces.current_span() or writes its own aw.event span (D5). Turn the two slice-2 xfail tests in hub/tests/test_the_hub_is_traced.py green and drop their markers; extend scripts/drive/d1020_hub_wide_trace_drive.py with an events step and drive it on a scratch Hub. Log it, update STATE, commit, push.",
     "queue": [
         {
             "id": "trace-hub-wide-spec",
@@ -24,16 +24,16 @@
         },
         {
             "id": "trace-hub-wide-1-impl",
-            "status": "open",
+            "status": "done",
             "title": "Slice 1: per-request ASGI span, parented under run tool span",
-            "detail": "Slice 1 of everything-the-hub-does-is-in-a-trace: ASGI middleware, actor from get_agent_actor, span queue + lifespan writer (traces.flush_spans, traces._write_spans, dropped_spans), migration 0138 (record_reads + ix_trace_spans_project_operation; round-trip on a trial-DB copy), list operation= filter. Unmark xfail on the nests/dropped tests (requests test also needs slice 2). test_a_run_is_one_trace lists unfiltered: fix. Drive on scratch Hub.",
+            "detail": "Done iter 3: RequestTraceMiddleware (hub/hub/trace_requests.py), span queue + lifespan writer (traces.enqueue/flush_spans/_write_spans/run_span_writer, lock retry LOCKED_ATTEMPTS=3), actor/project stamped by auth deps, migration 0138 round-tripped on a trial-DB copy, operation= filter, settings record_reads/dropped_spans/spans_by_operation. Drive d1020 requests+nested green on scratch :8027.",
             "model": "opus"
         },
         {
             "id": "trace-hub-wide-2-impl",
             "status": "open",
             "title": "Slice 2: persist_event attaches a span event / short span",
-            "detail": "One writer persist_event. Test-first.",
+            "detail": "One writer persist_event: attach a span event to traces.current_span() (the request's PendingSpan, mutable until enqueued) else stage an aw.event span in persist_event's own session. Unmark test_mutating_and_failing_requests... and test_an_event_with_no_trace_current... Note D5: a run's executor sets the run's root as current -- PendingSpan has no form for an already-written root; design it (event appended to the root row in the event's session). Test-first.",
             "model": "opus"
         },
         {
@@ -47,7 +47,7 @@
             "id": "trace-hub-wide-4-impl",
             "status": "open",
             "title": "Slice 4: WARNING+ log records on trace, OTLP logs export, redaction",
-            "detail": "Then drive whole change, measure growth, fold change via Hub routes, rebuild bundle once if UI touched.",
+            "detail": "Then drive whole change, measure growth, fold change via Hub routes, rebuild bundle once if UI touched. The app's Traces list now shows request traces unlabeled among runs (TracesSection.tsx:70 only labels 'worker'): add the kind filter + labels (D8), default to runs.",
             "model": "opus"
         },
         {
