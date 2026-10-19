@@ -17,6 +17,43 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-10-19
+
+**For the night window armed by hand 2026-10-19 21:24 (first firing 23:00).** Written ~21:35 in an
+interactive session. Today that session built and merged reach-1019, vault-1019 and trace-1019
+(`b54ba60`, `5f5b10e`, `f827635`, bundle `ce33789`); the branch now adds migrations 0135 and 0137,
+so the merge gate holds (loop-A1) whatever tonight builds.
+
+Operator (verbatim): "Can we add traces for a broader surface area? Like everything that happens in
+the hub?" Asked when, the operator chose **"Queue it for the fix window"**, and for requests,
+**"All but UI polling"** (DECISIONS `trace-D4`).
+
+ORDER: `trace-hub-wide` first (Tier 2, Opus), then the default queue (red CI, today's findings
+F758-F786, every other open finding).
+
+**`trace-hub-wide`** (Tier 2). Extend trace-1019 (`hub/hub/traces.py`, the only writer of
+`trace_spans`; change `spec/changes/a-run-is-a-trace-you-can-export`) from agent turns to
+everything the Hub does. Author a short change on :8010 (night playbook, "Tier 1 and Tier 2 at
+night"), acceptance drive written and failing first, then build and drive on a scratch Hub. Scope:
+
+1. **A span per API request** (ASGI middleware): route template, method, status, duration, actor
+   (operator, or the run from its credential), project. A request made with a run's credential is
+   parented under that run's open tool span, so an agent's calls into the Hub nest under the tool
+   call that made them. Recorded: every mutating request, every agent-credential request, every
+   error (4xx/5xx) and slow request. **Skipped by default: the app's routine read polling and the
+   SSE stream**, with a project trace setting to record them too (trace-D4).
+2. **Every event is in a trace**, through `persist_event` (one writer, ~28 event types on :8000):
+   a span event on the current trace when there is one, else a short span of its own.
+3. **Background work is a trace**: a job firing, a loop tick, flow staffing and review, inbound
+   queue processing, worktree create/merge/release and integration, a project check run, a spec
+   fold, a distil batch; git and check commands as child spans (argv, exit code, duration).
+4. **The Hub's own log records** (WARNING and up) attached to the current trace and exported as
+   OTLP logs beside the spans; content passes the same redaction.
+
+Volume is the hazard (kept forever, trace-D3): index for it, keep the views paged, and state the
+growth measured in the drive. No new dependency without justification (trace-1019 used stdlib
+urllib). Do not touch :8000. Don't commit the built bundle mid-change: rebuild it once at the end.
+
 ## 2026-10-18
 
 **For the night window armed by hand 2026-10-18 22:41 (22:44-07:00).** Written ~23:00 in an

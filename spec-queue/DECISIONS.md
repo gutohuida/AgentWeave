@@ -50,6 +50,7 @@ Interactive session, 2026-10-19 ~19:00. "we should start adding traces and logs.
 - DECIDED   trace-D1  OpenTelemetry-shaped traces (GenAI semantic conventions): a run is a trace; model calls, tool calls, judge decisions, permission waits, retries, deliveries are spans. Viewed **both** in the app and exported over **OTLP** to an external tool. (operator, 2026-10-19)
 - DECIDED   trace-D2  **Everything**, including full prompt and response content (with secret redaction). (operator, 2026-10-19)
 - DECIDED   trace-D3  Kept **forever** by default; the operator can **export and clear** (by project, by date range). (operator, 2026-10-19)
+- DECIDED   trace-D4  Hub-wide traces: API requests, every event, background work, the Hub's own logs. Requests recorded: all mutating, all agent-credential, all errors and slow ones; the app's routine read polling and the SSE stream skipped by default, behind a setting. Built by the 2026-10-19 night window first (`APPROVALS.md` `## 2026-10-19`). (operator, 2026-10-19 ~21:30: "All but UI polling", "Queue it for the fix window")
 - OPEN      trace-4   Capture the runner CLIs' own telemetry too (Claude Code's OTel export, if Copilot has one): verify what each emits before designing on it.
 
 ### reach-1019: what an agent can reach -- DECIDED 2026-10-19
