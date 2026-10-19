@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 14,
+  "iteration": 15,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F750-impl",
-  "next_action": "Do queue item F750-impl: F750 (D), tool-server digest pin race, Access denied on Windows. Test-first, fix, set its Status line in scripts/drive/FINDINGS.md. Then F752-spec.",
+  "current": "F752-spec",
+  "next_action": "Do queue item F752-spec: F752/F753/F754/F755 spec-flow friction + shell-judge spec gap. Group by seam; one finding per commit; spec flow on trial Hub :8010. Then F444-impl.",
   "queue": [
     {
       "id": "F738-impl",
@@ -96,9 +96,9 @@
     },
     {
       "id": "F750-impl",
-      "status": "open",
+      "status": "done",
       "title": "F750 (D): tool-server digest pin race, Access denied on Windows",
-      "detail": "Test-first; fix; Status."
+      "detail": "fixed; see log iteration 15"
     },
     {
       "id": "F752-spec",

@@ -107,6 +107,37 @@ def test_an_unwritable_target_raises_instead_of_returning_the_source(tmp_path, m
         pin.path()
 
 
+def test_a_lost_replace_race_that_left_the_same_bytes_counts_as_pinned(tmp_path, monkeypatch):
+    """F750: another process wrote the same digest between our read and our replace, and on
+    Windows the replace onto its freshly written file is refused. The target holds our bytes."""
+    pin = ToolServerPin(_source(tmp_path, b"A"), root=tmp_path / "root")
+    real_replace = os.replace
+
+    def lose_the_race(src, dst):
+        Path(dst).parent.mkdir(parents=True, exist_ok=True)
+        Path(dst).write_bytes(b"A")
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(os, "replace", lose_the_race)
+    target = pin.path()
+    monkeypatch.setattr(os, "replace", real_replace)
+    assert target.read_bytes() == b"A"
+    assert not list(target.parent.glob("*.tmp"))
+
+
+def test_a_refused_replace_that_left_other_bytes_still_raises(tmp_path, monkeypatch):
+    pin = ToolServerPin(_source(tmp_path, b"A"), root=tmp_path / "root")
+
+    def refuse(src, dst):
+        Path(dst).parent.mkdir(parents=True, exist_ok=True)
+        Path(dst).write_bytes(b"other")
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(os, "replace", refuse)
+    with pytest.raises(PermissionError):
+        pin.path()
+
+
 # --- `a-run-reaches-the-hub-without-mcp` D5: the `aw-tool` launchers beside the pin ---------------
 
 

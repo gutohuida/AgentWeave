@@ -36697,7 +36697,7 @@ The harness should default to the git toplevel of the current directory, or refu
 
 ## F750 (D) -- two processes pinning the same new tool-server digest race, and one fails with Access denied on Windows
 
-**Status:** open 2026-10-18. Seen in the 2026-10-18 full Hub suite run: `test_mcp_server_stdio_surface.py` failed collection on two xdist workers. A re-run, with the digest already pinned, passed.
+**Status:** fixed 2026-10-19 (Tier 0, night window): `_write_verified` treats a refused replace as done when the target already holds the bytes, and otherwise retries a short while before raising. Tests in `hub/tests/test_tool_server_pin.py`, the race case red first. Driven with 6 real processes pinning one new digest, 15 rounds: 37 failures before, 0 after. Seen 2026-10-18 in the full Hub suite run: `test_mcp_server_stdio_surface.py` failed collection on two xdist workers. A re-run, with the digest already pinned, passed.
 **Source:** drive
 **Theme:** Resilience
 

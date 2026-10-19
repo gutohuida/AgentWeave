@@ -23,6 +23,9 @@ from typing import List, Optional
 logger = logging.getLogger(__name__)
 
 _SERVER_NAME = "mcp_server.py"
+# A refused replace is retried this often, pausing a little longer each time (F750).
+_REPLACE_ATTEMPTS = 6
+_REPLACE_PAUSE = 0.02
 
 
 def pin_root() -> Path:
@@ -83,7 +86,22 @@ class ToolServerPin:
             temp.write_bytes(data)
             if mode is not None and os.name != "nt":
                 os.chmod(temp, mode)
-            os.replace(temp, target)
+            for attempt in range(_REPLACE_ATTEMPTS):
+                try:
+                    os.replace(temp, target)
+                    return
+                except OSError:
+                    # Two processes pinning the same new digest: on Windows the replace onto the
+                    # file the other has just written, or is still reading, is refused (F750).
+                    # Holding our bytes is done; otherwise the refusal may be a moment's lock.
+                    try:
+                        if target.read_bytes() == data:
+                            return
+                    except OSError:
+                        pass
+                    if attempt == _REPLACE_ATTEMPTS - 1:
+                        raise
+                    time.sleep(_REPLACE_PAUSE * (attempt + 1))
         finally:
             temp.unlink(missing_ok=True)
 
