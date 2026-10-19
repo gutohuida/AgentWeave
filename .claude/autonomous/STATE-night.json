@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "d7b552c",
   "stop_at": "2026-10-19T07:00:00+01:00",
-  "iteration": 13,
+  "iteration": 14,
   "log_file": ".claude/autonomous/2026-10-18-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "F751-impl",
-  "next_action": "Do queue item F751-impl: F751 (D), verdict accepts awaiting evidence recorded for earlier wording. Test-first, fix, drive (scratch Hub, never 8000), set its Status line in scripts/drive/FINDINGS.md. Then F750-impl.",
+  "current": "F750-impl",
+  "next_action": "Do queue item F750-impl: F750 (D), tool-server digest pin race, Access denied on Windows. Test-first, fix, set its Status line in scripts/drive/FINDINGS.md. Then F752-spec.",
   "queue": [
     {
       "id": "F738-impl",
@@ -90,9 +90,9 @@
     },
     {
       "id": "F751-impl",
-      "status": "open",
+      "status": "done",
       "title": "F751 (D): verdict accepts awaiting evidence recorded for earlier wording",
-      "detail": "Test-first; fix; drive; Status."
+      "detail": "fixed; see log iteration 14"
     },
     {
       "id": "F750-impl",
