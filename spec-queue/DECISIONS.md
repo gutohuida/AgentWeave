@@ -33,6 +33,16 @@ From the operator's 2026-10-18 brief (`APPROVALS.md` `## 2026-10-18`: "dev -> te
 - OPEN      flow-1018-7  Where is the editor: the project page beside Spec steps, the document's Delivery section, or both? Recommended: both, one shared component, and the board shows each card's stage.
 - OPEN      flow-1018-8  How is a stage staffed? (Added from the spike: the test agent was given the build and then could not test it.) Recommended: by agent name or by charter. Agents named by a later stage are kept out of that flow's build pool, and the unstaffed sentence names the stage.
 
+### reach-1019: what an agent can reach -- DECIDED 2026-10-19
+
+Interactive session, 2026-10-19 ~18:30, after a read-only study of :8000 (48 refusals on 10-16, all from the Workspace judge; ~36 were judge false positives: heredoc/inline-script text read as paths, msys `/c/...` paths, a relative path after `cd` in one command; ~12 by design: temp, parent, localhost, `$PWD`). The operator escalated QA and Architect to Full access instead. "the environment seems to tight... Hub is blocking too much."
+
+- DECIDED   reach-D1  The boundary is a **guardrail** against an agent's mistakes, not containment; the spec says so. (operator, 2026-10-19: "Yes a guardrail seems okay but I want to be able to set more generous permission")
+- DECIDED   reach-D2  **Allow-all**, settable for every agent in a project or for specific agents. "allow-all means all including copilot": it covers Copilot and spec turns. **Supersedes** fix-D11 / wpc-obs-4 (Full access hidden for Copilot) and ghcp-a-spec-turn-full-access (spec turns judged as Workspace under Full access). (operator, 2026-10-19)
+- DECIDED   reach-D3  A **middle setting** between Workspace only and allow-all (e.g. the workspace plus granted roots, temp, localhost, the project root). (operator, 2026-10-19: "Yes a middle setting as well")
+- OPEN      reach-4   Does allow-all keep recording writes outside the project, visibly in the run? Recommended: keep the record, out of the way (a run row, not a card).
+- OPEN      reach-5   The three judge false positives (heredoc text, msys `/c/` paths, `cd` within one command): the operator said **Hold** on filing them as Tier 0 for the 2026-10-19 night. Reopen when the reach change is shaped.
+
 ### loop-1018: the daily cycle restarts as DRIVE by day, FIX by night -- DECIDED 2026-10-18
 
 Interactive session, 2026-10-18 ~22:40. "I want to restart my daily and nightly run. The daily run will be about driving and testing e2e agentweave and finding everything wrong with it and the night about fixing everything that was found. Unless I add something new." Then: "also e2e loop should start with a pretask that is reviewing the plan agains the code to check if it's reaching everything and if there is something new."
