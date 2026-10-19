@@ -102,21 +102,32 @@ faster than the file.
    message that counts each of the three.
 2. **Log `PLAN: rows <n> · unreached added <n> · new <n> · gone <n>`**, and list the new and
    unreached paths by name.
-3. **Choose today's sweep areas**, three or four of them, in this order:
+3. **Queue a full sweep: every row of the checklist, once** (operator, 2026-10-19: "a full sweep
+   at the project"; the earlier "three or four areas" reached 8 of 28 rows and closed the window
+   at 10:45). Group the rows into `sweep-<area>-sweep` items of two or three rows each, pairing
+   rows whose seam is the point, such as the spec flow with tasks and runs, or the vault with
+   specs. **Every row lands in exactly one item**, and the log's `PLAN:` line counts rows queued
+   against rows in the checklist; they must be equal. Order the items:
    - (a) rows with new or unreached paths from step 1;
    - (b) rows last night's commits touched heavily (`git log --stat` since the arm);
    - (c) rows swept least recently (grep the last seven day logs for `SWEPT:` lines). A row that
      has never been swept counts as least recent.
 
-   Pair rows whose seam is the point, such as the spec flow with tasks and runs, or the vault with
-   specs. Insert one `sweep-<area>-sweep` item each, with the new paths named in its `detail` so
-   the sweep drives them first.
+   Name the new paths in each item's `detail` so the sweep drives them first. A sweep stays one
+   representative path per row, driven honestly (skill: "breadth deliberately"); it does not
+   become a deep dive because the queue is long.
 
 This item drives nothing. It reads code and edits only the checklist. Keep it to one firing.
 
 ---
 
 ## A sweep firing — `sweep-<area>-sweep`
+
+**The time guard, checked first.** If the local time is **16:15 or later** (`date`), do not
+start the sweep: mark it and every later sweep item `deferred`, log
+`DEFERRED: <rows> — out of window`, set `next_action` to `ledger-tidy`, and end the firing. The
+merge gate needs the time before 17:00. Tomorrow's step (c) puts deferred rows first, since they
+are the least recently swept.
 
 The method is the skill's Steps 3–8 and its harness, `e2e.py`. Its Step 1 and Step 2 questions
 are already answered here. The scope is the item's area. Nothing stops for an operator: a decision
@@ -189,7 +200,8 @@ which is the point. Never `checkout master`, never make a merge commit, and neve
 conflict. Log the four measured values and the sha that landed. When the gate stays shut, log which
 condition failed.
 
-Then write the closing entry: the findings filed by severity and tier, the areas swept, what was
+Then write the closing entry: the findings filed by severity and tier, the areas swept (rows
+swept against checklist rows, and any deferred), what was
 confirmed and reopened, and the decisions waiting for the operator. Set `next_action: null`.
 
 ---

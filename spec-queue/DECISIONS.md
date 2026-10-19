@@ -41,6 +41,7 @@ Interactive session, 2026-10-18 ~22:40. "I want to restart my daily and nightly 
 - DECIDED   loop-D2  Night window (23:00-07:00) = FIX everything found, **every tier, Tier 2 included**. Tier 1/2 author their own short change on :8010 and use approve_anyway; Tier 2 writes its acceptance drive and sees it fail before the build. APPROVED-FIXES no longer gates anything. (operator, 2026-10-18)
 - DECIDED   loop-D3  The gated fast-forward of master stays, at day close (D-7), with the morning fallback. The night never merges. (operator, 2026-10-18)
 - DECIDED   loop-D4  Restart with the night of 2026-10-18, armed by hand; ArmDay and ArmNight re-enabled from 2026-10-19. (operator, 2026-10-18)
+- DECIDED   loop-D5  Amends loop-D1: the day queues a **full sweep**, every e2e checklist row once (two or three rows per sweep item), not 3-4 areas. On 2026-10-19 the 3-4 rule reached 8 of 28 rows and closed the window at 10:45. A sweep does not start after 16:15; its rows are logged `DEFERRED` and lead the next day. "It doesnt need to be the full day but a full sweep at the project." (operator, 2026-10-19)
 - ASSUMED   loop-A1  Migration hold: the merge gate stays shut while the branch adds a migration, because :8000's next restart would run it on real data. This is the session's own safety default, not the operator's call; drop it if it is unwanted. (2026-10-18)
 
 ### vis-1017: evidence goes agentic, and the project becomes visible -- DECIDED 2026-10-17

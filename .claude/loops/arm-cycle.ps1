@@ -70,7 +70,7 @@ $windows = @{
     StateFile = ".claude\autonomous\STATE-day.json"
     LogFile   = ".claude\autonomous\driver-day.log"
     Playbook  = ".claude/loops/day-window.md"
-    Purpose   = "DRIVE. Operator, 2026-10-18: drive AgentWeave end to end and file everything wrong with it, as ready findings (repro, severity, seam, tier) for the night to fix. Open with plan-review (the e2e checklist checked against the code: unreached, new, gone), then anything today's DIRECTION.md adds, then re-drive last night's fixes, then 3-4 full-surface sweep areas. Close with the merge gate. No product code unless DIRECTION.md asks. Playbook: .claude/loops/day-window.md"
+    Purpose   = "DRIVE. Operator, 2026-10-18: drive AgentWeave end to end and file everything wrong with it, as ready findings (repro, severity, seam, tier) for the night to fix. Open with plan-review (the e2e checklist checked against the code: unreached, new, gone), then anything today's DIRECTION.md adds, then re-drive last night's fixes, then a full sweep: every e2e checklist row once, two or three rows per sweep item (operator, 2026-10-19), with no sweep started after 16:15. Close with the merge gate. No product code unless DIRECTION.md asks. Playbook: .claude/loops/day-window.md"
     MergeGate = $true
   }
   night = @{
