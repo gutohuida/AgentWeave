@@ -44,6 +44,7 @@ project's worktrees live inside it too (`.agentweave/worktrees`).
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import platform
@@ -510,6 +511,9 @@ class _Record:
             "created_at": meta["created_at"],
             "dated": meta.get("dated"),
             "holder": meta.get("holder"),
+            # The agent whose run added it by path (`agents-add-files-to-the-vault-by-path`);
+            # None for the operator's own uploads and every source written before it.
+            "added_by": meta.get("added_by"),
             "available": text is not None,
             "opening": None if text is None else _opening(text),
         }
@@ -821,6 +825,27 @@ def set_transcription(project_root: Path, private_root: Path, source_id: str, te
     storage.write(record.text_root, f"{SOURCES}/{source_id}.md", text.encode("utf-8"))
 
 
+def source_digests(project_root: Path, private_root: Path) -> Dict[str, str]:
+    """Every source held on this machine by the sha256 of its body: the first source of each
+    digest, oldest first. A source written before digests were kept is hashed from its body here;
+    one whose body is on another machine has none and is left out."""
+    digests: Dict[str, str] = {}
+    records = sorted(
+        _records(project_root, private_root).values(),
+        key=lambda record: (record.meta["created_at"], record.meta["id"]),
+    )
+    for record in records:
+        digest = record.meta.get("sha256")
+        if not isinstance(digest, str) and record.text_root is not None:
+            kind = record.file_kind
+            extension = "md" if kind is None else kind[0]
+            body = storage.read(record.text_root, f"{SOURCES}/{record.meta['id']}.{extension}")
+            digest = None if body is None else hashlib.sha256(body).hexdigest()
+        if isinstance(digest, str):
+            digests.setdefault(digest, record.meta["id"])
+    return digests
+
+
 def source_text(
     project_root: Path, private_root: Path, source_id: str
 ) -> Optional[Tuple[Dict[str, Any], Optional[str]]]:
@@ -884,9 +909,10 @@ def _store(
     media_type: str,
     extension: str,
     data: bytes,
+    added_by: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], str]:
     """Write a new source's body as `sources/<id>.<extension>`, then its metadata; answer the
-    metadata and where the body went."""
+    metadata and where the body went. *added_by* is the agent that added it by path, if one did."""
     entry_id = f"src-{secrets.token_hex(6)}"
     meta = {
         "id": entry_id,
@@ -897,7 +923,12 @@ def _store(
         "holder": holder_name() if visibility == "private" else None,
         "media_type": media_type,
         "dated": dated,
+        # What the bulk add compares to skip a duplicate; kept off the private stub below, since
+        # a digest of private text would let a colleague confirm a guess at it.
+        "sha256": hashlib.sha256(data).hexdigest(),
     }
+    if added_by is not None:
+        meta["added_by"] = added_by
     tracked = tracked_root(project_root)
     body_root = tracked if visibility == "tracked" else str(private_root)
     # The body before its metadata: the .json is what lists an entry, so a failure in between
@@ -910,6 +941,8 @@ def _store(
             keys.append("media_type")  # so a colleague's checkout can tell a scan from a note
         stub = {key: meta[key] for key in keys}
         stub["holder"] = meta["holder"]
+        if added_by is not None:
+            stub["added_by"] = added_by
         storage.write(tracked, f"{SOURCES}/{entry_id}.json", _encode(stub))
     return meta, body_root
 
@@ -923,6 +956,7 @@ def add_source(
     content: str,
     visibility: str,
     dated: Optional[str] = None,
+    added_by: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Write a new source and answer it as the map lists it. Checked before anything is written.
     *dated* is the day it was said (YYYY-MM-DD), which decides the newer side of a
@@ -947,6 +981,7 @@ def add_source(
         media_type=TEXT_MEDIA_TYPE,
         extension="md",
         data=data,
+        added_by=added_by,
     )
     return _Record(meta, body_root).listed(content)
 
@@ -961,6 +996,7 @@ def add_file(
     data: bytes,
     visibility: str,
     dated: Optional[str] = None,
+    added_by: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Write a new PDF or image source and answer it as the map lists it. It has no text until it
     is read (`distillation.py` transcribes it): 415 for another media type, 400 for bytes that do
@@ -989,6 +1025,7 @@ def add_file(
         media_type=media_type,
         extension=known[0],
         data=data,
+        added_by=added_by,
     )
     return _Record(meta, body_root).listed(None)
 

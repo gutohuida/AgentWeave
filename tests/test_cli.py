@@ -908,3 +908,92 @@ class TestDownloadWithSha256:
         assert result is False
         # Destination should not exist — the corrupted file must be cleaned up
         assert not dest.exists()
+
+
+class TestVaultAdd:
+    """`agentweave vault add` (`agents-add-files-to-the-vault-by-path`, vault-D3): the CLI resolves
+    paths against its own directory, names the project from the folder's marker, and posts them;
+    the Hub reads the files."""
+
+    def _answer(self, refused: int = 0) -> dict:
+        results = [{"path": "/x/a.md", "status": "added", "source": {"id": "src-000000000001"}}]
+        results += [{"path": "/x/e.exe", "status": "refused", "reason": "no"}] * refused
+        return {
+            "results": results,
+            "counts": {"added": 1, "skipped": 0, "refused": refused},
+            "distillation": {"requested": False, "queued": 0, "note": "Not distilled."},
+        }
+
+    def _install(self, monkeypatch, answer: dict) -> list:
+        import json as _json
+        import urllib.request
+
+        from agentweave import cli
+
+        sent: list = []
+
+        class FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return _json.dumps(answer).encode("utf-8")
+
+        def fake_urlopen(request, timeout=None):
+            sent.append(request)
+            return FakeResp()
+
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(cli, "_fetch_setup_token", lambda port=8000: "aw_live_test")
+        monkeypatch.delenv("AW_KEY", raising=False)
+        return sent
+
+    def test_distil_must_be_stated(self):
+        from agentweave.cli import create_parser
+
+        with pytest.raises(SystemExit):
+            create_parser().parse_args(["vault", "add", "inbox"])
+        parsed = create_parser().parse_args(["vault", "add", "inbox", "--no-distil"])
+        assert parsed.distil is False and parsed.visibility is None
+        parsed = create_parser().parse_args(["vault", "add", "a", "b", "--distil", "--private"])
+        assert parsed.distil is True and parsed.visibility == "private"
+        assert parsed.paths == ["a", "b"]
+
+    def test_posts_absolute_paths_to_this_folders_project(self, tmp_path, monkeypatch, capsys):
+        import json as _json
+
+        from agentweave.cli import main
+
+        (tmp_path / ".agentweave").mkdir()
+        (tmp_path / ".agentweave" / "project.json").write_text(
+            '{"version": 1, "project_id": "proj-abc"}', encoding="utf-8"
+        )
+        (tmp_path / "inbox").mkdir()
+        monkeypatch.chdir(tmp_path / "inbox")
+        sent = self._install(monkeypatch, self._answer())
+
+        assert main(["vault", "add", ".", "--no-distil", "--port", "8130"]) == 0
+        [request] = sent
+        assert request.full_url == "http://localhost:8130/api/v1/projects/proj-abc/vault/paths"
+        body = _json.loads(request.data)
+        assert body["paths"] == [str((tmp_path / "inbox").resolve())]
+        assert body["distil"] is False and "visibility" not in body
+        out = capsys.readouterr().out
+        assert "added    src-000000000001" in out and "1 added, 0 skipped, 0 refused" in out
+
+    def test_a_refused_file_exits_nonzero_and_no_project_is_refused(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        from agentweave.cli import main
+
+        monkeypatch.chdir(tmp_path)
+        sent = self._install(monkeypatch, self._answer(refused=1))
+        assert main(["vault", "add", "x", "--no-distil"]) == 1
+        captured = capsys.readouterr()
+        assert "No project here" in captured.out + captured.err
+        assert sent == []
+        assert main(["vault", "add", "x", "--no-distil", "--project", "proj-abc"]) == 1
+        assert "refused  /x/e.exe: no" in capsys.readouterr().out

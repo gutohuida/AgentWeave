@@ -185,7 +185,9 @@ async def test_distil_must_be_stated_and_a_job_that_cannot_run_refuses_before_wr
     unstated = await app.post(AGENT_ROUTE, json={"paths": ["inbox"]}, headers=headers)
     assert unstated.status_code == 422, unstated.text
 
-    refused = await app.post(AGENT_ROUTE, json={"paths": ["inbox"], "distil": True}, headers=headers)
+    refused = await app.post(
+        AGENT_ROUTE, json={"paths": ["inbox"], "distil": True}, headers=headers
+    )
     assert refused.status_code == 409, refused.text
     assert "distil" in refused.json()["detail"]
     assert not (tmp_path / "knowledge").exists()
@@ -206,7 +208,12 @@ async def test_an_agent_path_outside_its_workspace_and_the_project_is_refused(
     got = await app.post(
         AGENT_ROUTE,
         json={
-            "paths": ["inbox/a.md", str(elsewhere / "secret.md"), "../../../inbox/b.txt", "nope.md"],
+            "paths": [
+                "inbox/a.md",
+                str(elsewhere / "secret.md"),
+                "../../../inbox/b.txt",
+                "nope.md",
+            ],
             "distil": False,
         },
         headers=headers,
@@ -222,7 +229,7 @@ async def test_an_agent_path_outside_its_workspace_and_the_project_is_refused(
 async def test_the_operator_route_adds_any_readable_path_without_added_by(
     app, auth_headers, tmp_path_factory
 ) -> None:
-    elsewhere = tmp_path_factory.mktemp("dump")
+    elsewhere = tmp_path_factory.mktemp("dump") / "dump"
     _inbox(elsewhere)
     got = await app.post(
         f"{BASE}/vault/paths",
@@ -237,7 +244,9 @@ async def test_the_operator_route_adds_any_readable_path_without_added_by(
     relative = await app.post(
         f"{BASE}/vault/paths", json={"paths": ["inbox"], "distil": False}, headers=auth_headers
     )
-    assert relative.status_code == 400, relative.text
+    assert relative.status_code == 200, relative.text
+    [result] = relative.json()["results"]
+    assert result["status"] == "refused" and "absolute" in result["reason"]
 
 
 @pytest.mark.asyncio
@@ -264,3 +273,12 @@ def test_vault_add_is_on_every_runners_surface() -> None:
     assert "vault_add" in mcp_server._CALLABLE_TOOLS
     assert "vault_add" in HUB_MCP_TOOLS
     assert "vault_add" in {operation.tool for operation in _operations()}
+
+
+def test_the_tools_restated_values_agree_with_the_vaults() -> None:
+    from typing import get_args
+
+    from hub import mcp_server, vault
+
+    assert set(get_args(mcp_server.VaultSourceType)) == set(vault.TYPES) - {vault.DECISION}
+    assert set(get_args(mcp_server.VaultVisibility)) == set(vault.VISIBILITIES)

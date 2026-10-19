@@ -9,6 +9,7 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -73,6 +74,7 @@ from .tasks import (
     task_transitions,
     update_task_for_actor,
 )
+from .vault import PathsAdd as VaultPathsAdd
 
 logger = logging.getLogger(__name__)
 
@@ -617,6 +619,63 @@ async def file_vault_report(
     )
     background.add_task(vault_reports.review_in_background, actor.project_id, report["id"])
     return report
+
+
+async def granted_vault_roots(session: AsyncSession, project_id: str, agent: str) -> List[Path]:
+    """Extra roots the operator granted this agent for adding to the vault. None yet: this is
+    the seam `reach-1019` (operator-granted roots) fills, and `vault_intake.agent_reach` already
+    accepts what it answers."""
+    return []
+
+
+@router.post("/vault/paths")
+async def add_vault_paths(
+    body: VaultPathsAdd,
+    background: BackgroundTasks,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Add files and folders to the vault by path; the Hub reads them (vault-1019).
+
+    A relative path is looked up in the run's workspace, then the project directory; any path
+    must resolve inside one of them, else that file is refused naming both. Every source added
+    records `added_by` as this run's agent, from its credential: the body cannot name one. One
+    result per file (added, skipped as a duplicate, refused with its reason); `distil` is
+    required. See `vault.add_paths` for the refusals before anything is written.
+    """
+    from ... import vault_intake
+    from . import vault as vault_routes
+
+    run = await session.get(Run, actor.run_id)
+    workspace = Path(run.workspace_dir) if run is not None and run.workspace_dir else None
+    project_root = await vault_routes.project_root(session, actor.project_id)
+    reach = vault_intake.agent_reach(
+        workspace,
+        project_root,
+        await granted_vault_roots(session, actor.project_id, actor.agent),
+    )
+    answer = await vault_routes.add_paths(
+        session, background, actor.project_id, body, reach=reach, added_by=actor.agent
+    )
+    added = answer["counts"]["added"]
+    if added:
+        await persist_event(
+            session,
+            actor.project_id,
+            "vault_sources_added",
+            {
+                "subject": {
+                    "sources": [
+                        r["source"]["id"] for r in answer["results"] if r["status"] == "added"
+                    ]
+                },
+                "counts": answer["counts"],
+                "distil": body.distil,
+                "run_id": actor.run_id,
+            },
+            agent=actor.agent,
+        )
+    return answer
 
 
 @router.post("/mcp-adapter-online", status_code=status.HTTP_204_NO_CONTENT)

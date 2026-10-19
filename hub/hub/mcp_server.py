@@ -761,6 +761,42 @@ def vault_report(entry_id: str, message: str) -> Dict[str, Any]:
     return _hub_request("POST", "/vault/reports", {"entry_id": entry_id, "message": message})
 
 
+# Restated from `hub/hub/vault.py` (this module imports nothing from the Hub);
+# `test_vault_paths.py` asserts they agree.
+VaultSourceType = Literal["transcript", "document", "rules", "example", "note"]
+VaultVisibility = Literal["tracked", "private"]
+
+
+@_tool()
+def vault_add(
+    paths: List[str],
+    distil: bool,
+    visibility: Optional[VaultVisibility] = None,
+    type: VaultSourceType = "document",  # noqa: A002 -- the field's own name
+    dated: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Add files to the knowledge vault by naming their paths; the Hub reads them, so never read
+    or paste a file's content yourself.
+
+    `paths` are files or folders (a folder's files are added recursively, hidden names skipped),
+    relative to your working directory or absolute, inside your workspace or the project
+    directory. Text (.md, .txt, .csv, .json, .yaml, .html, .vtt, .srt and similar, UTF-8, up to
+    1 MiB) and PDFs or images (.pdf, .png, .jpg, .gif, .webp, up to 10 MiB). At most 200 files a
+    call. `distil` is required: true queues the manager's distillation of everything added (a
+    paid model call per source, refused with 409 when the job is off), false adds without it.
+    `visibility` defaults to the project's vault setting. The answer has one result per file:
+    `added` (with the source), `skipped` (the same bytes are already a source) or `refused` (with
+    the reason); report the refused ones rather than retrying them unchanged. Sources you add are
+    marked as added by you.
+    """
+    body: Dict[str, Any] = {"paths": list(paths), "distil": distil, "type": type}
+    if visibility is not None:
+        body["visibility"] = visibility
+    if dated is not None:
+        body["dated"] = dated
+    return _hub_request("POST", "/vault/paths", body)
+
+
 @_tool()
 def request_agent(name: str, template: str, task: str) -> Dict[str, Any]:
     """Request a new agent, modelled on an existing open agent of this project.

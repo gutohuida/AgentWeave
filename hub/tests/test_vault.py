@@ -424,7 +424,8 @@ async def test_an_agent_reads_the_map_and_an_entry_with_its_run_credential(
 async def test_no_agent_route_writes_to_the_vault(app) -> None:
     """Only the operator and the manager write knowledge: every agent-actions vault route is a GET,
     except filing a report (`a-working-agent-tells-the-manager-an-entry-is-wrong`), which writes
-    only the report."""
+    only the report, and adding sources by path (`agents-add-files-to-the-vault-by-path`), which
+    adds sources marked as the agent's and never edits one."""
     from hub.main import app as fastapi_app
 
     from ._routing import iter_api_routes
@@ -436,7 +437,10 @@ async def test_no_agent_route_writes_to_the_vault(app) -> None:
         for method in route.methods
     }
     writes = {(path, method) for path, method in methods if method not in ("GET", "HEAD")}
-    assert methods and writes == {("/api/v1/agent-actions/vault/reports", "POST")}
+    assert methods and writes == {
+        ("/api/v1/agent-actions/vault/reports", "POST"),
+        ("/api/v1/agent-actions/vault/paths", "POST"),
+    }
 
 
 def test_the_two_tools_are_on_every_runners_surface() -> None:
