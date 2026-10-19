@@ -36873,3 +36873,93 @@ Expected (warn, not gate): the fold draft and the fold each list every unanswere
 But nothing in `hub/ui/src` calls the route (`hub/ui/src/api/spec.ts` has no roadmap write), and no MCP tool or `/agent-actions` route does either. A "not started" slice offers no way to name the change that built it, and a change's own page has no such control. The visibility roadmap's backfill was done with a script (`d1017_roadmap_backfill.py`).
 
 Expected: a "Roadmap slice" control on a change document's page, or "Link a change..." on a not-started slice, that calls the route and shows its refusal sentence. Seam: Spec documents (roadmaps).
+
+## F767 (B) -- a flow hands fresh work to its own named reviewer, and the task that reviewer builds can then never be reviewed: one event, and nothing on the loop or the task
+
+**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns).
+**Source:** drive
+**Theme:** Flows & review
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+Two agents, `builder` and `rev`, both Haiku. A change with two independent tasks (`t-clamp`, `t-sub`) and `delivery: {mode: flow, agent: builder, reviewer: rev}`, approved with `approve_anyway`. The first `POST /jobs/{id}/run` started both tasks in parallel: `t-clamp` to builder, **`t-sub` to rev** (`job_run_ids` two; the loop's `current_tasks` named `rev` as t-sub's agent before the firing). rev completed t-sub. The next firing staged t-clamp's review to rev and emitted `review_unstaffed` for t-sub: "this task names 'rev' as its reviewer, and that agent is the one that completed this task. Naming a different reviewer, or reviewing it yourself, is the way forward -- the flow will not substitute somebody else for a named reviewer."
+
+The cause is that a flow draws fresh work from every free agent: `scheduler._agents_a_loop_may_staff` returns `_agents_that_are_free(...)` unfiltered for a loop with a document (`hub/hub/scheduler.py:1384-1386`), so the agent the delivery names as reviewer is offered as an author. The rule "the flow will not substitute somebody else for a named reviewer" then makes that task unreviewable by construction.
+
+What the operator sees afterwards: the event fired **once** (08:50:44). Over four more firings t-sub stayed `completed`, the loop's `stall_reason` was `null` and `queue` read `{"completed": 2}`, the task's `blocked_reason` was null, and its story said nothing (F768). It waited until I accepted its evidence and pressed Land.
+
+Expected: a flow that names a reviewer does not hand that reviewer fresh work while another agent can take it, so with two agents the flow runs one build at a time. Or, if the reviewer has to build, the task it built says on the loop and on the task that it waits on the operator. Failing test: `decide_firing` on a flow whose delivery names `rev`, with two ready independent tasks and `builder` and `rev` free, selects `rev` for neither task. Seam: Flows & review (parallel firing x the named reviewer).
+
+## F768 (C) -- a task's story leaves out the flow's refusal to staff its review, so an unreviewable task's story ends at "completed" and says nothing more
+
+**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser.
+**Source:** drive
+**Theme:** Tasks
+**Ready:** yes -- repro is F767's.
+**Tier:** 0
+
+`GET /tasks/task-960d7005a969/story` for F767's t-sub: `assigned` (flow), `in_progress`, the run, the evidence, `completed` at 08:49:33, and then nothing until the operator's own accept and Land at 08:56. The `review_unstaffed` event for this task (`event_logs`, `data.task_id` = the task, 08:50:44, with the sentence naming the remedy) is not in the story. In the browser, the drawer's Story reads "rev moved it to completed" followed directly by "Checks passed 11m ago, You moved it to under review". `task_story.story_for` already reads `event_logs` for one task-scoped event (`_WORKSPACE_EVENTS = {"task_worktree_release_failed": ...}`, F711). `review_unstaffed` carries `task_id` and is the one record of why the task waited.
+
+Expected: the story carries a `review_unstaffed` event, with its reason, at its time. Failing test: in `test_task_story`, a task with a `review_unstaffed` event in `event_logs` has a story event of that kind. Seam: Tasks (story) x Flows & review.
+
+## F769 (B) -- the integration note hides a merge behind a later "already in master" skip and keeps a resolved "no main branch" line, so merged work reads "Not merged" twice
+
+**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks_p2.py`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser.
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+A documentless task (`task-3e217a6750c7`, "Add mul()", built by a real builder turn), with the project's `main_branch` set to null, is landed by the operator: 200 approved, and the integration row is skipped with "this project has no main branch set". Saving `main_branch: "master"` re-attempts the merge: a `merged` row at `146d99b`. A later **Retry** records a `skipped` row "146d99b84f01 is already in master; there was nothing to merge", which `retry_integration`'s docstring says is the honest answer. `GET /tasks/{id}/integrations` lists all four rows correctly.
+
+The drawer's note (`TaskIntegrationNote`) keeps only the newest row per `commit_sha@target_branch` (`newestPerTarget`, `hub/ui/src/components/tasks/TaskIntegrationNote.tsx:11-17`). Rendered, it read: "Not merged -- this project has no main branch set -- choose one in the project's settings / Not merged -- 146d99b84f01 is already in master; there was nothing to merge". The merge itself does not appear. The board card shows the same lines. The same rule puts "Not merged -- 24638934ecla is already in master" at the top of the flow task `t-clamp`'s card, above "Merged f97918a0 into master". That line is about the sibling task's commit, which `t-clamp` named through a stray FR-2 evidence piece (F771).
+
+Expected: an `ALREADY_INTEGRATED` skip does not replace a `merged` row for the same commit. It reads as "Merged", or drops out. A no-main-branch skip (null commit) is not shown once a later row merged the task's work. Failing test: `TaskIntegrationNote` given rows [skipped no-main (null), merged X, skipped already-in-master X] in the route's order shows "Merged X into master" and no "Not merged". Seam: Worktrees & integration (Retry) x the task drawer.
+
+## F770 (C) -- the checks row never says a failure also fails on main: the drawer shows a red "Checks failed" with the output, and only the Land refusal says it is not the task's
+
+**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py div`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser.
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+The setup: a task whose checks passed, then an operator commit on master that adds a failing test, then **Re-run**. The run is `failed`, and its result carries `"on_main": {"exit_code": 1}`, `"preexisting": true` (F605's fix). `POST /land` says so: "This task's checks fail, and they fail on main too, so the failure is not this task's work ... Land it with an override reason, or fix main first", and the drawer offers Land anyway. But the checks row above it reads "Checks failed: tests" in red, with the output tail, and "Earlier runs" lists "Checks failed · tests · exit 1 · 0.5s" with nothing more. `grep -rn "preexisting\|on_main" hub/ui/src` returns nothing: `TaskCheckRun`'s result type and `TaskChecksRow` never read either field. So the row a reviewer or operator reads first charges the task with a failure the Hub knows is main's.
+
+Expected: a failed result with `preexisting: true` reads "tests failed -- fails on main too, not this task's work", in the latest row and in each earlier run. Failing test: `TaskChecksRow` given a failed run whose only result has `preexisting: true` renders "fails on main too". Seam: Worktrees & integration (project checks) x the task drawer.
+
+## F771 (C) -- a review turn is not told which of the document's requirements are someone else's, and a Haiku reviewer sent correct work back twice for the sibling task's requirement
+
+**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns).
+**Source:** drive
+**Theme:** Flows & review
+**Ready:** yes -- repro below; behavioural, measured 2 of 2 here, and once in F606's drive.
+**Tier:** 0
+
+In F767's flow, `t-clamp` serves FR-1 only and `t-sub` serves FR-2. rev reviewed t-clamp twice (`run-82e6d2001130`, `run-02929cb026e6`). Both times it called `mcp__agentweave__read_spec_document`, read FR-1 and FR-2, and sent the task back: "the specification requires TWO requirements to be satisfied: FR-1 (clamp) and FR-2 (sub). The sub(a, b) function is entirely missing". Both rejected evidence pieces carry that as their reason. The review briefing does scope the work ("Under review: Fix clamp upper bound ... Acceptance criteria: a-clamp", and "Your verdict decides this task's evidence (ev-... for FR-1)"). But nothing says that FR-2 belongs to another task, and `read_spec_document` returns the whole document with no mark on which requirements the reviewed task serves. The builder then gave in: it merged master (which by then held t-sub's work) and recorded FR-2 evidence on t-clamp, and the third review approved. That stray evidence is the source of the "Not merged -- 24638934 already in master" line in F769. Two wasted review rounds (about $0.26 of Haiku) and a builder pushed outside its task. F606 records the same misjudgement by a tester ("it judged the *other* task's FR-2").
+
+Expected: the review briefing adds one line: "This task serves FR-1. The document's other requirements (FR-2) belong to other tasks (Add sub(), task-...): do not send this task back for them." A `read_spec_document` from a run reviewing a task marks which requirements that task serves. Failing test: the review briefing for a task serving FR-1 of a two-requirement document names FR-2 as another task's. Seam: Flows & review (review briefing) x Spec documents (read_spec_document).
+
+## F772 (C) -- Land on a task with awaiting evidence also says its commit is "on neither master nor inside any commit the accepted evidence names" and asks the author to record evidence they already recorded
+
+**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+F767's t-sub was completed by rev, and its evidence `ev-f2583f4de03b` was awaiting, naming `24638934` on `agentweave/task/task-960d7005a969`. `POST /tasks/{id}/land` answered 409 `gate_unsatisfied`, with `unaccepted` (that piece, remedy "accept the evidence") and `unlanded` (`commits: ["24638934..."]`, the same commit). The message has both paragraphs. The first is right: "nobody has judged it: FR-2 at 24638934ec1a ... accept the evidence". The second, from `_unlanded_detail` (`hub/hub/requirement_gate.py:414`), says: "commit 24638934ec1a is on neither master nor inside any commit the accepted evidence names ... What clears it is evidence recorded from the task's own checkout ... Ask the task's author to record it, accept it, and approve again; or send the task back". The author had already recorded exactly that. Accepting the piece cleared both paragraphs at once. The landing then needed one more retry while the checks ran, then 200.
+
+Expected: when every unlanded commit is named by an awaiting piece in `unaccepted`, leave the unlanded paragraph out, because accepting is the whole remedy. Failing test: a gate with one awaiting piece on the task branch's tip produces no "Ask the task's author to record it" sentence. Seam: Worktrees & integration (land gate).
+
+## F773 (C) -- a flow task's checks never run while it waits for review: the reviewer judges without them, and its approval is first refused "checks are still running"
+
+**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+The project has one check configured (`py -3.11 -m pytest -q tests`) and `main_branch: master`. A flow task completed by a real turn got no check run: `GET /tasks/{id}/checks` stayed `{"configured": true, "runs": []}` through three build-and-review rounds of t-clamp, and the drawer read "Checks have not run". `project_checks._after_run` calls `request_run`, which takes its targets from `task_integration.merge_targets`. Where evidence governs, that is **accepted** evidence only (`task_integration.py:516-518`), and a just-completed flow task's evidence is awaiting, so `request_run` returns `None` before creating a run. The first run starts only from the approval gate. rev's verdict `approved` (`run-40aaf30388a5`) was refused: "The approval is blocked because checks are still running. Let me wait for them to complete and retry". The check ran at 08:58:28, after the verdict, and the approval landed on retry at 08:58:39. A documentless task in the same project got its run at the end of the turn, as `project_checks`' docstring says ("when a turn bound to a completed task ends").
+
+Expected: at the end of a run bound to a completed, evidence-governed task, the checks run on the commit the review will be given (`review_target`, the newest evidence naming a commit). The reviewer's briefing and the drawer then carry a result, and the verdict is not refused for a run nobody started. Failing test: `project_checks._after_run` for a completed flow task with one awaiting piece naming a commit on the task branch creates a `TaskCheckRun`. Seam: Worktrees & integration (project checks) x Flows & review.

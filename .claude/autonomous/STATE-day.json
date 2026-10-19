@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "d7b552c",
     "stop_at": "2026-10-19T17:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-19-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-tasks-sweep",
-    "next_action": "Do the 'sweep-tasks-sweep' item: read .claude/skills/e2e-loop/SKILL.md in full, then drive its detail on a scratch Hub >=8110; file findings with Ready/Tier lines; set current to the next open item.",
+    "current": "sweep-ledger-sweep",
+    "next_action": "Do the 'sweep-ledger-sweep' item: read .claude/skills/e2e-loop/SKILL.md in full, then drive its detail on a scratch Hub >=8110; file findings with Ready/Tier lines; set current to the next open item.",
     "queue": [
         {
             "id": "compose",
@@ -46,7 +46,7 @@
         },
         {
             "id": "sweep-tasks-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Tasks x Flows & review x Worktrees & integration",
             "detail": "New paths first: the task drawer's story (GET /tasks/{id}/story, TaskStory, 2026-10-17) through a real flow with a review, a send-back and project checks; run and transition links to conversations; the checks row's earlier runs (exit code, duration). Does the story agree with task_history and the transitions that happened? Least-driven: a verdict withdrawing waiting reviews, integration Retry."
         },
