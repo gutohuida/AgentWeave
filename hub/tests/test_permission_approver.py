@@ -954,9 +954,10 @@ def test_a_link_named_without_a_separator_is_judged_by_where_it_lands(
         _assert_through_the_link(decision, outside)
 
 
-# Task 1.4f, the accepted cost and (R8) the bracket reading: with `node_modules`, `venv` and
-# `.venv` each a link out (the Hub's shared-dependency links), a bare mention of one is refused --
-# asserted so the cost stays visible (F444) -- while a bare bracket expression is matched as the
+# Task 1.4f and (R8) the bracket reading: with `node_modules`, `venv` and `.venv` each a link out to
+# a directory of another name (not the Hub's shared-dependency shape, which F444 reads as inside --
+# `test_a_shared_dependency_link_reads_as_inside_the_workspace.py`), a bare mention of one is
+# refused, while a bare bracket expression is matched as the
 # shell matches it, not as `*`, so a regular expression or a `tr` class stands. `[u]p` and `u[p]`
 # still reach `up`.
 @pytest.mark.parametrize(

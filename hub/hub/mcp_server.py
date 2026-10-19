@@ -1490,17 +1490,45 @@ def _physical(absolute: str) -> str:
     return os.path.realpath(current)
 
 
+# F444: the directories the Hub links from the project checkout into a worktree. Restated from
+# `hub/hub/worktrees.py` (`SHARED_DEPENDENCY_DIRS`), which this file cannot import; a test pins it.
+_SHARED_DEPENDENCY_DIRS = ("node_modules", ".venv", "venv")
+
+
+def _in_shared_dependency(resolved: str, root: str) -> bool:
+    """F444: whether `resolved` is, or lies beneath, the target of one of the workspace's shared
+    dependency links -- `root/<name>` a link to a directory also called `<name>`, as
+    `worktrees._symlink_shared_dependencies` makes it. A `..` out of the link lands above that
+    target and is not beneath it; a link of another name, or to a directory of another name, is
+    not the Hub's. Total: a link that cannot be read is not shared."""
+    for name in _SHARED_DEPENDENCY_DIRS:
+        try:
+            target = os.path.realpath(os.path.join(root, name))
+            if os.path.normcase(os.path.basename(target)) != os.path.normcase(name):
+                continue
+            if os.path.normcase(target) == os.path.normcase(os.path.join(root, name)):
+                continue  # a real directory in the workspace, not a link out of it
+            shared = os.path.commonpath([target, resolved])
+        except (OSError, ValueError):
+            continue
+        if os.path.normcase(shared) == os.path.normcase(target):
+            return True
+    return False
+
+
 def _judge_resolved(absolute: str, resolved: str, root: str) -> Optional[str]:
     """Why `resolved` -- a lexical or (D12) physical reading of `absolute` -- lands outside `root`,
-    or None when it is inside."""
+    or None when it is inside (F444: a path beneath a shared dependency link is inside)."""
     # `commonpath` compares path components, so it cannot be fooled the way a string prefix
     # can (`/work-other` does not start inside `/work`). Both sides are already real paths,
     # so `..` and symlinks have been collapsed before this comparison.
     try:
         shared = os.path.commonpath([root, resolved])
     except ValueError:  # different drives on Windows
-        return _resolves_elsewhere(absolute, resolved)
-    if os.path.normcase(shared) != os.path.normcase(root):
+        shared = None
+    if shared is None or os.path.normcase(shared) != os.path.normcase(root):
+        if _in_shared_dependency(resolved, root):
+            return None
         return _resolves_elsewhere(absolute, resolved)
     return None
 

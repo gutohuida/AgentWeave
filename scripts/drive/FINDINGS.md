@@ -33322,7 +33322,7 @@ refuse those fields at create for run actors.
 
 ## F444 (B) — a worktree's shared dependency links make ordinary reads through them refused
 
-**Status:** open. Filed 2026-09-24 (operator decision `B4-dep-links`), surfaced by B4's R4 and R5.
+**Status:** fixed 2026-10-19 (night window iteration 17, Tier 0). `_judge_resolved` (`hub/hub/mcp_server.py`) now reads a path beneath a shared dependency link as inside: `_in_shared_dependency` accepts `root/<name>` (`node_modules`, `.venv`, `venv`) when it is a link to a directory of the same name, and only for a path at or beneath that target. A `..` out of the link, a link to a directory of another name, and any other name stay outside. Not a *read*-through exemption as filed: the judge has no read/write classification (every path word is judged alike), so a write beneath the link is also inside; `npm install` already wrote through the link with no path word to judge. Test `hub/tests/test_a_shared_dependency_link_reads_as_inside_the_workspace.py`: 9 read rows red before, green after; the `..` and look-alike controls stay refused. Drive: a real git worktree with a junction as the link (this account cannot make the symlink, F22): `ls node_modules`, `grep -r foo --exclude-dir=node_modules .`, `grep foo *` refused before, allowed after; `cp n node_modules/../a.txt` refused both ways. Original filing: Filed 2026-09-24 (operator decision `B4-dep-links`), surfaced by B4's R4 and R5.
 **Prerequisite for registering a JavaScript project** (noted 2026-10-04 when
 `the-shell-judge-reads-a-word-whole` was archived, its task 4.1: that change extends these refusals to
 globs and bare names through the links).
@@ -36744,3 +36744,12 @@ Folding into `requirement-traceability` or `workspace-isolation` answers `blocki
 **Theme:** Permissions & sandbox
 
 No capability states F675's or F676's text rules: the interpreter and pipe-fed rules, or the sed/awk/grep pattern exemptions (d0a27d4, 570e93d). The 2026-10-18 fold added `pipe-fed-shapes` to `agent-run-sandboxing`, but the rest of the judge's behaviour exists only in code and in `test_permission_approver.py`'s row table. Related: F675, F676, F696, F737.
+
+## F756 (C) -- a glob in the last component after `..` through a link out is allowed
+
+**Status:** open 2026-10-19. Found while writing the F444 test.
+**Source:** drive
+**Theme:** Permissions & sandbox
+
+With `up` a link to a directory outside the workspace, `ls up/..`, `ls up*/..` and `ls up/../*` are refused, but `ls up*/../*` is allowed (`{'allow': True, 'reason': 'inside your workspace'}`, measured on a junction through `_decide`), though it lists the link target's parent. Probably the glob walk (`_glob_tail_walk`, `hub/hub/mcp_server.py`) judges the `..` it walks to and then the final glob component as inside the listed path, not the resolved one. Reads only as filed; a write form (`cp n up*/../*`) is not measured. Related: F444.
+
