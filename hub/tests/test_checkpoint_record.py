@@ -48,6 +48,9 @@ from hub.worktrees import (
     release_task_worktree,
     snapshot_worktree,
 )
+from hub.worktrees import (
+    files_committed_between as real_files_committed_between,
+)
 
 PROJECT = "proj-test"
 AGENT = "claude-1"
@@ -921,13 +924,17 @@ def _commit_on(repo, branch, name, *, when=None):
 
 
 @pytest.mark.asyncio
-async def test_files_changed_includes_what_the_agent_committed_itself(app, tmp_path):
+async def test_files_changed_includes_what_the_agent_committed_itself(app, tmp_path, monkeypatch):
     """F775: an agent told to commit leaves a clean tree, so `snapshot_commit_sha` is NULL for
     its turn ("the turn changed nothing") and the checkpoint said "No files recorded as
     changed". The turn's own commits on its branch, in its time window, are changes too."""
     from datetime import datetime, timedelta, timezone
 
+    import hub.worktrees as worktrees
     from hub.worktrees import branch_name
+
+    # conftest defaults this away (see `_no_real_worktree_provision`); this test is the real one.
+    monkeypatch.setattr(worktrees, "files_committed_between", real_files_committed_between)
 
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -953,3 +960,16 @@ async def test_files_changed_includes_what_the_agent_committed_itself(app, tmp_p
         envelope = await compute_envelope(db, conversation, repo_root=Path(repo))
 
     assert envelope.files_changed == ["during.txt"]
+
+
+def test_a_run_bound_to_an_id_that_is_not_task_shaped_still_resolves_a_branch():
+    """The branch name builders refuse an id they would not mint; a legacy or hand-made row must
+    fall through to the agent's branch, not fail the checkpoint (found by the full suite)."""
+    from hub.checkpoints import _branch_of
+    from hub.worktrees import branch_name, task_branch_name
+
+    assert _branch_of(Run(id="r", agent=AGENT, task_id="task-1x")) == branch_name(AGENT)
+    assert _branch_of(Run(id="r", agent=AGENT, task_id="task-ab12")) == task_branch_name(
+        "task-ab12"
+    )
+    assert _branch_of(Run(id="r", agent="bad name!", task_id=None)) is None

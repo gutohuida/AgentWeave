@@ -1068,6 +1068,12 @@ def _no_real_worktree_provision(monkeypatch):
         "ensure_task_worktree",
         lambda repo_root, task_id, base, prerequisites=(), approved=(): repo_root,
     )
+    # A checkpoint also reads the turn's own commits off its branch (`files_committed_between`,
+    # F775): a `git log` through `subprocess.run`, which the checkpoint-generation tests replace
+    # wholesale with a fake of the *generator* process, so that fake would answer git. Defaulted
+    # to "no commits"; `test_checkpoint_record.py` restores the real function against a `tmp_path`
+    # repository.
+    monkeypatch.setattr(worktrees, "files_committed_between", lambda *a, **kw: [])
 
 
 @pytest.fixture(autouse=True)

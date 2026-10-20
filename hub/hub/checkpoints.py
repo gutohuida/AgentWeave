@@ -278,9 +278,19 @@ def _branch_of(run: Run) -> Optional[str]:
             )
             name = head.stdout.strip() if head.returncode == 0 else ""
             return name or None
-    if run.task_id:
-        return worktrees.task_branch_name(run.task_id)
-    return worktrees.branch_name(run.agent)
+    # Both name builders refuse an id that is not the shape they mint; a checkpoint is best-effort
+    # about files and must not fail on a legacy row, so such a run falls through to the next name.
+    for build, key in (
+        (worktrees.task_branch_name, run.task_id),
+        (worktrees.branch_name, run.agent),
+    ):
+        if not key:
+            continue
+        try:
+            return build(key)
+        except ValueError:
+            continue
+    return None
 
 
 async def _tasks_for(db, project_id: str, agent: str) -> Dict[str, Any]:
