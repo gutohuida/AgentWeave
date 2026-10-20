@@ -15098,6 +15098,8 @@ door are probed, because closing one leaves the other.
 
 **Re-verified 2026-10-15** (full sweep, G1: Charters): still open; duplicate charter names are accepted, visible as "Tester, Tester" in the Add-agent charter select.
 
+**Re-verified 2026-10-20** (day sweep `sweep-agents-sweep`, scratch :8149): still open. `POST /charters {"name": "Developer"}` -> 201 beside the seeded Developer, and Environment -> Charters lists "Developer" twice.
+
 ## F184 (C) — a whitespace-only charter name is accepted by the API and renders as a blank row
 
 **Status:** fixed (this commit) [Round 4, 2026-09-23] — a whitespace-only charter name is refused; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `CharterCreate.name`
@@ -37420,3 +37422,82 @@ Expected: the empty state names the way that works ("No agents yet." plus a butt
 - A runner name may be 256 characters (`schemas/runners.py`, `models.py:343`). On the Runners page a 200-character name runs off the page in one unbroken line, over that row's Edit and Delete icons (`testbed/ui-judge/s1020-p-keys/110136/21_runner_delete_refused.png`). Every runner select option grows the same way.
 
 Expected: the literal `…`, a lint or test that fails on mojibake sequences in `hub/ui/src`, the in-Hub browser's toggle outside the area the picker covers (or the picker opening below it), reasons quoted as written, and runner names truncated with a title tooltip. Tests: a source scan in `hub/ui/src/__tests__/`, `hub/tests/test_fs_browse*.py` for the reason text, and a RunnersPage snapshot with a long name. Seam: Projects (Add-project dialog) x Runners & models (Runners page).
+
+## F810 (B) -- `POST /session/sync` deletes an agent whose messages are still queued, which archive refuses to do: the entries and the conversation are orphaned, the rail calls them "agent archived", and a later agent of the same name inherits them
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8149, `scripts/drive/s1020_a_sync.py`, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes
+**Tier:** 0
+
+F774's guard (`launchability.agent_removal_refusal`, `hub/hub/launchability.py:668`) refuses a sync that would delete an agent holding a live run or an unfinished task. It does not count **queued inbound entries**. Archive, on the same agents, does: `POST /agents/gamma/archive` answered `409 "gamma has 1 queued message, and nothing delivers to an archived agent, so archiving it now would strand them. Bind a runner so it can deliver them, or discard them to archive the agent now."` (`hub/hub/api/v1/agents.py:3341`). Sync then deletes the same agent with the same message:
+
+```
+gamma, delta: runner unbound, one operator message each queued (waiting_reason "No runner is bound ...")
+POST /session/sync {"data": {"agents": {"alpha": {}, "beta": {}}}}
+  -> 200 {"ok": true, "agents": ["alpha", "beta"]}       gamma and delta rows gone
+inbound_queue_entries: entry-d3f9a75962e5 (delta) queued, entry-7a274edd13f4 (gamma) queued
+conversations conv-b5dbabe96813 (delta), conv-834a29b23fb1 (gamma): lifecycle open
+```
+
+What happens afterwards:
+- gamma's entry: the scheduler retried it three times and logged `queue_entry_abandoned` "delivery failed 3 times (gamma is not an agent in this project ...)". The row ends `withdrawn`.
+- gamma's conversation: the rail lists it under **Archived agents** as "held for gamma — agent archived". Opening it (`?agent=gamma&conversation=conv-834a29b23fb1`) shows only "gamma is not on this project's roster.", with no Unarchive button and no way to read it. `GET /agents/gamma/chat/{id}` returns 404. Screenshot: `testbed/ui-judge/s1020-a-orphan/114315/orphan-gamma.png`.
+- delta's entry stays `queued`. `POST /agents {"name": "delta", "runner_id": ...}` (201) creates a *new* agent of that name. `GET /queue/delta/status` then reads "the last delivery attempt was refused: No runner is bound to this agent", which is false, since the new delta has a runner. On the new agent's first trigger, the scheduler delivers the deleted agent's message first ("held for delta", `run-c9b86b8d9fda`), in the deleted agent's conversation, and only then the operator's new message (`run-604b5014e273`). That is a paid turn spent on someone else's message.
+
+Expected: removal by sync is refused like archive (409, the same `agent_removal_under_held_work` shape, naming the queued entry ids), or the omitted agent's queued entries are withdrawn with an event saying why. Either way, a deleted agent's open conversations are not shown as "agent archived". Fix: `held_work`/`agent_removal_refusal` counts `InboundQueueEntry.state == 'queued'` for removal, not for the isolation check. Failing test: `hub/tests/test_session_sync.py`, an agent with a queued entry omitted from the payload -> 409, with the row and the entry kept. Seam: Agents (roster sync) x Inbound queue & messages x Conversations.
+
+## F811 (B) -- two agents whose names differ only in case are both accepted; on Windows and macOS the second shares the first's worktree folder and can never run, and the refusal tells the operator to `rm -r` the other agent's checkout
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8149, a real trigger).
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes
+**Tier:** 0
+
+Agent-name uniqueness is case-sensitive: `Agent.name == body.name` (`hub/hub/api/v1/agents.py:639`), the same in `request_agent` (`:2734`) and in sync. Reserved names and route words are compared case-insensitively. Worktrees live at `.agentweave/worktrees/<name>` on a filesystem that is case-insensitive by default on Windows and macOS.
+
+```
+eps: an agent that has run once (worktree .agentweave/worktrees/eps, branch agentweave/eps), then archived
+POST /agents {"name": "eps", ...}  -> 409 "Agent name 'eps' already exists in this project"
+POST /agents {"name": "EPS", ...}  -> 201
+POST /agent/trigger {"agent": "EPS", "message": "..."}
+  -> 200 status "queued", waiting_reason: "Could not prepare EPS's own workspace: refusing existing
+     path C:\...\aw-a-1020\.agentweave\worktrees\EPS: it is not the registered git worktree for
+     refs/heads/agentweave/EPS. Move or delete that directory (`rm -r C:\...\worktrees\EPS`) once you
+     have salvaged anything in it; ..."
+GET /queue/EPS/status -> waiting_count 2, the same sentence
+```
+
+`worktrees\EPS` is `worktrees\eps`: the remedy the Hub prints deletes another agent's checkout, which may hold unmerged work. If the operator doesn't follow it, EPS waits for ever. `eps` and `EPS` were both `open` after an Unarchive from eps's old conversation. Branch refs `agentweave/eps` and `agentweave/EPS` also collide as loose refs on these filesystems.
+
+Expected: a name that equals an existing agent's name case-insensitively, archived included, is refused at creation with a sentence ("an agent named 'eps' already exists (archived); names differ by more than case"), on `POST /agents`, `request_agent` and sync. It is not added to `RESERVED_AGENT_NAMES`, which is checked at every use. Failing test: `hub/tests/test_operator_agent_creation*.py`, create `eps` then `EPS` -> 409, and the same for `request_agent`. Seam: Agents x Worktrees & integration.
+
+## F812 (C) -- `POST /session/sync` answers 500 to an `agents` that is not an object, never says which agents it deleted, and leaves every agent it named with a `config` the operator can no longer PATCH ("reserved for a configured agent")
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8149, `scripts/drive/s1020_a_sync.py`).
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes
+**Tier:** 0
+
+The route is reached only by direct API calls (its own docstring, `hub/hub/api/v1/session_sync.py:1-19`). Three gaps were measured after F774:
+
+1. `{"data": {"agents": ["alpha"]}}` and `{"data": {"agents": "alpha"}}` each answer **500 Internal Server Error**: `list((body.data.get("agents") or {}).keys())` (`:73`) calls `.keys()` on a list or a str. The roster is untouched. `{"agents": null}` is 200, treated as no key.
+2. A sync that deletes agents answers `200 {"ok": true, "agents": ["alpha", "beta"]}`, the roster that remains. Nothing names the two agents it just deleted. No event is persisted either: `session_synced` is only broadcast (`:221`), so `event_logs` holds nothing for the deletion (queried: no `session_synced`, no `agent_removed`). In the Activity feed, an agent vanishes with no record.
+3. Once a sync names an agent, `PATCH /agents/<name>` with any `config` key answers `409 "Agent name 'beta' is reserved for a configured agent"` (`hub/hub/api/v1/agents.py:3096-3104`). Measured: `PATCH /agents/beta {"config": {"read_only": true}}` -> 409, before and after. The sentence names neither the stored sync row nor the way out (`POST /session/sync {"data": {}}` clears it, as found by reading the code). The operator never knowingly made beta "configured".
+
+Expected: (1) 422 "agents must be an object of name -> config"; (2) the answer carries `removed: [...]`, and an `agent_removed` (or `session_synced` with `removed`) event is persisted; (3) the 409 says the agent's config is owned by the last session sync and names how to release it, or the lock is dropped now that no CLI pushes session.json. Failing tests: `hub/tests/test_session_sync.py` (list -> 422, removed listed, event row) and `test_patch_agent_refuses_unknown_fields.py` (the 409's text). Seam: Agents (roster sync) x Logs, events & SSE.
+
+## F813 (D) -- `request_agent` and Add agent refuse an archived agent's name as merely "already exists", without saying it is archived or that names are never reused
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8149, a real Haiku turn `run-b1b305376af9`).
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes
+**Tier:** 0
+
+With `eps` archived, alpha's `request_agent {"name": "eps", "template": "beta"}` came back `Hub rejected POST /agents/request (409): Agent 'eps' already exists` (`hub/hub/api/v1/agents.py:2734`). `POST /agents {"name": "eps"}` gives `409 "Agent name 'eps' already exists in this project"` (`:646`). eps is in no picker, so an operator or agent that looks for it finds nothing to act on. The design keeps archived names taken on purpose (F465's note: "a name is never reused"), and the sentence should say so. The budget refusal beside it already reads well: "Project agent budget exhausted (4/4) ... Ask the operator to archive an agent ... or to raise the agent budget in Settings."
+
+Expected: "'eps' belongs to an archived agent; a name is never reused. Unarchive eps, or choose another name." on both doors. Failing test: in `hub/tests/test_request_agent*.py`, archive then request the same name, asserting the 409 detail contains "archived". Seam: Agents.
