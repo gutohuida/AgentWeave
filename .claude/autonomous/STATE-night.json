@@ -8,19 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-20-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F800-impl",
-    "next_action": "Do queue item F800-impl: read F800 in scripts/drive/FINDINGS.md (grep the heading), write a failing test at the seam it names, fix, drive, set Status to 'fixed <sha>' with a drive line. One finding per firing.",
+    "current": "F798-impl",
+    "next_action": "Do queue item F798-impl: read F798 in scripts/drive/FINDINGS.md (grep the heading), write a failing test at the seam it names, fix, drive, set Status to 'fixed <sha>' with a drive line. One finding per firing.",
     "queue": [
-        {
-            "id": "F800-impl",
-            "status": "open",
-            "title": "F800 (B,T0): reset --profile <name> --all deletes the shared ~/.agentweave/hub/.env",
-            "detail": "Data-loss on a shared file. Test first at the reset seam."
-        },
         {
             "id": "F798-impl",
             "status": "open",

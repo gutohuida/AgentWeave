@@ -602,6 +602,12 @@ def _hub_pid_files_of(profile: str) -> List[Tuple[Optional[int], Path]]:
     return sorted(found)
 
 
+def _hub_logs_of(profile: str) -> List[Path]:
+    """Every `hub-<profile>-<port>.log` in the Hub folder; exact, so `a` does not claim `a-b`."""
+    pattern = re.compile(rf"^hub-{re.escape(profile)}-\d+\.log$")
+    return sorted(path for path in HUB_DIR.glob("hub-*.log") if pattern.match(path.name))
+
+
 def _hub_pid_running(port: Optional[int] = None, profile: str = "default") -> Optional[int]:
     """Return the PID from the port's/profile's PID file if the process is alive, else None.
 
@@ -1543,12 +1549,16 @@ def cmd_reset(args: argparse.Namespace) -> int:
     # it targets only that profile's directory, so reset's blast radius is always exactly one
     # profile, named or default, never inferred (`design.md` D6).
     data_dir = _hub_profile_data_dir(profile)
+    named = bool(profile) and profile != "default"
+    # `.env` and the `*.log` files are shared by every profile in the Hub folder (F800), so only
+    # the default profile's `--all` reaches them; a named profile's `--all` removes its own logs.
     env_path = HUB_DIR / ".env"
+    own_logs = _hub_logs_of(profile) if named else sorted(HUB_DIR.glob("*.log"))
     pid_files = _hub_pid_files_of(profile)
 
     if (
         not data_dir.exists()
-        and not env_path.exists()
+        and (named or not env_path.exists())
         and not any(path.exists() for _, path in pid_files)
     ):
         print_info("No Hub data found. Nothing to destroy.")
@@ -1556,7 +1566,9 @@ def cmd_reset(args: argparse.Namespace) -> int:
 
     # Describe what will be deleted
     targets = [str(data_dir)]
-    if destroy_all:
+    if destroy_all and named:
+        targets.append(f"the log files of profile '{profile}' in {HUB_DIR}")
+    elif destroy_all:
         targets.append(str(env_path))
         targets.append("any log files in " + str(HUB_DIR))
 
@@ -1567,7 +1579,10 @@ def cmd_reset(args: argparse.Namespace) -> int:
     for t in targets:
         print(f"  - {t}")
     if not destroy_all:
-        print_info("(Use --all to also remove the .env config and API key)")
+        if named:
+            print_info("(Use --all to also remove this profile's log files)")
+        else:
+            print_info("(Use --all to also remove the .env config and API key)")
 
     if not yes:
         try:
@@ -1608,11 +1623,10 @@ def cmd_reset(args: argparse.Namespace) -> int:
         print_info(f"Deleted {data_dir}")
 
     if destroy_all:
-        if env_path.exists():
+        if not named and env_path.exists():
             env_path.unlink()
             print_info(f"Deleted {env_path}")
-        # Remove any *.log files in hub dir
-        for log_file in HUB_DIR.glob("*.log"):
+        for log_file in own_logs:
             with contextlib.suppress(OSError):
                 log_file.unlink()
                 print_info(f"Deleted {log_file}")

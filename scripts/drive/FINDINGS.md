@@ -37288,7 +37288,7 @@ Expected: the walk does not descend into a directory link or junction (or tracks
 
 ## F800 (B) -- `agentweave reset --profile <name> --all` deletes the shared `~/.agentweave/hub/.env` (the default profile's bootstrap key and ticket secret) and every other instance's `*.log`
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row), reproduced with `USERPROFILE`/`HOME` pointed at `testbed/life1020-home`, so no real state was touched.
+**Status:** fixed 2026-10-20 (night iteration 2; sha in the commit that carries this line). Drive: sandboxed home, `reset --profile life --all --yes` removed `profiles/life` and `hub-life-8144.log`, left `.env` and `hub-trial-8010.log`. Tests: `tests/test_hub_commands.py::TestResetAllIsScopedToTheNamedProfile` (two failed before the fix). Original: open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row), reproduced with `USERPROFILE`/`HOME` pointed at `testbed/life1020-home`, so no real state was touched.
 **Source:** drive
 **Theme:** CLI & lifecycle
 **Ready:** yes
