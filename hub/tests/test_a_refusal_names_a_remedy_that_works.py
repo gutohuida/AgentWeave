@@ -737,7 +737,9 @@ async def test_a_silent_holder_is_not_said_to_have_a_review_in_flight(
     assert f"Ask {holder!r} to review it again" in detail, detail
 
 
-async def test_an_author_asking_to_review_is_told_it_is_the_author(app, auth_headers, bind_runner):
+async def test_an_author_asking_to_review_is_told_it_is_the_author(
+    app, auth_headers, bind_runner, add_agent
+):
     """F654: the sweep's author asked to review a task a silent reviewer held, and was told who
     held it -- not that its own verdict would be refused, which is what stops it whoever holds it.
     """
@@ -745,7 +747,9 @@ async def test_an_author_asking_to_review_is_told_it_is_the_author(app, auth_hea
         app, auth_headers, bind_runner, "c", holder_runs=False
     )
     author = "author-438c"
-    await _roster(app, auth_headers, bind_runner, author)
+    # Not `_roster`: its sync replaces the roster, and the holder still holds the task (F774).
+    await add_agent(author)
+    await bind_runner(author, cli="claude")
 
     response = await app.post(
         "/api/v1/projects/proj-test/agent/trigger",

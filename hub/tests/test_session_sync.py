@@ -219,3 +219,101 @@ async def test_removing_an_agent_leaves_the_checkouts_of_its_tasks_alone(
     assert worktrees._registered_worktree_branch(repo_root, task_checkout) == (
         f"refs/heads/{worktrees.task_branch_name('task-ab12cd34ef56')}"
     )
+
+
+# --- F774: a roster replace never deletes held work, and no roster means no change --------------
+
+SYNC = "/api/v1/projects/proj-test/session/sync"
+
+
+async def _names():
+    async with async_session_factory() as db:
+        result = await db.execute(select(Agent.name).where(Agent.project_id == "proj-test"))
+        return set(result.scalars())
+
+
+async def test_sync_omitting_an_agent_with_an_unfinished_task_and_a_live_run_is_refused(
+    app, auth_headers, add_agent, monkeypatch
+):
+    from hub import run_liveness
+    from hub.db.models import Run, Task
+
+    await add_agent("builder")
+    await add_agent("rev")
+    async with async_session_factory() as db:
+        db.add(
+            Task(
+                id="task-f774",
+                project_id="proj-test",
+                title="work",
+                status="in_progress",
+                assignee="builder",
+            )
+        )
+        db.add(
+            Run(
+                id="run-f774",
+                project_id="proj-test",
+                agent="builder",
+                status="running",
+                turn_depth=0,
+            )
+        )
+        await db.commit()
+    monkeypatch.setitem(run_liveness.active_ptys, "run-f774", object())
+
+    response = await app.post(SYNC, json={"data": {"agents": {"rev": {}}}}, headers=auth_headers)
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert detail["code"] == "agent_removal_under_held_work"
+    assert detail["held"] == {"runs": ["run-f774"], "tasks": ["task-f774"]}
+    assert "task-f774" in detail["message"] and "run-f774" in detail["message"]
+    assert await _names() == {"builder", "rev"}
+
+
+async def test_sync_omitting_an_agent_whose_work_is_finished_still_removes_it(
+    app, auth_headers, add_agent
+):
+    from hub.db.models import Task
+
+    await add_agent("done")
+    await add_agent("rev")
+    async with async_session_factory() as db:
+        db.add(
+            Task(
+                id="task-f774-done",
+                project_id="proj-test",
+                title="work",
+                status="approved",
+                assignee="done",
+            )
+        )
+        await db.commit()
+
+    response = await app.post(SYNC, json={"data": {"agents": {"rev": {}}}}, headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert await _names() == {"rev"}
+
+
+async def test_sync_without_an_agents_key_leaves_the_roster_alone(app, auth_headers, add_agent):
+    await add_agent("builder")
+    await add_agent("rev")
+
+    response = await app.post(SYNC, json={"data": {"mode": "peer"}}, headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["agents"] == ["builder", "rev"]
+    assert await _names() == {"builder", "rev"}
+
+
+async def test_sync_with_an_explicitly_empty_roster_is_still_a_replace(
+    app, auth_headers, add_agent
+):
+    await add_agent("builder")
+
+    response = await app.post(SYNC, json={"data": {"agents": {}}}, headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert await _names() == set()

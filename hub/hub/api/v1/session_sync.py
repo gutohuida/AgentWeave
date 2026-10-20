@@ -14,7 +14,9 @@ full roster *replace*, not a merge, on every call. An operator-facing roster mut
 through `operator-agent-creation` instead (`POST /agents`), which only ever adds.
 
 Calling this endpoint directly against a project with agents you want to keep will delete
-any agent whose name is missing from the payload, exactly as it did for a CLI push.
+any agent whose name is missing from the payload, exactly as it did for a CLI push -- except an
+agent that holds a live turn or an unfinished task, which refuses the whole payload (409), and a
+payload with no `agents` key, which leaves the roster alone (F774).
 """
 
 import logging
@@ -30,7 +32,7 @@ from ...agent_colors import next_color_index
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, ProjectSession
-from ...launchability import agent_config, isolation_change_refusal
+from ...launchability import agent_config, agent_removal_refusal, isolation_change_refusal
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
@@ -106,8 +108,11 @@ async def sync_session(
     # Ensure an Agent row exists for every synced agent (drives the "registered"
     # flag in GET /agents/agent-context — a declared agent is "registered" once
     # the Hub knows about it, independent of self-registration) and remove rows
-    # for agents no longer in the session.
-    agents_data = body.data.get("agents", {})
+    # for agents no longer in the session. A payload with no `agents` key says nothing about the
+    # roster, so it leaves it alone (F774: it used to delete every agent and, on the next sync,
+    # bring them back without their runner or charter).
+    roster_given = isinstance(body.data.get("agents"), dict)
+    agents_data = body.data["agents"] if roster_given else {}
     for agent_name in agents_data:
         try:
             worktrees.validate_agent_name(agent_name)
@@ -123,6 +128,18 @@ async def sync_session(
             route_refusal = route_words.agent_route_word(agent_name)
             if route_refusal is not None:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, route_refusal)
+
+    removed_agent_names = (
+        [name for name in existing_agents if name not in current_agent_names]
+        if roster_given
+        else []
+    )
+    # F774: an agent holding a live turn or an unfinished task is not deleted by omission. Checked
+    # before anything is written, the first refusal refusing the payload whole.
+    for agent_name in removed_agent_names:
+        removal_refusal = await agent_removal_refusal(session, project_id, agent_name)
+        if removal_refusal is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail=removal_refusal)
 
     # Computed once and incremented locally (not re-queried per agent): several new
     # agents can be added in the same sync, and none of them are flushed yet, so a
@@ -140,11 +157,6 @@ async def sync_session(
             )
             next_index += 1
 
-    removed_agent_names = [
-        agent_name
-        for agent_name, agent_row in existing_agents.items()
-        if agent_name not in current_agent_names
-    ]
     for agent_name in removed_agent_names:
         await session.delete(existing_agents[agent_name])
 
@@ -202,14 +214,13 @@ async def sync_session(
             },
         )
 
-    # Broadcast so the UI refreshes agent list immediately
-    await sse_manager.broadcast(
-        project_id,
-        "session_synced",
-        {"agents": list(body.data.get("agents", {}).keys())},
-    )
+    # The roster as it now stands: the payload's when it gave one, else the untouched one.
+    roster = sorted(agents_data) if roster_given else sorted(existing_agents)
 
-    return {"ok": True, "agents": sorted(body.data.get("agents", {}).keys())}
+    # Broadcast so the UI refreshes agent list immediately
+    await sse_manager.broadcast(project_id, "session_synced", {"agents": roster})
+
+    return {"ok": True, "agents": roster}
 
 
 @router.get("/sync")

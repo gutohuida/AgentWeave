@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T07:00:00+01:00",
-    "iteration": 11,
+    "iteration": 12,
     "log_file": ".claude/autonomous/2026-10-19-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F774-impl",
-    "next_action": "Do queue item F774-impl (Tier 0): session/sync must not delete an agent that holds a task and a live run; also data.mode=peer deleting all agents and losing runner/charter on re-sync. Read F774 in scripts/drive/FINDINGS.md for the repro. One test failing first at the seam the finding names (the sync route/service), fix, then drive on a scratch Hub (e2e.py hub-up <profile> <port>, a free port that is not 8000/8010) with a real Haiku run holding a task. Set the Status line, METRICS row, log, STATE, commit, push.",
+    "current": "F775-F777-impl",
+    "next_action": "Do queue item F775-F777-impl (Tier 0 each): F775 checkpoint files_changed must include the agent's own commits (hub/hub/checkpoints.py _files_from_runs reads only runs.snapshot_commit_sha); F777 non-ASCII filename git-quoted in the @ picker (hub/hub/workspace_paths.py: core.quotepath=off, UTF-8 decode); consider fixing F760 (requirement_evidence._git decoding) in the same stroke. Read each finding in scripts/drive/FINDINGS.md for the repro. Test first at the seam, fix, drive on a scratch Hub (e2e.py hub-up <profile> <port>, free port not 8000/8010). Set Status lines, METRICS row, log, STATE, commit, push. Run the full hub suite to a FILE (py -3.11 -m pytest tests -q -rf > /tmp/x.out), it takes ~50 minutes: run it in the background early.",
     "queue": [
         {
             "id": "trace-hub-wide-spec",
@@ -72,9 +72,9 @@
         },
         {
             "id": "F774-impl",
-            "status": "open",
+            "status": "done",
             "title": "session/sync must not delete an agent holding task+live run (B,T0)",
-            "detail": "Also data.mode=peer deleting all agents and losing runner/charter on re-sync."
+            "detail": "Done iter 12: launchability.held_work shared; agent_removal_refusal -> 409 agent_removal_under_held_work; payload without an agents key leaves the roster alone. 4 tests (2 failing first). Driven on :8120 with a live Haiku turn (d1020_f774_sync_keeps_held_agents.py)."
         },
         {
             "id": "F775-F777-impl",

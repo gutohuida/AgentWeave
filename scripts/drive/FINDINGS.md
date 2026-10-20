@@ -36966,7 +36966,7 @@ Expected: at the end of a run bound to a completed, evidence-governed task, the 
 
 ## F774 (B) -- `POST /session/sync` deletes an agent that holds an in-progress task and a live run, answers 200, and a payload with no `agents` key deletes every agent
 
-**Status:** open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger_p4.py`, scratch Hub :8180, real Haiku turns).
+**Status:** fixed 2026-10-20 (night iteration 12, Tier 0). `POST /session/sync` now refuses (409 `agent_removal_under_held_work`, `held: {runs, tasks}`, the shape of `isolation_change_under_held_work`) a payload that would delete an agent with a live turn or a task not yet `approved`/`rejected`, before anything is written (`launchability.held_work` shared with the isolation guard, `agent_removal_refusal`); a payload with no `agents` key leaves the roster alone (so `{"data": {"mode": "peer"}}` no longer deletes every agent or loses runner/charter bindings), and its answer lists the roster as it stands. An explicit `agents: {}` is still a replace. Four tests in `hub/tests/test_session_sync.py` (two failed before). `test_an_author_asking_to_review_is_told_it_is_the_author` relied on the deletion (its roster sync dropped the task holders) and now adds its agent with `add_agent`. Driven on scratch :8120 (`scripts/drive/d1020_f774_sync_keeps_held_agents.py`, real Haiku turn mid-sleep holding an in_progress task): omit -> 409 naming run and task, roster kept; mode=peer -> 200, both agents and builder's runner kept; a `completed` task still holds its agent. Found 2026-10-19 in the ledger sweep (`scripts/drive/s1019_ledger_p4.py`, scratch Hub :8180, real Haiku turns).
 **Source:** drive
 **Theme:** Agents
 **Ready:** yes -- repro below.

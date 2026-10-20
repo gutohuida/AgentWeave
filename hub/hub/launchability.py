@@ -10,7 +10,7 @@ runner->CLI table instead of ``agentweave.constants.RUNNER_CONFIGS``.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -585,34 +585,16 @@ def agent_config(
     return meta
 
 
-ISOLATION_CHANGE_UNDER_HELD_WORK = "isolation_change_under_held_work"
-
-
-async def isolation_change_refusal(
-    db: AsyncSession,
-    project_id: str,
-    agent: str,
-    before: Dict[str, Any],
-    after: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
-    """Why changing where `agent` works is refused now, or None.
-
-    `before` and `after` are the configuration its turns read (`agent_config`: the synced session
-    entry laid over `Agent.config`), as stored and as about to be written. Only a change to
-    `worktrees.is_writing_agent` is this rule's question, and it is refused while the agent holds
-    work: a turn this Hub is executing, or a task assigned to it that has not reached a terminal
-    status. Flipping under either strands work -- the next task-bound turn runs in a checkout the
-    earlier ones did not, and nothing commits the difference (F242,
-    `isolation-does-not-change-under-held-work`, design D1). Both directions count.
-    """
-    from . import run_liveness, worktrees
+async def held_work(db: AsyncSession, project_id: str, agent: str) -> Tuple[List[str], List[str]]:
+    """What `agent` holds right now: the ids of its turns this Hub is executing, and of the tasks
+    assigned to it that have not reached a terminal status. Changing where it works or removing it
+    strands both (F242, F774)."""
+    from . import run_liveness
     from .db.models import Run, Task
     from .task_transition_service import TERMINAL_STATUSES
 
-    if worktrees.is_writing_agent(before) == worktrees.is_writing_agent(after):
-        return None
     live = run_liveness.live_run_ids()
-    runs = []
+    runs: List[str] = []
     if live:
         runs = list(
             (
@@ -636,6 +618,35 @@ async def isolation_change_refusal(
             )
         ).scalars()
     )
+    return runs, tasks
+
+
+ISOLATION_CHANGE_UNDER_HELD_WORK = "isolation_change_under_held_work"
+AGENT_REMOVAL_UNDER_HELD_WORK = "agent_removal_under_held_work"
+
+
+async def isolation_change_refusal(
+    db: AsyncSession,
+    project_id: str,
+    agent: str,
+    before: Dict[str, Any],
+    after: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Why changing where `agent` works is refused now, or None.
+
+    `before` and `after` are the configuration its turns read (`agent_config`: the synced session
+    entry laid over `Agent.config`), as stored and as about to be written. Only a change to
+    `worktrees.is_writing_agent` is this rule's question, and it is refused while the agent holds
+    work: a turn this Hub is executing, or a task assigned to it that has not reached a terminal
+    status. Flipping under either strands work -- the next task-bound turn runs in a checkout the
+    earlier ones did not, and nothing commits the difference (F242,
+    `isolation-does-not-change-under-held-work`, design D1). Both directions count.
+    """
+    from . import worktrees
+
+    if worktrees.is_writing_agent(before) == worktrees.is_writing_agent(after):
+        return None
+    runs, tasks = await held_work(db, project_id, agent)
     if not runs and not tasks:
         return None
     direction = "its own checkout" if worktrees.is_writing_agent(after) else "the shared checkout"
@@ -650,6 +661,28 @@ async def isolation_change_refusal(
             f"{agent} cannot move to {direction} while it holds work, because the work would be "
             f"left where its next turn no longer looks: {'; and '.join(held)}."
         ),
+        "held": {"runs": runs, "tasks": tasks},
+    }
+
+
+async def agent_removal_refusal(
+    db: AsyncSession, project_id: str, agent: str
+) -> Optional[Dict[str, Any]]:
+    """Why removing `agent` from the project is refused now, or None: it holds a turn this Hub is
+    executing or an unfinished task. Deleting its row strands both -- the turn goes on as an agent
+    that no longer exists and the task keeps an assignee nothing can trigger (F774). Same shape as
+    `isolation_change_refusal`."""
+    runs, tasks = await held_work(db, project_id, agent)
+    if not runs and not tasks:
+        return None
+    held = []
+    if runs:
+        held.append(f"a turn that is running ({', '.join(runs)}); let it end")
+    if tasks:
+        held.append(f"unfinished tasks ({', '.join(tasks)}); finish, reassign or reject them")
+    return {
+        "code": AGENT_REMOVAL_UNDER_HELD_WORK,
+        "message": f"{agent} cannot be removed while it holds work: {'; and '.join(held)}.",
         "held": {"runs": runs, "tasks": tasks},
     }
 
