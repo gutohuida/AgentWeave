@@ -37596,7 +37596,7 @@ So once the Hub has stopped retrying, nothing on the loop says that its one task
 
 ## F820 (B) -- Land during a passing git failure approves the task and records the permanent skip "this project is not a git repository": its commit is never merged, and the screen offers no Retry, though the API's retry would merge it
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-loops-sweep` (Resilience, failure injection; scratch Hub :8160, project `proj-205b3b4c85ec`).
+**Status:** fixed 2026-10-21 night iteration 7 (Tier 0). `_integrate_task` now asks `task_integration.repository_fault` (git's own stderr) and, when git fails for a project the Hub has proof was a repository (`repository_proof`: the task's own worktree directory exists, or accepted/awaiting evidence for it names a git commit), records a `failed` row (`GIT_UNREADABLE`, quoting git) instead of the permanent skip, so `is_retryable` is True and the retry merges once git is back. A project with no such proof keeps `NOT_A_REPOSITORY`. Tests `hub/tests/test_task_integration.py` (`..._unreadable_for_a_moment...`, `..._worktree_exists_proves...`), failing before. Drive: real git, `.git` renamed away while the real ASGI app approved, then restored and the retry route merged (labelled: real ASGI app and database, not a scratch Hub). Not done: the drawer still has no Retry control (a separate finding, filed below); a task with neither signal and a vanished `.git` still reads as not a repository. Found by the day sweep `sweep-loops-sweep` (Resilience, failure injection; scratch Hub :8160, project `proj-205b3b4c85ec`).
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes

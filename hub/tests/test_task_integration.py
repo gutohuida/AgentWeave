@@ -782,6 +782,60 @@ async def test_a_project_without_a_repository_approves_unchanged(
 
 
 @pytest.mark.asyncio
+async def test_git_unreadable_for_a_moment_is_a_retryable_failure_not_a_permanent_skip(
+    app, auth_headers, builder, tmp_path
+):
+    """F820: a repository whose `.git` is out of reach while Land is pressed is not "not a
+    repository". The Hub has recorded commits for this task, so it knows better: the row is a
+    `failed` one carrying git's words, the retry route merges once git is back, and the story is
+    not the false sentence that nothing can be merged here."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+    work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "from the agent\n")
+    await accept_evidence(app, auth_headers, builder)
+    git(tmp_path, "checkout", "-q", "main")
+    task = await linked_task(app, auth_headers)
+
+    (tmp_path / ".git").rename(tmp_path / ".git-away")
+    try:
+        approved = await approve(app, auth_headers, task)
+        assert approved.status_code == 200, approved.text
+    finally:
+        (tmp_path / ".git-away").rename(tmp_path / ".git")
+
+    recorded = await integrations(app, auth_headers, task)
+    assert recorded[0]["outcome"] == "failed", recorded
+    assert "nothing to merge" not in recorded[0]["reason"]
+    assert "not a git repository" in recorded[0]["reason"]  # git's own stderr, quoted
+    assert recorded[0]["retryable"] is True, recorded[0]
+    assert work not in commits_on(tmp_path, "main")
+
+    retried = await app.post(f"{TASKS}/{task}/integrations/retry", headers=auth_headers)
+    assert retried.status_code == 200, retried.text
+    assert [row["outcome"] for row in await integrations(app, auth_headers, task)][-1] == "merged"
+    assert work in commits_on(tmp_path, "main")
+
+
+@pytest.mark.asyncio
+async def test_a_task_whose_worktree_exists_proves_the_project_was_a_repository(
+    app, auth_headers, tmp_path
+):
+    """F820's other signal: the task's own worktree directory exists, which only git puts there."""
+    from hub.db.models import Task
+    from hub.task_integration import repository_proof
+
+    make_repo(tmp_path)
+    created = await app.post(TASKS, json={"title": "No evidence"}, headers=auth_headers)
+    task_id = created.json()["id"]
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        assert await repository_proof(session, task, tmp_path) is False
+        worktrees.task_worktree_path(tmp_path, task_id).mkdir(parents=True)
+        assert await repository_proof(session, task, tmp_path) is True
+
+
+@pytest.mark.asyncio
 async def test_evidence_awaiting_review_merges_nothing(app, auth_headers, builder, tmp_path):
     """Only accepted evidence names a commit to merge. Merging on unreviewed evidence would make
     the review that gates the merge decorative.
