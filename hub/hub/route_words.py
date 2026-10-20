@@ -8,7 +8,7 @@ running. `hub/tests/test_a_chosen_name_is_not_a_route.py` walks the route table 
 collision. Compared case-insensitively, as the reserved names are, though the route match is exact.
 """
 
-from typing import Dict, Optional
+from typing import Dict, Iterable, Optional
 
 #: Agent names, each with the route (relative to a project) that answers for it first.
 AGENT_WORDS: Dict[str, str] = {
@@ -44,3 +44,21 @@ def task_route_word(task_id: str) -> Optional[str]:
         f"id '{task_id}' is a route the Hub already answers ({route}), so the task could not be "
         "opened; choose another id"
     )
+
+
+def agent_case_twin(name: str, existing: Iterable[str]) -> Optional[str]:
+    """The sentence refusing *name* because an agent differing from it only in case exists (F811).
+
+    Worktrees live at `.agentweave/worktrees/<name>`, on a filesystem that is case-insensitive by
+    default on Windows and macOS, so `EPS` would share `eps`'s checkout and never run. Refused at
+    creation only, like the route words, and for archived rows too: an archived agent keeps its
+    checkout. An identical name is not a twin; the callers' own "already exists" check owns it.
+    """
+    for other in existing:
+        if other != name and other.lower() == name.lower():
+            return (
+                f"an agent named '{other}' already exists in this project; names must differ by "
+                "more than case, because the two would share one worktree folder on Windows and "
+                "macOS"
+            )
+    return None

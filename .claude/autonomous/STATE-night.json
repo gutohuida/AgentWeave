@@ -8,19 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-10-20-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F811-impl",
-    "next_action": "Do queue item F811-impl: read F811 in scripts/drive/FINDINGS.md (grep the heading), write a failing test at the seam it names, fix, drive, set Status to 'fixed <sha>' with a drive line. One finding per firing.",
+    "current": "F820-impl",
+    "next_action": "Do queue item F820-impl: read F820 in scripts/drive/FINDINGS.md (grep the heading), write a failing test at the seam it names, fix, drive, set Status to 'fixed <sha>' with a drive line. One finding per firing.",
     "queue": [
-        {
-            "id": "F811-impl",
-            "status": "open",
-            "title": "F811 (B,T0): agent names differing only in case both accepted",
-            "detail": "Refuse at creation (Hub check; mind AGENT_NAME_RE restated in several places, CLAUDE.md)."
-        },
         {
             "id": "F820-impl",
             "status": "open",

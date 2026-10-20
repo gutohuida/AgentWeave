@@ -645,6 +645,18 @@ async def create_operator_agent(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Agent name '{body.name}' already exists in this project",
         )
+    # F811: archived rows count, as do names a synced session declares.
+    twin = route_words.agent_case_twin(
+        body.name,
+        [
+            *(
+                await session.execute(select(Agent.name).where(Agent.project_id == project_id))
+            ).scalars(),
+            *configured_names,
+        ],
+    )
+    if twin is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=twin)
 
     if body.runner_id is not None:
         runner = await session.get(Runner, body.runner_id)
@@ -2732,6 +2744,9 @@ async def request_agent(
     existing_names = set(rows_by_name)
     if body.name in existing_names:
         raise HTTPException(status_code=409, detail=f"Agent '{body.name}' already exists")
+    twin = route_words.agent_case_twin(body.name, existing_names)
+    if twin is not None:
+        raise HTTPException(status_code=409, detail=twin)
 
     project_row = await session.get(Project, project_id)
     if project_row is None:

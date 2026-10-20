@@ -129,6 +129,14 @@ async def sync_session(
             if route_refusal is not None:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, route_refusal)
 
+    # F811: a name this sync would add may not differ from another in the project, or in this
+    # payload, only by case. Pairs that already exist are left to sync, like route words.
+    added_names = [name for name in agents_data if name not in existing_agents]
+    for position, agent_name in enumerate(added_names):
+        twin = route_words.agent_case_twin(agent_name, [*existing_agents, *added_names[:position]])
+        if twin is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, twin)
+
     removed_agent_names = (
         [name for name in existing_agents if name not in current_agent_names]
         if roster_given

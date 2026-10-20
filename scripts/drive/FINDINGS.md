@@ -37450,7 +37450,7 @@ Expected: removal by sync is refused like archive (409, the same `agent_removal_
 
 ## F811 (B) -- two agents whose names differ only in case are both accepted; on Windows and macOS the second shares the first's worktree folder and can never run, and the refusal tells the operator to `rm -r` the other agent's checkout
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8149, a real trigger).
+**Status:** fixed (this commit, 2026-10-20 night). `route_words.agent_case_twin` refuses a name equal to an existing agent's (archived included) or a synced session's name case-insensitively, 409 with a sentence naming the existing agent, at `POST /agents`, `request_agent` and `POST /session/sync` (also two new names in one payload); an existing pair still syncs. Drive: real ASGI app against the real test database (`hub/tests/test_agent_names_differing_only_in_case.py`, 7 tests, 6 failed before the fix), not a scratch Hub; the related suites (59 tests) pass. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8149, a real trigger).
 **Source:** drive
 **Theme:** Agents
 **Ready:** yes
