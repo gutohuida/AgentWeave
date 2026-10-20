@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T17:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-vault-sweep",
-    "next_action": "Run 'sweep-vault-sweep': Knowledge vault x Manager jobs x CLI & lifecycle. NEW first: vault_add from an agent (folder recursion, hidden skipped, outside path / bad type / oversized refused per file, granted root counts inside), POST /vault/paths, and `agentweave vault add` (cmd_vault, needs --port with a named profile). Then distillation on a vault job runner, manager firings, doctor/status/stop/reset on a throwaway profile. Bind agents to claude-haiku-4-5-20251001 (bare 'claude-haiku-4-5' is a 400; alias 'haiku' means claude-haiku-5-5).",
+    "current": "sweep-questions-sweep",
+    "next_action": "Run 'sweep-questions-sweep': Questions x Conversations & composer. NEW first: the turn clock counts work, not waiting (F782/F783): an ask_user left open past where the old 600 s clock cut, a deadline cut not re-delivered unchanged. Then answer/decline/timeout/late answer; composer @file over GET /workspace/paths|file (outside path, binary, huge file -- unreached until 10-19). Bind agents to claude-haiku-4-5-20251001 (bare 'claude-haiku-4-5' is a 400; alias 'haiku' means claude-haiku-5-5).",
     "queue": [
         {
             "id": "plan-review",
@@ -41,7 +41,7 @@
         },
         {
             "id": "sweep-vault-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Knowledge vault x Manager jobs x CLI & lifecycle",
             "detail": "NEW first: vault_add from an agent (folder recursion, hidden skipped, outside path / bad type / oversized refused per file, granted root counts inside), POST /vault/paths, and `agentweave vault add` (cmd_vault, needs --port with a named profile). Then distillation on a vault job runner, manager firings, doctor/status/stop/reset on a throwaway profile."
         },

@@ -37256,3 +37256,80 @@ Expected: a non-empty host draft is either added on save (and validated by the H
 **Tier:** 0
 
 `ReachGrantsEditor`'s access `Select` has `wrapperClassName="w-28"` (`hub/ui/src/components/environment/ReachGrantsEditor.tsx`), which clips the selected "Read and write" to "Read and wr" on both the project and agent pages. Expected: the select fits its longest option (e.g. `w-36`). Seam: Permissions & sandbox (Reach UI).
+
+## F798 (B) -- adding a folder by path that holds one unreadable subfolder answers a bare 500, adds nothing, and the agent's `vault_add` reads only "Internal Server Error"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143, branch tip 636ce55).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+Repro: a folder `edge/acl` holding `ok.md` and a subfolder `locked/` whose listing is denied (`icacls edge\acl\locked /deny %USERNAME%:(RD)`; on Windows the same happens under any home folder, e.g. `AppData\Local\Application Data`). `POST /projects/{p}/vault/paths {"paths": ["C:/.../edge/acl"], "distil": false}` -> `500 "Internal Server Error"`; the log has `PermissionError: [WinError 5] Access is denied: '...\acl\locked'` from `vault_intake._walk` (`hub/hub/vault_intake.py:188`, `folder.iterdir()`), reached from `expand` (`:210`). Nothing is added, not even `ok.md`. Through the agent door (the project grants a read root over `edge`), Haiku's `vault_add(["C:/.../vault1020-outside/outside.md", "C:/.../edge/acl"], distil=false)` got `Tool error: Hub rejected POST /vault/paths (500): Internal Server Error`, so the legitimate `outside.md` in the same batch was lost with it. A single file *inside* the denied folder, named directly, is added (200), so the walk is the only seam.
+
+Expected: the unreadable folder becomes one `refused` result naming it ("The Hub could not list this folder: Access is denied."), the rest of the batch is added, and no route answers 500. Failing test: `hub/tests/test_vault_paths.py`, a folder whose subfolder raises `PermissionError` on `iterdir` (monkeypatch) answers 200 with the sibling file added and the subfolder refused. Seam: Knowledge vault (add by path) x Resilience (what a route returns when the thing it calls raises).
+
+## F799 (C) -- the folder walk follows junctions and directory links (a loop adds each file 64 times to the batch), and the 200-file cap is checked only after the whole folder is walked
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143, `scripts/drive/s1020_vault.py` steps L and B).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+Two measurements of one function, `vault_intake._walk` / `expand` (`hub/hub/vault_intake.py:185-238`):
+
+- **A link loop.** Folder `loop/` holding `a.md`, `b.md` and a junction `back -> loop` (`mklink /J`). `POST /vault/paths {"paths": [".../loop"], "distil": false}` -> 200 in 0.4 s with **128 results for 2 files**, the same two resolved paths repeated until Windows' path length ended the recursion (on the first call: 1 added, its 63 copies "skipped" as duplicates). Every copy counts toward `MAX_BATCH_FILES`, so a folder of four files plus one such link is refused as "more than 200 files". `child.is_dir()` follows the link; nothing records folders already visited.
+- **The cap after the walk.** `POST /vault/paths {"paths": [".../hub/ui/node_modules"], "distil": false}` (27,135 files) -> 400 "These paths reach more than 200 files ..." after **14.1 s**: `expand` walks the given folder completely and only then compares the count. The docstring's own case, "a mistaken path (a home directory)", walks the whole home folder before refusing (and on Windows usually hits F798's 500 first).
+
+Expected: the walk does not descend into a directory link or junction (or tracks the resolved folders it has visited), and stops as soon as the 201st file is reached. Failing tests (`hub/tests/test_vault_paths.py`): a folder with a link to itself yields one result per real file; a folder of 300 files is refused without yielding more than 201. Seam: Knowledge vault (add by path).
+
+## F800 (B) -- `agentweave reset --profile <name> --all` deletes the shared `~/.agentweave/hub/.env` (the default profile's bootstrap key and ticket secret) and every other instance's `*.log`
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row), reproduced with `USERPROFILE`/`HOME` pointed at `testbed/life1020-home`, so no real state was touched.
+**Source:** drive
+**Theme:** CLI & lifecycle
+**Ready:** yes
+**Tier:** 0
+
+Repro (sandboxed home): start `agentweave --profile life1020 --port 8144`, stop it, put a `hub-trial-8010.log` and a default-profile `data/agentweave.db` in the Hub folder, then `agentweave reset --profile life1020 --all --yes`. Output: `Deleted ...\hub\profiles\life1020`, `Deleted ...\hub\.env`, `Deleted ...\hub\hub-trial-8010.log`. The default profile's `data/` survived; the shared `.env` and the other instance's log did not. `cmd_reset` (`src/agentweave/cli.py:1546`, `:1610-1618`) uses `env_path = HUB_DIR / ".env"` and `HUB_DIR.glob("*.log")` whatever `--profile` says, although its own comment says "reset's blast radius is always exactly one profile, named or default, never inferred (`design.md` D6)". `.env` is one file for every profile (`_hub_native_scaffold`, `cli.py:811`, written by whichever profile starts first; in the sandbox it named the *named* profile's database), so on this machine `reset --profile scratch --all` would delete the file the default profile's `AW_BOOTSTRAP_API_KEY` and `AW_TICKET_SECRET` come from, and every log in `~/.agentweave/hub/`, `hub-trial-8010.log` included. The confirmation lists the `.env` under "profile 'life1020'", so it reads as that profile's own.
+
+Expected: with a named profile, `--all` touches only that profile (its own logs, such as `hub-<profile>-<port>.log`), and either leaves the shared `.env` alone or refuses `--all` saying why. Failing test: `tests/test_hub_commands.py` (or a new `tests/test_reset_blast_radius.py`): `cmd_reset` with `profile="x"`, `all=True`, `yes=True` and `HUB_DIR` in `tmp_path` leaves `.env` and a foreign `*.log` in place. Seam: CLI & lifecycle (reset) x Projects (profiles).
+
+## F801 (C) -- a vault report filed while the reports job has no runner stays `pending` forever: choosing a runner never looks into it, and the operator cannot close a pending report
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143).
+**Source:** drive
+**Theme:** Manager jobs
+**Ready:** yes
+**Tier:** 1
+
+Repro: `PATCH /projects/{p}/manager/jobs/vault-reports {"enabled": true}` (no runner). A Haiku agent calls `vault_report` on a fact -> report `rpt-cffc675f654b`, `pending`; one `manager_job_fired` row, `failed`, "Did nothing: the Vault reports job is on but has no runner. Choose one on the Manager page." (F626's fix holds). Then choose the runner as told (`PATCH ... {"enabled": true, "runner_id": "<haiku runner>", "model": "claude-haiku-4-5-20251001"}`) and wait 45 s: still one firing, the report still `pending`, `answer: null`. `POST /vault/reports/rpt-cffc675f654b/close {"note": "closing"}` -> 409 "Report rpt-cffc675f654b is pending; only a referred report is closed." The Vault tab's Reports list shows the report with a bare `pending` badge and no control (screenshot `testbed/ui-judge/s1020-vault/101454/01_vault.png`; `VaultPage.tsx:924` renders a close form only for `referred`). The same dead end follows any failed spawn (`vault_reports.py:277`, "the report stays pending"). No route looks into a pending report again; the source-side twin has one (`POST /vault/sources/{id}/distil`).
+
+Expected: a pending report can be looked into again (a "Look into it" door on the report, or the job picking up its pending reports when it gains a runner), and the failed firing's sentence says what will happen to the report. Acceptance: file a report with the job runner-less, set the runner, use the door -> one `written` firing and the report `answered`, `corrected` or `referred`. Seam: Manager jobs x Knowledge vault (reports).
+
+## F802 (C) -- `agentweave doctor --profile <name> --port N` tells the operator to start `agentweave --port N`, which starts the default profile's database on that port; doctor also prints bare `diagnostic_check_warn` lines
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row, sandboxed home).
+**Source:** drive
+**Theme:** CLI & lifecycle
+**Ready:** yes
+**Tier:** 0
+
+Repro: with no Hub on 8144, `agentweave doctor --profile life1020 --port 8144` prints `[WARN] port:8144: No Hub answered on port 8144 (...)` with `Hint: Start it with ``agentweave --port 8144``, if it should be running.` (`src/agentweave/diagnostics.py:269`; the hint has no profile). `agentweave status --profile life1020 --port 8144` gets it right: `Run 'agentweave --profile life1020 --port 8144' to start it`. Following doctor's hint starts the **default** profile's database on 8144. The same doctor run also writes two lines reading only `diagnostic_check_warn` above the `[DOCTOR]` header: `_emit_diagnostic_log` (`cli.py:24-34`) logs the event name through an unconfigured logger, so Python's last-resort handler prints the bare name to stderr.
+
+Expected: the hint is the status command's (`_hub_start_hint(profile, port)`), and doctor prints no bare event names. Failing tests: `tests/test_doctor_port_names_its_profile.py`, doctor for a named profile with nothing on the port gives a hint containing `--profile <name>`; a capsys test that doctor's stderr has no line equal to `diagnostic_check_warn`. Seam: CLI & lifecycle (doctor).
+
+## F803 (D) -- small legibility slips on the vault-by-path doors: doubled backslashes in the CLI's refusals, a UTF-8 BOM kept in a source's text, and a runner-less firing reading "runner default"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+- `agentweave vault add missing.md --no-distil ...` prints `refused  C:\...\missing.md: No file or folder at 'C:\\Users\\huida\\Documents\\aw-vault-1020\\notes\\sub\\missing.md'.` The CLI resolves to a Windows path and `vault_intake._locate` quotes it with `{given!r}` (`hub/hub/vault_intake.py:149-165`), doubling every backslash: the class F656 fixed for permission verdicts (`mcp_server._quote`). Same in the "relative" and "outside" sentences an agent reads.
+- A text file written with a UTF-8 BOM (PowerShell 5.1's `Set-Content -Encoding utf8`) is stored with it: `POST /vault/paths` answered `"opening": "\ufeffinside"`, and the Vault tab's entry preview starts with the invisible character (`in.md`, `loop/a.md`). `add_all` decodes with `data.decode("utf-8")` (`vault_intake.py:298`); `utf-8-sig` drops it.
+- The Manager page's firing for F801's runner-less report reads `failed · runner default · 0.0 s` although there was no runner (the event has `"runner_id": ""`).
+
+Expected: quote paths as written (reuse `_quote`), decode text with `utf-8-sig`, and word a runner-less firing "no runner". Tests: `hub/tests/test_vault_paths.py` for the first two; a UI test for the firing row. Seam: Knowledge vault (add by path) x Manager jobs (firing list).
