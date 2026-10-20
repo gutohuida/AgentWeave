@@ -320,3 +320,57 @@ async def test_a_folder_the_operator_granted_is_in_an_agents_reach(
         AGENT_ROUTE, json={"paths": [str(dump / "more.md")], "distil": False}, headers=headers
     )
     assert [r["status"] for r in again.json()["results"]] == ["refused"]
+
+
+@pytest.mark.asyncio
+async def test_a_folder_that_cannot_be_listed_is_refused_by_name_and_the_rest_is_added(
+    app, auth_headers, tmp_path_factory, monkeypatch
+) -> None:
+    """F798: a subfolder whose listing is denied was a bare 500 that added nothing, not even the
+    readable sibling. It is one refused result naming the folder; the batch carries on."""
+    dump = tmp_path_factory.mktemp("acl") / "acl"
+    (dump / "locked").mkdir(parents=True)
+    (dump / "ok.md").write_bytes(b"# Fine\n\nThis one is readable.\n")
+    (dump / "locked" / "hidden.md").write_bytes(b"# Hidden\n\nNever listed.\n")
+    other = tmp_path_factory.mktemp("other") / "outside.md"
+    other.write_bytes(b"# Outside\n\nA legitimate file in the same batch.\n")
+
+    real_iterdir = Path.iterdir
+
+    def _deny(self):
+        raise PermissionError(13, "Access is denied", str(self))
+
+    def iterdir(self):
+        if self.name == "locked":
+            _deny(self)
+        return real_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", iterdir)
+    got = await app.post(
+        f"{BASE}/vault/paths",
+        json={"paths": [str(other), str(dump)], "distil": False},
+        headers=auth_headers,
+    )
+    assert got.status_code == 200, got.text
+    results = got.json()["results"]
+    by_name = {Path(r["path"]).name: r for r in results}
+    assert by_name["outside.md"]["status"] == "added"
+    assert by_name["ok.md"]["status"] == "added"
+    refused = [r for r in results if r["status"] == "refused"]
+    assert len(refused) == 1
+    assert "locked" in refused[0]["path"] + refused[0]["reason"]
+    assert "Access is denied" in refused[0]["reason"]
+    assert "could not list" in refused[0]["reason"]
+
+    # The folder the caller named itself cannot be listed: one refusal, still no 500.
+    monkeypatch.setattr(
+        Path,
+        "iterdir",
+        lambda self: iterdir(self) if self.name != "acl" else _deny(self),
+    )
+    top = await app.post(
+        f"{BASE}/vault/paths", json={"paths": [str(dump)], "distil": False}, headers=auth_headers
+    )
+    assert top.status_code == 200, top.text
+    [only] = top.json()["results"]
+    assert only["status"] == "refused" and "could not list" in only["reason"]

@@ -182,14 +182,21 @@ def _short(name: str) -> str:
     return name if len(name) <= vault.MAX_NAME_CHARS else name[-vault.MAX_NAME_CHARS :]
 
 
-def _walk(folder: Path) -> List[Path]:
-    """The files under *folder*, sorted, leaving out hidden names (`.git`, `.agentweave`, ...)."""
+def _walk(folder: Path, unlistable: List[Tuple[Path, str]]) -> List[Path]:
+    """The files under *folder*, sorted, leaving out hidden names (`.git`, `.agentweave`, ...).
+    A folder the Hub cannot list is recorded in *unlistable* with the reason and walked no
+    further; it never fails the walk."""
+    try:
+        children = sorted(folder.iterdir(), key=lambda p: p.name.lower())
+    except OSError as exc:
+        unlistable.append((folder, exc.strerror or str(exc)))
+        return []
     found: List[Path] = []
-    for child in sorted(folder.iterdir(), key=lambda p: p.name.lower()):
+    for child in children:
         if child.name.startswith("."):
             continue
         if child.is_dir():
-            found += _walk(child)
+            found += _walk(child, unlistable)
         elif child.is_file():
             found.append(child)
     return found
@@ -207,8 +214,17 @@ def expand(paths: Sequence[str], reach: Reach) -> Batch:
             batch.items.append(Item(given=given, refused=refusal))
             continue
         if located.is_dir():
-            files = _walk(located)
-            if not files:
+            unlistable: List[Tuple[Path, str]] = []
+            files = _walk(located, unlistable)
+            for blocked, why in unlistable:
+                batch.items.append(
+                    Item(
+                        given=given,
+                        path=None,
+                        refused=f"The Hub could not list the folder {blocked}: {why}.",
+                    )
+                )
+            if not files and not unlistable:
                 batch.items.append(
                     Item(given=given, path=located, refused=f"The folder {given!r} holds no files.")
                 )

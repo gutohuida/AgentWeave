@@ -37261,7 +37261,7 @@ Expected: a non-empty host draft is either added on save (and validated by the H
 
 ## F798 (B) -- adding a folder by path that holds one unreadable subfolder answers a bare 500, adds nothing, and the agent's `vault_add` reads only "Internal Server Error"
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143, branch tip 636ce55).
+**Status:** fixed 2026-10-20 (night iteration 3; sha in the commit that carries this line). Drive: a real `icacls /deny (RD)` subfolder through `vault_intake.expand` gave one refusal "The Hub could not list the folder ...\locked: Access is denied." and `ok.md` kept. Test: `hub/tests/test_vault_paths.py::test_a_folder_that_cannot_be_listed_is_refused_by_name_and_the_rest_is_added` (failed before the fix). Original: open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143, branch tip 636ce55).
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes
