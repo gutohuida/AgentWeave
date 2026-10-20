@@ -37741,3 +37741,81 @@ PATCH Z {"status": "in_progress"} -> 409 dependency_unmet: "... 'bulk 006 ...' (
 ```
 
 `DependencyRefusal.detail` (`hub/hub/dependency_gate.py:62-66`) predates hand-authored `depends_on`: for a task with no `spec_document_id` the dependency was declared in the drawer's "Depends on" (or at creation), and the Dependencies view itself says "Hand-made tasks belong to no document". **Expected:** for a task with no document, the remedy reads "reopen it, or remove the dependency in this task's Depends on". **Test:** `hub/tests/test_dependency_gate.py`: a documentless task gated on a rejected prerequisite gets a message without "document".
+
+## F828 (C) -- deleting a document (or a task) leaves the deleted task's checkout and branch, with the agent's unmerged commit, listed under a task id that no longer exists; neither the response nor the dialog mentions them
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, `scripts/drive/s1020_s_api.py` + real Haiku turns).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+```
+approved change spec/changes/slug-speed, task task-67b0bf33dda8 worked by a real Haiku turn (builder):
+  commit a15d775 on agentweave/task/task-67b0bf33dda8, task completed, two evidence pieces
+DELETE /projects/<p>/project/documents/spec/changes/slug-speed/spec.json
+  -> 200 {"deleted": true, "tasks": ["task-67b0bf33dda8"], "requirements": 1, "diagnostics": [...]}
+git -C <project> worktree list
+  .../.agentweave/tasks/task-67b0bf33dda8  a15d775 [agentweave/task/task-67b0bf33dda8]   <- still there
+GET /projects/<p>/worktrees -> {"kind": "task", "name": "task-67b0bf33dda8", ...}            <- still listed
+GET /projects/<p>/tasks/task-67b0bf33dda8 -> 404
+```
+
+The delete dialog says "Its file, its requirements and their evidence, and every task it put on the board go with it". The code the agent wrote does not go with it: `deletion.delete_document` / `delete_task` (`hub/hub/deletion.py:177-198`) delete rows only, and `DELETE /tasks/{id}` (`hub/hub/api/v1/tasks.py:1459`) is the same. The operator can't tell whether the work was discarded or kept, and Worktrees lists a checkout named after a task that 404s. **Expected:** the delete removes a deleted task's checkout and branch when the branch holds nothing unmerged. When it does hold unmerged commits, the checkout is kept and the response (and the dialog's result) names the branch and its unmerged commit count. **Test:** `hub/tests/` next to the F532 deletion tests: a task with a checkout and a commit on its branch, deleted through the document route; assert the response names the branch (or the checkout is gone), and fail on the current rows-only delete.
+
+## F829 (C) -- after Delete document in the app, the page stays on the deleted document: its old title and phase, three load failures, and 404s, with no word that it was deleted
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, `scripts/drive/s1020_s_ui2.py`), seen in Chromium on the served bundle.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+```
+Chromium: ?tab=spec&document=spec/changes/ui-delete-131858/spec.json -> spec-delete -> "Delete document"
+DELETE .../documents/spec/changes/ui-delete-131858/spec.json -> 200 {"deleted": true}
+the page 3 s later (testbed/ui-judge/s1020-spec2/132004/03_after_delete.png):
+  title "UI delete 131858", chips change-spec / exploring / sketch, "No requirements yet."
+  "Drift could not be read: no specification document at spec/changes/ui-delete-131858/spec.json"
+  "Could not load retired requirements: no specification document at ..."
+  "This document's decided proposals could not be read."
+  URL still ...&document=spec%2Fchanges%2Fui-delete-131858%2Fspec.json; 15 console 404s
+```
+
+`onConfirmDelete` (`hub/ui/src/components/spec/SpecPhaseBar.tsx:306-314`) closes the dialog and does nothing else. `useDeleteSpecDocument` (`hub/ui/src/api/spec.ts:1344`) invalidates the corpus but leaves the selected document in place, and its per-document queries then fail one by one. This is the document twin of F824 (task drawer). **Expected:** on a 200, the page leaves the deleted document for the document browser (or the home document) and says what was deleted, with the response's task count. The deleted path's queries are removed rather than refetched. **Test:** a UI test that deletes from the phase bar and asserts the selected document changes and no query for the deleted path runs after the mutation resolves.
+
+## F830 (D) -- the `steps_skipped` approval gap tells the operator, on screen, to make raw HTTP calls, and the recipe it gives leaves out re-proposing
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, `scripts/drive/s1020_s_ui.py`), seen in Chromium.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+```
+proposed change written in one PUT -> Approve (Chromium) -> approval-warnings:
+  "steps_skipped — the document is at step 'intake'; this project's journey (no size, so every step) goes on to
+   threat-model, ... delivery, which it never reached. If it already holds what those steps produce, record that:
+   send it back first, POST /api/v1/projects/proj-e5b03b955646/project/documents/phase?path=...&to=exploring,
+   then POST /api/v1/projects/.../documents/journey?path=... {"step": "delivery"} (the step control on its phase bar)"
+-> Approve anyway -> the same text is kept on the document as "Approved over these gaps"
+```
+
+The message is built once for agents and the operator alike (`hub/hub/spec_service.py:1874-1892`, F574/F730/F752). On the app's approval card it reads as an API recipe, although the phase bar has the controls. It also stops one step short: after "send it back" and the step move, the document is `exploring` again and has to be proposed again before Approve shows. **Expected:** the finding carries the steps as data (or a second operator-facing sentence) and the card names the controls: "Send back, choose the step on the journey bar, Propose, then Approve". The agent-facing text keeps the routes and adds the propose step. **Test:** `test_the_journey_steps_a_document_never_reached_are_a_gap_naming_them` extended: a proposed document's remedy names propose after the journey move; plus a UI test that the approval card renders no `POST /api/` text.
+
+## F831 (D) -- the note answering a cannot-satisfy report runs the operator's reason into the next sentence with no full stop
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, real Haiku reporter `builder`).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+```
+POST .../documents/spec/changes/slug-speed/spec.json/amendments/amd-6ab5b83b9196/respond
+  {"response": "amend", "reason": "a typo for microseconds", "change": {"then": "it returns in under 100 microseconds"}}
+inbound_queue_entries (builder): "... how_to_check: time it with time.perf_counter_ns. Their reason: a typo for
+  microseconds The task is unblocked; continue the work against the criterion as it now reads."
+```
+
+`hub/hub/spec_amendments.py:845` appends `" Their reason: {reason}"`, and the next sentence follows directly. An operator's reason rarely ends in a full stop, so this happens every time. **Expected:** the reason is closed with a full stop when it lacks terminal punctuation (or is quoted). **Test:** next to the F700 respond tests: an amend with a reason without a full stop; assert the delivered note contains `"microseconds. The task"`.

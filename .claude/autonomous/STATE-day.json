@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T17:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-spec-sweep",
-    "next_action": "Run 'sweep-spec-sweep': Spec documents x Corpus & folding. New paths first: the cannot-satisfy amend/accept/reject respond route (F700), resolved proposals list, PUT roadmap slice after the fact (F674); then create->explore->close->propose->approve(anyway)->archive->reopen, journey steps, fold + archive refusal. Bind agents to claude-haiku-4-5-20251001. No sweep started after 16:15.",
+    "current": "sweep-evidence-sweep",
+    "next_action": "Run 'sweep-evidence-sweep': Requirements, evidence & coverage x Drift. Least driven first: list_evidence/decide_evidence from an agent, a rejected requirement at contract/gate rigor, operator overturn (F692), a piece recorded before a criterion amend (how it reads in the Evidence view and coverage), then stale on reword, Scan for drift and its three answers. Bind agents to claude-haiku-4-5-20251001. No sweep started after 16:15.",
     "queue": [
         {
             "id": "plan-review",
@@ -83,7 +83,7 @@
         },
         {
             "id": "sweep-spec-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Spec documents x Corpus & folding",
             "detail": "Swept 10-19: the journey one step at a time, approve with approval_warnings, report_cannot_satisfy + respond, fold with retire-what-it-supersedes, coverage after a fold (F593)."
         },
@@ -91,7 +91,7 @@
             "id": "sweep-evidence-sweep",
             "status": "open",
             "title": "Requirements, evidence & coverage x Drift",
-            "detail": "Swept 10-19: list_evidence/decide_evidence from an agent (least driven), a rejected requirement at contract/gate rigor, stale on reword, Scan for drift and its three answers."
+            "detail": "Swept 10-19: list_evidence/decide_evidence from an agent (least driven), a rejected requirement at contract/gate rigor, stale on reword, Scan for drift and its three answers. Also (from sweep-spec): after a criterion amend, the pre-amend piece lists review_state awaiting and counts in coverage evidence_count; only the decision refuses it (evidence_stale). How does the Evidence view show it?"
         },
         {
             "id": "ledger-tidy",
