@@ -8,16 +8,16 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T17:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "plan-review",
-    "next_action": "Run the 'plan-review' item per .claude/loops/day-window.md 'The pretask': skill Step 0 in full, update the checklist in .claude/skills/e2e-loop/SKILL.md, commit it alone, log the PLAN: line, and insert sweep-<area>-sweep items (every checklist row once) before ledger-tidy. Drives nothing.",
+    "current": "night-recheck-drive",
+    "next_action": "Run 'night-recheck-drive': re-drive F760, F774, F775, F777, F782, F783, F784, F785, F786 live on a scratch Hub from source (port 8110+, fresh testbed DB, haiku), each through the path its finding names; log CONFIRMED/REOPENED F<n>; reopen any fix that does not fire.",
     "queue": [
         {
             "id": "plan-review",
-            "status": "open",
+            "status": "done",
             "title": "Check the e2e checklist against the code; queue the full sweep",
             "detail": "Playbook 'The pretask'. Edit only the checklist. Insert sweep items (2-3 rows each, every row once) before night-recheck-drive."
         },
@@ -26,6 +26,72 @@
             "status": "open",
             "title": "Re-drive last night's fixes live",
             "detail": "Findings fixed 2026-10-19/20 night: F760, F774, F775, F777, F782, F783, F784, F785, F786. Drive each through the path its finding names (git reads/checkpoint file lists F775/F777/F760; others per FINDINGS.md). Log CONFIRMED/REOPENED F<n>."
+        },
+        {
+            "id": "sweep-traces-sweep",
+            "status": "open",
+            "title": "Traces x Runs x Logs, events & SSE",
+            "detail": "NEW first: a turn's trace button and the task story's (GET /traces/by-run/{run_id}), Settings -> Traces (list, kind filter, one trace, OTLP export, clear, settings); every event in a trace, background work and commands as traces, warnings on the trace; secret redaction in spans. Then Runs (stop, MCP status, aw-tool fallback) and Logs/SSE (/events/history, stream_gap, F419)."
+        },
+        {
+            "id": "sweep-reach-sweep",
+            "status": "open",
+            "title": "Permissions & sandbox x Capability plane x Agent environment",
+            "detail": "NEW first: project default_permission_mode, project + agent reach grants (read/readwrite roots, {temp}/{project}, hosts; agent's replace the project's), Claude and Copilot judged alike, Copilot spec turn under Full access, the turn context stating the run's reach, the agent page's granted reach (check the bundle carries the Reach UI). Then allow_agent_jobs refusal->question->grant, and what a Hub-launched agent sees (F453/F454)."
+        },
+        {
+            "id": "sweep-vault-sweep",
+            "status": "open",
+            "title": "Knowledge vault x Manager jobs x CLI & lifecycle",
+            "detail": "NEW first: vault_add from an agent (folder recursion, hidden skipped, outside path / bad type / oversized refused per file, granted root counts inside), POST /vault/paths, and `agentweave vault add` (cmd_vault, needs --port with a named profile). Then distillation on a vault job runner, manager firings, doctor/status/stop/reset on a throwaway profile."
+        },
+        {
+            "id": "sweep-questions-sweep",
+            "status": "open",
+            "title": "Questions x Conversations & composer",
+            "detail": "NEW first: the turn clock counts work, not waiting (F782/F783): an ask_user left open past where the old 600 s clock cut, a deadline cut not re-delivered unchanged. Then answer/decline/timeout/late answer; composer @file over GET /workspace/paths|file (outside path, binary, huge file -- unreached until 10-19)."
+        },
+        {
+            "id": "sweep-projects-sweep",
+            "status": "open",
+            "title": "Projects x Runners & models x Keyboard & dialogs",
+            "detail": "Unreached-until-10-19 first: the in-app folder browser (GET /fs/roots, /fs/list) behind the typed path; delete-project dialog in a browser. Then runner aliases/undeclared model refusal/409 holders, and keyboard-only dialog focus."
+        },
+        {
+            "id": "sweep-agents-sweep",
+            "status": "open",
+            "title": "Agents x Charters x Inbound queue & messages",
+            "detail": "Unreached first: POST /session/sync after F774 (agent holding work kept, no agents key leaves roster alone; does the response say so?). Then reserved/route-word names, request_agent budget, charters CRUD, hop-budget chain, Withdraw/Continue, held message drained on bind (F96)."
+        },
+        {
+            "id": "sweep-checkpoints-sweep",
+            "status": "open",
+            "title": "Checkpoints x Accounting & allowance",
+            "detail": "Night-touched: checkpoint files changed list includes files the agent committed itself; git reads UTF-8 with unquoted paths (F775/F777/F760 -- the recheck drives the fix; this drives the row). Checkpoints sheet, cut over once, grants. Then per-conversation usage, budget exhaustion via an operator turn (F456), quiet hours."
+        },
+        {
+            "id": "sweep-loops-sweep",
+            "status": "open",
+            "title": "Jobs & loops x Flows & review x Resilience",
+            "detail": "Never swept in a day log: a loop that fires/claims/drains/stops both endings, Run's held reason, waiting_reason firing; a flow with parallel firing and a verdict withdrawing waiting reviews; kill the Hub mid-run and restart, concurrent triggers (F349), failure injection."
+        },
+        {
+            "id": "sweep-tasks-sweep",
+            "status": "open",
+            "title": "Tasks x Dependencies x Worktrees & integration",
+            "detail": "Swept 10-19 (Tasks, Worktrees): actor-boundary refusals, the story vs task_history; A->B->C with B's checkout merging A on its next turn; integration Retry (least driven), isolation flip under held work."
+        },
+        {
+            "id": "sweep-spec-sweep",
+            "status": "open",
+            "title": "Spec documents x Corpus & folding",
+            "detail": "Swept 10-19: the journey one step at a time, approve with approval_warnings, report_cannot_satisfy + respond, fold with retire-what-it-supersedes, coverage after a fold (F593)."
+        },
+        {
+            "id": "sweep-evidence-sweep",
+            "status": "open",
+            "title": "Requirements, evidence & coverage x Drift",
+            "detail": "Swept 10-19: list_evidence/decide_evidence from an agent (least driven), a rejected requirement at contract/gate rigor, stale on reword, Scan for drift and its three answers."
         },
         {
             "id": "ledger-tidy",
