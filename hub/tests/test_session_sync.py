@@ -267,9 +267,74 @@ async def test_sync_omitting_an_agent_with_an_unfinished_task_and_a_live_run_is_
     assert response.status_code == 409, response.text
     detail = response.json()["detail"]
     assert detail["code"] == "agent_removal_under_held_work"
-    assert detail["held"] == {"runs": ["run-f774"], "tasks": ["task-f774"]}
+    assert detail["held"] == {"runs": ["run-f774"], "tasks": ["task-f774"], "queue_entries": []}
     assert "task-f774" in detail["message"] and "run-f774" in detail["message"]
     assert await _names() == {"builder", "rev"}
+
+
+async def test_sync_omitting_an_agent_with_a_queued_message_is_refused_like_archive(
+    app, auth_headers, add_agent
+):
+    """F810: archive refuses an agent with queued messages (nothing delivers to a gone agent), so
+    removal by omission must too, naming the entry, and keep both the row and the entry."""
+    from hub.db.models import InboundQueueEntry
+
+    await add_agent("gamma")
+    await add_agent("rev")
+    async with async_session_factory() as db:
+        db.add(
+            InboundQueueEntry(
+                id="entry-f810",
+                project_id="proj-test",
+                agent="gamma",
+                origin_type="operator",
+                content="still waiting",
+                hop_depth=0,
+                state="queued",
+            )
+        )
+        await db.commit()
+
+    response = await app.post(SYNC, json={"data": {"agents": {"rev": {}}}}, headers=auth_headers)
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert detail["code"] == "agent_removal_under_held_work"
+    assert detail["held"]["queue_entries"] == ["entry-f810"]
+    assert "entry-f810" in detail["message"] and "queued" in detail["message"]
+    assert await _names() == {"gamma", "rev"}
+    async with async_session_factory() as db:
+        entry = (
+            await db.execute(select(InboundQueueEntry).where(InboundQueueEntry.id == "entry-f810"))
+        ).scalar_one()
+    assert entry.state == "queued"
+
+
+async def test_sync_omitting_an_agent_whose_queue_is_spent_still_removes_it(
+    app, auth_headers, add_agent
+):
+    from hub.db.models import InboundQueueEntry
+
+    await add_agent("gamma")
+    await add_agent("rev")
+    async with async_session_factory() as db:
+        db.add(
+            InboundQueueEntry(
+                id="entry-f810-done",
+                project_id="proj-test",
+                agent="gamma",
+                origin_type="operator",
+                content="read",
+                hop_depth=0,
+                state="withdrawn",
+            )
+        )
+        await db.commit()
+
+    response = await app.post(SYNC, json={"data": {"agents": {"rev": {}}}}, headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert await _names() == {"rev"}
 
 
 async def test_sync_omitting_an_agent_whose_work_is_finished_still_removes_it(

@@ -37425,7 +37425,7 @@ Expected: the literal `…`, a lint or test that fails on mojibake sequences in 
 
 ## F810 (B) -- `POST /session/sync` deletes an agent whose messages are still queued, which archive refuses to do: the entries and the conversation are orphaned, the rail calls them "agent archived", and a later agent of the same name inherits them
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8149, `scripts/drive/s1020_a_sync.py`, Chromium against the served bundle).
+**Status:** fixed 2026-10-20 night iteration 4 (Tier 0). `launchability.agent_removal_refusal` now counts `InboundQueueEntry.state == 'queued'` and names the entry ids (`held.queue_entries`); sync answers the same 409 `agent_removal_under_held_work` archive does, row and entry kept. Tests `hub/tests/test_session_sync.py` (queued -> 409; spent queue -> still removed), failing before. Drive: through the real ASGI app and database (no scratch Hub). Not done: the rail still says "agent archived" for conversations of an agent already deleted by an older sync, and F812 (non-object agents -> 500) left for its own item.
 **Source:** drive
 **Theme:** Agents
 **Ready:** yes

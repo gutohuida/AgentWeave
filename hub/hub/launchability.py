@@ -669,21 +669,42 @@ async def agent_removal_refusal(
     db: AsyncSession, project_id: str, agent: str
 ) -> Optional[Dict[str, Any]]:
     """Why removing `agent` from the project is refused now, or None: it holds a turn this Hub is
-    executing or an unfinished task. Deleting its row strands both -- the turn goes on as an agent
-    that no longer exists and the task keeps an assignee nothing can trigger (F774). Same shape as
-    `isolation_change_refusal`."""
+    executing, an unfinished task, or a queued inbound message. Deleting its row strands all
+    three -- the turn goes on as an agent that no longer exists, the task keeps an assignee
+    nothing can trigger (F774), and a queued message is orphaned with its conversation, or
+    inherited by a later agent of the same name (F810). Archive refuses the queued message for the
+    same reason (`archive_agent`); same shape as `isolation_change_refusal`."""
+    from .db.models import InboundQueueEntry
+
     runs, tasks = await held_work(db, project_id, agent)
-    if not runs and not tasks:
+    queued = list(
+        (
+            await db.execute(
+                select(InboundQueueEntry.id)
+                .where(
+                    InboundQueueEntry.project_id == project_id,
+                    InboundQueueEntry.agent == agent,
+                    InboundQueueEntry.state == "queued",
+                )
+                .order_by(InboundQueueEntry.sequence)
+            )
+        ).scalars()
+    )
+    if not runs and not tasks and not queued:
         return None
     held = []
     if runs:
         held.append(f"a turn that is running ({', '.join(runs)}); let it end")
     if tasks:
         held.append(f"unfinished tasks ({', '.join(tasks)}); finish, reassign or reject them")
+    if queued:
+        held.append(
+            f"queued messages ({', '.join(queued)}); let them be delivered, or discard them"
+        )
     return {
         "code": AGENT_REMOVAL_UNDER_HELD_WORK,
         "message": f"{agent} cannot be removed while it holds work: {'; and '.join(held)}.",
-        "held": {"runs": runs, "tasks": tasks},
+        "held": {"runs": runs, "tasks": tasks, "queue_entries": queued},
     }
 
 
