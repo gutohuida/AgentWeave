@@ -1,0 +1,174 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a fake ACP session whose prompt never answers",
+      "how_to_check": "hub/tests/test_copilot_acp_run_turn.py (written first, failing on HEAD)",
+      "key": "timeout-kind",
+      "requirement": "deadline-cut-is-not-rerun",
+      "then": "the TurnOutcome is failed, its error names 1 s, error_kind is turn_timeout and retryable is False",
+      "when": "run_turn is called with turn_timeout=1"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a queue entry delivered in a run whose turn failed with turn_timeout",
+      "how_to_check": "hub/tests/test_inbound_queue.py (written first, failing on HEAD)",
+      "key": "timeout-withdrawn",
+      "requirement": "deadline-cut-is-not-rerun",
+      "then": "the entry is withdrawn after one attempt, not requeued, and its abandoned_reason names the limit in seconds and the background-or-split advice",
+      "when": "the run's end returns its entries the way _execute_run does for that outcome"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake ACP session whose prompt answers 3 s after it is sent, and a blocking question asked through the real agent ask route by the run's credential, with its wait open",
+      "how_to_check": "hub/tests/test_the_turn_clock_counts_work.py (written first, failing on HEAD)",
+      "key": "question-pauses",
+      "requirement": "clock-pauses-for-operator",
+      "then": "the turn completes, not failed; with no question open the same turn fails at 1 s; and once the question is answered through the operator route the clock runs again",
+      "when": "run_turn is called with turn_timeout=1 for that run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake ACP session that sends a permission request judged Ask me, and a request_approval that answers after 3 s",
+      "how_to_check": "hub/tests/test_the_turn_clock_counts_work.py (written first, failing on HEAD)",
+      "key": "card-pauses",
+      "requirement": "clock-pauses-for-operator",
+      "then": "the turn completes, not failed at 1 s",
+      "when": "run_turn is called with turn_timeout=1"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub with a Copilot agent (claude-haiku-4.5, real Copilot CLI) whose question wait is 600 s",
+      "how_to_check": "scripts/drive/c1019_copilot_s4.py ask and scripts/drive/c1019_copilot_s3.py, re-run on a scratch Hub; 2 Copilot turns",
+      "key": "drive",
+      "requirement": "clock-pauses-for-operator",
+      "then": "ask: the turn survives past 600 s on the open card, the answer reaches the same run, there is one question and one run, and it completes. s3: the 700 s command's turn fails at 600 s and its entry is withdrawn at once with the limit named. One run, no re-delivery, and the reason is visible on the agent's last-attempt text.",
+      "when": "ask: the agent asks at once and the operator answers about 620 s later. s3: the agent is told to run a 700 s command and wait for it."
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "675fecb7a5cf2d672e26abe399b1ee88b5141dffe840ef608bd8ceb90ce1fcb6",
+      "FR-2": "00105bb2b5868d78bc5f8fe8477f35007edbbb7847abadb11dd4aec2c9b2fb94"
+    },
+    "high_water": 2,
+    "requirements": {
+      "clock-pauses-for-operator": "FR-1",
+      "deadline-cut-is-not-rerun": "FR-2"
+    },
+    "retired": {}
+  },
+  "design": "Tier 1. No migration, no settings change.\nD1. The run's operator waits are tracked in memory, in a new module hub/hub/run_waits.py: begin(run_id, key, until), end(run_id, key) and paused(run_id, now). This is enough because the run and its clock live in this process, and a Hub restart ends both. The ask route that stamps wait_expires_at (api/v1/agent_actions.py, around line 812) begins one wait per blocking question, until = wait_expires_at. Answer, decline, the wait-ended report and the run's end each end it. Copilot's answer_permission brackets request_approval with a begin and an end, until = now + the agent's permission wait. A wait that leaks is harmless: paused() never counts past its until.\nD2. _send_and_wait's poll loop (copilot_acp.py:2988) moves the shared deadline forward by each poll interval during which paused() is true, so refusal continuations keep one budget for work.\nD3. A deadline cut sets error_kind turn_timeout, and UNRETRYABLE_ERROR_KINDS (copilot_acp.py:980) gains it. return_run_entries' withdrawal reason for turn_timeout names the limit and the advice. Other unretryable kinds keep today's text.",
+  "evidence": {
+    "checked": [
+      "copilot_acp.py:3012 is the only place the deadline failure is written, and it carries no error_kind",
+      "copilot_acp.py:3189 maps error_kind to retryable=False through UNRETRYABLE_ERROR_KINDS",
+      "inbound_queue.py:401 already withdraws a retryable=False entry after one attempt",
+      "run_task_binding.record_wait_ended and the run-end sweep (run_divergence.py:987) only stamp an expired wait"
+    ],
+    "limits": [
+      "Codex is not drivable here",
+      "A 600 s drive step takes real minutes: the drive costs about 22 minutes and 2 premium requests"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F782 (A): a Copilot turn that reaches the fixed 600 s deadline (`copilot_acp._send_and_wait`, `copilot_acp.py:3012`) fails with no `error_kind`, so `inbound_queue.return_run_entries` (`inbound_queue.py:341`) treats it as a crash and re-delivers it unchanged, twice. The retry note only says an earlier attempt was cut off (`inbound_queue.py:224-227`), so the agent repeats the same long command. Measured: three runs, 30 min 14 s, three premium requests, then the entry was dropped and the operator got no reply. F783 (A): the same clock runs while `ask_user` waits for the operator. A 600 s question wait (`MAX_WAITING_SECONDS`, `api/v1/agents.py:2834`) cannot finish inside a 600 s turn. The run was killed 3 s before the question's own wait ended, the retry asked the same question again, and the operator's answer to the first card queued behind the retry. It reached the agent 9 min 38 s later. Ask me permission cards (`request_approval`, `copilot_acp.py:2585`) consume the same clock.",
+  "requirements": [
+    {
+      "key": "clock-pauses-for-operator",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F783: an ask the Hub allows to wait 600 s must fit inside a 600 s turn, and time the operator takes is not the agent's work.",
+      "statement": "A Copilot turn's deadline MUST NOT count time its run spends waiting on the operator: from a blocking ask_user question's ask until it is answered, declined or its wait ends, and never past its wait_expires_at; and while an Ask me permission card the run raised is open. The deadline MUST still bound the turn's own work, and every pause MUST end at the wait's own expiry."
+    },
+    {
+      "key": "deadline-cut-is-not-rerun",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F782: the same input re-sent after a deadline cut does the same long work and is cut again.",
+      "statement": "A Copilot turn that reaches its deadline MUST end failed with error_kind turn_timeout and retryable false. Its input MUST be withdrawn after that one attempt, not re-delivered, and the withdrawn entry's reason MUST name the limit in seconds and say to run long commands in the background or split the work. The run's error MUST state the limit."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Copilot turn deadline pauses while the run waits on the operator",
+      "a deadline cut is unretryable and withdrawn with a reason naming the limit"
+    ],
+    "non_goals": [
+      "A per-agent turn-limit setting (F782 expectation 2). It needs an agents column, which is a migration and so Tier 2. It stays open on F782 as its own follow-up.",
+      "Codex: it shares DEFAULT_TURN_TIMEOUT_SECONDS but cannot be driven on this machine.",
+      "Stamping wait_ended_at on a live question at run end. The Questions route already reads asker_waiting false once the asking run has ended (api/v1/questions.py:457), and a task-bound run's open question parks its task on purpose (run_divergence.py:964). With both requirements below, a deadline cut no longer re-asks.",
+      "F784, F785, F786 (separate queue items)"
+    ]
+  },
+  "summary": "A Copilot turn's 600 s deadline stops counting while the run waits on the operator (an ask_user question or an Ask me card), and a turn that still reaches the deadline is withdrawn at once with a reason that names the limit, instead of being run twice more unchanged (F782, F783).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Failing first: test_copilot_acp_run_turn (timeout kind), test_inbound_queue (withdrawn with the limit named), test_the_turn_clock_counts_work (question and card pause)",
+      "files": [
+        "hub/tests/test_copilot_acp_run_turn.py",
+        "hub/tests/test_inbound_queue.py",
+        "hub/tests/test_the_turn_clock_counts_work.py"
+      ],
+      "from": null,
+      "key": "test",
+      "requirements": [
+        "clock-pauses-for-operator",
+        "deadline-cut-is-not-rerun"
+      ],
+      "reviewer": null,
+      "title": "Acceptance tests, failing first"
+    },
+    {
+      "depends_on": [
+        "test"
+      ],
+      "description": "run_waits.py; agent_actions.py ask, questions.py answer and decline, wait-ended report and run end call end(); copilot_acp.py deadline pause, card bracket, turn_timeout kind; inbound_queue.py reason",
+      "files": [
+        "hub/hub/run_waits.py",
+        "hub/hub/copilot_acp.py",
+        "hub/hub/inbound_queue.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/api/v1/questions.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "clock-pauses-for-operator",
+        "deadline-cut-is-not-rerun"
+      ],
+      "reviewer": null,
+      "title": "Build"
+    },
+    {
+      "depends_on": [
+        "build"
+      ],
+      "description": "c1019_copilot_s4.py ask and c1019_copilot_s3.py on a scratch Hub, real Copilot, claude-haiku-4.5",
+      "files": [
+        "scripts/drive/c1019_copilot_s4.py",
+        "scripts/drive/c1019_copilot_s3.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "clock-pauses-for-operator",
+        "deadline-cut-is-not-rerun"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive"
+    }
+  ],
+  "title": "The turn clock counts work, not waiting"
+}

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-19-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F782-F783-spec",
-    "next_action": "Do queue item F782-F783-spec: a Tier 1 change on :8010 (proj-d85a82bf4216) covering F782 (Copilot's 600 s deadline re-delivers the turn) and F783 (the turn clock runs while ask_user waits). Read both findings in scripts/drive/FINDINGS.md and grep openspec/changes/ for them first. Write requirements, scenarios and the acceptance drive, then approve_anyway. Log it, update STATE, commit, push.",
+    "current": "F782-F783-impl",
+    "next_action": "Do queue item F782-F783-impl: build spec/changes/the-turn-clock-counts-work-not-waiting (spdoc-8cdbaa6d6f9f, approved on :8010) per its design D1-D3, each acceptance test failing first (test_copilot_acp_run_turn.py timeout kind, test_inbound_queue.py withdrawal reason, new test_the_turn_clock_counts_work.py question and card pause). Then drive c1019_copilot_s4.py ask and c1019_copilot_s3.py on a scratch Hub with real Copilot claude-haiku-4.5, set F782/F783 Status lines, fold the change, append a METRICS row. Log it, update STATE, commit, push.",
     "queue": [
         {
             "id": "trace-hub-wide-spec",
@@ -52,16 +52,16 @@
         },
         {
             "id": "F782-F783-spec",
-            "status": "open",
+            "status": "done",
             "title": "Tier 1: Copilot 600s deadline redelivery (A) and ask_user clock (A)",
-            "detail": "F782 re-delivers on deadline; F783 turn clock runs while ask_user waits. Short change doc on :8010, acceptance drive named.",
+            "detail": "Done iter 8: spec/changes/the-turn-clock-counts-work-not-waiting (spdoc-8cdbaa6d6f9f) approved anyway on :8010; FR-1 clock-pauses-for-operator, FR-2 deadline-cut-is-not-rerun; tasks test/build/drive created. Turn-limit setting scoped out (Tier 2).",
             "model": "opus"
         },
         {
             "id": "F782-F783-impl",
             "status": "open",
             "title": "Build F782+F783",
-            "detail": "Test-first at seam named by findings; drive.",
+            "detail": "Build spdoc-8cdbaa6d6f9f per its design D1-D3: run_waits.py registry; ask route begins, answer/decline/wait-ended/run-end end; copilot_acp deadline pause + card bracket + turn_timeout in UNRETRYABLE_ERROR_KINDS; inbound_queue reason naming the limit. Tests failing first (test_copilot_acp_run_turn, test_inbound_queue, new test_the_turn_clock_counts_work). Drive c1019_copilot_s4.py ask + c1019_copilot_s3.py on a scratch Hub (~22 min, 2 Copilot turns). Then fold + METRICS row.",
             "model": "opus"
         },
         {
