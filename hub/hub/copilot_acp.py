@@ -2544,7 +2544,9 @@ async def run_turn(
         facts = calls.get(call_id) if isinstance(call_id, str) else None
         if facts is not None and facts.subagent:
             return
-        if operator:
+        if operator and subject.get("card_status") == "expired":
+            reason = "nobody answered the approval card in time"
+        elif operator:
             reason = None
         elif no_channel:
             reason = "no operator channel was available to approve it"
@@ -2555,6 +2557,7 @@ async def run_turn(
             "label": subject.get("tool_name") or "a tool call",
             "reason": reason,
             "decided_by": "operator" if operator else "hub",
+            "card_expired": operator and subject.get("card_status") == "expired",
         }
 
     async def answer_permission(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -2969,13 +2972,28 @@ REFUSAL_CONTINUATIONS_PER_TURN = 1
 
 def refusal_continuation_text(refusal: Mapping[str, Any]) -> str:
     """The follow-up prompt, in the Hub's voice: the reason ACP's reject could not carry (F660
-    D3). An operator's refusal says "did not approve": the card cannot tell a Deny from expiry."""
+    D3). An operator's Deny says "did not approve"; a card nobody answered says that instead
+    (F784), and a path outside the workspace says every tool is refused on it (F785)."""
     label = refusal.get("label") or "a tool call"
+    if refusal.get("card_expired"):
+        return (
+            f"Nobody answered the operator's approval card for your last tool call ({label}) "
+            "in time, so it did not run. Do not ask for it again this turn. Continue without it, "
+            "or end your turn saying what you need approved."
+        )
     if refusal.get("decided_by") == "operator":
         head = f"The operator did not approve your last tool call ({label})."
-    else:
-        reason = str(refusal.get("reason") or "no reason was given").rstrip(". ")
-        head = f"The Hub refused your last tool call ({label}): {reason}."
+        return (
+            head + " It did not run. Continue the task another way, or call ask_user if you cannot."
+        )
+    reason = str(refusal.get("reason") or "no reason was given").rstrip(". ")
+    head = f"The Hub refused your last tool call ({label}): {reason}."
+    if "is outside your workspace" in reason:
+        return (
+            head + " It did not run. Any tool that reads or writes this path will be refused the "
+            "same way. Do not retry it. Continue without it, or end your turn saying what you "
+            "need from the operator."
+        )
     return head + " It did not run. Continue the task another way, or call ask_user if you cannot."
 
 
@@ -3028,11 +3046,12 @@ async def _send_and_wait(
             cancel_sent_at = state["cancel_sent_at"]
             if cancel_sent_at is not None and now - cancel_sent_at >= CANCEL_GRACE_SECONDS:
                 break
-            if now >= deadline:
+            if now >= deadline and not timed_out:
+                # The cancel is answered with the prompt's result, which carries the usage the
+                # ledger needs (F786): wait the grace a Stop waits, then cut.
                 timed_out = True
                 state["turn_timed_out"] = True
                 await send_cancel()
-                break
     finally:
         if not prompt_task.done():
             prompt_task.cancel()
@@ -3042,16 +3061,15 @@ async def _send_and_wait(
     #: The prompt result, read in one place; its `usage` goes to the ledger (D2, D3).
     prompt_result: Optional[Dict[str, Any]] = None
     failure: Optional[str] = None
-    if prompt_task.cancelled():
-        if timed_out:
-            failure = f"Copilot did not finish the turn within {int(turn_timeout)} s"
-    else:
+    if timed_out:
+        failure = f"Copilot did not finish the turn within {int(turn_timeout)} s"
+    if not prompt_task.cancelled():
         exc = prompt_task.exception()
         if isinstance(exc, (AppServerError, asyncio.TimeoutError, OSError)):
-            failure = str(exc) or type(exc).__name__
+            failure = failure or str(exc) or type(exc).__name__
         elif exc is not None:
             logger.warning("Copilot's prompt ended with an unexpected error", exc_info=exc)
-            failure = f"{type(exc).__name__}: {exc}"
+            failure = failure or f"{type(exc).__name__}: {exc}"
         else:
             prompt_result = prompt_task.result()
         # D8: a JSON-RPC error's structured quota fields count as a refusal; never its message.
@@ -3062,6 +3080,9 @@ async def _send_and_wait(
         # Cumulative within the process, so a follow-up's result replaces the first's (wpc1-d).
         with contextlib.suppress(Exception):
             ledger.observe_prompt_result(prompt_result.get("usage"))
+    if timed_out:
+        # A cut turn has no result: its `cancelled` stop reason must not read as a Stop (F786).
+        return None, failure
     return prompt_result, failure
 
 
@@ -3168,7 +3189,7 @@ async def _await_prompt(
             "info",
             # F698: the reason is what the operator needs too, not only the agent.
             f"Copilot ended the turn on a refused call ({facts['label']}): {facts['reason']}. "
-            "The Hub told it why and asked it to continue another way.",
+            "The Hub told it why and asked it to continue.",
             facts,
         )
         state["last_refusal"] = None

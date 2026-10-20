@@ -3955,6 +3955,8 @@ async def _await_operator_permission(
         if status_now == "allowed":
             return True
         if status_now in ("denied", "expired"):
+            # The bool cannot tell a Deny from nobody answering; the runner reads this (F784).
+            subject["card_status"] = status_now
             return False
 
     async with async_session_factory() as db:
@@ -3962,6 +3964,7 @@ async def _await_operator_permission(
         if row is not None and row.status == "pending":
             row.status = "expired"
             await db.commit()
+    subject["card_status"] = "expired"
     return False
 
 

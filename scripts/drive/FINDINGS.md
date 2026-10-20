@@ -37074,7 +37074,7 @@ Expected: time the run spends blocked on the operator (an open `ask_user`, a pen
 
 ## F784 (B) -- under Ask me, a card nobody answers ends a Copilot turn `completed` with no reply after 4 minutes: the expiry is told to the agent as "the operator did not approve", and its retry raises a second card for the same command
 
-**Status:** open 2026-10-19. Found in the Copilot stall drive (`scripts/drive/c1019_copilot_s4.py card`, scratch Hub :8110, real turn).
+**Status:** fixed 2026-10-20 (night iteration 11, Tier 0). `_await_operator_permission` now stamps `subject["card_status"]` (`expired`/`denied`) and `copilot_acp` records it on the refusal, so `refusal_continuation_text` says "Nobody answered the operator's approval card ... Do not ask for it again this turn ... end your turn saying what you need approved" and the notices carry "nobody answered the approval card in time" instead of "did not approve". A Deny keeps the old wording. Driven on scratch :8110 (`c1019_copilot_s4.py card`, real Copilot): one card (was two), expired after 120 s, and the turn ended with the agent's reply "I need approval to run `git log --oneline -3`..." (was no reply). The turn still reads `completed`: the hold-as-waiting-for-approval route stays unbuilt. Original report: open 2026-10-19. Found in the Copilot stall drive (`scripts/drive/c1019_copilot_s4.py card`, scratch Hub :8110, real turn).
 **Source:** drive
 **Theme:** Permissions & sandbox
 **Ready:** yes -- repro below.
@@ -37086,7 +37086,7 @@ Expected: an expired card is not a refusal. Either the turn ends as *waiting for
 
 ## F785 (B) -- the refusal continuation says "continue another way", and Haiku's other way is the same path through another tool: the judge refuses it again and the task turn ends with no reply
 
-**Status:** open 2026-10-19. Found in the Copilot stall drive (`scripts/drive/c1019_copilot_s2.py`, scratch Hub :8110, real turn).
+**Status:** fixed 2026-10-20 (night iteration 11, Tier 0). `refusal_continuation_text` for a Hub refusal whose reason is "is outside your workspace" says any tool on that path is refused the same way, not to retry it, and to end the turn saying what is needed from the operator. Driven on scratch :8110 (`c1019_copilot_s2.py`, real Copilot): one refusal, no second attempt through powershell, and the reply "I cannot access the file outside my workspace. Please provide the requirement ... or copy it into my workspace" (was no reply). One sample. Original report: open 2026-10-19. Found in the Copilot stall drive (`scripts/drive/c1019_copilot_s2.py`, scratch Hub :8110, real turn).
 **Source:** drive
 **Theme:** Permissions & sandbox
 **Ready:** yes -- repro below; behavioural, 1 of 1 (and F784's card case is the same shape).
@@ -37098,7 +37098,7 @@ Expected: when the refusal is a path outside the workspace, the continuation say
 
 ## F786 (C) -- a Copilot turn that hits the 600 s deadline (or is cut by a Hub restart) records no premium request, though its prompt was sent and billed
 
-**Status:** open 2026-10-19. Found in the Copilot stall drive (scratch Hub :8110).
+**Status:** fixed 2026-10-20 (night iteration 11, Tier 0). `_send_and_wait` no longer breaks at the deadline: it sends the cancel and waits `CANCEL_GRACE_SECONDS` for the cancelled prompt's result, as a Stop does, then returns it as a cut (no result, `turn_timeout`, so a cancelled stop reason never reads as a Stop). Driven on scratch :8110 (`c1019_copilot_s3.py`, 700 s command, real Copilot): the cut run `run-81e71b87bb6c` recorded `premium_requests` 0.33 (the five earlier cuts: NULL), withdrawn with the turn-limit reason. Original report: open 2026-10-19. Found in the Copilot stall drive (scratch Hub :8110).
 **Source:** drive
 **Theme:** Accounting & allowance
 **Ready:** yes -- repro below.

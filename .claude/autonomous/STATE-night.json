@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-19-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F784-F785-F786-impl",
-    "next_action": "Do queue item F784-F785-F786-impl (Tier 0 each, Copilot seam): F784 refusal_continuation_text and the closing notice tell an expired card (permission_requests.status expired) from a Deny; F785 a runtime refusal for a path outside the workspace says any tool on that path is refused the same way and not to retry it; F786 on the deadline, wait CANCEL_GRACE_SECONDS for the cancelled prompt result so its usage reaches the ledger. One test each failing first at the seam the finding names (copilot_acp), then drive on a scratch Hub with real Copilot claude-haiku-4.5 (c1019_copilot_s4.py card, c1019_copilot_s2.py, c1019_copilot_s3.py for the premium request). Do not run the full suite while a drive runs (F789). Set their Status lines, METRICS row, log, STATE, commit, push.",
+    "current": "F774-impl",
+    "next_action": "Do queue item F774-impl (Tier 0): session/sync must not delete an agent that holds a task and a live run; also data.mode=peer deleting all agents and losing runner/charter on re-sync. Read F774 in scripts/drive/FINDINGS.md for the repro. One test failing first at the seam the finding names (the sync route/service), fix, then drive on a scratch Hub (e2e.py hub-up <profile> <port>, a free port that is not 8000/8010) with a real Haiku run holding a task. Set the Status line, METRICS row, log, STATE, commit, push.",
     "queue": [
         {
             "id": "trace-hub-wide-spec",
@@ -66,9 +66,9 @@
         },
         {
             "id": "F784-F785-F786-impl",
-            "status": "open",
+            "status": "done",
             "title": "Copilot Ask-me unanswered card, refusal continuation text, deadline cut record (B,B,C; T0)",
-            "detail": "Group by Copilot seam; one test each failing first; drive."
+            "detail": "Done iter 11: card_status stamped on the subject (expired vs denied) and the continuation/notices say nobody answered; outside-workspace continuation says every tool is refused; deadline waits the Stop grace so the cut records its premium request. 9 tests, 4 failing first. Driven on :8110 with real Copilot (card, s2, s3: 0.33 recorded)."
         },
         {
             "id": "F774-impl",

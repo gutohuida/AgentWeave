@@ -140,3 +140,26 @@ async def test_a_copilot_card_stores_the_verdict_its_turn_worked_out(
         await await_background_runs()
 
     assert (await _cards())["Edit file"].workspace_verdict == verdict
+
+
+@pytest.mark.asyncio
+async def test_a_card_nobody_answers_says_it_expired_on_the_subject(app):
+    """F784: the bool the runner gets back cannot tell a Deny from nobody answering, so the
+    subject it handed in carries the card's last status."""
+    from hub.api.v1.agent_trigger import _await_operator_permission
+
+    subject: dict = {"tool_name": "powershell"}
+    allowed = await _await_operator_permission(
+        project_id="proj-test",
+        agent="cop",
+        run_id="run-f784",
+        method="session/request_permission",
+        subject=subject,
+        timeout_seconds=0.1,
+        label="a command",
+    )
+    assert allowed is False
+    assert subject["card_status"] == "expired"
+    async with async_session_factory() as db:
+        [row] = (await db.execute(select(PermissionRequest))).scalars().all()
+    assert row.status == "expired"

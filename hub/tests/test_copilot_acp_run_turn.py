@@ -4802,3 +4802,30 @@ class TestADeadlineCutIsNotRerun:
         assert "1 s" in outcome.error
         assert outcome.error_kind == "turn_timeout"
         assert outcome.retryable is False
+
+    async def test_the_cut_waits_for_the_cancelled_prompts_usage(self, monkeypatch):
+        """F786: the deadline sends the cancel and then waits the same grace a Stop does, so the
+        premium request the cancelled prompt still reports reaches the ledger."""
+        accounting = []
+        script = _new_with() + [
+            {"sleep": 2},
+            _checkpoint(5_000_000, 0.33),
+            {"response": {"stopReason": "cancelled", "usage": {"inputTokens": 10}}},
+        ]
+        _fake, _events, outcome = await _drive(
+            monkeypatch, script, turn_timeout=1, on_accounting=_collector(accounting)
+        )
+
+        assert outcome.status == "failed"
+        assert outcome.error_kind == "turn_timeout"
+        assert "1 s" in outcome.error
+        [sample] = accounting
+        assert sample.session_premium_requests_total == 0.33
+
+    async def test_a_prompt_that_never_answers_the_cancel_is_still_cut(self, monkeypatch):
+        monkeypatch.setattr(copilot_acp, "CANCEL_GRACE_SECONDS", 0.5)
+        script = _new_with() + [{"sleep": 60}]
+        _fake, _events, outcome = await _drive(monkeypatch, script, turn_timeout=1)
+
+        assert outcome.status == "failed"
+        assert outcome.error_kind == "turn_timeout"

@@ -286,6 +286,84 @@ async def test_with_no_operator_channel_the_refusal_is_the_hubs(monkeypatch):
     assert "operator did not approve" not in text
 
 
+async def test_an_expired_card_is_not_told_to_the_agent_as_a_refusal(monkeypatch):
+    """F784: nobody answering the Ask me card is not "the operator did not approve": the
+    continuation says so, and tells the agent not to raise the same card again."""
+
+    async def request_approval(method, subject):
+        subject["card_status"] = "expired"
+        return False
+
+    script = (
+        _new_with()
+        + _refused_root(command="echo hi")
+        + [END_TURN, _chunk("I need that command approved."), END_TURN]
+    )
+    fake, events, _outcome = await _drive(
+        monkeypatch, script, permission_mode="manual", request_approval=request_approval
+    )
+    [_first, continuation] = _prompts(fake)
+    text = _prompt_text(continuation)
+    assert "did not approve" not in text
+    assert "nobody answered" in text.lower()
+    assert "do not ask for it again" in text.lower()
+    assert "what you need approved" in text
+    (said,) = _diag(events, "copilot.refusal_continued")
+    assert "did not approve" not in said.payload["summary"]
+    assert "nobody answered" in said.payload["facts"]["reason"].lower()
+
+
+async def test_a_turn_that_ends_on_an_expired_card_says_nobody_answered(monkeypatch):
+    monkeypatch.setattr(copilot_acp, "REFUSAL_CONTINUATIONS_PER_TURN", 0, raising=False)
+
+    async def request_approval(method, subject):
+        subject["card_status"] = "expired"
+        return False
+
+    script = _new_with() + _refused_root(command="echo hi") + [END_TURN]
+    _fake, events, _outcome = await _drive(
+        monkeypatch, script, permission_mode="manual", request_approval=request_approval
+    )
+    (said,) = _diag(events, "copilot.turn_ended_on_refusal")
+    assert "did not approve" not in said.payload["summary"]
+    assert "nobody answered" in said.payload["summary"].lower()
+
+
+async def test_a_denied_card_still_names_the_operator(monkeypatch):
+    async def request_approval(method, subject):
+        subject["card_status"] = "denied"
+        return False
+
+    script = _new_with() + _refused_root(command="echo hi") + [END_TURN, _chunk("Ok."), END_TURN]
+    fake, _events, _outcome = await _drive(
+        monkeypatch, script, permission_mode="manual", request_approval=request_approval
+    )
+    [continuation] = _continuations(fake)
+    assert "The operator did not approve" in _prompt_text(continuation)
+
+
+def test_a_refusal_for_a_path_outside_the_workspace_says_every_tool_is_refused():
+    """F785: the judge judges the path, so another tool on it fails the same way."""
+    text = copilot_acp.refusal_continuation_text(
+        {
+            "label": "a command",
+            "decided_by": "hub",
+            "reason": "'C:\notes\a.txt' is outside your workspace",
+        }
+    )
+    assert "will be refused the same way" in text
+    assert "Do not retry" in text
+    assert "what you need from the operator" in text
+    assert "another way" not in text
+
+
+def test_another_hub_refusal_keeps_the_general_wording():
+    text = copilot_acp.refusal_continuation_text(
+        {"label": "a command", "decided_by": "hub", "reason": "Edit files allows changes inside"}
+    )
+    assert "Continue the task another way" in text
+
+
 # --- 1.4 / 1.5 / 1.16 what clears the record ---------------------------------------------------
 
 
@@ -548,6 +626,9 @@ async def test_a_continuation_that_fails_after_output_fails_the_run(monkeypatch)
 
 
 async def test_the_continuation_uses_the_remaining_deadline(monkeypatch):
+    # The cut waits the Stop grace for the cancelled prompt's usage (F786), so it is part of the
+    # bound: remaining deadline 0.4 s + grace 0.2 s, where a fresh deadline would be 1.0 s + grace.
+    monkeypatch.setattr(copilot_acp, "CANCEL_GRACE_SECONDS", 0.2)
     hang = asyncio.Event()
     script = _new_with() + [{"sleep": 0.6}] + _refused_root() + [END_TURN, {"hang": hang}]
     started = time.monotonic()
