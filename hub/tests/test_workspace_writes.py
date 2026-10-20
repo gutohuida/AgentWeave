@@ -76,7 +76,8 @@ def _imports_of(module: str) -> list:
     """Every `hub`/database module a fresh interpreter loads when it imports *module*.
 
     A subprocess, so nothing pytest already imported can mask a dependency. `hub` itself
-    always appears, because importing any submodule runs the package `__init__`.
+    always appears, because importing any submodule runs the package `__init__`, along with
+    whatever that `__init__` imports.
     """
     probe = "".join(
         (
@@ -275,8 +276,14 @@ def test_importing_the_module_pulls_in_no_other_hub_module_and_no_database():
     in `hub.model_catalog` and `hub.runner_events`, and pinning the set would make this test
     fail for a refactor that changes nothing about purity. What it may never pull in is a
     database.
+
+    The package `__init__`'s own imports (today `hub.version`) are measured as a baseline
+    rather than listed: they load for every submodule, so they say nothing about this one.
+    The baseline itself must stay off the database, or the exclusion would hide one.
     """
-    assert _imports_of("hub.workspace_writes") == ["hub", "hub.workspace_writes"]
+    package = _imports_of("hub")
+    assert all(module.startswith("hub") for module in package), package
+    assert _imports_of("hub.workspace_writes") == sorted(package + ["hub.workspace_writes"])
 
     parsing = _imports_of("hub.runner_parsing")
     assert all(module.startswith("hub") for module in parsing), parsing
