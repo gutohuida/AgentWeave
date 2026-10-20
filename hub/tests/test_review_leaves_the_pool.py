@@ -38,7 +38,7 @@ from hub.scheduler import (
     enter_selected_task,
 )
 from hub.task_transition_service import apply_transition
-from hub.task_transitions import TRANSITIONS, run_actor
+from hub.task_transitions import ACTOR_RUN, TRANSITIONS, is_allowed, run_actor
 
 from .review_evidence import record_review_evidence
 from .test_review_turn import _roster
@@ -144,8 +144,9 @@ async def test_a_review_verdict_is_reachable_only_from_under_review():
     is why entering the review at `under_review` is what makes the instruction true, rather than a
     wording change being enough.
     """
-    assert set(TRANSITIONS["completed"]) == {"under_review", "rejected"}
-    assert "revision_needed" not in TRANSITIONS["completed"]
+    assert set(TRANSITIONS["completed"]) == {"under_review", "revision_needed", "rejected"}
+    # F832 gave the operator a send-back from `completed`; an agent still has no verdict there.
+    assert not is_allowed("completed", "revision_needed", ACTOR_RUN)
     assert {"approved", "revision_needed"} <= set(TRANSITIONS["under_review"])
 
 

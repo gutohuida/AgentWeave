@@ -37822,7 +37822,7 @@ inbound_queue_entries (builder): "... how_to_check: time it with time.perf_count
 
 ## F832 (B) -- a refused Land tells the operator to "send the task back (revision_needed)", a move the Hub never offers the operator from `completed`; the one control that might, "Move to under review", is refused with "Land it"
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8190, real Haiku `builder` completing the task, Chromium against the served bundle: `scripts/drive/s1020_v_ui2.py`).
+**Status:** fixed 2026-10-21 night iteration 8 (Tier 0; the cleaner of the two expected options). `task_transitions.TRANSITIONS['completed']` gains `revision_needed` for the operator only (an agent still reaches a verdict through `under_review`), so the Land refusals' "send the task back (revision_needed)" now names a legal move, and the drawer menu (built from `/tasks/transitions/allowed`) offers it as "Move to Revision needed" with no UI change or bundle refresh. The send-back returns to the author (F495, asserted). Tests `hub/tests/test_operator_sends_completed_work_back.py` (failing before); `test_review_leaves_the_pool` updated to say agents have no verdict from `completed`. Drive: the real ASGI app and database through `PATCH /tasks/{id}` (labelled: not a scratch Hub, no Chromium); 159 tests across transitions, review and revision files pass. Not done: a dedicated "Send back" label in the drawer; the rejected-requirement refusal still quotes reviewer text (`REVIEWER_SENDS_BACK_REJECTED`) to the operator. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8190, real Haiku `builder`; `scripts/drive/s1020_v_ui2.py`).
 **Source:** drive
 **Theme:** Tasks
 **Ready:** yes

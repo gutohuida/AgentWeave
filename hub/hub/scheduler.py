@@ -938,8 +938,8 @@ async def enter_selected_task(
     noticing, and nothing on the board said anything was wrong.
 
     It also makes the reviewer's own instructions true. The turn context tells a reviewer to report
-    through `revision_needed`, and `TRANSITIONS` does not offer that edge from `completed` --
-    `completed` reaches only `under_review`. A reviewer that followed the instruction literally was
+    through `revision_needed`, and `TRANSITIONS` does not offer an agent that edge from `completed`
+    (F832 gave the operator one) -- an agent's `completed` reaches only `under_review`. A reviewer that followed the instruction literally was
     refused, and one that found the work correct had no legal exit at all; measured across this
     Hub's history, no flow-dispatched reviewer had ever recorded a transition. Entering the review
     at `under_review` puts both `approved` and `revision_needed` one legal edge away.
