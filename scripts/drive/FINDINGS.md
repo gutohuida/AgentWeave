@@ -37145,3 +37145,62 @@ Expected: a run's routine read (a GET that answered 2xx, was fast and emitted no
 Under CPU load, three of four first attempts (`run-331d557c454e`, `run-20bf26c760d4`, `run-2cb5fc049d43`) ended `failed` about 33-35 s after they started, before the prompt was sent. Each had `error = ''`, a `run_failed` event with `"error": ""`, `exit_code`, `method` and `stderr_tail` all null, and no agent output. The 33 s matches spawn plus `DEFAULT_REQUEST_TIMEOUT_SECONDS` (30 s, `codex_appserver.py`) on an ACP startup request: `ACPProcess.request` raises `asyncio.TimeoutError` from `asyncio.wait_for` (`copilot_acp.py`, `request`), and `str(asyncio.TimeoutError())` is `''`. The RPC executor's pre-spawn branch writes `run.error = run_secrets.scrub(run_id, str(exc))` (`hub/hub/api/v1/agent_trigger.py:4534`), and `_transport_failure_fields` broadcasts `"error": str(exc)` (`:2686`). The sibling Claude path at `:2920` already writes `str(exc) or type(exc).__name__`. Each failure also spent one of the entry's three delivery attempts, so a slow machine can lose an operator's message with nothing on screen saying why.
 
 Expected: a pre-prompt timeout fails with an error naming what timed out, for example "Copilot did not answer `initialize` within 30 s", by raising a `CopilotACPError`/`AppServerError` carrying `method` from `ACPProcess.request` on timeout. At the least, the error is never empty (`str(exc) or type(exc).__name__` in both places). Failing test: a fake ACP process that never answers `initialize`, with a 0.1 s request timeout, makes the executor record a run whose `error` is non-empty and names the method. Seam: Runs (Copilot ACP startup) x Runs (RPC executor failure record).
+
+## F790 (B) -- a run's `aw.permission_wait` span stores the tool call's arguments unredacted, while the same call's `execute_tool` span redacts them; the download and the OTLP push carry the raw value
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141, `scripts/drive/s1020_traces.py`).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+Repro: a Claude Haiku agent under `manual` (`POST /projects/{p}/agent/trigger` with `overrides.permission_mode=manual`), told to run `py -3.11 -c "print('build', 'Q7r8S9t0U1v2W3x4Y5z6A7b8C9d0E1f2G3h4')"`; the operator approves the card (`POST /permission-requests/{id}/decide {"allow": true}`). Then `GET /projects/{p}/traces/by-run/run-80339e599c95`:
+- `execute_tool PowerShell`: `gen_ai.tool.call.arguments` = `{"command": "py -3.11 -c \"print('build', '<redacted>')\"", ...}`, and the result `build <redacted>`.
+- `aw.permission_wait PowerShell` (same `gen_ai.tool.call.id` toolu_011bYh7R...): `gen_ai.tool.call.arguments` = `{"command": "py -3.11 -c \"print('build', 'Q7r8S9t0U1v2W3x4Y5z6A7b8C9d0E1f2G3h4')\"", ...}`.
+- The app's **Download OTLP JSON** file (Settings -> Traces) contains the 36-character value: `"Q7r8S9t0U1v2W3x4Y5z6A7b8C9d0E1f2G3h4" in file` -> True. The span detail shows it behind the collapsed "Content gen_ai.tool.call.arguments 130 chars".
+
+Cause: the `execute_tool` span copies the tool event's payload, which `runner_events.redact_secrets` already scrubbed (the high-entropy catch-all included). `traces.finish_run` builds the permission span from `PermissionRequest.tool_input` with `traces.redact` only (`hub/hub/traces.py:631`: `redact(run_id, request.tool_input or {})`), i.e. registered values plus named patterns, so a GitHub token, an AWS secret or any other unnamed credential passes. Requirement `trace-content-is-redacted` (FR-3 of `a-run-is-a-trace-you-can-export`): "Every string a span stores or exports SHALL first pass the redaction recorded output passes". The tool event is that recorded output, so the two spans of one call should agree.
+
+Expected: the permission span's arguments pass the same redaction as the tool event's input (`runner_events.redact_secrets`, then `traces.redact`). Failing test at the seam: in `hub/tests/test_a_run_is_one_trace.py` (the permission-wait test near line 144), give the request a `tool_input` holding a 40-character mixed-case token and assert the `aw.permission_wait` span's `gen_ai.tool.call.arguments` does not contain it. The `permission_requests` row keeps the raw input (the card needs it); only the span changes. Seam: Traces x Permissions & sandbox.
+
+## F791 (C) -- every run's trace shows two routine `git rev-parse --verify --quiet MERGE_HEAD` probes as red error spans
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+Repro: any completed Claude turn on a clean project (four drove here: run-82a990b9d101, run-80339e599c95, run-e29790a7fee5, run-0f1b472b91c7). `GET /traces/by-run/{run}` lists four `aw.command` spans at the end of every one; the first two are `git -c core.quotepath=off rev-parse --verify --quiet MERGE_HEAD`, `process.exit.code` 1, `status` `error`, `status_message` "exit code 1". In the app's trace drawer, both rows have `data-status="error"` and render in red (`TraceWaterfall.tsx:109`), in a run whose root reads `ok`. Exit 1 from `--verify --quiet` is the answer "no merge in progress": that is the normal case, not a failure. An operator who opens any trace to look for what went wrong is first shown two false errors.
+
+Cause: `traces.run()` -> `exited(span, result.returncode)` treats every non-zero exit as an error (`hub/hub/traces.py:1055`); the caller that probes `MERGE_HEAD` knows that 1 means "absent".
+
+Expected: a probe whose non-zero exit is an answer records its exit code without error status. For example, `exited(span, code, expected=(0, 1))`, or the probe passes `ok_codes` through `traces.run`. The callers are `hub/hub/worktrees.py:554` and `:560`, `_run_git(worktree, "rev-parse", "--verify", "--quiet", "MERGE_HEAD", check=False)`; their `check=False` already says that a non-zero exit is an answer there. Failing test: the run-finish path on a clean checkout leaves no `aw.command` span with `status == "error"` (`hub/tests/test_trace_seams.py`). Seam: Traces x Worktrees & integration (the end-of-run checkout probe).
+
+## F792 (C) -- a stopped run's trace reads `ok`, and its stop is recorded as an `aw.status.completed` event; the trace list and drawer cannot tell a stopped turn from a completed one
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+Repro: trigger a turn that runs a 150 s `time.sleep` loop under `workspace`; once its tool call is recorded, `POST /projects/{p}/agent/tracer/stop` -> 200 `"status": "stopping"`. The run ends `stopped` (exit 2), and the conversation shows "Turn stopped · 09:29". `GET /traces/by-run/run-e29790a7fee5`: root `status` `ok`, `status_message` null; root events `run_started, context_warning, run_stopped, aw.status.completed` (summary "Run stopped (exit 2)."). The `execute_tool PowerShell` span is correctly `error` "PowerShell interrupted". In the app, the trace drawer's header reads "ok tracer ...", and Settings -> Traces lists the run with no badge, the same as a completed run. Only the attribute `aw.run.status = stopped` says otherwise.
+
+Cause: `traces.finish_run` sets `error` only for `run.status == "failed"` and `ok` for everything else (`hub/hub/traces.py:710-714`), so `stopped`, `interrupted` and `abandoned` all read as success. The status-event name is the runner phase (`aw.status.{phase}`, `:434`), and the stop's status line is written with phase `completed`.
+
+Expected: a run that did not complete is not `ok`. Leave the status `unset` with `status_message` "stopped by the operator" (OTel keeps `error` for failures), and let the drawer header and the list show the run's own status (`aw.run.status`), so a stopped turn reads "stopped" in both places. Failing test: `finish_run` on a run with status `stopped` leaves the root not `ok` and with a message naming the stop. Seam: Traces x Runs (stop).
+
+## F793 (C) -- after the OTLP collector was down, a fixed endpoint receives nothing for up to 300 s while Settings -> Traces shows no error and "Never"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+Repro: `PUT /projects/{p}/traces/settings {"otlp_endpoint": "http://127.0.0.1:9", "export_enabled": true}` (nothing listens) and leave it for about 12 minutes of normal operator writes. Settings then reads `last_error` "URLError: ... actively refused it", which is correct and legible. Now fix it the way the operator would: start a collector (`scripts/drive/otlp_receiver.py 4419`) and `PUT {"otlp_endpoint": "http://127.0.0.1:4419"}`, then disable and re-enable export. The response clears `last_error`, `last_export_at` stays null, and the screen reads "Never · 0 spans sent" with no error. A write made right after it reached the collector **176 s later**, measured by polling `GET /traces/settings` every 5 s. Nothing in between says that the Hub is waiting.
+
+Cause: `trace_export` keeps per-project `_failures` / `_retry_after` in process memory, with backoff `push_interval() * 2**failures` capped at `MAX_BACKOFF_SECONDS = 300` (`hub/hub/trace_export.py:136-139`). `update_trace_settings` (`hub/hub/api/v1/traces.py`) resets `last_error` and `enabled_at` but not the backoff, so the old endpoint's failures delay the new endpoint.
+
+Expected: saving the endpoint, its headers or the enable flag resets that project's backoff (`trace_export._failures.pop(p)`, `_retry_after.pop(p)`), so the next pass, within 5 s, tries the new settings. Failing test: after `push_project` fails three times against a dead URL, a settings PUT followed by `push_once()` posts to the new URL at once. Seam: Traces (settings route) x Traces (pusher).

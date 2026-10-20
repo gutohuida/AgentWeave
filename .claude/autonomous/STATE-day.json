@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T17:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-10-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-traces-sweep",
-    "next_action": "Run 'sweep-traces-sweep': Traces x Runs x Logs, events & SSE. NEW first: a turn's trace button and the task story's (GET /traces/by-run/{run_id}), Settings -> Traces (list, kind filter, one trace, OTLP export, clear, settings); every event in a trace, background work and commands as traces, warnings on the trace; secret redaction in spans. Then Runs (stop, MCP status, aw-tool fallback) and Logs/SSE (/events/history, stream_gap, F419).",
+    "current": "sweep-reach-sweep",
+    "next_action": "Run 'sweep-reach-sweep': Permissions & sandbox x Capability plane x Agent environment. NEW first: project default_permission_mode, project + agent reach grants (read/readwrite roots, {temp}/{project}, hosts; agent's replace the project's), Claude and Copilot judged alike, Copilot spec turn under Full access, the turn context stating the run's reach, the agent page's granted reach (check the bundle carries the Reach UI). Then allow_agent_jobs refusal->question->grant, and what a Hub-launched agent sees (F453/F454). Bind agents to claude-haiku-4-5-20251001 (the bare 'claude-haiku-4-5' is a 400; the alias 'haiku' now means claude-haiku-5-5).",
     "queue": [
         {
             "id": "plan-review",
@@ -29,7 +29,7 @@
         },
         {
             "id": "sweep-traces-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Traces x Runs x Logs, events & SSE",
             "detail": "NEW first: a turn's trace button and the task story's (GET /traces/by-run/{run_id}), Settings -> Traces (list, kind filter, one trace, OTLP export, clear, settings); every event in a trace, background work and commands as traces, warnings on the trace; secret redaction in spans. Then Runs (stop, MCP status, aw-tool fallback) and Logs/SSE (/events/history, stream_gap, F419)."
         },
