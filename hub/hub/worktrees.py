@@ -38,6 +38,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -105,10 +106,12 @@ class ReviewCommitUnavailableError(RuntimeError):
 
 def _run_git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
     result = traces.run(
-        ["git", *args],
+        ["git", "-c", "core.quotepath=off", *args],
         cwd=cwd,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=_GIT_TIMEOUT_SECONDS,
         **no_console_kwargs(),
     )
@@ -1413,6 +1416,32 @@ def files_changed_in(worktree: Path, sha: str) -> List[str]:
     garbage-collected is wrong, but a checkpoint that fails to exist because of it is worse.
     """
     result = _run_git(worktree, "show", "--pretty=format:", "--name-only", sha, check=False)
+    if result.returncode != 0:
+        return []
+    return sorted({line.strip() for line in result.stdout.splitlines() if line.strip()})
+
+
+def files_committed_between(
+    repo_root: Path, branch: str, since: datetime, until: Optional[datetime]
+) -> List[str]:
+    """Paths touched by commits on *branch* made from *since* to *until*, sorted (F775).
+
+    The agent's own commits: one told to commit leaves a clean tree, so the Hub's end-of-turn
+    snapshot finds nothing and records no sha, and only the branch remembers the work. Read from
+    *repo_root* for the reason `checkpoints._files_from_runs` gives (shared object database, and
+    refs, so a removed checkout still answers). Empty when the branch is gone or unreadable.
+
+    Commit time is the only link between a commit and a turn, so two turns sharing one branch
+    at once each see the other's commits: a union is the right answer for a checkpoint, an exact
+    attribution is not claimed.
+    """
+    args = ["log", branch, "--no-merges", "--pretty=format:", "--name-only"]
+    # Whole seconds: git compares committer dates at that grain, and a commit made in the
+    # second a turn began is the turn's.
+    args.append("--since=" + since.astimezone(timezone.utc).replace(microsecond=0).isoformat())
+    if until is not None:
+        args.append("--until=" + until.astimezone(timezone.utc).isoformat())
+    result = _run_git(repo_root, *args, "--", check=False)
     if result.returncode != 0:
         return []
     return sorted({line.strip() for line in result.stdout.splitlines() if line.strip()})

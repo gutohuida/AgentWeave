@@ -729,10 +729,14 @@ async def capture_footprint(
 def _git(root: Path, *args: str) -> Optional[str]:
     try:
         result = traces.run(
-            ["git", *args],
+            # UTF-8 and unquoted paths, whatever the locale: a cp1252 decode of git's bytes was a 500
+            # on some content and mojibake on the rest, and a quoted path matched no header (F760).
+            ["git", "-c", "core.quotepath=off", *args],
             cwd=str(root),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
             check=False,
             **no_console_kwargs(),

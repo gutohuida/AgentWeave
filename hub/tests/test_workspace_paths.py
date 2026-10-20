@@ -103,3 +103,15 @@ async def test_workspace_paths_endpoint_returns_empty_for_non_git_cwd(
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_a_non_ascii_file_name_is_listed_as_itself_not_git_quoted(repo):
+    """F777: `git ls-files` quotes `café.md` as `"caf\303\251.md"` unless `core.quotepath` is
+    off, and decodes it with the locale's codepage (cp1252 on this machine) unless told UTF-8.
+    The composer's `@` picker then offered a string no file is called."""
+    (repo / "notes café.md").write_text("accent\n", encoding="utf-8")
+
+    paths = list_workspace_paths(repo)
+
+    assert "notes café.md" in paths
+    assert not any(path.startswith('"') for path in paths)

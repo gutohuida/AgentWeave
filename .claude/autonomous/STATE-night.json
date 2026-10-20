@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T07:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-19-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F775-F777-impl",
-    "next_action": "Do queue item F775-F777-impl (Tier 0 each): F775 checkpoint files_changed must include the agent's own commits (hub/hub/checkpoints.py _files_from_runs reads only runs.snapshot_commit_sha); F777 non-ASCII filename git-quoted in the @ picker (hub/hub/workspace_paths.py: core.quotepath=off, UTF-8 decode); consider fixing F760 (requirement_evidence._git decoding) in the same stroke. Read each finding in scripts/drive/FINDINGS.md for the repro. Test first at the seam, fix, drive on a scratch Hub (e2e.py hub-up <profile> <port>, free port not 8000/8010). Set Status lines, METRICS row, log, STATE, commit, push. Run the full hub suite to a FILE (py -3.11 -m pytest tests -q -rf > /tmp/x.out), it takes ~50 minutes: run it in the background early.",
+    "current": "F759-F761-impl",
+    "next_action": "Do queue item F759-F761-impl (Tier 0 each): F759 evidence: drift candidate on overturned evidence; F761 a piece that names no commit shows the HEAD commit as its work (hub/hub/requirement_evidence.py work_diff: the commit^ fallback is right only for a commit the piece named; answer no files and a reason otherwise). Read each finding in scripts/drive/FINDINGS.md for the repro. Test first at the seam, fix, drive on a scratch Hub (e2e.py hub-up <profile> <port>, free port not 8000/8010; the evidence drive is scripts/drive/s1019_evidence.py). Set Status lines, METRICS row, log, STATE, commit, push. Run the full hub suite to a FILE (py -3.11 -m pytest tests -q -rf > /tmp/x.out, from hub/), ~1 hour: start it in the background early.",
     "queue": [
         {
             "id": "trace-hub-wide-spec",
@@ -78,9 +78,9 @@
         },
         {
             "id": "F775-F777-impl",
-            "status": "open",
+            "status": "done",
             "title": "checkpoint files_changed when agent committed (B); non-ASCII filename git-quoted in picker (B)",
-            "detail": "F777 sibling of F760 (git output decoding). Consider fixing F760 with it."
+            "detail": "Done iter 13 together with F760 (same git-decoding fix): UTF-8 + core.quotepath=off in three git callers; files_committed_between for checkpoints. 4 tests failing first; driven on :8130 (d1020_f775_f777_git_reads.py)."
         },
         {
             "id": "F759-F761-impl",
@@ -90,9 +90,9 @@
         },
         {
             "id": "F760-impl",
-            "status": "open",
+            "status": "done",
             "title": "Evidence diff reads git output as cp1252: 500 (B,T0)",
-            "detail": "Skip if fixed with F777."
+            "detail": "Done iter 13 with F775/F777."
         },
         {
             "id": "F767-F769-impl",

@@ -228,7 +228,7 @@ async def runs_to_cover(db, conversation_id: str, anchor: Optional[Checkpoint]) 
 def _files_from_runs(runs: List[Run], repo_root: Optional[Path]) -> List[str]:
     """Every path the covered turns committed, deduplicated.
 
-    Reads the per-run auto-snapshot SHAs. Before those were recorded (`Run.snapshot_commit_sha`,
+    Reads the per-run auto-snapshot SHAs and the turn's own commits (F775). Before those were recorded (`Run.snapshot_commit_sha`,
     migration 0043) there was nothing to read, so a conversation whose turns predate it reports
     no changed files rather than a plausible guess.
 
@@ -244,15 +244,43 @@ def _files_from_runs(runs: List[Run], repo_root: Optional[Path]) -> List[str]:
         return []
     paths: set = set()
     for run in runs:
-        if not run.snapshot_commit_sha:
+        if run.snapshot_commit_sha:
+            try:
+                paths.update(worktrees.files_changed_in(repo_root, run.snapshot_commit_sha))
+            except worktrees.GitCommandError:
+                logger.warning(
+                    "could not read files for snapshot %s", run.snapshot_commit_sha, exc_info=True
+                )
+        branch = _branch_of(run)
+        if branch is None:
             continue
         try:
-            paths.update(worktrees.files_changed_in(repo_root, run.snapshot_commit_sha))
-        except worktrees.GitCommandError:
-            logger.warning(
-                "could not read files for snapshot %s", run.snapshot_commit_sha, exc_info=True
+            paths.update(
+                worktrees.files_committed_between(repo_root, branch, run.started_at, run.ended_at)
             )
+        except worktrees.GitCommandError:
+            logger.warning("could not read commits on %s for run %s", branch, run.id, exc_info=True)
     return sorted(paths)
+
+
+def _branch_of(run: Run) -> Optional[str]:
+    """The branch whose commits are this turn's own work, or None when it has none to read (F775).
+
+    The checkout's checked-out branch when it still exists (a detached HEAD is a review, which
+    writes nothing). Once the checkout is released, the branch is rebuilt from what the run was
+    bound to: its task's branch, else its agent's.
+    """
+    if run.workspace_dir:
+        checkout = Path(run.workspace_dir)
+        if checkout.is_dir():
+            head = worktrees._run_git(
+                checkout, "symbolic-ref", "--short", "-q", "HEAD", check=False
+            )
+            name = head.stdout.strip() if head.returncode == 0 else ""
+            return name or None
+    if run.task_id:
+        return worktrees.task_branch_name(run.task_id)
+    return worktrees.branch_name(run.agent)
 
 
 async def _tasks_for(db, project_id: str, agent: str) -> Dict[str, Any]:

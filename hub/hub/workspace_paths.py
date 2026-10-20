@@ -29,10 +29,22 @@ def list_workspace_paths(repo_root: Path) -> List[str]:
         return []
     try:
         result = subprocess.run(
-            ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+            # quotepath off and UTF-8 out: git otherwise writes `café.md` as `"caf\303\251.md"` and
+            # this machine's locale codepage would decode the rest of it (F777).
+            [
+                "git",
+                "-c",
+                "core.quotepath=off",
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+            ],
             cwd=repo_root,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=_GIT_TIMEOUT_SECONDS,
             **no_console_kwargs(),
         )

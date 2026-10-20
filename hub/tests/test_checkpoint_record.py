@@ -896,3 +896,60 @@ async def test_an_unresolvable_project_yields_a_checkpoint_with_no_files_not_a_f
 
     assert checkpoint is not None
     assert checkpoint.files_changed == []
+
+
+def _commit_on(repo, branch, name, *, when=None):
+    """Commit *name* on *branch* (created from HEAD), optionally at a fixed committer date."""
+    import os
+
+    env = {**os.environ}
+    if when is not None:
+        env["GIT_COMMITTER_DATE"] = env["GIT_AUTHOR_DATE"] = when.isoformat()
+    existing = subprocess.run(
+        ["git", "rev-parse", "--verify", branch], cwd=repo, capture_output=True
+    ).returncode
+    (
+        _git(repo, "checkout", "-q", branch)
+        if existing == 0
+        else _git(repo, "checkout", "-q", "-b", branch)
+    )
+    (repo / name).write_text(name)
+    _git(repo, "add", "-A")
+    subprocess.run(
+        ["git", "commit", "-q", "-m", name], cwd=repo, check=True, capture_output=True, env=env
+    )
+
+
+@pytest.mark.asyncio
+async def test_files_changed_includes_what_the_agent_committed_itself(app, tmp_path):
+    """F775: an agent told to commit leaves a clean tree, so `snapshot_commit_sha` is NULL for
+    its turn ("the turn changed nothing") and the checkpoint said "No files recorded as
+    changed". The turn's own commits on its branch, in its time window, are changes too."""
+    from datetime import datetime, timedelta, timezone
+
+    from hub.worktrees import branch_name
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@t")
+    _git(repo, "config", "user.name", "t")
+    (repo / "base.txt").write_text("base")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+
+    now = datetime.now(timezone.utc)
+    # Before the turn began: not this turn's work.
+    _commit_on(repo, branch_name(AGENT), "earlier.txt", when=now - timedelta(hours=3))
+    _commit_on(repo, branch_name(AGENT), "during.txt")
+    _git(repo, "checkout", "-q", "main")
+
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        run = await _run(db, "run-a", sha=None, started=now - timedelta(minutes=5))
+        run.ended_at = now + timedelta(minutes=5)
+        await db.commit()
+
+        envelope = await compute_envelope(db, conversation, repo_root=Path(repo))
+
+    assert envelope.files_changed == ["during.txt"]

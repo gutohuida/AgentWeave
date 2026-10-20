@@ -36783,7 +36783,7 @@ FR-3 (sketch rigor) has one operator piece with `locator: todo/other.py` (accept
 
 ## F760 (B) -- the evidence diff reads git output as cp1252: a 500 on some non-ASCII content, mojibake on the rest, and non-ASCII paths quoted with no patch
 
-**Status:** open 2026-10-19. Found in the evidence sweep (`scripts/drive/s1019_evidence.py`, scratch Hub :8150), seen in a browser.
+**Status:** fixed 2026-10-20 (night iteration 13, Tier 0). `requirement_evidence._git` reads git as UTF-8 (`errors="replace"`) with `core.quotepath=off`, so content with any byte is read, not a 500, and a non-ASCII path is named as itself with its patch. `worktrees._run_git` got the same two arguments. Tests: `hub/tests/test_evidence_diff_reads_utf8.py` (both failed first). Driven on scratch :8130 (`d1020_f775_f777_git_reads.py`): operator evidence on a commit with `todo/ñandú.py` containing `Ángel → café` -> diff 200, the path as itself, `+name = "Ángel → café"` in the patch. Original report: open 2026-10-19. Found in the evidence sweep (`scripts/drive/s1019_evidence.py`, scratch Hub :8150), seen in a browser.
 **Source:** drive
 **Theme:** Requirements & evidence
 **Ready:** yes -- three repros below, one seam.
@@ -36980,7 +36980,7 @@ Expected: deleting an agent through sync is refused, 409 with the same shape as 
 
 ## F775 (B) -- a checkpoint says "No files recorded as changed" when the agent committed its own work, because `files_changed` reads only the Hub's auto-snapshot commit
 
-**Status:** open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger_p2.py`, `_p3.py`).
+**Status:** fixed 2026-10-20 (night iteration 13, Tier 0). `checkpoints._files_from_runs` also reads the turn's own commits: `worktrees.files_committed_between(repo_root, branch, started_at, ended_at)`, the branch being the checkout's checked-out one while it exists (a detached review writes nothing), else the task's branch, else the agent's. Commit time is the only link to a turn, so two turns sharing one branch at once each see the other's commits. Test in `test_checkpoint_record.py` (failed first; a commit three hours before the turn is excluded). Driven on scratch :8130, real Haiku turn that committed `hello.txt` with a clean tree and `snapshot_commit_sha` NULL: the checkpoint's `files_changed` is `["hello.txt"]`. Original report: open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger_p2.py`, `_p3.py`).
 **Source:** drive
 **Theme:** Checkpoints
 **Ready:** yes -- repro below.
@@ -37004,7 +37004,7 @@ Expected: a non-review run whose task is in `completed`/`under_review` at its en
 
 ## F777 (B) -- a non-ASCII file name reaches the `@` picker git-quoted (`"notes caf\303\251.md"`), and neither that string nor the real name can be read
 
-**Status:** open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger.py`, `_ui.py`).
+**Status:** fixed 2026-10-20 (night iteration 13, Tier 0). `list_workspace_paths` runs `git -c core.quotepath=off ls-files` and decodes UTF-8, so the picker lists `notes café.md` as itself. Test beside the existing path tests (failed first). Driven on scratch :8130: `/workspace/paths` listed `notes café.md`; `/workspace/file` reads it. Original report: open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger.py`, `_ui.py`).
 **Source:** drive
 **Theme:** Conversations & composer
 **Ready:** yes -- repro below.
