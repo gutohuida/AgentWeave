@@ -26,15 +26,29 @@ export function isWaitedOn(question: Question): boolean {
  *
  * Ordering is `batch_index` then `created_at` — a total order, rather than whatever order the API
  * happened to return.
+ *
+ * `conversationId` scopes the tray to the conversation on screen (F804): a question asked in
+ * conversation A is not B's to answer, and used to take over B's composer. A question that names no
+ * conversation stays visible everywhere. Left `undefined`, nothing is scoped; `null` is the
+ * new-conversation surface, which has no conversation of its own to show a question from.
  */
-export function activeQuestionFor(questions: Question[], agent: string): ActiveQuestion {
+export function activeQuestionFor(
+  questions: Question[],
+  agent: string,
+  conversationId?: string | null,
+): ActiveQuestion {
   const pending = questions
     // Only a question a run asked belongs to this agent's tray. One no run asked (`null`; absent
     // means a Hub too old to say) would own the composer, and take every message the operator types
     // to this agent as its answer: the Hub's record of a refused capability is exactly that, and it
     // is answered from the Questions destination (`a-refused-capability-reaches-the-operator`).
     .filter(
-      (q) => q.from_agent === agent && !q.answered && !q.declined && q.created_by_run_id !== null,
+      (q) =>
+        q.from_agent === agent &&
+        !q.answered &&
+        !q.declined &&
+        q.created_by_run_id !== null &&
+        (conversationId === undefined || !q.conversation_id || q.conversation_id === conversationId),
     )
     .sort((a, b) => {
       // Questions someone is actually waiting on come first.

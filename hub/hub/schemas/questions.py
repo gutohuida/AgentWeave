@@ -77,6 +77,11 @@ class QuestionResponse(BaseModel):
     # (`a-refused-capability-reaches-the-operator`). An agent's conversation tray and composer
     # carry only questions a run asked; the rest are answered from the Questions destination.
     created_by_run_id: Optional[str] = Field(default=None, max_length=128)
+    # The conversation the asking run belonged to, or `None` (an operator-posted question, a Hub
+    # record, a run in no conversation). A conversation's tray shows only the questions asked in it
+    # (F804); without this the tray could not tell, and a question asked in one conversation took
+    # over the composer of every other conversation with the same agent.
+    conversation_id: Optional[str] = Field(default=None, max_length=128)
     # When the wait this question started runs out, stamped by the Hub from its own inputs at
     # `api/v1/agent_actions.py::_record_the_wait_and_park` and never told to the Hub by anybody.
     #

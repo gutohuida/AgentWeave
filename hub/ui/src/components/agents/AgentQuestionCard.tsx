@@ -7,6 +7,8 @@ interface AgentQuestionCardProps {
   questions: Question[]
   /** Only this agent's questions; the card sits inside one conversation. */
   agent: string
+  /** The conversation on screen; only questions asked in it (or in none) are shown. */
+  conversationId?: string | null
   /** Labels chosen so far. Owned by the panel's parent, because the composer's send button is
    *  what confirms them — there is no submit control in here. */
   selected: string[]
@@ -32,6 +34,7 @@ interface AgentQuestionCardProps {
 export function AgentQuestionCard({
   questions,
   agent,
+  conversationId,
   selected,
   onToggle,
   isResponding,
@@ -39,7 +42,7 @@ export function AgentQuestionCard({
   onDecline,
   isDeclining = false,
 }: AgentQuestionCardProps) {
-  const { question, step, total } = activeQuestionFor(questions, agent)
+  const { question, step, total } = activeQuestionFor(questions, agent, conversationId)
   /** Folded to its header so the conversation behind it can be read (F345). Keyed by question,
    *  so the next question in a batch — or the next one asked — arrives open rather than hidden. */
   const [collapsedId, setCollapsedId] = useState<string | null>(null)
