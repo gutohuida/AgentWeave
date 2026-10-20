@@ -662,6 +662,8 @@ logger = logging.getLogger(__name__)
 # No protocol-level turn timeout exists (implications.md §2) — the Hub enforces its own so a
 # stuck app-server cannot wedge an agent forever (task 2.7).
 DEFAULT_TURN_TIMEOUT_SECONDS = 600.0
+#: The failure kind of a turn cut at that deadline (F782): the Hub's own, not one a provider reports.
+TURN_TIMEOUT_ERROR_KIND = "turn_timeout"
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 30.0
 
 

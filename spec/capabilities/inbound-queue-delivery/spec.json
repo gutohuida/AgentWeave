@@ -746,6 +746,24 @@
       "requirement": "a-held-successor-waits-for-continue-migration",
       "then": "only the off project's queued checkpoint entries are held; downgrade removes the column",
       "when": "it upgrades to 0127 and downgrades back"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake ACP session whose prompt never answers",
+      "how_to_check": "hub/tests/test_copilot_acp_run_turn.py (written first, failing on HEAD)",
+      "key": "the-turn-clock-counts-work-not-waiting-timeout-kind",
+      "requirement": "the-turn-clock-counts-work-not-waiting-deadline-cut-is-not-rerun",
+      "then": "the TurnOutcome is failed, its error names 1 s, error_kind is turn_timeout and retryable is False",
+      "when": "run_turn is called with turn_timeout=1"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a queue entry delivered in a run whose turn failed with turn_timeout",
+      "how_to_check": "hub/tests/test_inbound_queue.py (written first, failing on HEAD)",
+      "key": "the-turn-clock-counts-work-not-waiting-timeout-withdrawn",
+      "requirement": "the-turn-clock-counts-work-not-waiting-deadline-cut-is-not-rerun",
+      "then": "the entry is withdrawn after one attempt, not requeued, and its abandoned_reason names the limit in seconds and the background-or-split advice",
+      "when": "the run's end returns its entries the way _execute_run does for that outcome"
     }
   ],
   "algorithms": [],
@@ -777,6 +795,7 @@
       "FR-30": "3d0d2969669bcbdbe4a9fa82aaf916d9eb6b5971ffc67aaab2b53a734437d0ac",
       "FR-31": "982404119c3f5dceffda0743693d9de38b5bcad3968bc840ae956073b9fabc21",
       "FR-32": "3d1fb56781efbb80de3aba607113fee210c7dee604a5e3ae0853e50d4d57d11f",
+      "FR-33": "00105bb2b5868d78bc5f8fe8477f35007edbbb7847abadb11dd4aec2c9b2fb94",
       "FR-4": "b9994b20205a42b667699a8e27f2ce2abfcffc5ebfa4bd5381f1d0b2a8b53a98",
       "FR-5": "ae17c713ddcd6654c83fcd552e4d17a50923c78336c354540035e06dfecad9cc",
       "FR-6": "40521e886fad38d15d2b3f92fcb9b436c52288a8e195c93cbd49e5c86f438c8b",
@@ -784,7 +803,7 @@
       "FR-8": "9c3ed42e412a52c5efc2b51089c1140f42e440610e47c80fab5d8e3c8fdaa06a",
       "FR-9": "460a821a46a771460ed9dd352b395641d65d2d40c649bcf1558bb17cbef0030d"
     },
-    "high_water": 32,
+    "high_water": 33,
     "requirements": {
       "a-delivered-turn-carries-a-review-or-ordinary-work-never-bot": "FR-7",
       "a-delivered-turn-reaches-the-model-intact": "FR-1",
@@ -817,7 +836,8 @@
       "the-operator-is-told-when-the-turn-that-began-is-not-the-one": "FR-11",
       "the-operator-reads-why-a-submission-was-refused": "FR-13",
       "the-queue-status-names-the-present-reason-input-waits": "FR-24",
-      "the-trigger-refuses-at-submission-what-can-never-run": "FR-23"
+      "the-trigger-refuses-at-submission-what-can-never-run": "FR-23",
+      "the-turn-clock-counts-work-not-waiting-deadline-cut-is-not-rerun": "FR-33"
     },
     "retired": {}
   },
@@ -1060,6 +1080,13 @@
       "party": null,
       "rationale": "Successors already queued on a live database were promised the same Continue button.",
       "statement": "The migration that adds the hold MUST mark every still-queued checkpoint entry in a project whose auto-continue is off as awaiting Continue, and its downgrade MUST drop the column without touching entry states."
+    },
+    {
+      "key": "the-turn-clock-counts-work-not-waiting-deadline-cut-is-not-rerun",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F782: the same input re-sent after a deadline cut does the same long work and is cut again.",
+      "statement": "A Copilot turn that reaches its deadline MUST end failed with error_kind turn_timeout and retryable false. Its input MUST be withdrawn after that one attempt, not re-delivered, and the withdrawn entry's reason MUST name the limit in seconds and say to run long commands in the background or split the work. The run's error MUST state the limit."
     }
   ],
   "schema_version": 1,

@@ -34,6 +34,7 @@ import json
 import logging
 import os
 import re
+import time
 from collections import deque
 from dataclasses import dataclass
 from typing import (
@@ -49,12 +50,13 @@ from typing import (
     Tuple,
 )
 
-from . import run_secrets
+from . import run_secrets, run_waits
 from .codex_appserver import (
     DEFAULT_REQUEST_TIMEOUT_SECONDS,
     DEFAULT_TURN_TIMEOUT_SECONDS,
     STDERR_TAIL_CHARS,
     STDERR_TAIL_LINES,
+    TURN_TIMEOUT_ERROR_KIND,
     AppServerError,
 )
 from .copilot_home import HUB_MCP_SERVER_NAME, MCP_CONFIG_NAME, agent_marker
@@ -972,12 +974,17 @@ def _subagent_id(params: Mapping[str, Any], data: Mapping[str, Any]) -> Optional
     return None
 
 
+#: The longest an Ask me card can wait (`agents.MAX_WAITING_SECONDS`, not importable here without a
+#: cycle): the bound on a card's pause when the run's own permission wait cannot be read (F783).
+_LONGEST_OPERATOR_WAIT_SECONDS = 600
+
 #: A Copilot `errorType` that may name an error code (D5); anything else is `copilot.unknown`.
 _ERROR_TYPE_RE = re.compile(r"^[a-z_]{1,32}$")
 
 #: Root `errorType`s the same input cannot get past by being sent again: a refused credential
-#: stays refused until the operator changes it, and a spent quota until it resets (F489).
-UNRETRYABLE_ERROR_KINDS = frozenset({"authentication", "quota"})
+#: stays refused until the operator changes it, and a spent quota until it resets (F489). And the
+#: Hub's own `turn_timeout`: the same input re-sent does the same long work and is cut again (F782).
+UNRETRYABLE_ERROR_KINDS = frozenset({"authentication", "quota", TURN_TIMEOUT_ERROR_KIND})
 _SUBAGENT_PHASES = {
     "subagent.started": "subagent_started",
     "subagent.completed": "subagent_completed",
@@ -2275,6 +2282,7 @@ async def run_turn(
     if not session_cwd:
         raise CopilotACPError("A Copilot turn needs a working directory for its session.")
     run_hub_url = (env or {}).get("HUB_URL")
+    run_id = (env or {}).get("AW_RUN_ID")
 
     mcp_config: Optional[str] = None
     if mcp_command:
@@ -2585,7 +2593,13 @@ async def run_turn(
                         github_mcp=github_mcp,
                         grants=run_grants,
                     )
-                    allowed = bool(await request_approval(PERMISSION_METHOD, subject))
+                    # The card's wait is the operator's, not the turn's work (F783, D1).
+                    card = f"card-{id(params)}"
+                    run_waits.begin(run_id, card, time.time() + _card_wait_seconds(env))
+                    try:
+                        allowed = bool(await request_approval(PERMISSION_METHOD, subject))
+                    finally:
+                        run_waits.end(run_id, card)
             else:
                 allowed = outcome == ALLOW
             subject["reason"] = decided.get("reason")
@@ -2928,13 +2942,25 @@ async def run_turn(
             check_interrupt=check_interrupt,
             send_cancel=send_cancel,
             turn_timeout=turn_timeout,
-            run_id=(env or {}).get("AW_RUN_ID"),
+            run_id=run_id,
         )
         return await deliver_accounting(outcome, session_was_new)
     finally:
+        # The turn is over, so nothing it waited on can pause its clock any more (D1).
+        run_waits.clear(run_id)
         if prompt_written:
             close_forced = bool(state.get("close_forced"))
         await session.close(force=close_forced)
+
+
+def _card_wait_seconds(env: Optional[Mapping[str, str]]) -> int:
+    """How long this run's Ask me card may wait: the trigger's `AW_DECISION_TIMEOUT`, else the
+    longest wait the Hub allows. Only the bound on a pause the card's answer always ends."""
+    try:
+        value = int((env or {}).get("AW_DECISION_TIMEOUT") or "")
+    except ValueError:
+        return _LONGEST_OPERATOR_WAIT_SECONDS
+    return value if 0 < value <= _LONGEST_OPERATOR_WAIT_SECONDS else _LONGEST_OPERATOR_WAIT_SECONDS
 
 
 #: Follow-up prompts the Hub may send in one turn after a refusal ended a prompt (F660 D3, wpc1-c).
@@ -2972,18 +2998,22 @@ async def _send_and_wait(
     ledger: CopilotUsageLedger,
     check_interrupt: Callable[[], Awaitable[None]],
     send_cancel: Callable[[], Awaitable[None]],
-    deadline: float,
     turn_timeout: float,
+    run_id: Optional[str] = None,
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """Send one prompt and wait for its result while its notifications are delivered, until the
-    turn's `deadline`. Returns the result (None when there was none) and the failure, if any; the
-    result's `usage` and a quota error's fields go to the ledger (D2, D3, D8). Raises nothing but
-    the cancellation of the run's task."""
+    turn's deadline (`state["deadline"]`, shared by every prompt of the turn). Returns the result
+    (None when there was none) and the failure, if any; the result's `usage` and a quota error's
+    fields go to the ledger (D2, D3, D8). Raises nothing but the cancellation of the run's task.
+
+    The deadline moves forward by every poll interval the run spends waiting on the operator
+    (`run_waits`, `the-turn-clock-counts-work-not-waiting` D2), so it bounds the turn's own work."""
     loop = asyncio.get_running_loop()
     prompt_task = asyncio.ensure_future(
         session.request("session/prompt", {"sessionId": session_id, "prompt": blocks}, timeout=None)
     )
     timed_out = False
+    last_poll = loop.time()
     try:
         while True:
             done, _ = await asyncio.wait({prompt_task}, timeout=POLL_SECONDS)
@@ -2991,11 +3021,16 @@ async def _send_and_wait(
                 break
             await check_interrupt()
             now = loop.time()
+            if run_waits.paused(run_id):
+                state["deadline"] += now - last_poll
+            last_poll = now
+            deadline = state["deadline"]
             cancel_sent_at = state["cancel_sent_at"]
             if cancel_sent_at is not None and now - cancel_sent_at >= CANCEL_GRACE_SECONDS:
                 break
             if now >= deadline:
                 timed_out = True
+                state["turn_timed_out"] = True
                 await send_cancel()
                 break
     finally:
@@ -3047,7 +3082,7 @@ async def _await_prompt(
     """Send the prompt, plus at most `REFUSAL_CONTINUATIONS_PER_TURN` follow-ups when a refusal
     ended it (F660 D3), and return how the turn ended. Every failure from here on is returned, not
     raised (D12, R3); the cancellation of the run's task is never absorbed (F660 D7)."""
-    deadline = asyncio.get_running_loop().time() + turn_timeout
+    state["deadline"] = asyncio.get_running_loop().time() + turn_timeout
 
     async def send(
         prompt_blocks: List[Dict[str, Any]], ordinal: int
@@ -3060,8 +3095,8 @@ async def _await_prompt(
             ledger=ledger,
             check_interrupt=check_interrupt,
             send_cancel=send_cancel,
-            deadline=deadline,
             turn_timeout=turn_timeout,
+            run_id=run_id,
         )
         logger.info(
             "Copilot prompt %d of run %s ended: stopReason=%r",
@@ -3164,14 +3199,16 @@ async def _await_prompt(
 
     state["close_forced"] = close_forced
     error_kind: Optional[str] = None
+    # F782: a prompt the deadline cut; sending the same input again would be cut the same way.
+    cut_kind = TURN_TIMEOUT_ERROR_KIND if state.get("turn_timed_out") else None
     if state["forced_failure"] is not None:
         status, error = "failed", state["forced_failure"]
     elif state["interrupted"] or stop_reason == "cancelled":
         status, error = "interrupted", None
     elif failure is not None:
-        status, error = "failed", failure
+        status, error, error_kind = "failed", failure, cut_kind
     elif continuation_failure is not None:
-        status, error = "failed", continuation_failure
+        status, error, error_kind = "failed", continuation_failure, cut_kind
     elif mapper.root_error is not None:
         status, error = "failed", mapper.root_error
         error_kind = mapper.root_error_kind

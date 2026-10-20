@@ -705,3 +705,55 @@ def test_escaping_does_not_collapse_an_existing_escape():
     assert restore_file_mentions(out) == text
     prompt = format_turn_prompt([_raw_entry("agent", text)])
     assert out in prompt
+
+
+@pytest.mark.asyncio
+async def test_a_deadline_cut_is_withdrawn_with_the_limit_named(app):
+    """F782: an entry whose turn hit the deadline is withdrawn after that one attempt, and the
+    reason says what the limit is and what to do instead of re-running it unchanged."""
+    from hub.codex_appserver import DEFAULT_TURN_TIMEOUT_SECONDS
+    from hub.copilot_acp import TurnOutcome
+
+    outcome = TurnOutcome(
+        session_id="sess-cut",
+        status="failed",
+        error=f"Copilot did not finish the turn within {int(DEFAULT_TURN_TIMEOUT_SECONDS)} s",
+        retryable=False,
+        error_kind="turn_timeout",
+    )
+    async with async_session_factory() as db:
+        entry = new_entry(
+            project_id="proj-test",
+            agent="cut-target",
+            origin_type="operator",
+            content="run the 700 s command and wait for it",
+            hop_depth=0,
+        )
+        db.add(entry)
+        await db.commit()
+        run = Run(
+            id="run-cut", project_id="proj-test", agent="cut-target", status="failed", turn_depth=0
+        )
+        await deliver_entries_with_run(
+            db, project_id="proj-test", agent="cut-target", entry_ids=[entry.id], run=run
+        )
+        # As `_execute_run` passes it for a failed turn.
+        returned = await return_run_entries(
+            db,
+            run.id,
+            retryable=getattr(outcome, "retryable", None),
+            failure_kind=getattr(outcome, "error_kind", None),
+        )
+        await db.commit()
+
+    assert returned == []
+    async with async_session_factory() as db:
+        result = await db.execute(
+            select(InboundQueueEntry).where(InboundQueueEntry.agent == "cut-target")
+        )
+        row = result.scalar_one()
+    assert row.state == "withdrawn"
+    assert row.delivery_attempts == 1
+    assert f"{int(DEFAULT_TURN_TIMEOUT_SECONDS)} s" in row.abandoned_reason
+    assert "background" in row.abandoned_reason
+    assert "split" in row.abandoned_reason

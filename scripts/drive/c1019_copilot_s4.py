@@ -4,8 +4,10 @@
     ask   -- agent `asker` (own Copilot runner) with question_timeout_seconds=600 (the allowed
              maximum) calls ask_user; nobody answers. The turn's fixed deadline is also 600 s.
              Watches the runs, the questions and the queue entry across retries, up to ~40 min.
+             `ask <seconds>`: the operator answers the first open question that many seconds
+             after the send (F783's acceptance drive answers at 620, past the 600 s deadline).
 
-    py -3.11 scripts/drive/c1019_copilot_s4.py card|ask
+    py -3.11 scripts/drive/c1019_copilot_s4.py card|ask [answer-after-seconds]
 """
 
 import sys
@@ -40,6 +42,9 @@ elif mode == "ask":
         "'Which name should the new helper function have?' and the options 'double' and 'twice'. "
         "Wait for my answer, then add that function (returning 2*x) to src/calc.py and reply in "
         "one line.", fresh=True)
+    started = q("select started_at from runs where id=?", rid)[0]["started_at"] or ""
+    answer_after = float(sys.argv[2]) if len(sys.argv) > 2 else None
+    answered_at = None
     seen = {}
     while time.time() - t0 < 40 * 60:
         rows = {
@@ -57,12 +62,21 @@ elif mode == "ask":
                 if key not in seen:
                     seen[key] = 1
                     print(f"t+{time.time()-t0:6.0f}s {k} {r}")
-        runs = rows["runs"]
+        open_qs = [r for r in rows["questions"] if r["created_by_run_id"] == rid
+                   and not r["answered"] and not r["declined"]]
+        if (answer_after is not None and answered_at is None and open_qs
+                and time.time() - t0 >= answer_after):
+            answered_at = time.time() - t0
+            status = req("PATCH", f"/projects/{P}/questions/{open_qs[0]['id']}",
+                         {"answer": "double"})[0]
+            print(f"t+{answered_at:6.0f}s ANSWERED {open_qs[0]['id']} -> {status}")
+        runs = [r for r in rows["runs"] if (r["started_at"] or "9") >= started]
         if time.time() - t0 > 90 and runs and all(
                 r["status"] not in ("running", "queued", "starting") for r in runs) and all(
                 e["state"] != "queued" for e in rows["entries"]):
             break
         sys.stdout.flush()
         time.sleep(10)
-    for r in q("select id from runs where agent='asker' order by started_at"):
+    for r in q("select id from runs where agent='asker' and started_at >= ? order by started_at",
+               started):
         report(r["id"])

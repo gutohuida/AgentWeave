@@ -161,6 +161,8 @@ class _FakeACPSession:
         the way the three other entry kinds are. `message`/`data` default to `None` if the entry
         omits them; a real response always carries `message` (JSON-RPC requires it) but this
         fake does not enforce that, since no case needs to test a malformed error.
+      - ``{"sleep": seconds}`` -- waits that long before the next entry, so a deadline can
+        land while a request is in flight (F782/F783);
       - ``{"process_exited": True}`` -- part 14/N, case (n)'s second scenario: "a process that
         exits after the prompt is written", not a JSON-RPC error at all -- the transport itself is
         gone, so there is no `error` object to translate. Ends the in-flight `request()` call by
@@ -212,6 +214,10 @@ class _FakeACPSession:
             if "process_exited" in entry:
                 self._running = False
                 raise self.process_ended_error(method)
+            if "sleep" in entry:
+                # A prompt that takes this long to answer (F782/F783): the turn's own clock runs.
+                await asyncio.sleep(entry["sleep"])
+                continue
             if "notification" in entry:
                 if self._on_notification is None:
                     raise AssertionError(
@@ -4782,3 +4788,17 @@ async def test_a_raising_log_scrub_logs_no_payload_and_keeps_the_error_card(
     assert _LOG_KEY not in line
     assert [e.kind for e in events if e.kind == "error"] == ["error"]
     assert outcome.status == "failed"
+
+
+class TestADeadlineCutIsNotRerun:
+    """F782 (`the-turn-clock-counts-work-not-waiting`, FR-2): a turn cut at its deadline names the
+    limit and is unretryable, so the same long work is not sent again unchanged."""
+
+    async def test_the_cut_is_turn_timeout_and_not_retryable(self, monkeypatch):
+        script = _new_with() + [{"sleep": 60}]
+        _fake, _events, outcome = await _drive(monkeypatch, script, turn_timeout=1)
+
+        assert outcome.status == "failed"
+        assert "1 s" in outcome.error
+        assert outcome.error_kind == "turn_timeout"
+        assert outcome.retryable is False

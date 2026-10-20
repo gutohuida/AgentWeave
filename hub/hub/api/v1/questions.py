@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import project_workspace, refused_capability
+from ... import project_workspace, refused_capability, run_waits
 from ...auth import get_project
 from ...conversations import (
     conversation_id_for_run,
@@ -573,6 +573,8 @@ async def apply_answer(
             detail=_DECLINED_DETAIL if question.declined else _REANSWER_DETAIL,
         )
     await session.refresh(question)
+    # The asker's turn clock runs again: it is no longer waiting on the operator (F783, D1).
+    run_waits.end(question.created_by_run_id, question_id)
 
     # Operator answers are typed depth-zero queue entries, not magic "user"
     # messages or inbox-poll triggers. They resume autonomous chains in the same
@@ -684,6 +686,8 @@ async def decline_question(
             await session.rollback()
             raise HTTPException(status_code=409, detail=_ANSWERED_DETAIL)
 
+    # And the asker's turn clock runs again (F783, D1).
+    run_waits.end(question.created_by_run_id, question_id)
     # Same function the answer path uses (design D3): the operator has said no answer is coming, so
     # a task held waiting on this question is no longer waiting on anyone.
     released = await release_block_for_question(session, question)

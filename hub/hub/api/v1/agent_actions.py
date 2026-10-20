@@ -18,7 +18,7 @@ from pydantic import AliasChoices, BaseModel, Field, ValidationInfo, field_valid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import mcp_announce, run_liveness, spec_reading
+from ... import mcp_announce, run_liveness, run_waits, spec_reading
 from ...agent_auth import AgentActor, get_agent_actor
 from ...checkpoint_access import (
     AccessDeniedError,
@@ -810,6 +810,8 @@ async def _record_the_wait_and_park(
         )
         for question in blocking:
             question.wait_expires_at = expires_at
+            # The run is waiting on the operator now, so its turn clock stops (F783, D1).
+            run_waits.begin(actor.run_id, question.id, expires_at.timestamp())
 
         # Everything below is the park, and it only applies to a run that holds a task. A wait on a
         # question asked by an unbound run is still recorded above: `ask_user` will report its
@@ -996,6 +998,7 @@ async def report_wait_ended(
         # answered since the load is refused here rather than let through the answered branch.
         if not question.answered and not wait_has_expired(question, now):
             continue
+        run_waits.end(run_id, question_id)
 
         try:
             if await record_wait_ended(session, question_id, now):

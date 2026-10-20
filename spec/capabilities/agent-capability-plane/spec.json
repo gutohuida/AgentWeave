@@ -496,6 +496,33 @@
       "requirement": "n4",
       "then": "409 states it is archived, says to ask the operator to unarchive it or send elsewhere, restates the content, and no queue entry exists",
       "when": "another agent sends it a message"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake ACP session whose prompt answers 3 s after it is sent, and a blocking question asked through the real agent ask route by the run's credential, with its wait open",
+      "how_to_check": "hub/tests/test_the_turn_clock_counts_work.py (written first, failing on HEAD)",
+      "key": "the-turn-clock-counts-work-not-waiting-question-pauses",
+      "requirement": "the-turn-clock-counts-work-not-waiting-clock-pauses-for-operator",
+      "then": "the turn completes, not failed; with no question open the same turn fails at 1 s; and once the question is answered through the operator route the clock runs again",
+      "when": "run_turn is called with turn_timeout=1 for that run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake ACP session that sends a permission request judged Ask me, and a request_approval that answers after 3 s",
+      "how_to_check": "hub/tests/test_the_turn_clock_counts_work.py (written first, failing on HEAD)",
+      "key": "the-turn-clock-counts-work-not-waiting-card-pauses",
+      "requirement": "the-turn-clock-counts-work-not-waiting-clock-pauses-for-operator",
+      "then": "the turn completes, not failed at 1 s",
+      "when": "run_turn is called with turn_timeout=1"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub with a Copilot agent (claude-haiku-4.5, real Copilot CLI) whose question wait is 600 s",
+      "how_to_check": "scripts/drive/c1019_copilot_s4.py ask and scripts/drive/c1019_copilot_s3.py, re-run on a scratch Hub; 2 Copilot turns",
+      "key": "the-turn-clock-counts-work-not-waiting-drive",
+      "requirement": "the-turn-clock-counts-work-not-waiting-clock-pauses-for-operator",
+      "then": "ask: the turn survives past 600 s on the open card, the answer reaches the same run, there is one question and one run, and it completes. s3: the 700 s command's turn fails at 600 s and its entry is withdrawn at once with the limit named. One run, no re-delivery, and the reason is visible on the agent's last-attempt text.",
+      "when": "ask: the agent asks at once and the operator answers about 620 s later. s3: the agent is told to run a 700 s command and wait for it."
     }
   ],
   "algorithms": [],
@@ -538,10 +565,11 @@
       "FR-56": "667cd5e1900623744bba0c9a97eb70b58795f45e81aebf37e0ac7313d26e11bf",
       "FR-57": "86dec95f49aafa435461a1b284f7a7b5d1915d5d8e03ba870b3239867c55e596",
       "FR-58": "4c1f1fa17438478a43ce11b9219fd36227726344b187cc06e029199485baa759",
+      "FR-59": "675fecb7a5cf2d672e26abe399b1ee88b5141dffe840ef608bd8ceb90ce1fcb6",
       "FR-6": "14a250e27dcbdd9a245fce16ae743c18326e2891803c944e760673e6fd2aee14",
       "FR-7": "6730fae64b673cfdf001fcc4f023e3fa23332aa70177e59a4bb8096c8b2e4e17"
     },
-    "high_water": 58,
+    "high_water": 59,
     "requirements": {
       "a-capability-refused-for-project-state-reaches-the-operator-": "FR-45",
       "a-live-run-credential-is-the-only-agent-authentication": "FR-22",
@@ -568,6 +596,7 @@
       "the-agent-api-is-a-least-privilege-allowlist": "FR-23",
       "the-operator-answers-a-batch-one-question-at-a-time": "FR-31",
       "the-operator-may-decline-a-question": "FR-38",
+      "the-turn-clock-counts-work-not-waiting-clock-pauses-for-operator": "FR-59",
       "whether-a-run-s-harness-started-the-hub-s-tool-server-is-rec": "FR-50"
     },
     "retired": {
@@ -794,6 +823,13 @@
       "party": null,
       "rationale": "An answer that reaches no one leaves the operator believing work is unblocked. The decision is taken after the answer or the wait's end is recorded and against recorded state, so an answer racing an expiry report is delivered at least once; a duplicate costs a turn, a lost answer costs the operator's decision. A question declined before its wait's end is recorded is not marked as gone ahead without an answer. The operator's view says nobody is waiting from the moment the wait ends.",
       "statement": "Where a blocking question is answered after the asking run has ended, or after that run's wait for it has ended, the system SHALL deliver the answer as queued input; where the asking run is still waiting it SHALL NOT also queue it, and where it cannot establish that the wait ended it SHALL assume the asker is still waiting."
+    },
+    {
+      "key": "the-turn-clock-counts-work-not-waiting-clock-pauses-for-operator",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F783: an ask the Hub allows to wait 600 s must fit inside a 600 s turn, and time the operator takes is not the agent's work.",
+      "statement": "A Copilot turn's deadline MUST NOT count time its run spends waiting on the operator: from a blocking ask_user question's ask until it is answered, declined or its wait ends, and never past its wait_expires_at; and while an Ask me permission card the run raised is open. The deadline MUST still bound the turn's own work, and every pause MUST end at the wait's own expiry."
     }
   ],
   "schema_version": 1,

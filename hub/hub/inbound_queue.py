@@ -11,6 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
+from .codex_appserver import DEFAULT_TURN_TIMEOUT_SECONDS, TURN_TIMEOUT_ERROR_KIND
 from .conversations import get_conversation_by_id
 from .db.models import InboundQueueEntry, Project, Run
 from .file_mentions import MENTION_NOTICE, neutralise_file_mentions
@@ -338,6 +339,21 @@ RESUME_RETRY_LIMIT = 2
 DELIVERY_ATTEMPT_LIMIT = 3
 
 
+def unretryable_reason(failure_kind: Optional[str]) -> str:
+    """Why an entry was withdrawn after one attempt (F489). A deadline cut names the limit and what
+    to do instead, since the same input sent again would do the same long work (F782)."""
+    if failure_kind == TURN_TIMEOUT_ERROR_KIND:
+        return (
+            f"the turn hit the Hub's {int(DEFAULT_TURN_TIMEOUT_SECONDS)} s turn limit, and the same"
+            " input would be cut the same way, so the Hub did not retry; run long commands in the"
+            " background, or split the work into smaller steps"
+        )
+    return (
+        f"the turn failed with `{failure_kind or 'an error'}`, which retrying cannot fix;"
+        " the Hub did not retry"
+    )
+
+
 async def return_run_entries(
     db: AsyncSession,
     run_id: str,
@@ -401,10 +417,7 @@ async def return_run_entries(
         if retryable is False:
             entry.state = "withdrawn"
             entry.withdrawn_at = datetime.now(timezone.utc)
-            entry.abandoned_reason = (
-                f"the turn failed with `{failure_kind or 'an error'}`, which retrying cannot fix;"
-                " the Hub did not retry"
-            )
+            entry.abandoned_reason = unretryable_reason(failure_kind)
             continue
 
         if entry.delivery_attempts >= RESUME_RETRY_LIMIT and entry.conversation_id:

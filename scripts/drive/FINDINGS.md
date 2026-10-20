@@ -37048,7 +37048,7 @@ builder's run `run-af8019ec2ad9` was bound to `task-5f15fb870841` when it sent r
 
 ## F782 (A) -- a Copilot turn that reaches the fixed 600 s deadline is re-delivered unchanged twice: work that needs more than ten minutes runs three times (30 min, three premium requests) and is then dropped
 
-**Status:** open 2026-10-19. Found in the Copilot stall drive (`scripts/drive/c1019_copilot_s3.py`, scratch Hub :8110, Copilot CLI 1.0.91 as the Hub launches it, `claude-haiku-4.5`, real turns).
+**Status:** expectation 1 fixed 2026-10-20 (night iteration 10, change `the-turn-clock-counts-work-not-waiting`, spdoc-8cdbaa6d6f9f, folded into `inbound-queue-delivery`): a deadline cut fails with `error_kind turn_timeout`, `retryable False`, and its entry is withdrawn after that attempt with a reason naming the 600 s limit and the background-or-split advice. Driven on scratch :8110 (`c1019_copilot_s3.py`, real Copilot): the turn that reached the deadline was withdrawn at once and `queue_entry_abandoned` carries the reason, with no re-delivery. (It was the entry's third attempt only because two earlier attempts failed at startup under load, F789; the reason text is the turn-limit one, not "delivery failed 3 times".) Expectation 2 (a per-agent turn-limit setting) is still open: it needs a column, so Tier 2. Found 2026-10-19 in the Copilot stall drive (`scripts/drive/c1019_copilot_s3.py`, scratch Hub :8110, Copilot CLI 1.0.91 as the Hub launches it, `claude-haiku-4.5`, real turns).
 **Source:** drive
 **Theme:** Runs
 **Ready:** yes -- repro below; measured 3 of 3 attempts.
@@ -37062,7 +37062,7 @@ Expected: (1) a turn that hit the deadline is not re-delivered unchanged. Either
 
 ## F783 (A) -- the 600 s turn clock keeps running while `ask_user` waits for the operator: the turn fails with its question still open, the retry asks the same question again, and the operator's answer to the first card reaches the agent ten minutes later
 
-**Status:** open 2026-10-19. Found in the Copilot stall drive (`scripts/drive/c1019_copilot_s4.py ask`, scratch Hub :8110, real turns).
+**Status:** fixed 2026-10-20 (night iteration 10, change `the-turn-clock-counts-work-not-waiting`, folded into `agent-capability-plane`): the Copilot turn deadline stops counting while the run waits on a blocking `ask_user` (from the ask until it is answered, declined or its wait is reported ended, never past `wait_expires_at`) or on an open Ask me card (`hub/hub/run_waits.py`). Driven on scratch :8110 (`c1019_copilot_s4.py ask`, real Copilot): the turn lived 627 s on the open card, the answer at 620 s came back as the tool result in the same run, which completed 7 s later; one question asked, no queued answer. (The run was the second attempt: the first failed at startup under load, F789.) Found 2026-10-19 in the Copilot stall drive (`scripts/drive/c1019_copilot_s4.py ask`, scratch Hub :8110, real turns).
 **Source:** drive
 **Theme:** Questions
 **Ready:** yes -- repro below.
@@ -37133,3 +37133,15 @@ Expected: no request holds the write lock across a subprocess or a CLI's start. 
 Over four real Haiku turns with `acceptEdits` (8 permission prompts), the project recorded 537 `aw.request` spans. 480 of them are `GET /api/v1/agent-actions/permission-requests/{request_id}` with actor `run`: 60 per prompt. The tool server polls its pending request while it waits for the operator or the judge, and slice 1's rule (D3, `trace_requests._keep`) records **every** request made with a run credential, so each poll is kept forever (trace-D3). The operator's own polling is skipped by default for exactly this reason. The run's polling is the same kind of traffic and is not.
 
 Expected: a run's routine read (a GET that answered 2xx, was fast and emitted no event) is not a span by default, like the operator's; `record_reads` turns both on. The wait itself is already recorded once, as the run's `aw.permission_wait` span. Keep recording a run's mutating, failing and slow requests and any request that emitted an event, as D3 and D5 already do. Test at the seam: `trace_requests._keep(method="GET", run_id="run-x", status=200, stream=False, elapsed=0.01)` must answer False. The existing test `test_a_runs_request_nests_under_its_open_tool_span` uses a POST, so it stays green. Re-drive: `d1020_hub_wide_trace_drive.py <project> work` should leave about 1/10 of today's request spans. Seam: Traces (requests) x the tool server's permission wait. This needs a design amendment: D3's "every request made with a run credential" becomes "every non-routine one".
+
+## F789 (B) -- a Copilot run whose ACP startup request times out fails with an empty error: the run, its `run_failed` event and the conversation say nothing about why
+
+**Status:** open 2026-10-20. Found in the F782/F783 acceptance drive (`scripts/drive/c1019_copilot_s4.py ask`, `c1019_copilot_s3.py`, scratch Hub :8110, `proj-ecfcc899dc34`, real Copilot CLI) while the full Hub suite ran with `-n auto` on the same machine.
+**Source:** drive
+**Theme:** Runs
+**Ready:** yes -- the seam and the repro are below.
+**Tier:** 0
+
+Under CPU load, three of four first attempts (`run-331d557c454e`, `run-20bf26c760d4`, `run-2cb5fc049d43`) ended `failed` about 33-35 s after they started, before the prompt was sent. Each had `error = ''`, a `run_failed` event with `"error": ""`, `exit_code`, `method` and `stderr_tail` all null, and no agent output. The 33 s matches spawn plus `DEFAULT_REQUEST_TIMEOUT_SECONDS` (30 s, `codex_appserver.py`) on an ACP startup request: `ACPProcess.request` raises `asyncio.TimeoutError` from `asyncio.wait_for` (`copilot_acp.py`, `request`), and `str(asyncio.TimeoutError())` is `''`. The RPC executor's pre-spawn branch writes `run.error = run_secrets.scrub(run_id, str(exc))` (`hub/hub/api/v1/agent_trigger.py:4534`), and `_transport_failure_fields` broadcasts `"error": str(exc)` (`:2686`). The sibling Claude path at `:2920` already writes `str(exc) or type(exc).__name__`. Each failure also spent one of the entry's three delivery attempts, so a slow machine can lose an operator's message with nothing on screen saying why.
+
+Expected: a pre-prompt timeout fails with an error naming what timed out, for example "Copilot did not answer `initialize` within 30 s", by raising a `CopilotACPError`/`AppServerError` carrying `method` from `ACPProcess.request` on timeout. At the least, the error is never empty (`str(exc) or type(exc).__name__` in both places). Failing test: a fake ACP process that never answers `initialize`, with a 0.1 s request timeout, makes the executor record a run whose `error` is non-empty and names the method. Seam: Runs (Copilot ACP startup) x Runs (RPC executor failure record).
