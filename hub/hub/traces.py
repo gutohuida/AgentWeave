@@ -69,10 +69,11 @@ from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import __version__, run_secrets
+from . import run_secrets
 from .db.models import PermissionRequest, Question, Run, TraceSettings, TraceSpan
 from .runner_events import redact_text_secrets
 from .subprocess_windows import no_console_kwargs
+from .version import __version__
 
 logger = logging.getLogger(__name__)
 
