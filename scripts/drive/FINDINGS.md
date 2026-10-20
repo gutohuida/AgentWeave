@@ -37204,3 +37204,55 @@ Repro: `PUT /projects/{p}/traces/settings {"otlp_endpoint": "http://127.0.0.1:9"
 Cause: `trace_export` keeps per-project `_failures` / `_retry_after` in process memory, with backoff `push_interval() * 2**failures` capped at `MAX_BACKOFF_SECONDS = 300` (`hub/hub/trace_export.py:136-139`). `update_trace_settings` (`hub/hub/api/v1/traces.py`) resets `last_error` and `enabled_at` but not the backoff, so the old endpoint's failures delay the new endpoint.
 
 Expected: saving the endpoint, its headers or the enable flag resets that project's backoff (`trace_export._failures.pop(p)`, `_retry_after.pop(p)`), so the next pass, within 5 s, tries the new settings. Failing test: after `push_project` fails three times against a dead URL, a settings PUT followed by `push_once()` posts to the new URL at once. Seam: Traces (settings route) x Traces (pusher).
+
+## F794 (C) -- a shell or write call on a path inside a root granted for reading only is refused as "is outside your workspace", the same words as an ungranted path; neither the agent nor the operator is told the root is granted for the file-reading tool
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach.py` steps T and W).
+**Source:** drive
+**Theme:** Permissions & sandbox
+**Ready:** yes
+**Tier:** 0
+
+Repro: `PUT /projects/{p}/settings {"default_permission_mode": "workspace", "reach_grants": {"roots": [{"path": "C:\Users\huida\Documents\reach1020-read", "access": "read"}], "hosts": []}}`. A Claude turn (Haiku) asked to Read `...\reach1020-read\notes.txt`, then `cat` it in Bash, then Write a file there: Read allowed (the word came back), Bash and Write refused, `permission_denied` reasons `'C:/Users/huida/Documents/reach1020-read/notes.txt' is outside your workspace` and `'C:\Users\huida\Documents\reach1020-read\written.txt' is outside your workspace`. A Copilot turn's `Get-Content` on `...\reach1020-read\other.txt` was refused with the same words. The judge's decision is right (reach-D3: a read root covers read tools only); the sentence is wrong. The path is not merely outside the workspace: it is in a root the operator granted, for reading, and the call that would work is the file-reading tool. Haiku worked it out here only because the turn context names the read root; the operator reading the refusal in the Questions panel's permission decisions sees "outside your workspace" for a folder they granted and has nothing to tell them why.
+
+Cause: `_judge_resolved` (`hub/hub/mcp_server.py:1660-1675`) asks `_in_granted_root(resolved)` against `_REACH`, which `_parse_reach` built with the read roots already dropped for a non-read tool (`hub/hub/mcp_server.py:1601-1606`), so a path in a read root falls through to `_resolves_elsewhere` and `_OUTSIDE`.
+
+Expected: when a refused path lies in a root granted `read` and the tool is not a read tool, the reason says so and names what works: e.g. `'...\notes.txt' is in a folder granted for reading only: read it with your file-reading tool, not a shell command; writing there needs the operator to grant read and write`. Failing test: in `hub/tests/test_an_operator_sets_how_far_an_agent_reaches.py`, `_decide` for `Bash` `cat <read-root>/f` with `AW_REACH_GRANTS` naming that root `read` returns a deny whose reason names the read grant (today: `is outside your workspace`). Seam: Permissions & sandbox (workspace judge) x reach grants.
+
+## F795 (C) -- an agent's granted-reach save the Hub refuses shows only "Could not save the granted reach."; the route's own detail is pydantic's raw dump with a docs URL
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach_ui.py`, Playwright on the served bundle).
+**Source:** drive
+**Theme:** Permissions & sandbox
+**Ready:** yes
+**Tier:** 0
+
+Repro (browser): agent page `?project=<p>&agent=cla&settings=execution`, Granted reach -> "This agent's own", type `http://bad host` in Granted host, Enter, **Save granted reach**. The PATCH answers 400 and the page shows, in red, only "Could not save the granted reach." (screenshot `testbed/ui-judge/s1020-reach/100046/04_agent_bad_save.png`); nothing says which entry or why, and the bad host chip stays in the list. The same refusal on the project's Reach group shows the Hub's sentence ("reach_grants.roots.0.path: a granted root is an absolute path, {temp} or {project}: 'notes'"), so the two editors of one setting disagree. The route's detail is not fit to show either: `PATCH /projects/{p}/agents/cla {"reach_grants": {"roots": [{"path": "rel", "access": "read"}]}}` -> 400 `"reach_grants: 1 validation error for ReachGrants\nroots.0.path\n  Value error, a granted root is an absolute path, {temp} or {project}: 'rel' [type=value_error, input_value='rel', input_type=str]\n    For further information visit https://errors.pydantic.dev/..."`.
+
+Cause: `hub/hub/api/v1/agents.py:3184-3189` raises `detail=f"reach_grants: {exc}"` with the `ValidationError`'s `str()`; `ReachGrantsSetting` (`hub/ui/src/components/agents/AgentSettingsControls.tsx:296-300`) renders a fixed sentence on `update.isError`.
+
+Expected: the route's detail is the same `loc: msg` sentence the project route yields (e.g. `reach_grants.hosts: a granted host is host, host:port, host:* or *.domain, not 'http://bad host'`), and the agent page shows it. Failing tests: a Hub test that the 400 detail has no `errors.pydantic.dev` and names the field and the bad value; a UI test (`hub/ui/src/__tests__/`) that a 400 from the agent reach PATCH renders the Hub's detail. Seam: Agents (settings PATCH) x Permissions & sandbox (reach grants UI).
+
+## F796 (C) -- a host typed into Granted host but not added with Enter or "Add host" is silently dropped when the settings are saved, and stays in the field as if it were granted
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach_ui.py`).
+**Source:** drive
+**Theme:** Permissions & sandbox
+**Ready:** yes
+**Tier:** 0
+
+Repro (browser): Environment -> Settings -> Reach. Add `localhost:*` with Enter (becomes a chip), then type `registry.npmjs.org` in Granted host and press **Save settings** without pressing Enter. `GET /projects/{p}/settings` reads `"hosts": ["localhost:*"]`; the field still shows `registry.npmjs.org` after the save, with no warning. The operator who granted a registry for `npm install` finds the agent refused and the setting apparently in place. Same editor on the agent page (`ReachGrantsEditor` is shared).
+
+Cause: `ReachGrantsEditor` (`hub/ui/src/components/environment/ReachGrantsEditor.tsx`) keeps the typed host in local `hostDraft` state that only `addHost` folds into `grants`; the form's save reads `grants`.
+
+Expected: a non-empty host draft is either added on save (and validated by the Hub like the others) or blocks the save with "Add or clear the host you typed". Failing test: a UI test typing a host without Enter and submitting the project settings form sends it in `reach_grants.hosts` (or refuses the submit). Seam: Permissions & sandbox (Reach UI) x Projects (settings form).
+
+## F797 (D) -- the granted root's access select is too narrow for its own label: "Read and write" reads "Read and wr"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (screenshot `testbed/ui-judge/s1020-reach/100046/04_agent_bad_save.png`, 1440 px, light).
+**Source:** drive
+**Theme:** Permissions & sandbox
+**Ready:** yes
+**Tier:** 0
+
+`ReachGrantsEditor`'s access `Select` has `wrapperClassName="w-28"` (`hub/ui/src/components/environment/ReachGrantsEditor.tsx`), which clips the selected "Read and write" to "Read and wr" on both the project and agent pages. Expected: the select fits its longest option (e.g. `w-36`). Seam: Permissions & sandbox (Reach UI).
