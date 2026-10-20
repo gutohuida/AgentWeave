@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T17:00:00+01:00",
-    "iteration": 14,
+    "iteration": 15,
     "log_file": ".claude/autonomous/2026-10-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ledger-tidy",
-    "next_action": "Run 'ledger-tidy': py -3.11 scripts/backlog_page.py to regenerate spec-queue/BACKLOG.html; check every finding whose Status reads 'open 2026-10-20' (today's, F787-F834 by number) carries **Ready:** and **Tier:** lines, and fix any that lack them. D-7 (merge gate) next.",
+    "current": "D-7",
+    "next_action": "Run 'D-7' (merge gate): four conditions per playbook .claude/loops/day-window.md. Known: branch adds migrations 0135, 0137, 0138 vs master -> HOLD: migration; add OPEN DECISIONS.md row. Then closing entry; set next_action null.",
     "queue": [
         {
             "id": "plan-review",
@@ -95,7 +95,7 @@
         },
         {
             "id": "ledger-tidy",
-            "status": "open",
+            "status": "done",
             "title": "Regenerate backlog; check Ready/Tier on today's findings",
             "detail": "py -3.11 scripts/backlog_page.py; every finding filed today needs **Ready:** and **Tier:** lines."
         },
