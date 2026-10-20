@@ -11,10 +11,15 @@ trace routes.
   events (slice 2): the event a request emits is a span event on its request's span; the events a
       real run's executor emits are on the run's root; an event with neither is an `aw.event`
       trace of its own. Every event row of the window is found in some trace.
+  work (slice 3): a real Haiku turn bound to a task writes and commits a file; the task is
+      completed, which runs the project's two checks (one passes, one fails on main too), and is
+      landed with an override. The turn's workspace, the check run, the integration and the
+      checkout's release are each an `aw.work` trace naming its kind, holding the git and check
+      commands they ran as `aw.command` spans; the run's own git is in its trace.
 
 Usage (after `e2e.py hub-up <profile> <port>` and `e2e.py setup <name>`):
   py -3.11 scripts/drive/d1020_hub_wide_trace_drive.py <project-id> [step]
-Steps: all (default), requests, nested, events.
+Steps: all (default), requests, nested, events, work.
 """
 
 from __future__ import annotations
@@ -202,6 +207,93 @@ def events(project: str) -> None:
     del created
 
 
+#: One check that passes and one that fails on main too, so Land takes an override (F605).
+CHECKS = [
+    {"name": "passes", "command": "git --version"},
+    {"name": "fails", "command": "exit 3"},
+]
+
+
+def work(project: str) -> None:
+    since = _now()
+    settings = e2e.call("GET", f"/projects/{project}/settings")
+    settings["main_branch"] = "master"
+    settings["checks"] = CHECKS
+    e2e.call("PUT", f"/projects/{project}/settings", settings)
+    e2e.cmd_agent(project, AGENT, "-", "claude", "claude-haiku-4-5-20251001")
+    task_id = e2e.call(
+        "POST", f"/projects/{project}/tasks", {"title": "Write a traced file", "assignee": AGENT}
+    )["id"]
+    print(f"[7] a real Haiku turn on {task_id}")
+    run = e2e.cmd_turn(
+        project,
+        AGENT,
+        # A file of its own each pass: one a landed pass left on main would leave nothing to merge.
+        f"Create {task_id}.txt in your workspace containing the line: traced. Commit it with git "
+        "(message: trace), then reply DONE. Do not ask anything.",
+        task=task_id,
+        fresh=True,
+        perm="acceptEdits",
+    )
+    print("  turn:", e2e.wait_for(run, 6))
+    code, _ = e2e.request("PATCH", f"/projects/{project}/tasks/{task_id}", {"status": "completed"})
+    print(f"  completed -> {code}")
+    deadline = time.time() + 120
+    rows: list = []
+    while time.time() < deadline:
+        rows = e2e.ro().execute(
+            "select state from task_check_runs where task_id=? order by started_at", (task_id,)
+        ).fetchall()
+        if rows and rows[-1][0] != "running":
+            break
+        time.sleep(2)
+    print("  check runs:", [r[0] for r in rows])
+    code, _ = e2e.request(
+        "POST",
+        f"/projects/{project}/tasks/{task_id}/land",
+        {"override_checks_reason": "the failing check fails on main too"},
+    )
+    print(f"  land -> {code}")
+    time.sleep(SETTLE)
+
+    print("[8] the Hub's work as traces")
+    listed = e2e.call("GET", f"/projects/{project}/traces?operation=aw.work&limit=200")
+    kinds = []
+    for row in listed["traces"]:
+        trace = e2e.call("GET", f"/projects/{project}/traces/{row['trace_id']}?limit=2000")
+        root = trace["root"]
+        if root["start_time"] < since:
+            continue
+        a = root["attributes"]
+        # Work inside other work is its child (the turn's workspace inside its queue pass).
+        nested = [s for s in trace["spans"] if s["operation"] == "aw.work"]
+        kinds += [s["attributes"].get("aw.work.kind") for s in nested]
+        print(
+            f"  {a.get('aw.work.kind'):<18} status={root['status']:<5} "
+            f"spans={len(trace['spans'])} events={[e['name'] for e in root['events']]} "
+            f"task={a.get('aw.task.id')} caused_by={a.get('aw.caused_by.run.id') or a.get('aw.caused_by.span.id')}"
+        )
+        by_id = {s["span_id"]: s for s in trace["spans"]}
+        for s in nested[1:]:
+            print(f"     work {s['name']} under {by_id.get(s['parent_span_id'], {}).get('name')}")
+        for c in [s for s in trace["spans"] if s["operation"] == "aw.command"]:
+            exit_code = c["attributes"].get("process.exit.code")
+            under = by_id.get(c["parent_span_id"], {}).get("name")
+            print(f"     cmd {c['name']:<28} exit={exit_code} status={c['status']} under={under}")
+    expected = {"worktree_create", "check_run", "task_integration", "worktree_release"}
+    print("  kinds:", sorted(set(kinds)), "missing (must be empty):", sorted(expected - set(kinds)))
+    trace = e2e.call("GET", f"/projects/{project}/traces/by-run/{run}?limit=2000")
+    by_id = {s["span_id"]: s for s in trace["spans"]}
+    for c in [s for s in trace["spans"] if s["operation"] == "aw.command"]:
+        parent = by_id.get(c["parent_span_id"], {})
+        print(
+            f"  run command {c['name']} exit={c['attributes'].get('process.exit.code')} "
+            f"parent={parent.get('operation')}"
+        )
+    settings = e2e.call("GET", f"/projects/{project}/traces/settings")
+    print("  settings:", json.dumps({k: settings.get(k) for k in ("dropped_spans", "spans_by_operation")}))
+
+
 def main() -> None:
     project = sys.argv[1]
     step = sys.argv[2] if len(sys.argv) > 2 else "all"
@@ -211,7 +303,9 @@ def main() -> None:
         nested(project)
     if step in ("events", "all"):
         events(project)
-    if step not in ("requests", "nested", "events", "all"):
+    if step in ("work", "all"):
+        work(project)
+    if step not in ("requests", "nested", "events", "work", "all"):
         raise SystemExit(f"unknown step {step}")
 
 

@@ -45,7 +45,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from pydantic import BaseModel, Field
 
-from . import manager, project_workspace, vault
+from . import manager, project_workspace, traces, vault
 from .db.engine import async_session_factory
 from .db.models import Runner
 from .runner_adapters import get_adapter
@@ -668,6 +668,9 @@ async def unread_note(project_id: str, source_id: str, word: str) -> str:
     return f"{opening} Distil the source to read it."
 
 
+@traces.traced_work(
+    "distil", attributes={"aw.vault.source.id": "source_id", "aw.work.trigger": "trigger"}
+)
 async def distil_in_background(project_id: str, source_id: str, *, trigger: str) -> None:
     """The background entry point: a source that cannot be distilled now is a silent no-op (the
     upload's floor is the source itself), and nothing here raises into the event loop."""
@@ -741,6 +744,7 @@ def paid_calls(sources: List[Dict[str, Any]], texts: Dict[str, str]) -> Dict[str
     }
 
 
+@traces.traced_work("distil_batch", attributes={"aw.work.trigger": "trigger"})
 async def distil_batch(project_id: str, source_ids: List[str], *, trigger: str) -> None:
     """Distil a batch one source after another, in one background task, so a folder of sources
     never spawns its model calls all at once. Each is `distil_in_background`, which never raises."""

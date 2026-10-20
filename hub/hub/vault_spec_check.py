@@ -30,7 +30,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import manager, project_workspace, spec_documents, spec_identity, spec_lifecycle, vault
+from . import (
+    manager,
+    project_workspace,
+    spec_documents,
+    spec_identity,
+    spec_lifecycle,
+    traces,
+    vault,
+)
 from .db.engine import async_session_factory
 from .db.models import EventLog, Runner
 from .project_workspace import ProjectWorkspace
@@ -376,6 +384,9 @@ async def check(plan: Plan, *, trigger: str) -> Optional[str]:
     return outcome
 
 
+@traces.traced_work(
+    "spec_vault_check", attributes={"aw.spec.path": "path", "aw.work.trigger": "trigger"}
+)
 async def check_in_background(project_id: str, path: str, *, trigger: str) -> None:
     """The background entry point: a document that is not checked now is simply not checked, and
     nothing here raises into the event loop."""

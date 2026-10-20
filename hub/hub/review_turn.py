@@ -28,7 +28,7 @@ from typing import List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import requirement_evidence, worktrees
+from . import requirement_evidence, traces, worktrees
 from .db.models import Agent, Project, SpecDocument, Task
 from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 from .repo_hygiene import seed_repo_excludes
@@ -484,6 +484,7 @@ async def _merge_base_sha(
     return base
 
 
+@traces.traced_work("review_staffing", attributes={"aw.agent": "reviewer", "aw.task.id": "task_id"})
 async def prepare_review_turn(
     session: AsyncSession,
     *,

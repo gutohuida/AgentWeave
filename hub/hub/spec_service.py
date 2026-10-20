@@ -29,6 +29,7 @@ from . import (
     spec_lifecycle,
     spec_naming,
     spec_rigor,
+    traces,
 )
 from .db.models import (
     InboundQueueEntry,
@@ -1318,6 +1319,20 @@ def fold_draft(
 
 
 async def fold(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    change: SpecDocument,
+    capability: SpecDocument,
+    items: Optional[List[FoldItem]],
+    **options: Any,
+) -> Tuple[SaveResult | ProposeResult, bool]:
+    """`_fold`, as a trace of its own (`background-work-is-a-trace`)."""
+    attributes = {"aw.spec.change": change.path, "aw.spec.capability": capability.path}
+    async with traces.work("spec_fold", change.project_id, **attributes):
+        return await _fold(session, workspace, change, capability, items, **options)
+
+
+async def _fold(
     session: AsyncSession,
     workspace: ProjectWorkspace,
     change: SpecDocument,

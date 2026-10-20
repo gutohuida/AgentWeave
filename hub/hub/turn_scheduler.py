@@ -14,6 +14,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
+from . import traces
 from .conversations import get_conversation_by_id
 from .db.engine import async_session_factory
 from .db.models import Conversation, InboundQueueEntry, Run, Task
@@ -285,6 +286,7 @@ class _Attempt:
     nothing_queued: bool = False
 
 
+@traces.traced_work("inbound_queue", quiet=True, attributes={"aw.agent": "agent"})
 async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
     """Start at most one turn for *agent*; leave work durable when it cannot start.
 

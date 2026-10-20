@@ -17,6 +17,7 @@ is a strict xfail until the slice its marker names removes the marker.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
@@ -280,7 +281,6 @@ def _commands(spans) -> List[Dict[str, Any]]:
     return [span for span in spans if span["operation"] == "aw.command"]
 
 
-@pytest.mark.xfail(strict=True, reason="trace-hub-wide slice 3 not built")
 @pytest.mark.asyncio
 async def test_a_check_run_is_a_trace_of_its_commands(app, auth_headers, tmp_path):
     task_id, _ = await _task_with_work(tmp_path)
@@ -300,7 +300,112 @@ async def test_a_check_run_is_a_trace_of_its_commands(app, auth_headers, tmp_pat
     assert any(c["attributes"].get("process.exit.code") == 0 for c in commands)
 
 
-@pytest.mark.xfail(strict=True, reason="trace-hub-wide slices 3 and 4 not built")
+def _git_version() -> None:
+    traces.run(["git", "--version"], capture_output=True, text=True, check=False)
+
+
+@pytest.mark.asyncio
+async def test_work_inside_work_is_its_child_and_an_idle_pass_is_not_recorded(app, auth_headers):
+    """A batch's distils are in the batch's trace, a command in the work that ran it (in a thread:
+    `asyncio.to_thread` carries the current span); quiet work that did nothing is not a trace."""
+    async with traces.work("distil_batch", PROJECT):
+        async with traces.work("distil", PROJECT, **{"aw.vault.source.id": "src-1"}):
+            await asyncio.to_thread(_git_version)
+    async with traces.work("inbound_queue", PROJECT, quiet=True):
+        pass
+    await _flush()
+
+    work = await _roots(app, auth_headers, "aw.work")
+    kinds = [r["root"]["attributes"]["aw.work.kind"] for r in work]
+    assert "inbound_queue" not in kinds and "distil" not in kinds, kinds
+    [batch] = [r for r in work if r["root"]["attributes"]["aw.work.kind"] == "distil_batch"]
+    [distil] = [s for s in batch["spans"] if s["name"] == "distil"]
+    assert distil["parent_span_id"] == batch["root"]["span_id"]
+    [git] = _commands(batch["spans"])
+    assert git["parent_span_id"] == distil["span_id"]
+    assert git["name"] == "git --version"
+    assert git["attributes"]["process.exit.code"] == 0 and git["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_a_command_goes_with_its_request_kept_or_not(app, auth_headers):
+    """The app's routine read that runs git (a diff, a status) is not recorded, and neither is its
+    command; a request that is recorded holds its commands as children."""
+    from hub import trace_requests
+    from hub.auth import PROJECT_SCOPE_KEY
+
+    for method in ("GET", "POST"):
+        span = traces.PendingSpan(
+            project_id="", name="", operation="aw.request", start_time=datetime.now(timezone.utc)
+        )
+        token = traces.set_current(span)
+        try:
+            await asyncio.to_thread(_git_version)
+        finally:
+            traces.reset_current(token)
+        scope = {"method": method, "path": f"{BASE}/tasks", PROJECT_SCOPE_KEY: PROJECT}
+        trace_requests._finish(scope, span, status=200, stream=False, elapsed=0.01)
+    await _flush()
+
+    roots = await _roots(app, auth_headers, "aw.request")
+    assert _requests(roots, "GET", "/tasks") == []
+    [post] = [r for r in roots if r["root"]["attributes"]["http.request.method"] == "POST"]
+    [git] = _commands(post["spans"])
+    assert git["parent_span_id"] == post["root"]["span_id"]
+    assert git["trace_id"] == post["trace_id"]
+
+
+@pytest.mark.asyncio
+async def test_a_command_a_runs_executor_makes_is_in_the_runs_trace(app, auth_headers):
+    run_id = f"run-{short_id()}"
+    async with async_session_factory() as db:
+        run = Run(id=run_id, project_id=PROJECT, agent="tracer", status="running", turn_depth=0)
+        db.add(run)
+        traces.start_run(db, run, prompt="Look around.", runner="claude", model=None)
+        await db.commit()
+
+    async def _executor() -> None:
+        await asyncio.to_thread(_git_version)
+
+    await traces.within_run(PROJECT, run_id, _executor())
+    await _flush()
+
+    by_run = await app.get(f"{BASE}/traces/by-run/{run_id}", headers=auth_headers)
+    assert by_run.status_code == 200, by_run.text
+    spans = by_run.json()["spans"]
+    [root] = [span for span in spans if span["parent_span_id"] is None]
+    [git] = _commands(spans)
+    assert git["parent_span_id"] == root["span_id"] and git["trace_id"] == root["trace_id"]
+
+
+@pytest.mark.asyncio
+async def test_a_loops_firing_is_a_loop_tick_trace(app, auth_headers):
+    from hub.db.models import AIJob
+    from hub.scheduler import JobScheduler
+
+    from .test_scheduler import _make_job, _make_loop
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="traced-tick", agent="loop-agent-traced")
+        await _make_loop(
+            db,
+            job_id=job.id,
+            purpose="traced loop",
+            stop_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        )
+    async with async_session_factory() as db:
+        fresh = await db.get(AIJob, job.id)
+        await JobScheduler()._fire_job_internal(fresh, trigger="scheduled", session=db)
+    await _flush()
+
+    work = await _roots(app, auth_headers, "aw.work")
+    [tick] = [r["root"] for r in work if r["root"]["attributes"].get("aw.job.id") == job.id]
+    assert tick["attributes"]["aw.work.kind"] == "loop_tick" and tick["name"] == "loop_tick"
+    assert tick["attributes"]["aw.loop.id"] == f"loop-{job.id}"
+    assert tick["attributes"]["aw.job.trigger"] == "scheduled"
+
+
+@pytest.mark.xfail(strict=True, reason="trace-hub-wide slice 4 not built")
 @pytest.mark.asyncio
 async def test_a_warning_the_hub_logs_is_on_its_trace_and_exported_as_a_log(
     app, auth_headers, tmp_path

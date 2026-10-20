@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import traces
 from .db.engine import async_session_factory
 from .db.models import Project, Run, Task, TaskCheckRun
 from .subprocess_windows import no_console_kwargs
@@ -83,7 +84,7 @@ def configured_checks(project: Optional[Project]) -> List[Dict[str, Any]]:
 def _git(root: Path, *args: str, timeout: int = GIT_TIMEOUT_SECONDS) -> subprocess.CompletedProcess:
     from .worktrees import COMMIT_IDENTITY
 
-    return subprocess.run(
+    return traces.run(
         [
             "git",
             "-c",
@@ -220,6 +221,17 @@ def scrub(text: str, removed: Sequence[str]) -> str:
 
 def run_one(check: Dict[str, Any], cwd: Path) -> Dict[str, Any]:
     """Run one check to completion or its timeout; end its whole process tree on a timeout."""
+    with traces.command(check["command"], name=f"check {check['name']}") as span:
+        result = _run_one(check, cwd)
+        traces.exited(
+            span,
+            result["exit_code"],
+            why=f"ran past its {check['timeout_seconds']}s timeout" if result["timed_out"] else "",
+        )
+    return result
+
+
+def _run_one(check: Dict[str, Any], cwd: Path) -> Dict[str, Any]:
     from .pty_runner import IS_WINDOWS, terminate_process_tree
 
     env, removed = check_environment()
@@ -464,7 +476,12 @@ async def request_run(
             await session.commit()
             run_id = run.id
         job = asyncio.get_running_loop().create_task(
-            _execute(run_id, task_id, root, tip, targets, checks)
+            traces.within_work(
+                "check_run",
+                project_id,
+                _execute(run_id, task_id, root, tip, targets, checks),
+                **{"aw.task.id": task_id, "aw.check_run.id": run_id},
+            )
         )
         _inflight[task_id] = job
         job.add_done_callback(lambda done: _inflight.pop(task_id, None))

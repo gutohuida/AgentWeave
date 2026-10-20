@@ -35,7 +35,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from . import requirement_evidence, worktrees
+from . import requirement_evidence, traces, worktrees
 from .db.models import (
     EvidenceFootprint,
     RequirementEvidence,
@@ -153,7 +153,7 @@ DIAGNOSTIC_GIT_TIMEOUT_SECONDS = 5
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
+    return traces.run(
         ["git", *args],
         cwd=str(root),
         capture_output=True,

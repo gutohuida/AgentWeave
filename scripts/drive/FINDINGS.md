@@ -37121,3 +37121,15 @@ The request span the new middleware recorded for `POST /api/v1/projects/{project
 Two later triggers of the same agent took 3 s each. A probe that tried `BEGIN IMMEDIATE` (then `ROLLBACK`) once a second throughout the second one found the lock free every time. So the hold is on a first-time path. Candidates, all unverified: tool-server pin or MCP registration on an agent's first run, and runner launchability checks. Any of them, run while a session has an uncommitted write open, would fit.
 
 Expected: no request holds the write lock across a subprocess or a CLI's start. Repro to try: a fresh profile, `e2e.py setup`, `agent <p> a - claude claude-haiku-4-5-20251001`, then `turn` while `testbed`-style `BEGIN IMMEDIATE` probes run at 1 Hz. Any LOCKED sample longer than a second names the window, and a stack dump of the Hub (py-spy) at that moment names the holder. Since slice 1, the trace writer retries a batch the locked database refused (`traces.LOCKED_ATTEMPTS`), so this no longer loses spans. Seam: Runs (trigger) x the database.
+
+## F788 (B) -- a run's permission wait polls its request about once a second, and every poll is recorded as an `aw.request` span: 60 spans per permission prompt, 90% of a project's request traces
+
+**Status:** open 2026-10-20. Found by the trace-hub-wide slice 3 drive (scratch Hub :8027, `proj-9c510080c45f`).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes -- the counts and the rule are below; it belongs in slice 4 (`trace-hub-wide-4-impl`), whose drive measures growth.
+**Tier:** 0
+
+Over four real Haiku turns with `acceptEdits` (8 permission prompts), the project recorded 537 `aw.request` spans. 480 of them are `GET /api/v1/agent-actions/permission-requests/{request_id}` with actor `run`: 60 per prompt. The tool server polls its pending request while it waits for the operator or the judge, and slice 1's rule (D3, `trace_requests._keep`) records **every** request made with a run credential, so each poll is kept forever (trace-D3). The operator's own polling is skipped by default for exactly this reason. The run's polling is the same kind of traffic and is not.
+
+Expected: a run's routine read (a GET that answered 2xx, was fast and emitted no event) is not a span by default, like the operator's; `record_reads` turns both on. The wait itself is already recorded once, as the run's `aw.permission_wait` span. Keep recording a run's mutating, failing and slow requests and any request that emitted an event, as D3 and D5 already do. Test at the seam: `trace_requests._keep(method="GET", run_id="run-x", status=200, stream=False, elapsed=0.01)` must answer False. The existing test `test_a_runs_request_nests_under_its_open_tool_span` uses a POST, so it stays green. Re-drive: `d1020_hub_wide_trace_drive.py <project> work` should leave about 1/10 of today's request spans. Seam: Traces (requests) x the tool server's permission wait. This needs a design amendment: D3's "every request made with a run credential" becomes "every non-routine one".

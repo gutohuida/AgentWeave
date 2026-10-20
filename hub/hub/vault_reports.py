@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
-from . import manager, project_workspace, vault
+from . import manager, project_workspace, traces, vault
 from .db.engine import async_session_factory
 from .db.models import Runner
 from .distillation import locate, unread_note
@@ -299,6 +299,7 @@ async def review(plan: Plan) -> str:
     return outcome
 
 
+@traces.traced_work("vault_report", attributes={"aw.vault.report.id": "report_id"})
 async def review_in_background(project_id: str, report_id: str) -> None:
     """The background entry point: a report that is not looked into now stays pending, and
     nothing here raises into the event loop."""

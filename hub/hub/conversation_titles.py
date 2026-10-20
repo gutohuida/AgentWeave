@@ -27,7 +27,7 @@ from typing import Dict, List, Optional
 
 from sqlalchemy import select
 
-from . import manager, project_workspace
+from . import manager, project_workspace, traces
 from .conversations import get_conversation_by_id, title_from_message
 from .db.engine import async_session_factory
 from .db.models import (
@@ -397,6 +397,9 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
     return title
 
 
+@traces.traced_work(
+    "conversation_title", quiet=True, attributes={"gen_ai.conversation.id": "conversation_id"}
+)
 async def maybe_generate_title(*, project_id: str, conversation_id: Optional[str]) -> None:
     """Fire-and-forget wrapper for the run-completion path. Never raises, never delays a turn."""
     if not conversation_id:

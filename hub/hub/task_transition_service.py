@@ -25,6 +25,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import traces
 from .db.models import RequirementEvidence, Run, Task, TaskTransition
 from .task_transitions import (
     STATUS_BLOCKED,
@@ -985,6 +986,11 @@ TERMINAL_STATUSES = frozenset({"approved", "rejected"})
 
 
 async def release_task_workspace(session: AsyncSession, task: Task) -> None:
+    async with traces.work("worktree_release", task.project_id, **{"aw.task.id": task.id}):
+        await _release_task_workspace(session, task)
+
+
+async def _release_task_workspace(session: AsyncSession, task: Task) -> None:
     """Remove a finished task's checkout and keep its branch (design D5).
 
     What bounds the disk is the *checkout*; the branch is the record of what the task did, and
@@ -1110,6 +1116,11 @@ async def hub_written_documents(session: AsyncSession, workspace, project_id: st
 
 
 async def integrate_task(session: AsyncSession, task: Task, actor: Actor) -> list:
+    async with traces.work("task_integration", task.project_id, **{"aw.task.id": task.id}):
+        return await _integrate_task(session, task, actor)
+
+
+async def _integrate_task(session: AsyncSession, task: Task, actor: Actor) -> list:
     """Put the approved work in the product, and record what happened either way.
 
     **After** the transition row, and never able to undo it. Approval is a judgement that the work

@@ -41,6 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from . import traces
 from .repo_hygiene import seed_repo_excludes
 from .subprocess_windows import no_console_kwargs
 
@@ -103,7 +104,7 @@ class ReviewCommitUnavailableError(RuntimeError):
 
 
 def _run_git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
-    result = subprocess.run(
+    result = traces.run(
         ["git", *args],
         cwd=cwd,
         capture_output=True,
@@ -125,7 +126,7 @@ def is_git_repo(path: Path) -> bool:
     if shutil.which("git") is None or not path.exists():
         return False
     try:
-        result = subprocess.run(
+        result = traces.run(
             ["git", "rev-parse", "--is-inside-work-tree"],
             cwd=path,
             capture_output=True,

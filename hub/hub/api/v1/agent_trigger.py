@@ -1497,16 +1497,21 @@ async def _trigger_agent_directly(
             else None
         )
         try:
-            resolved = worktrees.resolve_turn_workspace(
-                repo_root,
-                agent,
-                config,
-                task_id=turn_workspace.task_id,
-                base=turn_workspace.base,
-                prerequisites=turn_workspace.prerequisites,
-                approved=turn_workspace.approved,
-                catch_up_to=catch_up_to,
-            )
+            with traces.work(
+                "worktree_create",
+                project_id,
+                **{"aw.agent": agent, "aw.task.id": turn_workspace.task_id},
+            ):
+                resolved = worktrees.resolve_turn_workspace(
+                    repo_root,
+                    agent,
+                    config,
+                    task_id=turn_workspace.task_id,
+                    base=turn_workspace.base,
+                    prerequisites=turn_workspace.prerequisites,
+                    approved=turn_workspace.approved,
+                    catch_up_to=catch_up_to,
+                )
         except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
             # Which workspace failed? `resolve_turn_workspace` prepares the **task's** checkout or
             # the **agent's** own, and both arms raise these two exception types carrying no scope.
@@ -3500,9 +3505,9 @@ async def _execute_run(
             # a conflict check has nothing to diff against. Best-effort: a git failure here
             # must not turn a completed/failed run into something worse than it already is.
             try:
-                snapshot_sha = await loop.run_in_executor(
-                    None, lambda: worktrees.snapshot_worktree(worktree, agent)
-                )
+                # `to_thread`, not `run_in_executor`: it carries the run's trace into the thread,
+                # so the snapshot's git is in the run's trace (trace-hub-wide D2).
+                snapshot_sha = await asyncio.to_thread(worktrees.snapshot_worktree, worktree, agent)
             except worktrees.GitCommandError:
                 logger.warning(
                     "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True
@@ -4569,10 +4574,9 @@ async def _execute_rpc_run(
             # Same best-effort snapshot as `_execute_run` — a git failure here must not turn
             # a completed/failed run into something worse than it already is.
             try:
-                loop = asyncio.get_running_loop()
-                snapshot_sha = await loop.run_in_executor(
-                    None, lambda: worktrees.snapshot_worktree(worktree, agent)
-                )
+                # `to_thread`, not `run_in_executor`: it carries the run's trace into the thread,
+                # so the snapshot's git is in the run's trace (trace-hub-wide D2).
+                snapshot_sha = await asyncio.to_thread(worktrees.snapshot_worktree, worktree, agent)
             except worktrees.GitCommandError:
                 logger.warning(
                     "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True

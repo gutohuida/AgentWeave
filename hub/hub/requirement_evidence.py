@@ -38,7 +38,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import run_liveness, worktrees
+from . import run_liveness, traces, worktrees
 from .db.models import (
     Agent,
     EvidenceFootprint,
@@ -728,7 +728,7 @@ async def capture_footprint(
 
 def _git(root: Path, *args: str) -> Optional[str]:
     try:
-        result = subprocess.run(
+        result = traces.run(
             ["git", *args],
             cwd=str(root),
             capture_output=True,
@@ -1063,7 +1063,7 @@ def is_reachable_from(root: Path, commit: str, branch: str) -> Optional[bool]:
     if _git(root, "rev-parse", "--verify", branch) is None:
         return None
     try:
-        result = subprocess.run(
+        result = traces.run(
             ["git", "merge-base", "--is-ancestor", commit, branch],
             cwd=str(root),
             capture_output=True,

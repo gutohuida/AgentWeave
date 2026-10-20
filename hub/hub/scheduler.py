@@ -14,7 +14,7 @@ from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
-from . import dependency_gate, requirement_evidence, requirement_links
+from . import dependency_gate, requirement_evidence, requirement_links, traces
 from .checkpoint_generation import format_notes, render_checkpoint
 from .checkpoints import (
     checkpoint_by_task_author,
@@ -3582,12 +3582,14 @@ class JobScheduler:
         Delegates to `_do_fire_job`, which spawns the agent directly — no synthetic
         `Message` for the watchdog to detect and re-trigger.
         """
-        # If session provided, use it; otherwise create our own
-        if session is not None:
-            return await self._do_fire_job(job, trigger, session)
+        attributes = {"aw.job.id": job.id, "aw.job.name": job.name, "aw.job.trigger": trigger}
+        async with traces.work("job", job.project_id, **attributes):
+            # If session provided, use it; otherwise create our own
+            if session is not None:
+                return await self._do_fire_job(job, trigger, session)
 
-        async with async_session_factory() as new_session:
-            return await self._do_fire_job(job, trigger, new_session)
+            async with async_session_factory() as new_session:
+                return await self._do_fire_job(job, trigger, new_session)
 
     async def _do_fire_job(
         self,
@@ -3640,6 +3642,11 @@ class JobScheduler:
             loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
             loop = loop_result.scalars().first()
             if loop is not None:
+                # A loop's firing is its tick; a flow is a loop on a spec document.
+                traces.annotate(
+                    kind="loop_tick",
+                    **{"aw.loop.id": loop.id, "aw.spec.document.id": loop.spec_document_id},
+                )
                 # D2a: a staged edit is applied *before* the guard when no firing of this job is
                 # active, so the guard, the skip check and `decide_firing` all ask about the agent
                 # that will run. An operator who switches away from a held agent would otherwise

@@ -37,10 +37,15 @@ have them here.
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
+import inspect
 import json
 import logging
+import os
 import secrets
+import subprocess
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
@@ -48,8 +53,10 @@ from typing import (
     Any,
     AsyncIterator,
     Awaitable,
+    Callable,
     Dict,
     Iterable,
+    Iterator,
     List,
     Optional,
     Sequence,
@@ -64,6 +71,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import __version__, run_secrets
 from .db.models import PermissionRequest, Question, Run, TraceSettings, TraceSpan
 from .runner_events import redact_text_secrets
+from .subprocess_windows import no_console_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -806,6 +814,11 @@ class PendingSpan:
     enqueued: bool = False
     #: Recorded even if its request would not be (a read that emitted an event, D5).
     keep: bool = False
+    #: The span this one is a child of (a command under its request or work, D6): written in its
+    #: parent's trace, with it, or not at all.
+    parent: Optional["PendingSpan"] = None
+    #: Children waiting for this span to be handed to the writer (`enqueue` hands them too).
+    children: List["PendingSpan"] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -846,6 +859,7 @@ def reset_current(token: Token) -> None:
 
 
 T = TypeVar("T")
+F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
 
 
 async def within_run(project_id: str, run_id: str, work: Awaitable[T]) -> T:
@@ -856,6 +870,205 @@ async def within_run(project_id: str, run_id: str, work: Awaitable[T]) -> T:
         return await work
     finally:
         reset_current(token)
+
+
+def _failure(exc: BaseException) -> str:
+    return str(redact(None, f"{type(exc).__name__}: {exc}"))[:2000]
+
+
+class Work:
+    """A trace of the Hub's own background work (D6, `background-work-is-a-trace`): an `aw.work`
+    span naming *kind*, current while the work runs, so the events it emits and the commands it
+    runs land on it rather than on whatever spawned it. A context manager, sync or async.
+
+    Its own trace's root, except inside other work, where it is a child (a batch's distils are in
+    the batch's trace). Started inside a request or a run, it names that as `aw.caused_by.*`.
+    Handed to the writer when it ends, however it ends; an exception marks it an error and goes on.
+    *quiet* work (a pass that often finds nothing to do) is recorded only if something happened in
+    it: an event, a command, child work, an error."""
+
+    def __init__(self, kind: str, project_id: str, *, quiet: bool = False, **attributes: Any):
+        self.quiet = quiet
+        self.parent: Current = current_span()
+        caused_by: Dict[str, Any] = {}
+        if isinstance(self.parent, RunTrace):
+            caused_by["aw.caused_by.run.id"] = self.parent.run_id
+        elif isinstance(self.parent, PendingSpan) and self.parent.operation != "aw.work":
+            caused_by["aw.caused_by.span.id"] = self.parent.span_id
+        self.span = PendingSpan(
+            project_id=project_id,
+            name=kind,
+            operation="aw.work",
+            start_time=_now(),
+            attributes={
+                "aw.work.kind": kind,
+                "aw.project.id": project_id,
+                **caused_by,
+                **attributes,
+            },
+        )
+        self._token: Optional[Token] = None
+
+    def __enter__(self) -> PendingSpan:
+        self._token = set_current(self.span)
+        return self.span
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        span = self.span
+        if exc is not None:
+            span.status = "error"
+            span.status_message = _failure(exc)
+        if self._token is not None:
+            reset_current(self._token)
+        span.end_time = _now()
+        if self.quiet and span.status != "error" and not span.events and not span.children:
+            return
+        try:
+            parent = self.parent
+            if (
+                isinstance(parent, PendingSpan)
+                and parent.operation == "aw.work"
+                and not parent.enqueued
+            ):
+                span.parent = parent
+                parent.children.append(span)
+            else:
+                enqueue(span)
+        except Exception:  # noqa: BLE001 -- recording work never fails it (D1)
+            logger.debug("recording a work span failed", exc_info=True)
+
+    async def __aenter__(self) -> PendingSpan:
+        return self.__enter__()
+
+    async def __aexit__(self, exc_type, exc, traceback) -> None:
+        self.__exit__(exc_type, exc, traceback)
+
+
+def work(kind: str, project_id: str, *, quiet: bool = False, **attributes: Any) -> Work:
+    """`with traces.work("check_run", project_id, **attrs):` -- see `Work`."""
+    return Work(kind, project_id, quiet=quiet, **attributes)
+
+
+async def within_work(kind: str, project_id: str, job: Awaitable[T], **attributes: Any) -> T:
+    """Await *job* inside `work(kind, ...)`: for a `create_task` site, `within_run`'s shape."""
+    async with work(kind, project_id, **attributes):
+        return await job
+
+
+def traced_work(
+    kind: str, *, quiet: bool = False, attributes: Optional[Dict[str, str]] = None
+) -> Callable[[F], F]:
+    """Decorate an async function whose `project_id` argument names its project as `work(kind)`;
+    *attributes* maps a span attribute to the argument whose value it records."""
+
+    def decorate(function: F) -> F:
+        signature = inspect.signature(function)
+
+        @functools.wraps(function)
+        async def traced(*args: Any, **kwargs: Any) -> Any:
+            try:
+                arguments = signature.bind_partial(*args, **kwargs).arguments
+                project_id = str(arguments.get("project_id") or "")
+                named = {key: arguments.get(arg) for key, arg in (attributes or {}).items()}
+            except Exception:  # noqa: BLE001 -- the call itself reports a bad binding
+                return await function(*args, **kwargs)
+            async with work(kind, project_id, quiet=quiet, **named):
+                return await function(*args, **kwargs)
+
+        return traced  # type: ignore[return-value]
+
+    return decorate
+
+
+def annotate(*, kind: Optional[str] = None, **attributes: Any) -> None:
+    """Name what the current work turned out to be (a job firing that is a loop's tick)."""
+    span = current_span()
+    if not isinstance(span, PendingSpan) or span.operation != "aw.work" or span.enqueued:
+        return
+    if kind:
+        span.name = kind
+        span.attributes["aw.work.kind"] = kind
+    span.attributes.update(attributes)
+
+
+def _command_name(args: Sequence[str]) -> str:
+    """`git merge-tree`: the program and its first word that is not an option (`-c x=y` skipped),
+    else its first option (`git --version`)."""
+    if not args:
+        return "command"
+    program = os.path.basename(str(args[0]))
+    rest = iter(args[1:])
+    for word in rest:
+        if word in ("-c", "-C"):
+            next(rest, None)
+        elif not str(word).startswith("-"):
+            return f"{program} {word}"
+    return f"{program} {args[1]}" if len(args) > 1 else program
+
+
+@contextmanager
+def command(
+    args: Sequence[str] | str, *, name: Optional[str] = None
+) -> Iterator[Optional[PendingSpan]]:
+    """A command the Hub runs, as an `aw.command` child of the current trace (D6,
+    `a-command-the-hub-runs-is-a-span`): its redacted arguments, its duration, and through
+    `exited` its exit code, an error on a non-zero one. Yields `None`, recording nothing, where no
+    trace is current. Safe in a thread: `asyncio.to_thread` copies the current span with it."""
+    parent = current_span()
+    if parent is None or (isinstance(parent, PendingSpan) and parent.enqueued):
+        yield None
+        return
+    argv = [args] if isinstance(args, str) else [str(a) for a in args]
+    span = PendingSpan(
+        project_id=parent.project_id,
+        name=(name or _command_name(argv))[:256],
+        operation="aw.command",
+        start_time=_now(),
+        attributes={"process.command_args": redact(parent.run_id, argv)},
+        run_id=parent.run_id,
+    )
+    try:
+        yield span
+    except BaseException as exc:
+        span.status = "error"
+        span.status_message = _failure(exc)
+        code = getattr(exc, "returncode", None)
+        if isinstance(code, int):
+            span.attributes["process.exit.code"] = code
+        raise
+    finally:
+        span.end_time = _now()
+        try:
+            if isinstance(parent, RunTrace):
+                enqueue(span)  # the writer nests it under the run's tool call, as a request (D4)
+            elif not parent.enqueued:
+                span.parent = parent
+                parent.children.append(span)
+        except Exception:  # noqa: BLE001 -- recording a command never fails it (D1)
+            logger.debug("recording a command span failed", exc_info=True)
+
+
+def exited(span: Optional[PendingSpan], code: Optional[int], *, why: str = "") -> None:
+    """Record a command's exit (*code* `None`: it did not exit by itself, e.g. a timeout)."""
+    if span is None:
+        return
+    if code is not None:
+        span.attributes["process.exit.code"] = code
+    if code != 0:
+        span.status = "error"
+        span.status_message = why or (f"exit code {code}" if code is not None else "did not exit")
+    elif span.status == "unset":
+        span.status = "ok"
+
+
+def run(args: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess:
+    """`subprocess.run(args, **kwargs)`, recorded as a `command` span, with no console window."""
+    with command(args) as span:
+        result = subprocess.run(  # noqa: S603 -- the caller's argv, as before
+            args, **{**no_console_kwargs(), **kwargs}
+        )
+        exited(span, result.returncode)
+    return result
 
 
 #: The bound on an event's data stored on a span (D5), in characters of its JSON.
@@ -976,13 +1189,26 @@ def _drop(spans: Iterable[PendingSpan]) -> None:
         _dropped[span.project_id] = _dropped.get(span.project_id, 0) + 1
 
 
+def _tree(span: PendingSpan) -> Iterator[PendingSpan]:
+    """*span* and its children, each after its parent, the writer's order."""
+    yield span
+    for child in span.children:
+        child.project_id = span.project_id
+        child.run_id = span.run_id
+        yield from _tree(child)
+
+
 def enqueue(span: PendingSpan) -> None:
-    """Hand *span* to the writer. Never blocks and never raises into the caller's work."""
-    span.enqueued = True
-    if len(_queue) >= MAX_QUEUE:
-        _drop([span])
+    """Hand *span*, then its children, to the writer. Never blocks and never raises into the
+    caller's work. A full queue drops a span with its children: a child is never written alone."""
+    spans = list(_tree(span))
+    for pending in spans:
+        pending.enqueued = True
+        pending.children = []
+    if len(_queue) + len(spans) > MAX_QUEUE:
+        _drop(spans)
         return
-    _queue.append(span)
+    _queue.extend(spans)
 
 
 def reset_spans() -> None:
@@ -1021,10 +1247,20 @@ async def _write_spans(batch: Sequence[PendingSpan]) -> None:
     from .db.engine import async_session_factory
 
     async with async_session_factory() as db:
+        #: Where each span of the batch was written: its children go in the same trace.
+        placed: Dict[str, Tuple[str, datetime]] = {}
         for pending in batch:
             parent: Optional[str] = None
             trace_id, trace_started_at = pending.trace_id, pending.start_time
-            if pending.run_id:
+            if pending.parent is not None:
+                where = placed.get(pending.parent.span_id)
+                if where is None and pending.parent.run_id is None:
+                    where = (pending.parent.trace_id, pending.parent.start_time)
+                if where is None:
+                    continue  # its parent was not written; a child is never a trace of its own
+                trace_id, trace_started_at = where
+                parent = pending.parent.span_id
+            elif pending.run_id:
                 root = await db.get(TraceSpan, root_span_id(pending.run_id))
                 if root is None:
                     continue  # a run with no trace; its request is never a trace of its own
@@ -1034,6 +1270,7 @@ async def _write_spans(batch: Sequence[PendingSpan]) -> None:
                     await _tool_span_during(db, pending.run_id, pending.start_time, end)
                     or root.span_id
                 )
+            placed[pending.span_id] = (trace_id, trace_started_at)
             db.add(
                 TraceSpan(
                     span_id=pending.span_id,

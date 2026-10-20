@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-10-19-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "trace-hub-wide-3-impl",
-    "next_action": "Do queue item trace-hub-wide-3-impl: slice 3 of spec/changes/everything-the-hub-does-is-in-a-trace -- traces.work(kind, project_id, **attrs) opens an aw.work root (D6) and is current while the work runs (so persist_event's events land on it), around a project check run first (the acceptance test), then jobs, loop ticks, flow/review staffing, inbound queue, worktree ops, task integration, spec fold, distil; traces.command(argv) wraps the Hub's git/check subprocess sites as aw.command children. Turn test_a_check_run_is_a_trace_of_its_commands green and drop its marker; extend scripts/drive/d1020_hub_wide_trace_drive.py with a work step and drive it on a scratch Hub. Log it, update STATE, commit, push.",
+    "current": "trace-hub-wide-4-impl",
+    "next_action": "Do queue item trace-hub-wide-4-impl: slice 4 of spec/changes/everything-the-hub-does-is-in-a-trace -- D7: a logging.Handler at WARNING on the hub logger appends a redacted, 8 KiB-bounded 'log' span event to the current span (no current trace: not stored); the OTLP download gains resourceLogs (traceId/spanId) and the push posts /v1/logs. Turn test_a_warning_the_hub_logs_is_on_its_trace_and_exported_as_a_log green and drop its marker. Fix F788 test-first (trace_requests._keep skips a run's routine GET). D8: Traces list kind filter + labels, default runs (TracesSection.tsx:70), bundle rebuilt once. Then the whole-change acceptance drive (otlp_receiver.py, spans/bytes per item measured), fold the change via Hub routes on :8010, METRICS row. Log it, update STATE, commit, push.",
     "queue": [
         {
             "id": "trace-hub-wide-spec",
@@ -38,16 +38,16 @@
         },
         {
             "id": "trace-hub-wide-3-impl",
-            "status": "open",
+            "status": "done",
             "title": "Slice 3: background work traces + git/check child spans",
-            "detail": "Jobs, loop ticks, flow staffing/review, inbound queue, worktree ops, checks, spec fold, distil. Note from slice 2: a task spawned inside a request or run inherits its current (request span falls back once enqueued; RunTrace persists, e.g. turn_scheduler._retry, _queue_decision_notes): traces.work must set its own current so background work stops attaching to whatever spawned it.",
+            "detail": "Done iter 5: traces.work (Work: sync/async, nests in work, aw.caused_by under request/run, quiet), traces.command/exited/run (aw.command children written with parent; RunTrace nests), wired into check_run, job/loop_tick, inbound_queue, worktree_create/release, task_integration, review_staffing, spec_fold, distil(_batch), titles, vault_report, spec_vault_check; snapshot to_thread. Drive work step green on scratch :8027 proj-9c510080c45f. Filed F788.",
             "model": "opus"
         },
         {
             "id": "trace-hub-wide-4-impl",
             "status": "open",
             "title": "Slice 4: WARNING+ log records on trace, OTLP logs export, redaction",
-            "detail": "Then drive whole change, measure growth, fold change via Hub routes, rebuild bundle once if UI touched. The app's Traces list now shows request traces unlabeled among runs (TracesSection.tsx:70 only labels 'worker'): add the kind filter + labels (D8), default to runs.",
+            "detail": "Then drive whole change, measure growth, fold change via Hub routes, rebuild bundle once if UI touched. The app's Traces list now shows request traces unlabeled among runs (TracesSection.tsx:70 only labels 'worker'): add the kind filter + labels (D8), default to runs. Also F788 (B): a run's routine GET (permission-request polling, 60 spans/prompt, 90% of request spans) is skipped like the operator's unless record_reads; amend D3 at fold. Consider marking expected probe exits (merge-base --is-ancestor 1) not error.",
             "model": "opus"
         },
         {
