@@ -37333,3 +37333,31 @@ Expected: the hint is the status command's (`_hub_start_hint(profile, port)`), a
 - The Manager page's firing for F801's runner-less report reads `failed · runner default · 0.0 s` although there was no runner (the event has `"runner_id": ""`).
 
 Expected: quote paths as written (reuse `_quote`), decode text with `utf-8-sig`, and word a runner-less firing "no runner". Tests: `hub/tests/test_vault_paths.py` for the first two; a UI test for the firing row. Seam: Knowledge vault (add by path) x Manager jobs (firing list).
+
+## F804 (B) -- a question nobody waits on, asked in one conversation, takes over the composer of every other conversation with that agent (archived ones included): the operator's next instruction there is stored as its answer and reaches the agent as "Question: ... Answer: <instruction>"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8146, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Questions
+**Ready:** yes -- repro below, driven twice.
+**Tier:** 0
+
+Agent `asker` (`claude-haiku-4-5-20251001`, `question_timeout_seconds: 30`) asked `q-5266fa021f02` ("Which name should the new helper have?", options double/twice) in conversation A (`conv-5933fff47ed8`). Nobody answered, its run ended, and the Questions route lists it with `asker_waiting: false` (the "no longer waiting" chip, which is right). Then the operator opened a different conversation B with the same agent (`conv-45ef9d145288`). B shows A's question card with the "no longer waiting" chip above B's composer, and the composer's placeholder reads "Answer asker…". The operator typed "New task: add a subtract(a, b) function to src/calc.py and reply in one line." and pressed Send. Nothing was triggered as a message. Instead `PATCH /questions/q-5266fa021f02` stored that sentence as A's answer (`answered 1`, `answer` = the instruction), and the Hub queued `entry-c45c84e0366d` into B with the content "Question: Which name should the new helper have?\n\nAnswer: New task: add a subtract(a, b) ...". Haiku happened to do the task. The record of A's question now holds an answer the operator never gave, and anything the send would have carried with it is skipped: the answer path returns before the Explore document is created and before the model, effort and permission pills are applied.
+
+Archiving A does not release it. A second stale question (`q-3bf07bba7fe5`), with its conversation archived through `POST .../conversations/{id}/archive`, still rendered in B (`agent-question-q-3bf07bba7fe5` present) with "Answer asker…". The only way out is to notice the card belongs elsewhere and press its X to decline it.
+
+Cause: `activeQuestionFor(questions, agent)` (`hub/ui/src/lib/pendingQuestions.ts:30-38`) filters by `from_agent` only. It never looks at `question.conversation_id`, and the card's own docstring says "the card sits inside one conversation" (`hub/ui/src/components/agents/AgentQuestionCard.tsx:8`). `AgentOutputPanel.handleComposerSubmit` (`hub/ui/src/components/agents/AgentOutputPanel.tsx:1040-1046`) then hands every send to `answerPendingQuestion` whenever a `pendingQuestion` exists, and its reason is "otherwise the operator's reply becomes a new message and the agent keeps waiting". That reason is false for a question with `asker_waiting === false`, because nothing is waiting.
+
+Expected: the tray in conversation X shows only questions whose `conversation_id` is X (or have none). A question nobody waits on does not take free text away from the composer: picking one of its options still answers it, but typed text is sent as a message. Failing tests: in `hub/ui/src/__tests__/` (beside `refusalRecordTray.test.ts`), `activeQuestionFor` given conversation B returns no question asked in conversation A; and an `AgentOutputPanel` render with a stale question from another conversation, after typing and sending, calls the trigger (`postTrigger`) and not the question PATCH. Seam: Questions x Conversations & composer.
+
+## F805 (D) -- the files tab's refusals are less legible than its neighbours: an oversized file reads "file is 11200000 bytes, exceeding the 1048576 byte limit", and a file that is not UTF-8 shows replacement characters with nothing saying why
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8146, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Conversations & composer
+**Ready:** yes
+**Tier:** 0
+
+In the side panel's Files view, `huge.txt` (11.2 MB) opens to `file-tab-error` "file is 11200000 bytes, exceeding the 1048576 byte limit". That is the raw `WorkspaceFileTooLargeError` text (`hub/hub/workspace_file.py:36-40`, passed through as the 413 detail by `hub/hub/api/v1/workspace.py`). It has unformatted numbers, while the binary notice beside it formats them ("This file is binary (16,384 bytes) and cannot be previewed."), and it does not say what would work instead (open it in an editor; "Insert into composer" still works and the agent can read it). `latin1.txt` (bytes `caf\xe9 cr\xe8me`) renders as "caf� cr�me" labelled "Plain text". `read_workspace_file` decodes with `errors="replace"` (`workspace_file.py:84`) and returns no flag saying anything was replaced.
+
+Expected: the oversized sentence uses readable sizes and names the alternative ("This file is 11 MB; the preview reads up to 1 MB. Insert it into the composer to let the agent read it."), and a lossy decode says so (a `decoded_lossily` flag the tab turns into one line). Tests: `hub/tests/test_workspace_file*.py` for the flag; a `FileTab` UI test for both sentences. Seam: Conversations & composer (side panel files tab) x the workspace file route.

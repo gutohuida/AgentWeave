@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T17:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-questions-sweep",
-    "next_action": "Run 'sweep-questions-sweep': Questions x Conversations & composer. NEW first: the turn clock counts work, not waiting (F782/F783): an ask_user left open past where the old 600 s clock cut, a deadline cut not re-delivered unchanged. Then answer/decline/timeout/late answer; composer @file over GET /workspace/paths|file (outside path, binary, huge file -- unreached until 10-19). Bind agents to claude-haiku-4-5-20251001 (bare 'claude-haiku-4-5' is a 400; alias 'haiku' means claude-haiku-5-5).",
+    "current": "sweep-projects-sweep",
+    "next_action": "Run 'sweep-projects-sweep': Projects x Runners & models x Keyboard & dialogs. Unreached-until-10-19 first: the in-app folder browser (GET /fs/roots, /fs/list) behind the typed path; delete-project dialog in a browser. Then runner aliases/undeclared model refusal/409 holders, and keyboard-only dialog focus. Bind agents to claude-haiku-4-5-20251001.",
     "queue": [
         {
             "id": "plan-review",
@@ -47,7 +47,7 @@
         },
         {
             "id": "sweep-questions-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Questions x Conversations & composer",
             "detail": "NEW first: the turn clock counts work, not waiting (F782/F783): an ask_user left open past where the old 600 s clock cut, a deadline cut not re-delivered unchanged. Then answer/decline/timeout/late answer; composer @file over GET /workspace/paths|file (outside path, binary, huge file -- unreached until 10-19)."
         },
