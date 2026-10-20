@@ -11,7 +11,7 @@ import json
 import threading
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pytest
 from sqlalchemy import select
@@ -151,8 +151,10 @@ async def test_a_runs_end_closes_its_spans_and_traces_its_waits(app, auth_header
 
 
 class _Receiver:
-    def __init__(self) -> None:
+    def __init__(self, answers: Optional[Dict[str, int]] = None) -> None:
         self.posts: List[Dict[str, Any]] = []
+        #: Status per path, else 200 (a backend that implements traces only answers 404 on logs).
+        self.answers = answers or {}
         receiver = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -161,7 +163,7 @@ class _Receiver:
                 receiver.posts.append(
                     {"path": self.path, "headers": dict(self.headers), "body": json.loads(raw)}
                 )
-                self.send_response(200)
+                self.send_response(receiver.answers.get(self.path, 200))
                 self.send_header("Content-Length", "2")
                 self.end_headers()
                 self.wfile.write(b"{}")

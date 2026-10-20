@@ -138,3 +138,14 @@ async def test_an_open_ask_me_card_pauses_the_clock(monkeypatch):
     )
 
     assert outcome.status == "completed", outcome.error
+
+
+@pytest.mark.parametrize("value", [None, "", "abc", "0", "1", "5", "9", "10", "300", "600", "700"])
+def test_an_ask_me_cards_pause_lasts_as_long_as_the_card_waits(value):
+    """Review 0203: the pause's bound is read from `AW_DECISION_TIMEOUT` by the rule the card's own
+    wait uses (`agent_trigger._decision_timeout`, 10..600 else 120). With a looser rule, a value
+    of 1..9 ended the pause seconds into a card that stayed open for 120 s."""
+    from hub.api.v1.agent_trigger import _decision_timeout
+
+    env = {} if value is None else {"AW_DECISION_TIMEOUT": value}
+    assert copilot_acp._card_wait_seconds(env) == _decision_timeout(env)

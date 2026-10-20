@@ -66,8 +66,10 @@ from typing import (
 )
 
 from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy import event as sa_event
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from . import run_secrets
 from .db.models import PermissionRequest, Question, Run, TraceSettings, TraceSpan
@@ -308,18 +310,36 @@ def _append_part(span: TraceSpan, part: Dict[str, Any], at: datetime) -> None:
 async def _add_event(
     db: AsyncSession, run_id: str, name: str, at: datetime, attributes: Dict[str, Any]
 ) -> bool:
-    """Append an event to *run_id*'s root; False when the run has no trace."""
-    root = await db.get(TraceSpan, root_span_id(run_id))
-    if root is None:
+    """Append an event to *run_id*'s root; False when the run has no trace.
+
+    One statement that appends in the database (SQLite's `json_insert`), never a list read earlier
+    and written back: the writer's session and a run's own session both append to the same root,
+    and a copy read before the other committed would erase its event (review 0203)."""
+    event = {
+        "name": name,
+        "time": at.isoformat(),
+        "attributes": {k: v for k, v in attributes.items() if v is not None},
+    }
+    result = await db.execute(
+        update(TraceSpan)
+        .where(TraceSpan.span_id == root_span_id(run_id))
+        .values(
+            events=func.json_insert(
+                TraceSpan.events,
+                "$[#]",
+                func.json(json.dumps(event, default=str, ensure_ascii=False)),
+            )
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if not result.rowcount:
         return False
-    root.events = [
-        *(root.events or []),
-        {
-            "name": name,
-            "time": at.isoformat(),
-            "attributes": {k: v for k, v in attributes.items() if v is not None},
-        },
-    ]
+    # A root this session already holds keeps its loaded copy in step, without marking it changed.
+    held = db.sync_session.identity_map.get(
+        db.sync_session.identity_key(TraceSpan, root_span_id(run_id))
+    )
+    if held is not None and "events" in held.__dict__:
+        set_committed_value(held, "events", [*(held.events or []), event])
     return True
 
 
@@ -1107,6 +1127,82 @@ def _event_record(
     }
 
 
+_STAGED = "aw_trace_staged_events"
+_COMMITTED = "aw_trace_committed"
+
+
+def _on_commit(
+    session: AsyncSession, span: PendingSpan, record: Dict[str, Any], project_id: str
+) -> None:
+    """Put *record* on the request's *span* once the transaction staging its event commits.
+
+    The span is in memory, outside the transaction, so an event appended at once stayed on the
+    trace when its savepoint or transaction rolled back (review 0203: a flow refused as empty
+    showed `loop_created` for a loop that never existed). Staged on the session instead: a
+    savepoint's rollback drops what it staged, a commit attaches what is left, and a session closed
+    without committing attaches nothing."""
+    sync = session.sync_session
+    owner = sync.get_nested_transaction() or sync.get_transaction()
+    if _STAGED not in sync.info:
+        sync.info[_STAGED] = []
+        sa_event.listen(sync, "after_soft_rollback", _drop_rolled_back)
+        sa_event.listen(sync, "after_commit", _mark_committed)
+        sa_event.listen(sync, "after_transaction_end", _attach_committed)
+    sync.info[_STAGED].append((owner, span, record, project_id))
+
+
+def _within(owner: Any, transaction: Any) -> bool:
+    while owner is not None:
+        if owner is transaction:
+            return True
+        owner = owner.parent
+    return False
+
+
+def _drop_rolled_back(sync: Any, previous_transaction: Any) -> None:
+    sync.info[_STAGED] = [
+        entry for entry in sync.info[_STAGED] if not _within(entry[0], previous_transaction)
+    ]
+
+
+def _mark_committed(sync: Any) -> None:
+    sync.info[_COMMITTED] = True
+
+
+def _attach_committed(sync: Any, transaction: Any) -> None:
+    if transaction.parent is not None:
+        return
+    committed = sync.info.pop(_COMMITTED, False)
+    staged = sync.info[_STAGED]
+    mine = [entry for entry in staged if _within(entry[0], transaction)]
+    sync.info[_STAGED] = [entry for entry in staged if not _within(entry[0], transaction)]
+    if not committed:
+        return
+    for _, span, record, project_id in mine:
+        try:
+            if not span.enqueued:
+                span.events.append(record)
+                span.keep = True
+                span.project_id = span.project_id or project_id
+                continue
+            # The request was handed to the writer before its transaction committed (work it
+            # spawned): the event is a short trace of its own, as with no request current.
+            at = datetime.fromisoformat(record["time"])
+            enqueue(
+                PendingSpan(
+                    project_id=project_id,
+                    name=record["name"][:256],
+                    operation="aw.event",
+                    start_time=at,
+                    end_time=at,
+                    attributes={"aw.event.type": record["name"], "aw.project.id": project_id},
+                    events=[record],
+                )
+            )
+        except Exception:  # noqa: BLE001 -- an event's trace never stops the event (D5)
+            logger.debug("putting a committed event in a trace failed", exc_info=True)
+
+
 async def record_event(
     session: AsyncSession,
     *,
@@ -1120,9 +1216,9 @@ async def record_event(
 ) -> None:
     """Put the event `persist_event` is writing in a trace (D5, `every-event-is-in-a-trace`).
 
-    On the current request's span while it is still being recorded; on the run's root while a
-    run's executor is current; else a short ended `aw.event` span of its own, staged in *session*
-    so the event and its span commit together."""
+    On the current request's span while it is still being recorded, once *session* commits; on the
+    run's root while a run's executor is current; else a short ended `aw.event` span of its own,
+    staged in *session* so the event and its span commit together."""
     at = _now()
     current = current_span()
 
@@ -1139,9 +1235,7 @@ async def record_event(
         )
 
     if isinstance(current, PendingSpan) and not current.enqueued:
-        current.events.append(_record(current.run_id))
-        current.keep = True
-        current.project_id = current.project_id or project_id
+        _on_commit(session, current, _record(current.run_id), project_id)
         return
     if isinstance(current, RunTrace) and current.project_id == project_id:
         attached = _record(current.run_id)["attributes"]

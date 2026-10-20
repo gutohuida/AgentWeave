@@ -94,13 +94,19 @@ async def sync_session(
             if refusal is not None:
                 raise HTTPException(status.HTTP_409_CONFLICT, detail=refusal)
 
+    # A payload with no `agents` key says nothing about the agents, so their synced entries are
+    # kept with it: dropping them would change where each one works, unchecked by the guard above,
+    # which only reads the agents a payload names (review 0203).
+    data = body.data
+    if not isinstance(data.get("agents"), dict) and isinstance(old_data.get("agents"), dict):
+        data = {**data, "agents": old_data["agents"]}
     if row:
-        row.data = body.data
+        row.data = data
         row.synced_at = datetime.now(timezone.utc)
     else:
         row = ProjectSession(
             project_id=project_id,
-            data=body.data,
+            data=data,
             synced_at=datetime.now(timezone.utc),
         )
         session.add(row)

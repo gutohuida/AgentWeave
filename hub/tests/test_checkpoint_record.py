@@ -973,3 +973,35 @@ def test_a_run_bound_to_an_id_that_is_not_task_shaped_still_resolves_a_branch():
         "task-ab12"
     )
     assert _branch_of(Run(id="r", agent="bad name!", task_id=None)) is None
+
+
+def test_a_turn_on_the_shared_checkout_claims_no_commits_on_its_branch(tmp_path, monkeypatch):
+    """Review 0203: a read-only agent runs in the project's own checkout, whose branch is main;
+    what others committed there during its turn (the operator, a merge) is not its work."""
+    from datetime import datetime, timedelta, timezone
+
+    import hub.worktrees as worktrees
+    from hub.checkpoints import _files_from_runs
+
+    monkeypatch.setattr(worktrees, "files_committed_between", real_files_committed_between)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@t")
+    _git(repo, "config", "user.name", "t")
+    (repo / "base.txt").write_text("base")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+    now = datetime.now(timezone.utc)
+    (repo / "operator_work.txt").write_text("o")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "the operator commits on main mid-turn")
+
+    run = Run(
+        id="run-ro",
+        agent="reader",
+        workspace_dir=str(repo),
+        started_at=now - timedelta(minutes=5),
+        ended_at=now + timedelta(minutes=5),
+    )
+    assert _files_from_runs([run], repo) == []

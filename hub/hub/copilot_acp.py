@@ -974,10 +974,6 @@ def _subagent_id(params: Mapping[str, Any], data: Mapping[str, Any]) -> Optional
     return None
 
 
-#: The longest an Ask me card can wait (`agents.MAX_WAITING_SECONDS`, not importable here without a
-#: cycle): the bound on a card's pause when the run's own permission wait cannot be read (F783).
-_LONGEST_OPERATOR_WAIT_SECONDS = 600
-
 #: A Copilot `errorType` that may name an error code (D5); anything else is `copilot.unknown`.
 _ERROR_TYPE_RE = re.compile(r"^[a-z_]{1,32}$")
 
@@ -2957,13 +2953,13 @@ async def run_turn(
 
 
 def _card_wait_seconds(env: Optional[Mapping[str, str]]) -> int:
-    """How long this run's Ask me card may wait: the trigger's `AW_DECISION_TIMEOUT`, else the
-    longest wait the Hub allows. Only the bound on a pause the card's answer always ends."""
-    try:
-        value = int((env or {}).get("AW_DECISION_TIMEOUT") or "")
-    except ValueError:
-        return _LONGEST_OPERATOR_WAIT_SECONDS
-    return value if 0 < value <= _LONGEST_OPERATOR_WAIT_SECONDS else _LONGEST_OPERATOR_WAIT_SECONDS
+    """How long this run's Ask me card may wait, and so the bound on the pause it puts on the turn
+    clock (F783): the wait the trigger hands `request_approval`, read by the trigger's own rule, so
+    an out-of-range `AW_DECISION_TIMEOUT` cannot end the pause while the card is still open."""
+    # Imported here, not at module scope: `agent_trigger` imports this module.
+    from .api.v1.agent_trigger import _decision_timeout
+
+    return _decision_timeout(dict(env or {}))
 
 
 #: Follow-up prompts the Hub may send in one turn after a refusal ended a prompt (F660 D3, wpc1-c).
