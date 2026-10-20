@@ -2,7 +2,7 @@
 while 900 large tasks are created, then reads what arrived (2026-10-20: one gap frame, dropped 152).
 State from s1020_traces.py (project P2) on the scratch Hub it names.
 """
-import sys, json, socket, time
+import sys, socket, time
 sys.argv=['x','none'];sys.path.insert(0,'scripts/drive')
 import s1020_traces as T, e2e
 P2=T.S["P2"]
