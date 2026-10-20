@@ -53,7 +53,6 @@ function conversation(overrides: Partial<AgentConversation> = {}): AgentConversa
 
 function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
   const props: React.ComponentProps<typeof Sidebar> = {
-    activePage: 'overview',
     activeAgent: null,
     onOpenProject: vi.fn(),
     onOpenAgent: vi.fn(),
@@ -230,8 +229,11 @@ describe('conversations as a navigable level', () => {
     // only works for agents you already expanded.
     expect(screen.getByTestId('rail-agent-attention-proj-a-claude')).toBeInTheDocument()
 
+    // Expanded, the agent row keeps saying so — it is the agent's own state, one signal in words
+    // — and the waiting conversation carries its own mark beneath it.
     expandClaude()
-    expect(screen.queryByTestId('rail-agent-attention-proj-a-claude')).toBeNull()
+    expect(screen.getByTestId('rail-agent-attention-proj-a-claude')).toHaveTextContent('waiting')
+    expect(screen.getByTestId('rail-conversation-conv-waiting-attention')).toHaveAccessibleName('Waiting for you')
   })
 
   it('distinguishes a peer-created conversation', () => {

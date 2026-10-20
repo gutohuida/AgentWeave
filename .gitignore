@@ -197,3 +197,10 @@ hub/agentweave.db
 # keeps the directory itself visible and makes the exception below actually work.
 .claude/handoffs/*
 !.claude/handoffs/DEAD-ENDS.md
+
+# ui-finesse mock build output
+hub/ui/dist-mock/
+
+# The mock's recorded data and screenshots come from the operator's own project: kept local, never pushed.
+hub/ui/mock/fixtures/*.json
+hub/ui/mock/before/

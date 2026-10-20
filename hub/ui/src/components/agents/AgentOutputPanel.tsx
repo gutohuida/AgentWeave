@@ -10,7 +10,11 @@ import {
   postureAtRest,
 } from '@/api/agents'
 import {
+  conversationErrorMessage,
   conversationLabel,
+  archiveConversation,
+  renameConversation,
+  unarchiveConversation,
   useAgentChatHistory,
   useAgentConversations,
   useAgentRecentChat,
@@ -39,15 +43,17 @@ import {
 } from '@/store/checkpointOperationStore'
 import { AgentTimeline } from './AgentTimeline'
 import { BannerStack, type ConversationBanner } from './BannerStack'
-import { Composer } from './Composer'
 import { PermissionRequestCard } from './PermissionRequestCard'
 import { openPermissionRequestsFor } from '@/lib/pendingPermissions'
-import { AgentQuestionCard } from './AgentQuestionCard'
 import { usePendingPermissionRequests } from '@/api/permissions'
 import { activeQuestionFor } from '@/lib/pendingQuestions'
 import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
-import { ConversationControls, type HandoffState } from './ConversationControls'
-import { agentColorVars } from '@/lib/agentColors'
+import { handoffLabel, handoffReason, type HandoffState } from '@/lib/checkpointControl'
+import { ConversationBar } from '@/components/conversation/ConversationBar'
+import { ConversationComposerDock } from '@/components/conversation/ConversationComposerDock'
+import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
+import { hubDate } from '@/lib/hubTime'
+import { toast } from '@/lib/toast'
 
 interface AgentOutputPanelProps {
   agent: AgentSummary
@@ -244,17 +250,16 @@ export function AgentOutputPanel({
   const answerQuestion = useAnswerQuestion()
   const declineQuestion = useDeclineQuestion()
   const [questionSelection, setQuestionSelection] = useState<string[]>([])
-  const [composerDraft, setComposerDraft] = useState('')
   // The same selector the card renders from. Deriving it separately here was safe while only one
   // question could be outstanding; with a batch the two could order differently, and the operator
   // would read one question while answering another.
   const pendingQuestion = activeQuestionFor(openQuestions, agent.name).question
-  /** Something the run is blocked on — a permission request or a question — is showing. They
-   *  float over the foot of the conversation in a tray (F345) rather than stacking in the
-   *  composer's own column, where an unbounded card squeezed the transcript to nothing and could
-   *  push the composer itself off the bottom of the panel. */
-  const hasInterjection =
-    !!pendingQuestion || openPermissionRequestsFor(permissionRequests, agent.name).length > 0
+  /** A permission request the run is blocked on is showing. It floats over the foot of the
+   *  conversation in a tray (F345) rather than stacking in the composer's own column, where an
+   *  unbounded card squeezed the transcript to nothing and could push the composer itself off the
+   *  bottom of the panel. A question is not in the tray: it docks inside the composer's surface,
+   *  capped (`DOCKED_MAX_HEIGHT`), because the box below it is where the answer is written. */
+  const hasInterjection = openPermissionRequestsFor(permissionRequests, agent.name).length > 0
   const trayRef = useRef<HTMLDivElement>(null)
   /** The panel, its header and its composer area: the room the conversation has is what the panel
    *  leaves after the other two, read from natural sizes so it does not depend on where the tray
@@ -429,6 +434,57 @@ export function AgentOutputPanel({
   // it is correct for its own events — and this component no longer calls it.
   const runFacts = chat.data?.runs ?? {}
   const sseConnectionState = useSSEConnectionState()
+  const [diagnosticsHidden, setDiagnosticsHidden] = useDiagnosticsHidden()
+
+  /** When the turn running now began, from its run row (the newest one with no end), so the bar's
+   *  "working · 2m 14s" reads the same after a reload as it did when the turn started. */
+  const runningSince = isRunning
+    ? Object.values(runFacts)
+        .filter((facts) => !facts.ended_at)
+        .map((facts) => hubDate(facts.started_at).getTime())
+        .filter((time) => !Number.isNaN(time))
+        .sort((a, b) => b - a)[0] ?? null
+    : null
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (runningSince === null) return
+    setNow(Date.now())
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [runningSince])
+  const elapsedSeconds = runningSince !== null ? Math.max(0, Math.round((now - runningSince) / 1000)) : null
+
+  const conversationTarget = currentConversationId && projectId
+    ? { projectId, agent: agent.name, conversationId: currentConversationId }
+    : null
+  const handleRename = (title: string) => {
+    if (!conversationTarget) return Promise.resolve()
+    return renameConversation({ ...conversationTarget, title }).catch((err: unknown) => {
+      toast({ title: conversationErrorMessage(err, 'Could not rename'), tone: 'error' })
+      throw err
+    })
+  }
+  const handleArchive = () => {
+    if (!conversationTarget) return
+    const target = conversationTarget
+    // Refused with a reason when a run is live or a queued entry is undelivered; the reason is
+    // why this is not fire-and-forget.
+    archiveConversation(target).then(
+      () =>
+        toast({
+          title: 'Conversation archived',
+          action: {
+            label: 'Undo',
+            onClick: () =>
+              void unarchiveConversation(target).catch((err: unknown) =>
+                toast({ title: conversationErrorMessage(err, 'Could not unarchive'), tone: 'error' }),
+              ),
+          },
+        }),
+      (err: unknown) =>
+        toast({ title: conversationErrorMessage(err, 'Could not archive'), tone: 'error' }),
+    )
+  }
 
   // Follow the entries the timeline actually renders. This used to depend on `lines` — the
   // legacy raw output log from `useAgentOutput`, which is not what this view shows — so new
@@ -1012,7 +1068,6 @@ export function AgentOutputPanel({
       labels,
     })
     setQuestionSelection([])
-    setComposerDraft('')
   }
 
   /** Close a question without answering it, and drop any selection made against it. */
@@ -1110,20 +1165,13 @@ export function AgentOutputPanel({
 
   // Rendered in exactly one of two places — floating over the conversation, or inline in the
   // composer's column — as `trayPlacement` decides.
-  const interjections = (
-    <>
-      <PermissionRequestCard requests={permissionRequests} agent={agent.name} />
-      <AgentQuestionCard
-        questions={openQuestions}
-        agent={agent.name}
-        selected={questionSelection}
-        onToggle={handleQuestionToggle}
-        isResponding={answerQuestion.isPending}
-        isTyping={composerDraft.trim().length > 0}
-        onDecline={handleDeclineQuestion}
-        isDeclining={declineQuestion.isPending}
-      />
-    </>
+  const interjections = <PermissionRequestCard requests={permissionRequests} agent={agent.name} />
+
+  const checkpointReason = handoffReason(
+    handoffUnavailable,
+    currentConversationId,
+    interactionLocked,
+    handoffState,
   )
 
   return (
@@ -1136,120 +1184,39 @@ export function AgentOutputPanel({
       {checkpointsOpen && currentConversationId ? (
         <CheckpointsPanel conversationId={currentConversationId} onClose={() => setCheckpointsOpen(false)} />
       ) : null}
-      <div
-        ref={headerRef}
-        className="conversation-header-surface flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5"
-        data-testid="conversation-header"
-      >
-        {onBackToProject && (
-          <Button variant="ghost" size="icon-sm" className="shrink-0" onClick={onBackToProject} aria-label="Back to project" title="Back to project">
-            <Icon name="arrow_left" size={16} />
-          </Button>
-        )}
-        {/* The agent's name appears here and nowhere else in this header. It was printed three
-            times when the specification workspace wrapped this surface in its own agent selector;
-            that selector is gone, and the name truncates rather than pushing the controls past
-            the panel's right edge. */}
-        <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
-          <span data-testid={`conversation-agent-color-${agent.name}`} className="h-2 w-2 shrink-0 rounded-full" style={{ background: agentColorVars(agent.color_index).accent }} />
-          <span className="truncate">{agent.name}</span>
-        </span>
-
-        {/* Status chip. Provider session identity is not shown here — see
-            "Conversation identity is readable without exposing provider
-            identity": normal controls use conversation_id only, and provider
-            binding is confined to agent details / diagnostics. */}
-        <span
-          className="flex shrink-0 items-center gap-1.5"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            borderRadius: 'var(--radius-sm)',
-            padding: '2px 8px',
-            fontSize: 11,
-            fontWeight: 500,
-            background: isRunning ? 'color-mix(in srgb, var(--green) 10%, transparent)' : 'var(--surface-3)',
-            color: isRunning ? 'var(--green)' : 'var(--text-3)',
-          }}
-        >
-          {isRunning && (
-            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-          )}
-          {agent.status}
-        </span>
-        {/* The conversation's own running total — distinct from the per-turn figure beside each
-            "Worked for Xs" line, and from the project-wide total in the Budgets panel. Waits for
-            at least one measured turn so a brand-new or all-unavailable conversation shows
-            nothing rather than a misleading "0 tokens". */}
-        {conversationUsage && conversationUsage.measured_turns > 0 && (
-          <span
-            data-testid="conversation-token-total"
-            className="shrink-0"
-            style={{ fontSize: 11, color: 'var(--text-3)' }}
-            title="Total tokens used across this conversation"
-          >
-            {conversationUsage.total_tokens?.toLocaleString()} tokens
-            {formatAiCredits(conversationUsage.ai_nano_aiu)
-              ? ` · ${formatAiCredits(conversationUsage.ai_nano_aiu)}`
-              : ''}
-          </span>
-        )}
-        <div className="min-w-0 flex-1" />
-        {/* The conversation's checkpoints and checkpoint notes (slice remaining-hidden-data). */}
-        {currentConversationId && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="shrink-0"
-            data-testid="conversation-checkpoints-toggle"
-            onClick={() => setCheckpointsOpen(true)}
-            aria-label="Checkpoints"
-            title={checkpoints.length ? `Checkpoints (${checkpoints.length})` : 'Checkpoints'}
-          >
-            <Icon name="event_note" size={16} />
-          </Button>
-        )}
-        {onTogglePanel && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="shrink-0"
-            data-testid="conversation-toggle-panel"
-            onClick={onTogglePanel}
-            aria-pressed={panelOpen}
-            aria-label={panelOpen ? 'Hide panel' : 'Show panel'}
-            title={panelOpen ? 'Hide panel' : 'Show panel'}
-          >
-            <Icon name="right_panel_close" size={16} />
-          </Button>
-        )}
-        {onOpenAgentSettings && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="shrink-0"
-            data-testid="conversation-agent-settings"
-            onClick={onOpenAgentSettings}
-            aria-label={`Settings for ${agent.name}`}
-            title={`Settings for ${agent.name}`}
-          >
-            <Icon name="settings" size={16} />
-          </Button>
-        )}
-        <ConversationControls
-          contextUsage={currentConversation?.context_usage}
-          isRunning={isRunning}
-          isStopping={isStopping}
-          onStop={handleStop}
-          currentConversationId={currentConversationId}
-          handoffState={handoffState}
-          handoffUnavailable={handoffUnavailable}
-          interactionLocked={interactionLocked}
-          onHandoff={handleCheckpoint}
-          onFoldAll={() => setFoldAllSignal((s) => s + 1)}
-        />
-      </div>
+      <ConversationBar
+        barRef={headerRef}
+        agent={agent}
+        conversation={currentConversation ?? null}
+        title={currentConversation ? conversationLabel(currentConversation) : 'New conversation'}
+        onRename={conversationTarget ? handleRename : undefined}
+        isRunning={isRunning}
+        elapsedSeconds={elapsedSeconds}
+        isStopping={isStopping}
+        onStop={handleStop}
+        checkpointLabel={handoffLabel(handoffState)}
+        checkpointDisabledReason={checkpointReason}
+        onCheckpoint={handleCheckpoint}
+        // The conversation's own running total — distinct from the per-turn figure beside each
+        // "Worked for Xs" line, and from the project-wide total in the Budgets panel. Waits for at
+        // least one measured turn so a brand-new conversation shows nothing rather than "0 tokens".
+        totalTokens={
+          conversationUsage && conversationUsage.measured_turns > 0
+            ? conversationUsage.total_tokens ?? null
+            : null
+        }
+        creditsLabel={formatAiCredits(conversationUsage?.ai_nano_aiu)}
+        checkpointCount={checkpoints.length}
+        diagnosticsHidden={diagnosticsHidden}
+        onToggleDiagnostics={() => setDiagnosticsHidden(!diagnosticsHidden)}
+        onFoldAll={() => setFoldAllSignal((n) => n + 1)}
+        onOpenCheckpoints={currentConversationId ? () => setCheckpointsOpen(true) : undefined}
+        onOpenAgentSettings={onOpenAgentSettings}
+        onTogglePanel={onTogglePanel}
+        panelOpen={panelOpen}
+        onBackToProject={onBackToProject}
+        onArchive={conversationTarget ? handleArchive : undefined}
+      />
 
       {/* Output body. The return-to-newest control used to float over its lower edge — which put
           an interactive element on top of whatever entry happened to be scrolled under it, and
@@ -1331,8 +1298,41 @@ export function AgentOutputPanel({
         )}
       </div>
 
-      <div ref={composerAreaRef} className="conversation-composer-fade shrink-0" data-testid="conversation-composer-area">
-        <div className="mx-auto flex w-full max-w-[820px] flex-col gap-2">
+      <ConversationComposerDock
+        areaRef={composerAreaRef}
+        questions={pendingQuestion ? openQuestions : []}
+        selected={questionSelection}
+        onToggleOption={handleQuestionToggle}
+        onDecline={handleDeclineQuestion}
+        isResponding={answerQuestion.isPending}
+        isDeclining={declineQuestion.isPending}
+        composer={{
+          key: `${agent.name}::${currentConversationId ?? NEW_CONVERSATION_ID}`,
+          agent: agent.name,
+          projectId: projectId ?? '',
+          conversationId: currentConversationId ?? null,
+          isRunning,
+          onSubmit: handleComposerSubmit,
+          workspacePaths,
+          runner: targetRunnerRow?.cli ?? null,
+          effectiveModel: targetRunnerRow?.model ?? null,
+          modelIsRunners: runnerSetsModel(targetRunnerRow),
+          // At rest the Permissions pill has to show what the run will actually do. The Hub
+          // applies the agent's default when the conversation states none, so without this the
+          // pill would sit at the catalog default while the run went elsewhere.
+          effectiveControls: agentDefaultControls,
+          pendingOverrides,
+          onPendingOverridesChange: setPendingOverrides,
+          onOpenSpecPicker,
+          onStartExploration,
+          onStopExploring,
+          specArmed: Boolean(createExploration),
+          onOpenExistingSpec,
+          specBusy,
+          specDocumentLabel,
+          insertPathRequest,
+        }}
+      >
           <BannerStack banners={banners} />
 
           {/* A successor is handed its checkpoint as a queued entry and then waits. Without this
@@ -1394,43 +1394,7 @@ export function AgentOutputPanel({
               {interjections}
             </div>
           )}
-
-          <div className="conversation-composer-surface">
-            <Composer
-              key={`${agent.name}::${currentConversationId ?? NEW_CONVERSATION_ID}`}
-              agent={agent.name}
-              projectId={projectId ?? ''}
-              conversationId={currentConversationId ?? null}
-              isRunning={isRunning}
-              onSubmit={handleComposerSubmit}
-              canSubmitEmpty={!!pendingQuestion && questionSelection.length > 0}
-              onTextChange={setComposerDraft}
-              placeholder={
-                pendingQuestion ? `Answer ${agent.name}…` : undefined
-              }
-              workspacePaths={workspacePaths}
-              runner={targetRunnerRow?.cli ?? null}
-              effectiveModel={targetRunnerRow?.model ?? null}
-              modelIsRunners={runnerSetsModel(targetRunnerRow)}
-              // At rest the Permissions pill has to show what the run will actually do. The Hub
-              // applies the agent's default when the conversation states none, so without this
-              // the pill would sit at the catalog default while the run went elsewhere — the
-              // pill appearing to say one thing and the run doing another.
-              effectiveControls={agentDefaultControls}
-              pendingOverrides={pendingOverrides}
-              onPendingOverridesChange={setPendingOverrides}
-              onOpenSpecPicker={onOpenSpecPicker}
-              onStartExploration={onStartExploration}
-              onStopExploring={onStopExploring}
-              specArmed={Boolean(createExploration)}
-              onOpenExistingSpec={onOpenExistingSpec}
-              specBusy={specBusy}
-              specDocumentLabel={specDocumentLabel}
-              insertPathRequest={insertPathRequest}
-            />
-          </div>
-        </div>
-      </div>
+      </ConversationComposerDock>
     </div>
   )
 }

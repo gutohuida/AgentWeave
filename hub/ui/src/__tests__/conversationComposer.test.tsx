@@ -87,7 +87,7 @@ describe('Composer — bounded autosizing', () => {
     // The same gap in the other direction: a restored draft arrives as state, not as
     // input, so the box used to stay short around text that overflowed it.
     const textarea = renderComposerWithDraft()
-    await waitFor(() => expect(textarea.style.height).toBe('240px'))
+    await waitFor(() => expect(textarea.style.height).toBe(`${COMPOSER_MAX_HEIGHT_PX}px`))
   })
 })
 

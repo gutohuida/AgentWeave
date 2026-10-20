@@ -1,0 +1,101 @@
+/* Activity digest (ui-finesse). */
+
+.aw-activity-page { width: min(100%, 1100px); margin-inline: auto; padding: 20px clamp(20px, 3vw, 32px) 96px; }
+.aw-activity-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.aw-activity-note { font-size: 12.5px; color: var(--text-3); }
+
+.aw-digest-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+
+.aw-digest-day { margin-top: 18px; }
+.aw-digest-day-label {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 0 6px;
+  background: var(--bg);
+  font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--text-2);
+}
+.aw-digest-day-count {
+  font-size: 11px; font-weight: 500; color: var(--text-3); font-variant-numeric: tabular-nums;
+}
+.aw-digest-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+
+.aw-digest-row { border-bottom: 1px solid var(--border); }
+.aw-digest-row-main {
+  display: grid;
+  grid-template-columns: 44px 26px minmax(0, 1fr) auto 16px;
+  align-items: center;
+  column-gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 7px 8px 7px 4px;
+  text-align: left;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--dur-fast) ease;
+}
+.aw-digest-row-main:hover { background: var(--row-hover); }
+.aw-digest-row-main:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-digest-time { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
+.aw-digest-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 7px;
+  background: var(--surface-2); color: var(--text-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.aw-digest-icon[data-kind="turn"] { background: var(--agent-tint, var(--surface-2)); color: var(--agent-accent, var(--text-2)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--agent-accent, var(--border)) 35%, transparent); }
+.aw-digest-initial { font-size: 11px; font-weight: 700; }
+.aw-digest-row[data-severity="warn"] .aw-digest-icon { color: var(--amber); background: color-mix(in oklab, var(--amber) 12%, var(--surface-2)); }
+.aw-digest-row[data-severity="error"] .aw-digest-icon { color: var(--red); background: color-mix(in oklab, var(--red) 12%, var(--surface-2)); }
+.aw-digest-text { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+.aw-digest-sentence { font-size: 13px; line-height: 1.4; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-digest-sentence strong { font-weight: 600; color: var(--text); }
+.aw-digest-detail { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-digest-facts { font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.aw-digest-chevron { color: var(--text-3); opacity: 0; transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) ease; }
+.aw-digest-row-main:hover .aw-digest-chevron, .aw-digest-row[data-open="true"] .aw-digest-chevron { opacity: 1; }
+.aw-digest-row[data-open="true"] .aw-digest-chevron { transform: rotate(90deg); }
+
+/* Height animates with the 0fr → 1fr grid trick: no measuring, and nothing clipped at rest. */
+.aw-digest-raw { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-overlay) var(--ease-out); }
+.aw-digest-row[data-open="true"] .aw-digest-raw { grid-template-rows: 1fr; }
+.aw-digest-raw-inner { min-height: 0; overflow: hidden; }
+.aw-digest-events {
+  list-style: none; margin: 0 8px 10px 80px; padding: 8px 10px;
+  border-left: 1px solid var(--border-hi);
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; line-height: 1.7; color: var(--text-3);
+}
+.aw-digest-events li { display: grid; grid-template-columns: 40px 170px minmax(0, 1fr); gap: 10px; }
+.aw-digest-event-type { color: var(--text-2); }
+.aw-digest-event-data { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-digest-link {
+  display: inline-flex; align-items: center; gap: 5px; margin: -2px 0 12px 80px;
+  font-size: 12px; font-weight: 500; color: var(--text-2);
+}
+.aw-digest-link:hover { color: var(--text); }
+
+.aw-digest-background {
+  display: grid; grid-template-columns: 44px 26px minmax(0, 1fr); column-gap: 10px; align-items: center;
+  min-height: 34px; padding: 4px 8px 4px 4px; font-size: 12px; color: var(--text-3);
+}
+.aw-digest-background svg { justify-self: center; }
+.aw-digest-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 56px 0; color: var(--text-3); font-size: 13px; }
+
+@media (max-width: 760px) {
+  .aw-digest-row-main { grid-template-columns: 38px 24px minmax(0, 1fr) 14px; }
+  .aw-digest-facts { display: none; }
+  .aw-digest-events { margin-left: 16px; }
+  .aw-digest-events li { grid-template-columns: 40px minmax(0, 1fr); }
+  .aw-digest-event-data { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .aw-digest-raw, .aw-digest-chevron { transition: none; } }
+
+/* Applied (ui-finesse wiring): the tab's frame. The Ledger and Logs keep their own layout inside. */
+.aw-activity-screen { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.aw-activity-bar { width: min(100%, 1100px); margin-inline: auto; margin-bottom: 0; padding: 16px clamp(20px, 3vw, 32px) 12px; box-sizing: border-box; }
+.aw-activity-body { flex: 1; min-height: 0; overflow: auto; }
+.aw-activity-body[data-view="logs"] { display: flex; flex-direction: column; overflow: hidden; }
+.aw-activity-body[data-view="ledger"] { width: min(100%, 1100px); margin-inline: auto; }
+.aw-activity-col { width: min(100%, 1100px); margin-inline: auto; padding: 4px clamp(20px, 3vw, 32px) 96px; box-sizing: border-box; }
+.aw-activity-count { margin-bottom: 12px; }
+.aw-activity-older { display: flex; justify-content: center; margin-top: 18px; }
+.aw-activity-error { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--radius-md); background: color-mix(in srgb, var(--red) 10%, transparent); font-size: 12.5px; color: var(--red); }

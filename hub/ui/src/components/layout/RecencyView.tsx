@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useProjectConversations } from '@/api/agentChat'
 import type { ProjectAgentSummary } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
-import { Button } from '@/components/ui/button'
 import { agentColorVars } from '@/lib/agentColors'
 import { capRows, groupConsecutiveFirings } from '@/lib/loopGrouping'
 import { ConversationRow } from './ConversationRow'
@@ -62,7 +61,7 @@ export function RecencyView({
   const hidden = hiddenConversations
 
   return (
-    <div className="ml-7 flex flex-col gap-0.5" data-testid={`rail-recency-${projectId}`}>
+    <div className="aw-rail-children aw-rail-recency" data-testid={`rail-recency-${projectId}`}>
       {visible.map((row) =>
         row.kind === 'loopGroup' ? (
           <LoopFiringGroup
@@ -103,12 +102,12 @@ export function RecencyView({
           version of this control on 2026-08-08. */}
       {(hidden > 0 || showAll) && (
         <button
+          data-slot="rail-more"
           type="button"
-          className="row-item"
+          className="aw-rail-more"
           data-testid={`recency-expander-${projectId}`}
           aria-expanded={showAll}
           onClick={() => setShowAll((value) => !value)}
-          style={{ color: 'var(--text-3)' }}
         >
           {showAll ? 'Show fewer' : `Show ${hidden} more`}
         </button>
@@ -120,34 +119,29 @@ export function RecencyView({
           second copy of it — the one action available from this spot should appear once. */}
       {conversations.length === 0 && (
         <div className="rail-empty" data-testid={`recency-empty-${projectId}`}>
-          <div className="rail-empty-head">
-            <span className="rail-empty-icon" aria-hidden="true">
-              <Icon name="forum" size={14} />
-            </span>
-            <span className="rail-empty-title">No conversations yet</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start"
+          <span className="sr-only">No conversations yet</span>
+          <button
+            data-slot="rail-empty"
+            type="button"
+            className="aw-rail-empty"
             data-testid={`recency-new-conversation-${projectId}`}
             aria-label="Start a conversation"
             onClick={() => onNewConversation?.(projectId, null)}
           >
-            <Icon name="add" size={14} />
-            New conversation
-          </Button>
+            <Icon name="add" size={13} />
+            Start a conversation
+          </button>
         </div>
       )}
 
       {archivedCount > 0 && (
         <button
+          data-slot="rail-more"
           type="button"
-          className="row-item"
+          className="aw-rail-more"
           data-testid={`recency-show-archived-${projectId}`}
           aria-expanded={showArchived}
           onClick={() => setShowArchived((value) => !value)}
-          style={{ color: 'var(--text-3)' }}
         >
           {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
         </button>
@@ -174,12 +168,13 @@ export function RecencyView({
           "is 2 buttons the right call?" defect the project rail already had once. */}
       {conversations.length > 0 && (
         <button
+          data-slot="rail-empty"
           type="button"
-          className="row-item"
+          className="aw-rail-empty"
           data-testid={`recency-new-conversation-${projectId}`}
           onClick={() => onNewConversation?.(projectId, null)}
         >
-          <Icon name="add" size={14} />
+          <Icon name="add" size={13} />
           New conversation
         </button>
       )}

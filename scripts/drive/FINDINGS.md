@@ -37420,3 +37420,74 @@ Expected: the empty state names the way that works ("No agents yet." plus a butt
 - A runner name may be 256 characters (`schemas/runners.py`, `models.py:343`). On the Runners page a 200-character name runs off the page in one unbroken line, over that row's Edit and Delete icons (`testbed/ui-judge/s1020-p-keys/110136/21_runner_delete_refused.png`). Every runner select option grows the same way.
 
 Expected: the literal `…`, a lint or test that fails on mojibake sequences in `hub/ui/src`, the in-Hub browser's toggle outside the area the picker covers (or the picker opening below it), reasons quoted as written, and runner names truncated with a title tooltip. Tests: a source scan in `hub/ui/src/__tests__/`, `hub/tests/test_fs_browse*.py` for the reason text, and a RunnersPage snapshot with a long name. Seam: Projects (Add-project dialog) x Runners & models (Runners page).
+
+## F835 (C) -- two files added to the vault by path, each named `README.md`, are both listed as "README.md"
+
+**Status:** fixed (uncommitted on `ui/finesse-mocks`) 2026-10-20 (Tier 0): a file added by path inside the project directory or the agent's workspace is named by its path there (`app/README.md`, `plugins/export/README.md`), the nearest root winning; a folder outside both keeps its name in front as before.
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+Found on the Terra replica (`:8130`, `proj-cd006955cbe2`) during the ui-finesse mock review (handoff 0204): one operator batch at 2026-10-20T18:16:19 added `app/README.md`, `plugins/export/README.md` and `plugins/export/docs/format.md` by path, and the map listed them as `README.md`, `README.md` and `format.md` (`GET /vault/map`). The Library could only tell the two READMEs apart by their opening lines. `vault_intake.expand` named a single file `located.name`, and a folder's files `<folder name>/<path beneath it>`, never the path from the project. Test: `test_files_named_alike_in_different_folders_keep_the_path_that_tells_them_apart` (`hub/tests/test_vault_paths.py`), failing before the fix (`'README.md' != 'app/README.md'`). Seam: Knowledge vault (add by path) x the Vault tab's Library. Not covered: two files with the same name outside the project and the workspace still share a name (no root to name them from).
+
+## F836 (C) -- the Vault reader's "Used by" can say how often an entry was read, never by which agent
+
+**Status:** fixed (uncommitted on `ui/finesse-mocks`) 2026-10-20 (Tier 2, migration 0139, change `the-vault-names-who-read-an-entry`): an agent's `vault_read` at offset 0 is recorded against the run credential's agent in `vault_readers`, and both maps and both entry routes list `readers` ({agent, count, last_read_at}, most recent first). The reader's Used by tab names each agent with its count and last read, and says how many earlier reads predate the record (`vaultAccess.test.tsx`).
+**Source:** operator
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 2
+
+The ui-finesse mock's reader has a "Used by" tab (`hub/ui/src/components/vault/VaultReader.tsx`), and the operator asked for it to name the agents (handoff 0204, open question 2; answered "Build as Tier 0/1 now" on 2026-10-20). `vault_fetches` (migration 0126) holds one count per entry, no agent, so the tab could only say "Read 3 times". Tests: `hub/tests/test_vault_readers.py` (written first; failed on `KeyError: 'readers'` and the missing model), `test_migration_vault_readers_creates_the_table_and_its_downgrade_drops_only_it`. Reads counted before 0139 stay unattributed, so `fetches` may exceed the readers' sum. Seam: Knowledge vault (agent reads) x the Vault tab.
+
+## F837 (C) -- the compact task card shows one fact at a time: a task both waiting and stalled shows only "waiting"
+
+**Status:** open 2026-10-20. Found applying the ui-finesse mock (`ui/finesse-mocks`), porting the old `TaskCard` tests to `TaskCardCompact`.
+**Source:** code
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+`cardStatus()` (`hub/ui/src/lib/taskCardStatus.ts`) returns the first matching fact for the card's one status line. The old card showed blocked/waiting and stalled side by side; now a task that is waiting on the operator *and* whose last run ended without changing its status shows only "waiting", and the drawer shows no divergence state either (only the policy control), so "stalled" is shown nowhere. Expected: the status line carries the second fact (e.g. "Waiting on you · stalled"), or the drawer states it. Test: a `taskCardCompact` case with both facts set. Seam: Tasks (card) x Runs.
+
+## F838 (C) -- a requirement awaiting review lost its own tone on the task card and in the drawer
+
+**Status:** open 2026-10-20. Found in the same port as F837.
+**Source:** code
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+The old card's per-requirement chips gave a requirement awaiting review a pending tone. The compact card replaces the chips with a tally (`N/M FR`) that does not count it, and the drawer's Serves list has no coverage tone, so "this requirement is waiting for review" is shown nowhere. Expected: the tally's title or the drawer's Serves list names requirements awaiting review. Test: `taskRequirementLinks.test.tsx`, a requirement in review. Seam: Tasks x Spec (coverage).
+
+## F839 (C) -- the Overview's "Needs you" lost two question behaviours: blocking questions first, and no "waiting" claim for a non-blocking one
+
+**Status:** open 2026-10-20. Found in the same port as F837.
+**Source:** code
+**Theme:** Overview
+**Ready:** yes
+**Tier:** 0
+
+`QuestionInterruptCard` (now rendered by nothing, kept so this is not lost) put the question an agent is blocked on first, and did not say anyone waits on a non-blocking question. `OverviewScreen`/`OverviewView` order "Needs you" by time and word every question alike. Expected: blocking questions first; a non-blocking one is not described as something an agent waits on. Test: `overviewScreen.test.tsx`, one blocking and one non-blocking question. Then delete `QuestionInterruptCard.tsx`. Seam: Overview x Questions.
+
+## F840 (C) -- the compact task card offers Retry on every unmerged task, even one a retry can never clear
+
+**Status:** open 2026-10-20. Found in the same port as F837.
+**Source:** code
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+`TaskCardCompact` shows Retry whenever `latest_integration` is not merged. `latest_integration` in the task-list payload carries no retryability, so a skip that retrying cannot clear ("already in master; nothing to merge", a missing main branch) still shows the button; `TaskIntegrationNote` in the drawer gets it right from the integration route. The same goes for the Overview's "approved but not merged" rows. Expected: the list payload carries `retryable` (Hub) and the card shows Retry only then. Tests: `hub/tests` for the field, `taskCardCompact` for the button. Seam: Tasks x Integration.
+
+
+## F841 (B) -- the clientless-route ratchet measures nothing: `n10_route_reachability.py` reads 0 declared `/api/v1` routes
+
+**Status:** open 2026-10-20. Found by the n11 ratchet repair during the ui-finesse apply.
+**Source:** code
+**Theme:** Tooling
+**Ready:** yes
+**Tier:** 0
+
+`test_no_new_route_without_a_client` warns "routes with no client anywhere dropped to 0 from a ceiling of 21". The drop is not a repair: `n10` finds zero declared routes, in this worktree and in the main checkout alike, so the count is 0 whatever the clients do and the ratchet cannot fail. Expected: `n10` reads the route table (or the test fails, rather than passes, when it reads none). Test: assert the declared-route count is > 0 before ratcheting. Seam: Tooling (surface ratchets) x the Hub route table.

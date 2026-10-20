@@ -68,7 +68,6 @@ function conversation(overrides: Partial<AgentConversation> = {}): AgentConversa
 
 function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
   const props: React.ComponentProps<typeof Sidebar> = {
-    activePage: 'overview',
     activeAgent: null,
     onOpenProject: vi.fn(),
     onOpenAgent: vi.fn(),
@@ -104,7 +103,7 @@ describe('one selection treatment across the three rail levels', () => {
   it('grades every level of the open path, deepest last', () => {
     payload = { conversations: [conversation({ id: 'conv-open' })], archived_count: 0 }
     renderRail({ activeAgent: 'claude', activeConversation: 'conv-open' })
-    expandClaude()
+    // No expanding: the open conversation's agent opens itself, so the path is always visible.
 
     const project = screen.getByTestId('project-name-proj-a')
     const agent = screen.getByTestId('rail-agent-proj-a-claude')
@@ -131,7 +130,6 @@ describe('one selection treatment across the three rail levels', () => {
       archived_count: 0,
     }
     renderRail({ activeAgent: 'claude', activeConversation: 'conv-open' })
-    expandClaude()
 
     expect(screen.getByTestId('rail-conversation-conv-open')).toHaveAttribute('data-active', 'true')
     expect(screen.getByTestId('rail-conversation-conv-open')).toHaveAttribute('aria-current', 'page')
@@ -144,26 +142,19 @@ describe('one selection treatment across the three rail levels', () => {
     // instead of quietly contradicting the comment that records the decision.
     payload = { conversations: [conversation({ id: 'conv-open' })], archived_count: 0 }
     const { container } = renderRail({ activeAgent: 'claude', activeConversation: 'conv-open' })
-    expandClaude()
+    expect(screen.getByTestId('rail-conversation-conv-open')).toBeInTheDocument()
 
     expect(container.querySelectorAll('.row-selection-indicator')).toHaveLength(0)
   })
 
-  it('leaves flat lists on the undepthed default', () => {
-    // Environment sections are one level, not three. They must not acquire the conversation's
-    // fill by accident, so they carry no `data-depth` at all.
-    renderRail({
-      destination: {
-        kind: 'project',
-        projectId: 'proj-a',
-        tab: 'environment',
-        environmentSection: 'runners',
-      },
-      activePage: 'runners',
-    })
-    const section = screen.getByTestId('environment-section-runners')
-    expect(section).toHaveAttribute('data-active', 'true')
-    expect(section).not.toHaveAttribute('data-depth')
+  it('opens the active agent on its own, so the conversation being read is never hidden', () => {
+    payload = { conversations: [conversation({ id: 'conv-open' })], archived_count: 0 }
+    const { unmount } = renderRail({ activeAgent: null })
+    expect(screen.queryByTestId('rail-conversation-conv-open')).toBeNull()
+    unmount()
+    renderRail({ activeAgent: 'claude', activeConversation: 'conv-open' })
+    expect(screen.getByTestId('agent-expander-proj-a-claude')).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('rail-conversation-conv-open')).toBeInTheDocument()
   })
 })
 

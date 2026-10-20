@@ -78,23 +78,14 @@ vi.mock('@/api/spec', async (importOriginal) => ({
   useSpecEvents: () => {},
 }))
 
-vi.mock('@/components/overview/OverviewPage', () => ({ OverviewPage: () => <div data-testid="page-overview" /> }))
-vi.mock('@/components/tasks/TasksBoard', () => ({ TasksBoard: () => <div /> }))
-vi.mock('@/components/jobs/JobsPage', () => ({ JobsPage: () => <div /> }))
+vi.mock('@/components/overview/OverviewScreen', () => ({ OverviewScreen: () => <div data-testid="page-overview" /> }))
+vi.mock('@/components/tasks/TasksScreen', () => ({ TasksScreen: () => <div /> }))
+vi.mock('@/components/jobs/JobsScreen', () => ({ JobsScreen: () => <div /> }))
 vi.mock('@/components/questions/QuestionsPanel', () => ({ QuestionsPanel: () => <div /> }))
-vi.mock('@/components/activity/ActivityLog', () => ({ ActivityLog: () => <div /> }))
-vi.mock('@/components/logs/LogsView', () => ({ LogsView: () => <div /> }))
-vi.mock('@/components/quality/QualityHealthPanel', () => ({ QualityHealthPanel: () => <div /> }))
-vi.mock('@/components/instructions/InstructionsPage', () => ({ InstructionsPage: () => <div /> }))
-vi.mock('@/components/runners/RunnersPage', () => ({ RunnersPage: () => <div /> }))
-vi.mock('@/components/charters/ChartersPage', () => ({ ChartersPage: () => <div /> }))
-vi.mock('@/components/environment/WorktreesPanel', () => ({ WorktreesPanel: () => <div /> }))
-vi.mock('@/components/environment/DiagnosticsPanel', () => ({ DiagnosticsPanel: () => <div /> }))
-vi.mock('@/components/accounting/AccountingPanel', () => ({ AccountingPanel: () => <div /> }))
-vi.mock('@/components/environment/ProjectSettingsPanel', () => ({ ProjectSettingsPanel: () => <div /> }))
+vi.mock('@/components/activity/ActivityScreen', () => ({ ActivityScreen: () => <div /> }))
+vi.mock('@/components/settings/ProjectSettingsScreen', () => ({ ProjectSettingsScreen: () => <div /> }))
 vi.mock('@/components/agents/AgentOutputPanel', () => ({ AgentOutputPanel: () => <div /> }))
 vi.mock('@/components/spec/SpecPage', () => ({ SpecPage: () => <div /> }))
-vi.mock('@/components/layout/StatusBar', () => ({ StatusBar: () => <div /> }))
 vi.mock('@/components/layout/SetupModal', () => ({ SetupModal: () => null }))
 
 import App from '@/App'

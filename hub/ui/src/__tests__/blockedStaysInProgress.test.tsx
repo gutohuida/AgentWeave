@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Task } from '@/api/tasks'
-import { TasksBoard } from '@/components/tasks/TasksBoard'
+import { TasksScreen } from '@/components/tasks/TasksScreen'
 
 /**
  * The board renders one column per status. `blocked` has none, by decision (R3) — so unless the
@@ -23,6 +23,7 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     useUpdateTask: () => ({ mutate: vi.fn() }),
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),
     useStartWorkOnTask: () => ({ mutate: vi.fn() }),
+    useRetryIntegration: () => ({ mutate: vi.fn() }),
   }
 })
 
@@ -49,7 +50,7 @@ function renderBoard(rows: Task[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <TasksBoard />
+      <TasksScreen />
     </QueryClientProvider>,
   )
 }
@@ -69,7 +70,7 @@ describe('a waiting task stays on the board', () => {
       makeTask('t2', 'in_progress', 'Running work'),
     ])
 
-    const header = screen.getByText('In Progress').parentElement
+    const header = screen.getByText('In progress').parentElement
     expect(header?.textContent).toContain('2')
   })
 
@@ -77,6 +78,7 @@ describe('a waiting task stays on the board', () => {
     renderBoard([makeTask('t1', 'blocked', 'Waiting work')])
 
     expect(screen.queryByText('Blocked')).toBeNull()
+    expect(document.querySelector('[data-status="blocked"]')).toBeNull()
   })
 
   it('puts waiting work above running work — it is the part that needs the operator', () => {

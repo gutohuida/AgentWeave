@@ -20,7 +20,13 @@ interface AgentQuestionCardProps {
   onDecline?: (questionId: string) => void
   /** True while a decline is in flight. */
   isDeclining?: boolean
+  /** Rendered inside the composer's own surface, as its top section (T3's pattern): no card of
+   *  its own, a hairline between it and the text box. The answer is written in that box. */
+  docked?: boolean
 }
+
+/** The tallest a docked question grows before it scrolls inside itself. */
+export const DOCKED_MAX_HEIGHT = 'min(40vh, 320px)'
 
 /** The question an agent is waiting on, rendered as part of the composer.
  *
@@ -38,6 +44,7 @@ export function AgentQuestionCard({
   isTyping,
   onDecline,
   isDeclining = false,
+  docked = false,
 }: AgentQuestionCardProps) {
   const { question, step, total } = activeQuestionFor(questions, agent)
   /** Folded to its header so the conversation behind it can be read (F345). Keyed by question,
@@ -76,9 +83,13 @@ export function AgentQuestionCard({
 
   return (
     <div
-      className={`conversation-interject${nobodyWaiting ? ' is-stale' : ''}`}
+      className={`conversation-interject${nobodyWaiting ? ' is-stale' : ''}${docked ? ' is-docked' : ''}`}
       data-testid={`agent-question-${question.id}`}
       data-collapsed={collapsed ? 'true' : undefined}
+      // Docked, the question shares the composer's column, so it is capped and scrolls inside
+      // itself: an unbounded card took the transcript's height and could push the send button,
+      // which confirms a chosen option, off the panel (F345).
+      style={docked ? { maxHeight: DOCKED_MAX_HEIGHT, overflowY: 'auto' } : undefined}
     >
       {/* Padding, not margin, below the header: in the tray it is pinned while the card scrolls
           under it, and a margin is transparent — the text scrolling past showed through it. */}
@@ -149,7 +160,7 @@ export function AgentQuestionCard({
             </p>
           )}
 
-          <div className="flex flex-col gap-1.5" style={{ marginTop: 10 }}>
+          <div className="interject-choices mt-2.5 flex flex-col gap-1.5">
             {options.map((option, index) => {
               const isSelected = !isTyping && selected.includes(option.label)
               const shortcut = index < 9 ? index + 1 : null

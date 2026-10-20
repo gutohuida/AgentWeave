@@ -5,6 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
 import { ApiError } from '@/api/client'
 
+/** The decisions other than the one primary action live in the header's overflow menu. */
+async function openMore() {
+  await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+}
+
 /**
  * `a-capability-can-be-retired` (F536), the app half: a current capability offers Retire, which asks
  * for a reason and optionally the capability that absorbed it, sends both, and shows the Hub's
@@ -63,6 +68,7 @@ beforeEach(() => {
 describe('retiring a capability', () => {
   it('offers Retire on a current capability and sends the reason and absorber', async () => {
     renderBar()
+    await openMore()
     await userEvent.click(screen.getByTestId('spec-retire-capability'))
     expect(screen.getByTestId('retire-confirm')).toBeDisabled()
     // Only other current capabilities can absorb it.
@@ -81,6 +87,7 @@ describe('retiring a capability', () => {
 
   it('sends no absorber when none is chosen', async () => {
     renderBar()
+    await openMore()
     await userEvent.click(screen.getByTestId('spec-retire-capability'))
     await userEvent.type(screen.getByTestId('retire-reason'), 'A sample.')
     await userEvent.click(screen.getByTestId('retire-confirm'))
@@ -97,16 +104,18 @@ describe('retiring a capability', () => {
       ),
     )
     renderBar()
+    await openMore()
     await userEvent.click(screen.getByTestId('spec-retire-capability'))
     await userEvent.type(screen.getByTestId('retire-reason'), 'Gone.')
     await userEvent.click(screen.getByTestId('retire-confirm'))
     expect(screen.getByRole('alert')).toHaveTextContent('open tasks still serve this capability')
   })
 
-  it('says why a retired capability left and what absorbed it, and offers Retire no more', () => {
+  it('says why a retired capability left and what absorbed it, and offers Retire no more', async () => {
     documents = [capability(OLD, 'Old', 'archived'), capability(NEW, 'New')]
     retired = { reason: 'Never built.', absorbed_by: NEW, at: '2026-10-08T12:00:00Z' }
     renderBar()
+    await openMore()
     expect(screen.queryByTestId('spec-retire-capability')).not.toBeInTheDocument()
     const note = screen.getByTestId('spec-retired-note')
     expect(note).toHaveTextContent('Never built.')

@@ -1,0 +1,221 @@
+/* Shell (ui-finesse): the 48px top bar and the rail. */
+
+.aw-app { display: flex; height: 100vh; overflow: hidden; background: var(--bg); color: var(--text); }
+.aw-main { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.aw-page { min-height: 0; flex: 1; overflow: auto; }
+.aw-page[data-fill="true"] { overflow: hidden; }
+
+/* ── Top bar ─────────────────────────────────────────────────────────── */
+.aw-topbar {
+  display: flex; align-items: center; gap: 6px;
+  height: 48px; flex: none;
+  padding: 0 12px 0 14px;
+  border-bottom: 1px solid var(--border-region);
+}
+.aw-project-switcher {
+  display: inline-flex; align-items: center; gap: 7px;
+  max-width: 220px; height: 30px; padding: 0 8px;
+  border-radius: var(--radius-md);
+  font-size: 13.5px; font-weight: 600; color: var(--text);
+  transition: background-color var(--dur-fast) ease;
+}
+.aw-project-switcher:hover, .aw-project-switcher[data-state="open"] { background: var(--row-hover); }
+.aw-project-switcher:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-project-switcher-icon { color: var(--text-2); flex: none; }
+.aw-project-switcher-chevron { color: var(--text-3); flex: none; }
+.aw-menu-path {
+  padding: 4px 8px 6px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px;
+  color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left;
+}
+
+.aw-topbar-tabs {
+  display: flex; align-items: stretch; gap: 2px; height: 100%;
+  margin-left: 6px; padding-left: 10px;
+  border-left: 1px solid var(--border-region);
+  overflow-x: auto; scrollbar-width: none;
+}
+.aw-topbar-tab {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 10px;
+  font-size: 13px; font-weight: 500; color: var(--text-2);
+  white-space: nowrap;
+  transition: color var(--dur-fast) ease;
+}
+.aw-topbar-tab::after {
+  content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px;
+  border-radius: 2px 2px 0 0; background: var(--text);
+  transform: scaleX(0); transition: transform var(--dur-base) var(--ease-out);
+}
+.aw-topbar-tab:hover { color: var(--text); }
+.aw-topbar-tab[data-active="true"] { color: var(--text); }
+.aw-topbar-tab[data-active="true"]::after { transform: scaleX(1); }
+.aw-topbar-tab:focus-visible { outline: none; color: var(--text); box-shadow: inset 0 0 0 2px var(--ring); border-radius: var(--radius-sm); }
+.aw-topbar-tab-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px;
+  background: color-mix(in oklab, var(--amber) 22%, transparent); color: var(--amber);
+  font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+
+.aw-topbar-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; padding-left: 12px; }
+.aw-search-button {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 28px; padding: 0 6px 0 9px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface-2); color: var(--text-3); font-size: 12.5px;
+  transition: border-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.aw-search-button:hover { border-color: var(--border-hi); color: var(--text-2); }
+.aw-search-button .aw-kbd { margin-left: 18px; }
+.aw-topbar-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: var(--radius-md); color: var(--text-2);
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.aw-topbar-icon:hover, .aw-topbar-icon[data-active="true"] { background: var(--row-hover); color: var(--text); }
+.aw-topbar-icon:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+@media (max-width: 1080px) { .aw-search-button span, .aw-search-button .aw-kbd { display: none; } .aw-search-button { width: 30px; justify-content: center; padding: 0; } }
+
+/* ── Rail ────────────────────────────────────────────────────────────── */
+.aw-rail {
+  display: flex; flex-direction: column; flex: none;
+  width: 248px; height: 100%;
+  border-right: 1px solid var(--border-region);
+  background: var(--rail);
+  transition: width var(--dur-overlay) var(--ease-drawer);
+}
+.aw-rail[data-collapsed="true"] { width: 52px; }
+.aw-rail-head { display: flex; align-items: center; justify-content: space-between; height: 48px; flex: none; padding: 0 10px 0 14px; }
+.aw-rail[data-collapsed="true"] .aw-rail-head { justify-content: center; padding: 0; }
+.aw-wordmark { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 650; letter-spacing: -.01em; }
+.aw-wordmark-dot { width: 8px; height: 8px; border-radius: 3px; background: var(--green); box-shadow: 0 0 0 3px color-mix(in oklab, var(--green) 18%, transparent); }
+.aw-rail-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 2px 8px 12px; }
+
+.aw-rail-row {
+  position: relative;
+  display: flex; align-items: center;
+  min-height: var(--row-h);
+  border-radius: var(--radius-md);
+  color: var(--text-2);
+  font-size: 13px;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.aw-rail-row:hover { background: var(--row-hover); color: var(--text); }
+.aw-rail-row[data-active="true"] { background: var(--row-selected); color: var(--text); }
+.aw-rail-row-main {
+  display: flex; align-items: center; gap: 7px;
+  min-width: 0; flex: 1; height: var(--row-h); padding: 0 6px;
+  color: inherit; text-align: left; border-radius: var(--radius-md);
+}
+.aw-rail-row-main:focus-visible, .aw-rail-conversation:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-rail-row-end { position: relative; display: inline-flex; align-items: center; justify-content: flex-end; flex: none; min-width: 44px; padding-right: 6px; }
+.aw-rail-row-end .aw-reveal { position: absolute; right: 2px; display: inline-flex; gap: 0; }
+.aw-rail-chevron { display: inline-flex; flex: none; color: var(--text-3); transition: transform var(--dur-fast) var(--ease-out); }
+.aw-rail-chevron[data-open="true"] { transform: rotate(90deg); }
+.aw-rail-project { margin-top: 6px; }
+.aw-rail-project-row { font-weight: 600; color: var(--text); font-size: 12.5px; }
+.aw-rail-project-row[data-active="true"] { background: transparent; }
+.aw-rail-project-row[data-active="true"]:hover { background: var(--row-hover); }
+.aw-rail-children { padding-left: 8px; }
+
+.aw-agent-dot { width: 7px; height: 7px; flex: none; border-radius: 999px; background: var(--agent-accent, var(--text-3)); }
+.aw-rail-agent-row .aw-rail-agent-name { font-weight: 500; }
+.aw-rail-agent-row[data-attention="idle"] { color: var(--text-2); }
+.aw-rail-agent-row[data-attention="idle"] .aw-agent-dot { opacity: .55; }
+.aw-rail-agent-row[data-attention="running"] { color: var(--text); }
+.aw-rail-agent-row[data-attention="waiting"] .aw-rail-meta { color: var(--amber); }
+.aw-rail-agent-row[data-attention="running"] .aw-rail-meta { color: var(--green); }
+.aw-rail-meta { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.aw-rail-conversations { position: relative; margin: 1px 0 4px 17px; padding-left: 8px; border-left: 1px solid var(--border); }
+.aw-rail-conversation { width: 100%; gap: 6px; padding: 0 8px; height: 28px; min-height: 28px; font-size: 12.5px; text-align: left; }
+.aw-rail-conversation[data-active="true"] { font-weight: 500; }
+.aw-rail-conversation[data-active="true"]::before {
+  content: ''; position: absolute; left: -9px; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--text-2);
+}
+.aw-rail-loop-icon { color: var(--text-3); flex: none; }
+.aw-rail-more { display: block; height: 24px; padding: 0 8px; font-size: 12px; color: var(--text-3); border-radius: var(--radius-sm); }
+.aw-rail-more:hover { color: var(--text); background: var(--row-hover); }
+.aw-rail-empty { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; font-size: 12.5px; color: var(--text-3); border-radius: var(--radius-md); }
+.aw-rail-empty:hover { color: var(--text); background: var(--row-hover); }
+
+.aw-live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 999px; background: var(--green); }
+.aw-waiting-dot { display: inline-block; width: 6px; height: 6px; border-radius: 999px; background: var(--amber); }
+
+.aw-rail-foot { flex: none; padding: 8px; border-top: 1px solid var(--border-region); }
+.aw-rail-foot-button {
+  display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 8px;
+  border-radius: var(--radius-md); font-size: 12.5px; color: var(--text-2);
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.aw-rail-foot-button:hover { background: var(--row-hover); color: var(--text); }
+
+.aw-rail-icons { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 4px; }
+.aw-rail-icon {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: var(--radius-md);
+  background: var(--agent-tint); color: var(--agent-accent);
+  font-size: 11px; font-weight: 650; text-transform: uppercase;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.aw-rail-icon[data-active="true"] { box-shadow: inset 0 0 0 1.5px var(--agent-accent); }
+.aw-rail-icon-dot { position: absolute; right: -2px; top: -2px; width: 8px; height: 8px; border-radius: 999px; border: 2px solid var(--rail); background: var(--green); }
+.aw-rail-icon-dot[data-attention="waiting"] { background: var(--amber); }
+
+/* ── Applied shell (the real rail's extra rows and states) ─────────────── */
+.aw-rail-head-actions { display: inline-flex; align-items: center; gap: 2px; }
+.aw-wordmark-dot[data-state="connecting"], .aw-wordmark-dot[data-state="reconnecting"] {
+  background: var(--amber); box-shadow: 0 0 0 3px color-mix(in oklab, var(--amber) 18%, transparent);
+}
+.aw-wordmark-dot[data-state="closed"] { background: var(--text-3); box-shadow: none; }
+.aw-rail-chevron-button {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 18px; height: var(--row-h); margin-left: 2px; margin-right: -4px; border-radius: var(--radius-sm); color: var(--text-3);
+}
+.aw-rail-chevron-button:hover { color: var(--text); }
+.aw-rail-chevron-button:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-rail-subline { font-size: 11px; font-weight: 400; color: var(--text-3); }
+.aw-rail-missing { display: inline-flex; flex: none; color: var(--amber); }
+.aw-rail-row-end .aw-reveal[data-persistent="true"] { opacity: 1; }
+.aw-reveal-host:has(.aw-reveal[data-persistent="true"]) .aw-reveal-rest { opacity: 0; }
+.aw-rail-actions .row-action { opacity: 1; width: 22px; height: 22px; }
+.aw-rail-section-label { display: block; padding: 8px 8px 2px; font-size: 11px; color: var(--text-3); }
+.aw-rail-orphans { margin-top: 4px; }
+
+.aw-rail-conversation-host { position: relative; }
+.aw-rail-conversation-host .aw-rail-row-menu { position: absolute; right: 4px; top: 3px; }
+.aw-rail-conversation-host:hover .aw-rail-meta, .aw-rail-conversation-host:focus-within .aw-rail-meta { opacity: 0; }
+.aw-rail-conversation .aw-rail-meta { transition: opacity var(--dur-fast) ease; }
+.aw-rail-agent-edge { width: 2px; height: 14px; flex: none; border-radius: 2px; }
+.aw-rail-loop {
+  display: inline-flex; align-items: center; gap: 3px; flex: 0 1 auto; min-width: 0; max-width: 34%;
+  font-size: 11px; font-weight: 400; color: var(--text-3);
+}
+.aw-rail-rename {
+  width: 100%; height: 28px; padding: 0 8px; border-radius: var(--radius-md);
+  background: var(--surface); color: var(--text); font-size: 12.5px;
+  box-shadow: inset 0 0 0 1px var(--border-hi); outline: none;
+}
+.aw-rail-rename:focus { box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-rail-error { padding: 0 8px 4px; font-size: 11px; color: var(--red); }
+.aw-rail-loop-row .aw-rail-row-main { gap: 6px; font-size: 12.5px; height: 28px; }
+
+.aw-rail-icon-group { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.aw-rail-icon-group + .aw-rail-icon-group { padding-top: 6px; border-top: 1px solid var(--border); }
+.aw-rail-project-icon { --agent-tint: var(--surface-2); --agent-accent: var(--text-2); }
+.aw-rail-foot-compact { display: flex; justify-content: center; }
+.aw-rail[data-collapsed="true"] .aw-rail-icons .aw-wordmark-dot { margin: 2px 0 6px; }
+.aw-rail { overflow: hidden; }
+
+.aw-topbar-warning {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  height: 22px; padding: 0 8px; border-radius: 999px;
+  font-size: 11.5px; color: var(--amber); background: color-mix(in oklab, var(--amber) 12%, transparent);
+}
+.aw-menu-path { direction: ltr; display: flex; align-items: center; min-width: 0; }
+.aw-menu-path-segment { display: inline-flex; align-items: center; min-width: 0; flex-shrink: 1; }
+.aw-menu-path-sep { margin: 0 4px; flex: none; }
+/* The empty branch is one quiet row in the rail, not the old boxed card. */
+.aw-rail .rail-empty { display: block; margin: 0; padding: 0; border: 0; background: none; }

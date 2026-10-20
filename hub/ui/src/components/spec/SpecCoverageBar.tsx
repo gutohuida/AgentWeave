@@ -87,11 +87,13 @@ interface SpecCoverageBarProps {
    *  switch to (there is none today, but the prop stays optional rather than required so a future
    *  caller with no board to route to is not forced to invent one). */
   onOpenTasks?: (taskIds: string[]) => void
+  /** Opened at rest: the document header's "Show details" opens this as the requirements detail. */
+  defaultOpen?: boolean
 }
 
-export function SpecCoverageBar({ path, onOpenTasks }: SpecCoverageBarProps) {
+export function SpecCoverageBar({ path, onOpenTasks, defaultOpen = false }: SpecCoverageBarProps) {
   const { data } = useSpecCoverage(path)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [evidenceOpen, setEvidenceOpen] = useState<string | null>(null)
 
   if (!data || (data.requirements.length === 0 && data.diagnostics.length === 0)) return null

@@ -1,15 +1,17 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ChartersPage } from '@/components/charters/ChartersPage'
+import { ChartersSection as ChartersPage } from '@/components/settings/sections/ChartersSection'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 
 const createMutate = vi.fn()
 const bindMutate = vi.fn()
+let chartersError: Error | null = null
+let agentsError: Error | null = null
 
 vi.mock('@/api/charters', () => ({
-  useCharters: () => ({
+  useCharters: () => chartersError ? { data: undefined, isLoading: false, error: chartersError, refetch: vi.fn() } : ({
     data: [
       {
         id: 'charter-one',
@@ -53,10 +55,11 @@ vi.mock('@/api/agents', async (importOriginal) => {
     useUpdateAgentReachGrants: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     useUpdateAgentPermissionDefault: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     useAgents: () => ({
-      data: [
+      data: agentsError ? undefined : [
         { name: 'claude', status: 'idle', message_count: 0, active_task_count: 0, charter_id: 'charter-two' },
       ],
       isLoading: false,
+      error: agentsError,
     }),
   }
 })
@@ -70,6 +73,22 @@ describe('charter management UI', () => {
   beforeEach(() => {
     createMutate.mockReset()
     bindMutate.mockReset()
+    chartersError = null
+    agentsError = null
+  })
+
+  it('says the charters could not be read, rather than waiting on a skeleton', () => {
+    chartersError = new Error('500')
+    render(<ChartersPage />)
+    expect(screen.queryByLabelText('Loading charters')).toBeNull()
+    expect(screen.getByRole('alert')).toHaveTextContent('The charters could not be read.')
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  it('warns that a charter shown unbound may be bound when the roster cannot be read', () => {
+    agentsError = new Error('500')
+    render(<ChartersPage />)
+    expect(screen.getByTestId('charters-bound-error')).toHaveTextContent('Which agents hold each charter could not be read.')
   })
 
   it('lists charters and submits custom authored content', async () => {
@@ -79,7 +98,7 @@ describe('charter management UI', () => {
     expect(screen.getByText('Release Guardian')).toBeInTheDocument()
     expect(screen.getByText('Verify every release.')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'New Charter' }))
+    await user.click(screen.getByRole('button', { name: 'New charter' }))
     await user.type(screen.getByLabelText('Charter name'), 'Incident Commander')
     await user.type(screen.getByLabelText('Charter content'), 'Coordinate incident response.')
     await user.click(screen.getByRole('button', { name: 'Save' }))
@@ -94,7 +113,7 @@ describe('charter management UI', () => {
     const user = userEvent.setup()
     render(<ChartersPage />)
 
-    const trigger = screen.getByRole('button', { name: 'New Charter' })
+    const trigger = screen.getByRole('button', { name: 'New charter' })
     trigger.focus()
     await user.click(trigger)
 
@@ -108,9 +127,10 @@ describe('charter management UI', () => {
 
   it('reassigns a charter from the agent settings page', async () => {
     const user = userEvent.setup()
-    render(<AgentSettingsPage agent="claude" section="charter" />)
+    render(<AgentSettingsPage agent="claude" section="charter" onSelectSection={vi.fn()} onBack={vi.fn()} />)
 
     await user.selectOptions(screen.getByLabelText('Charter for claude'), 'charter-one')
     expect(bindMutate).toHaveBeenCalledWith({ agent: 'claude', charterId: 'charter-one' })
   })
+
 })

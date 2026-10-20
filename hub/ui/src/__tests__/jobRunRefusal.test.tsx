@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { JobsPage } from '@/components/jobs/JobsPage'
+import { JobsScreen } from '@/components/jobs/JobsScreen'
 import { ApiError } from '@/api/client'
 import type { Job } from '@/api/jobs'
 
@@ -20,6 +20,8 @@ vi.mock('@/api/jobs', async (importOriginal) => {
   return {
     ...actual,
     useJobs: () => ({ data: [pageJob()], isLoading: false }),
+    useArchivedJobs: () => ({ data: [], isLoading: false }),
+    useJobHistory: () => ({ data: undefined, isLoading: false }),
     // A Run that the Hub declines: the mutation reports through the per-call `onError`, as
     // react-query does for a rejected request.
     useRunJob: () => ({
@@ -63,7 +65,7 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <JobsPage />
+      <JobsScreen />
     </QueryClientProvider>,
   )
 }
@@ -75,14 +77,14 @@ describe('F411 -- a declined Run is shown to the operator', () => {
       JSON.stringify({ detail: 'Agent claude is busy with another turn; try again when it finishes.' }),
     )
     renderPage()
-    await userEvent.setup().click(screen.getByRole('button', { name: /^Run$/ }))
+    await userEvent.setup().click(screen.getByRole('button', { name: /^Run now$/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/busy with another turn/)
   })
 
   it('says it was Run that failed when the body carries no detail', async () => {
     runRefusal = new ApiError(500, 'Internal Server Error')
     renderPage()
-    await userEvent.setup().click(screen.getByRole('button', { name: /^Run$/ }))
+    await userEvent.setup().click(screen.getByRole('button', { name: /^Run now$/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/Internal Server Error/)
   })
 
@@ -90,10 +92,10 @@ describe('F411 -- a declined Run is shown to the operator', () => {
     runRefusal = new ApiError(409, JSON.stringify({ detail: 'first reason' }))
     renderPage()
     const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: /^Run$/ }))
+    await user.click(screen.getByRole('button', { name: /^Run now$/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('first reason')
     runRefusal = new ApiError(409, JSON.stringify({ detail: 'second reason' }))
-    await user.click(screen.getByRole('button', { name: /^Run$/ }))
+    await user.click(screen.getByRole('button', { name: /^Run now$/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('second reason')
     expect(screen.queryByText('first reason')).not.toBeInTheDocument()
   })

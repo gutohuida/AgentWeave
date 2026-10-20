@@ -14,6 +14,7 @@ import { formatAiCredits } from '@/components/accounting/accountingDisplay'
 import { agentColorVars } from '@/lib/agentColors'
 import { hubDate } from '@/lib/hubTime'
 import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
+import '@/styles/conversation.css'
 import {
   entryCategory,
   groupIntoTurns,
@@ -1292,15 +1293,14 @@ function MessageEntry({
   const colors = agentColorVars(colorByName.get(entry.participant || ''))
   const { name } = participantLabel(entry, agentName)
 
+  // A peer's message is quiet: a 2px edge in the sender's colour and a faint wash of it, so it is
+  // told apart from the agent's own words without being the loudest thing on screen. It used to be
+  // a full card filled and bordered in the sender's tint (QA1's amber outshone everything around
+  // it). `--peer-accent` feeds `.timeline-peer-message` in conversation.css.
   return (
     <div
-      className="timeline-message-row timeline-bubble px-[13px] py-[10px] text-sm"
-      style={{
-        borderRadius: 'var(--radius-xl, 18px)',
-        border: `1px solid ${colors.border}`,
-        background: colors.tint,
-        ...wrapperStyle,
-      }}
+      className="timeline-message-row timeline-peer-message text-sm"
+      style={{ '--peer-accent': colors.accent, ...wrapperStyle } as React.CSSProperties}
     >
       <div className="flex items-center gap-[.4rem] mb-[5px] text-[11.5px] font-semibold" style={{ color: colors.accent }}>
         {name}

@@ -3,13 +3,14 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import type { Task } from '@/api/tasks'
-import { TasksBoard } from '@/components/tasks/TasksBoard'
+import { TasksScreen } from '@/components/tasks/TasksScreen'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 
 /**
  * The other half of F4's cross-tab navigation: a coverage row's task-count link sets which tasks
  * the board shows (`SpecCoverageBar` → `App.tsx` → this store → `TasksBoard`), rather than the
- * board inventing a second filtering mechanism of its own (`design.md` D7).
+ * board inventing a second filtering mechanism of its own (`design.md` D7). The board is
+ * `TasksScreen` on the compact `BoardView` since ui-finesse; the agent filter reads "Everyone".
  */
 
 vi.mock('@/api/agents', () => ({
@@ -43,6 +44,7 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     useUpdateTask: () => ({ mutate: updateTask, isPending: false }),
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),
     useStartWorkOnTask: () => ({ mutate: vi.fn() }),
+    useRetryIntegration: () => ({ mutate: vi.fn() }),
   }
 })
 
@@ -81,7 +83,7 @@ function renderBoard() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <TasksBoard />
+      <TasksScreen />
     </QueryClientProvider>,
   )
 }
@@ -109,20 +111,20 @@ describe('the board can be filtered from outside itself', () => {
     expect(screen.getByText('Settle the account')).toBeInTheDocument()
     expect(screen.getByText('Round consistently')).toBeInTheDocument()
     expect(screen.getByText('Unrelated work')).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Filter tasks by agent' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'worker' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Filter by agent' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^worker/ })).toBeInTheDocument()
     expect(screen.queryByTestId('tasks-requirement-filter-banner')).not.toBeInTheDocument()
   })
 
   it('keeps project agents available as filters before any task is assigned', () => {
     renderBoard()
 
-    fireEvent.click(screen.getByRole('button', { name: 'worker' }))
+    fireEvent.click(screen.getByRole('button', { name: /^worker/ }))
     expect(screen.queryByText('Settle the account')).not.toBeInTheDocument()
     expect(screen.queryByText('Round consistently')).not.toBeInTheDocument()
     expect(screen.queryByText('Unrelated work')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Everyone' }))
     expect(screen.getByText('Settle the account')).toBeInTheDocument()
   })
 

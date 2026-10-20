@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
-import { ChartersPage } from '@/components/charters/ChartersPage'
+import { ChartersSection as ChartersPage } from '@/components/settings/sections/ChartersSection'
 
 // F186: the delete control hard-deleted on one click. F187: the create/update form dropped the
 // Hub's refusal on the floor. Both are exercised through the real page with the mutations mocked
@@ -29,6 +29,12 @@ vi.mock('@/api/charters', () => ({
   useCreateCharter: () => ({ mutate: createMutate, isPending: false }),
   useUpdateCharter: () => ({ mutate: updateMutate, isPending: false }),
   useDeleteCharter: () => ({ mutate: deleteMutate, isPending: false }),
+}))
+
+// The list names the agents each charter is given to; the roster is not what these test.
+vi.mock('@/api/agents', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/agents')>()),
+  useAgents: () => ({ data: [], isLoading: false }),
 }))
 
 // The body FastAPI returns for a name past VisibleName's 256 characters.
@@ -114,11 +120,11 @@ describe('the charter form renders its own refusal (F187)', () => {
     const user = userEvent.setup()
     render(<ChartersPage />)
 
-    await user.click(screen.getByRole('button', { name: 'New Charter' }))
+    await user.click(screen.getByRole('button', { name: 'New charter' }))
     await user.type(screen.getByLabelText('Charter name'), 'x'.repeat(30))
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
-    const dialog = screen.getByRole('dialog', { name: 'New Charter' })
+    const dialog = screen.getByRole('dialog', { name: 'New charter' })
     expect(dialog).toContainElement(screen.getByRole('alert'))
     expect(screen.getByRole('alert')).toHaveTextContent('String should have at most 256 characters')
   })
@@ -143,11 +149,11 @@ describe('the charter form renders its own refusal (F187)', () => {
     const user = userEvent.setup()
     render(<ChartersPage />)
 
-    await user.click(screen.getByRole('button', { name: 'New Charter' }))
+    await user.click(screen.getByRole('button', { name: 'New charter' }))
     await user.type(screen.getByLabelText('Charter name'), 'y')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    await user.click(screen.getByRole('button', { name: 'New Charter' }))
+    await user.click(screen.getByRole('button', { name: 'New charter' }))
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })

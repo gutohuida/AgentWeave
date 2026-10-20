@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AgentConversation } from '@/api/agentChat'
 import { Icon } from '@/components/common/Icon'
-import { Button } from '@/components/ui/button'
 import { loopTabId, usePanelTabsStore } from '@/store/panelTabsStore'
 import { ConversationRow } from './ConversationRow'
 
@@ -66,55 +65,42 @@ export function LoopFiringGroup({
       : null
 
   return (
-    <div className="flex flex-col gap-0.5" data-testid={testId}>
-      <div className="row-group flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon-xs"
+    <div className="aw-rail-loop-group" data-testid={testId}>
+      <div className="aw-rail-row aw-rail-loop-row">
+        <button
+          data-slot="rail-chevron"
+          type="button"
+          className="aw-rail-chevron-button"
           data-testid={`${testId}-expander`}
           aria-expanded={expanded}
           aria-label={expanded ? `Collapse ${label} firings` : `Expand ${label} firings`}
           onClick={() => setExpanded((value) => !value)}
         >
-          <span
-            className="flex"
-            style={{
-              transform: expanded ? 'rotate(90deg)' : 'none',
-              transition: 'transform var(--dur-fast) var(--ease)',
-            }}
-          >
-            <Icon name="chevron_right" size={14} />
+          <span className="aw-rail-chevron" data-open={expanded ? 'true' : 'false'}>
+            <Icon name="chevron_right" size={12} />
           </span>
-        </Button>
+        </button>
         <button
+          data-slot="rail-row-main"
           type="button"
-          className="row-item min-w-0 flex-1"
+          className="aw-rail-row-main"
           data-testid={`${testId}-open`}
           data-loop-id={loopId}
           onClick={() => openTab(projectId, loopTabId(loopId))}
           title={`${conversations.length} firings of “${label}” — open the loop`}
         >
           {agentColor && (
-            <span
-              aria-hidden="true"
-              className="h-4 w-[2px] shrink-0 rounded-full"
-              style={{ background: agentColor }}
-            />
+            <span aria-hidden="true" className="aw-rail-agent-edge" style={{ background: agentColor }} />
           )}
-          <Icon name="sync" size={13} className="shrink-0" style={{ color: 'var(--text-3)' }} />
+          <Icon name="sync" size={12} className="aw-rail-loop-icon" />
           <span className="min-w-0 flex-1 truncate">{label}</span>
-          <span
-            data-testid={`${testId}-count`}
-            className="shrink-0 text-[11px]"
-            style={{ color: 'var(--text-3)' }}
-          >
+          <span data-testid={`${testId}-count`} className="aw-rail-meta">
             {conversations.length}
           </span>
           {attention && (
             <span
               data-testid={`${testId}-attention`}
-              className="h-1.5 w-1.5 shrink-0 rounded-full"
-              style={{ background: attention.color }}
+              className={running ? 'aw-live-dot aw-pulse' : 'aw-waiting-dot'}
               title={attention.label}
               aria-label={attention.label}
               role="img"
@@ -124,7 +110,7 @@ export function LoopFiringGroup({
       </div>
 
       {expanded && (
-        <div className="ml-5 flex flex-col gap-0.5" data-testid={`${testId}-firings`}>
+        <div className="aw-rail-conversations" data-testid={`${testId}-firings`}>
           {conversations.map((conversation) => (
             <ConversationRow
               key={conversation.id}

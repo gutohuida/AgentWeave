@@ -38,20 +38,6 @@ interface RowMenuProps {
   icon?: string
 }
 
-const ITEM_STYLE: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'flex-start',
-  gap: 2,
-  width: '100%',
-  padding: '6px 10px',
-  borderRadius: 'var(--radius-sm)',
-  fontSize: 13,
-  color: 'var(--text-2)',
-  cursor: 'pointer',
-  outline: 'none',
-}
-
 /**
  * One menu for every row in navigation — agent rows and conversation rows both.
  *
@@ -118,15 +104,8 @@ export function RowMenu({
             event.preventDefault()
             opensAControl()
           }}
-          style={{
-            minWidth: 200,
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            padding: 4,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-            zIndex: 50,
-          }}
+          className="aw-menu aw-pop"
+          style={{ minWidth: 200 }}
         >
           {items.map((item) => (
             <DropdownMenu.Item
@@ -134,7 +113,8 @@ export function RowMenu({
               data-testid={`${testId}-${item.id}`}
               disabled={item.disabled}
               aria-disabled={item.disabled ? 'true' : undefined}
-              style={{ ...ITEM_STYLE, ...(item.disabled ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+              className="aw-menu-item"
+              data-two-line={item.disabled && item.reason ? 'true' : undefined}
               onSelect={(event) => {
                 if (item.disabled) {
                   event.preventDefault()
@@ -150,10 +130,10 @@ export function RowMenu({
                 item.onSelect()
               }}
             >
-              <span>{item.label}</span>
-              {item.disabled && item.reason && (
-                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{item.reason}</span>
-              )}
+              <span className="min-w-0 flex-1">
+                <span>{item.label}</span>
+                {item.disabled && item.reason && <span className="aw-menu-item-detail">{item.reason}</span>}
+              </span>
             </DropdownMenu.Item>
           ))}
         </DropdownMenu.Content>

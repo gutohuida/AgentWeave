@@ -16,7 +16,8 @@ import { ComposerModelControls } from './ComposerModelControls'
 import { ComposerSpecControl } from './ComposerSpecControl'
 
 export const COMPOSER_MIN_ROWS = 3
-const COMPOSER_MAX_ROWS = 12
+// 10 rows of 20px: the box grows from three lines (70px with its padding) to 200px, then scrolls.
+const COMPOSER_MAX_ROWS = 10
 const COMPOSER_ROW_HEIGHT_PX = 20
 export const COMPOSER_MAX_HEIGHT_PX = COMPOSER_ROW_HEIGHT_PX * COMPOSER_MAX_ROWS
 export const COMPOSER_DRAFT_DEBOUNCE_MS = 300
@@ -313,17 +314,17 @@ export function Composer({
             handleCursorMove(e)
           }}
           onClick={handleCursorMove}
-          placeholder={placeholder ?? (isRunning ? `${agent} is responding…` : `Message ${agent}…`)}
+          // The resting placeholder teaches the two triggers, which were otherwise found by accident.
+          placeholder={placeholder ?? (isRunning ? `${agent} is responding…` : `Message ${agent} — @ to mention a file, / for commands`)}
           rows={COMPOSER_MIN_ROWS}
           disabled={submitting}
-          className="composer-textarea w-full resize-none border-0 bg-transparent px-2 py-2 text-xs disabled:opacity-50"
+          className="composer-textarea w-full resize-none border-0 bg-transparent px-2 py-2 text-[13.5px] leading-5 disabled:opacity-50"
           style={{
             background: 'transparent',
             color: 'var(--text)',
             maxHeight: `${COMPOSER_MAX_HEIGHT_PX}px`,
             overflowY: 'auto',
             outline: 'none',
-            fontFamily: "'JetBrains Mono', monospace",
           }}
         />
       </div>

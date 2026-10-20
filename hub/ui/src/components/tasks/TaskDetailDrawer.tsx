@@ -24,6 +24,7 @@ import { useAgents } from '@/api/agents'
 import { useSpecDocuments } from '@/api/spec'
 import { TaskTransitionHistory } from '@/components/tasks/TaskTransitionHistory'
 import { TaskChecksRow } from '@/components/tasks/TaskChecksRow'
+import { TaskIntegrationNote } from '@/components/tasks/TaskIntegrationNote'
 import { TaskStory } from '@/components/tasks/TaskStory'
 import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import { RowMenu } from '@/components/layout/RowMenu'
@@ -892,6 +893,11 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
           </div>
         )}
 
+        {/* Approval merges, so an approved task owes an answer about where the work went: each
+            target's newest attempt, a retry only where retrying can clear it, and the commits that
+            rode along (F58). The board card states only the newest outcome, on its status line. */}
+        <TaskIntegrationNote taskId={task.id} status={task.status} />
+
         {/* Full description */}
         {task.description && (
           <div>
@@ -1031,8 +1037,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             unchanged in behaviour from the old inline expansion, per `design.md` D8, except for
             one addition (6.3): where a link's evidence was rejected, the reason
             (`latest_rejection_reason`) is shown too — the one place it has ever reached a screen.
-            Driven by `requirement_links` directly, not the card's `requirement_ids`-scoped chips
-            (`useRequirementChips`) — a link can exist here without being in `requirement_ids`, and
+            Driven by `requirement_links` directly, not the card's `requirement_ids`-scoped tally
+            (`useRequirementTallies`) — a link can exist here without being in `requirement_ids`, and
             this list has always shown every one, same as before this change. */}
         {task.requirement_links && task.requirement_links.length > 0 && (
           <div data-testid={`task-serves-${task.id}`}>

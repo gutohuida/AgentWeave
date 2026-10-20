@@ -62,7 +62,6 @@ function conversation(overrides: Partial<AgentConversation> = {}): AgentConversa
 
 function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
   const props: React.ComponentProps<typeof Sidebar> = {
-    activePage: 'overview',
     activeAgent: null,
     onOpenProject: vi.fn(),
     onOpenAgent: vi.fn(),
@@ -140,13 +139,15 @@ describe('a loop firing names its loop on the conversation row', () => {
     const { props } = renderRail()
     expandClaude()
 
-    fireEvent.click(screen.getByTestId('rail-conversation-conv-fired-loop'))
+    // From the row's menu: the row itself opens the conversation, and nothing nests in it.
+    fireEvent.keyDown(screen.getByTestId('rail-conversation-conv-fired-menu'), { key: 'Enter' })
+    fireEvent.click(screen.getByTestId('rail-conversation-conv-fired-menu-open-loop'))
 
     const panel = selectProjectPanel(usePanelTabsStore.getState(), 'proj-a')
     expect(panel.tabs.map((tab) => tab.id)).toContain('loop:loop-7')
     expect(panel.activeTabId).toBe('loop:loop-7')
     expect(panel.isOpen).toBe(true)
-    // The marker is its own destination — clicking it must not also navigate the row.
+    // Opening the loop is not opening the conversation.
     expect(props.onOpenConversation).not.toHaveBeenCalled()
   })
 

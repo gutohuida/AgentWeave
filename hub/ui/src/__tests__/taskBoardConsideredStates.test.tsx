@@ -1,15 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import type { Task } from '@/api/tasks'
-import { TasksBoard } from '@/components/tasks/TasksBoard'
+import { TasksScreen } from '@/components/tasks/TasksScreen'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 
 /**
- * The S2 `considered` mock's board treatments, which shipped as the `restrained` variant or not at
- * all: per-column empty states, the description's second line and its fade, and requirement chips
- * that are distinguishable from informational badges at rest.
+ * The S2 `considered` mock's board treatments, carried onto the compact board (ui-finesse): every
+ * empty column still says why it is empty in its own words — now once it is opened, since an empty
+ * column rests folded to a rail that names it and its count — and a card still says how its
+ * requirements stand, as a tally whose rejected state is distinguishable at rest. The card's
+ * description and provenance moved to the task story the card opens (ui-finesse decision: a card
+ * is three lines at most).
  *
  * These are visual contracts, so they are asserted at the level a regression would actually break —
  * which element exists and which class carries it — not by re-reading computed styles jsdom does
@@ -49,6 +52,7 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     useUpdateTask: () => ({ mutate: vi.fn(), isPending: false }),
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),
     useStartWorkOnTask: () => ({ mutate: vi.fn() }),
+    useRetryIntegration: () => ({ mutate: vi.fn() }),
   }
 })
 
@@ -86,7 +90,7 @@ function renderBoard() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <TasksBoard />
+      <TasksScreen />
     </QueryClientProvider>,
   )
 }
@@ -98,64 +102,38 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('S2 — per-column empty states', () => {
-  it('gives every empty column an icon, a title and its own description, not one shared string', () => {
+  it('rests an empty column folded, named with its count, for a screen reader too', () => {
     renderBoard()
 
-    // Six of the seven columns are empty here, which is the point: this treatment is the
-    // most-repeated element on the board, so it cannot be seven copies of "No tasks".
-    const assigned = screen.getByTestId('task-column-empty-assigned')
-    expect(assigned).toHaveTextContent('Nothing assigned')
-    expect(assigned).toHaveTextContent('Assign a pending task to move it here.')
-    expect(assigned.querySelector('.task-column-empty-icon')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Pending, 0 tasks. Show column' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Assigned, 0 tasks. Show column' })).toHaveAttribute('title', 'Assigned: nothing here')
+    // The column with work is open, not a rail.
+    expect(screen.queryByRole('button', { name: /^In progress, .* Show column$/ })).not.toBeInTheDocument()
+  })
 
-    // Per column, not shared — the review column says what it is waiting for, which is a
-    // different fact from what the pending column says.
-    expect(screen.getByTestId('task-column-empty-under_review')).toHaveTextContent('Nothing to review')
-    expect(screen.getByTestId('task-column-empty-approved')).toHaveTextContent('Nothing approved')
+  it('gives each opened empty column its own description, not one shared string', () => {
+    renderBoard()
 
-    // The one populated column has no empty state at all.
+    fireEvent.click(screen.getByRole('button', { name: 'Assigned, 0 tasks. Show column' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Under review, 0 tasks. Show column' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approved, 0 tasks. Show column' }))
+
+    expect(screen.getByTestId('task-column-empty-assigned')).toHaveTextContent('Assign a pending task to move it here.')
+    expect(screen.getByTestId('task-column-empty-under_review')).toHaveTextContent('Completed work waits here for a verdict.')
+    expect(screen.getByTestId('task-column-empty-approved')).toHaveTextContent('Nothing approved yet.')
     expect(screen.queryByTestId('task-column-empty-in_progress')).not.toBeInTheDocument()
-
-    // The literal placeholder this replaces is gone.
     expect(screen.queryByText('No tasks')).not.toBeInTheDocument()
   })
-
-  it('still names the column for a screen reader', () => {
-    renderBoard()
-    expect(screen.getByLabelText('Pending has no tasks')).toBeInTheDocument()
-  })
 })
 
-describe('S2 — the card keeps its second description line', () => {
-  it('clamps to two lines with a fade, not to one', () => {
+describe('S2 — a card says how its requirements stand', () => {
+  it('tallies verified over total, and marks a rejected one at rest', () => {
     renderBoard()
 
-    const description = screen.getByText(/A description long enough/)
-    // Clamping harder was a density regression (IDENTITY clause 6).
-    expect(description).toHaveClass('line-clamp-2')
-    expect(description).not.toHaveClass('line-clamp-1')
-    // The affordance the clamp never had: something at rest saying more text exists.
-    expect(description.parentElement).toHaveClass('task-card-desc-wrap')
-    expect(description.parentElement?.querySelector('.task-card-desc-fade')).not.toBeNull()
-  })
-})
-
-describe('S2 — a requirement chip does not look like an informational badge', () => {
-  it('gives requirement chips their own class and informational text its own', () => {
-    renderBoard()
-
-    const chip = screen.getByTestId('task-requirement-chip-task-1-REQ-118')
-    expect(chip).toHaveClass('task-chip-req')
-    expect(chip).not.toHaveClass('rejected')
-
-    // Rejected evidence is a modifier on the same chip, not a different kind of element.
-    const rejected = screen.getByTestId('task-requirement-chip-task-1-REQ-090')
-    expect(rejected).toHaveClass('task-chip-req')
-    expect(rejected).toHaveClass('rejected')
-
-    // Provenance is a fact, not an action — flat text rather than a bordered pill.
-    const provenance = screen.getByText('from: reviewer')
-    expect(provenance).toHaveClass('task-chip-info')
-    expect(provenance).not.toHaveClass('task-chip-req')
+    const tally = screen.getByText('1/2 FR')
+    expect(tally).toHaveClass('aw-task-card-reqs')
+    expect(tally).toHaveAttribute('data-rejected', 'true')
+    expect(tally).toHaveAttribute('data-complete', 'false')
+    expect(tally).toHaveAttribute('title', '1 of 2 requirements verified, 1 rejected')
   })
 })

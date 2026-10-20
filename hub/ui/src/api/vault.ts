@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, fetchWithAuth, getJson, postJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
@@ -51,6 +51,17 @@ export interface VaultEntry {
   fetches?: number
   /** When an agent last read it; null when none has. */
   last_fetched_at?: string | null
+  /** The agents that read it (`the-vault-names-who-read-an-entry`), most recent first; empty when
+   *  none is known. Reads counted before the Hub recorded readers are in `fetches` only, so the
+   *  readers' counts may sum to less. Absent on a Hub that predates readers. */
+  readers?: VaultReaderCount[]
+}
+
+/** One agent's reads of one vault entry. */
+export interface VaultReaderCount {
+  agent: string
+  count: number
+  last_read_at: string
 }
 
 /** Where a fact's quote sits in its source, 1-based lines found by the Hub, not the model. */
@@ -404,5 +415,20 @@ export function useCheckVaultWarnings() {
         `/api/v1/projects/${projectId}/vault/warnings/check?path=${encodeURIComponent(path)}`,
         {},
       ),
+  })
+}
+
+/** The records of the facts citing one source, for their claims and cited lines. One request per
+ *  fact, cached apart from `useVaultEntry`'s pages. A fact whose record is not readable here (a
+ *  404, a private fact on another machine) comes back undefined, and the map's line stands in. */
+export function useVaultFactRecords(factIds: string[]) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQueries({
+    queries: factIds.map((id) => ({
+      queryKey: ['project', projectId, 'vault', 'fact', id],
+      queryFn: () => getJson<VaultEntryPage>(`/api/v1/projects/${projectId}/vault/entries/${id}?offset=0`),
+      enabled: isConfigured && !!projectId,
+      retry: false,
+    })),
   })
 }

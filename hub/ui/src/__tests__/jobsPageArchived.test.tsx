@@ -2,20 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { Job } from '@/api/jobs'
-import { JobsPage } from '@/components/jobs/JobsPage'
+import { JobsScreen } from '@/components/jobs/JobsScreen'
 
 /** F637: after every job was archived, the Jobs page said "No jobs yet / Create First Job" although
  *  six had fired. Archived jobs are listed on their own, and the empty state counts them. */
 
 let live: Job[] = []
 let archived: Job[] = []
+let jobsError: Error | null = null
 const idle = { mutate: vi.fn(), isPending: false }
 
 vi.mock('@/api/jobs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/jobs')>()
   return {
     ...actual,
-    useJobs: () => ({ data: live, isLoading: false }),
+    useJobs: () => (jobsError ? { data: undefined, isLoading: false, error: jobsError } : { data: live, isLoading: false }),
     useArchivedJobs: () => ({ data: archived, isLoading: false }),
     useRunJob: () => idle,
     usePauseJob: () => idle,
@@ -47,7 +48,7 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <JobsPage />
+      <JobsScreen />
     </QueryClientProvider>,
   )
 }
@@ -56,6 +57,14 @@ describe('the Jobs page and archived jobs (F637)', () => {
   beforeEach(() => {
     live = []
     archived = []
+    jobsError = null
+  })
+
+  it('says the jobs could not be read, never "No jobs yet", when the list failed', () => {
+    jobsError = new Error('500')
+    renderPage()
+    expect(screen.queryByText('No jobs yet')).toBeNull()
+    expect(screen.getByTestId('query-error-notice')).toHaveTextContent('Couldn’t read the jobs from the Hub')
   })
 
   it('does not call a project with archived jobs empty, and lists them on request', () => {
@@ -67,7 +76,7 @@ describe('the Jobs page and archived jobs (F637)', () => {
     expect(screen.queryByText('No jobs yet')).toBeNull()
     expect(screen.getByText('No active or paused jobs')).toBeInTheDocument()
     expect(screen.getByText(/2 archived/)).toBeInTheDocument()
-    fireEvent.click(screen.getByTestId('jobs-filter-archived'))
+    fireEvent.click(screen.getByRole('radio', { name: /Archived/ }))
     expect(screen.getByTestId('archived-job-a')).toHaveTextContent('Job a')
     expect(screen.getByTestId('archived-job-b')).toHaveTextContent('archived')
   })

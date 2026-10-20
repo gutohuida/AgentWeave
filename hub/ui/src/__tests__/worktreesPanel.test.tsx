@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { WorktreesPanel } from '@/components/environment/WorktreesPanel'
+import { WorktreesSection } from '@/components/settings/sections/WorktreesSection'
 import type { WorkspaceInfo, WorktreeConflict, WorktreeListing } from '@/api/workspace'
 
 let worktrees: WorktreeListing | undefined
@@ -36,7 +36,7 @@ function renderPanel(
   error = options.error ?? null
   conflicts = 'conflicts' in options ? options.conflicts : []
   conflictsError = options.conflictsError ?? null
-  return render(<WorktreesPanel />)
+  return render(<WorktreesSection />)
 }
 
 const AGENT: WorkspaceInfo = {
@@ -79,7 +79,7 @@ describe('the project’s worktrees panel', () => {
   it('does not claim there is no activity while checkouts exist', () => {
     // The exact defect: the stub rendered this string unconditionally.
     renderPanel([TASK])
-    expect(screen.queryByText('No worktree activity')).not.toBeInTheDocument()
+    expect(screen.queryByText('No checkouts right now')).not.toBeInTheDocument()
   })
 
   it('omits a heading whose group is empty rather than showing an empty one', () => {
@@ -97,7 +97,7 @@ describe('the project’s worktrees panel', () => {
 
   it('says the project is empty only when the Hub said so', () => {
     renderPanel([])
-    expect(screen.getByText('No worktree activity')).toBeInTheDocument()
+    expect(screen.getByText('No checkouts right now')).toBeInTheDocument()
   })
 
   it('reports a failed read as a failure, not as an empty project', () => {
@@ -105,13 +105,13 @@ describe('the project’s worktrees panel', () => {
     // different answers, and only one of them means the operator should go looking.
     renderPanel(undefined, { error: new Error('boom') })
     expect(screen.getByRole('alert')).toHaveTextContent('Could not read')
-    expect(screen.queryByText('No worktree activity')).not.toBeInTheDocument()
+    expect(screen.queryByText('No checkouts right now')).not.toBeInTheDocument()
   })
 
   it('says it is loading rather than rendering an empty project', () => {
     renderPanel(undefined, { loading: true })
     expect(screen.getByLabelText('Loading worktrees')).toBeInTheDocument()
-    expect(screen.queryByText('No worktree activity')).not.toBeInTheDocument()
+    expect(screen.queryByText('No checkouts right now')).not.toBeInTheDocument()
   })
 })
 
@@ -194,7 +194,7 @@ describe('the worktrees panel in a project that is not a repository (F249)', () 
     loading = false
     error = null
     conflicts = []
-    render(<WorktreesPanel />)
+    render(<WorktreesSection />)
 
     expect(screen.getByTestId('worktrees-not-a-repository')).toHaveTextContent('/p is not a git repository')
     expect(screen.queryByText(/appear here when an agent starts work/)).not.toBeInTheDocument()

@@ -86,8 +86,8 @@ describe('Draft the next slice', () => {
     roadmapSlice = { document: 'spec/changes/the-plan/spec.json', slice: 's1' }
     renderPhaseBar()
 
-    const box = (await screen.findByLabelText('Draft the next slice')) as HTMLInputElement
-    expect(box.checked).toBe(true)
+    const toggle = await screen.findByRole('switch', { name: 'Draft the next slice' })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     await waitFor(() => expect(approvals()).toHaveLength(1))

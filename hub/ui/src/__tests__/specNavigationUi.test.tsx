@@ -166,7 +166,9 @@ describe('the document panel opens beside the conversation', () => {
     renderView()
     expect(screen.getByTestId('conversation-surface')).toBeInTheDocument()
     expect(screen.getByTestId('spec-document-panel')).toBeInTheDocument()
-    expect(screen.getByTestId('spec-document-breadcrumb')).toHaveTextContent('Reconstruction')
+    // The header names the document (its title, and the breadcrumb that opens search says which).
+    expect(screen.getByRole('heading', { name: 'Reconstruction' })).toBeInTheDocument()
+    expect(screen.getByTestId('spec-document-breadcrumb')).toHaveAccessibleName(/^Reconstruction/)
   })
 
   it('closing the panel closes its reading tab, but does not detach the document', () => {
@@ -213,7 +215,7 @@ describe('specs as the shell\'s first tenant (2026-08-18-one-shell-three-panels,
 
     // A new reading tab opened and is now showing the selected document...
     await waitFor(() =>
-      expect(screen.getByTestId('spec-document-breadcrumb')).toHaveTextContent('Add Spec Navigation'),
+      expect(screen.getByTestId('spec-document-breadcrumb')).toHaveAccessibleName(/^Add Spec Navigation/),
     )
     // ...but nothing asked the destination to attach it. Only the composer's own control does that
     // (asserted end-to-end, with the real composer mounted, in specChatSurface.test.tsx).

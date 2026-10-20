@@ -1,0 +1,105 @@
+/* Jobs (ui-finesse). */
+
+.aw-jobs { width: min(100%, 1100px); margin-inline: auto; padding: 20px clamp(20px, 3vw, 32px) 96px; }
+.aw-jobs-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.aw-jobs-clock { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; font-size: 12px; color: var(--text-3); }
+
+.aw-jobs-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
+.aw-job-row {
+  display: grid;
+  grid-template-columns: 32px minmax(200px, 1.3fr) minmax(180px, 1fr) 110px 112px auto;
+  align-items: center;
+  column-gap: 16px;
+  min-height: 68px;
+  padding: 12px 14px;
+  transition: background-color var(--dur-fast) ease;
+}
+.aw-job-item { border-bottom: 1px solid var(--border); }
+.aw-job-item:last-child { border-bottom: 0; }
+.aw-job-row:hover { background: color-mix(in srgb, var(--text) 2.5%, transparent); }
+.aw-job-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: var(--radius-md);
+  background: var(--surface-2); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--border);
+}
+.aw-job-row[data-state="active"] .aw-job-icon { color: var(--green); background: color-mix(in oklab, var(--green) 12%, var(--surface-2)); }
+.aw-job-main { min-width: 0; }
+.aw-job-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--text); }
+.aw-job-kind {
+  flex: none; padding: 1px 6px; border-radius: 999px;
+  border: 1px solid var(--border); font-size: 10.5px; font-weight: 500; color: var(--text-3);
+}
+.aw-job-sub { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; }
+.aw-job-agent { display: inline-flex; align-items: center; gap: 5px; color: var(--text-2); }
+
+.aw-job-progress { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.aw-job-progress-label { align-self: flex-start; font-size: 12.5px; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; border-radius: 4px; }
+.aw-job-progress-label:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border-hi); }
+.aw-job-progress-label:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-job-bar { display: block; height: 4px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.aw-job-bar span { display: block; height: 100%; border-radius: inherit; background: var(--green); transition: width var(--dur-slow) var(--ease-out); }
+.aw-job-progress-note { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.aw-job-last { display: flex; flex-direction: column; gap: 1px; font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.aw-job-last-count { font-size: 12px; color: var(--text-3); }
+
+.aw-job-state { display: flex; justify-content: flex-start; }
+.aw-job-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-2); cursor: pointer; }
+.aw-job-row[data-state="active"] .aw-job-switch { color: var(--text); }
+.aw-job-finished { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--text-3); }
+.aw-job-finished svg { color: var(--green); }
+
+.aw-job-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+
+.aw-jobs-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 64px 16px; text-align: center; border: 1px dashed var(--border-hi); border-radius: var(--radius-lg); }
+.aw-jobs-empty-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; margin-bottom: 6px; border-radius: var(--radius-md); background: var(--surface-2); color: var(--text-2); }
+.aw-jobs-empty-title { font-size: 14px; font-weight: 600; }
+.aw-jobs-empty-text { max-width: 46ch; margin-bottom: 10px; font-size: 13px; line-height: 1.5; color: var(--text-3); }
+
+@media (max-width: 1100px) {
+  .aw-job-row { grid-template-columns: 32px minmax(0, 1fr) 112px auto; row-gap: 10px; }
+  .aw-job-progress { grid-column: 2 / 3; grid-row: 2; }
+  .aw-job-last { grid-column: 3 / 4; grid-row: 2; }
+  .aw-job-state { grid-column: 3 / 4; grid-row: 1; }
+  .aw-job-actions { grid-column: 4 / 5; grid-row: 1; }
+}
+
+/* Applied (ui-finesse wiring): what the old JobCard carried, in the row's vocabulary. */
+.aw-job-next { font-size: 12px; color: var(--text-3); }
+.aw-job-next[data-tone="amber"] { color: var(--amber); white-space: normal; }
+.aw-job-refused { color: var(--amber); }
+.aw-job-trend { display: inline-flex; align-items: center; gap: 6px; margin-top: 2px; }
+.aw-job-chevron { transition: transform var(--dur-pop) var(--ease-out); }
+.aw-job-item[data-open="true"] .aw-job-chevron { transform: rotate(180deg); }
+.aw-job-detail-host { padding: 0 14px 14px 62px; animation: aw-job-open var(--dur-pop) var(--ease-out); }
+@keyframes aw-job-open { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.aw-job-details { display: grid; gap: 14px; padding-top: 12px; border-top: 1px dashed var(--border); }
+.aw-job-detail-label { margin-bottom: 4px; font-size: 11.5px; font-weight: 600; color: var(--text-3); }
+.aw-job-detail-text { font-size: 12.5px; color: var(--text); }
+.aw-job-detail-muted { font-size: 12px; color: var(--text-3); }
+.aw-job-detail-warn { font-size: 12px; color: var(--amber); }
+.aw-job-message { padding: 8px 10px; border-radius: var(--radius-md); background: var(--surface-2); font-size: 12.5px; color: var(--text); white-space: pre-wrap; }
+.aw-job-runs { display: grid; gap: 2px; list-style: none; margin: 0; padding: 0; }
+.aw-job-run { display: grid; grid-template-columns: 96px auto minmax(0, 1fr) auto auto auto; align-items: center; column-gap: 10px; padding: 4px 8px; border-radius: var(--radius-sm); font-size: 12px; }
+.aw-job-run:nth-child(odd) { background: var(--surface-2); }
+.aw-job-run-status { display: inline-flex; align-items: center; gap: 5px; text-transform: capitalize; }
+.aw-job-run-reason { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-job-loop { display: grid; gap: 6px; }
+.aw-job-loop-head { display: flex; align-items: center; gap: 6px; color: var(--blue); }
+.aw-job-loop-head .aw-job-detail-label { margin: 0; }
+.aw-job-loop-state { padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); font-size: 11px; color: var(--text-2); }
+.aw-job-loop-state[data-state="active"] { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+.aw-job-loop-queue { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.aw-job-loop-current { display: grid; gap: 2px; }
+.aw-job-current-link { justify-self: start; font-size: 12px; color: var(--blue); text-align: left; border-radius: 4px; }
+.aw-job-current-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.aw-job-current-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-job-current-agent { margin-left: 6px; color: var(--text-3); }
+.aw-job-ids { display: flex; gap: 12px; }
+.aw-job-id { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--text-3); border-radius: 4px; }
+.aw-job-id:hover { color: var(--text-2); }
+.aw-job-id:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-jobs-notice { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 12px; border-radius: var(--radius-md); background: color-mix(in srgb, var(--red) 10%, transparent); font-size: 12.5px; color: var(--red); }
+.aw-job-archived { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.aw-job-archived:last-child { border-bottom: 0; }
+@media (prefers-reduced-motion: reduce) { .aw-job-detail-host { animation: none; } .aw-job-chevron { transition: none; } }

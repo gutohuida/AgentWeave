@@ -93,13 +93,13 @@ describe('per-agent checkpoint policy', () => {
   })
 
   it('inherits the project by default rather than showing a value nobody set', () => {
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.getByLabelText('Automatic checkpointing for claude-1')).toHaveValue('')
     expect(screen.getByLabelText('Checkpoint threshold for claude-1')).toHaveValue(null)
   })
 
   it('submits a token threshold in canonical units, entered in thousands', () => {
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Threshold unit for claude-1'), {
       target: { value: 'tokens' },
     })
@@ -116,7 +116,7 @@ describe('per-agent checkpoint policy', () => {
     // An override that kept its mode while losing its value would be a number in a unit nobody
     // chose — the Hub refuses it, and the control must not be able to ask.
     roster = [agent({ checkpoint_threshold_mode: 'percent', checkpoint_threshold_value: 60 })]
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     const input = screen.getByLabelText('Checkpoint threshold for claude-1')
     fireEvent.change(input, { target: { value: '' } })
     fireEvent.blur(input)
@@ -127,7 +127,7 @@ describe('per-agent checkpoint policy', () => {
   })
 
   it('lets an agent opt out while still inheriting the threshold', () => {
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Automatic checkpointing for claude-1'), {
       target: { value: 'off' },
     })
@@ -144,34 +144,46 @@ describe('per-agent access grants', () => {
   })
 
   it('shows both grants closed by default', () => {
-    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/)).not.toBeChecked()
-    expect(screen.getByLabelText(/Recall the observations behind them for claude-1/)).not.toBeChecked()
+    expect(screen.getByLabelText(/Recall what a checkpoint cites for claude-1/)).not.toBeChecked()
+    // Recall only reaches what a checkpoint it can read cites, so it waits for that grant.
+    expect(screen.getByLabelText(/Recall what a checkpoint cites for claude-1/)).toBeDisabled()
   })
 
   it('grants each one separately', () => {
     // The whole reason there are two: a peer allowed to see what was concluded is not thereby
     // allowed to read everything that agent's tools ever printed.
-    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     fireEvent.click(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/))
 
-    expect(grantMutate).toHaveBeenCalledWith({
-      agent: 'claude-1', grant: 'can_read_checkpoints', enabled: true,
-    })
+    expect(grantMutate).toHaveBeenCalledWith(
+      { agent: 'claude-1', grant: 'can_read_checkpoints', enabled: true },
+      expect.anything(),
+    )
     expect(grantMutate).toHaveBeenCalledTimes(1)
   })
 
   it('reflects a grant that is already open', () => {
     roster = [agent({ can_read_checkpoints: true })]
-    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/)).toBeChecked()
-    expect(screen.getByLabelText(/Recall the observations behind them for claude-1/)).not.toBeChecked()
+    expect(screen.getByLabelText(/Recall what a checkpoint cites for claude-1/)).not.toBeChecked()
+    expect(screen.getByLabelText(/Recall what a checkpoint cites for claude-1/)).toBeEnabled()
+  })
+
+  it('closes recall with the read grant it depends on', () => {
+    roster = [agent({ can_read_checkpoints: true, can_recall: true })]
+    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/))
+    expect(grantMutate).toHaveBeenCalledWith({ agent: 'claude-1', grant: 'can_read_checkpoints', enabled: false }, expect.anything())
+    expect(grantMutate).toHaveBeenCalledWith({ agent: 'claude-1', grant: 'can_recall', enabled: false }, expect.anything())
   })
 
   it('states the read grant reaches every conversation, and does not claim a bound nothing sets', () => {
     // F235: the grant is all-or-nothing across the project. Nothing can restrict a checkpoint's
     // own visibility, so the hint must not suggest one exists.
-    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.getByText(/every conversation in this project/)).toBeInTheDocument()
     expect(screen.queryByText(/visibility/)).not.toBeInTheDocument()
   })
@@ -192,27 +204,28 @@ describe('evidence acceptance grant', () => {
   })
 
   it('is closed by default, because it is authority over what ships', () => {
-    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.getByLabelText(/Accept evidence for claude-1/)).not.toBeChecked()
   })
 
   it('is granted on its own, without touching the checkpoint grants', () => {
-    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     fireEvent.click(screen.getByLabelText(/Accept evidence for claude-1/))
-    expect(grantMutate).toHaveBeenCalledWith({
-      agent: 'claude-1', grant: 'can_accept_evidence', enabled: true,
-    })
+    expect(grantMutate).toHaveBeenCalledWith(
+      { agent: 'claude-1', grant: 'can_accept_evidence', enabled: true },
+      expect.anything(),
+    )
     expect(grantMutate).toHaveBeenCalledTimes(1)
   })
 
   it('reflects a grant that is already open', () => {
     roster = [agent({ can_accept_evidence: true })]
-    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.getByLabelText(/Accept evidence for claude-1/)).toBeChecked()
   })
 
   it('says what it does not confer', () => {
-    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.getByText(/cannot accept its own/)).toBeInTheDocument()
   })
 })
@@ -238,33 +251,33 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
   it('says so when the inherited project threshold could not be read', () => {
     projectThreshold = null
     roster = [agent({ checkpoint_compaction_percent: 95 })]
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.queryByText(/project's threshold could not be read/)).toBeInTheDocument()
   })
 
   it('an agent with no override is judged against the project threshold it inherits (task 6.3)', () => {
     projectThreshold = { checkpoint_threshold_mode: 'percent', checkpoint_threshold_value: 96 }
     roster = [agent({ checkpoint_compaction_percent: 95 })]
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.queryByText(/threshold of 96% is lowered to 92%/)).toBeInTheDocument()
   })
 
   it('names the runner\'s own compaction point for a Copilot-bound agent with no configured threshold', () => {
     roster = [agent({ checkpoint_compaction_percent: 80 })]
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.queryByText(/compacts at about 80%/)).toBeInTheDocument()
     expect(screen.queryByText(/fires by 77% at the latest/)).toBeInTheDocument()
   })
 
   it('shows no compaction-point line for an agent at the C=95 default', () => {
     roster = [agent({ checkpoint_compaction_percent: 95 })]
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.queryByText(/compacts at about/)).not.toBeInTheDocument()
   })
 
   it('shows no compaction-point line for an agent with no bound runner (null compaction percent)', () => {
     roster = [agent({ checkpoint_compaction_percent: null })]
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.queryByText(/compacts at about/)).not.toBeInTheDocument()
   })
 
@@ -274,7 +287,7 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
       checkpoint_threshold_mode: 'percent',
       checkpoint_threshold_value: 96,
     })]
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.queryByText(/lowered to 92%/)).toBeInTheDocument()
     expect(screen.queryByText(/Claude compacts at about 95%/)).toBeInTheDocument()
   })
@@ -285,7 +298,7 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
       checkpoint_threshold_mode: 'percent',
       checkpoint_threshold_value: 92,
     })]
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.queryByText(/lowered to 92%/)).not.toBeInTheDocument()
   })
 
@@ -295,7 +308,7 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
       checkpoint_threshold_mode: 'percent',
       checkpoint_threshold_value: 95,
     })]
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.queryByText(/lowered to 92%/)).toBeInTheDocument()
   })
 
@@ -305,7 +318,7 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
       checkpoint_threshold_mode: 'tokens',
       checkpoint_threshold_value: 150_000,
     })]
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(
       screen.queryByText(/fires at 150000 tokens or at 77% of its window/),
     ).toBeInTheDocument()
@@ -317,7 +330,7 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
       checkpoint_threshold_mode: 'tokens',
       checkpoint_threshold_value: 150_000,
     })]
-    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.queryByText(/fires at 150000 tokens/)).not.toBeInTheDocument()
   })
 })

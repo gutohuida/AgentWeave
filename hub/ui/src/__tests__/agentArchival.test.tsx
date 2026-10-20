@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
@@ -50,7 +50,7 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 
 function renderIdentity(summary: AgentSummary) {
   roster = [summary]
-  return render(<AgentSettingsPage agent={summary.name} section="identity" />)
+  return render(<AgentSettingsPage agent={summary.name} section="identity" onSelectSection={vi.fn()} onBack={vi.fn()} />)
 }
 
 vi.mock('@/api/modelCatalog', async (importOriginal) => {
@@ -69,13 +69,17 @@ describe('an agent is archived, never deleted', () => {
     renderIdentity(agent())
 
     const toggle = screen.getByTestId('agent-archive-toggle')
-    expect(toggle).toHaveTextContent('Archive agent')
+    expect(toggle).toHaveTextContent('Archive…')
     // The absence is the requirement: there is no delete, and the copy says why.
     expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument()
-    expect(screen.getByText(/no way to delete an agent, by design/i)).toBeInTheDocument()
+    expect(screen.getByText(/An agent is never deleted: its name is the attribution/)).toBeInTheDocument()
 
+    // Asked first; nothing is archived by the first click.
     await user.click(toggle)
-    expect(archiveMutate).toHaveBeenCalledWith({ agent: 'codex-1', archived: true })
+    expect(archiveMutate).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Archive codex-1' }))
+    expect(archiveMutate).toHaveBeenCalledWith({ agent: 'codex-1', archived: true }, expect.anything())
   })
 
   it('offers the way back once archived', async () => {
@@ -83,10 +87,10 @@ describe('an agent is archived, never deleted', () => {
     renderIdentity(agent({ lifecycle: 'archived' }))
 
     const toggle = screen.getByTestId('agent-archive-toggle')
-    expect(toggle).toHaveTextContent('Unarchive agent')
+    expect(toggle).toHaveTextContent('Unarchive codex-1')
 
     await user.click(toggle)
-    expect(archiveMutate).toHaveBeenCalledWith({ agent: 'codex-1', archived: false })
+    expect(archiveMutate).toHaveBeenCalledWith({ agent: 'codex-1', archived: false }, expect.anything())
   })
 
   it('shows a refusal as the reason it was refused, not as a generic failure', async () => {
@@ -118,10 +122,9 @@ describe('an agent is archived, never deleted', () => {
     expect(remedy).toHaveTextContent(/cannot be undone/i)
     await user.click(remedy)
 
-    expect(archiveMutate).toHaveBeenCalledWith({
-      agent: 'codex-1',
-      archived: true,
-      discardQueueEntryIds: ['queue-1', 'queue-2'],
-    })
+    expect(archiveMutate).toHaveBeenCalledWith(
+      { agent: 'codex-1', archived: true, discardQueueEntryIds: ['queue-1', 'queue-2'] },
+      expect.anything(),
+    )
   })
 })

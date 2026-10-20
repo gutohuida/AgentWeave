@@ -1,52 +1,40 @@
 import { useEffect, useRef, useState } from 'react'
-import { AccountingPanel } from '@/components/accounting/AccountingPanel'
 import { useAgents } from '@/api/agents'
 import { useProjects } from '@/api/projects'
 import { ConversationView } from '@/components/agents/ConversationView'
 import { AgentCreateDialog } from '@/components/agents/AgentCreateDialog'
 import { NewConversationSurface } from '@/components/agents/NewConversationSurface'
-import { ActivityLog } from '@/components/activity/ActivityLog'
-import { ProjectLedger } from '@/components/activity/ProjectLedger'
-import { ChartersPage } from '@/components/charters/ChartersPage'
-import { InstructionsPage } from '@/components/instructions/InstructionsPage'
-import { JobsPage } from '@/components/jobs/JobsPage'
-import { VaultPage } from '@/components/vault/VaultPage'
-import { LogsView } from '@/components/logs/LogsView'
-import { DiagnosticsPanel } from '@/components/environment/DiagnosticsPanel'
-import { ManagerPanel } from '@/components/environment/ManagerPanel'
-import { ProjectSettingsPanel } from '@/components/environment/ProjectSettingsPanel'
-import { SpecStepsSection } from '@/components/environment/SpecStepsSection'
-import { TracesSection } from '@/components/environment/TracesSection'
-import { WorktreesPanel } from '@/components/environment/WorktreesPanel'
+import { JobsScreen } from '@/components/jobs/JobsScreen'
+import { ActivityScreen } from '@/components/activity/ActivityScreen'
+import { ProjectSettingsScreen } from '@/components/settings/ProjectSettingsScreen'
+import { VaultScreen } from '@/components/vault/VaultScreen'
 import { PaneResizer } from '@/components/layout/PaneResizer'
-import { ProjectHeader } from '@/components/layout/ProjectHeader'
-import { ProjectTabs } from '@/components/layout/ProjectTabs'
+import { TopBar } from '@/components/layout/TopBar'
 import { SetupModal } from '@/components/layout/SetupModal'
 import {
   Sidebar,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
   SIDEBAR_WIDTH,
-  type SidebarPage,
 } from '@/components/layout/Sidebar'
-import { OverviewPage } from '@/components/overview/OverviewPage'
+import { Toaster } from '@/components/ui/toast'
+import { openCommandPalette } from '@/lib/palette'
+import { OverviewScreen } from '@/components/overview/OverviewScreen'
 import { CommandPalette } from '@/components/palette/CommandPalette'
 import { ProjectManagerModal, type ProjectManagerMode } from '@/components/projects/ProjectManagerModal'
-import { QualityHealthPanel } from '@/components/quality/QualityHealthPanel'
 import { QuestionsPanel } from '@/components/questions/QuestionsPanel'
-import { RunnersPage } from '@/components/runners/RunnersPage'
 import { useSpecDocuments } from '@/api/spec'
 import { SpecPage } from '@/components/spec/SpecPage'
 import { EvidenceBrowser } from '@/components/evidence/EvidenceBrowser'
 import { RequirementStory } from '@/components/spec/RequirementStory'
 import { useTasks } from '@/api/tasks'
-import { TasksBoard } from '@/components/tasks/TasksBoard'
-import { DependencyBoardView } from '@/components/tasks/DependencyBoardView'
+import { TasksScreen } from '@/components/tasks/TasksScreen'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/common/Icon'
 import { useSSE } from '@/hooks/useSSE'
 import { useWorkspaceNavigation } from '@/hooks/useWorkspaceNavigation'
 import {
+  PROJECT_TABS,
   agentDestination,
   agentSettingsBackDestination,
   agentSettingsDestination,
@@ -57,7 +45,6 @@ import {
   evidenceDestination,
   resolveConversationSelection,
   withDocument,
-  type EnvironmentSection,
 } from '@/lib/navigation'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { ArchivedAgentNotice } from '@/components/agents/ArchivedAgentNotice'
@@ -107,10 +94,6 @@ export default function App() {
   const [overviewQuestionsOpen, setOverviewQuestionsOpen] = useState(false)
   // The ledger leads (slice project-ledger): what the project did, before the live stream of it.
   const [activitySubview, setActivitySubview] = useState<'ledger' | 'activity' | 'logs'>('ledger')
-  // Task 8.11: the seven-column board stays the default and unchanged — the dependency board is
-  // an alternate lens on the same data, not a replacement, so it is opt-in per visit rather than
-  // a stored preference.
-  const [tasksView, setTasksView] = useState<'board' | 'dependencies'>('board')
   const { destination, navigate: navigateTo } = useWorkspaceNavigation({
     availableProjectIds: projects ? projects.map((project) => project.id) : null,
     lastOpenedProjectId: projectId,
@@ -235,11 +218,6 @@ export default function App() {
     return <HubConnectionState state="unreachable" onRetry={() => useConfigStore.getState().bootstrap()} />
   }
 
-  const activePage: SidebarPage | 'overview' | null = destination.kind === 'project'
-    ? destination.tab === 'environment'
-      ? (destination.environmentSection as SidebarPage)
-      : destination.tab
-    : null
   const selectedAgent = destination.kind === 'conversation'
     ? agents.find((agent) => agent.name === destination.agent) ?? null
     : null
@@ -271,6 +249,22 @@ export default function App() {
       : null
   const openDocument =
     destination.kind === 'conversation' ? destination.document : rememberedDocument
+
+  // Tasks the operator has to look at: finished work waiting on review.
+  const awaitingReview = (allTasks ?? []).filter(
+    (task) => task.status === 'completed' || task.status === 'under_review',
+  ).length
+
+  /** A theme flip repaints every surface at once; transitions are suspended for that frame so it
+   *  is one change rather than a hundred staggered fades. */
+  const toggleMode = () => {
+    const next = mode === 'light' ? 'dark' : 'light'
+    const root = document.documentElement
+    root.classList.add('no-transitions')
+    useConfigStore.getState().setMode(next)
+    root.dataset.mode = next
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('no-transitions')))
+  }
 
   const navigate = (value: string) => {
     // `agent-settings:<name>:<section>` -- the Overview's agent cards link a flag to the section that
@@ -401,83 +395,69 @@ export default function App() {
       )
     )
   } else if (destination.kind === 'agent-settings') {
-    content = <AgentSettingsPage agent={destination.agent} section={destination.section} />
+    const settingsDestination = destination
+    content = (
+      <AgentSettingsPage
+        agent={settingsDestination.agent}
+        section={settingsDestination.section}
+        onSelectSection={(section) =>
+          navigateTo(agentSettingsDestination(settingsDestination.projectId, settingsDestination.agent, section))
+        }
+        onBack={() =>
+          navigateTo(
+            agentSettingsBackDestination(
+              agentSettingsDestination(settingsDestination.projectId, settingsDestination.agent),
+              openDocument,
+            ),
+          )
+        }
+      />
+    )
   } else if (destination.kind === 'project') {
+    const openTask = (taskId: string) => {
+      useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
+      navigateTo(projectDestination(destination.projectId, 'tasks'))
+    }
+    const openConversation = (agent: string, conversationId: string) =>
+      navigateTo(agentDestination(destination.projectId, agent, conversationId, openDocument))
     let projectContent: React.ReactNode
     if (destination.tab === 'overview') {
       projectContent = overviewQuestionsOpen
         ? <QuestionsPanel />
-        : <OverviewPage onNavigate={navigate} />
+        : <OverviewScreen onNavigate={navigate} onOpenConversation={openConversation} />
     } else if (destination.tab === 'tasks') {
       // A task's requirement chip, clicked: land on that requirement in its document, scrolled
-      // into view — the other direction of F4's cross-tab navigation. Shared by both views since
-      // `TaskCard` renders the same chip either way.
-      const onOpenRequirement = (documentPath: string, anchor: string) =>
-        navigateTo(projectDestination(destination.projectId, 'spec', documentPath, anchor))
+      // into view — the other direction of F4's cross-tab navigation.
       projectContent = (
-        <div className="flex h-full flex-col">
-          <div className="flex gap-1 px-4 pt-3">
-            {(
-              [
-                ['board', 'Board'],
-                ['dependencies', 'Dependencies'],
-              ] as const
-            ).map(([view, label]) => (
-              <button
-                key={view}
-                type="button"
-                data-testid={`tasks-view-${view}`}
-                onClick={() => setTasksView(view)}
-                className="px-3 py-1.5 text-xs"
-                aria-pressed={tasksView === view}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="min-h-0 flex-1 overflow-hidden">
-            {tasksView === 'board' ? (
-              <TasksBoard onOpenRequirement={onOpenRequirement} />
-            ) : (
-              <DependencyBoardView onOpenRequirement={onOpenRequirement} />
-            )}
-          </div>
-        </div>
-      )
-    } else if (
-      destination.tab === 'spec' &&
-      destination.view === 'requirement' &&
-      destination.document &&
-      destination.focus
-    ) {
-      // One requirement's story (slice requirement-story): linkable, from its document and FR-n.
-      projectContent = (
-        <RequirementStory
-          key={`${destination.document}#${destination.focus}`}
-          document={destination.document}
-          identifier={destination.focus}
-          onOpenDocument={(path) => navigateTo(projectDestination(destination.projectId, 'spec', path))}
-          onOpenTask={(taskId) => {
-            useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
-            navigateTo(projectDestination(destination.projectId, 'tasks'))
-          }}
-        />
-      )
-    } else if (destination.tab === 'spec' && destination.view === 'evidence') {
-      // The Spec tab's evidence view (slice evidence-browser): linkable, focused by the URL.
-      projectContent = (
-        <EvidenceBrowser
-          focus={destination.focus ?? null}
-          onFocus={(focus) =>
-            navigateTo(evidenceDestination(destination.projectId, focus), { replace: true })
+        <TasksScreen
+          onOpenRequirement={(documentPath, anchor) =>
+            navigateTo(projectDestination(destination.projectId, 'spec', documentPath, anchor))
           }
-          onOpenTask={(taskId) => {
-            useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
-            navigateTo(projectDestination(destination.projectId, 'tasks'))
-          }}
+          onOpenDocument={(path) => navigateTo(projectDestination(destination.projectId, 'spec', path))}
         />
       )
     } else if (destination.tab === 'spec') {
+      // One screen with the document list beside it; the requirement story (slice
+      // requirement-story) and the evidence view (slice evidence-browser) take the document's
+      // place, each linkable and focused by the URL.
+      const specView =
+        destination.view === 'requirement' && destination.document && destination.focus ? (
+          <RequirementStory
+            key={`${destination.document}#${destination.focus}`}
+            document={destination.document}
+            identifier={destination.focus}
+            onOpenDocument={(path) => navigateTo(projectDestination(destination.projectId, 'spec', path))}
+            onOpenTask={openTask}
+          />
+        ) : destination.view === 'evidence' ? (
+          <EvidenceBrowser
+            focus={destination.focus ?? null}
+            onFocus={(focus) =>
+              navigateTo(evidenceDestination(destination.projectId, focus), { replace: true })
+            }
+            onOpenTask={openTask}
+          />
+        ) : undefined
       projectContent = (
         <SpecPage
           document={destination.document ?? null}
@@ -502,13 +482,17 @@ export default function App() {
             usePanelTabsStore.getState().openTab(destination.projectId, loopTabId(loop.id))
             navigateTo(agentDestination(destination.projectId, loop.agent, null, null))
           }}
-        />
+          onOpenEvidence={() => navigateTo(evidenceDestination(destination.projectId), { replace: true })}
+          evidenceOpen={destination.view === 'evidence'}
+        >
+          {specView}
+        </SpecPage>
       )
     } else if (destination.tab === 'vault') {
-      projectContent = <VaultPage />
+      projectContent = <VaultScreen />
     } else if (destination.tab === 'jobs') {
       projectContent = (
-        <JobsPage
+        <JobsScreen
           // A loop's queue/current-item link, clicked: same cross-tab filter mechanism as the
           // spec coverage bar's task-count link above — switch to Tasks, filtered.
           onOpenTasks={(taskIds) => {
@@ -519,90 +503,37 @@ export default function App() {
       )
     } else if (destination.tab === 'activity') {
       projectContent = (
-        <div className="flex h-full flex-col">
-          <div className="px-4 pt-3">
-            <div
-              className="inline-flex gap-1 rounded-lg p-1"
-              role="group"
-              aria-label="Activity view"
-              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
-            >
-            {(['ledger', 'activity', 'logs'] as const).map((view) => (
-              <button
-                key={view}
-                type="button"
-                data-testid={`activity-subview-${view}`}
-                onClick={() => setActivitySubview(view)}
-                data-active={activitySubview === view ? 'true' : 'false'}
-                className="row-item w-auto rounded-md px-3 py-1.5 text-xs capitalize"
-                aria-pressed={activitySubview === view}
-              >
-                {view}
-              </button>
-            ))}
-            </div>
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto">
-            {activitySubview === 'ledger' ? (
-              <ProjectLedger
-                onOpenTask={(taskId) => {
-                  useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
-                  navigateTo(projectDestination(destination.projectId, 'tasks'))
-                }}
-              />
-            ) : activitySubview === 'activity' ? (
-              <ActivityLog />
-            ) : (
-              <LogsView />
-            )}
-          </div>
-        </div>
+        <ActivityScreen
+          // The palette's `logs` route and the tab's reset to the ledger (F718) arrive through
+          // this; the screen follows a changed value while mounted.
+          initialView={activitySubview}
+          onOpenTask={openTask}
+          onOpenConversation={openConversation}
+        />
       )
     } else if (destination.tab === 'environment') {
-      const section = destination.environmentSection
-      const environmentPages: Record<EnvironmentSection, React.ReactNode> = {
-        quality: <QualityHealthPanel />,
-        instructions: <InstructionsPage />,
-        runners: <RunnersPage />,
-        charters: <ChartersPage />,
-        manager: <ManagerPanel />,
-        worktrees: <WorktreesPanel />,
-        diagnostics: <DiagnosticsPanel />,
-        budgets: <AccountingPanel />,
-        settings: (
-          <>
-            <ProjectSettingsPanel onNavigate={navigate} />
-            <SpecStepsSection />
-            <TracesSection />
-          </>
-        ),
-      }
-      projectContent = <div className="min-w-0 h-full overflow-auto">{environmentPages[section]}</div>
+      projectContent = (
+        <ProjectSettingsScreen
+          section={destination.environmentSection}
+          onSelectSection={(section) => navigateTo(environmentDestination(destination.projectId, section))}
+          onNavigate={navigate}
+        />
+      )
     }
+    // Workspaces (Tasks, Spec, Vault) and screens that lay out and scroll themselves (Activity,
+    // Project settings) take the whole area. Reading pages sit in `workspace-content`'s centred
+    // column. Putting the board in that column once made each card narrow before the board had
+    // even reached the viewport edge.
+    const fills =
+      destination.tab === 'spec' ||
+      destination.tab === 'tasks' ||
+      destination.tab === 'vault' ||
+      destination.tab === 'activity' ||
+      destination.tab === 'environment'
     content = (
       <div className="flex h-full flex-col" data-testid="active-page-wrapper">
-        {destination.tab !== 'environment' && (
-          <ProjectTabs
-            active={destination.tab}
-            onSelect={(tab) => {
-              setOverviewQuestionsOpen(false)
-              // The tab opens on the ledger, which leads (F718: this reset to the live stream, so
-              // the ledger was never what a click on Activity showed).
-              if (tab === 'activity') setActivitySubview('ledger')
-              navigateTo(projectDestination(destination.projectId, tab))
-            }}
-          />
-        )}
-        {/* Spec and Tasks are workspaces, not reading pages. Both need the whole available width:
-            Spec for its two panes, Tasks for seven deliberately persistent lifecycle columns.
-            Putting the board in `workspace-content`'s centred 1180px column made each card narrow
-            before the board had even reached the viewport edge. */}
         <div
-          className={
-            destination.tab === 'spec' || destination.tab === 'tasks'
-              ? 'min-h-0 flex-1 overflow-hidden'
-              : 'workspace-content min-h-0 flex-1 overflow-auto'
-          }
+          className={fills ? 'min-h-0 flex-1 overflow-hidden' : 'workspace-content min-h-0 flex-1 overflow-auto'}
         >
           {projectContent}
         </div>
@@ -618,10 +549,8 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
-      <div className="workspace-shell flex h-full overflow-hidden">
+      <div className="workspace-shell aw-app">
           <Sidebar
-            destination={destination}
-            activePage={activePage}
             activeAgent={
               destination.kind === 'conversation' || destination.kind === 'agent-settings'
                 ? destination.agent
@@ -642,17 +571,6 @@ export default function App() {
             onOpenAgentSettings={(id, agent, section) =>
               navigateTo(agentSettingsDestination(id, agent, section))
             }
-            onBackFromAgentSettings={(id, agent) =>
-              navigateTo(
-                agentSettingsBackDestination(agentSettingsDestination(id, agent), openDocument),
-              )
-            }
-            // The rail stands in for the project tree while the Spec screen is open, so choosing
-            // a document is a rail action there.
-            onOpenSpecDocument={(id, path) =>
-              navigateTo(projectDestination(id, 'spec', path), { replace: true })
-            }
-            onOpenSpecEvidence={(id) => navigateTo(evidenceDestination(id), { replace: true })}
             // Navigating is not decoration here, it is what scopes the dialog. Everything the
             // dialog reads — `useCreateAgent`, `useCharters`, `useProviderLaunchability` — resolves
             // the *selected* project, and selection is derived from the destination by the effect
@@ -681,17 +599,30 @@ export default function App() {
               max={SIDEBAR_MAX_WIDTH}
             />
           )}
-          <main className="flex min-w-0 flex-1 flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
+          <main className="aw-main" style={{ background: 'var(--bg)' }}>
             {currentProject && (
-              <ProjectHeader
-                projectId={currentProject.id}
-                projectName={currentProject.name}
-                projects={projects ?? []}
-                pathDisplay={currentProject.path_display}
-                agentCount={currentProject.agents.length}
+              <TopBar
+                project={{ id: currentProject.id, name: currentProject.name, path: currentProject.path_display ?? '' }}
+                projects={(projects ?? []).map((project) => ({ id: project.id, name: project.name, path: project.path_display ?? '' }))}
+                tabs={PROJECT_TABS}
+                active={destination.kind === 'project' && destination.tab !== 'environment' ? destination.tab : null}
+                counts={{ tasks: awaitingReview }}
                 directoryAvailable={currentProject.directory_state === 'available'}
+                onSelectTab={(tab) => {
+                  setOverviewQuestionsOpen(false)
+                  // The tab opens on the ledger, which leads (F718: this reset to the live stream, so
+                  // the ledger was never what a click on Activity showed).
+                  if (tab === 'activity') setActivitySubview('ledger')
+                  navigateTo(projectDestination(currentProject.id, tab))
+                }}
                 onSelectProject={(id) => navigateTo(projectDestination(id))}
+                onAddProject={() => setProjectManagerMode('open')}
                 onOpenSetup={() => setSetupOpen(true)}
+                onOpenPalette={openCommandPalette}
+                onOpenSettings={() => navigateTo(environmentDestination(currentProject.id, 'settings'))}
+                settingsActive={destination.kind === 'project' && destination.tab === 'environment'}
+                mode={mode === 'light' ? 'light' : 'dark'}
+                onToggleMode={toggleMode}
               />
             )}
             <div className="min-h-0 flex-1 overflow-hidden">{content}</div>
@@ -738,6 +669,7 @@ export default function App() {
         }}
       />
       <CheckpointStatusBanner />
+      <Toaster />
     </div>
   )
 }

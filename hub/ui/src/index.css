@@ -276,10 +276,11 @@
      by default so a control never reads as visually inert under the pointer;
      controls that need a different treatment opt in via the Button primitive
      or the .row-item class, both of which are excluded below.
-     Excludes [data-slot="button"] and .row-item, which carry their own full
+     Excludes anything with a data-slot (the Button primitive, data-slot="button", and the
+     ui-finesse primitives, each naming its own slot) and .row-item, which carry their own full
      treatments. */
-  button:not([data-slot="button"]):not(.row-item):not(.row-action),
-  [role="button"]:not([data-slot="button"]):not(.row-item):not(.row-action) {
+  button:not([data-slot]):not(.row-item):not(.row-action),
+  [role="button"]:not([data-slot]):not(.row-item):not(.row-action) {
     border: 1px solid transparent;
     outline: none;
     cursor: pointer;
@@ -290,15 +291,15 @@
                 color var(--dur-fast) var(--ease),
                 opacity var(--dur-fast) var(--ease);
   }
-  button:not([data-slot="button"]):not(.row-item):not(.row-action):hover,
-  [role="button"]:not([data-slot="button"]):not(.row-item):not(.row-action):hover {
+  button:not([data-slot]):not(.row-item):not(.row-action):hover,
+  [role="button"]:not([data-slot]):not(.row-item):not(.row-action):hover {
     background-color: var(--accent);
   }
-  button:not([data-slot="button"]):focus-visible,
-  [role="button"]:not([data-slot="button"]):focus-visible {
+  button:not([data-slot]):focus-visible,
+  [role="button"]:not([data-slot]):focus-visible {
     box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
   }
-  button:not([data-slot="button"]):disabled {
+  button:not([data-slot]):disabled {
     opacity: 0.64;
     pointer-events: none;
     box-shadow: none;
@@ -366,6 +367,20 @@
                 box-shadow var(--dur-fast) var(--ease),
                 background-color var(--dur-fast) var(--ease),
                 opacity var(--dur-fast) var(--ease);
+  }
+  /* A default size, so a caller that passes no padding gets a 32px field and not a 16px sliver
+     (the vault's Name and storage fields did, VaultPage.tsx). Utilities a caller passes still win:
+     this sits in the base layer, beneath them. */
+  input.control-field,
+  select.control-field {
+    padding: 6px 10px;
+    font-size: 13px;
+    line-height: 18px;
+  }
+  textarea.control-field {
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.5;
   }
   .control-field::placeholder { color: var(--text-3); }
   .control-field:hover:not(:disabled) { border-color: var(--border-hi); }

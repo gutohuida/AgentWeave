@@ -10,6 +10,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { chooseMenuOption, openMenu } from './testUtils/menus'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
 import { SpecApprovalReport } from '@/components/spec/SpecApprovalReport'
 import { useConfigStore } from '@/store/configStore'
@@ -165,8 +166,9 @@ describe('the stale-delivery strip', () => {
     specDelivery = { state: 'stale', agent: 'dev2', reason: 'archived' }
     renderPhaseBar()
     await screen.findByTestId('delivery-stale-strip')
-    const select = screen.getByTestId('delivery-agent-choice') as HTMLSelectElement
-    const optionLabels = Array.from(select.options).map((o) => o.textContent)
+    // A themed menu (MenuSelect) since ui-finesse, not a native select.
+    openMenu(screen.getByTestId('delivery-agent-choice'))
+    const optionLabels = screen.getAllByRole('menuitemradio').map((o) => o.textContent)
     expect(optionLabels).toContain('@dev')
     expect(optionLabels).toContain('@qa')
     expect(optionLabels).toContain('No flow')
@@ -192,7 +194,7 @@ describe('Approve and the chosen delivery agent', () => {
     renderPhaseBar()
     await screen.findByTestId('delivery-stale-strip')
 
-    fireEvent.change(screen.getByTestId('delivery-agent-choice'), { target: { value: 'qa' } })
+    chooseMenuOption(screen.getByTestId('delivery-agent-choice'), '@qa')
     fireEvent.click(screen.getByText('Approve'))
 
     await waitFor(() => expect(posts).toHaveLength(1))
@@ -206,7 +208,7 @@ describe('Approve and the chosen delivery agent', () => {
     renderPhaseBar()
     await screen.findByTestId('delivery-stale-strip')
 
-    fireEvent.change(screen.getByTestId('delivery-agent-choice'), { target: { value: '' } })
+    chooseMenuOption(screen.getByTestId('delivery-agent-choice'), 'No flow')
     fireEvent.click(screen.getByText('Approve'))
 
     await waitFor(() => expect(posts).toHaveLength(1))

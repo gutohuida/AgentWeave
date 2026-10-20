@@ -5,6 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
 import { ApiError } from '@/api/client'
 
+/** The decisions other than the one primary action live in the header's overflow menu. */
+async function openMore() {
+  await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+}
+
 /**
  * `a-finished-change-is-folded-into-its-capability`, the app half: a shipped change in no
  * capability says so beside its phase, the fold dialog shows the Hub's draft and sends what the
@@ -173,7 +178,8 @@ describe('folding a finished change', () => {
 
   it('asks why an unfolded change changes no capability before archiving it', async () => {
     renderBar()
-    await userEvent.click(screen.getByText('Archive'))
+    await openMore()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Archive' }))
 
     expect(screen.getByTestId('archive-confirm')).toBeDisabled()
     await userEvent.type(screen.getByTestId('archive-reason'), 'it only retired a finding')
@@ -188,7 +194,8 @@ describe('folding a finished change', () => {
   it('archives a folded change without asking', async () => {
     foldState = { state: 'folded', open_tasks: [], capabilities: [CAP] }
     renderBar()
-    await userEvent.click(screen.getByText('Archive'))
+    await openMore()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Archive' }))
 
     expect(screen.queryByTestId('archive-reason')).not.toBeInTheDocument()
     await userEvent.click(screen.getByTestId('archive-confirm'))
@@ -226,6 +233,7 @@ describe('folding a finished change', () => {
   it('deletes a document behind a confirm (F532)', async () => {
     deleteDocument.mockResolvedValue({ path: CHANGE, deleted: true, tasks: ['task-1'] })
     renderBar()
+    await openMore()
     await userEvent.click(screen.getByTestId('spec-delete'))
 
     expect(screen.getByRole('dialog')).toHaveTextContent(/cannot be undone/)
@@ -242,26 +250,33 @@ describe('folding a finished change', () => {
       ),
     )
     renderBar()
+    await openMore()
     await userEvent.click(screen.getByTestId('spec-delete'))
     await userEvent.click(screen.getByTestId('delete-confirm'))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/flow is still running/)
   })
 
-  it('offers no delete for a folded change, an archived one or a capability', () => {
+  it('offers no delete for a folded change, an archived one or a capability', async () => {
     foldState = { state: 'folded', open_tasks: [], capabilities: [CAP] }
     const { unmount } = renderBar()
+    await openMore()
+    expect(screen.getByRole('menu')).toBeInTheDocument()
     expect(screen.queryByTestId('spec-delete')).not.toBeInTheDocument()
     unmount()
 
     foldState = undefined
     documents = [doc({ phase: 'archived' })]
     const archived = renderBar()
+    await openMore()
+    expect(screen.getByRole('menu')).toBeInTheDocument()
     expect(screen.queryByTestId('spec-delete')).not.toBeInTheDocument()
     archived.unmount()
 
     documents = [doc({ kind: 'capability', phase: 'current' })]
     renderBar()
+    await openMore()
+    expect(screen.getByRole('menu')).toBeInTheDocument()
     expect(screen.queryByTestId('spec-delete')).not.toBeInTheDocument()
   })
 })

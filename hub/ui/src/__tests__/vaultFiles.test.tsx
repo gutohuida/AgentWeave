@@ -2,7 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { VaultPage } from '@/components/vault/VaultPage'
+import { VaultScreen } from '@/components/vault/VaultScreen'
+import { Toaster } from '@/components/ui/toast'
+import { useToastStore } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
 
 /** `images-and-pdfs-are-vault-sources-too`, requirement wiki-inline (task images-pdfs-tab-impl). The
@@ -49,11 +51,23 @@ function page(entry: object, content: string | null, note: string | null = null)
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return (
+    <QueryClientProvider client={client}>
+      {children}
+      <Toaster />
+    </QueryClientProvider>
+  )
+}
+
+/** Choose files in the Add dialog, as its drop zone's picker does. */
+function chooseFiles(files: File[]) {
+  fireEvent.click(screen.getByTestId('vault-upload-open'))
+  fireEvent.change(screen.getByTestId('vault-upload-file'), { target: { files } })
 }
 
 beforeEach(() => {
   calls.length = 0
+  useToastStore.setState({ items: [] })
   useConfigStore.setState({ apiKey: 'aw_live_test', hubUrl: 'http://hub', isConfigured: true, selectedProjectId: 'proj-a' })
   vault = (url) => {
     if (url.endsWith('/vault/map')) return { status: 200, body: { entries: [PDF, IMAGE, TEXT] } }
@@ -89,13 +103,13 @@ afterEach(() => {
 
 describe('the Vault tab, image and PDF sources', () => {
   it('marks image and PDF entries in the list and leaves a text entry unmarked', async () => {
-    render(<VaultPage />, { wrapper })
+    render(<VaultScreen />, { wrapper })
     const pdf = await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf')
     expect(pdf).toHaveTextContent('PDF')
-    expect(screen.getByTestId('vault-entry-src-imgimgimgimg')).toHaveTextContent('image')
+    expect(screen.getByTestId('vault-entry-src-imgimgimgimg')).toHaveTextContent('Image')
     const text = screen.getByTestId('vault-entry-src-txttxttxttx')
     expect(text).not.toHaveTextContent('PDF')
-    expect(text).not.toHaveTextContent('image')
+    expect(text).not.toHaveTextContent('Image')
   })
 
   it('does not say a tracked file with no text yet is held on another machine (F591)', async () => {
@@ -104,7 +118,7 @@ describe('the Vault tab, image and PDF sources', () => {
     const base = vault
     vault = (url, init) =>
       url.endsWith('/vault/map') ? { status: 200, body: { entries: [unread, heldElsewhere] } } : base(url, init)
-    render(<VaultPage />, { wrapper })
+    render(<VaultScreen />, { wrapper })
     const row = await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf')
     expect(row).not.toHaveTextContent('Held on')
     expect(row).toHaveTextContent('No text yet')
@@ -121,18 +135,19 @@ describe('the Vault tab, image and PDF sources', () => {
         : url.includes('/vault/entries/src-pdfpdfpdfpdf')
           ? page(unread, null, 'This PDF has not been read yet.')
           : base(url, init)
-    render(<VaultPage />, { wrapper })
+    render(<VaultScreen />, { wrapper })
     fireEvent.click(await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf'))
     expect(await screen.findByTestId('vault-distil')).toBeEnabled()
     expect(await screen.findByTestId('vault-file-pdf')).toBeInTheDocument()
   })
 
   it('shows a PDF in an embedded viewer from a blob URL, above its transcription', async () => {
-    render(<VaultPage />, { wrapper })
+    render(<VaultScreen />, { wrapper })
     fireEvent.click(await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf'))
     const viewer = await screen.findByTestId('vault-file-pdf')
     expect(viewer.getAttribute('src') ?? viewer.getAttribute('data')).toMatch(/^blob:/)
     expect(screen.queryByTestId('vault-file-image')).toBeNull()
+    // Its transcription is a document, read as Markdown.
     const text = await screen.findByTestId('vault-entry-text')
     expect(text).toHaveTextContent('Refunds up to 450 euros')
     // Above: the viewer comes first in the document.
@@ -144,7 +159,7 @@ describe('the Vault tab, image and PDF sources', () => {
   })
 
   it('shows an image as an img from a blob URL', async () => {
-    render(<VaultPage />, { wrapper })
+    render(<VaultScreen />, { wrapper })
     fireEvent.click(await screen.findByTestId('vault-entry-src-imgimgimgimg'))
     const image = await screen.findByTestId('vault-file-image')
     expect(image.tagName).toBe('IMG')
@@ -153,7 +168,7 @@ describe('the Vault tab, image and PDF sources', () => {
   })
 
   it('asks for no file when the source is text', async () => {
-    render(<VaultPage />, { wrapper })
+    render(<VaultScreen />, { wrapper })
     fireEvent.click(await screen.findByTestId('vault-entry-src-txttxttxttx'))
     await screen.findByTestId('vault-entry-text')
     expect(screen.queryByTestId('vault-file-pdf')).toBeNull()
@@ -165,7 +180,7 @@ describe('the Vault tab, image and PDF sources', () => {
     const routed = vault
     vault = (url, init) =>
       url.endsWith('/vault/sources/src-pdfpdfpdfpdf/file') ? { status: 404, body: { detail: 'Not Found' } } : routed(url, init)
-    render(<VaultPage />, { wrapper })
+    render(<VaultScreen />, { wrapper })
     fireEvent.click(await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf'))
     expect(await screen.findByTestId('vault-entry-text')).toHaveTextContent('Refunds up to 450 euros')
     await waitFor(() => expect(calls.some((call) => call.url.endsWith('/file'))).toBe(true))
@@ -179,7 +194,7 @@ describe('the Vault tab, image and PDF sources', () => {
       url.includes('/vault/entries/src-imgimgimgimg')
         ? page(IMAGE, null, 'This image has not been read yet. Its text appears once the manager has transcribed it.')
         : routed(url, init)
-    render(<VaultPage />, { wrapper })
+    render(<VaultScreen />, { wrapper })
     fireEvent.click(await screen.findByTestId('vault-entry-src-imgimgimgimg'))
     expect(await screen.findByText(/has not been read yet/)).toBeInTheDocument()
     expect(await screen.findByTestId('vault-file-image')).toBeInTheDocument()
@@ -192,13 +207,13 @@ describe('the Vault tab, image and PDF sources', () => {
       url.includes('/vault/files') && init?.method === 'POST'
         ? { status: 201, body: { ...PDF, id: 'src-newnewnewnew', name: 'Contract' } }
         : routed(url, init)
-    render(<VaultPage />, { wrapper })
+    render(<VaultScreen />, { wrapper })
     await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf')
-    fireEvent.click(screen.getByTestId('vault-upload-open'))
     const file = new File(['%PDF-1.4 body'], 'Contract.pdf', { type: 'application/pdf' })
-    fireEvent.change(screen.getByTestId('vault-upload-file'), { target: { files: [file] } })
-    expect(await screen.findByTestId('vault-upload-name')).toHaveValue('Contract')
-    expect(screen.getByTestId('vault-upload-type')).toHaveValue('document')
+    chooseFiles([file])
+    expect(await screen.findByText('Contract.pdf')).toBeInTheDocument()
+    // A PDF is a document unless the operator says otherwise; its name is the file's, less the extension.
+    expect(screen.getByTestId('vault-upload-type')).toHaveTextContent('Document')
     fireEvent.change(screen.getByTestId('vault-upload-dated'), { target: { value: '2026-10-01' } })
     fireEvent.click(screen.getByTestId('vault-upload-submit'))
     await waitFor(() => expect(calls.some((call) => call.method === 'POST')).toBe(true))
@@ -211,14 +226,42 @@ describe('the Vault tab, image and PDF sources', () => {
     expect((sent.init?.headers as Record<string, string>).Authorization).toBe('Bearer aw_live_test')
   })
 
-  it('reads a chosen text file into the text box as before, and sends it to /vault/sources', async () => {
-    render(<VaultPage />, { wrapper })
+  it('reads a chosen text file as text, and sends it to /vault/sources', async () => {
+    const routed = vault
+    vault = (url, init) =>
+      url.endsWith('/vault/sources') && init?.method === 'POST'
+        ? { status: 201, body: { ...TEXT, id: 'src-newnewnewnew', name: 'notes' } }
+        : routed(url, init)
+    render(<VaultScreen />, { wrapper })
     await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf')
-    fireEvent.click(screen.getByTestId('vault-upload-open'))
     const file = new File(['Dana: 450.'], 'notes.txt', { type: 'text/plain' })
-    fireEvent.change(screen.getByTestId('vault-upload-file'), { target: { files: [file] } })
-    await waitFor(() => expect(screen.getByTestId('vault-upload-content')).toHaveValue('Dana: 450.'))
-    expect(screen.getByTestId('vault-upload-type')).toHaveValue('transcript')
+    chooseFiles([file])
+    expect(screen.getByTestId('vault-upload-type')).toHaveTextContent('Transcript')
+    fireEvent.click(screen.getByTestId('vault-upload-submit'))
+    await waitFor(() => expect(calls.some((call) => call.method === 'POST')).toBe(true))
+    const sent = calls.find((call) => call.method === 'POST')!
+    expect(sent.url).toBe('http://hub/api/v1/projects/proj-a/vault/sources')
+    expect(JSON.parse(String(sent.init?.body))).toEqual({
+      name: 'notes', type: 'transcript', content: 'Dana: 450.', visibility: 'tracked',
+    })
+  })
+
+  it('keeps a file\'s folder in its name, and skips hidden files', async () => {
+    const routed = vault
+    vault = (url, init) =>
+      url.endsWith('/vault/sources') && init?.method === 'POST'
+        ? { status: 201, body: { ...TEXT, id: 'src-newnewnewnew', name: 'docs/plan' } }
+        : routed(url, init)
+    render(<VaultScreen />, { wrapper })
+    await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf')
+    const plan = new File(['The plan.'], 'plan.md', { type: 'text/markdown' })
+    Object.defineProperty(plan, 'webkitRelativePath', { value: 'docs/plan.md' })
+    const hidden = new File(['x'], '.DS_Store')
+    chooseFiles([plan, hidden])
+    expect(screen.queryByText('.DS_Store')).toBeNull()
+    fireEvent.click(screen.getByTestId('vault-upload-submit'))
+    await waitFor(() => expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1))
+    expect(JSON.parse(String(calls.find((call) => call.method === 'POST')!.init?.body))).toMatchObject({ name: 'docs/plan' })
   })
 
   it("shows the Hub's reason when it refuses the file", async () => {
@@ -227,13 +270,12 @@ describe('the Vault tab, image and PDF sources', () => {
       url.includes('/vault/files') && init?.method === 'POST'
         ? { status: 413, body: { detail: 'A file source is at most 10 MiB.' } }
         : routed(url, init)
-    render(<VaultPage />, { wrapper })
+    render(<VaultScreen />, { wrapper })
     await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf')
-    fireEvent.click(screen.getByTestId('vault-upload-open'))
-    fireEvent.change(screen.getByTestId('vault-upload-file'), {
-      target: { files: [new File(['%PDF-1.4'], 'Big.pdf', { type: 'application/pdf' })] },
-    })
+    chooseFiles([new File(['%PDF-1.4'], 'Big.pdf', { type: 'application/pdf' })])
     fireEvent.click(await screen.findByTestId('vault-upload-submit'))
     expect(await screen.findByRole('alert')).toHaveTextContent('at most 10 MiB')
+    // The refused file stays in the dialog, to try again or remove.
+    expect(screen.getByText('Big.pdf')).toBeInTheDocument()
   })
 })

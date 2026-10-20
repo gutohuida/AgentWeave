@@ -15,7 +15,7 @@ vi.mock('@/api/client', async (importOriginal) => {
 })
 
 import { ApiError, getJson, putJson } from '@/api/client'
-import { InstructionsPage } from '@/components/instructions/InstructionsPage'
+import { InstructionsSection as InstructionsPage } from '@/components/settings/sections/InstructionsSection'
 
 const ALPHA = 'proj-alpha'
 const PROJECT_NAME = 'Alpha'
@@ -198,11 +198,14 @@ describe('clearing stored instructions asks first, and asking writes nothing', (
     renderPage()
     const box = await loadedEditor()
     expect(box).toHaveValue('')
+    // Save waits for a change; blank over blank is still a write the dialog must not interrupt.
+    expect(saveButton()).toBeDisabled()
+    await user.type(box, '  ')
 
     await user.click(saveButton())
 
     await waitFor(() => expect(putJson).toHaveBeenCalledTimes(1))
-    expect(putJson).toHaveBeenCalledWith(pathFor(ALPHA), { content: '' })
+    expect(putJson).toHaveBeenCalledWith(pathFor(ALPHA), { content: '  ' })
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 

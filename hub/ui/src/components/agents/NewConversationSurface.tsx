@@ -3,12 +3,31 @@ import { postureAtRest, useAgents } from '@/api/agents'
 import { useRunners } from '@/api/runners'
 import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
 import { useWorkspacePaths } from '@/api/workspace'
+import {
+  permissionModeValues,
+  providerForRunner,
+  resolveCatalogModel,
+  useModelCatalog,
+} from '@/api/modelCatalog'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { ApiError, deleteJson, postJson, readableRefusal } from '@/api/client'
+import { ConversationComposerDock } from '@/components/conversation/ConversationComposerDock'
+import {
+  NewConversationIntro,
+  type ConversationStarter,
+} from '@/components/conversation/NewConversationIntro'
 import { agentColorVars } from '@/lib/agentColors'
+import { setComposerDraft } from '@/lib/composerDrafts'
 import { useConfigStore } from '@/store/configStore'
-import { Composer } from './Composer'
+
+/** Ways to start, offered under the intro. Picking one puts its message in the composer — not
+ *  sent: the operator edits and sends. */
+const STARTERS: ConversationStarter[] = [
+  { label: 'Pick up the next task', message: 'Look at the open tasks assigned to you and start on the most important one.', icon: 'task_alt' },
+  { label: 'Catch up on today', message: 'Summarize what changed in the project today and what is still open.', icon: 'event_note' },
+  { label: 'Review the latest work', message: 'Review the most recent merged change against its requirements and report anything missing.', icon: 'fact_check' },
+]
 
 interface NewConversationSurfaceProps {
   projectId: string
@@ -56,9 +75,22 @@ export function NewConversationSurface({
   const { data: workspacePaths = [] } = useWorkspacePaths()
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
+  /** Bumped when a starter writes the draft, so the composer remounts and reads it. Not keyed by
+   *  agent: retargeting is a change of recipient, and a half-written message survives it. */
+  const [composerKey, setComposerKey] = useState(0)
+  const { data: catalog } = useModelCatalog()
 
   const agentRow = roster.find((candidate) => candidate.name === agent)
   const runnerRow = runners.find((runner) => runner.id === agentRow?.runner_id)
+  // What the intro says it runs on, in the catalog's words: the runner's name, its model's label,
+  // and the posture its next run gets.
+  const runnerProvider = catalog?.providers.find(
+    (provider) => provider.provider === providerForRunner(runnerRow?.cli),
+  )
+  const modelLabel = resolveCatalogModel(runnerProvider, runnerRow?.model)?.label ?? null
+  const posture = postureAtRest(agentRow)
+  const postureLabel =
+    permissionModeValues(catalog).find((value) => Object.values(posture).includes(value.id))?.label ?? null
 
   /* Declaring an exploration before the first message is the one case where the intent
    * genuinely precedes the document: there is no conversation to attach one to and no title to
@@ -137,109 +169,122 @@ export function NewConversationSurface({
     else onStarted(agent, result.conversation_id)
   }
 
+  const agentChooser = (
+    <div className="flex flex-col items-center gap-2" style={{ marginTop: 24 }}>
+      <p className="text-center text-[11.5px]" style={{ color: 'var(--text-3)' }}>
+        Start with a recent agent, or choose another before you send.
+      </p>
+      <div className="flex flex-wrap justify-center gap-1.5">
+        {roster.map((candidate) => {
+          const selected = candidate.name === agent
+          return (
+            <button
+              key={candidate.name}
+              type="button"
+              data-slot="new-conversation-agent"
+              className="new-conversation-agent row-item"
+              style={{ width: 'auto' }}
+              data-testid={`new-conversation-agent-${candidate.name}`}
+              data-active={selected ? 'true' : 'false'}
+              aria-pressed={selected}
+              onClick={() => onChooseAgent(candidate.name)}
+            >
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ background: agentColorVars(candidate.color_index).accent }}
+              />
+              {candidate.name}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
-      <div
-        className="conversation-header-surface flex shrink-0 items-center gap-2 px-4 py-2.5"
-        data-testid="conversation-header"
-      >
-        {onBackToProject && (
-          <Button variant="ghost" size="icon-sm" onClick={onBackToProject} aria-label="Back to project" title="Back to project">
-            <Icon name="arrow_left" size={16} />
-          </Button>
-        )}
-        <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>
-          New conversation
+      <div className="conversation-header-surface aw-convbar" data-testid="conversation-header">
+        <span className="aw-convbar-agent">New conversation</span>
+        {/* The project the unsent message will act on, repeated at the decision point so it
+            cannot look detached from it. */}
+        <span
+          className="aw-chip"
+          data-testid="new-conversation-project-context"
+          style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
+        >
+          <Icon name="folder_open" size={13} />
+          Project: {projectName ?? projectId}
         </span>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
-        <div className="flex w-full max-w-[820px] flex-col gap-4" data-testid="new-conversation-surface">
-          <div className="flex justify-center">
-            <span
-              className="aw-chip"
-              data-testid="new-conversation-project-context"
-              style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
-            >
-              <Icon name="folder_open" size={13} />
-              Project: {projectName ?? projectId}
-            </span>
-          </div>
-          <div className="new-conversation-icon" aria-hidden="true">
-            <Icon name="chat" size={20} />
-          </div>
-          {/* The one line an operator reads every time they start work. It names the agent
-              rather than the project, because the project is explicit immediately above and
-              the agent is the thing this product has that a chat app does not. Unbound, the
-              question changes to the one that actually has to be answered first — the line is
-              the instruction, not decoration above one. */}
-          <h1
-            data-testid="new-conversation-headline"
-            className="text-center font-semibold"
-            style={{ fontSize: 28, lineHeight: 1.2, color: 'var(--text)' }}
-          >
-            {agent ? `What should ${agent} work on?` : 'Who should work on this?'}
-          </h1>
-
-          <p className="text-center text-[11.5px]" style={{ color: 'var(--text-3)' }}>
-            Start with a recent agent, or choose another before you send.
-          </p>
-
-          <div className="flex flex-wrap justify-center gap-1.5">
-            {roster.map((candidate) => {
-              const selected = candidate.name === agent
-              return (
-                <button
-                  key={candidate.name}
-                  type="button"
-                  className="new-conversation-agent row-item"
-                  style={{ width: 'auto' }}
-                  data-testid={`new-conversation-agent-${candidate.name}`}
-                  data-active={selected ? 'true' : 'false'}
-                  aria-pressed={selected}
-                  onClick={() => onChooseAgent(candidate.name)}
-                >
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ background: agentColorVars(candidate.color_index).accent }}
-                  />
-                  {candidate.name}
-                </button>
-              )
-            })}
-          </div>
-
-          {error && (
-            <span role="alert" className="text-center text-[11px]" style={{ color: 'var(--red)' }}>
-              {error}
-            </span>
+        <div className="aw-convbar-end">
+          {onBackToProject && (
+            <Button variant="ghost" size="icon-xs" onClick={onBackToProject} aria-label="Back to project" title="Back to project">
+              <Icon name="arrow_left" size={15} />
+            </Button>
           )}
-
-          <div className="conversation-composer-surface">
-            <Composer
-              agent={agent ?? 'an agent'}
-              projectId={projectId}
-              conversationId={null}
-              isRunning={false}
-              onSubmit={handleSubmit}
-              placeholder={agent ? `Message ${agent}…` : 'Choose an agent, then write your first message…'}
-              disabledReason={agent ? undefined : 'Choose an agent to start'}
-              workspacePaths={workspacePaths}
-              runner={runnerRow?.cli ?? null}
-              effectiveModel={runnerRow?.model ?? null}
-              modelIsRunners={runnerSetsModel(runnerRow)}
-              effectiveControls={postureAtRest(agentRow)}
-              pendingOverrides={pendingOverrides}
-              onPendingOverridesChange={setPendingOverrides}
-              specDocumentLabel={null}
-              specArmed={exploring}
-              onOpenSpecPicker={() => setExploring(true)}
-              onStartExploration={() => setExploring(true)}
-              onStopExploring={() => setExploring(false)}
-            />
-          </div>
         </div>
       </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto" data-testid="new-conversation-surface">
+        {agentRow ? (
+          <NewConversationIntro
+            agent={agentRow}
+            runnerLabel={runnerRow?.name ?? null}
+            modelLabel={modelLabel}
+            postureLabel={postureLabel}
+            starters={STARTERS}
+            headlineTestId="new-conversation-headline"
+            onPick={(message) => {
+              if (!agent) return
+              setComposerDraft(projectId, agent, null, message)
+              setComposerKey((key) => key + 1)
+            }}
+          />
+        ) : (
+          <div className="aw-newconv">
+            <span className="new-conversation-icon" aria-hidden="true">
+              <Icon name="chat" size={20} />
+            </span>
+            {/* Unbound, the line is the question that has to be answered first, not decoration. */}
+            <h2 className="aw-newconv-title" data-testid="new-conversation-headline">
+              {agent ? `New conversation with ${agent}` : 'Who should work on this?'}
+            </h2>
+          </div>
+        )}
+        {agentChooser}
+      </div>
+
+      <ConversationComposerDock
+        selected={[]}
+        onToggleOption={() => undefined}
+        composer={{
+          key: composerKey,
+          agent: agent ?? 'an agent',
+          projectId,
+          conversationId: null,
+          isRunning: false,
+          onSubmit: handleSubmit,
+          placeholder: agent ? undefined : 'Choose an agent, then write your first message…',
+          disabledReason: agent ? undefined : 'Choose an agent to start',
+          workspacePaths,
+          runner: runnerRow?.cli ?? null,
+          effectiveModel: runnerRow?.model ?? null,
+          modelIsRunners: runnerSetsModel(runnerRow),
+          effectiveControls: posture,
+          pendingOverrides,
+          onPendingOverridesChange: setPendingOverrides,
+          specDocumentLabel: null,
+          specArmed: exploring,
+          onOpenSpecPicker: () => setExploring(true),
+          onStartExploration: () => setExploring(true),
+          onStopExploring: () => setExploring(false),
+        }}
+      >
+        {error && (
+          <span role="alert" className="text-center text-[11px]" style={{ color: 'var(--red)' }}>
+            {error}
+          </span>
+        )}
+      </ConversationComposerDock>
     </div>
   )
 }

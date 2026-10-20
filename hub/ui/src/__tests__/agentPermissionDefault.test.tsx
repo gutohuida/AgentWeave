@@ -1,8 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import type { AgentSummary } from '@/api/agents'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
+import { chooseMenuOption, menuSelect, openMenuSelect } from './support/menuSelect'
 
 const postureMutate = vi.fn()
 let roster: AgentSummary[] = []
@@ -56,10 +58,12 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 
 function renderExecution(summary: AgentSummary) {
   roster = [summary]
-  return render(<AgentSettingsPage agent={summary.name} section="execution" />)
+  return render(<AgentSettingsPage agent={summary.name} section="execution" onSelectSection={vi.fn()} onBack={vi.fn()} />)
 }
 
-const control = () => screen.getByLabelText('Default permissions for codex-1')
+const control = () => menuSelect('Default permissions for codex-1')
+const choices = async (user: ReturnType<typeof userEvent.setup>) =>
+  (await openMenuSelect(user, 'Default permissions for codex-1')).map((o) => o.querySelector('.block')?.textContent)
 
 vi.mock('@/api/workspace', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/workspace')>()
@@ -69,12 +73,12 @@ vi.mock('@/api/workspace', async (importOriginal) => {
 describe('an agent has a default permission posture', () => {
   beforeEach(() => postureMutate.mockClear())
 
-  it('offers the same postures the composer does, with the same labels', () => {
+  it('offers the same postures the composer does, with the same labels', async () => {
     // Not a second vocabulary for the same choice: an operator picking "Ask me" in the composer
     // and "Ask me" here must be choosing the same thing.
+    const user = userEvent.setup()
     renderExecution(agent())
-    const labels = [...control().querySelectorAll('option')].map((o) => o.textContent)
-    expect(labels).toEqual([
+    expect(await choices(user)).toEqual([
       'Built-in default (depends on the runner)',
       'Edit files',
       'Workspace only',
@@ -83,16 +87,16 @@ describe('an agent has a default permission posture', () => {
     ])
   })
 
-  it('names the built-in default the run would get (F283)', () => {
+  it('names the built-in default the run would get (F283)', async () => {
+    const user = userEvent.setup()
     renderExecution(agent({ runner_id: 'runner-1', permission_mode_built_in: 'workspace' }))
-    expect(control().querySelector('option[value=""]')).toHaveTextContent(
-      'Built-in default (Workspace only)',
-    )
+    expect((await choices(user))[0]).toBe('Built-in default (Workspace only)')
   })
 
-  it('names what clearing gives, not the Full access this agent has now', () => {
+  it('names what clearing gives, not the Full access this agent has now', async () => {
     // Choosing Full access sets the autonomy flag and clearing clears it, so the blank option is
     // the posture without it (design D3, operator review).
+    const user = userEvent.setup()
     renderExecution(
       agent({
         runner_id: 'runner-1',
@@ -101,21 +105,20 @@ describe('an agent has a default permission posture', () => {
         permission_mode_built_in: 'workspace',
       }),
     )
-    expect(control().querySelector('option[value=""]')).toHaveTextContent(
-      'Built-in default (Workspace only)',
-    )
+    expect(control()).toHaveTextContent('Full access')
+    expect((await choices(user))[0]).toBe('Built-in default (Workspace only)')
   })
 
   it('sits at the built-in default until one is chosen', () => {
     // Not pre-selected to today's default, for the same reason the waiting settings are not: a
     // stored copy would keep saying it after the default moved.
     renderExecution(agent())
-    expect(control()).toHaveValue('')
+    expect(control()).toHaveTextContent('Built-in default (depends on the runner)')
   })
 
   it('shows what is stored', () => {
     renderExecution(agent({ default_permission_mode: 'manual' }))
-    expect(control()).toHaveValue('manual')
+    expect(control()).toHaveTextContent('Ask me')
   })
 
   it('says Claude Code still runs read-only commands without asking under Ask me (F453)', () => {
@@ -128,16 +131,18 @@ describe('an agent has a default permission posture', () => {
     expect(screen.queryByText(/treats as read-only/)).toBeNull()
   })
 
-  it('saves a chosen posture', () => {
+  it('saves a chosen posture', async () => {
+    const user = userEvent.setup()
     renderExecution(agent())
-    fireEvent.change(control(), { target: { value: 'bypassPermissions' } })
-    expect(postureMutate).toHaveBeenCalledWith({ agent: 'codex-1', mode: 'bypassPermissions' })
+    await chooseMenuOption(user, 'Default permissions for codex-1', /^Full access/)
+    expect(postureMutate).toHaveBeenCalledWith({ agent: 'codex-1', mode: 'bypassPermissions' }, expect.anything())
   })
 
-  it('clears back to the built-in default rather than sending a blank', () => {
+  it('clears back to the built-in default rather than sending a blank', async () => {
+    const user = userEvent.setup()
     renderExecution(agent({ default_permission_mode: 'manual' }))
-    fireEvent.change(control(), { target: { value: '' } })
-    expect(postureMutate).toHaveBeenCalledWith({ agent: 'codex-1', mode: null })
+    await chooseMenuOption(user, 'Default permissions for codex-1', /^Built-in default/)
+    expect(postureMutate).toHaveBeenCalledWith({ agent: 'codex-1', mode: null }, expect.anything())
   })
 
   it('is offered for an agent with no runner bound', () => {
@@ -153,8 +158,8 @@ describe('an agent has a default permission posture', () => {
     execution.unmount()
 
     for (const section of ['identity', 'charter', 'interaction', 'workspace'] as const) {
-      const { unmount } = render(<AgentSettingsPage agent="codex-1" section={section} />)
-      expect(screen.queryByLabelText('Default permissions for codex-1')).not.toBeInTheDocument()
+      const { unmount } = render(<AgentSettingsPage agent="codex-1" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} />)
+      expect(screen.queryByRole('button', { name: 'Default permissions for codex-1' })).not.toBeInTheDocument()
       unmount()
     }
   })

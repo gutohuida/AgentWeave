@@ -91,6 +91,19 @@ export interface Task {
   /** `"gated"` | `"gated_on_rejected"` | `"running_on_regressed"` | `null` — derived per request,
    *  never stored (task 7.2, design D1). */
   dependency_state?: string | null
+  /** What the latest approval did to the repository (`TaskIntegrationSummary`), riding on the list
+   *  response so the board can say "not merged" without a per-card fetch. Absent from an older Hub,
+   *  and null for a task never approved. */
+  latest_integration?: LatestIntegration | null
+}
+
+/** A trimmed echo of the newest `TaskIntegration` row (`hub/hub/schemas/tasks.py`). */
+export interface LatestIntegration {
+  outcome: 'merged' | 'skipped' | 'failed'
+  reason: string
+  commit_sha: string | null
+  target_branch: string | null
+  created_at: string
 }
 
 /** A prerequisite or dependent named on a `Task` — enough to draw an edge without fetching the
@@ -461,6 +474,24 @@ export function useRetryTaskIntegration(taskId: string) {
       queryClient.invalidateQueries({
         queryKey: ['project', projectId, 'task', taskId, 'integrations'],
       })
+    },
+  })
+}
+
+/** `useRetryTaskIntegration`, for a host that holds many tasks (the board): the task is named on
+ *  each call rather than bound when the hook is created. Refreshes the board's own list too, since
+ *  `latest_integration` rides on it. */
+export function useRetryIntegration() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (taskId: string) =>
+      postJson<{ integrations: TaskIntegration[] }>(
+        `/api/v1/projects/${projectId}/tasks/${taskId}/integrations/retry`,
+      ),
+    onSuccess: (_result, taskId) => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'task', taskId, 'integrations'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
     },
   })
 }

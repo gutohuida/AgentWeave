@@ -1,0 +1,195 @@
+/* Spec tab (ui-finesse): the document list pane, the document header, the health line. */
+
+.aw-spec { display: flex; height: 100%; min-height: 0; }
+.aw-spec-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.aw-spec-body { position: relative; min-height: 0; flex: 1; }
+.aw-spec-body > iframe { display: block; width: 100%; height: 100%; border: 0; }
+
+/* ── Document list ───────────────────────────────────────────────────── */
+.aw-spec-list {
+  flex: none; width: 236px; overflow-y: auto; padding: 0 8px 16px;
+  border-right: 1px solid var(--border-region);
+}
+.aw-spec-list-head {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 44px; padding: 0 2px 0 8px; font-size: 12.5px; font-weight: 600; color: var(--text);
+}
+.aw-spec-list-group { margin-top: 10px; }
+.aw-spec-list-label { padding: 0 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.aw-spec-list-row {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  height: 30px; padding: 0 8px; border-radius: var(--radius-md);
+  font-size: 12.5px; color: var(--text-2); text-align: left;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.aw-spec-list-row:hover { background: var(--row-hover); color: var(--text); }
+.aw-spec-list-row[data-active="true"] { background: var(--row-selected); color: var(--text); font-weight: 500; }
+.aw-spec-list-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-spec-list-dot { width: 7px; height: 7px; flex: none; border-radius: 999px; background: var(--text-3); }
+.aw-spec-list-dot[data-phase="approved"], .aw-spec-list-dot[data-phase="current"] { background: var(--green); }
+.aw-spec-list-dot[data-phase="proposed"] { background: var(--amber); }
+.aw-spec-list-dot[data-phase="exploring"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.aw-spec-list-phase { flex: none; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aw-spec-list-icon { color: var(--text-3); flex: none; }
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+.aw-spec-head { flex: none; padding: 0 24px 12px; border-bottom: 1px solid var(--border-region); }
+.aw-spec-head-bar { display: flex; align-items: center; gap: 12px; height: 44px; }
+.aw-spec-crumbs { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; }
+.aw-spec-crumb-sep { flex: none; opacity: .7; }
+.aw-spec-crumb-current { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
+.aw-spec-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.aw-spec-reason { max-width: 340px; font-size: 12px; color: var(--text-3); text-align: right; line-height: 1.35; }
+@media (max-width: 1180px) { .aw-spec-reason { display: none; } }
+
+.aw-spec-titlebar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-top: 2px; }
+.aw-spec-title { font-size: 20px; font-weight: 650; letter-spacing: -.015em; line-height: 1.25; text-wrap: balance; }
+.aw-spec-phase {
+  display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px;
+  border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  background: var(--surface-2); color: var(--text-2);
+}
+.aw-spec-phase::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.aw-spec-phase[data-phase="approved"], .aw-spec-phase[data-phase="current"] { background: color-mix(in oklab, var(--green) 14%, transparent); color: var(--green); }
+.aw-spec-phase[data-phase="proposed"] { background: color-mix(in oklab, var(--amber) 14%, transparent); color: var(--amber); }
+.aw-spec-chip {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 8px;
+  border: 1px solid var(--border); border-radius: 999px; font-size: 11.5px; color: var(--text-2);
+  transition: border-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.aw-spec-chip:hover { border-color: var(--border-hi); color: var(--text); }
+.aw-spec-chip:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-spec-kind { font-size: 12px; color: var(--text-3); }
+
+/* ── Health line ─────────────────────────────────────────────────────── */
+.aw-health { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 0; margin: 8px 0 0 -8px; }
+.aw-health-fact {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 6px 0 8px; border-radius: var(--radius-md);
+  font-size: 12.5px; color: var(--text-2); white-space: nowrap;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.aw-health-fact strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.aw-health-fact:hover, .aw-health-fact[data-state="open"] { background: var(--row-hover); color: var(--text); }
+.aw-health-fact:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-health-fact[data-tone="warn"] { color: var(--amber); }
+.aw-health-fact[data-muted="true"] { color: var(--text-3); }
+.aw-health-fact + .aw-health-fact { margin-left: 9px; }
+.aw-health-fact + .aw-health-fact::after {
+  content: ''; position: absolute; left: -6px; top: 50%; width: 3px; height: 3px; margin-top: -1.5px;
+  border-radius: 999px; background: var(--text-3); opacity: .55;
+}
+.aw-health-fact { position: relative; }
+.aw-health-chevron { color: var(--text-3); opacity: 0; transition: opacity var(--dur-fast) ease; }
+.aw-health-fact:hover .aw-health-chevron, .aw-health-fact[data-state="open"] .aw-health-chevron { opacity: 1; }
+.aw-health-label { display: inline-flex; align-items: center; white-space: pre; }
+.aw-health-label .aw-health-bar { margin-right: 8px; }
+.aw-health-bad { color: var(--red); }
+.aw-health-bar {
+  display: inline-flex; width: 44px; height: 5px; overflow: hidden; border-radius: 999px;
+  background: color-mix(in oklab, var(--blue) 30%, var(--surface-3));
+}
+.aw-health-bar > span { display: block; height: 100%; }
+
+.aw-health-pop { padding-bottom: 6px; }
+.aw-health-note { padding: 2px 8px 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.aw-health-reqs { max-height: 320px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.aw-health-req { min-height: 26px; }
+.aw-health-req-id { width: 42px; flex: none; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; color: var(--text-2); }
+.aw-health-req-note { margin-left: auto; font-size: 11px; color: var(--text-3); }
+.aw-health-state {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font-size: 12px; color: var(--blue);
+}
+.aw-health-state::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.aw-health-state[data-state="verified"] { color: var(--green); }
+.aw-health-state[data-state="rejected"], .aw-health-state[data-state="revision_needed"] { color: var(--red); }
+.aw-health-state[data-state="drifting"], .aw-health-state[data-state="stale"], .aw-health-state[data-state="under_review"] { color: var(--amber); }
+.aw-health-state[data-state="not_started"], .aw-health-state[data-state="pending"] { color: var(--text-3); }
+.aw-health-tasks { margin: 0; padding: 0 0 4px; list-style: none; }
+.aw-health-task { display: flex; align-items: center; gap: 10px; min-height: 28px; padding: 0 8px; font-size: 12.5px; color: var(--text); }
+.aw-health-task .aw-health-state { width: 88px; }
+.aw-health-history { margin: 0; padding: 0 8px 4px 24px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.aw-health-history li + li { margin-top: 4px; }
+
+/* ── Applied (ui-finesse wiring) ─────────────────────────────────────── */
+/* Group labels fold their group. */
+button.aw-spec-list-label {
+  display: flex; align-items: center; gap: 4px; width: 100%; height: 22px; padding: 0 8px 0 4px;
+  border-radius: var(--radius-sm); text-align: left;
+  transition: color var(--dur-fast) ease;
+}
+button.aw-spec-list-label:hover { color: var(--text-2); }
+button.aw-spec-list-label:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-spec-list-chevron { display: inline-flex; transition: transform var(--dur-fast) var(--ease-out); }
+.aw-spec-list-chevron[data-open="true"] { transform: rotate(90deg); }
+.aw-spec-list-count { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
+.aw-spec-list-row[data-missing="true"] { color: var(--text-3); cursor: not-allowed; text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text-3) 50%, transparent); }
+.aw-spec-list-row:disabled:hover { background: transparent; }
+.aw-spec-list-empty { padding: 4px 8px; font-size: 12.5px; color: var(--text-3); }
+.aw-spec-list .aw-spec-list-footer { margin-top: 14px; }
+
+/* The health line's separators: every fact carries its dot on its left, and the line clips the
+   dot of whichever fact begins a row, so a wrapped line never starts with a separator. */
+.aw-health { margin-left: -17px; clip-path: inset(-6px -6px -6px 6px); }
+.aw-health-fact + .aw-health-fact { margin-left: 0; }
+.aw-health-fact { margin-left: 9px; }
+.aw-health-fact::after {
+  content: ''; position: absolute; left: -6px; top: 50%; width: 3px; height: 3px; margin-top: -1.5px;
+  border-radius: 999px; background: var(--text-3); opacity: .55;
+}
+.aw-health-fact[data-active="true"] { background: var(--row-hover); color: var(--text); }
+
+/* A fact's full detail, opened under the header ("Show details" in its popover). */
+.aw-spec-detail { flex: none; max-height: 40vh; overflow-y: auto; border-bottom: 1px solid var(--border-region); background: var(--surface); }
+.aw-spec-detail-head { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 16px 0 24px; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.aw-spec-detail-head > button { margin-left: auto; }
+.aw-spec-detail-body { padding: 0 12px 8px; }
+
+/* Messages the document's controls produced (refusals, gaps, a pending rigor change): under the
+   title, in the header's padding, rather than strips of their own. */
+.aw-spec-messages { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--text-2); }
+.aw-spec-messages:empty { display: none; }
+.aw-spec-message {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: var(--radius-md); background: var(--surface-2);
+}
+.aw-spec-message[data-tone="warn"] { background: color-mix(in oklab, var(--amber) 10%, transparent); }
+.aw-spec-message[data-tone="error"] { background: color-mix(in oklab, var(--red) 10%, transparent); color: var(--text); }
+.aw-spec-message-text { flex: 1; min-width: 200px; line-height: 1.45; }
+.aw-spec-message ul { width: 100%; margin: 0; padding-left: 18px; color: var(--text-2); }
+.aw-spec-journey { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.aw-spec-journey-step {
+  height: 24px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 12px; color: var(--text-2);
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.aw-spec-journey-step:hover:not(:disabled) { background: var(--row-hover); color: var(--text); }
+.aw-spec-journey-step[aria-current="step"] { background: var(--surface-3); color: var(--text); font-weight: 600; }
+.aw-spec-journey-step:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-spec-flow-chip { gap: 5px; }
+.aw-spec-flow-chip[data-static="true"] { cursor: default; }
+.aw-spec-tools { display: flex; align-items: center; gap: 2px; }
+
+/* The reading body: the document and, beside it, the page outline. */
+.aw-spec-reading { display: flex; min-height: 0; flex: 1; }
+.aw-spec-reading > .aw-spec-body { min-width: 0; }
+.aw-spec-outline { width: 200px; flex: none; overflow-y: auto; padding: 10px 8px; border-left: 1px solid var(--border-region); }
+.aw-spec-outline-label { padding: 0 8px 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.aw-spec-outline-row {
+  display: block; width: 100%; padding: 4px 8px; border-radius: var(--radius-sm);
+  font-size: 12px; color: var(--text-3); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.aw-spec-outline-row:hover { background: var(--row-hover); color: var(--text-2); }
+.aw-spec-outline-row[data-active="true"] { color: var(--text); font-weight: 500; }
+.aw-spec-outline-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+
+/* Narrow hosts (the conversation's document panel): the header tightens. */
+.aw-spec-main[data-compact="true"] .aw-spec-head { padding: 0 14px 10px; }
+.aw-spec-main[data-compact="true"] .aw-spec-title { font-size: 16px; }
+.aw-spec-main[data-compact="true"] .aw-spec-reason { display: none; }
+.aw-spec-reading > .aw-spec-body { overflow: hidden; }
+.aw-spec-crumbs-button { border-radius: var(--radius-sm); padding: 2px 6px; margin-left: -6px; text-align: left; transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease; }
+.aw-spec-crumbs-button:hover { background: var(--row-hover); color: var(--text-2); }
+.aw-spec-crumbs-button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-spec-inline-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); white-space: nowrap; }

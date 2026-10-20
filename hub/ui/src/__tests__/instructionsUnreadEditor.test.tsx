@@ -17,7 +17,7 @@ vi.mock('@/api/client', async (importOriginal) => {
 })
 
 import { ApiError, getJson, putJson } from '@/api/client'
-import { InstructionsPage } from '@/components/instructions/InstructionsPage'
+import { InstructionsSection as InstructionsPage } from '@/components/settings/sections/InstructionsSection'
 
 const ALPHA = 'proj-alpha'
 const BETA = 'proj-beta'

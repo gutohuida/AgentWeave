@@ -1,31 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useProjects, type ProjectSummary } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
-import { Button } from '@/components/ui/button'
 import { agentColorVars } from '@/lib/agentColors'
-import {
-  AGENT_SETTINGS_SECTIONS,
-  ENVIRONMENT_SECTIONS,
-  isAgentSettingsDestination,
-  isConfigurationDestination,
-  isSpecDestination,
-  type AgentSettingsSection,
-  type EnvironmentSection,
-  type WorkspaceDestination,
-} from '@/lib/navigation'
+import type { AgentSettingsSection, EnvironmentSection } from '@/lib/navigation'
 import { useConfigStore } from '@/store/configStore'
 import { useSSEConnectionState, type SSEConnectionState } from '@/hooks/useSSE'
-import { SpecRailNav } from '@/components/spec/SpecRailNav'
 import { AgentTree } from './AgentTree'
 import { RecencyView } from './RecencyView'
 
-export type SidebarPage =
-  | 'tasks' | 'questions' | 'activity' | 'logs' | 'jobs' | 'quality' | 'instructions' | 'spec' | 'vault'
-  | 'runners' | 'charters' | 'manager' | 'worktrees' | 'diagnostics' | 'budgets' | 'settings'
+/** The rail: projects → agents → conversations, and nothing else.
+ *
+ *  It used to change into three other things — an Environment section list, an agent-settings
+ *  section list and the Spec document tree — whenever the page beside it had sections of its own.
+ *  Each of those now carries its own navigation in-page (Project settings, Agent settings, the
+ *  Spec document list), so the rail stays where the operator left it and is never a second,
+ *  disagreeing copy of the page's nav.
+ *
+ *  The look follows the ui-finesse mock (`shell.css`, `aw-rail-*`): one status signal per row,
+ *  carried by the row's own text; row actions fade into the slot the age leaves so the row never
+ *  changes width; full-row hit targets. */
 
 interface SidebarProps {
-  destination?: WorkspaceDestination
-  activePage: SidebarPage | 'overview' | null
   activeAgent?: string | null
   activeConversation?: string | null
   onOpenProject: (projectId: string) => void
@@ -36,13 +31,6 @@ interface SidebarProps {
   onNewConversation?: (projectId: string, agent: string | null) => void
   onOpenEnvironment?: (projectId: string, section: EnvironmentSection) => void
   onOpenAgentSettings?: (projectId: string, agent: string, section: AgentSettingsSection) => void
-  /** Where the settings page's back control goes — a fixed target, the agent's most recent
-   *  conversation, mirroring "Back to {project}" rather than remembering an origin. */
-  onBackFromAgentSettings?: (projectId: string, agent: string) => void
-  /** Opening a specification document while the rail is standing in for the project tree. */
-  onOpenSpecDocument?: (projectId: string, path: string) => void
-  /** Opens the Spec tab's evidence view (slice evidence-browser). */
-  onOpenSpecEvidence?: (projectId: string) => void
   onAddAgent?: (projectId: string) => void
   /** Open a folder as a project. `open_existing` initialises it if it is not one yet,
    *  so this single action covers both opening and creating. */
@@ -54,7 +42,7 @@ interface SidebarProps {
   width?: number
 }
 
-export const SIDEBAR_WIDTH = 252
+export const SIDEBAR_WIDTH = 248
 export const SIDEBAR_COMPACT_WIDTH = 52
 export const SIDEBAR_MIN_WIDTH = 180
 export const SIDEBAR_MAX_WIDTH = 420
@@ -66,55 +54,14 @@ const RAIL_VIEW_KEY = 'aw.railView'
 /** The tree is the default: the agent roster is what AgentWeave has that a two-level chat
  *  sidebar does not. The recency view recovers the flat scan the extra level costs. */
 export type RailView = 'tree' | 'recency'
-const AGENT_SECTION_LABELS: Record<AgentSettingsSection, string> = {
-  identity: 'Identity',
-  execution: 'Execution',
-  charter: 'Charter',
-  interaction: 'Interaction',
-  context: 'Context',
-  access: 'Access',
-  workspace: 'Workspace',
-}
-const AGENT_SECTION_ICONS: Record<AgentSettingsSection, string> = {
-  identity: 'badge',
-  execution: 'terminal',
-  charter: 'description',
-  interaction: 'forum',
-  context: 'memory',
-  access: 'lock',
-  workspace: 'folder_open',
-}
-const SECTION_LABELS: Record<EnvironmentSection, string> = {
-  quality: 'Quality',
-  instructions: 'Instructions',
-  runners: 'Runners',
-  charters: 'Charters',
-  manager: 'Manager',
-  worktrees: 'Worktrees',
-  diagnostics: 'Diagnostics',
-  budgets: 'Budgets',
-  settings: 'Settings',
-}
-const SECTION_ICONS: Record<EnvironmentSection, string> = {
-  quality: 'verified_user',
-  instructions: 'description',
-  runners: 'terminal',
-  charters: 'menu_book',
-  manager: 'schedule',
-  worktrees: 'file_vcs',
-  diagnostics: 'monitoring',
-  budgets: 'bar_chart',
-  settings: 'settings',
-}
 
 /**
  * What the dot beside the wordmark actually reports.
  *
  * It used to be rendered unconditionally, `aria-hidden`, and filled with `--green` — a
  * permanently-"live" mark bound to nothing. IDENTITY.md: semantic colour is earned, and
- * green/amber/red carry state. The Hub stream is a real signal and this corner is now the only
- * place it shows: `StatusBar`, which used to carry the reconnecting chip, is no longer rendered
- * anywhere in the app.
+ * green/amber/red carry state. The Hub stream is a real signal and this corner is the only
+ * place it shows.
  *
  * `closed` is deliberately neutral rather than red — not configured yet, or nothing subscribed,
  * is not a fault, and colouring it as one is the same mistake in the other direction.
@@ -141,7 +88,6 @@ function agentKey(projectId: string, agent: string): string {
 }
 
 export function Sidebar({
-  destination,
   activeAgent = null,
   activeConversation = null,
   onOpenProject,
@@ -150,9 +96,6 @@ export function Sidebar({
   onNewConversation,
   onOpenEnvironment,
   onOpenAgentSettings,
-  onBackFromAgentSettings,
-  onOpenSpecDocument,
-  onOpenSpecEvidence,
   onAddAgent,
   onAddProject,
   compact = false,
@@ -166,9 +109,13 @@ export function Sidebar({
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>(() =>
     loadFlags(AGENTS_EXPANDED_KEY),
   )
-  const [railView, setRailView] = useState<RailView>(
-    () => (localStorage.getItem(RAIL_VIEW_KEY) as RailView | null) ?? 'tree',
-  )
+  const [railView, setRailView] = useState<RailView>(() => {
+    try {
+      return (localStorage.getItem(RAIL_VIEW_KEY) as RailView | null) ?? 'tree'
+    } catch {
+      return 'tree'
+    }
+  })
   /** The tree component keys its agents by bare name; the store keys them by project too. */
   const agentExpansionFor = (projectId: string): Record<string, boolean> => {
     const prefix = `${projectId}/`
@@ -183,14 +130,14 @@ export function Sidebar({
     for (const project of projects) counts.set(project.name, (counts.get(project.name) ?? 0) + 1)
     return counts
   }, [projects])
-  const configuration = destination && isConfigurationDestination(destination) ? destination : null
-  const configuredProject = configuration
-    ? projects.find((project) => project.id === configuration.projectId)
-    : null
-  const agentSettings =
-    destination && isAgentSettingsDestination(destination) ? destination : null
-  const spec = destination && isSpecDestination(destination) ? destination : null
-  const specProject = spec ? projects.find((project) => project.id === spec.projectId) : null
+
+  // The open conversation is always visible: arriving at an agent from anywhere — the palette, a
+  // link, the Overview — opens its branch here, so the rail never points at a collapsed row.
+  useEffect(() => {
+    if (!selectedProjectId || !activeAgent) return
+    const key = agentKey(selectedProjectId, activeAgent)
+    setExpandedAgents((state) => (state[key] ? state : { ...state, [key]: true }))
+  }, [selectedProjectId, activeAgent])
 
   useEffect(() => {
     try {
@@ -218,144 +165,35 @@ export function Sidebar({
 
   return (
     <aside
-      className="workspace-rail flex h-full shrink-0 flex-col"
+      className="aw-rail workspace-rail"
       data-testid="sidebar"
+      data-collapsed={compact ? 'true' : 'false'}
       data-compact={compact ? 'true' : 'false'}
-      data-mode={configuration || agentSettings || spec ? 'section' : 'project'}
-      style={{
-        width: compact ? SIDEBAR_COMPACT_WIDTH : width,
-        background: 'var(--rail)',
-        borderRight: '1px solid var(--border-region)',
-        padding: compact ? '10px 4px' : '10px 8px',
-      }}
+      aria-label="Projects and agents"
+      style={compact ? undefined : { width }}
     >
-      <div
-        className={compact ? 'mb-3 flex flex-col items-center gap-1' : 'mb-3 flex items-center gap-2 px-1.5 py-1'}
-        style={{ fontSize: 13, fontWeight: 600 }}
-      >
-        {/* Not `aria-hidden`: it is the only report of the stream's health on this screen, so
-            it carries a name and a tooltip rather than being decoration with a colour. */}
-        <span
-          className="rail-live-dot"
-          data-testid="rail-live-dot"
-          data-state={connection}
-          role="img"
-          aria-label={CONNECTION_LABEL[connection]}
-          title={CONNECTION_LABEL[connection]}
-        />
-        {!compact && <span className="flex-1">AgentWeave</span>}
-        {onCompactChange && (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            data-testid="rail-collapse-toggle"
-            aria-pressed={compact}
-            aria-label={compact ? 'Expand navigation' : 'Collapse navigation'}
-            title={compact ? 'Expand navigation' : 'Collapse navigation'}
-            onClick={() => onCompactChange(!compact)}
-          >
-            <Icon name={compact ? 'chevron_right' : 'right_panel_close'} size={15} />
-          </Button>
+      <div className="aw-rail-head">
+        {!compact && (
+          <span className="aw-wordmark">
+            {/* Not `aria-hidden`: it is the only report of the stream's health on this screen, so
+                it carries a name and a tooltip rather than being decoration with a colour. */}
+            <span
+              className="aw-wordmark-dot rail-live-dot"
+              data-testid="rail-live-dot"
+              data-state={connection}
+              role="img"
+              aria-label={CONNECTION_LABEL[connection]}
+              title={CONNECTION_LABEL[connection]}
+            />
+            AgentWeave
+          </span>
         )}
-      </div>
-
-      {compact ? (
-        <CompactRail
-          projects={projects}
-          selectedProjectId={selectedProjectId}
-          activeAgent={activeAgent}
-          onOpenProject={onOpenProject}
-          onOpenAgent={onOpenAgent}
-          onAddProject={onAddProject}
-        />
-      ) : spec ? (
-        <SpecRailNav
-          projectName={specProject?.name ?? 'project'}
-          currentPath={spec.view === 'evidence' ? null : spec.document ?? null}
-          evidenceOpen={spec.view === 'evidence'}
-          onOpenEvidence={() => onOpenSpecEvidence?.(spec.projectId)}
-          onSelect={(path) => onOpenSpecDocument?.(spec.projectId, path)}
-          onBack={() => onOpenProject(spec.projectId)}
-        />
-      ) : agentSettings ? (
-        <>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mb-3 w-full justify-start"
-            data-testid="agent-settings-back"
-            aria-label={`Back to ${agentSettings.agent}`}
-            onClick={() =>
-              onBackFromAgentSettings?.(agentSettings.projectId, agentSettings.agent)
-            }
-          >
-            <Icon name="arrow_left" size={15} />
-            {agentSettings.agent}
-          </Button>
-          <div className="mb-3 px-2">
-            <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Agent settings</div>
-            <div className="truncate text-[12px]" style={{ color: 'var(--text-3)' }}>{agentSettings.agent}</div>
-          </div>
-          <nav aria-label="Agent settings sections" className="flex flex-col gap-0.5">
-            {AGENT_SETTINGS_SECTIONS.map((section) => (
-              <button
-                key={section}
-                type="button"
-                className="row-item"
-                data-testid={`agent-settings-section-${section}`}
-                data-active={agentSettings.section === section ? 'true' : 'false'}
-                aria-current={agentSettings.section === section ? 'page' : undefined}
-                onClick={() =>
-                  onOpenAgentSettings?.(agentSettings.projectId, agentSettings.agent, section)
-                }
-              >
-                <Icon name={AGENT_SECTION_ICONS[section]} size={14} />
-                {AGENT_SECTION_LABELS[section]}
-              </button>
-            ))}
-          </nav>
-        </>
-      ) : configuration ? (
-        <>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mb-3 w-full justify-start"
-            data-testid="rail-section-back"
-            aria-label={`Back to ${configuredProject?.name ?? 'project'}`}
-            onClick={() => onOpenProject(configuration.projectId)}
-          >
-            <Icon name="arrow_left" size={15} />
-            Environment
-          </Button>
-          <div className="mb-3 px-2">
-            <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Configuration</div>
-            <div className="truncate text-[12px]" style={{ color: 'var(--text-3)' }}>{configuredProject?.name ?? configuration.projectId}</div>
-          </div>
-          <nav aria-label="Environment sections" className="flex flex-col gap-0.5">
-            {ENVIRONMENT_SECTIONS.map((section) => (
-              <button
-                key={section}
-                type="button"
-                className="row-item"
-                data-testid={`environment-section-${section}`}
-                data-active={configuration.environmentSection === section ? 'true' : 'false'}
-                aria-current={configuration.environmentSection === section ? 'page' : undefined}
-                onClick={() => onOpenEnvironment?.(configuration.projectId, section)}
-              >
-                <Icon name={SECTION_ICONS[section]} size={14} />
-                {SECTION_LABELS[section]}
-              </button>
-            ))}
-          </nav>
-        </>
-      ) : (
-        <>
-          <div className="flex items-center justify-between px-1 pb-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Projects</span>
-            <Button
-              variant="ghost"
-              size="icon-xs"
+        <span className="aw-rail-head-actions">
+          {!compact && (
+            <button
+              data-slot="icon-button"
+              type="button"
+              className="aw-icon-button"
               data-testid="rail-view-toggle"
               data-view={railView}
               aria-pressed={railView === 'recency'}
@@ -364,58 +202,121 @@ export function Sidebar({
               title={railView === 'tree' ? 'Recent conversations' : 'Agent tree'}
             >
               <Icon name={railView === 'tree' ? 'schedule' : 'smart_toy'} size={15} />
-            </Button>
-          </div>
+            </button>
+          )}
+          {onCompactChange && (
+            <button
+              data-slot="icon-button"
+              type="button"
+              className="aw-icon-button"
+              data-testid="rail-collapse-toggle"
+              aria-pressed={compact}
+              aria-label={compact ? 'Expand navigation' : 'Collapse navigation'}
+              title={compact ? 'Expand navigation' : 'Collapse navigation'}
+              onClick={() => onCompactChange(!compact)}
+            >
+              <Icon name="right_panel_close" size={15} className={compact ? undefined : 'rotate-180'} />
+            </button>
+          )}
+        </span>
+      </div>
 
-          <div className="min-h-0 flex-1 overflow-auto">
+      {compact ? (
+        <CompactRail
+          projects={projects}
+          selectedProjectId={selectedProjectId}
+          activeAgent={activeAgent}
+          connection={connection}
+          onOpenProject={onOpenProject}
+          onOpenAgent={onOpenAgent}
+          onAddProject={onAddProject}
+        />
+      ) : (
+        <>
+          <div className="aw-rail-scroll">
             {projects.map((project) => {
               const expanded = !collapsed[project.id]
               const activeProject = selectedProjectId === project.id
               const duplicateName = (duplicateNames.get(project.name) ?? 0) > 1
+              const missing = project.directory_state !== 'available'
+              const live = project.agents.some((agent) => agent.status === 'running' || agent.status === 'working')
               return (
-                <div key={project.id} className="mb-2" data-testid={`rail-project-${project.id}`}>
-                  <div className="row-group flex items-start gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
+                <div key={project.id} className="aw-rail-project" data-testid={`rail-project-${project.id}`}>
+                  <div className="aw-rail-row aw-rail-project-row aw-reveal-host" data-active={activeProject ? 'true' : 'false'}>
+                    <button
+                      data-slot="rail-chevron"
+                      type="button"
+                      className="aw-rail-chevron-button"
                       aria-label={`${expanded ? 'Collapse' : 'Expand'} ${project.name}`}
+                      aria-expanded={expanded}
                       data-testid={`project-expander-${project.id}`}
                       onClick={() => setCollapsed((state) => ({ ...state, [project.id]: expanded }))}
                     >
-                      <span style={{ transform: expanded ? 'rotate(90deg)' : undefined, transition: 'transform var(--dur-fast) var(--ease)' }}><Icon name="chevron_right" size={14} /></span>
-                    </Button>
+                      <span className="aw-rail-chevron" data-open={expanded ? 'true' : 'false'}>
+                        <Icon name="chevron_right" size={13} />
+                      </span>
+                    </button>
                     <button
+                      data-slot="rail-row-main"
                       type="button"
+                      className="aw-rail-row-main"
                       data-testid={`project-name-${project.id}`}
                       data-active={activeProject ? 'true' : 'false'}
-                      /* Level 1 of the rail's selection ladder — see the `.row-item[data-active]`
-                       * block in index.css. The project is marked by weight alone: which one is
-                       * current is already stated by the whole subtree hanging open beneath it,
-                       * and marking the outermost thing most strongly is the inversion this
-                       * attribute exists to fix. The leading indicator that used to be rendered
-                       * here — on project rows and nowhere else — was the accent bar the operator
-                       * had removed on 2026-08-19, and is gone. */
+                      /* Level 1 of the rail's selection ladder: the project is marked by weight
+                       * alone — which one is current is already stated by the subtree hanging
+                       * open beneath it. */
                       data-depth="project"
+                      aria-current={activeProject ? 'true' : undefined}
+                      // Navigation, not expansion: the two stay independent (the chevron folds).
                       onClick={() => onOpenProject(project.id)}
-                      className="row-item min-w-0 flex-1"
                     >
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{project.name}</span>
-                        {duplicateName && <span className="block truncate text-[11px]" style={{ color: 'var(--text-3)' }}>{project.path_display ?? 'Directory unavailable'}</span>}
+                        {duplicateName && (
+                          <span className="aw-rail-subline block truncate">
+                            {project.path_display ?? 'Directory unavailable'}
+                          </span>
+                        )}
                       </span>
-                      <span className="h-2 w-2 shrink-0 rounded-full" data-testid={`project-state-${project.id}`} title={project.directory_state} style={{ background: project.directory_state === 'available' ? 'var(--green)' : 'var(--red)' }} />
+                      {missing ? (
+                        <span
+                          className="aw-rail-missing"
+                          data-testid={`project-state-${project.id}`}
+                          role="img"
+                          title="Directory unavailable"
+                          aria-label="Directory unavailable"
+                        >
+                          <Icon name="warning" size={12} />
+                        </span>
+                      ) : live ? (
+                        <span className="aw-live-dot aw-pulse" title="An agent is working" />
+                      ) : null}
                     </button>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      className="row-action"
-                      data-persistent={activeProject ? 'true' : undefined}
-                      aria-label={`Configure ${project.name}`}
-                      title={`Configure ${project.name}`}
-                      onClick={() => onOpenEnvironment?.(project.id, 'quality')}
-                    >
-                      <Icon name="settings" size={14} />
-                    </Button>
+                    <span className="aw-rail-row-end">
+                      <span className="aw-reveal aw-rail-actions">
+                        <button
+                          data-slot="icon-button"
+                          type="button"
+                          className="aw-icon-button"
+                          data-testid={`rail-add-agent-${project.id}`}
+                          aria-label={`Add agent to ${project.name}`}
+                          title="Add agent"
+                          onClick={() => onAddAgent?.(project.id)}
+                        >
+                          <Icon name="person_add" size={13} />
+                        </button>
+                        <button
+                          data-slot="icon-button"
+                          type="button"
+                          className="aw-icon-button"
+                          aria-label={`Configure ${project.name}`}
+                          title="Project settings"
+                          onClick={() => onOpenEnvironment?.(project.id, 'settings')}
+                        >
+                          <Icon name="settings" size={13} />
+                        </button>
+                      </span>
+                    </span>
                   </div>
                   {expanded && railView === 'recency' && (
                     <RecencyView
@@ -444,9 +345,6 @@ export function Sidebar({
                       onOpenAgent={onOpenAgent}
                       onOpenConversation={onOpenConversation}
                       onNewConversation={onNewConversation}
-                      // Navigates to the agent's settings destination. It used to open a dialog
-                      // hosted here; configuration outgrew a 520px modal, and a destination is
-                      // also linkable and survives reload, which a dialog never was.
                       onOpenAgentSettings={(id, agent) => onOpenAgentSettings?.(id, agent, 'identity')}
                       onAddAgent={onAddAgent}
                     />
@@ -456,20 +354,22 @@ export function Sidebar({
             })}
           </div>
 
-          {/* One action, not two. "Open existing" and "Add project" both opened the same modal
-              onto the same folder picker; the only difference was whether the folder had to exist
-              already, which is a mode rather than a second feature — and asking the operator to
-              pick between them happened at the exact moment they knew least. `open_existing`
-              already resolves all three cases on its own (a path the Hub knows, a directory
-              carrying a project marker, or a plain folder it initialises), and the OS folder
-              dialog has its own "New folder" button, so creating never needed an entry point of
-              its own. Operator, 2026-08-18: "Is 2 buttons the right call? Shouldn't this be
-              decided differently?" */}
-          <div className="mt-3">
-            <Button variant="outline" size="md" data-testid="add-project" onClick={onAddProject} aria-label="Add project" title="Open a folder — it is initialised as a project if it is not one yet" className="w-full">
-              <Icon name="folder_open" size={15} />
+          {/* One action, not two: `open_existing` resolves a known path, a marked directory, or a
+              plain folder it initialises, and the OS folder dialog has its own "New folder"
+              button, so creating never needed an entry point of its own (operator, 2026-08-18). */}
+          <div className="aw-rail-foot">
+            <button
+              data-slot="rail-foot-button"
+              type="button"
+              className="aw-rail-foot-button"
+              data-testid="add-project"
+              onClick={onAddProject}
+              aria-label="Add project"
+              title="Open a folder — it is initialised as a project if it is not one yet"
+            >
+              <Icon name="folder_plus" size={14} />
               Add project
-            </Button>
+            </button>
           </div>
         </>
       )}
@@ -480,18 +380,15 @@ export function Sidebar({
 /**
  * The rail while collapsed.
  *
- * It renders destinations, not decoration. The previous compact mode gated every branch on
- * `!compact` and so drew the AW mark and nothing else — no projects, no agents, no way back —
- * which is a hidden rail, not a collapsed one. Every project and agent reachable when expanded is
- * reachable here, each with an accessible name, and the active one is marked.
- *
- * Conversations are deliberately not here: 40px of width cannot name a conversation, and an
- * unnamed row is not a destination anyone can choose. The agent leads to its most recent one.
+ * It renders destinations, not decoration: every project and agent reachable when expanded is
+ * reachable here, each with an accessible name, and the active one is marked. Conversations are
+ * deliberately not here — 52px cannot name one. The agent leads to its most recent conversation.
  */
 function CompactRail({
   projects,
   selectedProjectId,
   activeAgent,
+  connection,
   onOpenProject,
   onOpenAgent,
   onAddProject,
@@ -499,58 +396,59 @@ function CompactRail({
   projects: ProjectSummary[]
   selectedProjectId: string | null
   activeAgent: string | null
+  connection: SSEConnectionState
   onOpenProject: (projectId: string) => void
   onOpenAgent: (projectId: string, agent: string) => void
-  /** Open a folder as a project. `open_existing` initialises it if it is not one yet,
-   *  so this single action covers both opening and creating. */
   onAddProject: () => void
 }) {
   return (
     <>
-      <nav aria-label="Projects and agents" className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto">
+      <nav aria-label="Projects and agents" className="aw-rail-icons">
+        <span
+          className="aw-wordmark-dot rail-live-dot"
+          data-testid="rail-live-dot"
+          data-state={connection}
+          role="img"
+          aria-label={CONNECTION_LABEL[connection]}
+          title={CONNECTION_LABEL[connection]}
+        />
         {projects.map((project) => {
           const activeProject = selectedProjectId === project.id
           return (
-            <div key={project.id} className="flex flex-col items-center gap-1">
+            <div key={project.id} className="aw-rail-icon-group">
               <button
+                data-slot="rail-icon"
                 type="button"
+                className="aw-rail-icon aw-rail-project-icon"
                 data-testid={`rail-compact-project-${project.id}`}
                 data-active={activeProject ? 'true' : 'false'}
                 aria-current={activeProject ? 'page' : undefined}
                 aria-label={project.name}
                 title={project.name}
                 onClick={() => onOpenProject(project.id)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[11px] font-semibold"
-                style={{
-                  background: activeProject ? 'var(--surface-3)' : 'var(--surface-2)',
-                  border: `1px solid ${activeProject ? 'var(--border-hi)' : 'var(--border)'}`,
-                  color: 'var(--text-2)',
-                  cursor: 'pointer',
-                }}
               >
                 {project.name.slice(0, 2).toUpperCase()}
               </button>
               {project.agents.map((agent) => {
                 const colors = agentColorVars(agent.color_index)
                 const active = activeProject && activeAgent === agent.name
+                const running = agent.status === 'running' || agent.status === 'working'
                 return (
                   <button
+                    data-slot="rail-icon"
                     key={agent.name}
                     type="button"
+                    className="aw-rail-icon"
                     data-testid={`rail-compact-agent-${project.id}-${agent.name}`}
                     data-active={active ? 'true' : 'false'}
                     aria-current={active ? 'page' : undefined}
                     aria-label={agent.name}
                     title={agent.name}
                     onClick={() => onOpenAgent(project.id, agent.name)}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-full"
-                    style={{
-                      background: active ? colors.tint : 'transparent',
-                      border: `1px solid ${active ? colors.border : 'var(--border)'}`,
-                      cursor: 'pointer',
-                    }}
+                    style={{ '--agent-accent': colors.accent, '--agent-tint': colors.tint } as React.CSSProperties}
                   >
-                    <span className="h-2 w-2 rounded-full" style={{ background: colors.accent }} />
+                    {agent.name.slice(0, 2)}
+                    {running ? <span className="aw-rail-icon-dot" data-attention="running" /> : null}
                   </button>
                 )
               })}
@@ -558,18 +456,18 @@ function CompactRail({
           )
         })}
       </nav>
-      {/* Collapsed rail: the same single action as the expanded one. */}
-      <div className="mt-2 flex flex-col items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon-sm"
+      <div className="aw-rail-foot aw-rail-foot-compact">
+        <button
+          data-slot="icon-button"
+          type="button"
+          className="aw-icon-button"
           data-testid="add-project"
           onClick={onAddProject}
           aria-label="Add project"
           title="Open a folder — it is initialised as a project if it is not one yet"
         >
-          <Icon name="folder_open" size={15} />
-        </Button>
+          <Icon name="folder_plus" size={15} />
+        </button>
       </div>
     </>
   )

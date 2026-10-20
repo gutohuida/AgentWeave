@@ -47,6 +47,11 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     // and cannot be given a provider without changing what it is testing. Behaviour of the button
     // itself belongs to `taskLandingAction.test.tsx`, which does wrap one.
     useLandTask: () => ({ mutate: vi.fn(), isPending: false }),
+    // Where approved work went (`TaskIntegrationNote`), moved into the drawer from the old board
+    // card; stubbed for the same provider-less test. Its own behaviour is
+    // `taskIntegrationRetry.test.tsx`.
+    useTaskIntegrations: () => ({ data: undefined }),
+    useRetryTaskIntegration: () => ({ mutate: vi.fn(), isPending: false }),
     useDeleteTask: () => ({
       mutate: (vars: { id: string }, opts?: { onSuccess?: () => void; onError?: (e: unknown) => void }) =>
         deleteMutate(vars, opts),

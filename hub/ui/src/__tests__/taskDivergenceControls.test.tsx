@@ -1,10 +1,10 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Task } from '@/api/tasks'
-import { TaskCard } from '@/components/tasks/TaskCard'
+import { TaskCardCompact } from '@/components/tasks/TaskCardCompact'
 import { TaskCardHost } from './testUtils/TaskCardHost'
 
 /**
@@ -18,7 +18,6 @@ import { TaskCardHost } from './testUtils/TaskCardHost'
  */
 
 const setHandling = vi.fn()
-const startWork = vi.fn()
 
 vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
@@ -27,7 +26,7 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     useAllowedTransitions: () => ({ data: { actor_kind: 'operator', transitions: {} } }),
     useUpdateTask: () => ({ mutate: vi.fn() }),
     useSetDivergenceHandling: () => ({ mutate: setHandling }),
-    useStartWorkOnTask: () => ({ mutate: startWork }),
+    useStartWorkOnTask: () => ({ mutate: vi.fn() }),
   }
 })
 
@@ -64,7 +63,6 @@ async function renderExpanded(task: Task) {
 
 beforeEach(() => {
   setHandling.mockReset()
-  startWork.mockReset()
 })
 
 afterEach(cleanup)
@@ -133,29 +131,23 @@ describe('the divergence policy is set where the work is', () => {
   })
 })
 
+const status = () => screen.queryByTestId('task-card-status-task-1')
+
 describe('a stalled task says so', () => {
   it('shows nothing when the task is fine', () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <TaskCard task={makeTask()} onOpen={() => {}} />
-      </QueryClientProvider>,
-    )
-    expect(screen.queryByTestId('task-divergence-task-1')).not.toBeInTheDocument()
+    render(<TaskCardCompact task={makeTask()} onOpen={() => {}} />)
+    expect(status()).toBeNull()
   })
 
-  it('marks a task a run ended without moving, in a word the operator recognised', () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <TaskCard task={makeTask({ has_open_divergence: true })} onOpen={() => {}} />
-      </QueryClientProvider>,
-    )
-    // "Dropped" was the first label. Shown it, the operator asked "what is a dropped task?" —
-    // so the badge says "Stalled" and the title carries the whole meaning.
-    const badge = screen.getByTestId('task-divergence-task-1')
-    expect(badge).toHaveTextContent('Stalled')
-    expect(badge).toHaveAttribute(
+  it('marks a task a run ended without moving, in words the operator recognises', () => {
+    render(<TaskCardCompact task={makeTask({ has_open_divergence: true })} onOpen={() => {}} />)
+    // "Dropped" was the first label. Shown it, the operator asked "what is a dropped task?" — so
+    // the line says what happened in plain words and the title carries the whole meaning.
+    const line = status()!
+    expect(line).toHaveAttribute('data-reason', 'divergence')
+    expect(line).toHaveTextContent('The run stopped without finishing it')
+    expect(line).not.toHaveTextContent(/dropped/i)
+    expect(line).toHaveAttribute(
       'title',
       'A run worked on this and ended without changing its status. Nothing is running now.',
     )
@@ -164,58 +156,50 @@ describe('a stalled task says so', () => {
 
 describe('a running task whose prerequisite regressed says so (task 8.9, design D8)', () => {
   it('shows nothing when there is no dependency state', () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <TaskCard task={makeTask()} onOpen={() => {}} />
-      </QueryClientProvider>,
-    )
-    expect(screen.queryByTestId('task-dependency-regressed-task-1')).not.toBeInTheDocument()
+    render(<TaskCardCompact task={makeTask()} onOpen={() => {}} />)
+    expect(status()).toBeNull()
   })
 
   it('shows nothing for a merely gated task — the flag is for a task already running', () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <TaskCard task={makeTask({ dependency_state: 'gated' })} onOpen={() => {}} />
-      </QueryClientProvider>,
-    )
-    expect(screen.queryByTestId('task-dependency-regressed-task-1')).not.toBeInTheDocument()
+    render(<TaskCardCompact task={makeTask({ dependency_state: 'gated' })} onOpen={() => {}} />)
+    expect(status()?.getAttribute('data-reason')).not.toBe('regressed')
   })
 
   it('flags a running task whose prerequisite regressed, without stopping it', () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const onOpen = vi.fn()
     render(
-      <QueryClientProvider client={client}>
-        <TaskCard
-          task={makeTask({ status: 'in_progress', dependency_state: 'running_on_regressed' })}
-          onOpen={() => {}}
-        />
-      </QueryClientProvider>,
+      <TaskCardCompact
+        task={makeTask({ status: 'in_progress', dependency_state: 'running_on_regressed' })}
+        onOpen={onOpen}
+      />,
     )
-    const badge = screen.getByTestId('task-dependency-regressed-task-1')
-    expect(badge).toHaveTextContent('Prerequisite regressed')
-    // Still in progress: the badge is awareness, not enforcement — nothing about rendering it
-    // touches status.
-    expect(screen.getByText('in progress')).toBeInTheDocument()
+    const line = status()!
+    expect(line).toHaveAttribute('data-reason', 'regressed')
+    expect(line).toHaveTextContent('A prerequisite regressed')
+    // Awareness, not enforcement: the card offers no move of its own, and drawing the flag sent
+    // nothing.
+    expect(onOpen).not.toHaveBeenCalled()
   })
 })
 
 describe('starting work binds the run', () => {
-  it('offers each agent, and starts the chosen one on this task', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  it('offers each agent, and starts the chosen one on this task', () => {
+    // The card reports the choice; `TasksScreen` binds it to `useStartWorkOnTask`
+    // (tasksScreen.test.tsx, "starts the chosen agent on the task").
+    const onStartWork = vi.fn()
     render(
-      <QueryClientProvider client={client}>
-        <TaskCard task={makeTask()} onOpen={() => {}} />
-      </QueryClientProvider>,
+      <TaskCardCompact
+        task={makeTask()}
+        onOpen={() => {}}
+        startAgents={['worker', 'reviewer']}
+        onStartWork={onStartWork}
+      />,
     )
 
-    await userEvent.click(screen.getByTestId('task-start-work-task-1'))
-    await userEvent.click(screen.getByText('Start reviewer on this'))
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Start work on Ship the thing' }), { key: 'Enter' })
+    expect(screen.getByRole('menuitem', { name: 'Start worker on this' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Start reviewer on this' }))
 
-    expect(startWork).toHaveBeenCalledWith(
-      expect.objectContaining({ taskId: 'task-1', agent: 'reviewer' }),
-      expect.anything(),
-    )
+    expect(onStartWork).toHaveBeenCalledWith('task-1', 'reviewer')
   })
 })
