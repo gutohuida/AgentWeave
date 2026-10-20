@@ -37819,3 +37819,63 @@ inbound_queue_entries (builder): "... how_to_check: time it with time.perf_count
 ```
 
 `hub/hub/spec_amendments.py:845` appends `" Their reason: {reason}"`, and the next sentence follows directly. An operator's reason rarely ends in a full stop, so this happens every time. **Expected:** the reason is closed with a full stop when it lacks terminal punctuation (or is quoted). **Test:** next to the F700 respond tests: an amend with a reason without a full stop; assert the delivered note contains `"microseconds. The task"`.
+
+## F832 (B) -- a refused Land tells the operator to "send the task back (revision_needed)", a move the Hub never offers the operator from `completed`; the one control that might, "Move to under review", is refused with "Land it"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8190, real Haiku `builder` completing the task, Chromium against the served bundle: `scripts/drive/s1020_v_ui2.py`).
+**Source:** drive
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+```
+task-8c50aa06ab24 completed by builder (real turn); its requirement FR-2 not verified (rejected, then amendment_unreviewed)
+POST /tasks/{id}/land {}  -> 409 gate_unsatisfied, message ends:
+  "... Ask the task's author to record it, accept it, and approve again; or send the task back (revision_needed) naming the commits."
+  (with FR-2 rejected it also says "If you are reviewing this task, ... move the task to revision_needed with notes ...")
+PATCH /tasks/{id} {"status":"revision_needed"}  -> 409 "Cannot move a task from 'completed' to 'revision_needed'.
+  From 'completed' the available transitions are: rejected, under_review."
+Drawer status menu (Chromium): ["Move to rejected", "Move to under review"] -- no send-back item
+"Move to under review" -> 403 "... with 'builder' as its holder: it is the agent recorded as completing this task ...
+  Land it, on the task, to review it yourself, or dispatch a different agent's review turn (POST /agent/trigger with review_task_id)."
+```
+
+The operator goes round a loop: Land says send it back, the menu has no send-back, and the menu's only other move says Land it. A way out exists, but no sentence names it. `PATCH {"status":"under_review","assignee":null}` answers 200, and `revision_needed` then works and returns the task to `builder` (F495). The remedy strings are `OPERATOR_ON_UNLANDED` and `OPERATOR_ON_FAILING_CHECKS` (`hub/hub/requirement_gate.py:111-125`). The rejected refusal also hands the operator `REVIEWER_SENDS_BACK_REJECTED` (`:134`), which is reviewer text. The table is `task_transitions.py:134` (`completed` -> `under_review`, `rejected` only). This is F353's class: a refusal naming a remedy that does not work. **Expected:** either the operator can send completed work back in one move (a `completed -> revision_needed` edge for the operator, offered in the drawer as "Send back"), or every operator-facing remedy names the move that works. The first is the cleaner one: the gate already says "send it back" in four places. **Test:** beside `test_revision_returns_to_the_author.py`: a task completed by an agent, whose Land is refused, can be sent back by the operator with one PATCH and returns to its author; plus a check that no operator-facing Land refusal names `revision_needed` unless that move is legal from the task's status.
+
+## F833 (C) -- a criterion-only amendment is recorded and shown as "reworded it" with the same wording twice, and the stale-evidence refusal says the requirement "has been reworded"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8190, a real Haiku `checker` test turn calling `amend_spec_document`, Chromium: `scripts/drive/s1020_v_ui.py`).
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes
+**Tier:** 0
+
+```
+checker (review turn on t-count) amend_spec_document op=change_criterion criterion=c-count change={"then": "it returns 3, as an int"}
+GET /spec/requirements/FR-2 -> revisions: [created "The package MUST offer count() ...",
+                                           reworded (actor checker) "The package MUST offer count() ..."]  -- same statement
+RequirementStory (Chromium): "You wrote it ... The package MUST offer count() ...  /  checker reworded it ... The package MUST offer count() ..."
+  chip "current"; Evidence "2 for an earlier wording"; nothing names criterion c-count or the unreviewed amendment
+decide_evidence(ev-a650d4cd3b7a, accepted) -> 409 "ev-a650d4cd3b7a was recorded for an earlier wording of FR-2, which has been
+  reworded since; it cannot be accepted."
+```
+
+The requirement's digest covers its criteria, so changing a criterion is correctly a new revision, and correctly makes earlier evidence stale. But `spec_index.py:268-277` classifies every digest change `REWORDED` and stores only the statement. The story (`RequirementStory.tsx:26`) then shows two identical wordings under "reworded it". The refusal (`requirement_evidence.py:1254`) sends the reader to compare statements that did not change. The story also reads "current" while coverage reads `amendment_unreviewed`. **Expected:** a revision whose statement is unchanged is classified as a criterion change. The story names the criterion and its before/after (the amendment row already holds `before` and `change`), and the stale refusal says "its criteria changed since" in that case. **Test:** in the spec-index tests: a change to a criterion alone records a revision that is not `reworded`; and the `evidence_stale` message for that piece names the criterion rather than a rewording.
+
+## F834 (D) -- a drift candidate re-raised after "Code corrected" or "Spec updated" looks like new drift: nothing on the row says it was answered, or when
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8190, `scripts/drive/s1020_v_p2.py` + `s1020_v_ui.py`, Chromium).
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes
+**Tier:** 0
+
+```
+three candidates on FR-3 answered: no_change_required, implementation_corrected, specification_updated (all 200)
+POST /spec/drift/detect (no new commit) -> {"raised": ["drift-f58c2a17b807", "drift-e89f2f95fdd8"]}
+  -- the two "corrected"/"updated" ones again, by design (requirement_evidence.resolve_drift docstring, D8/F730)
+Drift panel: "Drifting: 3 to answer -- say which one was wrong", each re-raised row reads exactly like a first one:
+  "FR-3 · verified by total() == 6, watched by locator (operator)  todo/total.py: 723004c -> a870e62  [Spec updated][Code corrected][No change]"
+```
+
+Asking again is right: the code was not put back and the requirement was not reworded. But the operator who answered a minute ago sees the same row return with no hint why, which reads as "my answer was lost". The reason sits only in the buttons' hover titles. **Expected:** the re-raised row says it was answered before, e.g. "You said Code corrected at 12:31; todo/total.py still differs." `GET /spec/drift` can carry the previous resolved candidate's answer for the same piece and fingerprint. **Test:** in the drift tests: a candidate raised again after `implementation_corrected` carries `previously` (resolution, time). A UI test renders it on the row.
