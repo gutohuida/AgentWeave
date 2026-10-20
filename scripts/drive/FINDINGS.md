@@ -37646,3 +37646,98 @@ F222 fixed exactly this shape for an archived job: `run_job` checks `archived_at
 **Tier:** 0
 
 `POST /jobs/{id}/run` answers `"job_run_id": "run-9b02d383538b"`, and the turn it started is `run-7d179cba3a19`. Both are minted `f"run-{short_id()}"` (`hub/hub/scheduler.py:3693`, `:4190`, `:4410` for `JobRun`; the same prefix as `Run`). `job_fired` events carry `job_run_id` with that prefix. `GET /traces/by-run/run-9b02d383538b` -> 404 "This run has no trace", but it is not a run at all, and `GET /traces/by-run/run-7d179cba3a19` -> 200. A reader correlating a firing with its turn by id, as the skill's own trap list warns ("Job events carry `job_run_id`, not `run_id`"), has nothing in the id to tell them apart. **Expected:** new `JobRun` ids use their own prefix (`jrun-`). Existing rows keep theirs, since ids are opaque and nothing parses the prefix (grep before changing). **Test:** a firing's `job_run_id` does not start with `run-`.
+
+## F823 (C) -- a failed merge's Retry ("Try again") exists only on the board card: the task drawer, where the failure is read, offers none, and a retry that fails again looks exactly like nothing happened
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+```
+project repo: .git/hooks/pre-merge-commit -> echo "policy: merges into master are frozen for the release (hook)" >&2; exit 1
+POST /tasks/task-6d2ada38a152/land {}  -> 200, latest_integration {"outcome": "failed", "reason": "policy: merges into master are frozen ... (hook)\nNot committing merge; ...", "retryable": true}
+Chromium, served bundle, Tasks tab:
+  drawer, Story view:   "Not merged (failed) ... policy: merges into master are frozen ..."  -- task-integration-retry-<id>: 0
+  drawer, Details view: no mention of the merge at all                                         -- task-integration-retry-<id>: 0
+  board card (behind the modal): "Merge failed -- policy: ... Try again"                       -- 1
+card "Try again" with the hook still there -> a second `failed` row (GET .../integrations: 2 rows); the card text is identical before and after
+hook removed, card "Try again" -> "Merged 87a62644 into master"; master b511a00 "Integrate approved work 87a6264407b9"
+```
+
+The integration note and its button are rendered only by `TaskCard` (`hub/ui/src/components/tasks/TaskCard.tsx:589`, the sole user of `TaskIntegrationNote`). The drawer's Story renders the failure (`TaskStory`) but has no control, and the Details view does not render the note. An operator who opens the task to read why its work is not on master has to close the drawer and find the card to act. And `newestPerTarget` keeps one row per target, so a repeated failure renders identically: the operator cannot tell that the press did anything. **Expected:** the drawer (Story's "Not merged" event, or Details beside Status) offers the same Try again when the newest row is `retryable`; after a press, the note shows the attempt time (or "failed again at HH:MM"). **Test:** `taskDetailDrawer.test.tsx`: a task whose integrations answer one `failed` retryable row renders `task-integration-retry-<id>` inside `task-drawer-<id>`; `taskIntegrationRetry.test.tsx`: two failed rows for one target render the newer row's time. Not F820 (that one is a reason classed unretryable; this one is retryable and still unreachable from the drawer).
+
+## F824 (C) -- deleting a task from its drawer makes the page request the deleted task's story ~110 times in five seconds, and the card stays on the board for 5-10 s
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
+**Source:** drive
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+```
+Chromium, served bundle, project with 104 tasks: open "bulk 004"'s drawer -> Details -> Delete -> Delete task
+DELETE /tasks/task-d5dfdb335e86 -> 204 (drawer closes)
+404 responses recorded by page.on("response") after the click:
+  t+2s  card task-open-task-d5dfdb335e86 present  404s=57
+  t+5s  card present                               404s=113
+  t+10s card gone                                  404s=113
+  all 113: GET projects/<p>/tasks/task-d5dfdb335e86/story
+(a first delete of "bulk 002" the same way: 90 console 404s, card still on the board at t+2.5s)
+```
+
+`useTaskStory` has `retry: false` (`hub/ui/src/api/tasks.ts:397-405`), so 113 requests are not React Query retries. Something re-subscribes the story query of the deleted task in a tight loop until the board's own refetch drops the card; the delete mutation invalidates the whole `['project', p, 'tasks']` prefix (`tasks.ts:647-649`), which includes the deleted task's `story` key. **Expected:** after a 204 the deleted task's queries are removed (`removeQueries` for `['project', p, 'tasks', id]`) before the list is invalidated, and the card leaves the board on the 204, not on a later refetch. **Test:** a UI test that deletes from the drawer and counts calls to the story `queryFn` for that id after the mutation resolves: at most 0. The 5-10 s card persistence on a 104-task project is measured once; on a small board it may not show.
+
+## F825 (C) -- deleting a prerequisite answers 204 and silently releases every task that waited on it; the confirm says only "Its dependencies ... go with it", and nothing names the released tasks
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+```
+POST /tasks/<bulk001>/dependencies {"depends_on": "<bulk000>"} -> 201 added; bulk001 dependency_state "gated"
+DELETE /tasks/<bulk000> -> 204
+GET /tasks/<bulk001> -> prerequisites [], dependency_state null   (now startable)
+event_logs: task_deleted {"id": "<bulk000>", "title": "bulk 000 ..."}   -- nothing about bulk001
+Chromium: bulk003 depends on bulk002; bulk002's drawer -> Delete:
+  confirm text: "Delete this task? Its dependencies, links, transitions and evidence go with it. This cannot be undone."
+  focus after opening the confirm: the opener "Delete" button, not Cancel
+  Delete task -> bulk003 prerequisites [], dependency_state null
+DELETE /tasks/task-d58872f60abf (approved, merged into master, C depended on it) -> 204: its transitions and integration rows are gone; the merge commit stays on master
+```
+
+`deletion.delete_task` refuses only an active run (`hub/hub/deletion.py:192-195`); documents refuse archived and folded ones (`:206-223`), tasks refuse nothing. A gate the operator set up (or a document declared) disappears without a word, and the dependent can start on work that no longer exists. "Its dependencies ... go with it" reads as the deleted task's *own* prerequisites. **Expected:** the confirm names the tasks it will release ("2 tasks wait on this one: bulk 003, ... -- they will be free to start"), using the drawer's `dependents`; the `task_deleted` event carries `released_dependents`; and the inline confirm takes focus on Cancel like every other confirm (Keyboard & dialogs row). Whether deleting an approved, merged task should be refused (as an archived document is) is the operator's call; record the answer. **Test:** `hub/tests/test_task_delete.py`: delete a prerequisite of a gated task; the event payload names the dependent. UI: the confirm text contains the dependent's title.
+
+## F826 (D) -- once approved, a task's card credits the reviewer (B: "@gamma") or nobody (Land: "Unassigned"); the author appears only in the story
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
+**Source:** drive
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+```
+B: beta in_progress -> completed (run-2d1f9cc60be2); POST /agent/trigger {"agent": "gamma", "review_task_id": B} -> gamma under_review -> approved
+GET /tasks/B -> assignee "gamma"; Dependencies view card: "@gamma"
+A: alpha completed; POST /tasks/A/land -> assignee null (tasks.py:1996 "the author's hold"); drawer Details: "Assignee Unassigned"
+```
+
+Staffing a review writes the reviewer into `assignee` (by design, F70's ordering) and Land clears it, and nothing restores the author when the task reaches `approved`. Two approved tasks built by alpha and beta read "Unassigned" and "@gamma" on the board. The story ("beta worked", "alpha worked") is right. **Expected:** at `approved` the card names who built it (the last completer from `task_transitions`), or labels the reviewer as reviewer ("reviewed by @gamma"). **Test:** a board-card test with an approved task whose assignee is its reviewer renders the completer's name. Design gap, small.
+
+## F827 (D) -- a hand-made task whose prerequisite was rejected is told to "edit the document that declared this dependency": there is no document
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+```
+X -> Y -> Z, all hand-made (POST /tasks/{id}/dependencies); PATCH Y {"status": "rejected"} -> 200; Z dependency_state "gated_on_rejected"
+PATCH Z {"status": "in_progress"} -> 409 dependency_unmet: "... 'bulk 006 ...' (task-6668d193dfa1) was rejected and will not become approved on its own -- reopen it, or edit the document that declared this dependency."
+```
+
+`DependencyRefusal.detail` (`hub/hub/dependency_gate.py:62-66`) predates hand-authored `depends_on`: for a task with no `spec_document_id` the dependency was declared in the drawer's "Depends on" (or at creation), and the Dependencies view itself says "Hand-made tasks belong to no document". **Expected:** for a task with no document, the remedy reads "reopen it, or remove the dependency in this task's Depends on". **Test:** `hub/tests/test_dependency_gate.py`: a documentless task gated on a rejected prerequisite gets a message without "document".
