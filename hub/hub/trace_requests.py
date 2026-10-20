@@ -4,7 +4,8 @@
 request's duration (`traces.current_span`, D2), and when the answer is sent decides whether to keep
 it (trace-D4): every request that is not a GET or HEAD, every request made with a run's credential,
 every 4xx and 5xx, and every request slower than a second. The operator's other reads (the app's
-polling) and the SSE stream are kept only when the project's trace settings ask (`record_reads`).
+polling) and the SSE stream are kept only when the project's trace settings ask (`record_reads`),
+or when the read emitted an event or logged a warning.
 
 The project and the run come from what the authentication dependencies stamped on the request
 scope (`auth.PROJECT_SCOPE_KEY`, `auth.RUN_SCOPE_KEY`), so the token is looked up once; a request
@@ -30,6 +31,8 @@ _READS = ("GET", "HEAD")
 
 
 def _keep(*, method: str, run_id: Optional[str], status: int, stream: bool, elapsed: float) -> bool:
+    """Everything but the operator's routine reads (trace-D4). A read that emitted an event or
+    logged a warning is kept by the span's own `keep`."""
     routine = (
         run_id is None and method in _READS and status < 400 and (stream or elapsed <= SLOW_SECONDS)
     )

@@ -37,6 +37,7 @@ have them here.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
 import hashlib
 import inspect
@@ -819,6 +820,8 @@ class PendingSpan:
     parent: Optional["PendingSpan"] = None
     #: Children waiting for this span to be handed to the writer (`enqueue` hands them too).
     children: List["PendingSpan"] = field(default_factory=list)
+    #: Not a span: its events go on its run's root (a log record a run's executor emitted, D7).
+    attach: bool = False
 
 
 @dataclass(frozen=True)
@@ -1172,6 +1175,109 @@ async def record_event(
     )
 
 
+#: The Hub's loggers: a WARNING-or-higher record any of them emits goes on its trace (D7).
+HUB_LOGGER = "hub"
+LOG_LEVEL = logging.WARNING
+
+
+#: OTLP SeverityNumber for each logging level (WARN 13, ERROR 17, FATAL 21).
+_SEVERITY_NUMBER = {logging.WARNING: 13, logging.ERROR: 17, logging.CRITICAL: 21}
+_formatter = logging.Formatter()
+
+
+def _bounded(text: str) -> str:
+    return text if len(text) <= EVENT_DATA_LIMIT else text[:EVENT_DATA_LIMIT] + "... [truncated]"
+
+
+def _log_event(run_id: Optional[str], record: logging.LogRecord) -> Dict[str, Any]:
+    """A `log` span event: severity, logger, message and an exception's type, message and
+    traceback, each redacted as span content is and bounded to `EVENT_DATA_LIMIT`."""
+    attributes: Dict[str, Any] = {
+        "log.severity": record.levelname,
+        "log.severity_number": _SEVERITY_NUMBER.get(record.levelno, 13),
+        "log.logger": record.name,
+        "log.body": _bounded(str(redact(run_id, record.getMessage()))),
+    }
+    if record.exc_info and record.exc_info[0] is not None:
+        exc_type, exc, _ = record.exc_info
+        attributes["exception.type"] = exc_type.__name__
+        attributes["exception.message"] = _bounded(str(redact(run_id, str(exc))))
+        trace = _formatter.formatException(record.exc_info)
+        attributes["exception.stacktrace"] = _bounded(str(redact(run_id, trace)))
+    return {
+        "name": "log",
+        "time": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
+        "attributes": attributes,
+    }
+
+
+def record_log(record: logging.LogRecord) -> None:
+    """Put a WARNING-or-higher *record* on the current trace (D7, `hub-warnings-are-on-their-
+    trace`): on the current request's or work's span while it is still being recorded (a read
+    that warned is kept, like one that emitted an event); on the run's root while a run's executor
+    is current, through the writer. With no trace current, or one already handed to the writer, it
+    is not stored: stderr still has it."""
+    current = current_span()
+    if isinstance(current, PendingSpan) and not current.enqueued:
+        current.events.append(_log_event(current.run_id, record))
+        current.keep = True
+    elif isinstance(current, RunTrace):
+        at = _now()
+        enqueue(
+            PendingSpan(
+                project_id=current.project_id,
+                name="log",
+                operation="log",
+                start_time=at,
+                end_time=at,
+                run_id=current.run_id,
+                events=[_log_event(current.run_id, record)],
+                attach=True,
+            )
+        )
+
+
+class TraceLogHandler(logging.Handler):
+    """`record_log` as a handler on the `hub` logger. It never raises and never logs.
+
+    A handler on `hub` makes the logging module stop falling back to `logging.lastResort` for the
+    Hub's records when nothing else handles them (before the root logger is configured, the
+    database line `main._log_database_before_opening` prints relies on it), so this handler passes
+    such a record on to `lastResort` itself."""
+
+    def __init__(self) -> None:
+        super().__init__(level=LOG_LEVEL)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        with contextlib.suppress(Exception):  # a trace never fails the work that logged
+            record_log(record)
+        if not _handled_elsewhere(record, self):
+            last = logging.lastResort
+            if last is not None and record.levelno >= last.level:
+                last.handle(record)
+
+    def handleError(self, record: logging.LogRecord) -> None:  # noqa: N802 -- logging's name
+        pass
+
+
+def _handled_elsewhere(record: logging.LogRecord, own: logging.Handler) -> bool:
+    logger_: Optional[logging.Logger] = logging.getLogger(record.name)
+    while logger_ is not None:
+        if any(handler is not own for handler in logger_.handlers):
+            return True
+        if not logger_.propagate:
+            return False
+        logger_ = logger_.parent  # type: ignore[assignment]
+    return False
+
+
+def install_log_handler() -> None:
+    """Attach one `TraceLogHandler` to the `hub` logger (idempotent)."""
+    hub_logger = logging.getLogger(HUB_LOGGER)
+    if not any(isinstance(handler, TraceLogHandler) for handler in hub_logger.handlers):
+        hub_logger.addHandler(TraceLogHandler())
+
+
 def records_reads(project_id: str) -> bool:
     return _record_reads.get(project_id, False)
 
@@ -1250,6 +1356,17 @@ async def _write_spans(batch: Sequence[PendingSpan]) -> None:
         #: Where each span of the batch was written: its children go in the same trace.
         placed: Dict[str, Tuple[str, datetime]] = {}
         for pending in batch:
+            if pending.attach:
+                if pending.run_id:
+                    for event in pending.events:
+                        await _add_event(
+                            db,
+                            pending.run_id,
+                            event["name"],
+                            datetime.fromisoformat(event["time"]),
+                            event["attributes"],
+                        )
+                continue
             parent: Optional[str] = None
             trace_id, trace_started_at = pending.trace_id, pending.start_time
             if pending.parent is not None:
@@ -1692,6 +1809,43 @@ def otlp_payload(project_id: str, spans: Sequence[TraceSpan]) -> Dict[str, Any]:
     }
 
 
+def otlp_log_records(spans: Iterable[Any]) -> List[Dict[str, Any]]:
+    """The `log` events of *spans* as OTLP log records, each naming its trace and span (D7).
+    *spans* are rows, or anything carrying `trace_id`, `span_id` and `events`."""
+    records = []
+    for span in spans:
+        for event in span.events or []:
+            if event.get("name") != "log":
+                continue
+            attributes = dict(event.get("attributes") or {})
+            stamp = _nanos(datetime.fromisoformat(event["time"]) if event.get("time") else None)
+            records.append(
+                {
+                    "timeUnixNano": stamp,
+                    "observedTimeUnixNano": stamp,
+                    "severityNumber": attributes.pop("log.severity_number", 13),
+                    "severityText": attributes.pop("log.severity", "WARNING"),
+                    "body": {"stringValue": attributes.pop("log.body", "")},
+                    "attributes": _attributes(attributes),
+                    "traceId": span.trace_id,
+                    "spanId": span.span_id,
+                }
+            )
+    return records
+
+
+def otlp_logs_payload(project_id: str, records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """One OTLP/HTTP JSON `ExportLogsServiceRequest` for *records* of one project."""
+    return {
+        "resourceLogs": [
+            {
+                "resource": _resource(project_id),
+                "scopeLogs": [{"scope": SCOPE, "logRecords": list(records)}],
+            }
+        ]
+    }
+
+
 async def stream_export(
     session_factory: Any,
     project_id: str,
@@ -1700,17 +1854,38 @@ async def stream_export(
     page: int = 500,
 ) -> AsyncIterator[bytes]:
     """The export as OTLP JSON, produced a page at a time (keyset on trace start and span id), so a
-    project kept forever is never held in memory whole."""
-    head = json.dumps(
-        {"resource": _resource(project_id), "scopeSpans": [{"scope": SCOPE, "spans": []}]},
-        ensure_ascii=False,
-    )
-    # Split the empty span list open: everything before `[]` and the closing after it.
-    marker = '"spans": []'
-    prefix, _, suffix = head.partition(marker)
-    yield ('{"resourceSpans": [' + prefix + '"spans": [').encode("utf-8")
-    after: Optional[Tuple[datetime, str]] = None
+    project kept forever is never held in memory whole: the spans as `resourceSpans`, then the
+    Hub's log records on them as `resourceLogs` (D7), a second pass over the same window.
+    One file holding both signals' requests side by side, each in its OTLP/HTTP JSON shape."""
+    resource = json.dumps(_resource(project_id), ensure_ascii=False)
+    scope = json.dumps(SCOPE, ensure_ascii=False)
+    yield ('{"resourceSpans": [{"resource": ' + resource).encode("utf-8")
+    yield (', "scopeSpans": [{"scope": ' + scope + ', "spans": [').encode("utf-8")
     first = True
+    async for rows in _export_pages(session_factory, project_id, since, until, page):
+        for span in rows:
+            chunk = json.dumps(otlp_span(span), ensure_ascii=False)
+            yield (chunk if first else "," + chunk).encode("utf-8")
+            first = False
+    yield b']}]}], "resourceLogs": [{"resource": '
+    yield (resource + ', "scopeLogs": [{"scope": ' + scope + ', "logRecords": [').encode("utf-8")
+    first = True
+    async for rows in _export_pages(session_factory, project_id, since, until, page):
+        for record in otlp_log_records(rows):
+            chunk = json.dumps(record, ensure_ascii=False)
+            yield (chunk if first else "," + chunk).encode("utf-8")
+            first = False
+    yield b"]}]}]}"
+
+
+async def _export_pages(
+    session_factory: Any,
+    project_id: str,
+    since: Optional[datetime],
+    until: Optional[datetime],
+    page: int,
+) -> AsyncIterator[Sequence[TraceSpan]]:
+    after: Optional[Tuple[datetime, str]] = None
     while True:
         async with session_factory() as db:
             query = select(TraceSpan).where(*_window(project_id, since, until))
@@ -1733,11 +1908,7 @@ async def stream_export(
                 .scalars()
                 .all()
             )
-        for span in rows:
-            chunk = json.dumps(otlp_span(span), ensure_ascii=False)
-            yield (chunk if first else "," + chunk).encode("utf-8")
-            first = False
+        yield rows
         if len(rows) < page:
             break
         after = (rows[-1].trace_started_at, rows[-1].span_id)
-    yield ("]" + suffix + "]}").encode("utf-8")

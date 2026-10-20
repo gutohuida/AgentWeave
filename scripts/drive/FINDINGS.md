@@ -37124,10 +37124,10 @@ Expected: no request holds the write lock across a subprocess or a CLI's start. 
 
 ## F788 (B) -- a run's permission wait polls its request about once a second, and every poll is recorded as an `aw.request` span: 60 spans per permission prompt, 90% of a project's request traces
 
-**Status:** open 2026-10-20. Found by the trace-hub-wide slice 3 drive (scratch Hub :8027, `proj-9c510080c45f`).
+**Status:** open 2026-10-20, waiting on the operator's decision `trace-5` (`spec-queue/DECISIONS.md`): the fix contradicts trace-D4's "all agent-credential" as decided, so slice 4 built it, then reverted it. Found by the trace-hub-wide slice 3 drive (scratch Hub :8027, `proj-9c510080c45f`).
 **Source:** drive
 **Theme:** Traces
-**Ready:** yes -- the counts and the rule are below; it belongs in slice 4 (`trace-hub-wide-4-impl`), whose drive measures growth.
+**Ready:** no -- needs decision `trace-5`. The counts and the rule are below.
 **Tier:** 0
 
 Over four real Haiku turns with `acceptEdits` (8 permission prompts), the project recorded 537 `aw.request` spans. 480 of them are `GET /api/v1/agent-actions/permission-requests/{request_id}` with actor `run`: 60 per prompt. The tool server polls its pending request while it waits for the operator or the judge, and slice 1's rule (D3, `trace_requests._keep`) records **every** request made with a run credential, so each poll is kept forever (trace-D3). The operator's own polling is skipped by default for exactly this reason. The run's polling is the same kind of traffic and is not.

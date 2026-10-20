@@ -43,6 +43,7 @@ from .scheduler import init_scheduler, shutdown_scheduler
 from .subprocess_windows import no_console_kwargs
 from .task_transition_service import TransitionRefusedError
 from .trace_requests import RequestTraceMiddleware
+from .traces import install_log_handler
 
 logger = logging.getLogger(__name__)
 
@@ -633,6 +634,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         default_response_class=UTF8JSONResponse,
     )
+    # The Hub's own warnings go on the trace they happened in (everything-the-hub-does-is-in-a-
+    # trace, D7), wherever the record is emitted from.
+    install_log_handler()
 
     # CORS — origins configurable via AW_CORS_ORIGINS env var (comma-separated).
     # Default: same-origin only (empty list = browser blocks cross-origin).

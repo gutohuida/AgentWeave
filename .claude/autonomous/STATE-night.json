@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-19-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "trace-hub-wide-4-impl",
-    "next_action": "Do queue item trace-hub-wide-4-impl: slice 4 of spec/changes/everything-the-hub-does-is-in-a-trace -- D7: a logging.Handler at WARNING on the hub logger appends a redacted, 8 KiB-bounded 'log' span event to the current span (no current trace: not stored); the OTLP download gains resourceLogs (traceId/spanId) and the push posts /v1/logs. Turn test_a_warning_the_hub_logs_is_on_its_trace_and_exported_as_a_log green and drop its marker. Fix F788 test-first (trace_requests._keep skips a run's routine GET). D8: Traces list kind filter + labels, default runs (TracesSection.tsx:70), bundle rebuilt once. Then the whole-change acceptance drive (otlp_receiver.py, spans/bytes per item measured), fold the change via Hub routes on :8010, METRICS row. Log it, update STATE, commit, push.",
+    "current": "F782-F783-spec",
+    "next_action": "Do queue item F782-F783-spec: a Tier 1 change on :8010 (proj-d85a82bf4216) covering F782 (Copilot's 600 s deadline re-delivers the turn) and F783 (the turn clock runs while ask_user waits). Read both findings in scripts/drive/FINDINGS.md and grep openspec/changes/ for them first. Write requirements, scenarios and the acceptance drive, then approve_anyway. Log it, update STATE, commit, push.",
     "queue": [
         {
             "id": "trace-hub-wide-spec",
@@ -45,9 +45,9 @@
         },
         {
             "id": "trace-hub-wide-4-impl",
-            "status": "open",
+            "status": "done",
             "title": "Slice 4: WARNING+ log records on trace, OTLP logs export, redaction",
-            "detail": "Then drive whole change, measure growth, fold change via Hub routes, rebuild bundle once if UI touched. The app's Traces list now shows request traces unlabeled among runs (TracesSection.tsx:70 only labels 'worker'): add the kind filter + labels (D8), default to runs. Also F788 (B): a run's routine GET (permission-request polling, 60 spans/prompt, 90% of request spans) is skipped like the operator's unless record_reads; amend D3 at fold. Consider marking expected probe exits (merge-base --is-ancestor 1) not error.",
+            "detail": "Done iter 6: TraceLogHandler (WARNING+ on current span / run root via writer attach; lastResort kept), resourceLogs in the download, /v1/logs push, app kind filter (default Runs) + labels, bundle rebuilt. Whole drive green on :8027 into otlp_receiver: nested MCP request, job + check_run traces, warning on /v1/logs with its traceId, 0 operator polls. F788 built then reverted: contradicts trace-D4 (OPEN trace-5). Fold blocked: no traces capability, base change proposed (OPEN trace-6).",
             "model": "opus"
         },
         {
@@ -108,7 +108,10 @@
             "model": "opus"
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": [
+        "trace-5",
+        "trace-6"
+    ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. Only the day window's merge gate (day-window.md, 'The merge gate') may fast-forward master. This window never merges.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

@@ -11,13 +11,17 @@ import { useConfigStore } from '@/store/configStore'
 
 export type SpanStatus = 'unset' | 'ok' | 'error'
 
+/** A root's operation: a run, a worker call, or the Hub's own request, event or background work. */
+export type TraceOperation = 'invoke_agent' | 'chat' | 'aw.request' | 'aw.event' | 'aw.work'
+export type TraceKind = 'run' | 'worker' | 'request' | 'event' | 'work'
+
 export interface TraceSummary {
   trace_id: string
   root_span_id: string
   run_id: string | null
   name: string
-  operation: 'invoke_agent' | 'chat'
-  kind: 'run' | 'worker'
+  operation: TraceOperation
+  kind: TraceKind
   agent: string | null
   conversation_id: string | null
   task_id: string | null
@@ -57,7 +61,7 @@ export interface Span {
 
 export interface TraceDetail {
   trace_id: string
-  kind: 'run' | 'worker'
+  kind: TraceKind
   run_id: string | null
   root: Span
   /** One page, ordered by start time. `total` is the whole trace's span count. */
@@ -79,6 +83,11 @@ export interface TraceSettings {
   span_count: number
   trace_count: number
   oldest_trace_at: string | null
+  /** Record the operator's and runs' routine reads too (off: only what changed or failed). */
+  record_reads: boolean
+  spans_by_operation: Record<string, number>
+  /** Spans this Hub process could not write since it started. */
+  dropped_spans: number
 }
 
 export interface TraceSettingsInput {
@@ -91,6 +100,8 @@ export interface TraceFilters {
   run_id?: string
   task_id?: string
   conversation_id?: string
+  /** Only traces whose root is this operation. */
+  operation?: TraceOperation
   before?: string
   limit?: number
 }

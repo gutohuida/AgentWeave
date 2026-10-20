@@ -19,13 +19,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 from unittest.mock import patch
 
 import pytest
 
-from hub import project_checks, traces
+from hub import project_checks, trace_export, traces
 from hub.agent_auth import hash_run_token, mint_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Run
@@ -33,6 +34,7 @@ from hub.output_recording import record_agent_output
 from hub.utils import persist_event, short_id
 
 from .test_project_checks_run import FAIL, PASS, _project, _task_with_work
+from .test_trace_seams import _Receiver
 
 PROJECT = "proj-test"
 BASE = f"/api/v1/projects/{PROJECT}"
@@ -405,7 +407,6 @@ async def test_a_loops_firing_is_a_loop_tick_trace(app, auth_headers):
     assert tick["attributes"]["aw.job.trigger"] == "scheduled"
 
 
-@pytest.mark.xfail(strict=True, reason="trace-hub-wide slice 4 not built")
 @pytest.mark.asyncio
 async def test_a_warning_the_hub_logs_is_on_its_trace_and_exported_as_a_log(
     app, auth_headers, tmp_path
@@ -444,6 +445,73 @@ async def test_a_warning_the_hub_logs_is_on_its_trace_and_exported_as_a_log(
     ]
     assert any(record["traceId"] == check["trace_id"] for record in records)
     assert SECRET not in exported.text
+
+
+@pytest.mark.asyncio
+async def test_a_warning_a_runs_executor_logs_is_on_the_runs_root(app, auth_headers):
+    run_id = f"run-{short_id()}"
+    async with async_session_factory() as db:
+        run = Run(id=run_id, project_id=PROJECT, agent="tracer", status="running", turn_depth=0)
+        db.add(run)
+        traces.start_run(db, run, prompt="Work.", runner="claude", model=None)
+        await db.commit()
+
+    async def _executor() -> None:
+        logging.getLogger("hub.agent_trigger").warning("the runner said %s", SECRET)
+
+    await traces.within_run(PROJECT, run_id, _executor())
+    await _flush()
+
+    by_run = await app.get(f"{BASE}/traces/by-run/{run_id}", headers=auth_headers)
+    root = next(span for span in by_run.json()["spans"] if span["parent_span_id"] is None)
+    [log] = [event for event in root["events"] if event["name"] == "log"]
+    assert log["attributes"]["log.logger"] == "hub.agent_trigger"
+    assert log["attributes"]["log.body"].startswith("the runner said ")
+    assert SECRET not in by_run.text
+
+
+@pytest.mark.asyncio
+async def test_a_warning_on_work_is_pushed_to_the_logs_endpoint(app, auth_headers):
+    receiver = _Receiver()
+    try:
+        settings = await app.put(
+            f"{BASE}/traces/settings",
+            json={"otlp_endpoint": receiver.url, "export_enabled": True},
+            headers=auth_headers,
+        )
+        assert settings.status_code == 200, settings.text
+        with traces.work("spec_fold", PROJECT) as span:
+            logging.getLogger("hub.spec_fold").error("folding failed for %s", SECRET)
+        await _flush()
+        assert await trace_export.push_once() == 2  # the settings PUT's request span, the fold
+        paths = [post["path"] for post in receiver.posts]
+        assert paths == ["/v1/traces", "/v1/logs"], "the batch's log records go with its spans"
+        [record] = [
+            record
+            for resource in receiver.posts[1]["body"]["resourceLogs"]
+            for scope in resource["scopeLogs"]
+            for record in scope["logRecords"]
+        ]
+        assert record["traceId"] == span.trace_id and record["spanId"] == span.span_id
+        assert record["severityText"] == "ERROR" and record["severityNumber"] == 17
+        assert record["body"]["stringValue"].startswith("folding failed for ")
+        assert SECRET not in json.dumps(receiver.posts)
+    finally:
+        receiver.close()
+
+
+@pytest.mark.asyncio
+async def test_a_warning_with_no_trace_is_not_stored_and_still_reaches_stderr(
+    app, auth_headers, monkeypatch, capsys
+):
+    """Before the root logger is configured the Hub's warnings reach stderr through
+    `logging.lastResort` (the database line at startup); the trace handler must not swallow them."""
+    monkeypatch.setattr(logging.getLogger(), "handlers", [])
+    logging.getLogger("hub.main").warning("Hub database: opening nowhere")
+    assert "Hub database: opening nowhere" in capsys.readouterr().err
+    await _flush()
+    settings = await app.get(f"{BASE}/traces/settings", headers=auth_headers)
+    assert settings.json()["span_count"] == 0
 
 
 @pytest.mark.asyncio

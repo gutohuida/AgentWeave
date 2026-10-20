@@ -7,7 +7,9 @@ import {
   useTraceSettings,
   useTraces,
   useUpdateTraceSettings,
+  type TraceOperation,
   type TraceSettings,
+  type TraceSummary,
 } from '@/api/traces'
 import { Badge } from '@/components/common/Badge'
 import { DeleteConfirmDialog } from '@/components/common/DeleteConfirmDialog'
@@ -20,7 +22,25 @@ import { hubDate } from '@/lib/hubTime'
 import { useConfigStore } from '@/store/configStore'
 
 const DESCRIPTION =
-  'Every run is recorded as a trace: its model calls, tool calls, permission decisions and waits. Export them as OTLP, or send them to a collector as they finish.'
+  'Every run is recorded as a trace: its model calls, tool calls, permission decisions and waits. So is what the Hub does around them: the requests that changed or failed, its events, its background work and the commands it ran, and its warnings. Export them as OTLP, or send them to a collector as they finish.'
+
+/** The list's kinds, runs first: the Hub's own requests, events and work outnumber them. */
+const KINDS: { operation: TraceOperation | undefined; label: string }[] = [
+  { operation: 'invoke_agent', label: 'Runs' },
+  { operation: 'chat', label: 'Workers' },
+  { operation: 'aw.request', label: 'Requests' },
+  { operation: 'aw.work', label: 'Work' },
+  { operation: 'aw.event', label: 'Events' },
+  { operation: undefined, label: 'All' },
+]
+
+const KIND_LABEL: Record<TraceSummary['kind'], string | null> = {
+  run: null,
+  worker: 'worker',
+  request: 'request',
+  event: 'event',
+  work: 'work',
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const RECENT_LIMIT = 10
@@ -37,24 +57,53 @@ function rangeSentence(since: string, until: string): string {
 }
 
 function RecentTraces() {
+  const [operation, setOperation] = useState<TraceOperation | undefined>('invoke_agent')
   const [before, setBefore] = useState<string | undefined>(undefined)
-  const { data, isLoading, error } = useTraces({ limit: RECENT_LIMIT, before })
+  const { data, isLoading, error } = useTraces({ limit: RECENT_LIMIT, before, operation })
+  const filter = (
+    <div className="mb-2 flex flex-wrap gap-1" role="group" aria-label="Kind of trace">
+      {KINDS.map((kind) => (
+        <Button
+          key={kind.label}
+          type="button"
+          size="xs"
+          variant={operation === kind.operation ? 'primary' : 'outline'}
+          aria-pressed={operation === kind.operation}
+          data-testid={`trace-kind-${kind.operation ?? 'all'}`}
+          onClick={() => {
+            setOperation(kind.operation)
+            setBefore(undefined)
+          }}
+        >
+          {kind.label}
+        </Button>
+      ))}
+    </div>
+  )
+  let body
   if (isLoading) {
-    return <div className="space-y-1.5">{[0, 1, 2].map((row) => <div key={row} className="skeleton h-5 w-80" />)}</div>
-  }
-  if (error) {
-    return (
+    body = <div className="space-y-1.5">{[0, 1, 2].map((row) => <div key={row} className="skeleton h-5 w-80" />)}</div>
+  } else if (error) {
+    body = (
       <p role="alert" className="text-xs" style={{ color: 'var(--red)' }}>
         {readableApiError(error, 'The traces could not be listed.')}
       </p>
     )
+  } else if ((data?.traces ?? []).length === 0) {
+    body = <p className="text-xs" style={{ color: 'var(--text-3)' }}>{before ? 'No older traces.' : 'No traces of this kind yet.'}</p>
+  }
+  if (body) {
+    return (
+      <div className="w-full max-w-[520px]">
+        {filter}
+        {body}
+      </div>
+    )
   }
   const traces = data?.traces ?? []
-  if (traces.length === 0) {
-    return <p className="text-xs" style={{ color: 'var(--text-3)' }}>{before ? 'No older traces.' : 'No traces yet.'}</p>
-  }
   return (
     <div className="w-full max-w-[520px]" data-testid="recent-traces">
+      {filter}
       <ul className="space-y-0.5">
         {traces.map((trace) => {
           const duration = trace.end_time
@@ -67,7 +116,7 @@ function RecentTraces() {
               </span>
               <span className="min-w-0 flex-1 truncate" style={{ color: 'var(--text)' }} title={trace.name}>
                 {trace.agent ?? trace.name}
-                {trace.kind === 'worker' ? <span style={{ color: 'var(--text-3)' }}> · worker</span> : null}
+                {KIND_LABEL[trace.kind] ? <span style={{ color: 'var(--text-3)' }}> · {KIND_LABEL[trace.kind]}</span> : null}
               </span>
               {trace.status === 'error' && <Badge variant="danger">error</Badge>}
               <span className="shrink-0 tabular-nums" style={{ color: 'var(--text-2)' }}>
@@ -205,9 +254,14 @@ export function TracesSection() {
           {settings.oldest_trace_at && (
             <div className="mt-0.5" style={{ color: 'var(--text-3)' }}>Oldest {when(settings.oldest_trace_at)}</div>
           )}
+          {settings.dropped_spans > 0 && (
+            <div className="mt-0.5" style={{ color: 'var(--red)' }} data-testid="trace-dropped">
+              {settings.dropped_spans.toLocaleString()} span{settings.dropped_spans === 1 ? '' : 's'} could not be written since the Hub started.
+            </div>
+          )}
         </div>
       </SettingsRow>
-      <SettingsRow label="Recent traces" description="The newest runs and background calls. Open one to see its spans.">
+      <SettingsRow label="Recent traces" description="The newest traces of one kind. Open one to see its spans.">
         <RecentTraces />
       </SettingsRow>
 

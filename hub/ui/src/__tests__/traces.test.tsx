@@ -13,6 +13,7 @@ import { useConfigStore } from '@/store/configStore'
 import { TraceButton } from '@/components/traces/TraceDrawer'
 import { buildWaterfall, traceExtent } from '@/components/traces/traceModel'
 import { parseHeaderLines } from '@/components/environment/traceHeaders'
+import { TracesSection } from '@/components/environment/TracesSection'
 
 function span(partial: Partial<Span> & Pick<Span, 'span_id' | 'start_time'>): Span {
   return {
@@ -203,5 +204,77 @@ describe('TraceButton', () => {
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('offset=500'))).toBe(true),
     )
+  })
+})
+
+describe('TracesSection recent traces', () => {
+  const settings = {
+    otlp_endpoint: null,
+    otlp_header_names: [],
+    export_enabled: false,
+    enabled_at: null,
+    last_export_at: null,
+    last_error: null,
+    exported_spans: 0,
+    span_count: 3,
+    trace_count: 2,
+    oldest_trace_at: null,
+    record_reads: false,
+    spans_by_operation: { invoke_agent: 1, 'aw.request': 2 },
+    dropped_spans: 0,
+  }
+  const summary = (partial: Record<string, unknown>) => ({
+    root_span_id: 's',
+    run_id: null,
+    agent: null,
+    conversation_id: null,
+    task_id: null,
+    status: 'unset',
+    status_message: null,
+    start_time: '2026-10-20T01:00:00+00:00',
+    end_time: '2026-10-20T01:00:01+00:00',
+    ended: true,
+    span_count: 1,
+    ...partial,
+  })
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock)
+    useConfigStore.setState({
+      apiKey: 'aw_live_test',
+      hubUrl: 'http://hub.test',
+      isConfigured: true,
+      selectedProjectId: 'proj-a',
+    })
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/traces/settings')) return { ok: true, status: 200, json: async () => settings }
+      const operation = new URL(url).searchParams.get('operation')
+      const traces =
+        operation === 'aw.request'
+          ? [summary({ trace_id: 'tr', name: 'POST /api/v1/projects/{project_id}/tasks', operation, kind: 'request' })]
+          : [summary({ trace_id: 'tw', name: 'invoke_agent builder', operation: 'invoke_agent', kind: 'run', run_id: 'run-1', agent: 'builder' })]
+      return { ok: true, status: 200, json: async () => ({ traces, next_before: null }) }
+    })
+  })
+  afterEach(() => {
+    cleanup()
+    fetchMock.mockReset()
+    vi.unstubAllGlobals()
+  })
+
+  it("lists runs by default and the Hub's own requests, labelled, when asked", async () => {
+    render(<TracesSection />, { wrapper })
+    expect(await screen.findByText('builder')).toBeInTheDocument()
+    const listed = () => fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => /\/traces\?/.test(url))
+    expect(listed()[0]).toContain('operation=invoke_agent')
+    expect(screen.getByTestId('trace-kind-invoke_agent')).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByTestId('trace-kind-aw.request'))
+    expect(await screen.findByText(/POST \/api\/v1\/projects/)).toBeInTheDocument()
+    expect(screen.getByText('· request')).toBeInTheDocument()
+    expect(listed().slice(-1)[0]).toContain('operation=aw.request')
+
+    fireEvent.click(screen.getByTestId('trace-kind-all'))
+    await waitFor(() => expect(listed().slice(-1)[0]).not.toContain('operation='))
   })
 })

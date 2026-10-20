@@ -7,7 +7,8 @@ on the next pass with its error shown in the project's trace settings.
 
 Off by default (trace-D1): only a project whose `trace_settings` row is enabled and names an
 endpoint is pushed, and only spans that ended after it was enabled. OTLP/HTTP JSON is one POST to
-`<endpoint>/v1/traces`; it is sent with the standard library rather than an SDK or a new HTTP
+`<endpoint>/v1/traces`, and the Hub's log records on those spans one POST to `<endpoint>/v1/logs`
+(`everything-the-hub-does-is-in-a-trace`, D7); they are sent with the standard library rather than an SDK or a new HTTP
 dependency, in a worker thread, with a short timeout.
 """
 
@@ -49,6 +50,14 @@ def traces_url(endpoint: str) -> str:
     return base if base.endswith("/v1/traces") else f"{base}/v1/traces"
 
 
+def logs_url(endpoint: str) -> str:
+    """`<endpoint>/v1/logs` beside `/v1/traces` (D7), from an endpoint given either way."""
+    base = endpoint.rstrip("/")
+    if base.endswith("/v1/traces"):
+        base = base[: -len("/v1/traces")]
+    return f"{base}/v1/logs"
+
+
 def _post(url: str, body: bytes, headers: Dict[str, str]) -> int:
     request = urllib.request.Request(  # noqa: S310 -- an operator-configured http(s) endpoint
         url,
@@ -83,12 +92,24 @@ async def push_project(project_id: str) -> int:
         body = json.dumps(traces.otlp_payload(project_id, spans), ensure_ascii=False).encode(
             "utf-8"
         )
+        records = traces.otlp_log_records(spans)
+        logs = (
+            json.dumps(traces.otlp_logs_payload(project_id, records), ensure_ascii=False).encode(
+                "utf-8"
+            )
+            if records
+            else None
+        )
         ids = [span.span_id for span in spans]
     error: Optional[str] = None
     try:
-        status = await asyncio.to_thread(_post, traces_url(endpoint), body, headers)
-        if status >= 300:
-            error = f"the endpoint answered {status}"
+        # The batch's log records go with its spans: both accepted, or the batch is retried.
+        posts = [(traces_url(endpoint), body)] + ([(logs_url(endpoint), logs)] if logs else [])
+        for url, payload in posts:
+            status = await asyncio.to_thread(_post, url, payload, headers)
+            if status >= 300:
+                error = f"the endpoint answered {status}"
+                break
     except urllib.error.HTTPError as exc:
         error = f"the endpoint answered {exc.code}"
     except Exception as exc:  # noqa: BLE001 -- recorded for the operator, retried next pass

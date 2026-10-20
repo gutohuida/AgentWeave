@@ -17,9 +17,16 @@ trace routes.
       checkout's release are each an `aw.work` trace naming its kind, holding the git and check
       commands they ran as `aw.command` spans; the run's own git is in its trace.
 
+  whole (slice 4, the acceptance drive): with the project pushing to `otlp_receiver.py`, a real
+      Haiku turn calls a Hub MCP tool, a job fires a real turn, a check run really fails (its
+      checkout directory is a file) and warns, and the app polls for a minute. The receiver must
+      get the nested request, the job and check_run traces and the warning on `/v1/logs` with its
+      trace id, and no poll; spans and bytes per kind are measured from the database.
+
 Usage (after `e2e.py hub-up <profile> <port>` and `e2e.py setup <name>`):
   py -3.11 scripts/drive/d1020_hub_wide_trace_drive.py <project-id> [step]
-Steps: all (default), requests, nested, events, work.
+  py -3.11 scripts/drive/d1020_hub_wide_trace_drive.py <project-id> whole <receiver-url> <out.jsonl>
+Steps: all (default), requests, nested, events, work, whole.
 """
 
 from __future__ import annotations
@@ -294,6 +301,188 @@ def work(project: str) -> None:
     print("  settings:", json.dumps({k: settings.get(k) for k in ("dropped_spans", "spans_by_operation")}))
 
 
+def _wait_check_run(task_id: str) -> list:
+    deadline = time.time() + 120
+    rows: list = []
+    while time.time() < deadline:
+        rows = e2e.ro().execute(
+            "select state, error from task_check_runs where task_id=? order by started_at",
+            (task_id,),
+        ).fetchall()
+        if rows and rows[-1][0] != "running":
+            break
+        time.sleep(2)
+    return [(r[0], r[1]) for r in rows]
+
+
+def _attrs(item: dict) -> dict:
+    return {a["key"]: next(iter(a["value"].values())) for a in item.get("attributes", [])}
+
+
+def whole(project: str, receiver: str, received: str) -> None:
+    since = _now()
+    out = pathlib.Path(received)
+    start_line = len(out.read_text(encoding="utf-8").splitlines()) if out.exists() else 0
+    e2e.call(
+        "PUT",
+        f"/projects/{project}/traces/settings",
+        {"otlp_endpoint": receiver, "export_enabled": True, "record_reads": False},
+    )
+
+    print("\n[9] a real Haiku turn calling a Hub MCP tool")
+    nested(project)
+
+    print("\n[10] a job fires a real Haiku turn")
+    code, job = e2e.request(
+        "POST",
+        f"/projects/{project}/jobs",
+        {
+            "name": "trace drive job",
+            "agent": AGENT,
+            "message": "Reply with the single word: done. Do not ask anything.",
+            "cron": "0 0 1 1 *",
+        },
+    )
+    print(f"  created -> {code} {job.get('id')}")
+    try:
+        code, fired = e2e.request("POST", f"/projects/{project}/jobs/{job['id']}/run")
+        print(f"  run -> {code} {json.dumps(fired)[:200]}")
+        deadline = time.time() + 360
+        row = None
+        while time.time() < deadline:
+            row = e2e.ro().execute(
+                "select id, status from job_runs where job_id=? order by fired_at desc",
+                (job["id"],),
+            ).fetchone()
+            if row and row[1] not in ("fired", "in_progress"):
+                break
+            time.sleep(3)
+        print("  job run:", tuple(row) if row else None)
+    finally:
+        code, _ = e2e.request("PATCH", f"/projects/{project}/jobs/{job['id']}", {"enabled": False})
+        print(f"  job disabled -> {code}")
+
+    print("\n[11] a check run that really fails: its checkout directory is a file")
+    project_dir = pathlib.Path(
+        e2e.ro()
+        .execute("select working_directory from projects where id=?", (project,))
+        .fetchone()[0]
+    )
+    checks_dir = project_dir / ".agentweave" / "checks"
+    aside = checks_dir.with_name("checks.drive-aside")
+    settings = e2e.call("GET", f"/projects/{project}/settings")
+    settings["main_branch"] = "master"
+    settings["checks"] = CHECKS
+    e2e.call("PUT", f"/projects/{project}/settings", settings)
+    task_id = e2e.call(
+        "POST", f"/projects/{project}/tasks", {"title": "Warn on a trace", "assignee": AGENT}
+    )["id"]
+    run = e2e.cmd_turn(
+        project,
+        AGENT,
+        f"Create {task_id}.txt in your workspace containing the line: warned. Commit it with git "
+        "(message: warn), then reply DONE. Do not ask anything.",
+        task=task_id,
+        fresh=True,
+        perm="acceptEdits",
+    )
+    print("  turn:", e2e.wait_for(run, 6))
+    if checks_dir.is_dir():
+        checks_dir.rename(aside)
+    checks_dir.write_text("not a directory: the drive's fault for the check run\n", encoding="utf-8")
+    try:
+        code, _ = e2e.request(
+            "PATCH", f"/projects/{project}/tasks/{task_id}", {"status": "completed"}
+        )
+        print(f"  completed -> {code}")
+        print("  check runs:", _wait_check_run(task_id))
+    finally:
+        checks_dir.unlink()
+        if aside.is_dir():
+            aside.rename(checks_dir)
+
+    print("\n[12] the app polls for a minute")
+    reads = ("/tasks", "/agents", "/traces/settings", "/manager/jobs")
+    polls = 0
+    end = time.time() + 60
+    while time.time() < end:
+        for path in reads:
+            e2e.request("GET", f"/projects/{project}{path}")
+            polls += 1
+        time.sleep(2)
+    print(f"  routine reads made: {polls}")
+    time.sleep(SETTLE + 8)  # the writer's pass, then a push pass
+
+    print("\n[13] what the receiver got")
+    lines = out.read_text(encoding="utf-8").splitlines()[start_line:]
+    posts = [json.loads(line) for line in lines]
+    paths = [post["path"] for post in posts]
+    spans = [
+        span
+        for post in posts
+        if post["path"].endswith("/v1/traces")
+        for resource in post["body"]["resourceSpans"]
+        for scope in resource["scopeSpans"]
+        for span in scope["spans"]
+    ]
+    logs = [
+        record
+        for post in posts
+        if post["path"].endswith("/v1/logs")
+        for resource in post["body"]["resourceLogs"]
+        for scope in resource["scopeLogs"]
+        for record in scope["logRecords"]
+    ]
+    print(
+        f"  posts: {paths.count('/v1/traces')} to /v1/traces, {paths.count('/v1/logs')} to "
+        f"/v1/logs; {len(spans)} spans, {len(logs)} log records, "
+        f"{sum(post['bytes'] for post in posts)} bytes"
+    )
+    by_id = {span["spanId"]: span for span in spans}
+    tool_ids = {
+        span["spanId"]
+        for span in spans
+        if _attrs(span).get("gen_ai.operation.name") == "execute_tool"
+    }
+    requests_ = [span for span in spans if "http.request.method" in _attrs(span)]
+    nested_ = [span for span in requests_ if span.get("parentSpanId") in tool_ids]
+    print("  request spans pushed:", len(requests_))
+    print("  request spans nested under a tool span:", [s["name"] for s in nested_])
+    kinds = sorted({_attrs(s)["aw.work.kind"] for s in spans if "aw.work.kind" in _attrs(s)})
+    print("  work kinds pushed:", kinds)
+    check_traces = {s["traceId"] for s in spans if _attrs(s).get("aw.work.kind") == "check_run"}
+    for record in logs:
+        a = _attrs(record)
+        print(
+            f"  log {record['severityText']} {a.get('log.logger')}: "
+            f"{record['body']['stringValue'][:70]!r} exception={a.get('exception.type')} "
+            f"on a check_run trace={record['traceId'] in check_traces} "
+            f"its span pushed={record['spanId'] in by_id}"
+        )
+    routine = [
+        s
+        for s in requests_
+        if _attrs(s).get("aw.actor") == "operator"  # a run's reads are recorded (trace-D4; F788)
+        and _attrs(s).get("http.request.method") == "GET"
+        and int(_attrs(s).get("http.response.status_code", 0)) < 400
+        and int(s["endTimeUnixNano"]) - int(s["startTimeUnixNano"]) < 1_000_000_000
+        and not s.get("events")
+    ]
+    print("  the operator's routine GETs pushed (must be 0):", len(routine), sorted({s["name"] for s in routine}))
+
+    print("\n[14] growth: spans and stored bytes per kind since the drive began")
+    rows = e2e.ro().execute(
+        "select operation, count(*), sum(length(attributes) + length(events)) from trace_spans "
+        "where project_id=? and start_time >= ? group by operation order by 2 desc",
+        (project, since.replace("T", " ").split("+")[0]),
+    ).fetchall()
+    for operation, count, size in rows:
+        size = size or 0
+        print(f"  {operation:<20} spans={count:<6} bytes={size:<9} per span={size // count}")
+    settings = e2e.call("GET", f"/projects/{project}/traces/settings")
+    print("  dropped:", settings.get("dropped_spans"), "last export error:", settings.get("last_error"))
+
+
 def main() -> None:
     project = sys.argv[1]
     step = sys.argv[2] if len(sys.argv) > 2 else "all"
@@ -305,7 +494,9 @@ def main() -> None:
         events(project)
     if step in ("work", "all"):
         work(project)
-    if step not in ("requests", "nested", "events", "work", "all"):
+    if step == "whole":
+        whole(project, sys.argv[3], sys.argv[4])
+    if step not in ("requests", "nested", "events", "work", "whole", "all"):
         raise SystemExit(f"unknown step {step}")
 
 
