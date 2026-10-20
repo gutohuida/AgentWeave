@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0138"
+HEAD_REVISION = "0139"
 
 
 # ---------------------------------------------------------------------------
@@ -5783,3 +5783,57 @@ def test_migration_0135_is_a_no_op_without_the_tables(tmp_path) -> None:
         conn.commit()
     _upgrade_to(db_url, "0135")
     _downgrade_to(db_url, "0134")
+
+
+# ---------------------------------------------------------------------------------------------
+# 0139 -- vault_readers (`the-vault-names-who-read-an-entry`, F836). A new table only: it starts
+# empty, vault_fetches' counts are untouched, and the downgrade drops it and nothing else.
+# ---------------------------------------------------------------------------------------------
+
+
+def test_migration_vault_readers_creates_the_table_and_its_downgrade_drops_only_it(
+    tmp_path,
+) -> None:
+    db_file = tmp_path / "readers.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        before = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        conn.execute("DROP TABLE vault_readers")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0138')")
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p', 'p', '2026-01-01T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO vault_fetches (project_id, entry_id, count, last_fetched_at) "
+            "VALUES ('p', 'src-aaaaaaaaaaaa', 4, '2026-01-01T00:00:00Z')"
+        )
+        conn.commit()
+
+    _upgrade_to(db_url, "0139")
+
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert tables == before | {"alembic_version"}
+        assert conn.execute("SELECT count(*) FROM vault_readers").fetchone() == (0,)
+        info = {r[1]: r for r in conn.execute("PRAGMA table_info(vault_readers)")}
+        assert set(info) == {"project_id", "entry_id", "agent", "count", "last_read_at"}
+        assert (info["project_id"][5], info["entry_id"][5], info["agent"][5]) == (1, 2, 3)
+        conn.execute(
+            "INSERT INTO vault_readers (project_id, entry_id, agent, last_read_at) "
+            "VALUES ('p', 'src-aaaaaaaaaaaa', 'Builder', '2026-01-01T00:00:00Z')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO vault_readers (project_id, entry_id, agent, last_read_at) "
+                "VALUES ('p', 'src-aaaaaaaaaaaa', 'Builder', '2026-01-01T00:00:00Z')"
+            )
+        conn.commit()
+
+    _downgrade_to(db_url, "0138")
+
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert conn.execute("SELECT count FROM vault_fetches").fetchone() == (4,)
+    assert tables == (before - {"vault_readers"}) | {"alembic_version"}

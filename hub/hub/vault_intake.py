@@ -182,6 +182,19 @@ def _short(name: str) -> str:
     return name if len(name) <= vault.MAX_NAME_CHARS else name[-vault.MAX_NAME_CHARS :]
 
 
+def _named(file: Path, folder: Optional[Path], within: Sequence[Path]) -> str:
+    """The name a file is listed by: its path inside the nearest of *within* (the caller's
+    workspace, the project directory) that holds it, so two `README.md` files stay told apart
+    (F835); else, for a folder's file, the folder's name and the path beneath it; else its name."""
+    holders = [root for root in within if _inside(file, (root,))]
+    if holders:
+        nearest = max(holders, key=lambda root: len(root.parts))
+        return _short(file.relative_to(nearest).as_posix())
+    if folder is not None:
+        return _short(f"{folder.name}/{file.relative_to(folder).as_posix()}")
+    return _short(file.name)
+
+
 def _walk(folder: Path) -> List[Path]:
     """The files under *folder*, sorted, leaving out hidden names (`.git`, `.agentweave`, ...)."""
     found: List[Path] = []
@@ -195,9 +208,11 @@ def _walk(folder: Path) -> List[Path]:
     return found
 
 
-def expand(paths: Sequence[str], reach: Reach) -> Batch:
+def expand(paths: Sequence[str], reach: Reach, within: Sequence[Path] = ()) -> Batch:
     """Every file *paths* reach, in their order (a folder's files sorted, recursively), each one
-    checked against *reach* and its extension. `IntakeError` past MAX_BATCH_FILES."""
+    checked against *reach* and its extension, and named by `_named` against *within* plus the
+    reach's bases. `IntakeError` past MAX_BATCH_FILES."""
+    named_within = [*reach.bases, *(Path(root).resolve() for root in within)]
     if not paths:
         raise IntakeError("Name at least one file or folder.")
     batch = Batch()
@@ -217,7 +232,7 @@ def expand(paths: Sequence[str], reach: Reach) -> Batch:
                 item = Item(
                     given=given,
                     path=real,
-                    name=_short(f"{located.name}/{file.relative_to(located).as_posix()}"),
+                    name=_named(file.resolve(), located, named_within),
                 )
                 if reach.roots is not None and not _inside(real, reach.roots):
                     item.refused = f"{file} resolves to {real}, outside {reach.described}."
@@ -225,7 +240,7 @@ def expand(paths: Sequence[str], reach: Reach) -> Batch:
                     item.media_type, item.refused = _kind(file)
                 batch.items.append(item)
         else:
-            item = Item(given=given, path=located, name=_short(located.name))
+            item = Item(given=given, path=located, name=_named(located, None, named_within))
             item.media_type, item.refused = _kind(located)
             batch.items.append(item)
         reached = sum(1 for item in batch.items if item.path is not None)

@@ -64,6 +64,7 @@ from hub.db.models import (
     TraceSpan,
     TurnUsage,
     VaultFetch,
+    VaultReader,
     VaultSettings,
     WorkerInvocation,
     WorkspaceFingerprint,
@@ -115,6 +116,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "manager_jobs",
     "vault_settings",
     "vault_fetches",
+    "vault_readers",
     "trace_spans",
     "trace_settings",
     "event_logs",
@@ -292,6 +294,9 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
         )
     )
     session.add(VaultFetch(project_id=project_id, entry_id=f"entry-{tag}", count=2))
+    session.add(
+        VaultReader(project_id=project_id, entry_id=f"entry-{tag}", agent=f"agent-{tag}", count=2)
+    )
     session.add(AgentHeartbeat(id=f"heartbeat-{tag}", project_id=project_id, agent=f"agent-{tag}"))
     session.add(
         AgentOutput(id=f"output-{tag}", project_id=project_id, agent=f"agent-{tag}", content="hi")
