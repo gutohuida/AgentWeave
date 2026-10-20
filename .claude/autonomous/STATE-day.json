@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T17:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-10-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-checkpoints-sweep",
-    "next_action": "Run 'sweep-checkpoints-sweep': Checkpoints x Accounting & allowance. Night-touched: checkpoint files changed list includes files the agent committed itself; git reads UTF-8 with unquoted paths (F775/F777/F760 -- the recheck drives the fix; this drives the row). Checkpoints sheet, cut over once, grants. Then per-conversation usage, budget exhaustion via an operator turn (F456), quiet hours. Bind agents to claude-haiku-4-5-20251001.",
+    "current": "sweep-loops-sweep",
+    "next_action": "Run 'sweep-loops-sweep': Jobs & loops x Flows & review x Resilience. Never swept in a day log: a loop that fires/claims/drains/stops both endings, Run's held reason, waiting_reason firing; a flow with parallel firing and a verdict withdrawing waiting reviews; kill the Hub mid-run and restart, concurrent triggers (F349), failure injection. Also a loop firing on a spent token budget (left from the checkpoints sweep). Bind agents to claude-haiku-4-5-20251001.",
     "queue": [
         {
             "id": "plan-review",
@@ -65,7 +65,7 @@
         },
         {
             "id": "sweep-checkpoints-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Checkpoints x Accounting & allowance",
             "detail": "Night-touched: checkpoint files changed list includes files the agent committed itself; git reads UTF-8 with unquoted paths (F775/F777/F760 -- the recheck drives the fix; this drives the row). Checkpoints sheet, cut over once, grants. Then per-conversation usage, budget exhaustion via an operator turn (F456), quiet hours."
         },

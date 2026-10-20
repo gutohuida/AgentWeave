@@ -37501,3 +37501,67 @@ Expected: (1) 422 "agents must be an object of name -> config"; (2) the answer c
 With `eps` archived, alpha's `request_agent {"name": "eps", "template": "beta"}` came back `Hub rejected POST /agents/request (409): Agent 'eps' already exists` (`hub/hub/api/v1/agents.py:2734`). `POST /agents {"name": "eps"}` gives `409 "Agent name 'eps' already exists in this project"` (`:646`). eps is in no picker, so an operator or agent that looks for it finds nothing to act on. The design keeps archived names taken on purpose (F465's note: "a name is never reused"), and the sentence should say so. The budget refusal beside it already reads well: "Project agent budget exhausted (4/4) ... Ask the operator to archive an agent ... or to raise the agent budget in Settings."
 
 Expected: "'eps' belongs to an archived agent; a name is never reused. Unarchive eps, or choose another name." on both doors. Failing test: in `hub/tests/test_request_agent*.py`, archive then request the same name, asserting the 409 detail contains "archived". Seam: Agents.
+
+## F814 (B) -- with the token budget spent, the operator's own message waits "Queued — token budget exhausted" behind an agent's budget-held message, so "operator messages can still run" does not hold
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150, profile c1020, real Haiku turns, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 0
+
+`PATCH /accounting/budget {"token_budget": 1000}` (used 1,004,695, `exhausted: true`). beta's operator turn (`run-07b58ed50efd`, `budget_note` returned, as F456 promises) sent alpha a message. That entry (`entry-3572d64d8b7d`, `origin_type: agent`, sequence 6, alpha's peer conversation) was held, correctly, `waiting_reason: "token budget exhausted"`. The operator then typed "Reply with the single word PRED." into one of alpha's own conversations from the composer. The screen said **"Queued — token budget exhausted"**. `entry-8e67483040e9` (`origin_type: operator`, sequence 7) stayed `queued`, and no run started until the budget was cleared (`PATCH {"token_budget": null}`). Then both drained (`run-2b0f9ff394ca`, `run-919f757fb747` "PRED"). `BudgetExhaustionNotice.tsx:12` and the trigger's own `budget_note` tell the operator that operator messages still run.
+
+Cause: `schedule_agent` (`hub/hub/turn_scheduler.py:456`) takes `select_turn`'s oldest eligible entry, here the autonomous one in another conversation. `initiator` (`:476`) is computed from that head only, so the budget gate (`:492-501`) holds the whole agent. The provider-allowance hold just above (`:477-490`) already handles this case: "their message can sit in a conversation behind an autonomous head", via `operator_would_probe(entries, hold)`. The budget gate has no such case. **Continue** on the held peer conversation does nothing either: "start it without sending a message" answers `started: false`, "Not started — token budget exhausted" (`POST /conversations/{id}/continue`). That one is arguably by design (the entry is autonomous), but the control still offers it.
+
+Expected: with the budget spent, an operator entry anywhere in the agent's queue is the turn that runs (select the operator-controlled turn first, as the allowance path probes with operator input), and the autonomous head stays held. Failing test: in `hub/tests/test_a_budget_passed_over_is_said.py` (or a sibling), queue an autonomous entry in conversation A, exhaust the budget, then `POST /agent/trigger` as the operator into conversation B. Assert that a run starts for B, and that A's entry is still `queued` with "token budget exhausted". Seam: Accounting & allowance x Inbound queue & messages (the scheduler).
+
+## F815 (C) -- an agent's `send_message` while the token budget is spent answers plain success, so the sender waits for a reply that cannot come
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150).
+**Source:** drive
+**Theme:** Inbound queue & messages
+**Ready:** yes
+**Tier:** 0
+
+With the budget spent (see F814), beta's `send_message {"to_agent": "alpha", ...}` returned `{"ok": true, "result": {"success": true, "message_id": "msg-f7cb9fe5754d"}}` (the tool result in `agent_outputs` of `run-07b58ed50efd`). beta replied "Message sent to alpha — waiting for their one-word reply". alpha's turn was held "token budget exhausted" until the operator raised the budget. The two other holds already tell the sender: hop budget (`held_by_hop_budget` + `delivery_note`, F361) and no runner (`held: "no_runner"`, `no_runner_note`, F623; `hub/hub/api/v1/messages.py:47-70`, `hub/hub/mcp_server.py:305-323`). A spent token budget is the third hold, and the only one that says nothing.
+
+Expected: `create_message_for_actor` returns a `Held("token_budget", note)` when the project's budget is exhausted, since the recipient's turn would be autonomous. Suggested note: "Recorded as msg-…, but not delivered yet: the project's token budget is spent, so alpha's turn waits until the operator raises it. Do not tell anyone it was delivered; if it matters now, ask the operator with ask_user." The tool passes it through as it does the others. Failing test: beside the F623 test (messages), with the budget exhausted, `POST /agent-actions/messages` returns `held == "token_budget"` and a `delivery_note` naming the budget. Seam: Inbound queue & messages x Accounting & allowance.
+
+## F816 (C) -- unarchiving a conversation that was cut over reopens it as a live line of work: no notice, a working composer on the old session, while the successor holds the same work
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Checkpoints
+**Ready:** yes
+**Tier:** 0
+
+`POST /checkpoints/ckpt-8a3375a6ae49/cutover` -> 200: successor `conv-1dbec82e6c34`, predecessor `conv-5bf3fe5c7c84` archived. `POST /agent/alpha/conversations/conv-5bf3fe5c7c84/unarchive` (`hub/hub/api/v1/agent_chat.py:659`) -> 200 with the plain conversation. Nothing in the body says it was handed over, and nothing was refused. A second cutover and a Checkpoint now on it are refused correctly, naming the successor (F716 holds). On screen the predecessor looks like any open conversation. There is no "continued in …" notice, and its composer is live. The Checkpoints sheet says only "Probe: passed · carried into a new conversation" (`CheckpointsPanel.tsx:47`), without naming or linking the conversation. A message typed there ran a real turn on the predecessor's old provider session (`run-919f757fb747`, reply "PRED"). That leaves two open conversations for one line of work: the checkpoint went to one, and the other keeps the full old context.
+
+Expected: either unarchive of a handed-over conversation is refused, naming the successor ("conv-… was cut over to conv-…; continue there"; `checkpoint_cutover.handover_of` already answers it), or it reopens read-only with a notice linking the successor. The sheet's "carried into a new conversation" should link `cut_over_to_conversation_id`. Failing test: in `hub/tests/test_checkpoint_cutover.py`, cut over, then unarchive the predecessor. Assert a 409 naming the successor (or, if reopening is kept, a `handed_over_to` field and a refused trigger). Seam: Checkpoints x Conversations & composer.
+
+## F817 (C) -- a failed Checkpoint now clears the conversation's checkpoint warning: after a reload the offer and the failure are both gone
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150, failure injected with an unauthenticated Codex checkpoint runner, Chromium).
+**Source:** drive
+**Theme:** Checkpoints
+**Ready:** yes
+**Tier:** 0
+
+The project's `checkpoint_runner_id` was pointed at a Codex runner that cannot run here. alpha's peer conversation `conv-bcf112b0ce9b` showed the threshold banner ("This conversation has reached its checkpoint threshold. Nothing has been written yet — checkpoint now, or dismiss this and keep working."). Pressing **Checkpoint now** -> `POST /conversations/{id}/checkpoint` 201 with `status: "unwritten"` and `generation_error: "exited 1: Reading additional input from stdin..."`. The screen showed "Checkpoint failed: exited 1: …" in a toast. In the database `checkpoint_warning` went from `due` to NULL. After a reload, the banner is gone, no failure is shown, and only the header's Checkpoint control remains (`testbed/ui-judge/s1020-c-reload/120418/failed-reloaded.png`). `take_checkpoint` (`hub/hub/api/v1/checkpoints.py:256`) clears `due`/`final`/`dismissed` whatever `checkpoint.status` came back. Its comment says "the warning has been answered by doing the thing it asked about", which is false for `unwritten`. F540's failure banner covers only an *automatic* checkpoint, so an operator's failed press leaves no trace on screen.
+
+Also: the error is `hub/hub/worker.py:304`'s *last* stderr line, which for Codex is its "Reading additional input from stdin..." banner, not a cause. That wording is general, but Codex is undrivable here, so its real stderr was not read.
+
+Expected: clear the warning only when the checkpoint is `ready`; an `unwritten` press leaves `due` (or `final`) in place, so the banner still offers Checkpoint now and can show the failure. Failing test: in `hub/tests/test_checkpoint*.py`, a worker stub that exits non-zero on a conversation with `checkpoint_warning = "due"`; after `POST .../checkpoint`, assert `status == "unwritten"` and the warning is still `"due"`. Seam: Checkpoints (operator press) x Runners (a failing worker).
+
+## F818 (D) -- the dismiss refusal tells a conversation far past its threshold that it "has not reached its threshold"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150).
+**Source:** drive
+**Theme:** Checkpoints
+**Ready:** yes
+**Tier:** 0
+
+The successor `conv-1dbec82e6c34` was at 38,493 tokens against an 8,000-token threshold. Its warning had been cleared by a Checkpoint now. `POST /conversations/conv-1dbec82e6c34/dismiss-checkpoint-warning` -> 409 "This conversation has no checkpoint warning to dismiss: it has not reached its threshold. …" (`hub/hub/api/v1/checkpoints.py:320`). The refusal's reason is wrong for this case. The conversation has no warning because a checkpoint was just taken, or because nothing new happened since.
+
+Expected: word it from the state: "This conversation has no checkpoint warning showing, so there is nothing to dismiss; a dismissal answers a warning that is showing." Failing test: dismiss on a conversation whose usage is past the threshold and whose warning is NULL; assert the detail does not say "has not reached". Seam: Checkpoints.
