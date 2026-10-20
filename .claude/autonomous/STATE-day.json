@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T17:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "night-recheck-drive",
-    "next_action": "Run 'night-recheck-drive': re-drive F760, F774, F775, F777, F782, F783, F784, F785, F786 live on a scratch Hub from source (port 8110+, fresh testbed DB, haiku), each through the path its finding names; log CONFIRMED/REOPENED F<n>; reopen any fix that does not fire.",
+    "current": "sweep-traces-sweep",
+    "next_action": "Run 'sweep-traces-sweep': Traces x Runs x Logs, events & SSE. NEW first: a turn's trace button and the task story's (GET /traces/by-run/{run_id}), Settings -> Traces (list, kind filter, one trace, OTLP export, clear, settings); every event in a trace, background work and commands as traces, warnings on the trace; secret redaction in spans. Then Runs (stop, MCP status, aw-tool fallback) and Logs/SSE (/events/history, stream_gap, F419).",
     "queue": [
         {
             "id": "plan-review",
@@ -23,7 +23,7 @@
         },
         {
             "id": "night-recheck-drive",
-            "status": "open",
+            "status": "done",
             "title": "Re-drive last night's fixes live",
             "detail": "Findings fixed 2026-10-19/20 night: F760, F774, F775, F777, F782, F783, F784, F785, F786. Drive each through the path its finding names (git reads/checkpoint file lists F775/F777/F760; others per FINDINGS.md). Log CONFIRMED/REOPENED F<n>."
         },
