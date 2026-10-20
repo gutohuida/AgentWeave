@@ -37361,3 +37361,62 @@ Expected: the tray in conversation X shows only questions whose `conversation_id
 In the side panel's Files view, `huge.txt` (11.2 MB) opens to `file-tab-error` "file is 11200000 bytes, exceeding the 1048576 byte limit". That is the raw `WorkspaceFileTooLargeError` text (`hub/hub/workspace_file.py:36-40`, passed through as the 413 detail by `hub/hub/api/v1/workspace.py`). It has unformatted numbers, while the binary notice beside it formats them ("This file is binary (16,384 bytes) and cannot be previewed."), and it does not say what would work instead (open it in an editor; "Insert into composer" still works and the agent can read it). `latin1.txt` (bytes `caf\xe9 cr\xe8me`) renders as "caf� cr�me" labelled "Plain text". `read_workspace_file` decodes with `errors="replace"` (`workspace_file.py:84`) and returns no flag saying anything was replaced.
 
 Expected: the oversized sentence uses readable sizes and names the alternative ("This file is 11 MB; the preview reads up to 1 MB. Insert it into the composer to let the agent read it."), and a lossy decode says so (a `decoded_lossily` flag the tab turns into one line). Tests: `hub/tests/test_workspace_file*.py` for the flag; a `FileTab` UI test for both sentences. Seam: Conversations & composer (side panel files tab) x the workspace file route.
+
+## F806 (B) -- one folder-browser listing, project open or relocate of a path on an unreachable network host freezes the whole Hub for about 21 s: the filesystem calls run on the event loop
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes -- measured three times, each against a fresh blackholed address (Windows caches a failed host, so a repeat answers at once).
+**Tier:** 0
+
+Repro (`py -3.11 scripts/drive/s1020_p_api.py fs-block`, and `open-block`): send one slow request, and half a second later time `GET /api/v1/health` (baseline 0.001-0.008 s).
+
+- `GET /fs/list?path=\\10.255.255.4\share` took 21.04 s (200, `reason` "[WinError 53] The network path was not found"). `/health` sent meanwhile took **20.54 s**.
+- `POST /projects/open {"path": "\\10.255.255.2\share\proj"}` took 21.08 s (409 `project_workspace_unreadable`), and `/health` took **20.57 s**.
+- `POST /projects/{id}/relocate {"path": "\\10.255.255.3\share\proj"}` took 21.18 s (409 `project_workspace_missing`), and `/health` took **20.68 s**.
+
+Nothing else is served for that time: no SSE, no agent tool call, no run event. A typed path is enough to cause it, in the Add-project dialog or its in-Hub browser (which lists as soon as it opens on the typed path). Cause: `list_fs_directory` is `async def` and calls `fs_browse.list_directory` (`Path.resolve`, `os.scandir`) directly (`hub/hub/api/v1/fs_browse.py:19-34`). The open, create and relocate routes reach the same kind of synchronous `resolve`/`stat` calls through `ProjectLifecycleService` (`hub/hub/api/v1/projects.py:357-372`, `:792-806`). `create` was not measured separately: its probe hit the cached failure. On the same unreachable share, open says "unreadable" and relocate says "does not exist".
+
+Expected: the filesystem work runs off the loop (`await asyncio.to_thread(list_directory, path)`, and the same around the workspace resolution in open/create/relocate), so a slow share costs only its own request. Failing test: in `hub/tests/test_fs_browse*.py`, monkeypatch `os.scandir` to sleep 2 s, `asyncio.gather` the listing with `GET /health` through the ASGI client, and assert `/health` finishes in under 0.5 s. Do the same for `POST /projects/open` with the workspace probe patched to sleep. Not measured: `GET /projects` refreshes every project's directory state (`_refresh_project_observation`), so a registered project whose share goes offline may freeze every project-list poll the same way. Seam: Projects (folder browser, open/relocate) x the whole Hub's event loop.
+
+## F807 (B) -- switching the checkpoint runner to a Copilot or Codex runner keeps a Claude checkpoint model the screen no longer shows, and Save is refused naming it
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 0
+
+Repro (`py -3.11 scripts/drive/s1020_p_ui.py checkpoint`). Settings store `checkpoint_runner_id` = `r-haiku-id` (claude) and `checkpoint_model` = `haiku`. On Settings -> Checkpointing the operator picks `r-cop` (copilot, `claude-haiku-4.5`) in "Checkpoint runner". The "Checkpoint model" select now shows **"Use the runner's model"** (DOM value `''`): its options are Copilot's, and `haiku` is not among them. The form still holds `haiku`. Pressing Save shows "checkpoint_model: 'haiku' is not a model 'copilot' declares; expected one of: auto, claude-sonnet-5.5, ... kimi-k3" (32 ids), and nothing is stored (`checkpoint_runner_id` stays `r-haiku-id`). The refusal names a value the screen says is not set. Choosing "Use the runner's model" again may not fire `onChange`, because it already looks selected. That is not driven: Playwright's `select_option` always dispatches. In that case the only way out is to pick some other model and then go back.
+
+While choosing, every option of the runner select carries the stored override: "r-cop — haiku (unrecognised) (copilot)", "r-codex — haiku (unrecognised) (codex)", "Copilot (default) — haiku (unrecognised) (copilot)". So the select itself warns that each non-Claude choice cannot run, and the save then refuses. `runnerOptionLabel(runner, catalog, { model: form.checkpoint_model })` (`hub/ui/src/components/environment/ProjectSettingsPanel.tsx:375`) applies the override to every runner. The model select (`:380-398`) renders `value={form.checkpoint_model}` with no option for a value its new catalog lacks. Ledger line 33583 saw the cross-CLI labels and left them unfiled, before 2026-10-16 made a newly set cross-CLI `checkpoint_model` a refusal (F662's change).
+
+Expected: changing the checkpoint runner to one whose CLI does not declare the stored `checkpoint_model` clears it in the form (it shows "Use the runner's model" and saves as null), or keeps it visible as "haiku (not a copilot model)" so the refusal matches the screen. The runner options take the override only where the runner's CLI declares it. Failing test: a `ProjectSettingsPanel` UI test (`hub/ui/src/__tests__/`) seeded with a claude checkpoint runner and model `haiku` that picks a copilot runner and saves, then asserts the PUT body carries `checkpoint_model: null` (it carries `"haiku"` today). Seam: Runners & models x Projects (settings, Checkpointing group).
+
+## F808 (C) -- every project with no agents tells the operator to run `agentweave start`, a command the CLI refuses
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+A fresh project's Overview reads "No agents connected. Run `agentweave start` to connect agents." (`hub/ui/src/components/overview/OverviewPage.tsx:179-184`; screenshot `testbed/ui-judge/s1020-p-picker/105638/05_pending.png`). Running it gives `agentweave: error: argument command: invalid choice: 'start' (choose from 'doctor', 'status', 'stop', 'reset', 'vault')` (`py -3.11 -m agentweave start` in `testbed/scratch`). Agents are added in the app, through the rail's "Add agent" directly above this card. Ledger line 16075 quoted the same sentence in 2026-09 as a failed-fetch MISREPORT example. The sentence itself, which is wrong on every successful fetch too, was never filed.
+
+Expected: the empty state names the way that works ("No agents yet." plus a button that opens the Add-agent dialog), with no CLI command. Failing test: an `OverviewPage` UI test with an empty roster asserting the text does not contain `agentweave start` and that the card offers Add agent. Seam: Projects (Overview) x Agents.
+
+## F809 (D) -- small slips around the Add-project dialog and the Runners page: "Workingâ€¦" mojibake, a Hide control under its own popup, doubled backslashes in the browser's reasons, a long runner name over its own buttons
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+- While Add project waits, its button reads **"Workingâ€¦"**. `ProjectManagerModal.tsx:249` holds the bytes `Working\xc3\xa2\xe2\x82\xac\xc2\xa6`, a UTF-8 ellipsis decoded as cp1252 and re-encoded, there since `5ee1a22` (2026-08-04), and the served bundle carries it. It is the only such string in `hub/ui/src` (scan for `â€` / `Ã`). Screenshot `testbed/ui-judge/s1020-p-picker/105638/05_pending.png`. A slow path (F806) keeps it on screen for 21 s.
+- With the native dialog available, the in-Hub browser opens from "Browse within the Hub instead", which then reads "Hide the in-Hub browser". The open picker covers it: `elementFromPoint` at the link's centre is the picker's `C:\` root button. The control that should close the picker cannot be clicked (clicking outside or pressing Escape works). The picker also extends past the modal and covers Cancel and Add project.
+- `/fs/list` reasons are `str(OSError)`, which repr-quotes the path. The picker therefore shows "Can't read this directory: [WinError 3] The system cannot find the path specified: 'C:\\does\\not\\exist'", with every backslash doubled, which is F803's class. `hub/hub/fs_browse.py:116`: word it from `exc.strerror` and the path as written.
+- A runner name may be 256 characters (`schemas/runners.py`, `models.py:343`). On the Runners page a 200-character name runs off the page in one unbroken line, over that row's Edit and Delete icons (`testbed/ui-judge/s1020-p-keys/110136/21_runner_delete_refused.png`). Every runner select option grows the same way.
+
+Expected: the literal `…`, a lint or test that fails on mojibake sequences in `hub/ui/src`, the in-Hub browser's toggle outside the area the picker covers (or the picker opening below it), reasons quoted as written, and runner names truncated with a title tooltip. Tests: a source scan in `hub/ui/src/__tests__/`, `hub/tests/test_fs_browse*.py` for the reason text, and a RunnersPage snapshot with a long name. Seam: Projects (Add-project dialog) x Runners & models (Runners page).

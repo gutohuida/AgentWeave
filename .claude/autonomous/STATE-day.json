@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T17:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-projects-sweep",
-    "next_action": "Run 'sweep-projects-sweep': Projects x Runners & models x Keyboard & dialogs. Unreached-until-10-19 first: the in-app folder browser (GET /fs/roots, /fs/list) behind the typed path; delete-project dialog in a browser. Then runner aliases/undeclared model refusal/409 holders, and keyboard-only dialog focus. Bind agents to claude-haiku-4-5-20251001.",
+    "current": "sweep-agents-sweep",
+    "next_action": "Run 'sweep-agents-sweep': Agents x Charters x Inbound queue & messages. Unreached first: POST /session/sync after F774 (agent holding work kept, no agents key leaves roster alone; does the response say so?). Then reserved/route-word names, request_agent budget, charters CRUD, hop-budget chain, Withdraw/Continue, held message drained on bind (F96). Bind agents to claude-haiku-4-5-20251001.",
     "queue": [
         {
             "id": "plan-review",
@@ -53,7 +53,7 @@
         },
         {
             "id": "sweep-projects-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Projects x Runners & models x Keyboard & dialogs",
             "detail": "Unreached-until-10-19 first: the in-app folder browser (GET /fs/roots, /fs/list) behind the typed path; delete-project dialog in a browser. Then runner aliases/undeclared model refusal/409 holders, and keyboard-only dialog focus."
         },
