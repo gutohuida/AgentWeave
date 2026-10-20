@@ -97,7 +97,6 @@ def cont(j):
     page.wait_for_timeout(5000)
     btn = page.get_by_test_id("conversation-continue")
     print("continue control:", btn.count(), btn.first.text_content() if btn.count() else None)
-    before = body(page)
     btn.first.click()
     page.wait_for_timeout(3000)
     after = body(page)

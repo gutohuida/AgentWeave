@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 
-from s1020_l_lib import P, q, req, show
+from s1020_l_lib import P, q, req
 
 B = f"/projects/{P}"
 SLEEP = 'py -3.11 -c "import time\nfor i in range(150): time.sleep(1)"'
