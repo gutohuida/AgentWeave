@@ -37504,7 +37504,7 @@ Expected: "'eps' belongs to an archived agent; a name is never reused. Unarchive
 
 ## F814 (B) -- with the token budget spent, the operator's own message waits "Queued — token budget exhausted" behind an agent's budget-held message, so "operator messages can still run" does not hold
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150, profile c1020, real Haiku turns, Chromium against the served bundle).
+**Status:** fixed 2026-10-21 (night iteration 9, Tier 0; sha in the commit that carries this line). Scheduler and status route select the operator's conversation when the budget is spent (`inbound_queue.select_operator_turn`). Drive: real ASGI app and database, scripted spawn, not a scratch Hub. The Continue control on the held peer conversation still offers a start that answers "Not started" -- left alone, arguably by design. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150, profile c1020, real Haiku turns, Chromium against the served bundle).
 **Source:** drive
 **Theme:** Accounting & allowance
 **Ready:** yes

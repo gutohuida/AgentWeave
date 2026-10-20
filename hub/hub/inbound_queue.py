@@ -193,6 +193,40 @@ def select_turn(
     return controlling, selected
 
 
+def select_operator_turn(
+    entries: Sequence[InboundQueueEntry], hop_budget: int, cap: int
+) -> Tuple[Optional[InboundQueueEntry], List[InboundQueueEntry]]:
+    """The turn that runs while only the operator's input may: `select_turn` over the conversation
+    of their oldest startable message, wherever it sits in the queue (F814).
+
+    A spent token budget holds autonomous input and lets the operator's through, but the operator's
+    message can sit in a conversation behind an autonomous head, which `select_turn` alone would
+    pick. `(None, [])` when no operator entry is startable, or when the kind rule would still leave
+    it out of the turn.
+    """
+    held = held_conversations(entries)
+    operator = next(
+        (
+            entry
+            for entry in entries
+            if entry.origin_type == "operator"
+            and entry.hop_depth <= hop_budget
+            and entry.conversation_id not in held
+        ),
+        None,
+    )
+    if operator is None:
+        return None, []
+    controlling, selected = select_turn(
+        [entry for entry in entries if entry.conversation_id == operator.conversation_id],
+        hop_budget,
+        cap,
+    )
+    if not any(entry.origin_type == "operator" for entry in selected):
+        return None, []
+    return controlling, selected
+
+
 def format_turn_prompt(entries: Iterable[InboundQueueEntry]) -> str:
     blocks = ["[AgentWeave inbound queue — delivered inline in arrival order]"]
     for entry in entries:

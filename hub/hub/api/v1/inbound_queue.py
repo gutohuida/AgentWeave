@@ -24,6 +24,7 @@ from ...inbound_queue import (
     held_conversations,
     not_queued_reason,
     release_entry,
+    select_operator_turn,
     select_turn,
     withdraw_entry,
 )
@@ -215,6 +216,11 @@ async def get_queue_status(
                 )[1]
             )
             and (await project_budget_state(session, project_id))["exhausted"]
+            # An operator message behind an autonomous head still runs (F814).
+            and select_operator_turn(
+                entries, project_row.hop_budget, project_row.turn_delivery_cap
+            )[0]
+            is None
         ):
             reason = "token budget exhausted"
         else:

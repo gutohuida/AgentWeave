@@ -27,6 +27,7 @@ from .inbound_queue import (
     held_conversations,
     project_limits,
     queued_entries,
+    select_operator_turn,
     select_turn,
 )
 from .provider_allowance import hold_sentence, operator_would_probe, provider_hold
@@ -454,6 +455,13 @@ async def _attempt_turn(
         return _Attempt(ScheduleResult(waiting_reason="hop budget exhausted"))
 
     controlling, turn = select_turn(entries, hop_budget, cap)
+    # A spent token budget holds autonomous input only, so the turn that runs is the operator's even
+    # when their message sits in another conversation behind an autonomous head (F814).
+    budget = await project_budget_state(db, project_id)
+    if budget["exhausted"] and not any(entry.origin_type == "operator" for entry in turn):
+        operator_controlling, operator_turn = select_operator_turn(entries, hop_budget, cap)
+        if operator_controlling is not None:
+            controlling, turn = operator_controlling, operator_turn
     if controlling is None or controlling.conversation_id is None:
         return _Attempt(ScheduleResult(waiting_reason="queued entry has no conversation"))
     conversation = await get_conversation_by_id(db, controlling.conversation_id)
@@ -489,7 +497,6 @@ async def _attempt_turn(
         return _Attempt(
             ScheduleResult(waiting_reason=hold_sentence(agent, hold), terminal_failure=False)
         )
-    budget = await project_budget_state(db, project_id)
     if initiator == "autonomous" and budget["exhausted"]:
         # A hold, like the allowance's above: the input is kept, and raising the budget re-drains
         # it. Recorded on the entries so a job's press answers why it waits (F608, F596's shape);
