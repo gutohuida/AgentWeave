@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T17:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-loops-sweep",
-    "next_action": "Run 'sweep-loops-sweep': Jobs & loops x Flows & review x Resilience. Never swept in a day log: a loop that fires/claims/drains/stops both endings, Run's held reason, waiting_reason firing; a flow with parallel firing and a verdict withdrawing waiting reviews; kill the Hub mid-run and restart, concurrent triggers (F349), failure injection. Also a loop firing on a spent token budget (left from the checkpoints sweep). Bind agents to claude-haiku-4-5-20251001.",
+    "current": "sweep-tasks-sweep",
+    "next_action": "Run 'sweep-tasks-sweep': Tasks x Dependencies x Worktrees & integration. Actor-boundary refusals (an agent approving its own work, finishing another's task, PATCHing assignee/priority/description), the story vs task_history; A->B->C with B's checkout merging A on its next turn and a conflicting prerequisite refusing the turn; integration Retry on a real failure (least driven), isolation flip under held work. Bind agents to claude-haiku-4-5-20251001. No sweep started after 16:15.",
     "queue": [
         {
             "id": "plan-review",
@@ -71,7 +71,7 @@
         },
         {
             "id": "sweep-loops-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Jobs & loops x Flows & review x Resilience",
             "detail": "Never swept in a day log: a loop that fires/claims/drains/stops both endings, Run's held reason, waiting_reason firing; a flow with parallel firing and a verdict withdrawing waiting reviews; kill the Hub mid-run and restart, concurrent triggers (F349), failure injection."
         },

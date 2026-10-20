@@ -37565,3 +37565,84 @@ Expected: clear the warning only when the checkpoint is `ready`; an `unwritten` 
 The successor `conv-1dbec82e6c34` was at 38,493 tokens against an 8,000-token threshold. Its warning had been cleared by a Checkpoint now. `POST /conversations/conv-1dbec82e6c34/dismiss-checkpoint-warning` -> 409 "This conversation has no checkpoint warning to dismiss: it has not reached its threshold. …" (`hub/hub/api/v1/checkpoints.py:320`). The refusal's reason is wrong for this case. The conversation has no warning because a checkpoint was just taken, or because nothing new happened since.
 
 Expected: word it from the state: "This conversation has no checkpoint warning showing, so there is nothing to dismiss; a dismissal answers a warning that is showing." Failing test: dismiss on a conversation whose usage is past the threshold and whose warning is NULL; assert the detail does not say "has not reached". Seam: Checkpoints.
+
+## F819 (C) -- a loop whose agent cannot run gives up on the delivery, but the loop does not say so: its task stays `in_progress` with that agent, the card reads "Active", and the next Run briefs the same broken agent again
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8160, profile l1020, project `proj-205b3b4c85ec`; a real firing, zero spend).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+A documentless loop on agent `delta`, bound to a Codex runner (Codex cannot run on this machine: every spawn exits 1). `POST /jobs {"name": "loop E codex", "agent": "delta", "initial_tasks": [{"title": "Write E.txt", ...}], "stop_when_queue_empties": true, ...}` and then `POST /jobs/{id}/run`:
+
+```
+POST /jobs/job-7f2da45bc1f4/run -> 200 {"success": true, "job_run_id": "run-01e70a76375a"}
+runs:  run-5b905c738b6c, run-d4342da5642c, run-2f31974989c5  delta  failed exit 1
+       error: "The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."
+queue: entry-74c856ce3103  state withdrawn  delivery_attempts 3
+       abandoned_reason "delivery failed 3 times; the Hub stopped retrying"
+task-21832111a8e0 "Write E.txt"   in_progress  assignee delta     (left there)
+GET /loops/loop-8fb2d27d2497 -> queue {"in_progress": 1}, stall_reason null
+GET /queue/delta/status       -> waiting_count 0, waiting_reason null
+POST /jobs/{id}/run (again)   -> 200 success; a new briefing ("It is `in_progress` now ...") and
+                                 three more failed runs (429), withdrawn the same way
+```
+
+So once the Hub has stopped retrying, nothing on the loop says that its one task is held by an agent whose every delivery failed. The card (Jobs tab) reads "Active", and the queue says "in_progress: 1". The task is never released, so another agent cannot take it, and the operator's only remedy, pressing Run, spends another three attempts on the same agent. The run's own error, which names the cause, is not on the loop or on the task. (The firing's `JobRun` being `failed` with `error_summary: null` is the openspec leftover `a-retried-firing-records-how-its-work-ended`, F123/F147, re-measured here. It is not part of this finding.)
+
+**Expected:** after a loop's delivery is abandoned, the loop's `stall_reason` (and the card) names the task, the agent and the last run's error ("delta could not start: <error>; its task Write E.txt is still assigned to it"). The task goes back to `pending` or `assigned`, so that a press or a flow can staff it again, or the press refuses with that sentence instead of briefing the same agent.
+**Seam:** `inbound_queue.py`'s abandonment (the `DELIVERY_ATTEMPT_LIMIT` path) never reaches the loop's task. The loop's stall check (`scheduler._loop_stop_reason` / the stall text in `api/v1/jobs.py`) reads no abandoned entry. **Test:** in `hub/tests/test_scheduler.py` (or a new `test_a_loop_says_its_delivery_was_abandoned.py`): a loop entry abandoned after three failed runs leaves `GET /loops/{id}` with a non-null `stall_reason` naming the agent, and a second `POST /run` does not create a fourth delivery to that agent. Both fail today.
+
+## F820 (B) -- Land during a passing git failure approves the task and records the permanent skip "this project is not a git repository": its commit is never merged, and the screen offers no Retry, though the API's retry would merge it
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-loops-sweep` (Resilience, failure injection; scratch Hub :8160, project `proj-205b3b4c85ec`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+This is a real git repository with task branches. Its `.git` was moved aside for a few seconds, the way an unreadable or locked `.git`, a git that drops off the Hub's PATH, or a sync tool holding the folder would look. During those seconds the operator pressed Land on two completed loop tasks:
+
+```
+POST /tasks/task-8d36435b40ca/land -> 200 status "approved"
+  latest_integration: {"outcome": "skipped", "reason": "this project is not a git repository, so there is nothing to merge"}
+  story: workspace release_failed "git status --porcelain failed (128): fatal: not a git repository: .../.git/worktrees/task-8d36435b40ca"
+(.git restored)
+git log agentweave/task/task-8d36435b40ca -> fe1e4b7 "Write C.txt"   (not on master)
+Tasks tab / drawer (Chromium, served bundle): "Not merged — this project is not a git repository, so there is nothing to merge", no Retry control
+POST /tasks/task-8d36435b40ca/integrations/retry -> 200; new row outcome "merged"; master dd86047 "Integrate approved work fe1e4b76521b"
+```
+
+Reproduced a second time on `task-68d5b577682f` ("Write D.txt"), which is still unmerged and approved, with the same drawer text and no button.
+
+**What is wrong:** `is_repository(root)` (`hub/hub/task_integration.py:167-169`) answers False for any git failure. Integration then records `NOT_A_REPOSITORY`, which the module classes as unretryable because it is "nothing this screen can change" (`task_integration.py:134`). So a passing fault becomes a permanent fact. The task reads `approved`, the work is on a branch nobody will merge, and the operator is told the project is not a repository, which is false. The retry route itself does not honour the classification, and merges.
+
+**Expected:** a project the Hub already knows is a repository (it has task branches and recorded worktrees, or `GET /worktrees` reported `repository: true` before) records a git failure as `failed`, with git's stderr, so it can be retried. Or Land refuses (409) while git cannot be read, naming the error. Either way the drawer offers Retry once git is back.
+**Test:** in `hub/tests/test_task_integration.py`: make `_git(root, "rev-parse", ...)` fail in a repository that has a task branch, then approve. Today the row is `skipped`/`NOT_A_REPOSITORY` and `is_retryable` is False. The test asserts `failed` and retryable.
+
+## F821 (D) -- Run on a loop that has ended answers 400 "Job is disabled", whose remedy, enabling it, is refused 409 "loop_ended"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8160).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+```
+loop B (stop_at reached by the scheduler's own tick): ending_state "stopped"
+POST /jobs/job-8805289b78c5/run          -> 400 "Job is disabled"
+PATCH /jobs/job-8805289b78c5 {"enabled": true} -> 409 {"code": "loop_ended", "message": "This loop has ended (loop stop time reached (...)) at ... and cannot be restarted ... Create a new loop with the work instead."}
+```
+
+F222 fixed exactly this shape for an archived job: `run_job` checks `archived_at` before `enabled`, because "disabled" names a remedy the guard refuses (`hub/hub/api/v1/jobs.py:1753-1762`). An ended loop takes the same path and still gets the misleading word. The UI disables the Run button on an ended loop's card (measured in Chromium), so this reaches an agent's `run_job` or the agent plane, and anyone using the API. It was recorded as held on 2026-08-29 (row 11, before F222). **Expected:** before the `enabled` check, a job whose loop has `ending_state` answers 409 with the same `loop_ended` body as the PATCH. **Test:** next to F222's in `hub/tests/test_an_archived_job_stays_retired.py`: an ended loop's run answers 409 `loop_ended`.
+
+## F822 (D) -- a job firing's id and an agent run's id share the `run-` prefix, so a firing id pasted into a run route reads "This run has no trace"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8160).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+`POST /jobs/{id}/run` answers `"job_run_id": "run-9b02d383538b"`, and the turn it started is `run-7d179cba3a19`. Both are minted `f"run-{short_id()}"` (`hub/hub/scheduler.py:3693`, `:4190`, `:4410` for `JobRun`; the same prefix as `Run`). `job_fired` events carry `job_run_id` with that prefix. `GET /traces/by-run/run-9b02d383538b` -> 404 "This run has no trace", but it is not a run at all, and `GET /traces/by-run/run-7d179cba3a19` -> 200. A reader correlating a firing with its turn by id, as the skill's own trap list warns ("Job events carry `job_run_id`, not `run_id`"), has nothing in the id to tell them apart. **Expected:** new `JobRun` ids use their own prefix (`jrun-`). Existing rows keep theirs, since ids are opaque and nothing parses the prefix (grep before changing). **Test:** a firing's `job_run_id` does not start with `run-`.
