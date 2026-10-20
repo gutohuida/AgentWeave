@@ -1,47 +1,118 @@
 {
-    "purpose":  "FIX. Operator, 2026-10-18: fix everything the day window found, at every tier (Tier 1/2 author their own short change on trial Hub :8010 and approve_anyway; Tier 2 writes its acceptance drive failing first). Red CI first, then what the operator added in APPROVALS.md, then today\u0027s day-log findings, then every other open finding, severity first. Test-first, drive each fix, set its Status line. Never merges.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-10-18-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "75e6edb",
-    "stop_at":  "2026-10-21T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-10-20-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. Only the day window\u0027s merge gate (day-window.md, \u0027The merge gate\u0027) may fast-forward master. This window never merges.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, \u0027Something new\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ],
-    "closeout":  {
-                     "briefing":  "claude-doc",
-                     "model":  "sonnet",
-                     "skill":  ".claude/skills/night-briefing/SKILL.md"
-                 },
-    "armed_at":  "2026-10-20T22:55:07+01:00",
-    "driver_log":  ".claude/autonomous/driver-night.log"
+    "purpose": "FIX. Operator, 2026-10-18: fix everything the day window found, at every tier (Tier 1/2 author their own short change on trial Hub :8010 and approve_anyway; Tier 2 writes its acceptance drive failing first). Red CI first, then what the operator added in APPROVALS.md, then today's day-log findings, then every other open finding, severity first. Test-first, drive each fix, set its Status line. Never merges.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-10-18-daily",
+    "parent_branch": "master",
+    "parent_sha": "75e6edb",
+    "stop_at": "2026-10-21T07:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-10-20-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "F800-impl",
+    "next_action": "Do queue item F800-impl: read F800 in scripts/drive/FINDINGS.md (grep the heading), write a failing test at the seam it names, fix, drive, set Status to 'fixed <sha>' with a drive line. One finding per firing.",
+    "queue": [
+        {
+            "id": "F800-impl",
+            "status": "open",
+            "title": "F800 (B,T0): reset --profile <name> --all deletes the shared ~/.agentweave/hub/.env",
+            "detail": "Data-loss on a shared file. Test first at the reset seam."
+        },
+        {
+            "id": "F798-impl",
+            "status": "open",
+            "title": "F798 (B,T0): add folder by path with an unreadable subfolder answers bare 500",
+            "detail": "Test the route's response when the walk raises; fix to a named refusal."
+        },
+        {
+            "id": "F810-impl",
+            "status": "open",
+            "title": "F810 (B,T0): POST /session/sync deletes an agent with queued messages",
+            "detail": "Archive refuses this; sync must too. Bundle F812 (500 on non-object agents) only if same seam, else leave."
+        },
+        {
+            "id": "F811-impl",
+            "status": "open",
+            "title": "F811 (B,T0): agent names differing only in case both accepted",
+            "detail": "Refuse at creation (Hub check; mind AGENT_NAME_RE restated in several places, CLAUDE.md)."
+        },
+        {
+            "id": "F820-impl",
+            "status": "open",
+            "title": "F820 (B,T0): Land during a passing git failure approves task and records permanent skip",
+            "detail": "Do not record a permanent skip on a transient git failure."
+        },
+        {
+            "id": "F832-impl",
+            "status": "open",
+            "title": "F832 (B,T0): refused Land tells operator to send back via revision_needed, which Hub never offers",
+            "detail": "Fix the message to name the working path, or allow the move."
+        },
+        {
+            "id": "F814-impl",
+            "status": "open",
+            "title": "F814 (B,T0): token budget spent -> operator message waits 'Queued' with mojibake/no remedy",
+            "detail": "Read finding; fix at the route/message seam."
+        },
+        {
+            "id": "F804-impl",
+            "status": "open",
+            "title": "F804 (B,T0): unwaited question in one conversation takes over every other conversation's composer",
+            "detail": "UI: needs browser drive of served bundle plus bundle refresh."
+        },
+        {
+            "id": "F806-impl",
+            "status": "open",
+            "title": "F806 (B,T0): folder browse/open/relocate of unreachable network path freezes",
+            "detail": "Bound the filesystem call with a timeout."
+        },
+        {
+            "id": "F807-impl",
+            "status": "open",
+            "title": "F807 (B,T0): switching checkpoint runner keeps a Claude model that the new runner cannot use",
+            "detail": "Clear/validate model on runner switch."
+        },
+        {
+            "id": "F789-impl",
+            "status": "open",
+            "title": "F789 (B,T0): Copilot ACP startup timeout fails with empty error",
+            "detail": "Name the timeout in the run's error."
+        },
+        {
+            "id": "F790-impl",
+            "status": "open",
+            "title": "F790 (B,T0): aw.permission_wait span stores tool args unredacted",
+            "detail": "Redact like the sibling call does. Security-adjacent: assert refusal too.",
+            "model": "opus"
+        },
+        {
+            "id": "F788-impl",
+            "status": "open",
+            "title": "F788 (B,T0): permission wait polling recorded as a span per poll; F787 (write lock >30s) after if time",
+            "detail": "F787 may be large; split rather than overrun."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. Only the day window's merge gate (day-window.md, 'The merge gate') may fast-forward master. This window never merges.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, 'Something new'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ],
+    "closeout": {
+        "briefing": "claude-doc",
+        "model": "sonnet",
+        "skill": ".claude/skills/night-briefing/SKILL.md"
+    },
+    "armed_at": "2026-10-20T22:55:07+01:00",
+    "driver_log": ".claude/autonomous/driver-night.log"
 }
