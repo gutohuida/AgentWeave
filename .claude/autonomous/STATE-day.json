@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-20T17:00:00+01:00",
-    "iteration": 15,
+    "iteration": 16,
     "log_file": ".claude/autonomous/2026-10-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "D-7",
-    "next_action": "Run 'D-7' (merge gate): four conditions per playbook .claude/loops/day-window.md. Known: branch adds migrations 0135, 0137, 0138 vs master -> HOLD: migration; add OPEN DECISIONS.md row. Then closing entry; set next_action null.",
+    "next_action": null,
     "queue": [
         {
             "id": "plan-review",
@@ -101,12 +101,14 @@
         },
         {
             "id": "D-7",
-            "status": "open",
+            "status": "done",
             "title": "Merge gate",
             "detail": "Four conditions per playbook. Known: branch adds migrations 0135, 0137, 0138 vs master -> HOLD: migration; add OPEN DECISIONS.md row. Then closing entry; next_action null."
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": [
+        "merge-hold-1020"
+    ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window's merge-gate item (.claude/loops/day-window.md, 'The merge gate'), which may fast-forward master to this branch with 'git fetch . <branch>:master' and 'git push origin master' when all four gate conditions hold and the branch adds no migration -- operator, 2026-10-11 and 2026-10-18. Never a merge commit, never a conflict resolved.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

@@ -20,6 +20,8 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+- OPEN      merge-hold-1020  The cycle branch `autonomous/2026-10-18-daily` is not landed on master. HOLD: migration, as `hub/hub/migrations/versions/0135_reach_settings.py`, `0137_trace_spans.py` and `0138_trace_hub_wide.py` are new against master, and `:8000` runs this checkout, so its next restart would run them on real data. Also, `origin/master` (c5de63b) holds one commit the branch lacks, so it is no longer a fast-forward. Land it awake: merge or rebase master, then fast-forward.
+
 ### flow-1018: editable flow stages -- eight OPEN -- 2026-10-18 night
 
 From the operator's 2026-10-18 brief (`APPROVALS.md` `## 2026-10-18`: "dev -> test -> deploy is edditable. The default is dev ->test but if I want to remove or add steps to be possible"). Night items `flow-stages-map`, `-spike`, `-spec`. The map and the driven Haiku spike are in `spec-queue/research/2026-10-18-editable-flow-stages.md`. Options and reasoning per question are in the change document's design: `spec/changes/editable-flow-stages/spec.json` (`spdoc-9e407ca6ffe8` on `:8010`, phase `exploring`, not proposed). Any build is Tier 2: the lifecycle contract, a migration, and today's flows kept as the default.
