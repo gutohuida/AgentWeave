@@ -24,6 +24,9 @@ export interface ConversationBarProps {
   /** Rejecting puts the old title back; the caller reports why. */
   onRename?: (title: string) => void | Promise<unknown>
   isRunning: boolean
+  /** The agent's live turn belongs to another of its conversations (F844). Shown in place of the
+   *  working chip, with no Stop: the one that exists would stop that other turn. */
+  busyElsewhere?: { title: string; waitingOnYou: boolean; onOpen?: () => void } | null
   /** Seconds the current turn has run; null when idle or unknown. */
   elapsedSeconds: number | null
   isStopping?: boolean
@@ -58,6 +61,7 @@ export function ConversationBar({
   title,
   onRename,
   isRunning,
+  busyElsewhere = null,
   elapsedSeconds,
   isStopping = false,
   onStop,
@@ -138,9 +142,18 @@ export function ConversationBar({
         </button>
       )}
 
-      <span className="aw-convbar-status" data-running={isRunning ? 'true' : 'false'} role="status" aria-live="polite">
-        {isRunning ? `working${elapsedSeconds !== null ? ` · ${formatDuration(elapsedSeconds)}` : ''}` : agent.status === 'idle' ? 'idle' : agent.status}
-      </span>
+      {busyElsewhere ? (
+        <span className="aw-convbar-status" data-running="false" data-testid="conversation-busy-elsewhere" role="status" aria-live="polite">
+          {busyElsewhere.waitingOnYou ? 'waiting on your answer in ' : 'busy in '}
+          {busyElsewhere.onOpen ? (
+            <button type="button" className="underline" onClick={busyElsewhere.onOpen}>{busyElsewhere.title}</button>
+          ) : busyElsewhere.title}
+        </span>
+      ) : (
+        <span className="aw-convbar-status" data-running={isRunning ? 'true' : 'false'} role="status" aria-live="polite">
+          {isRunning ? `working${elapsedSeconds !== null ? ` · ${formatDuration(elapsedSeconds)}` : ''}` : agent.status === 'idle' ? 'idle' : agent.status}
+        </span>
+      )}
 
       <div className="aw-convbar-end">
         <ContextUsageIndicator value={conversation?.context_usage ?? null} />

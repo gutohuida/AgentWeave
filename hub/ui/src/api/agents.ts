@@ -22,6 +22,10 @@ export interface AgentSummary {
   display_model?: string  // e.g. "Claude", "Kimi", "Minimax" — derived from runner
   context_usage?: ContextUsage
   session_started_at?: string  // ISO timestamp when current session started
+  /** The conversation the agent's live run belongs to. `status` is the agent's, not a
+   *  conversation's: a screen on another of its conversations reads this to tell the turn is
+   *  elsewhere (F844). Null/absent with no run, a run that has no conversation, or an older Hub. */
+  running_conversation_id?: string | null
   runner_options?: Record<string, unknown>  // Runner-specific options (e.g., memory for Codex)
   color_index?: number | null  // Stable palette index, assigned once at registration
   runner_id?: string | null  // Bound Runner record, if any (runner-agent-charter-separation)

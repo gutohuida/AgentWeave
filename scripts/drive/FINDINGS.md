@@ -38051,7 +38051,7 @@ agent (job off): vault_report on an entry with a pending report -> "Entry src-1c
 
 ## F844 (B) -- a conversation whose agent is busy in another conversation reads as its own live turn: "asker is responding…", a `running` chip and **Stop turn**, which stops the other conversation's run (here, one waiting on the operator's own question)
 
-**Status:** open 2026-10-21. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8152, profile q1021, Chromium against the served bundle, `scripts/drive/s1021_q_ui.py live|stopb`).
+**Status:** fixed 2026-10-21 (night, Tier 0). The roster now carries `running_conversation_id` (newest running run's conversation); `AgentOutputPanel` reads a run on another conversation as `busyElsewhere`: the bar says "busy in <conversation>" (or "waiting on your answer in" when that run's question waits), with an Open link, no Stop; the placeholder says a message will queue. Test `agentBusyElsewhere.test.tsx` (fails before) and `test_list_agents_names_the_conversation_the_live_run_belongs_to`. Not driven in a browser. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8152, profile q1021, Chromium against the served bundle, `scripts/drive/s1021_q_ui.py live|stopb`).
 **Source:** drive
 **Theme:** Conversations & composer
 **Ready:** yes -- driven twice with real Haiku turns.

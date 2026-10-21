@@ -88,6 +88,10 @@ class AgentSummary(BaseModel):
         None  # {percent, warning, model, threshold_warning, updated_at}
     )
     session_started_at: Optional[datetime] = None  # When the current session started
+    # The conversation the agent's live run belongs to, when it has one running. `status` is the
+    # agent's, not a conversation's; a screen on another conversation reads this to tell the
+    # turn is elsewhere (F844). Null with no run, or a run that belongs to no conversation.
+    running_conversation_id: Optional[str] = Field(default=None, max_length=64)
     # The posture this agent's next run gets when nobody chose one, and what clearing its default
     # would give (the same with `yolo` off). Null with no runner bound: there is no run to describe.
     permission_mode_at_rest: Optional[str] = Field(default=None, max_length=32)

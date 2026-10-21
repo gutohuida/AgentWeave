@@ -246,6 +246,44 @@ async def test_list_agents_shows_running_for_active_direct_spawn_run(app, auth_h
     assert agent["status"] == "running"
 
 
+@pytest.mark.asyncio
+async def test_list_agents_names_the_conversation_the_live_run_belongs_to(app, auth_headers):
+    """F844: `status: running` is the agent's, not a conversation's. A screen on another of its
+    conversations cannot tell whose turn is live without the roster saying which one it is, so
+    it read the other conversation's run as its own and offered to stop it."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    sync_resp = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={
+            "data": {
+                "agents": {"busy-elsewhere": {"runner": "claude"}, "idle-one": {"runner": "claude"}}
+            }
+        },
+        headers=auth_headers,
+    )
+    assert sync_resp.status_code == 200
+
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-conv-a",
+                project_id="proj-test",
+                agent="busy-elsewhere",
+                status="running",
+                conversation_id="conv-a",
+            )
+        )
+        await session.commit()
+
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
+    assert resp.status_code == 200
+    by_name = {a["name"]: a for a in resp.json()}
+    assert by_name["busy-elsewhere"]["running_conversation_id"] == "conv-a"
+    assert by_name["idle-one"]["running_conversation_id"] is None
+
+
 # Moved from the deleted `test_agents_self_registered.py` (`agents-no-longer-register-themselves`,
 # task 2.7): what they test is the charter/agent context routes, the roster summary and PATCH, not
 # registration. The agents they need are inserted with `add_agent`.

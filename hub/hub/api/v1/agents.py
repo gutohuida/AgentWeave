@@ -352,13 +352,23 @@ async def list_agents(
     # run (agent_trigger.py) never posts a heartbeat, so without this the
     # heartbeat-only effective_status below would show "idle" for the whole
     # duration of a live direct spawn.
-    running_run_q = select(Run.agent).where(
-        Run.project_id == project_id,
-        Run.agent.in_(agent_names),
-        Run.status == "running",
+    running_run_q = (
+        select(Run.agent, Run.conversation_id)
+        .where(
+            Run.project_id == project_id,
+            Run.agent.in_(agent_names),
+            Run.status == "running",
+        )
+        .order_by(Run.started_at)
     )
     running_run_res = await session.execute(running_run_q)
-    agents_with_active_run = {name for (name,) in running_run_res}
+    # F844: which conversation the live run belongs to. `status` is the agent's, and a screen on
+    # another of its conversations needs this to tell whose turn is live. Newest run wins, the
+    # one `POST /agent/{agent}/stop` would stop.
+    running_conversation_by_agent: dict[str, Optional[str]] = {}
+    for name, conversation_id in running_run_res:
+        running_conversation_by_agent[name] = conversation_id
+    agents_with_active_run = set(running_conversation_by_agent)
 
     # F17: when each agent was last observed doing anything — runs and output, not only the
     # heartbeat rows that a Hub-spawned agent never writes. See `agent_activity` for why the
@@ -531,6 +541,7 @@ async def list_agents(
                 runner=_runner,
                 display_model=_display_model,
                 context_usage=context_usage,
+                running_conversation_id=running_conversation_by_agent.get(agent_name),
                 session_started_at=session_started_at,
                 runner_options=agent_meta.get("runner_options"),
                 color_index=agent_row.color_index if agent_row else None,

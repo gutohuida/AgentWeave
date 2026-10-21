@@ -46,7 +46,7 @@ import { BannerStack, type ConversationBanner } from './BannerStack'
 import { PermissionRequestCard } from './PermissionRequestCard'
 import { openPermissionRequestsFor } from '@/lib/pendingPermissions'
 import { usePendingPermissionRequests } from '@/api/permissions'
-import { activeQuestionFor } from '@/lib/pendingQuestions'
+import { activeQuestionFor, isWaitedOn } from '@/lib/pendingQuestions'
 import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
 import { handoffLabel, handoffReason, type HandoffState } from '@/lib/checkpointControl'
 import { ConversationBar } from '@/components/conversation/ConversationBar'
@@ -386,10 +386,19 @@ export function AgentOutputPanel({
     el.scrollTop = el.scrollHeight
   }, [tailSpacer])
 
-  const isRunning = agent.status === 'running'
+  const agentIsRunning = agent.status === 'running'
+  // F844: `status` is the agent's. When the roster says the live run belongs to a different
+  // conversation than the one on screen, this conversation has no turn of its own: no chip, no
+  // Stop (which would stop that other run), no "responding" placeholder. A message sent here
+  // still queues behind it, which the placeholder says. An older Hub or a run with no
+  // conversation leaves the id empty and reads as before.
+  const runningConversationId = agent.running_conversation_id ?? null
+  const busyElsewhere =
+    agentIsRunning && !!runningConversationId && runningConversationId !== conversationId
+  const isRunning = agentIsRunning && !busyElsewhere
   const handoffUnavailable = agent.runner === 'manual'
   const interactionLocked =
-    isRunning || isSending || handoffState === 'preparing'
+    agentIsRunning || isSending || handoffState === 'preparing'
   // A prepared handoff closes the conversation on screen even though the destination still names
   // it: nothing further belongs in it, so it stops being the open conversation here.
   const currentConversationId = startingFresh ? undefined : conversationId ?? undefined
@@ -397,6 +406,26 @@ export function AgentOutputPanel({
   // explicitly — a brand-new agent has none to continue either.
   const startsFresh = !currentConversationId
   const currentConversation = conversations.find((c) => c.id === currentConversationId)
+  // The other conversation's name and whether its turn waits on the operator's own answer: the two
+  // things the bar says in place of a chip and a Stop (F844).
+  const busyConversation = busyElsewhere
+    ? conversations.find((c) => c.id === runningConversationId)
+    : undefined
+  const busyElsewhereNote =
+    busyElsewhere && runningConversationId
+      ? {
+          title: busyConversation ? conversationLabel(busyConversation) : runningConversationId,
+          waitingOnYou: openQuestions.some(
+            (q) =>
+              q.from_agent === agent.name
+              && q.conversation_id === runningConversationId
+              && isWaitedOn(q)
+              && !q.answered
+              && !q.declined,
+          ),
+          onOpen: onSelectConversation ? () => onSelectConversation(runningConversationId) : undefined,
+        }
+      : null
 
   const { data: roster = [] } = useAgents()
   const { data: runners = [] } = useRunners()
@@ -984,7 +1013,7 @@ export function AgentOutputPanel({
    * Shown when a conversation has undelivered queued entries and no run — which is exactly the
    * state a successor is in the moment it is handed its checkpoint. */
   const handleContinue = async () => {
-    if (!apiKey || !projectId || !currentConversationId || isRunning || isSending) return
+    if (!apiKey || !projectId || !currentConversationId || agentIsRunning || isSending) return
     setIsSending(true)
     try {
       const result = await continueConversation(projectId, currentConversationId)
@@ -1021,7 +1050,7 @@ export function AgentOutputPanel({
    * entry, so the operator's next message needs no prefix and carries no instructions.
    */
   const handleCheckpoint = async () => {
-    if (!apiKey || !projectId || !currentConversationId || isRunning || isSending) return
+    if (!apiKey || !projectId || !currentConversationId || agentIsRunning || isSending) return
     setIsSending(true)
     setHandoffState('preparing')
     setSessionNotice('Writing checkpoint…')
@@ -1197,6 +1226,7 @@ export function AgentOutputPanel({
         title={currentConversation ? conversationLabel(currentConversation) : 'New conversation'}
         onRename={conversationTarget ? handleRename : undefined}
         isRunning={isRunning}
+        busyElsewhere={busyElsewhereNote}
         elapsedSeconds={elapsedSeconds}
         isStopping={isStopping}
         onStop={handleStop}
@@ -1319,6 +1349,9 @@ export function AgentOutputPanel({
           projectId: projectId ?? '',
           conversationId: currentConversationId ?? null,
           isRunning,
+          placeholder: busyElsewhere
+            ? `${agent.name} is busy in another conversation — a message here will queue`
+            : undefined,
           onSubmit: handleComposerSubmit,
           workspacePaths,
           runner: targetRunnerRow?.cli ?? null,
@@ -1347,7 +1380,7 @@ export function AgentOutputPanel({
               when the work is already described. Shown only when there is queued work and no run
               — otherwise the composer is the right control. */}
           {/* Not for hop-held work (F653): that has its own Continue on the entry. */}
-          {hasQueuedWork && !isRunning && !hasHopHeld && (
+          {hasQueuedWork && !agentIsRunning && !hasHopHeld && (
             <div className="flex items-center gap-2">
               <Button
                 variant="primary"
