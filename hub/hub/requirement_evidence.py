@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import run_liveness, traces, worktrees
@@ -1304,6 +1304,18 @@ async def decide(
     # Materialised from the append-only reviews so coverage is a join rather than a correlated
     # subquery. `evidence_reviews` is what governs; this follows it.
     evidence.review_state = decision
+    if decision == REJECTED:
+        # F759: a drift candidate asks whether the code moved away from what *accepted* evidence
+        # showed. Rejecting the piece answers it; left open it outranks `rejected` in the coverage
+        # precedence and hid the rejection from the approval gate.
+        await session.execute(
+            update(RequirementDrift)
+            .where(
+                RequirementDrift.evidence_id == evidence.id,
+                RequirementDrift.state == "candidate",
+            )
+            .values(state="superseded")
+        )
     return review
 
 
