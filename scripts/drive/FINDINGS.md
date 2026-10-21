@@ -36906,7 +36906,7 @@ Expected: the story carries a `review_unstaffed` event, with its reason, at its 
 
 ## F769 (B) -- the integration note hides a merge behind a later "already in master" skip and keeps a resolved "no main branch" line, so merged work reads "Not merged" twice
 
-**Status:** fixed 2026-10-21 (commit named in the next line's follow-up). `newestPerTarget` lets a merged row outrank a skip for the same commit and drops a null-commit skip once any row merged. Test: `taskIntegrationRetry.test.tsx` (F769, route's order). Found in the tasks sweep (`scripts/drive/s1019_tasks_p2.py`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser.
+**Status:** fixed 2026-10-21 at 1df4f02. `newestPerTarget` lets a merged row outrank a skip for the same commit and drops a null-commit skip once any row merged. Test: `taskIntegrationRetry.test.tsx` (F769, route's order). Found in the tasks sweep (`scripts/drive/s1019_tasks_p2.py`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser.
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes -- repro below.
