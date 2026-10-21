@@ -144,6 +144,12 @@ async def push_project(project_id: str) -> int:
     return len(ids)
 
 
+def forget_backoff(project_id: str) -> None:
+    """Try the project's export at the next pass: its settings changed, so the old wait is stale."""
+    _failures.pop(project_id, None)
+    _retry_after.pop(project_id, None)
+
+
 async def push_once() -> int:
     """One pass over every project with push enabled; a full batch is drained before returning."""
     async with async_session_factory() as db:
