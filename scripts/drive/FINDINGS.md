@@ -37939,3 +37939,56 @@ event_logs task_created data: {"id": "task-bf20bddeb689", "title": "B: discounte
 ```
 
 `tasks.py:892-899` broadcasts and persists `{"id", "title"}` only (the assignee goes into the event's `agent` column), and `eventSummary.ts:14` reads `data.assignee ?? 'unassigned'`. So the summary is wrong for every assigned task. **Expected:** the payload carries `assignee` (null when none) and the row reads "assigned to beta". **Test:** a hub test that the persisted `task_created` payload has `assignee`; `eventSummary.test.ts` already covers the string.
+
+## F838 (C) -- deleting a document whose task kept work says only "Deleted “T” and its 2 tasks.": the 200's `kept_work` (branch, unmerged commit) never reaches the screen, and the confirm promises every task "goes with it"
+
+**Status:** open 2026-10-21. The document twin of F836 (task delete); F828's "Not done". Found by the day sweep `sweep-spec-sweep` (scratch Hub :8150, `scripts/drive/s1021_s_ui.py`, Chromium on the served bundle, after a real Haiku turn committed on the task's branch).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+```
+approved change spec/changes/ui-delete2, task task-33a51cd750bc worked by a real Haiku turn: commit 3e1be22 on agentweave/task/task-33a51cd750bc
+Spec tab -> spec-delete -> confirm: "Delete “ui-delete2 095124”? Its file, its requirements and their evidence, and every task it put on the
+  board go with it. This cannot be undone."  -> Delete document
+DELETE .../documents/spec/changes/ui-delete2/spec.json -> 200 {"deleted": true, "tasks": [2 ids], "requirements": 2,
+  "kept_work": [{"task_id": "task-33a51cd750bc", "branch": "agentweave/task/task-33a51cd750bc", "unmerged_commits": 1, "uncommitted": false}]}
+page after: spec-deleted-note "Deleted “ui-delete2 095124” and its 2 tasks."  -- body text has no "kept", "branch", "unmerged", "commit", "checkout"
+git worktree list: .agentweave/tasks/task-33a51cd750bc 3e1be22 [agentweave/task/task-33a51cd750bc]   <- kept, correctly (F828 holds)
+```
+
+The backend keeps and names the work (F828 holds: the other task's clean checkout was discarded, this one kept, `task_checkout_kept` recorded). The UI drops it: `useDeleteSpecDocument` types the result as `{path, deleted, tasks}` (`hub/ui/src/api/spec.ts:1352`), `onConfirmDelete` stores only `tasks.length` (`hub/ui/src/components/spec/SpecPhaseBar.tsx:315-319`), and `SpecDeletedNote` has nothing else to say. The operator who deleted the document cannot learn from this screen that a commit survives, nor on which branch. **Expected:** the note adds "Kept agentweave/task/<id> (1 unmerged commit) from a deleted task." for each `kept_work` entry (and "uncommitted edits" when `uncommitted`). **Test:** `specFold.test.tsx` beside the existing `SpecDeletedNote` cases: a delete whose stubbed 200 carries `kept_work` must render the branch and count; fails today.
+
+## F839 (D) -- the F829 fix still refetches the deleted document: the delete's own `spec_updated` broadcast re-invalidates every spec query family, so seven GETs of the dead path 404 after the 200
+
+**Status:** open 2026-10-21. Partial regression of F829's stated fix ("no GET of the dead path after the 200"); nothing reaches the screen (the page has already moved to the home document). Found by the day sweep `sweep-spec-sweep` (scratch Hub :8150, `scripts/drive/s1021_s_ui.py`, Chromium, live SSE).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+```
+Chromium, two documents (ui-delete2, stays): Delete document on ui-delete2 -> 200, page moves to stays, note shown
+responses after the DELETE's 200, all 404, all for spec/changes/ui-delete2/spec.json:
+  GET spec/coverage?document=...   GET documents/.../proposals   GET documents/.../proposals?status=resolved
+  GET documents/.../rigor-history  GET spec/drift?state=candidate&document=...   GET spec/requirements?document=...   GET spec?path=...
+7 console errors "Failed to load resource: 404". Same seven with one document (the last) deleted.
+```
+
+`useDeleteSpecDocument` (`hub/ui/src/api/spec.ts:1355-1379`) takes care to skip the dead path's keys, but the Hub's delete then announces `spec_updated {path: <deleted>}` (`hub/hub/api/v1/spec.py:3685`), and `useSpecEvents` (`hub/ui/src/api/spec.ts:589-611`) invalidates `specCoverage`, `specProposals`, `specRigorHistory`, `specRequirements`, `specDrift` wholesale and `['spec', <deleted path>]` by name while the panel's observers are still mounted. The F829 test stubbed `fetch` with no SSE, so it could not see this. **Expected:** the delete broadcasts something the client can tell apart (e.g. `spec_updated {path, deleted: true}`), and `useSpecEvents` removes the dead path's queries instead of invalidating them. **Test:** in `specDeleteApi.test.tsx`, deliver the `spec_updated` event the route actually emits after the 200 and assert no request for the deleted path follows; fails today.
+
+## F840 (D) -- deleting the last document shows "No specification yet" with no word of what was deleted: `SpecDeletedNote` lives inside the document panel, which the empty state replaces
+
+**Status:** open 2026-10-21. Follow-up to F829 (its "Not done" names only the conversation host). Found by the day sweep `sweep-spec-sweep` (scratch Hub :8150, `scripts/drive/s1021_s_ui.py`, Chromium; screenshot `testbed/ui-judge/s1021-spec/094953/02_after_delete.png`).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+```
+the project's only remaining document spec/changes/ui-delete (approved, 2 tasks, one with commit 11c9d17) -> Delete document -> 200, kept_work names the branch
+page after: "No specification yet -- Open a conversation and ask an agent to write one ..."; spec-deleted-note absent
+```
+
+`SpecPage` returns the empty state before it mounts `SpecDocumentPanel` (`hub/ui/src/components/spec/SpecPage.tsx:85-95`), and the note is rendered only by the panel (`SpecDocumentPanel.tsx:256`). The store holds the notice, but no mounted component reads it. **Expected:** the empty state (and the "Everything here is archived" state at `SpecPage.tsx:101`) shows `SpecDeletedNote` above it. **Test:** a `SpecPage` test with an empty inventory and a notice in `specDeletionStore` asserts the note renders; fails today.
