@@ -2683,7 +2683,8 @@ def _transport_failure_fields(exc: BaseException, conversation_id: Optional[str]
     these — an absent fact is reported as absent rather than invented.
     """
     return {
-        "error": str(exc),
+        # `or type(...)`: a bare `TimeoutError` stringifies to '' (F789).
+        "error": str(exc) or type(exc).__name__,
         # Rendered, not raw — this dict is broadcast for display. See `_runtime_failure_fields`.
         "exit_code": readable_exit_code(getattr(exc, "exit_code", None)),
         "method": getattr(exc, "method", None),
@@ -3245,7 +3246,7 @@ async def _execute_run(
             run = await db.get(Run, run_id)
             if run:
                 run.status = "failed"
-                run.error = run_secrets.scrub(run_id, str(exc))
+                run.error = run_secrets.scrub(run_id, str(exc) or type(exc).__name__)
                 run.ended_at = datetime.now(timezone.utc)
                 # Nothing spawned, so nothing can have asked — swept anyway, because the rule is
                 # "a terminal run leaves nothing pending", not "the paths where we expect some".
@@ -4534,7 +4535,7 @@ async def _execute_rpc_run(
                 run = await db.get(Run, run_id)
                 if run:
                     run.status = "failed"
-                    run.error = run_secrets.scrub(run_id, str(exc))
+                    run.error = run_secrets.scrub(run_id, str(exc) or type(exc).__name__)
                     run.ended_at = datetime.now(timezone.utc)
                     # See `_execute_run`'s spawn-failure branch.
                     await expire_pending_for_run(db, run_id)

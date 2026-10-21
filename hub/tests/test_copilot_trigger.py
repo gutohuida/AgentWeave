@@ -11,6 +11,7 @@ turn does.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -231,3 +232,30 @@ async def test_the_stored_github_toggle_reaches_the_turn_as_stored(
         await await_background_runs()
 
     assert fake.call_args.kwargs["agent_config"]["copilot_github_mcp"] is expected
+
+
+@pytest.mark.asyncio
+async def test_a_startup_timeout_leaves_a_run_error_that_says_what_timed_out(
+    app, auth_headers, bind_runner
+):
+    """F789: through the route, a turn that dies before the prompt on a request timeout records
+    a non-empty `error` -- a bare `TimeoutError` stringifies to '' and used to leave nothing."""
+    from hub.copilot_acp import CopilotACPError
+
+    await _copilot_agent(app, auth_headers, bind_runner)
+    for raised, expect in (
+        (asyncio.TimeoutError(), "TimeoutError"),
+        (CopilotACPError("Copilot did not answer `initialize` within 30 s"), "`initialize`"),
+    ):
+        with patch("hub.copilot_acp.run_turn", AsyncMock(side_effect=raised)):
+            response = await _trigger(app, auth_headers, session_mode="new")
+            assert response.status_code == 200, response.text
+            await await_background_runs()
+        async with async_session_factory() as db:
+            run = (
+                (await db.execute(select(Run).where(Run.id == response.json()["run_id"])))
+                .scalars()
+                .one()
+            )
+        assert run.status == "failed"
+        assert expect in run.error, run.error
