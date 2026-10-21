@@ -37879,3 +37879,63 @@ Drift panel: "Drifting: 3 to answer -- say which one was wrong", each re-raised 
 ```
 
 Asking again is right: the code was not put back and the requirement was not reworded. But the operator who answered a minute ago sees the same row return with no hint why, which reads as "my answer was lost". The reason sits only in the buttons' hover titles. **Expected:** the re-raised row says it was answered before, e.g. "You said Code corrected at 12:31; todo/total.py still differs." `GET /spec/drift` can carry the previous resolved candidate's answer for the same piece and fingerprint. **Test:** in the drift tests: a candidate raised again after `implementation_corrected` carries `previously` (resolution, time). A UI test renders it on the row.
+
+## F835 (C) -- a dependent's turn refused because its prerequisite's merge could not be brought in is never tried again when the prerequisite lands: it sits `queued` behind a stale refusal until the operator presses Continue
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8150, `scripts/drive/s1021_t_drive.py` + `s1021_t_ui.py`, real Haiku turns, Chromium).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+```
+B depends_on A (both real Haiku tasks). project repo: .git/hooks/pre-merge-commit -> exit 1 ("policy: merges into master are frozen (hook)")
+POST /tasks/<A>/land {}                       -> 200, A approved, latest_integration failed, retryable (F823 path)
+GET  /tasks/<B>                               -> dependency_state null (released by A's approval)
+POST /agent/trigger {agent: beta, task_id: B} -> 200 {"status": "queued", "waiting_reason": "Could not prepare the checkout for task <B>:
+     the work <B> depends on conflicts with its base: merging prerequisite commit f9b6e8a188ec failed. policy: merges into master are frozen (hook) ..."}
+remove the hook; drawer Try again on A    -> "Merged f9b6e8a1 into master" (08:18:01Z)
+inbound_queue_entries <B's entry>          -> state queued, delivery_attempts 1, same waiting_reason -- still so at 08:39:14Z (21 min), no run started
+conversation (Chromium): "1 waiting -- the last delivery attempt was refused: ... merges into master are frozen (hook) ... Continue"
+press Continue                             -> POST .../conversations/<c>/continue, run-da547dc87e9d delivered, B's checkout has A's commit, task completed
+```
+
+The prerequisite merge in `worktrees.py:648-652` raises `IsolationUnavailableError`, which `agent_trigger.py:1523-1527` turns into the task-checkout refusal; the entry stays `queued` (correct: it is not the agent's fault). But nothing re-tries it: `redrain_queued_agents` runs only at a run's end, project open, settings save and relocate (`agent_trigger.py:3282-3293`, `:3786-3804`), and neither `POST /tasks/{id}/integrations/retry` (`tasks.py:1414-1449`) nor `land` / an approval that merges calls it. So the one event that clears the refusal (the prerequisite now on the main line) does not deliver the waiting work, and the screen keeps saying the merge is frozen after it went through. The same holds for any retryable integration failure (a hook, an index lock), not only this repro's hook. Smaller, same sentence: it says "the work <B> depends on conflicts with its base" for a merge that failed on a hook, not a conflict, and names the prerequisite by sha, not by task title. **Expected:** a successful integration (approve, Land, Retry) re-drains the project's queue as a run's end does; the refusal names the prerequisite task and says "could not be merged" rather than "conflicts" unless git reported a conflict. **Test:** `hub/tests/` beside the F158 prerequisite tests: a dependent entry refused by a failing prerequisite merge is delivered after `POST /tasks/{A}/integrations/retry` merges, without any other call (fails today: the entry stays `queued`).
+
+## F836 (C) -- when deleting a task keeps its work (unmerged commits), nothing on screen says so: the drawer just closes, Activity shows a bare `task_checkout_kept`, and Worktrees lists the checkout under the deleted task's id as one "released when the task is approved or rejected"
+
+**Status:** open 2026-10-21. Follow-up to F828's "Not done". Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8150, `scripts/drive/s1021_t_ui.py`, Chromium on the served bundle).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+```
+K1 worked by a real Haiku turn: commit 921a51d on agentweave/task/task-0a0ea57ec87c, task completed, checks passed
+drawer -> Details -> Delete -> confirm: "Delete this task? Its own prerequisites, links, transitions and evidence go with it. This cannot be undone."
+  (no word about the commit on its branch) -> Delete task -> drawer closes; page text has no "kept", "branch", "checkout", "unmerged"
+event_logs: task_checkout_kept {"task_id": "task-0a0ea57ec87c", "branch": "agentweave/task/task-0a0ea57ec87c", "unmerged_commits": 1, "uncommitted": false}
+Activity -> Activity feed row: "task_checkout_kept  warn  1 minute ago"            (no branch, no count, no task title)
+           and "task_deleted  P2: prerequisite deleted from the drawer"             (released_dependents not shown)
+Environment -> Worktrees: "Task checkouts -- One per task being worked. Released when the task is approved or rejected; the branch is kept.
+           task-0a0ea57ec87c  ...\.agentweave\tasks\task-0a0ea57ec87c  agentweave/task/task-0a0ea57ec87c  No conflicts"   (no discard control)
+control: K2 (no commit) deleted -> checkout and branch removed, no event (F828 holds)
+```
+
+The backend keeps and names the work correctly (F828), but `eventSummary.ts` has no case for `task_checkout_kept` or `task_deleted`'s `released_dependents`, so the default branch prints the event name; the task drawer's delete gets a 204 with no body; and `WorktreesPanel.tsx:129` describes a release that can no longer happen for a task that no longer exists. An operator who deleted a task cannot learn from the app that its commit survives on a branch, nor find which branch. **Expected:** the Activity row reads "Kept agentweave/task/<id> (1 unmerged commit) from deleted task “K1: add shop/tax.py”" (carry `title` in the event), and `task_deleted` names the released tasks; the drawer's delete, once done, says the same (the board can toast the event it already receives); the Worktrees row for a checkout whose task is gone says "task deleted -- 1 unmerged commit kept". Whether Worktrees should offer a discard control is a separate design question, not this fix. **Test:** `eventSummary.test.ts` cases for both payloads; a Worktrees panel test with a task checkout whose task 404s.
+
+## F837 (D) -- every `task_created` row in the Activity feed reads "assigned to unassigned", even for a task created with an assignee
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8150, Chromium).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes
+**Tier:** 0
+
+```
+POST /tasks {"title": "B: discounted label", "assignee": "beta", ...} -> 201, assignee "beta"
+Activity feed: task_created "B: discounted label" assigned to unassigned
+event_logs task_created data: {"id": "task-bf20bddeb689", "title": "B: discounted label"}   (agent column = beta)
+```
+
+`tasks.py:892-899` broadcasts and persists `{"id", "title"}` only (the assignee goes into the event's `agent` column), and `eventSummary.ts:14` reads `data.assignee ?? 'unassigned'`. So the summary is wrong for every assigned task. **Expected:** the payload carries `assignee` (null when none) and the row reads "assigned to beta". **Test:** a hub test that the persisted `task_created` payload has `assignee`; `eventSummary.test.ts` already covers the string.

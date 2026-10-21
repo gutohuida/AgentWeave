@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T17:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-21-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-tasks-sweep",
-    "next_action": "Do the 'sweep-tasks-sweep' queue item per .claude/loops/day-window.md 'A sweep firing' (time guard first: 16:15 or later -> defer). Read .claude/skills/e2e-loop/SKILL.md in full; drive the new paths named in the item's detail first on a scratch Hub 8110+; file findings Ready+Tier; log SWEPT.",
+    "current": "sweep-spec-sweep",
+    "next_action": "Do the 'sweep-spec-sweep' queue item per .claude/loops/day-window.md 'A sweep firing' (time guard first: 16:15 or later -> defer). Read .claude/skills/e2e-loop/SKILL.md in full; drive the new paths named in the item's detail first on a scratch Hub 8110+ (not 8130: something else listens there); file findings Ready+Tier; log SWEPT.",
     "queue": [
         {
             "id": "plan-review",
@@ -23,7 +23,7 @@
         },
         {
             "id": "sweep-tasks-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Tasks x Dependencies x Worktrees & integration",
             "detail": "New first: delete a prerequisite -> confirm and task_deleted event name the released tasks (F825); delete discards the clean checkout+branch and names kept work (F828); task drawer TaskIntegrationNote Try again on a failed merge, naming attempt time (F823). Then one representative path per row."
         },
@@ -93,7 +93,7 @@
             "title": "Re-drive last night's fixes live",
             "model": "sonnet",
             "effort": "medium",
-            "detail": "Night 2026-10-20 (45 iterations) fixed 43 findings; re-drive those touching a route, run, gate or UI: F759 F761 F767 F769 F773 F776 F789-F796 F798 F801 F804 F806 F807 F810 F811 F812 F814-F817 F819 F820 F823-F825 F828 F829 F832 F833 (CLI-only F800 F802 F808 by command). Log CONFIRMED F<n> or REOPENED F<n> (set Status back to open with evidence). Scratch Hub 8110+, haiku-4-5 only."
+            "detail": "Night 2026-10-20 (45 iterations) fixed 43 findings; re-drive those touching a route, run, gate or UI: F759 F761 F767 F769 F773 F776 F789-F796 F798 F801 F804 F806 F807 F810 F811 F812 F814-F817 F819 F820 F824 F829 F832 F833 (CLI-only F800 F802 F808 by command). Log CONFIRMED F<n> or REOPENED F<n> (set Status back to open with evidence). Scratch Hub 8110+, haiku-4-5 only. F823 F825 F828 held in sweep-tasks-sweep: skip."
         },
         {
             "id": "ledger-tidy",
