@@ -37209,7 +37209,7 @@ Expected: saving the endpoint, its headers or the enable flag resets that projec
 
 ## F794 (C) -- a shell or write call on a path inside a root granted for reading only is refused as "is outside your workspace", the same words as an ungranted path; neither the agent nor the operator is told the root is granted for the file-reading tool
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach.py` steps T and W).
+**Status:** fixed 2026-10-21 (night iteration 28, Tier 0, SHA_PLACEHOLDER). `_Reach` keeps the roots granted `read` that a non-read tool may not reach (`read_only`); `_judge_resolved` answers `_READ_ONLY_ROOT` (names the read grant, the file-reading tool, and that writing needs read and write) for a path in one. `test_a_read_only_root_refusal_says_so.py` (2 of 4 failed before; the read tool still allowed, an ungranted path still "outside your workspace"). Drive: `_decide` over real directories for Bash and Write; not re-seen in the Questions panel (labelled). The mcp_server copy a Hub spawns is pinned at its start, so a running Hub's agents get the wording on its next restart.
 **Source:** drive
 **Theme:** Permissions & sandbox
 **Ready:** yes
