@@ -37691,7 +37691,7 @@ DELETE /tasks/task-d5dfdb335e86 -> 204 (drawer closes)
 
 ## F825 (C) -- deleting a prerequisite answers 204 and silently releases every task that waited on it; the confirm says only "Its dependencies ... go with it", and nothing names the released tasks
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
+**Status:** fixed 5be6c22, 2026-10-21 night iteration 42 (Tier 0). `DELETE /tasks/{id}` reads the tasks that depend on the one being deleted before the rows go and puts them in the `task_deleted` event as `released_dependents` (`[{id, title}]`); the drawer's inline confirm lists them by title ("2 tasks wait on this one: ... -- they will be free to start"), its wording now says "Its own prerequisites" so it no longer reads as the dependents, and it takes focus on Cancel. Tests `test_the_operator_can_delete_a_document_a_task_or_an_archived_agent.py::test_deleting_a_prerequisite_names_the_tasks_it_releases` (failed before: KeyError), `taskDetailDrawer.test.tsx` (names the dependents and Cancel has focus; silent when none; both failed before the first); full vitest 2222 passed, lint and tsc clean, bundle refreshed, hub `-k "ui_build_stamp or ui_staleness or static or delet or task"` 1287 passed. Drive: real route over ASGI and database, real components in jsdom (labelled: no Chromium, no scratch Hub). Not done: whether deleting an approved, merged task should be refused is the operator's call and is not decided here. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
 **Source:** drive
 **Theme:** Dependencies
 **Ready:** yes
