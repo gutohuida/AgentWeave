@@ -37181,7 +37181,7 @@ Expected: a probe whose non-zero exit is an answer records its exit code without
 
 ## F792 (C) -- a stopped run's trace reads `ok`, and its stop is recorded as an `aw.status.completed` event; the trace list and drawer cannot tell a stopped turn from a completed one
 
-**Status:** fixed (this commit, iteration 26, Tier 0). `finish_run` leaves a stopped/interrupted/abandoned root `unset` with a message naming how it ended; the trace summary carries `run_status`; the drawer header and the Traces list show it. Left alone: the `aw.status.completed` event name for a stop's status line. Drive: real route + real finish_run in tests, not re-seen in a live Hub drawer. Was: open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
+**Status:** fixed 17c14d5 (iteration 26, Tier 0). `finish_run` leaves a stopped/interrupted/abandoned root `unset` with a message naming how it ended; the trace summary carries `run_status`; the drawer header and the Traces list show it. Left alone: the `aw.status.completed` event name for a stop's status line. Drive: real route + real finish_run in tests, not re-seen in a live Hub drawer. Was: open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
 **Source:** drive
 **Theme:** Traces
 **Ready:** yes
