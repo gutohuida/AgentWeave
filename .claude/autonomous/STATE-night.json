@@ -8,17 +8,17 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T07:00:00+01:00",
-    "iteration": 20,
+    "iteration": 21,
     "log_file": ".claude/autonomous/2026-10-20-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F771-impl",
-    "next_action": "Do queue item F771-impl: read F771 in scripts/drive/FINDINGS.md (grep the heading), write a failing hub test (the review briefing for a task serving FR-1 of a two-requirement document names FR-2 as another task's, with that task's title/id), then fix in the review briefing builder (and, if small, read_spec_document marking the reviewed task's requirements), set Status to 'fixed <sha>' with a drive line. One finding per firing. After F771: the remaining C-severity Ready:yes findings (F772 next: Land gate unlanded paragraph when every commit is named by an awaiting piece; then F773..F834 range), severity first. Skip F788 (waits on OPEN decision trace-5) and F787 (no repro). No scratch Hubs running.",
+    "current": "F772-impl",
+    "next_action": "Do queue item F772-impl: read F772 in scripts/drive/FINDINGS.md (grep the heading), write a failing hub test (Land gate: when every unlanded commit is named by an awaiting evidence piece, the `unlanded` paragraph is not added / does not ask the author to record evidence already recorded; see `_unlanded_detail`, hub/hub/requirement_gate.py), fix, set Status to 'fixed <sha>' with a drive line. One finding per firing. After F772: the remaining C-severity Ready:yes findings (F773..F834 range), severity first. Skip F788 (waits on OPEN decision trace-5) and F787 (no repro). No scratch Hubs running.",
     "queue": [
         {
-            "id": "F771-impl",
+            "id": "F772-impl",
             "status": "open",
-            "title": "F771 (C,T0): review briefing names other tasks' requirements"
+            "title": "F772 (C,T0): Land gate unlanded paragraph when every commit is named by an awaiting piece"
         },
         {
             "id": "F788-blocked",

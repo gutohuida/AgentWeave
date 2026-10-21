@@ -36932,7 +36932,7 @@ Expected: a failed result with `preexisting: true` reads "tests failed -- fails 
 
 ## F771 (C) -- a review turn is not told which of the document's requirements are someone else's, and a Haiku reviewer sent correct work back twice for the sibling task's requirement
 
-**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns).
+**Status:** fixed 2026-10-21 night iteration 21 (Tier 0), 089bb89, the briefing half. `review_turn._other_requirements_sentence` joins `verdict_evidence_sentence` (so the loop briefing and the turn context both carry it): "This task serves `FR-1`. The document's other requirements belong to other tasks (`FR-2`: `task-...` (Add sub())): do not send this task back for them." A requirement the task also serves is not called the other's; a one-task document says nothing. Test `hub/tests/test_review_briefing_names_other_tasks_requirements.py` (3, failed before). Not built: `read_spec_document` marking the reviewed task's requirements (the run-to-task lookup and the budgeted view make it more than a one-line change); the briefing line is what the reviewer reads first. Not re-seen with a live Haiku reviewer (labelled).
 **Source:** drive
 **Theme:** Flows & review
 **Ready:** yes -- repro below; behavioural, measured 2 of 2 here, and once in F606's drive.
