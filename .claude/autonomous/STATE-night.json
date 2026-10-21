@@ -8,18 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T07:00:00+01:00",
-    "iteration": 15,
+    "iteration": 16,
     "log_file": ".claude/autonomous/2026-10-20-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F761-impl",
-    "next_action": "Do queue item F761-impl: read F761 in scripts/drive/FINDINGS.md (grep the heading), write a failing test at the seam it names (a piece naming no commit must answer no files and a reason from GET /spec/evidence/{id}/diff), fix, drive, set Status to 'fixed <sha>' with a drive line. One finding per firing. After F761: F767, F769, then the C-severity Ready:yes findings (F758-F834 range), severity first. Skip F788 (waits on OPEN decision trace-5) and F787 (no repro).",
+    "current": "F767-impl",
+    "next_action": "Do queue item F767-impl: read F767 in scripts/drive/FINDINGS.md (grep the heading; a flow hands fresh work to its own named reviewer), write a failing test at the seam it names, fix, drive, set Status to 'fixed <sha>' with a drive line. One finding per firing. After F767: F769, then the C-severity Ready:yes findings (F758-F834 range), severity first. Skip F788 (waits on OPEN decision trace-5) and F787 (no repro). A scratch drive Hub on :8153 was used by F761 and is stopped.",
     "queue": [
-        {
-            "id": "F761-impl",
-            "status": "open",
-            "title": "F761 (B,T0): a piece that names no commit shows HEAD's commit as its work"
-        },
         {
             "id": "F767-impl",
             "status": "open",

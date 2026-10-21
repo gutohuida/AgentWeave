@@ -90,6 +90,8 @@ class Footprint:
     branch: Optional[str] = None
     entries: Dict[str, str] = None  # type: ignore[assignment]
     reachable_from_main: Optional[bool] = None
+    #: Whether the commit was named by the recorder, not taken as the checkout's HEAD (F761).
+    commit_named: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------
@@ -678,6 +680,7 @@ def _apply_footprint(
     row.entries = taken.entries or {}
     row.reachable_from_main = taken.reachable_from_main
     row.watched_from = list(taken.watched_from)
+    row.commit_named = taken.commit_named
     row.outside_workspace_writes = outside_writes
     return row
 
@@ -837,15 +840,34 @@ def _line_of_work_base(root: Path, commit: str, main: str) -> Optional[str]:
     return _git(root, "rev-parse", "--verify", f"{commit}^")
 
 
-def work_diff(root: Path, commit: Optional[str], main_branch: Optional[str]) -> Dict[str, Any]:
+def work_diff(
+    root: Path,
+    commit: Optional[str],
+    main_branch: Optional[str],
+    *,
+    unnamed_branch: Optional[str] = None,
+) -> Dict[str, Any]:
     """`{files: [{path, status, patch}], base, commit, truncated, reason}` for the work *commit*
-    carries on its line of work. Never raises: a missing commit or repository is a `reason`."""
+    carries on its line of work. Never raises: a missing commit or repository is a `reason`.
+
+    *unnamed_branch* is the branch a piece that named no commit was recorded on. When that is the
+    main line, its footprint's commit is whatever HEAD happened to be, already on main, and its
+    parent is no base for work that piece never did (F761). It answers no files and says so.
+    """
     empty: Dict[str, Any] = {"files": [], "base": None, "commit": commit, "truncated": False}
     if not commit:
         return {**empty, "reason": "this piece names no commit, so there is no work to diff"}
     if _git(root, "rev-parse", "--verify", f"{commit}^{{commit}}") is None:
         return {**empty, "reason": f"commit {commit[:12]} is not in this repository"}
     main = _main_ref(root, main_branch)
+    if unnamed_branch and unnamed_branch == main and is_reachable_from(root, commit, main):
+        return {
+            **empty,
+            "reason": (
+                f"this piece names no commit; it was recorded with the checkout at "
+                f"{commit[:12]} on {main}, which is not work of its own, so there is no work to diff"
+            ),
+        }
     base = _line_of_work_base(root, commit, main) if main else None
     if base is None:
         base = _git(root, "rev-parse", "--verify", f"{commit}^")
@@ -992,6 +1014,7 @@ def read_footprint(
                 if main_branch
                 else is_reachable_from_main(root, commit)
             ),
+            commit_named=bool(named),
         )
 
     if at:
@@ -1641,6 +1664,7 @@ async def restamp_run_footprints(
             entries=entries,
             watched_from=watched_from,
             reachable_from_main=reachable,
+            commit_named=False,
         )
 
     # Read once per run, like the footprint above it, and for the same reason: it is one fact about

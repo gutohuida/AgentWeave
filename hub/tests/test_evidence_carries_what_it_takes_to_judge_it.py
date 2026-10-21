@@ -204,6 +204,65 @@ async def test_a_piece_with_no_commit_answers_why(app, auth_headers, builder, tm
 
 
 @pytest.mark.asyncio
+async def test_a_piece_naming_no_commit_does_not_show_the_checkouts_commit_as_its_work(
+    app, auth_headers, builder, tmp_path
+):
+    """F761: the footprint took HEAD on main, a commit made for something else, and the diff showed
+    that commit's patch as the piece's work."""
+    await ready(app, auth_headers, builder, tmp_path)
+    task = await linked_task(app, auth_headers)
+    (tmp_path / "unrelated.py").write_text("print('someone else')\n", encoding="utf-8")
+    git(tmp_path, "add", "unrelated.py")
+    git(tmp_path, "commit", "-q", "-m", "an unrelated commit")
+    head = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    recorded = await app.post(
+        f"{BASE}/spec/evidence",
+        json={"identifier": "FR-1", "summary": "watched it sort", "task_id": task},
+        headers=auth_headers,
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    diff = await app.get(f"{BASE}/spec/evidence/{recorded.json()['id']}/diff", headers=auth_headers)
+
+    assert diff.status_code == 200, diff.text
+    body = diff.json()
+    assert body["files"] == []
+    assert head[:12] in body["reason"] and "no commit" in body["reason"]
+
+
+@pytest.mark.asyncio
+async def test_a_piece_naming_a_commit_on_main_still_shows_that_commit(
+    app, auth_headers, builder, tmp_path
+):
+    await ready(app, auth_headers, builder, tmp_path)
+    task = await linked_task(app, auth_headers)
+    (tmp_path / "fix.py").write_text("print('the fix')\n", encoding="utf-8")
+    git(tmp_path, "add", "fix.py")
+    git(tmp_path, "commit", "-q", "-m", "the fix")
+    fix = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    (tmp_path / "later.py").write_text("print('later')\n", encoding="utf-8")
+    git(tmp_path, "add", "later.py")
+    git(tmp_path, "commit", "-q", "-m", "a later commit")
+    recorded = await app.post(
+        f"{BASE}/spec/evidence",
+        json={
+            "identifier": "FR-1",
+            "summary": "the fix works",
+            "task_id": task,
+            "commit": fix,
+            "locator": "fix.py",
+        },
+        headers=auth_headers,
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    diff = await app.get(f"{BASE}/spec/evidence/{recorded.json()['id']}/diff", headers=auth_headers)
+
+    assert diff.status_code == 200, diff.text
+    assert [f["path"] for f in diff.json()["files"]] == ["fix.py"]
+
+
+@pytest.mark.asyncio
 async def test_an_unknown_piece_has_no_diff(app, auth_headers):
     missing = await app.get(f"{BASE}/spec/evidence/ev-nope/diff", headers=auth_headers)
     assert missing.status_code == 404
