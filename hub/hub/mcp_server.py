@@ -317,7 +317,7 @@ def send_message(
         reply["held_by_hop_budget"] = True
         reply["delivery_note"] = result.get("delivery_note")
     if result.get("held"):
-        # Either hold, the recipient's missing runner included (F623).
+        # Any hold: the recipient's missing runner (F623) and a spent token budget (F815) included.
         reply["held"] = result["held"]
         reply["delivery_note"] = result.get("delivery_note")
     return reply

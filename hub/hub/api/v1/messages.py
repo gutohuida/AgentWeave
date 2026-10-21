@@ -24,6 +24,7 @@ from ...run_task_binding import resolve_task_for_project
 from ...schemas.common import SuccessResponse
 from ...schemas.messages import OPERATOR_SENDER, MessageCreate, MessageResponse
 from ...sse import sse_manager
+from ...usage_accounting import project_budget_state
 from ...utils import persist_accepted_event, persist_event, short_id
 from ...worktrees import is_reserved_agent_name
 
@@ -53,8 +54,17 @@ def no_runner_note(msg_id: str, recipient: str) -> str:
     )
 
 
+def token_budget_note(msg_id: str, recipient: str) -> str:
+    """What the sender of a message queued behind a spent token budget is told (F815)."""
+    return (
+        f"Recorded as {msg_id}, but not delivered yet: the project's token budget is spent, so "
+        f"{recipient}'s turn waits until the operator raises it. Do not tell anyone it was "
+        "delivered; if it matters now, ask the operator with ask_user."
+    )
+
+
 class Held(NamedTuple):
-    """Why a recorded message is not on its way: `hop_budget` or `no_runner`, and the note."""
+    """Why a recorded message is not on its way: `hop_budget`, `no_runner` or `token_budget`."""
 
     reason: str
     note: str
@@ -421,6 +431,10 @@ async def create_message_for_actor(
         return msg, Held("hop_budget", held_note(msg.id, body.recipient, hop_depth, hop_budget))
     if recipient_row.runner_id is None:
         return msg, Held("no_runner", no_runner_note(msg.id, body.recipient))
+    # An agent's message makes an autonomous turn, which a spent budget holds; the operator's own
+    # still runs (F814), so it is never reported held.
+    if not by_operator and (await project_budget_state(session, project_id))["exhausted"]:
+        return msg, Held("token_budget", token_budget_note(msg.id, body.recipient))
     return msg, None
 
 
