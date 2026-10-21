@@ -37530,7 +37530,7 @@ Expected: `create_message_for_actor` returns a `Held("token_budget", note)` when
 
 ## F816 (C) -- unarchiving a conversation that was cut over reopens it as a live line of work: no notice, a working composer on the old session, while the successor holds the same work
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150, Chromium against the served bundle).
+**Status:** fixed feb1947 (2026-10-21, Tier 0). `POST .../unarchive` on a handed-over conversation is 409 naming the successor (via `handover_of`); the UI's existing error path shows the sentence; an ordinary archived conversation still reopens. Driven over the real route and database (not in a browser, labelled); the F293 test now reopens through the database helper. The sheet's "carried into a new conversation" link to the successor is not done. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150, Chromium against the served bundle).
 **Source:** drive
 **Theme:** Checkpoints
 **Ready:** yes

@@ -8,17 +8,17 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T07:00:00+01:00",
-    "iteration": 36,
+    "iteration": 37,
     "log_file": ".claude/autonomous/2026-10-20-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F816-impl",
-    "next_action": "Do queue item F816-impl: read F816 in scripts/drive/FINDINGS.md (grep the heading); if it is not Ready:yes / still open, take the next in this order, C before D: F817, F819, F823..F825, F828, F829, F833, then the D ones (F778, F779, F797, F803, F805, F809, F813, F818, F821, F822, F826, F827, F830, F831, F834). Write a failing test at the seam the finding names, fix, set Status to 'fixed <sha>' with a drive line. One finding per firing. Skip F788 (waits on OPEN decision trace-5) and F787 (no repro). No scratch Hubs running.",
+    "current": "F817-impl",
+    "next_action": "Do queue item F817-impl: read F817 in scripts/drive/FINDINGS.md (grep the heading); if it is not Ready:yes / still open, take the next in this order, C before D: F819, F823..F825, F828, F829, F833, then the D ones (F778, F779, F797, F803, F805, F809, F813, F818, F821, F822, F826, F827, F830, F831, F834). Write a failing test at the seam the finding names, fix, set Status to 'fixed <sha>' with a drive line. One finding per firing. Skip F788 (waits on OPEN decision trace-5) and F787 (no repro). No scratch Hubs running.",
     "queue": [
         {
-            "id": "F816-impl",
+            "id": "F817-impl",
             "status": "open",
-            "title": "F816 (C): next open Ready:yes finding, C before D"
+            "title": "F817 (C): next open Ready:yes finding, C before D"
         },
         {
             "id": "F788-blocked",
