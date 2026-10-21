@@ -199,6 +199,36 @@ async def test_a_task_someone_else_decided_while_the_run_was_live_records_nothin
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("waiting", ["completed", "under_review"])
+@pytest.mark.parametrize("policy", ["surface", "retry"])
+async def test_a_turn_bound_to_a_task_waiting_for_its_reviewer_records_nothing(
+    app, waiting, policy
+):
+    """F776. A task in `completed`/`under_review` is waiting on its reviewer and its author can make
+    no move on it, so an acknowledgement turn bound to it by conversation ends with the task where
+    it was and nothing was neglected. Recording it left an open divergence on a task nobody
+    dropped, and under `retry` would have queued a run for work awaiting review."""
+    run_id = f"run-f776-{waiting}-{policy}"
+    task_id = f"task-f776-{waiting}-{policy}"
+    async with async_session_factory() as session:
+        await _bound_run(session, run_id, task_id, policy=policy, status="running")
+        task = await session.get(Task, task_id)
+        await apply_transition(session, task, "completed", operator())
+        if waiting == "under_review":
+            await apply_transition(session, task, "under_review", operator())
+        await session.commit()
+        run = await session.get(Run, run_id)
+        run.status = "completed"
+        await session.commit()
+
+    assert await evaluate_run_end(run_id) is None
+
+    async with async_session_factory() as session:
+        assert await _divergence_for(session, run_id) is None
+        assert await _queued_for(session, "worker") == []
+
+
+@pytest.mark.asyncio
 async def test_a_task_the_operator_approves_over_the_route_records_nothing(app, auth_headers):
     """F548 at the surface: the operator's own route decides the task, then the run ends."""
     base = "/api/v1/projects/proj-test/tasks/task-f548c"
