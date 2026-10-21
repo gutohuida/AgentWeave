@@ -16,6 +16,7 @@ import type { ReachGrants } from '@/api/projects'
 import { Button } from '@/components/ui/button'
 import { ReachGrantsEditor } from '@/components/environment/ReachGrantsEditor'
 import { EMPTY_GRANTS, cleanGrants, describeGrants } from '@/lib/reachGrants'
+import { readableApiError } from '@/api/client'
 import { permissionModeValues, useModelCatalog } from '@/api/modelCatalog'
 import { useBindAgentCharter, useCharters } from '@/api/charters'
 import {
@@ -295,7 +296,7 @@ export function ReachGrantsSetting({ agent }: { agent: AgentSummary }) {
       </p>
       {update.isError && (
         <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
-          Could not save the granted reach.
+          {readableApiError(update.error, 'Could not save the granted reach.')}
         </p>
       )}
     </div>

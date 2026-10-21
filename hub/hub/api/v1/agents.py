@@ -3201,7 +3201,7 @@ async def patch_agent(
         try:
             agent_row.reach_grants = validated_grants(body["reach_grants"])
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=f"reach_grants: {exc}") from exc
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     bound_runner = (
         await session.get(Runner, agent_row.runner_id) if agent_row.runner_id is not None else None
