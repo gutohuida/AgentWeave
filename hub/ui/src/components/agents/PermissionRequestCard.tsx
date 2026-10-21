@@ -43,7 +43,16 @@ function describe(request: PermissionRequest): string {
   // the only thing describing the request, and is better than telling the operator nothing.
   const reason = input.reason
   if (typeof reason === 'string' && reason) return reason
-  return 'no details given — the provider sent none'
+  // The Hub's own always-ask request for archiving a job (F861): the job's name and schedule are
+  // what the operator is deciding on, and the id alone says nothing.
+  const jobName = input.job_name
+  if (typeof jobName === 'string' && jobName) {
+    const cron = input.cron
+    return typeof cron === 'string' && cron ? `${jobName} (${cron})` : jobName
+  }
+  const jobId = input.job_id
+  if (typeof jobId === 'string' && jobId) return jobId
+  return 'no details given'
 }
 
 /** The `tool_name` of the Hub's question about a turn held on a runner-config change (F737,

@@ -38378,7 +38378,7 @@ Cause: `tool_result_event` (`hub/hub/runner_events.py:318-345`) writes `content 
 
 ## F861 (B) -- an agent's `archive_job` puts a card to the operator that does not say which job: "cla wants to use archive_job — no details given — the provider sent none"
 
-**Status:** open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, Chromium, `scripts/drive/s1021_rc_archive.py`, runs run-d64b7d0cdc12 and run-98d3f8072dca).
+**Status:** fixed 2026-10-21 (Tier 0): the archive route's direction request now carries `{job_id, job_name, cron}` (`jobs.py`), and `PermissionRequestCard.describe` renders "name (cron)"; its last fallback is the neutral "no details given", no longer blaming a provider. Tests `test_the_archive_card_names_the_job_it_asks_about` (failed before) and `names the job an archive request is about`; 57 Hub tests and 34 card tests pass; UI bundle refreshed. Tested through the real route and the real component, not driven in a browser. Originally: open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, Chromium, `scripts/drive/s1021_rc_archive.py`, runs run-d64b7d0cdc12 and run-98d3f8072dca).
 **Source:** drive
 **Theme:** Capability plane
 **Ready:** yes

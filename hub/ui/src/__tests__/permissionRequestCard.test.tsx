@@ -159,7 +159,25 @@ describe('permission request card — codex shapes', () => {
         agent="haiku-1"
       />
     )
-    expect(screen.getByText(/the provider sent none/)).toBeInTheDocument()
+    expect(screen.getByText('no details given')).toBeInTheDocument()
+  })
+
+  // F861: the Hub opens this request itself (an agent archiving a job), so the card must name the
+  // job, and must not blame a provider for sending nothing.
+  it('names the job an archive request is about', () => {
+    render(
+      <PermissionRequestCard
+        requests={[
+          request({
+            tool_name: 'archive_job',
+            tool_input: { job_id: 'job-bdd57e64ad62', job_name: 'archive-me', cron: '0 4 * * *' },
+          }),
+        ]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByText('archive-me (0 4 * * *)')).toBeInTheDocument()
+    expect(screen.queryByText(/the provider sent none/)).not.toBeInTheDocument()
   })
 
   // F107: the operator used to approve the literal string "a file change" with nothing under it.

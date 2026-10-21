@@ -1569,7 +1569,8 @@ async def archive_job(
             run_id=run_identity,
             tool_name="archive_job",
             tool_use_id=f"archive-{job_id}",
-            tool_input={"job_id": job_id},
+            # F861: the operator decides on *which* job, and the card can only show what is here.
+            tool_input={"job_id": job_id, "job_name": job.name, "cron": job.cron},
             action="archiving this job",
         )
 

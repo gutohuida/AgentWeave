@@ -546,6 +546,24 @@ async def test_a_caller_that_repeats_the_request_does_not_open_a_second_card(app
 
 
 @pytest.mark.asyncio
+async def test_the_archive_card_names_the_job_it_asks_about(app, auth_headers):
+    """F861: the card was "cla wants to use archive_job -- no details given", because the request
+    carried only the id. The operator decides on *which* job, so the Hub puts its name and
+    schedule in the request it opens."""
+    headers = await _actor(run_id="run-named")
+    await _allow_agent_jobs(app, auth_headers)
+    job_id = await _job_for_archiving(app, headers, name="archive-me")
+
+    opened = await app.post(f"/api/v1/agent-actions/jobs/{job_id}/archive", headers=headers)
+    assert opened.status_code == 409, opened.text
+
+    (card,) = await _cards(job_id)
+    assert card.tool_input["job_id"] == job_id
+    assert card.tool_input["job_name"] == "archive-me"
+    assert card.tool_input["cron"] == "0 2 * * *"
+
+
+@pytest.mark.asyncio
 async def test_the_operators_refusal_is_an_answer_rather_than_a_hurdle(app, auth_headers):
     """A denial comes back as 403 and stays denied. 409 means *not yet*, 403 means *no*, and an
     agent that could turn the second into the first by asking again would be voting."""
