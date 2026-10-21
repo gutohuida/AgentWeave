@@ -37195,7 +37195,7 @@ Expected: a run that did not complete is not `ok`. Leave the status `unset` with
 
 ## F793 (C) -- after the OTLP collector was down, a fixed endpoint receives nothing for up to 300 s while Settings -> Traces shows no error and "Never"
 
-**Status:** fixed 2026-10-21 (night iteration 27, Tier 0). `trace_export.forget_backoff` runs when the settings route saves the endpoint, headers or enable flag; `test_saving_trace_settings_ends_the_backoff.py` (3 of 4 failed before). Drive: real route + real pusher against a live local receiver; not re-seen on a live Hub. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
+**Status:** fixed 2026-10-21 (night iteration 27, Tier 0, e850402). `trace_export.forget_backoff` runs when the settings route saves the endpoint, headers or enable flag; `test_saving_trace_settings_ends_the_backoff.py` (3 of 4 failed before). Drive: real route + real pusher against a live local receiver; not re-seen on a live Hub. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
 **Source:** drive
 **Theme:** Traces
 **Ready:** yes
