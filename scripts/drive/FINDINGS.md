@@ -37300,7 +37300,7 @@ Expected: with a named profile, `--all` touches only that profile (its own logs,
 
 ## F801 (C) -- a vault report filed while the reports job has no runner stays `pending` forever: choosing a runner never looks into it, and the operator cannot close a pending report
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143).
+**Status:** fixed <SHA> 2026-10-21 (a door, not auto-pickup): `POST /vault/reports/{id}/review` (202; 404 unknown report, 409 not pending / job off / no runner) and a "Look into it" button on each pending report; the no-runner and failed-spawn firings now say the report stays pending and name the door. Tests: `test_a_pending_report_is_looked_into_again_once_the_job_has_a_runner`, vaultTab "looks into a pending report again". Drive: real route over ASGI with a faked worker; component over a real ApiError; not driven through a live Hub with a real Haiku turn (labelled). Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143).
 **Source:** drive
 **Theme:** Manager jobs
 **Ready:** yes

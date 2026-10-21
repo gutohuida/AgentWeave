@@ -8,6 +8,7 @@ import {
   isNoVault,
   useDistilVaultSource,
   useCloseVaultReport,
+  useReviewVaultReport,
   useResolveContradiction,
   useUpdateVaultSettings,
   useUploadVaultFile,
@@ -921,8 +922,36 @@ function ReportCard({ report, onOpen }: { report: VaultReport; onOpen: (id: stri
           Closed: {report.close.note}
         </p>
       )}
+      {report.status === 'pending' && <ReviewReportButton report={report} />}
       {report.status === 'referred' && <CloseReportForm report={report} />}
     </article>
+  )
+}
+
+function ReviewReportButton({ report }: { report: VaultReport }) {
+  const review = useReviewVaultReport()
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <Button
+        size="sm"
+        variant="ghost"
+        data-testid={`vault-report-${report.id}-review`}
+        disabled={review.isPending}
+        title="Ask the manager to look into this report now"
+        onClick={() => review.mutate(report.id)}
+      >
+        Look into it
+      </Button>
+      {review.error ? (
+        <p className="text-xs" style={{ color: 'var(--amber)' }} role="alert">
+          {readableApiError(review.error, 'Could not look into this report.')}
+        </p>
+      ) : review.isSuccess ? (
+        <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+          Looking into it in the background. The answer appears here when it finishes.
+        </p>
+      ) : null}
+    </div>
   )
 }
 

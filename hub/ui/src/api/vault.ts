@@ -349,6 +349,21 @@ export function useVaultReports(refetchMs: number | false = false) {
   })
 }
 
+/** Look into a pending report again (F801). 202: it runs in the background and the report leaves
+ *  `pending` when it finishes. 409 carries the reason it cannot run (the job is off or has no
+ *  runner). */
+export function useReviewVaultReport() {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: (id: string) =>
+      postJson<{ report: string; queued: boolean }>(`/api/v1/projects/${projectId}/vault/reports/${id}/review`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault', 'reports'] })
+    },
+  })
+}
+
 export function useCloseVaultReport() {
   const queryClient = useQueryClient()
   const projectId = useConfigStore((state) => state.selectedProjectId)

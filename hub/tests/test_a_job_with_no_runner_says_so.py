@@ -6,10 +6,11 @@ the on-demand Distil route said why. Each now records a `failed` firing naming t
 """
 
 import asyncio
+from pathlib import Path
 
 import pytest
 
-from hub import distillation, manager, vault_reports, vault_spec_check
+from hub import distillation, manager, vault, vault_reports, vault_spec_check
 
 BASE = "/api/v1/projects/proj-test"
 
@@ -65,10 +66,28 @@ async def test_a_spec_check_with_no_runner_says_so(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_a_report_review_with_no_runner_says_so(app, auth_headers):
+async def test_a_report_review_with_no_runner_says_so(app, auth_headers, tmp_path):
     await _enable_without_runner(app, auth_headers, manager.REPORTS)
-    await vault_reports.review_in_background("proj-test", "rpt-0123456789ab")
+    source = await app.post(
+        f"{BASE}/vault/sources",
+        json={"name": "Limits", "type": "note", "content": "The limit is 300 euros."},
+        headers=auth_headers,
+    )
+    assert source.status_code == 201, source.text
+    settings = await app.get(f"{BASE}/vault/settings", headers=auth_headers)
+    private = Path(settings.json()["effective_private_location"])
+    report = vault.add_report(
+        tmp_path,
+        private,
+        entry_id=source.json()["id"],
+        message="This looks wrong.",
+        reporter={"agent": "helper", "run_id": "run-1"},
+    )
+    await vault_reports.review_in_background("proj-test", report["id"])
     await _one_firing(app, auth_headers, manager.REPORTS)
+    # F801: the sentence says what becomes of the report.
+    (firing,) = [f for f in await _firings(app, auth_headers) if f["job"] == manager.REPORTS]
+    assert "stays pending" in firing["detail"] and "Look into it" in firing["detail"]
 
 
 @pytest.mark.asyncio

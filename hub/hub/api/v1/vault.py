@@ -46,6 +46,7 @@ from ... import (
     vault,
     vault_access,
     vault_intake,
+    vault_reports,
     vault_spec_check,
 )
 from ...auth import get_project
@@ -448,6 +449,29 @@ async def get_vault_reports(
     """Every report on this machine, pending and referred first, then newest first."""
     root, private = await roots(session, project[0])
     return {"reports": await asyncio.to_thread(vault.list_reports, root, private)}
+
+
+@router.post("/reports/{report_id}/review", status_code=status.HTTP_202_ACCEPTED)
+async def review_vault_report(
+    report_id: str,
+    background: BackgroundTasks,
+    project: Tuple[str, str] = Depends(get_project),
+) -> dict:
+    """Look into a pending report again, in the background (F801): 404 for an unknown report,
+    409 naming what to do when the job is off or has no runner, or the report is not pending."""
+    try:
+        plan = await vault_reports.prepare(project[0], report_id)
+    except vault_reports.CannotReviewError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.reason) from exc
+    background.add_task(_review_quietly, plan)
+    return {"report": report_id, "queued": True}
+
+
+async def _review_quietly(plan: vault_reports.Plan) -> None:
+    try:
+        await vault_reports.review(plan, trigger=vault_reports.REQUESTED)
+    except Exception:  # noqa: BLE001 -- the answer has been sent; nothing can raise into it
+        vault_reports.logger.warning("vault report review failed", exc_info=True)
 
 
 @router.post("/reports/{report_id}/close")

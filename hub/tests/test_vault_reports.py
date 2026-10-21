@@ -365,6 +365,43 @@ async def test_each_report_is_one_firing_and_a_disabled_job_spawns_nothing(
     assert _report(tmp_path, waiting["id"])["status"] == "pending"
 
 
+@pytest.mark.asyncio
+async def test_a_pending_report_is_looked_into_again_once_the_job_has_a_runner(
+    app, auth_headers, worker, tmp_path
+) -> None:
+    """F801: a report filed while the job had no runner stayed pending for good -- choosing the
+    runner never looked into it and the operator could not close a pending report."""
+    fake = worker(("answered", "The fact matches line 4.", None, []))
+    await _set_job(app, auth_headers, enabled=True)
+    source = await _source(app, auth_headers)
+    agent = await _run_headers("run-again", "helper")
+    fact = await _fact(app, auth_headers, tmp_path, source, "Limit is 300.")
+    report = await _filed(app, agent, fact)
+    assert _report(tmp_path, report["id"])["status"] == "pending" and not fake.calls
+    (failed,) = await _firings()
+    assert failed["outcome"] == "failed" and "Look into it" in failed["detail"]
+
+    url = f"{BASE}/vault/reports/{report['id']}/review"
+    # Still no runner: the door says why, and spawns nothing.
+    refused = await app.post(url, headers=auth_headers)
+    assert refused.status_code == 409 and "no runner" in refused.json()["detail"]
+    missing = await app.post(f"{BASE}/vault/reports/rpt-nope/review", headers=auth_headers)
+    assert missing.status_code == 404
+
+    await _set_job(app, auth_headers, runner_id=await _runner(app, auth_headers))
+    queued = await app.post(url, headers=auth_headers)
+    assert queued.status_code == 202, queued.text
+    assert queued.json() == {"report": report["id"], "queued": True}
+    assert len(fake.calls) == 1
+    assert _report(tmp_path, report["id"])["status"] == "answered"
+    firings = await _firings()
+    assert [f["outcome"] for f in firings] == ["failed", "answered"]
+    assert firings[1]["trigger"] == "report_requested"
+    # An answered report is not looked into a second time.
+    again = await app.post(url, headers=auth_headers)
+    assert again.status_code == 409 and len(fake.calls) == 1
+
+
 # ---------------------------------------------------------------------------
 # outcomes
 # ---------------------------------------------------------------------------
