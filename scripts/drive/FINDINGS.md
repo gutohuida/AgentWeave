@@ -37237,7 +37237,7 @@ Expected: the route's detail is the same `loc: msg` sentence the project route y
 
 ## F796 (C) -- a host typed into Granted host but not added with Enter or "Add host" is silently dropped when the settings are saved, and stays in the field as if it were granted
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach_ui.py`).
+**Status:** fixed 2026-10-21 (night iteration 30; sha in the commit that carries this line). Drive: a real `userEvent` type-then-click-Save over a stateful form carrying the real editor submitted `hosts: ['localhost:*','registry.npmjs.org']` and cleared the field; test `hub/ui/src/__tests__/reachGrantsHostDraft.test.tsx` (failed before the fix). The editor adds a typed host on blur, so both the project and agent pages are covered; not re-seen in a browser. Original: open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach_ui.py`).
 **Source:** drive
 **Theme:** Permissions & sandbox
 **Ready:** yes

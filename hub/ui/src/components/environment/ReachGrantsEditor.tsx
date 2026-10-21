@@ -8,7 +8,8 @@ const field = 'control-field block px-2 py-1.5 text-xs'
 /**
  * What an agent may reach beyond its workspace under Workspace only (reach-1019): roots, each read
  * or read/write, and hosts a shell command may name. Edits the grants only; the caller saves them.
- * Shared by the project's settings and an agent's, where the agent's replace the project's whole.
+ * A host typed but not yet added is added when the field loses focus (F796), so pressing Save
+ * never leaves it behind. Shared by the project's settings and an agent's, where the agent's replace the project's whole.
  */
 export function ReachGrantsEditor({
   grants,
@@ -27,7 +28,11 @@ export function ReachGrantsEditor({
     })
   const addHost = () => {
     const host = hostDraft.trim()
-    if (!host || grants.hosts.includes(host)) return
+    if (!host) return
+    if (grants.hosts.includes(host)) {
+      setHostDraft('')
+      return
+    }
     onChange({ ...grants, hosts: [...grants.hosts, host] })
     setHostDraft('')
   }
@@ -110,6 +115,7 @@ export function ReachGrantsEditor({
           value={hostDraft}
           placeholder="localhost:*"
           onChange={(event) => setHostDraft(event.target.value)}
+          onBlur={addHost}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault()
