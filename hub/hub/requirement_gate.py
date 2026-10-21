@@ -422,6 +422,13 @@ class GateRefusal:
         if not self.unlanded:
             return ""
         entry = self.unlanded[0]
+        # F772: where every one of these commits is named by a piece awaiting judgement, the author
+        # has recorded exactly what is asked for here, and accepting it (the `unaccepted` sentence)
+        # is the whole remedy. Asking them to record it again sends them after what exists.
+        awaiting = {str(piece.get("commit_sha") or "") for piece in self.unaccepted} - {""}
+        commits = [str(sha) for sha in entry.get("commits") or [] if sha]
+        if commits and all(sha in awaiting for sha in commits):
+            return ""
         branch = str(entry.get("branch") or "the task's branch")
         target = str(entry.get("target_branch") or "the main branch")
         shas = [str(sha)[:12] for sha in entry.get("commits") or [] if sha]
