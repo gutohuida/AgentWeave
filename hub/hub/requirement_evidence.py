@@ -38,7 +38,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import run_liveness, traces, worktrees
+from . import run_liveness, spec_index, traces, worktrees
 from .db.models import (
     Agent,
     EvidenceFootprint,
@@ -1272,10 +1272,24 @@ async def decide(
         # says that. Rejecting it stays open; accepting it would count a stale demonstration.
         requirement = await session.get(SpecRequirement, evidence.requirement_id)
         if requirement is not None and evidence.digest != requirement.digest:
+            name = requirement.identifier or "its requirement"
+            if await spec_index.stale_cause(session, requirement.id, evidence.digest) == (
+                spec_index.CRITERIA
+            ):
+                # F833: the statement stands; its acceptance criteria are what moved.
+                said = (
+                    f"{evidence.id} was recorded before the acceptance criteria of {name} "
+                    "changed (its statement is unchanged); it cannot be accepted. Record new "
+                    "evidence against the current criteria."
+                )
+            else:
+                said = (
+                    f"{evidence.id} was recorded for an earlier wording of {name}, which has "
+                    "been reworded since; it cannot be accepted. Record new evidence against "
+                    "the current wording."
+                )
             raise EvidenceRefusedError(
-                f"{evidence.id} was recorded for an earlier wording of "
-                f"{requirement.identifier or 'its requirement'}, which has been reworded since; "
-                "it cannot be accepted. Record new evidence against the current wording.",
+                said,
                 code="evidence_stale",
                 http_status=409,
             )

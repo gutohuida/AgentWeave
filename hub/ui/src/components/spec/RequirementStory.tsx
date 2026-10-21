@@ -21,9 +21,10 @@ import { wordDiff } from '@/lib/wordDiff'
  * before the Hub kept wordings (migration 0131) says so rather than guessing what it said.
  */
 
-const CHANGE: Record<RequirementRevision['classification'], { verb: string; icon: string; tone: Tone }> = {
+const CHANGE: Record<NonNullable<RequirementRevision['change']>, { verb: string; icon: string; tone: Tone }> = {
   created: { verb: 'wrote it', icon: 'add', tone: 'blue' },
   reworded: { verb: 'reworded it', icon: 'edit', tone: 'amber' },
+  criteria: { verb: 'changed its acceptance criteria', icon: 'edit', tone: 'amber' },
   retired: { verb: 'retired it', icon: 'archive', tone: 'red' },
   restored: { verb: 'restored it', icon: 'restart_alt', tone: 'green' },
 }
@@ -94,7 +95,8 @@ function Revision({
   onOpenDocument: (path: string) => void
 }) {
   const folded = revision.folded_from
-  const change = CHANGE[revision.classification] ?? CHANGE.reworded
+  const kind = revision.change ?? revision.classification
+  const change = CHANGE[kind] ?? CHANGE.reworded
   const recorded = revision.statement != null
   return (
     <TimelineItem
@@ -125,7 +127,12 @@ function Revision({
         </>
       }
     >
-      {revision.classification !== 'retired' && recorded ? (
+      {kind === 'criteria' ? (
+        <p className="aw-tl-meta" data-testid={`requirement-revision-criteria-${revision.id}`}>
+          The statement is unchanged; its acceptance criteria are what moved, so earlier evidence
+          is for an earlier version.
+        </p>
+      ) : revision.classification !== 'retired' && recorded ? (
         <>
           <Wording before={previous ?? null} after={revision.statement as string} />
           {previous === null ? (

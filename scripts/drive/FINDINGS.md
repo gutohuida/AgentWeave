@@ -37844,7 +37844,7 @@ The operator goes round a loop: Land says send it back, the menu has no send-bac
 
 ## F833 (C) -- a criterion-only amendment is recorded and shown as "reworded it" with the same wording twice, and the stale-evidence refusal says the requirement "has been reworded"
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8190, a real Haiku `checker` test turn calling `amend_spec_document`, Chromium: `scripts/drive/s1020_v_ui.py`).
+**Status:** fixed (iteration 45, Tier 0, commit named on the next line). Found 2026-10-20 by the day sweep `sweep-evidence-sweep`. Fix: the requirement detail route adds `change` to each revision (`spec_index.change_kind`: a `reworded` revision whose statement equals the one before is `criteria`; stored classification unchanged, so no migration), the story says "changed its acceptance criteria" with no repeated wording, and the `evidence_stale` refusal says the criteria changed when the statement stood (`spec_index.stale_cause`). Tests: `test_a_criterion_only_change_is_not_a_rewording`, `test_stale_refusal_for_a_criterion_change_does_not_say_reworded`, `requirementStory.test.tsx`. Drive: real routes over ASGI and database, real component in jsdom; no Chromium, no scratch Hub. Not done: the story does not name which criterion moved or its before/after. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8190, a real Haiku `checker` test turn calling `amend_spec_document`, Chromium: `scripts/drive/s1020_v_ui.py`).
 **Source:** drive
 **Theme:** Requirements & evidence
 **Ready:** yes

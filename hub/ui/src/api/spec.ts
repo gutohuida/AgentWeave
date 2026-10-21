@@ -963,6 +963,9 @@ export function useSpecRequirements(path: string | null) {
 export interface RequirementRevision {
   id: string
   classification: 'created' | 'reworded' | 'retired' | 'restored'
+  /** What the revision left unchanged: `criteria` is a `reworded` revision whose statement stood
+   *  (F833). Absent from a Hub that predates it. */
+  change?: 'created' | 'reworded' | 'retired' | 'restored' | 'criteria'
   source: string
   actor_kind: string
   actor: string

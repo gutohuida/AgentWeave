@@ -1577,6 +1577,11 @@ async def _requirement_story(
             {
                 "id": row.id,
                 "classification": row.classification,
+                # What it left unchanged, not only what was recorded (F833): a criterion edit is
+                # stored `reworded` but reads `criteria` when the statement stood.
+                "change": spec_index.change_kind(
+                    row, revisions[position - 1] if position else None
+                ),
                 "source": row.source,
                 "actor_kind": row.actor_kind,
                 "actor": row.actor,
@@ -1587,7 +1592,7 @@ async def _requirement_story(
                 "created_at": row.created_at.isoformat() if row.created_at else None,
                 "folded_from": folded_from(row),
             }
-            for row in revisions
+            for position, row in enumerate(revisions)
         ],
         "drift": [
             {

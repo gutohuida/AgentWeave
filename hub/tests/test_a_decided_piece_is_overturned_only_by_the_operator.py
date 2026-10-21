@@ -264,3 +264,44 @@ async def test_evidence_for_an_earlier_wording_cannot_be_accepted(
     assert await state_of(evidence) == "awaiting"
     # Rejecting it stays possible: it is the author's signal.
     assert (await decide(app, auth_headers, evidence, "rejected", "old wording")).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_stale_refusal_for_a_criterion_change_does_not_say_reworded(
+    app, auth_headers, builder, tmp_path
+):
+    """F833: the statement did not change, so "has been reworded" sends the reader to compare
+    wording that is the same. The refusal names the criteria."""
+    await ready(app, auth_headers, builder, tmp_path)
+    evidence = await record_evidence(app, builder)
+    changed = await app.post(
+        SUBMIT,
+        json={
+            "path": PATH,
+            "document": {
+                "schema_version": SCHEMA_VERSION,
+                "kind": "change-spec",
+                "title": "Integration demo",
+                "requirements": [ALPHA],
+                "acceptance_criteria": [
+                    {
+                        "key": "c-today",
+                        "requirement": ALPHA["key"],
+                        "given": "two items are due",
+                        "when": "the list is read",
+                        "then": "it returns 2",
+                    }
+                ],
+            },
+        },
+        headers=builder,
+    )
+    assert changed.status_code == 200, changed.text
+
+    refused = await decide(app, auth_headers, evidence, "accepted")
+
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["code"] == "evidence_stale", detail
+    assert "reworded" not in detail["message"], detail
+    assert "criteria" in detail["message"], detail
