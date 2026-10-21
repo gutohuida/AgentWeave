@@ -37273,7 +37273,7 @@ Expected: the unreadable folder becomes one `refused` result naming it ("The Hub
 
 ## F799 (C) -- the folder walk follows junctions and directory links (a loop adds each file 64 times to the batch), and the 200-file cap is checked only after the whole folder is walked
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143, `scripts/drive/s1020_vault.py` steps L and B).
+**Status:** fixed 2026-10-21 f3e013c (night iteration 31). Drive: `vault_intake.expand` over the real `hub/ui/node_modules` refused in 0.1 s (was 14.1 s). Tests: `hub/tests/test_vault_paths.py::test_a_folder_holding_a_link_to_itself_yields_each_file_once` (a real junction) and `::test_a_folder_past_the_limit_is_refused_without_walking_all_of_it` (both failed before the fix). Original: open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143, `scripts/drive/s1020_vault.py` steps L and B).
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes
