@@ -15061,7 +15061,7 @@ Driven 2026-09-01 (iteration 6) against the 8011 Hub on the beta profile, PID 22
 
 ## F183 (C) — charter names have no uniqueness rule anywhere, and the one place a charter is chosen shows nothing else
 
-**Status:** open. Verified 2026-09-09: `hub/hub/api/v1/charters.py` still carries no
+**Status:** open. Re-verified 2026-10-21 (`sweep-agents-sweep`, :8154): `POST /charters {"name": "Developer"}` beside the seeded Developer -> 201. Verified 2026-09-09: `hub/hub/api/v1/charters.py` still carries no
 duplicate-name refusal on either the create or the rename door, and `Charter.name` has no unique
 constraint. Named in no change. [classified 2026-09-09, D-3]
 
@@ -37501,7 +37501,9 @@ Expected: (1) 422 "agents must be an object of name -> config"; (2) the answer c
 
 With `eps` archived, alpha's `request_agent {"name": "eps", "template": "beta"}` came back `Hub rejected POST /agents/request (409): Agent 'eps' already exists` (`hub/hub/api/v1/agents.py:2734`). `POST /agents {"name": "eps"}` gives `409 "Agent name 'eps' already exists in this project"` (`:646`). eps is in no picker, so an operator or agent that looks for it finds nothing to act on. The design keeps archived names taken on purpose (F465's note: "a name is never reused"), and the sentence should say so. The budget refusal beside it already reads well: "Project agent budget exhausted (4/4) ... Ask the operator to archive an agent ... or to raise the agent budget in Settings."
 
-Expected: "'eps' belongs to an archived agent; a name is never reused. Unarchive eps, or choose another name." on both doors. Failing test: in `hub/tests/test_request_agent*.py`, archive then request the same name, asserting the 409 detail contains "archived". Seam: Agents.
+Expected: "'eps' belongs to an archived agent; a name is never reused. Unarchive eps, or choose another name." on both doors.
+
+Also measured 2026-10-21 (`sweep-agents-sweep`, scratch Hub :8154): F811's new case-twin refusal has the same gap. With `eps` archived, `POST /agents {"name": "Eps"}` -> 409 "an agent named 'eps' already exists in this project; names must differ by more than case, ...", which does not say eps is archived, and the identical name still answers the bare "Agent name 'eps' already exists in this project". The same sentence fits both: name the archived agent and how to get it back. Failing test: in `hub/tests/test_request_agent*.py`, archive then request the same name, asserting the 409 detail contains "archived". Seam: Agents.
 
 ## F814 (B) -- with the token budget spent, the operator's own message waits "Queued — token budget exhausted" behind an agent's budget-held message, so "operator messages can still run" does not hold
 
@@ -38122,3 +38124,43 @@ Cause: F540's failure line (`hub/ui/src/components/agents/AgentOutputPanel.tsx:6
 Cause: the warn path (`hub/hub/checkpoint_trigger.py:376-404`) broadcasts `checkpoint_due` with no reason and sets the same `due` as `offered`; the banner (`AgentOutputPanel.tsx:767`) has one text.
 
 **Expected:** when the warning was raised under `automatic` because the budget is spent, the banner says so: "Automatic checkpointing is paused: the project's token budget is spent. Checkpoint now runs as your own act and is counted." (a `reason` on `checkpoint_due`, or the banner reading the budget state it already has for the budget notice). **Test:** `hub/tests/test_checkpoint_trigger*.py`: automatic policy, budget exhausted, a reading over the threshold -> the `checkpoint_due` payload carries a budget reason; fails today. Seam: Checkpoints x Accounting & allowance.
+
+## F849 (C) -- an agent a session sync deletes leaves its conversations open; the rail files them under "agent archived", and an agent later created with the same name inherits them and resumes the deleted agent's provider session
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8154, profile a1021, three real Haiku turns, Chromium against the served bundle, `scripts/drive/s1021_a_api.py history turn|remove|recreate`, `s1021_a_ui.py removed`). F810's fix refuses the deletion only while an entry is `queued`; an agent with a finished history is still deleted, and this is what it leaves.
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes
+**Tier:** 0
+
+gamma (Haiku) ran one turn, "Reply with the single word PONG" (`run-2b5931fb62a9`, completed, `conv-c7cc72d97030`, provider session `b82eaf02-…`). `POST /session/sync {"data": {"agents": {"alpha": {}, "beta": {}, "eps": {}}}}` -> 200 `removed: ["gamma"]`. The Agent row went; `conv-c7cc72d97030` stayed `lifecycle: open` and is still listed by `GET /conversations`. Then `POST /agents {"name": "gamma", ...}` -> 201 (a new agent, `agent-06a9bdd093fb`). The palette (Ctrl+K) and gamma's rail group list the old conversation as the new gamma's. `POST /agent/trigger {"agent": "gamma", "conversation_id": "conv-c7cc72d97030", "message": "...what single word did you reply with earlier...?"}` -> 200, `provider_session_id: "b82eaf02-…"`, and the new agent answered **"PONG."** (`run-688f1d04e180`). It resumed the deleted agent's session and memory. The Ledger's "By agent" also adds the deleted gamma's spend to the new one. Before re-creation, the same residue for kappa (deleted the same way) shows in the rail as "Archived agents · Say hello. · **agent archived**" (`testbed/ui-judge/s1021-a-removed/104643/removed-2-reload.png`). The page itself says "kappa is not on this project's roster", but the row's label and its title "kappa is archived; open this to unarchive it" (`ConversationRow.tsx:224`) name an archive that never happened and an unarchive that cannot work.
+
+Cause: conversations, runs and ledger rows are keyed by the agent's *name* string, and `sync_session` (`hub/hub/api/v1/session_sync.py:174`) deletes only the `Agent` row. `AgentTree.tsx:73-77` treats any conversation whose agent is not on the open roster as an archived agent's. Archive keeps the name for ever ("a name is never reused", F465), but the sync deletion frees it.
+
+**Expected:** a sync deletion archives the departing agent's open conversations (`lifecycle: archived`) in the same commit, so nothing open belongs to a name with no agent. Alternatively, refuse the deletion as F810 does for queued entries, naming the conversations. Either way, a later agent of the same name starts with no conversation and no provider session of the old one. **Test:** `hub/tests/test_session_sync.py`: an agent with one conversation holding a `provider_session_id`, synced away, then re-created by `POST /agents`. `GET /conversations` lists no open conversation for it, and a trigger naming the old `conversation_id` is refused, not resumed. Fails today. Seam: Agents (roster sync) x Conversations & composer.
+
+## F850 (D) -- a session sync that deletes an agent leaves it in the rail until a reload: `session_synced` never refreshes the projects summary the rail reads, and the Activity row is a bare `agent_removed`
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8154, Chromium against the served bundle, `scripts/drive/s1021_a_ui.py removed` and an inline live probe).
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes
+**Tier:** 0
+
+With the dashboard open, `POST /agents {"name": "lam"}` (201) and then `POST /session/sync` omitting lam -> 200 `removed: ["lam"]`. Polled at +2, +6, +15 and +30 s, the rail still listed **lam** ("No activity yet") and the header still said "4 agents". A reload dropped it. The same happened to kappa while its conversation was open. The `agent_removed` event F812 added does reach Activity and Logs, as a WARN row reading `lam agent_removed`. The Logs message column repeats the type, and neither says it was a session sync (`data.by: "session_sync"`) (`testbed/ui-judge/s1021-a-activity2/105128/sub-logs.png`).
+
+Cause: the rail's agents are the projects summary (`Sidebar.tsx:433` `agents={project.agents}`). On `session_synced`, `useAgents` invalidates only `['project', projectId, 'agents']` (`hub/ui/src/api/agents.ts:218-223`). The archive mutation also invalidates `['projects']` (`agents.ts:273-275`), and the sync handler does not.
+
+**Expected:** `session_synced` also invalidates the `['projects']` summary (and the conversations list), so a deleted agent leaves the rail live. The Activity/Logs message for `agent_removed` reads "lam was removed from the roster by a session sync". **Test:** `hub/ui/src/__tests__/useSSE.test.tsx` (or an AgentTree test): dispatch `session_synced` with `removed: ["lam"]` and assert the `['projects']` query is invalidated; fails today. Seam: Agents (roster sync) x Logs, events & SSE.
+
+## F851 (C) -- `request_agent`'s required `task` is the new agent's whole first message, but neither the MCP tool nor the `aw-tool` listing says so; a real agent passed a task id
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8154, a real Haiku turn `run-6bc545f5458f`, `aw-tool` call mode).
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes
+**Tier:** 0
+
+Asked to "call request_agent with name 'Beta' and template 'beta'", alpha's first call failed for a missing argument. Its thinking: "`request_agent` requires three arguments: name, template, and task ... no details on what task should be. Let me try with ... a simple task identifier". It listed the project's tasks and called again with `task: "task-e32b0b7a5aec"`. That call was refused for F811's case twin, which is the only reason no new agent was created whose entire brief was a bare task id. The route treats `task` as free text: it becomes the delegation `Message.content` and the queue entry's `content` (`hub/hub/api/v1/agents.py:2799`, `:2813`; `AgentRequest.task`, up to 100,000 characters, `:100`). The MCP docstring (`hub/hub/mcp_server.py:802-808`) never mentions `task`. The `aw-tool` listing (`agents.py:1515-1526`) gives `args="name, template, task"` with text about the budget and the template only.
+
+**Expected:** both descriptions say what `task` is: "`task`: the new agent's first message, the work you are handing it, in prose; it is delivered to it as a message from you, and it is not a task id". If the field is meant to accept a task id too, the route resolves one. **Test:** `hub/tests/test_mcp_tool_docs*.py` (or beside the aw-tool listing tests): `request_agent`'s docstring and its `_Operation.text` both mention `task` and "first message"; fails today. Seam: Agents x Capability plane (agent tool descriptions).
