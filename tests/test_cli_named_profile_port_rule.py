@@ -16,7 +16,7 @@ def hub_home(tmp_path, monkeypatch):
     monkeypatch.setattr(diagnostics, "NATIVE_HUB_DIR", tmp_path)
     probed = []
 
-    def _probe(port):
+    def _probe(port, start_command=None):
         probed.append(port)
         return diagnostics.ok("hub_running", f"port:{port}", "answering", category="environment")
 

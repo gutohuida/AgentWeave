@@ -725,6 +725,62 @@ class TestResetCommand:
         assert (profile_a_dir / "agentweave.db").exists()
 
 
+class TestResetAllIsScopedToTheNamedProfile:
+    """F800 — `.env` is one file for every profile and `*.log` holds every instance's log."""
+
+    def _hub(self, tmp_path, monkeypatch):
+        hub = tmp_path / "hub"
+        monkeypatch.setattr("agentweave.cli.HUB_DIR", hub)
+        (hub / "profiles" / "x").mkdir(parents=True)
+        (hub / "profiles" / "x" / "agentweave.db").write_text("x", encoding="utf-8")
+        (hub / ".env").write_text("AW_BOOTSTRAP_API_KEY=k", encoding="utf-8")
+        (hub / "hub-trial-8010.log").write_text("other", encoding="utf-8")
+        (hub / "hub-x-8144.log").write_text("mine", encoding="utf-8")
+        (hub / "hub-x-y-8145.log").write_text("profile x-y", encoding="utf-8")
+        return hub
+
+    def test_named_profile_all_keeps_shared_env_and_foreign_logs(self, tmp_path, monkeypatch):
+        hub = self._hub(tmp_path, monkeypatch)
+        args = MagicMock()
+        args.yes = True
+        args.all = True
+        args.profile = "x"
+
+        assert cmd_reset(args) == 0
+
+        assert not (hub / "profiles" / "x").exists()
+        assert (hub / ".env").read_text(encoding="utf-8") == "AW_BOOTSTRAP_API_KEY=k"
+        assert (hub / "hub-trial-8010.log").exists()
+        assert (hub / "hub-x-y-8145.log").exists()
+        assert not (hub / "hub-x-8144.log").exists()
+
+    def test_named_profile_confirmation_does_not_list_the_shared_env(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        self._hub(tmp_path, monkeypatch)
+        args = MagicMock()
+        args.yes = True
+        args.all = True
+        args.profile = "x"
+
+        cmd_reset(args)
+
+        assert ".env" not in capsys.readouterr().out
+
+    def test_default_profile_all_still_removes_env_and_logs(self, tmp_path, monkeypatch):
+        hub = self._hub(tmp_path, monkeypatch)
+        (hub / "data").mkdir()
+        args = MagicMock()
+        args.yes = True
+        args.all = True
+        args.profile = "default"
+
+        assert cmd_reset(args) == 0
+
+        assert not (hub / ".env").exists()
+        assert not list(hub.glob("*.log"))
+
+
 def test_first_start_migrations_leave_a_database_that_can_hold_a_conversation(
     tmp_path, monkeypatch
 ):

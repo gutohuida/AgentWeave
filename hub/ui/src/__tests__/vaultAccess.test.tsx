@@ -13,7 +13,7 @@ const READ = {
   id: 'src-readreadread', name: 'Read often', type: 'transcript', kind: 'source', media_type: 'text/plain',
   visibility: 'tracked', created_at: '2026-10-12T10:02:00.000000Z', holder: null, available: true,
   opening: 'Read twice.', fetches: 2, last_fetched_at: '2026-10-12T11:00:00.000000Z',
-  // One of the two reads is named (F836, migration 0139); the other predates the record.
+  // One of the two reads is named (F901, migration 0140); the other predates the record.
   readers: [{ agent: 'Builder', count: 1, last_read_at: '2026-10-12T11:00:00.000000Z' }],
 }
 const UNREAD = {
@@ -95,7 +95,7 @@ describe('the Vault tab, agent read counts', () => {
     expect(line).not.toHaveTextContent('Not yet')
   })
 
-  it('names the agents that read an entry, and says how many reads predate the record (F836)', async () => {
+  it('names the agents that read an entry, and says how many reads predate the record (F901)', async () => {
     render(<VaultScreen />, { wrapper })
     fireEvent.click(await screen.findByTestId('vault-entry-src-readreadread'))
     await screen.findByTestId('vault-entry-text')

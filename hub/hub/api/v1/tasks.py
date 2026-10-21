@@ -1466,6 +1466,22 @@ async def delete_task(
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
     title = task.title
+    # F825: the tasks that waited on this one are free to start the moment it goes; name them
+    # before the rows that say so are deleted.
+    released = [
+        {"id": dependent_id, "title": dependent_title}
+        for dependent_id, dependent_title in (
+            await session.execute(
+                select(Task.id, Task.title)
+                .join(TaskDependency, TaskDependency.task_id == Task.id)
+                .where(
+                    TaskDependency.project_id == project_id,
+                    TaskDependency.depends_on_task_id == task_id,
+                )
+                .order_by(Task.created_at, Task.id)
+            )
+        ).all()
+    ]
     try:
         await deletion.delete_task(session, task)
     except deletion.DeletionRefusedError as exc:
@@ -1473,11 +1489,24 @@ async def delete_task(
             status_code=status.HTTP_409_CONFLICT, detail={"message": str(exc), "code": exc.code}
         ) from exc
     await persist_event(
-        session, project_id, "task_deleted", {"id": task_id, "title": title}, commit=False
+        session,
+        project_id,
+        "task_deleted",
+        {"id": task_id, "title": title, "released_dependents": released},
+        commit=False,
     )
     # Announced once the delete has committed (F335), never before.
     defer_broadcast(session, project_id, "task_updated", {"id": task_id, "deleted": True})
     await session.commit()
+    # F828: the rows are gone; now the checkout and branch the agent worked in. What held work is
+    # kept and named in an event (the 204 has no body to carry it).
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, project_id)
+        kept = deletion.discard_checkouts(workspace.root, [task_id])
+    except Exception as exc:  # noqa: BLE001 - the delete has committed; this is only reported
+        kept = [{"task_id": task_id, "error": str(exc)}]
+    for entry in kept:
+        await persist_event(session, project_id, "task_checkout_kept", entry, severity="warn")
     return None
 
 

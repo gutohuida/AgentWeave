@@ -11,14 +11,18 @@ import { useSpecPhaseControls, type SpecPhaseControls } from './useSpecPhaseCont
 export function SpecPhaseBar({
   path,
   onOpenLoop,
+  onDeleted,
 }: {
   path: string
+  /** Called once the Hub has deleted this document (F829). The host leaves it: nothing on this
+   *  page can show a document that no longer exists. */
+  onDeleted?: () => void
   /** Opens a loop's tab. Each host supplies its own: the conversation panel opens the tab beside
    *  the document; the Spec destination has no panel shell and must navigate to one. Without it
    *  the flow's label is text rather than a link that does nothing. */
   onOpenLoop?: (loop: LoopSummary) => void
 }) {
-  const controls = useSpecPhaseControls(path, onOpenLoop)
+  const controls = useSpecPhaseControls(path, onOpenLoop, onDeleted)
   if (!controls) return null
   return <SpecPhaseHeader path={path} controls={controls} health={null} />
 }

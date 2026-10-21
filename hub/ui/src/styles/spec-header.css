@@ -193,3 +193,7 @@ button.aw-spec-list-label:focus-visible { outline: none; box-shadow: inset 0 0 0
 .aw-spec-crumbs-button:hover { background: var(--row-hover); color: var(--text-2); }
 .aw-spec-crumbs-button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
 .aw-spec-inline-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+
+/* F829: the sentence naming what "Delete document" removed, on the page the operator lands on. */
+.aw-spec-deleted-note { display: flex; align-items: center; gap: 8px; padding: 8px 16px; font-size: 13px; color: var(--text-2); border-bottom: 1px solid var(--border); }
+.aw-spec-deleted-note > span { flex: 1; }

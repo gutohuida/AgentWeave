@@ -20,8 +20,10 @@ points at a task, requirement, evidence row, document, loop or job is listed bel
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence, Set, Tuple
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Sequence, Set, Tuple
 
 from sqlalchemy import Table, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +39,8 @@ from .db.models import (
     SpecRequirement,
     Task,
 )
+
+logger = logging.getLogger(__name__)
 
 #: The row goes with the deleted thing.
 DELETE = "delete"
@@ -187,6 +191,37 @@ async def _delete_tasks(session: AsyncSession, task_ids: Set[str]) -> None:
     await _delete_evidence(session, evidence)
     await _apply(session, TASK_REFERENCES, task_ids)
     await session.execute(_table("tasks").delete().where(Task.id.in_(task_ids)))
+
+
+def discard_checkouts(repo_root: Path, task_ids: Iterable[str]) -> List[Dict[str, Any]]:
+    """Remove the deleted tasks' checkouts and branches; describe the ones that held work (F828).
+
+    Run by the caller once the rows are committed -- a transaction rolls back and a git removal
+    does not. A task that never had a checkout of its own (a grandfathered one, or one that never
+    ran) has nothing here, and a git failure for one task must not hide the others, so each is
+    answered separately: the work that was kept, or a failure the operator can see.
+    """
+    from . import worktrees
+
+    kept: List[Dict[str, Any]] = []
+    for task_id in sorted(task_ids):
+        try:
+            result = worktrees.discard_task_checkout(repo_root, task_id)
+        except Exception as exc:  # noqa: BLE001 - a git failure is reported, never a rollback
+            logger.warning("Could not discard task %s's checkout", task_id, exc_info=True)
+            kept.append({"task_id": task_id, "error": str(exc)})
+            continue
+        if result.kept:
+            entry: Dict[str, Any] = {
+                "task_id": task_id,
+                "branch": result.branch,
+                "unmerged_commits": result.unmerged_commits,
+                "uncommitted": result.uncommitted,
+            }
+            if result.kept_reason:
+                entry["reason"] = result.kept_reason
+            kept.append(entry)
+    return kept
 
 
 async def delete_task(session: AsyncSession, task: Task) -> None:

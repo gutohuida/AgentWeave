@@ -1,10 +1,10 @@
 """which agents read each vault entry -- vault_readers
 
-Revision ID: 0139
-Revises: 0138
+Revision ID: 0140
+Revises: 0139
 Create Date: 2026-10-20 00:00:00.000000
 
-`the-vault-names-who-read-an-entry` (Tier 2, F836). One row per vault entry per agent per project,
+`the-vault-names-who-read-an-entry` (Tier 2, F901). One row per vault entry per agent per project,
 holding how many times that agent read it and when it last did. A new table only: no existing row is
 read, copied or changed, and nothing is backfilled (reads counted in `vault_fetches` before this
 revision stay unattributed). The downgrade drops the table and loses only the attribution; the
@@ -19,8 +19,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0139"
-down_revision = "0138"
+revision = "0140"
+down_revision = "0139"
 branch_labels = None
 depends_on = None
 

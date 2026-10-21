@@ -12,6 +12,7 @@ import '@/styles/conversation.css'
  *  object, one place to answer from (T3's pattern). The composer itself is today's `Composer`. */
 export function ConversationComposerDock({
   questions,
+  conversationId,
   selected,
   onToggleOption,
   onDecline,
@@ -23,6 +24,8 @@ export function ConversationComposerDock({
 }: {
   /** This agent's pending questions; empty or absent docks nothing. */
   questions?: Question[]
+  /** The conversation on screen: only a question asked in it docks here (F804). */
+  conversationId?: string | null
   selected: string[]
   onToggleOption: (label: string) => void
   onDecline?: (questionId: string) => void
@@ -46,6 +49,7 @@ export function ConversationComposerDock({
             <AgentQuestionCard
               docked
               questions={questions!}
+              conversationId={conversationId}
               agent={composerProps.agent}
               selected={selected}
               onToggle={onToggleOption}

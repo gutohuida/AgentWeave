@@ -3,7 +3,14 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
-import { useTasks, useDocumentTasks, useTaskBoard, useRenameTask } from '@/api/tasks'
+import {
+  useTasks,
+  useDocumentTasks,
+  useTaskBoard,
+  useRenameTask,
+  useDeleteTask,
+  useTaskStory,
+} from '@/api/tasks'
 import { useConfigStore } from '@/store/configStore'
 
 /**
@@ -184,5 +191,50 @@ describe('useTaskBoard', () => {
     await waitFor(() => expect(result.current.data).toBeDefined())
 
     expect(seen).toEqual(['http://hub.test/api/v1/projects/proj-1/tasks/board'])
+  })
+})
+
+// F824: a delete answered 204 and the page then asked for the deleted task's story ~110 times,
+// because the whole `tasks` prefix was invalidated -- the dead task's own keys included -- and the
+// card stayed on the board until a later refetch. The task's keys go, and its card goes with the 204.
+describe('useDeleteTask', () => {
+  it('stops asking for the deleted task and takes its card off the cached board', async () => {
+    const calls: string[] = []
+    globalThis.fetch = ((url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      if (init?.method === 'DELETE') {
+        return Promise.resolve({ ok: true, status: 204, json: async () => ({}) } as Response)
+      }
+      if (url.endsWith('/story')) {
+        return Promise.resolve({ ok: false, status: 404, json: async () => ({}) } as Response)
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => PAGE } as Response)
+    }) as typeof fetch
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const listKey = ['project', 'proj-1', 'tasks', { excludeArchivedCompleted: false, loopId: null }]
+    client.setQueryData(listKey, {
+      tasks: [{ id: 'task-1' }, { id: 'task-2' }],
+      total: 2,
+      has_more: false,
+    })
+    client.setQueryData(['project', 'proj-1', 'tasks', 'task-1', 'story'], { events: [] })
+
+    // The drawer is still mounted when the 204 lands, so the story observer is live.
+    const { result } = renderHook(
+      () => ({ story: useTaskStory('task-1', true), del: useDeleteTask() }),
+      { wrapper: wrapper(client) },
+    )
+    await waitFor(() => expect(calls.some((c) => c.endsWith('/task-1/story'))).toBe(true))
+    calls.length = 0
+
+    result.current.del.mutate({ id: 'task-1' })
+    await waitFor(() => expect(result.current.del.isSuccess).toBe(true))
+    await new Promise((r) => setTimeout(r, 300))
+
+    expect(calls.filter((c) => c.includes('/task-1/'))).toEqual([])
+    const board = client.getQueryData<{ tasks: { id: string }[]; total: number }>(listKey)
+    expect(board?.tasks.map((t) => t.id)).toEqual(['task-2'])
+    expect(board?.total).toBe(1)
   })
 })

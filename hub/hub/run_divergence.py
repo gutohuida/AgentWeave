@@ -1041,6 +1041,12 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
                 session, run, task
             )
         else:
+            # Waiting for its reviewer (F776). A task in `completed`/`under_review` has been handed
+            # off, and none of the moves out of it belong to its author, so a turn that ends with it
+            # unmoved (an acknowledgement turn bound to it by conversation) dropped nothing. The
+            # same reasoning as the terminal exclusion above, one band earlier.
+            if task.status in ("completed", "under_review"):
+                return None
             policy = task.divergence_policy or DEFAULT_POLICY
             if policy == POLICY_RETRY and flow_work_turn:
                 # Design D7: the flow is going to fire this task again on its own next tick, so

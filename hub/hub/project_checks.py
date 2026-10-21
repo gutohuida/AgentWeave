@@ -449,6 +449,12 @@ async def request_run(
                 targets = [
                     t.commit_sha for t in await task_integration.merge_targets(session, task, root)
                 ]
+                if not targets and task.status in ("completed", "under_review"):
+                    # Where evidence governs, `merge_targets` names accepted evidence only, and a
+                    # task waiting for its reviewer has none yet: the check ran first at the
+                    # approval gate, after the verdict (F773). Check the commit the review is given.
+                    reviewed = await task_integration.review_target(session, task, root)
+                    targets = [reviewed.commit_sha] if reviewed.resolved else []
             targets = await asyncio.to_thread(unmerged, root, tip, list(targets))
             if not targets:
                 return None

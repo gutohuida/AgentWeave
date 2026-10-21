@@ -464,6 +464,19 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           {event.reason ? <div className="aw-callout tone-amber">{event.reason}</div> : null}
         </TimelineItem>
       )
+    case 'review_unstaffed':
+      return (
+        <TimelineItem
+          key={event.id}
+          {...common}
+          tone="amber"
+          icon="warning"
+          head={<span>Nobody could be found to review this</span>}
+          meta={<Time value={event.at} />}
+        >
+          {event.reason ? <div className="aw-callout tone-amber">{event.reason}</div> : null}
+        </TimelineItem>
+      )
   }
 }
 

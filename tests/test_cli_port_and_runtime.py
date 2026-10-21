@@ -206,7 +206,7 @@ class TestDoctorExaminesTheInstanceTheProjectUses:
 
         seen = {}
 
-        def _instance(port):
+        def _instance(port, start_command=None):
             seen["port"] = port
             return diagnostics.ok("x", "y", "z", category="environment")
 

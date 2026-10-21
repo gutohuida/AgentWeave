@@ -22,6 +22,8 @@ const COLOR: Record<TaskCheckRun['state'], string> = {
   interrupted: 'var(--text-3)',
 }
 
+const ON_MAIN_TOO = 'fails on main too, not this task’s work'
+
 /**
  * The latest run of the project's checks on the work this task's approval would merge
  * (`approval-runs-the-projects-checks`). Approval is refused until they pass, so this is where the
@@ -50,6 +52,7 @@ function EarlierRun({ run }: { run: TaskCheckRun }) {
           >
             {result.name} · {result.timed_out ? 'timed out' : `exit ${result.exit_code}`}
             {result.duration_seconds != null ? ` · ${result.duration_seconds}s` : ''}
+            {result.preexisting ? ` · ${ON_MAIN_TOO}` : ''}
           </span>
         ))}
       </span>
@@ -96,6 +99,12 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
       </div>
       {state === 'error' && latest?.error && (
         <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{latest.error}</p>
+      )}
+      {state === 'failed' && failing.some((result) => result.preexisting) && (
+        <p data-testid={`task-checks-preexisting-${taskId}`} className="text-[11px]" style={{ color: 'var(--text-2)' }}>
+          {failing.filter((result) => result.preexisting).map((result) => result.name).join(', ')}{' '}
+          {ON_MAIN_TOO}
+        </p>
       )}
       {state === 'failed' && failing.map((result) => (
         <pre

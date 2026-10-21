@@ -1,6 +1,6 @@
 """The vault names which agents read each entry.
 
-`the-vault-names-who-read-an-entry` (Tier 2, migration 0139; F836). The Vault tab's "Used by" could
+`the-vault-names-who-read-an-entry` (Tier 2, migration 0140; F901). The Vault tab's "Used by" could
 only say how many reads an entry had, never by whom. An agent's `vault_read` at offset 0 now also
 records its agent, taken from the run credential (no request field or header can name one), and both
 maps and both entry routes list `readers`: one row per agent, most recent first.

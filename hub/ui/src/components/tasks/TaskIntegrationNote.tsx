@@ -1,5 +1,10 @@
-import { useRetryTaskIntegration, useTaskIntegrations, type TaskIntegration } from '@/api/tasks'
-import { Icon } from '@/components/common/Icon'
+import {
+  useRetryTaskIntegration,
+  useTaskIntegrations,
+  type TaskIntegration,
+} from "@/api/tasks";
+import { Icon } from "@/components/common/Icon";
+import { hubDate } from "@/lib/hubTime";
 
 /**
  * The newest attempt per target, newest last.
@@ -9,11 +14,26 @@ import { Icon } from '@/components/common/Icon'
  * opposite of what the operator needs to read off a card.
  */
 function newestPerTarget(rows: TaskIntegration[]): TaskIntegration[] {
-  const newest = new Map<string, TaskIntegration>()
+  const newest = new Map<string, TaskIntegration>();
   for (const row of rows) {
-    newest.set(`${row.commit_sha ?? ''}@${row.target_branch ?? ''}`, row)
+    newest.set(`${row.commit_sha ?? ""}@${row.target_branch ?? ""}`, row);
   }
-  return [...newest.values()]
+  // A skip never outranks a merge (F769). A later Retry appends "already in master" for the commit
+  // the earlier row merged, which would replace the merge under the same key; and a skip that named
+  // no commit ("no main branch set") is resolved once any row merged. Both are about work that did land.
+  const merged = rows.filter((row) => row.outcome === "merged");
+  const mergedKeys = new Set(
+    merged.map((row) => `${row.commit_sha ?? ""}@${row.target_branch ?? ""}`),
+  );
+  for (const row of merged)
+    newest.set(`${row.commit_sha ?? ""}@${row.target_branch ?? ""}`, row);
+  return [...newest.entries()]
+    .filter(([key, row]) => {
+      if (row.outcome === "merged") return true;
+      if (merged.length > 0 && row.commit_sha === null) return false;
+      return !mergedKeys.has(key);
+    })
+    .map(([, row]) => row);
 }
 
 /**
@@ -31,78 +51,121 @@ function newestPerTarget(rows: TaskIntegration[]): TaskIntegration[] {
  * every reason nobody had thought of — including "there is nothing to merge" — got a button that
  * appended an identical second failure.
  */
-export function TaskIntegrationNote({ taskId, status }: { taskId: string; status: string }) {
+export function TaskIntegrationNote({
+  taskId,
+  status,
+}: {
+  taskId: string;
+  status: string;
+}) {
   // Only an approved task has reached the integration step, so nothing else is worth a request.
-  const { data } = useTaskIntegrations(taskId, status === 'approved')
-  const retry = useRetryTaskIntegration(taskId)
-  const rows = newestPerTarget(data?.integrations ?? [])
-  if (rows.length === 0) return null
+  const { data } = useTaskIntegrations(taskId, status === "approved");
+  const retry = useRetryTaskIntegration(taskId);
+  const rows = newestPerTarget(data?.integrations ?? []);
+  if (rows.length === 0) return null;
 
   // The Hub decides this now. It owns the reasons, so it is the only place that can classify them
   // without matching prose — and the classification is deliberately absent-means-no, so a row from
   // an older Hub, or a reason nobody has classified, offers nothing to press rather than a button
   // that appends an identical failure.
-  const canRetry = rows.some((row) => row.retryable)
+  const canRetry = rows.some((row) => row.retryable);
 
   return (
-    <div className="task-integration-note mt-2 space-y-1" data-testid={`task-integrations-${taskId}`}>
+    <div
+      className="task-integration-note mt-2 space-y-1"
+      data-testid={`task-integrations-${taskId}`}
+    >
       {rows.map((row) => {
-        const merged = row.outcome === 'merged'
-        const failed = row.outcome === 'failed'
+        const merged = row.outcome === "merged";
+        const failed = row.outcome === "failed";
         // `--text-3`, not `--text-muted` — that token is defined nowhere, so the declaration was
         // invalid and the skipped outcome inherited full-strength body text, rendering *louder*
         // than merged and failed. The one outcome meaning "nothing happened" was the most emphatic.
-        const color = merged ? 'var(--green)' : failed ? 'var(--red)' : 'var(--text-3)'
-        const glyph = merged ? 'check_circle' : failed ? 'error' : 'remove_circle'
-        const rodeAlong = row.rode_along_commits ?? []
+        const color = merged
+          ? "var(--green)"
+          : failed
+            ? "var(--red)"
+            : "var(--text-3)";
+        const glyph = merged
+          ? "check_circle"
+          : failed
+            ? "error"
+            : "remove_circle";
+        const rodeAlong = row.rode_along_commits ?? [];
         return (
           <div key={row.id}>
-            <p className="text-[11px] flex items-start gap-1.5" style={{ color }}>
-              <Icon name={glyph} size={12} className="mt-px shrink-0" aria-hidden="true" />
+            <p
+              className="text-[11px] flex items-start gap-1.5"
+              style={{ color }}
+            >
+              <Icon
+                name={glyph}
+                size={12}
+                className="mt-px shrink-0"
+                aria-hidden="true"
+              />
               {merged ? (
                 <>
-                  Merged <code>{(row.commit_sha ?? '').slice(0, 8)}</code> into{' '}
+                  Merged <code>{(row.commit_sha ?? "").slice(0, 8)}</code> into{" "}
                   <strong>{row.target_branch}</strong>
                 </>
               ) : (
                 <>
-                  {failed ? 'Merge failed' : 'Not merged'} — {row.reason}
+                  {failed ? "Merge failed" : "Not merged"} — {row.reason}{" "}
+                  {/* One row is kept per target, so a retry that fails the same way reads
+                      identically; the time is what shows the press did something (F823). */}
+                  <time
+                    dateTime={row.created_at}
+                    title={row.created_at}
+                    className="shrink-0 opacity-80"
+                  >
+                    (tried {hubDate(row.created_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })})
+                  </time>
                 </>
               )}
             </p>
             {merged && rodeAlong.length > 0 && (
               <p
                 className="text-[11px] flex items-start gap-1.5 pl-[18px]"
-                style={{ color: 'var(--amber)' }}
+                style={{ color: "var(--amber)" }}
                 data-testid={`task-integration-rode-along-${row.id}`}
               >
-                <Icon name="warning" size={12} className="mt-px shrink-0" aria-hidden="true" />
-                {rodeAlong.length} earlier commit{rodeAlong.length === 1 ? '' : 's'} on the same
-                branch also landed with this merge, not just the reviewed one.
+                <Icon
+                  name="warning"
+                  size={12}
+                  className="mt-px shrink-0"
+                  aria-hidden="true"
+                />
+                {rodeAlong.length} earlier commit
+                {rodeAlong.length === 1 ? "" : "s"} on the same branch also
+                landed with this merge, not just the reviewed one.
               </p>
             )}
           </div>
-        )
+        );
       })}
       {canRetry && (
         <button
           data-testid={`task-integration-retry-${taskId}`}
           className="text-[11px] underline"
-          style={{ color: 'var(--text-3)' }}
+          style={{ color: "var(--text-3)" }}
           disabled={retry.isPending}
           onClick={(e) => {
-            e.stopPropagation()
-            retry.mutate()
+            e.stopPropagation();
+            retry.mutate();
           }}
         >
-          {retry.isPending ? 'Trying…' : 'Try again'}
+          {retry.isPending ? "Trying…" : "Try again"}
         </button>
       )}
       {retry.isError && (
-        <p className="text-[11px]" style={{ color: 'var(--red)' }}>
+        <p className="text-[11px]" style={{ color: "var(--red)" }}>
           Could not retry the merge.
         </p>
       )}
     </div>
-  )
+  );
 }

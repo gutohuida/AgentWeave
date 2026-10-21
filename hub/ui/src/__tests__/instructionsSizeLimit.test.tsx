@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useConfigStore } from '@/store/configStore'
 
@@ -39,7 +39,9 @@ describe('project instructions show their size against the limit (F686)', () => 
   it('states the size and that it is sent with every turn', async () => {
     renderPage()
     const size = await screen.findByTestId('instructions-size')
-    expect(size).toHaveTextContent('11 / 20')
+    // The size line first renders with the editor's initial '' and is seeded from `data` by an
+    // effect, so the first paint reads "0 of 20"; wait for the seeded count rather than race it.
+    await waitFor(() => expect(size).toHaveTextContent('11 / 20'))
     expect(size).toHaveTextContent(/every agent turn/)
   })
 

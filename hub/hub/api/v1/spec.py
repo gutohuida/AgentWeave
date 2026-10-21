@@ -1577,6 +1577,11 @@ async def _requirement_story(
             {
                 "id": row.id,
                 "classification": row.classification,
+                # What it left unchanged, not only what was recorded (F833): a criterion edit is
+                # stored `reworded` but reads `criteria` when the statement stood.
+                "change": spec_index.change_kind(
+                    row, revisions[position - 1] if position else None
+                ),
                 "source": row.source,
                 "actor_kind": row.actor_kind,
                 "actor": row.actor,
@@ -1587,7 +1592,7 @@ async def _requirement_story(
                 "created_at": row.created_at.isoformat() if row.created_at else None,
                 "folded_from": folded_from(row),
             }
-            for row in revisions
+            for position, row in enumerate(revisions)
         ],
         "drift": [
             {
@@ -1902,8 +1907,15 @@ async def evidence_diff(
             "reason": f"the project's directory cannot be read: {exc}",
         }
     main_branch = await _main_branch(session, project_id)
+    # A footprint that took the checkout's HEAD rather than a commit the recorder named, on the main
+    # line, is no work of this piece's (F761). A row from before this was recorded reads as it did.
+    unnamed = footprint is not None and footprint.commit_named is False
     return await asyncio.to_thread(
-        requirement_evidence.work_diff, workspace.root, commit, main_branch
+        requirement_evidence.work_diff,
+        workspace.root,
+        commit,
+        main_branch,
+        unnamed_branch=footprint.branch if unnamed else None,
     )
 
 
@@ -3673,6 +3685,11 @@ async def delete_document(
     defer_broadcast(session, project_id, "spec_updated", {"path": deleted.path})
     await session.commit()
 
+    # F828: the tasks' checkouts and branches go with them unless they hold work.
+    kept_work = deletion.discard_checkouts(workspace.root, deleted.tasks)
+    for entry in kept_work:
+        await persist_event(session, project_id, "task_checkout_kept", entry, severity="warn")
+
     diagnostics: List[Dict[str, Any]] = []
     try:
         spec_documents.delete_document_file(workspace, deleted.path)
@@ -3696,6 +3713,7 @@ async def delete_document(
         "deleted": True,
         "tasks": deleted.tasks,
         "requirements": deleted.requirements,
+        "kept_work": kept_work,
         "diagnostics": diagnostics,
     }
 

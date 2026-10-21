@@ -326,7 +326,7 @@ async def test_a_folder_the_operator_granted_is_in_an_agents_reach(
 async def test_files_named_alike_in_different_folders_keep_the_path_that_tells_them_apart(
     app, auth_headers, tmp_path
 ) -> None:
-    """F835: two `README.md` files added by path both listed as "README.md". A file inside the
+    """F900: two `README.md` files added by path both listed as "README.md". A file inside the
     project (or an agent's workspace) is named by its path there; a folder's files keep the
     folder's name in front, as before, when the folder is outside it."""
     for folder, text in (("app", b"# App\n"), ("plugins/export", b"# Export\n")):
@@ -359,3 +359,116 @@ async def test_files_named_alike_in_different_folders_keep_the_path_that_tells_t
         AGENT_ROUTE, json={"paths": ["notes/deep/README.md"], "distil": False}, headers=headers
     )
     assert [r["source"]["name"] for r in agent.json()["results"]] == ["notes/deep/README.md"]
+
+
+@pytest.mark.asyncio
+async def test_a_folder_that_cannot_be_listed_is_refused_by_name_and_the_rest_is_added(
+    app, auth_headers, tmp_path_factory, monkeypatch
+) -> None:
+    """F798: a subfolder whose listing is denied was a bare 500 that added nothing, not even the
+    readable sibling. It is one refused result naming the folder; the batch carries on."""
+    dump = tmp_path_factory.mktemp("acl") / "acl"
+    (dump / "locked").mkdir(parents=True)
+    (dump / "ok.md").write_bytes(b"# Fine\n\nThis one is readable.\n")
+    (dump / "locked" / "hidden.md").write_bytes(b"# Hidden\n\nNever listed.\n")
+    other = tmp_path_factory.mktemp("other") / "outside.md"
+    other.write_bytes(b"# Outside\n\nA legitimate file in the same batch.\n")
+
+    real_iterdir = Path.iterdir
+
+    def _deny(self):
+        raise PermissionError(13, "Access is denied", str(self))
+
+    def iterdir(self):
+        if self.name == "locked":
+            _deny(self)
+        return real_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", iterdir)
+    got = await app.post(
+        f"{BASE}/vault/paths",
+        json={"paths": [str(other), str(dump)], "distil": False},
+        headers=auth_headers,
+    )
+    assert got.status_code == 200, got.text
+    results = got.json()["results"]
+    by_name = {Path(r["path"]).name: r for r in results}
+    assert by_name["outside.md"]["status"] == "added"
+    assert by_name["ok.md"]["status"] == "added"
+    refused = [r for r in results if r["status"] == "refused"]
+    assert len(refused) == 1
+    assert "locked" in refused[0]["path"] + refused[0]["reason"]
+    assert "Access is denied" in refused[0]["reason"]
+    assert "could not list" in refused[0]["reason"]
+
+    # The folder the caller named itself cannot be listed: one refusal, still no 500.
+    monkeypatch.setattr(
+        Path,
+        "iterdir",
+        lambda self: iterdir(self) if self.name != "acl" else _deny(self),
+    )
+    top = await app.post(
+        f"{BASE}/vault/paths", json={"paths": [str(dump)], "distil": False}, headers=auth_headers
+    )
+    assert top.status_code == 200, top.text
+    [only] = top.json()["results"]
+    assert only["status"] == "refused" and "could not list" in only["reason"]
+
+
+def _link_dir(link: Path, target: Path) -> None:
+    """A directory link: a junction on Windows (no privilege needed), a symlink elsewhere."""
+    import os
+    import subprocess
+    import sys
+
+    if sys.platform == "win32":
+        done = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True
+        )
+        if done.returncode != 0:
+            pytest.skip("cannot create a junction here")
+    else:
+        os.symlink(target, link, target_is_directory=True)
+
+
+def test_a_folder_holding_a_link_to_itself_yields_each_file_once(tmp_path) -> None:
+    """F799: the walk followed `back -> loop` until the path length ended it, so two files were
+    128 results, each counting toward the batch limit."""
+    from hub import vault_intake
+
+    loop = tmp_path / "loop"
+    loop.mkdir()
+    (loop / "a.md").write_bytes(b"# A\n\nOne.\n")
+    (loop / "b.md").write_bytes(b"# B\n\nTwo.\n")
+    _link_dir(loop / "back", loop)
+
+    batch = vault_intake.expand([str(loop)], vault_intake.Reach())
+    reached = [item.path for item in batch.items if item.path is not None]
+    assert sorted(p.name for p in reached) == ["a.md", "b.md"]
+
+
+def test_a_folder_past_the_limit_is_refused_without_walking_all_of_it(
+    tmp_path, monkeypatch
+) -> None:
+    """F799: the 200-file cap was compared only after the whole folder was walked (27,135 files,
+    14 s). The walk stops at the first file past the limit."""
+    from hub import vault_intake
+
+    big = tmp_path / "big"
+    big.mkdir()
+    for n in range(300):
+        (big / f"f{n:03}.md").write_bytes(b"# F\n\nx\n")
+
+    real_is_file = Path.is_file
+    looked_at: list = []
+
+    def is_file(self):
+        looked_at.append(self.name)
+        return real_is_file(self)
+
+    monkeypatch.setattr(Path, "is_file", is_file)
+    monkeypatch.setattr(vault_intake, "MAX_BATCH_FILES", 5)
+    with pytest.raises(vault_intake.IntakeError) as raised:
+        vault_intake.expand([str(big)], vault_intake.Reach())
+    assert "5" in str(raised.value)
+    assert len(looked_at) <= 5 + 1

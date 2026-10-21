@@ -11,79 +11,88 @@
  * nobody had thought of got a button, including "there is nothing to merge", where pressing it
  * appends an identical second skip forever.
  */
-import { render, screen, fireEvent } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen, fireEvent } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { TaskIntegrationNote } from '@/components/tasks/TaskIntegrationNote'
-import type { TaskIntegration } from '@/api/tasks'
+import { TaskIntegrationNote } from "@/components/tasks/TaskIntegrationNote";
+import type { TaskIntegration } from "@/api/tasks";
 
-const retry = vi.fn()
-let rows: TaskIntegration[] = []
-let pending = false
+const retry = vi.fn();
+let rows: TaskIntegration[] = [];
+let pending = false;
 
-vi.mock('@/api/tasks', () => ({
+vi.mock("@/api/tasks", () => ({
   useTaskIntegrations: () => ({ data: { integrations: rows } }),
-  useRetryTaskIntegration: () => ({ mutate: retry, isPending: pending, isError: false }),
-}))
+  useRetryTaskIntegration: () => ({
+    mutate: retry,
+    isPending: pending,
+    isError: false,
+  }),
+}));
 
 function row(over: Partial<TaskIntegration>): TaskIntegration {
   return {
     id: `tint-${Math.random().toString(36).slice(2)}`,
-    commit_sha: 'abc123def456',
-    source_branch: 'agentweave/builder',
-    target_branch: 'main',
-    outcome: 'skipped',
-    reason: 'something',
+    commit_sha: "abc123def456",
+    source_branch: "agentweave/builder",
+    target_branch: "main",
+    outcome: "skipped",
+    reason: "something",
     retryable: true,
     rode_along_commits: [],
-    mechanism: 'local',
-    actor_kind: 'operator',
-    actor: 'operator',
-    created_at: '2026-08-14T12:00:00Z',
+    mechanism: "local",
+    actor_kind: "operator",
+    actor: "operator",
+    created_at: "2026-08-14T12:00:00Z",
     ...over,
-  }
+  };
 }
 
-describe('TaskIntegrationNote', () => {
+describe("TaskIntegrationNote", () => {
   beforeEach(() => {
-    retry.mockClear()
-    pending = false
-    rows = []
-  })
+    retry.mockClear();
+    pending = false;
+    rows = [];
+  });
 
-  it('offers a retry when the newest attempt did not merge', () => {
-    rows = [
-      row({ outcome: 'skipped', reason: 'the checkout has uncommitted changes', retryable: true }),
-    ]
-    render(<TaskIntegrationNote taskId="task-1" status="approved" />)
-
-    fireEvent.click(screen.getByTestId('task-integration-retry-task-1'))
-    expect(retry).toHaveBeenCalledTimes(1)
-  })
-
-  it('offers nothing to press once the work is merged', () => {
-    rows = [row({ outcome: 'merged', reason: '', retryable: false })]
-    render(<TaskIntegrationNote taskId="task-2" status="approved" />)
-
-    expect(screen.queryByTestId('task-integration-retry-task-2')).toBeNull()
-    expect(screen.getByText(/Merged/)).toBeTruthy()
-  })
-
-  it('points at the setting rather than a retry when no main branch is set', () => {
+  it("offers a retry when the newest attempt did not merge", () => {
     rows = [
       row({
-        outcome: 'skipped',
+        outcome: "skipped",
+        reason: "the checkout has uncommitted changes",
+        retryable: true,
+      }),
+    ];
+    render(<TaskIntegrationNote taskId="task-1" status="approved" />);
+
+    fireEvent.click(screen.getByTestId("task-integration-retry-task-1"));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers nothing to press once the work is merged", () => {
+    rows = [row({ outcome: "merged", reason: "", retryable: false })];
+    render(<TaskIntegrationNote taskId="task-2" status="approved" />);
+
+    expect(screen.queryByTestId("task-integration-retry-task-2")).toBeNull();
+    expect(screen.getByText(/Merged/)).toBeTruthy();
+  });
+
+  it("points at the setting rather than a retry when no main branch is set", () => {
+    rows = [
+      row({
+        outcome: "skipped",
         commit_sha: null,
         target_branch: null,
         retryable: false,
-        reason: "this project has no main branch set — choose one in the project's settings",
+        reason:
+          "this project has no main branch set — choose one in the project's settings",
       }),
-    ]
-    render(<TaskIntegrationNote taskId="task-3" status="approved" />)
+    ];
+    render(<TaskIntegrationNote taskId="task-3" status="approved" />);
 
-    expect(screen.queryByTestId('task-integration-retry-task-3')).toBeNull()
-    expect(screen.getByText(/no main branch set/)).toBeTruthy()
-  })
+    expect(screen.queryByTestId("task-integration-retry-task-3")).toBeNull();
+    expect(screen.getByText(/no main branch set/)).toBeTruthy();
+  });
 
   /**
    * Break 7, closed. This case is the reproduction, flipped.
@@ -93,19 +102,20 @@ describe('TaskIntegrationNote', () => {
    * about the database rather than about the checkout. The only reason suppressed was a missing
    * main branch, so every other unclearable reason got a button by default.
    */
-  it('offers nothing to press for a skip that retrying can never clear', () => {
+  it("offers nothing to press for a skip that retrying can never clear", () => {
     rows = [
       row({
-        outcome: 'skipped',
-        reason: 'no accepted evidence names a commit, so there is nothing to merge',
+        outcome: "skipped",
+        reason:
+          "no accepted evidence names a commit, so there is nothing to merge",
         retryable: false,
       }),
-    ]
-    render(<TaskIntegrationNote taskId="task-9" status="approved" />)
+    ];
+    render(<TaskIntegrationNote taskId="task-9" status="approved" />);
 
-    expect(screen.queryByTestId('task-integration-retry-task-9')).toBeNull()
-    expect(screen.getByText(/nothing to merge/)).toBeTruthy()
-  })
+    expect(screen.queryByTestId("task-integration-retry-task-9")).toBeNull();
+    expect(screen.getByText(/nothing to merge/)).toBeTruthy();
+  });
 
   /**
    * The inverted default, at the one layer it can still be got wrong.
@@ -113,63 +123,161 @@ describe('TaskIntegrationNote', () => {
    * A response from a Hub older than this change carries no `retryable` at all. Absent must read
    * as "no", not as "unknown, so offer it" — which is the same failure the string match was.
    */
-  it('offers nothing to press when the Hub said nothing about retryability', () => {
-    rows = [row({ outcome: 'skipped', reason: 'something nobody has classified' })]
-    delete (rows[0] as { retryable?: boolean }).retryable
-    render(<TaskIntegrationNote taskId="task-10" status="approved" />)
-
-    expect(screen.queryByTestId('task-integration-retry-task-10')).toBeNull()
-  })
-
-  it('shows only the newest attempt per target, so a stale skip does not outlive its merge', () => {
+  it("offers nothing to press when the Hub said nothing about retryability", () => {
     rows = [
-      row({ id: 'tint-old', outcome: 'skipped', reason: 'no main branch set', retryable: false }),
-      row({ id: 'tint-new', outcome: 'merged', reason: '', retryable: false }),
-    ]
-    render(<TaskIntegrationNote taskId="task-4" status="approved" />)
+      row({ outcome: "skipped", reason: "something nobody has classified" }),
+    ];
+    delete (rows[0] as { retryable?: boolean }).retryable;
+    render(<TaskIntegrationNote taskId="task-10" status="approved" />);
 
-    expect(screen.queryByText(/Not merged/)).toBeNull()
-    expect(screen.getByText(/Merged/)).toBeTruthy()
-    // The stale skip is gone, so nothing it carried can put a button on screen either.
-    expect(screen.queryByTestId('task-integration-retry-task-4')).toBeNull()
-  })
+    expect(screen.queryByTestId("task-integration-retry-task-10")).toBeNull();
+  });
 
-  it('disables the button while a retry is in flight', () => {
-    rows = [row({ outcome: 'failed', reason: 'the merge conflicted', retryable: true })]
-    pending = true
-    render(<TaskIntegrationNote taskId="task-5" status="approved" />)
-
-    const button = screen.getByTestId('task-integration-retry-task-5') as HTMLButtonElement
-    expect(button.disabled).toBe(true)
-    expect(button.textContent).toContain('Trying')
-  })
-
-  it('renders nothing for a task that never reached integration', () => {
-    rows = []
-    const { container } = render(<TaskIntegrationNote taskId="task-6" status="in_progress" />)
-    expect(container.firstChild).toBeNull()
-  })
-
-  it('warns when other commits rode along with a merge (F58)', () => {
+  it("shows only the newest attempt per target, so a stale skip does not outlive its merge", () => {
     rows = [
       row({
-        id: 'tint-rode-along',
-        outcome: 'merged',
-        reason: '',
+        id: "tint-old",
+        outcome: "skipped",
+        reason: "no main branch set",
         retryable: false,
-        rode_along_commits: ['a1', 'b2', 'c3'],
       }),
-    ]
-    render(<TaskIntegrationNote taskId="task-7" status="approved" />)
+      row({ id: "tint-new", outcome: "merged", reason: "", retryable: false }),
+    ];
+    render(<TaskIntegrationNote taskId="task-4" status="approved" />);
 
-    expect(screen.getByTestId('task-integration-rode-along-tint-rode-along')).toBeTruthy()
-    expect(screen.getByText(/3 earlier commits on the same branch also landed/)).toBeTruthy()
-  })
+    expect(screen.queryByText(/Not merged/)).toBeNull();
+    expect(screen.getByText(/Merged/)).toBeTruthy();
+    // The stale skip is gone, so nothing it carried can put a button on screen either.
+    expect(screen.queryByTestId("task-integration-retry-task-4")).toBeNull();
+  });
 
-  it('shows no warning when a merge brought in nothing extra', () => {
-    rows = [row({ outcome: 'merged', reason: '', retryable: false, rode_along_commits: [] })]
-    render(<TaskIntegrationNote taskId="task-8" status="approved" />)
+  /**
+   * F769. The route's order for a documentless task landed after a null main branch: a no-main-branch
+   * skip (null commit), the merge once the branch was set, and a later Retry's "already in master"
+   * skip for the same commit. Keyed per commit, the first and third survived and the merge vanished,
+   * so merged work read "Not merged" twice.
+   */
+  it("keeps the merge when a no-main-branch skip and an already-in-master skip surround it (F769)", () => {
+    rows = [
+      row({
+        id: "tint-nomain",
+        outcome: "skipped",
+        commit_sha: null,
+        target_branch: null,
+        retryable: false,
+        reason:
+          "this project has no main branch set — choose one in the project's settings",
+      }),
+      row({
+        id: "tint-merged",
+        outcome: "merged",
+        commit_sha: "146d99b84f01",
+        target_branch: "master",
+        reason: "",
+        retryable: false,
+      }),
+      row({
+        id: "tint-again",
+        outcome: "skipped",
+        commit_sha: "146d99b84f01",
+        target_branch: "master",
+        retryable: false,
+        reason: "146d99b84f01 is already in master; there was nothing to merge",
+      }),
+    ];
+    render(<TaskIntegrationNote taskId="task-11" status="approved" />);
 
-    expect(screen.queryByText(/also landed with this merge/)).toBeNull()
-  })
-})
+    expect(screen.queryByText(/Not merged/)).toBeNull();
+    expect(screen.getByText(/Merged/)).toBeTruthy();
+  });
+
+  it("disables the button while a retry is in flight", () => {
+    rows = [
+      row({
+        outcome: "failed",
+        reason: "the merge conflicted",
+        retryable: true,
+      }),
+    ];
+    pending = true;
+    render(<TaskIntegrationNote taskId="task-5" status="approved" />);
+
+    const button = screen.getByTestId(
+      "task-integration-retry-task-5",
+    ) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toContain("Trying");
+  });
+
+  it("renders nothing for a task that never reached integration", () => {
+    rows = [];
+    const { container } = render(
+      <TaskIntegrationNote taskId="task-6" status="in_progress" />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("warns when other commits rode along with a merge (F58)", () => {
+    rows = [
+      row({
+        id: "tint-rode-along",
+        outcome: "merged",
+        reason: "",
+        retryable: false,
+        rode_along_commits: ["a1", "b2", "c3"],
+      }),
+    ];
+    render(<TaskIntegrationNote taskId="task-7" status="approved" />);
+
+    expect(
+      screen.getByTestId("task-integration-rode-along-tint-rode-along"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/3 earlier commits on the same branch also landed/),
+    ).toBeTruthy();
+  });
+
+  it("shows no warning when a merge brought in nothing extra", () => {
+    rows = [
+      row({
+        outcome: "merged",
+        reason: "",
+        retryable: false,
+        rode_along_commits: [],
+      }),
+    ];
+    render(<TaskIntegrationNote taskId="task-8" status="approved" />);
+
+    expect(screen.queryByText(/also landed with this merge/)).toBeNull();
+  });
+
+  /**
+   * F823. A retry that fails again appended a second `failed` row, and `newestPerTarget` keeps one
+   * per target, so the note read identically before and after the press: the operator could not
+   * tell that anything had happened. The note names when the newest attempt was made.
+   */
+  it("names the time of the newest attempt, so a repeated failure does not look like nothing happened (F823)", () => {
+    rows = [
+      row({
+        id: "tint-first",
+        outcome: "failed",
+        reason: "hook said no",
+        created_at: "2026-10-20T12:00:00Z",
+      }),
+      row({
+        id: "tint-second",
+        outcome: "failed",
+        reason: "hook said no",
+        created_at: "2026-10-20T12:07:00Z",
+      }),
+    ];
+    const { container } = render(
+      <TaskIntegrationNote taskId="task-12" status="approved" />,
+    );
+
+    const stamps = [...container.querySelectorAll("time")].map((t) =>
+      t.getAttribute("datetime"),
+    );
+    expect(stamps).toEqual(["2026-10-20T12:07:00Z"]);
+  });
+});

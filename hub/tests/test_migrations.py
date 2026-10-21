@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0139"
+HEAD_REVISION = "0140"
 
 
 # ---------------------------------------------------------------------------
@@ -5786,7 +5786,7 @@ def test_migration_0135_is_a_no_op_without_the_tables(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------------------------
-# 0139 -- vault_readers (`the-vault-names-who-read-an-entry`, F836). A new table only: it starts
+# 0140 -- vault_readers (`the-vault-names-who-read-an-entry`, F901). A new table only: it starts
 # empty, vault_fetches' counts are untouched, and the downgrade drops it and nothing else.
 # ---------------------------------------------------------------------------------------------
 
@@ -5801,7 +5801,7 @@ def test_migration_vault_readers_creates_the_table_and_its_downgrade_drops_only_
         before = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         conn.execute("DROP TABLE vault_readers")
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
-        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0138')")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0139')")
         conn.execute(
             "INSERT INTO projects (id, name, created_at) VALUES ('p', 'p', '2026-01-01T00:00:00Z')"
         )
@@ -5811,7 +5811,7 @@ def test_migration_vault_readers_creates_the_table_and_its_downgrade_drops_only_
         )
         conn.commit()
 
-    _upgrade_to(db_url, "0139")
+    _upgrade_to(db_url, "0140")
 
     with sqlite3.connect(db_file) as conn:
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -5831,7 +5831,7 @@ def test_migration_vault_readers_creates_the_table_and_its_downgrade_drops_only_
             )
         conn.commit()
 
-    _downgrade_to(db_url, "0138")
+    _downgrade_to(db_url, "0139")
 
     with sqlite3.connect(db_file) as conn:
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}

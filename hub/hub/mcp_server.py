@@ -317,7 +317,7 @@ def send_message(
         reply["held_by_hop_budget"] = True
         reply["delivery_note"] = result.get("delivery_note")
     if result.get("held"):
-        # Either hold, the recipient's missing runner included (F623).
+        # Any hold: the recipient's missing runner (F623) and a spent token budget (F815) included.
         reply["held"] = result["held"]
         reply["delivery_note"] = result.get("delivery_note")
     return reply
@@ -1464,6 +1464,11 @@ def _restore_brace_sentinels(text: str) -> str:
 _QUOTATION_MAX = 200
 
 _OUTSIDE = "is outside your workspace"
+#: F794: the path is in a folder the operator granted for reading, and this tool is not a read tool.
+_READ_ONLY_ROOT = (
+    "is in a folder the operator granted for reading only: read it with your file-reading tool "
+    "(a shell command or a write cannot reach it); writing there needs the operator to grant read and write"
+)
 _UNRESOLVED = "could not be resolved"
 _NETWORK = (
     "is a network address. Under this posture a shell command may name only this run's own Hub "
@@ -1580,6 +1585,8 @@ class _Reach(NamedTuple):
 
     roots: Tuple[str, ...] = ()
     hosts: Tuple[Tuple[str, bool, Optional[int]], ...] = ()
+    #: Roots granted `read` that this (non-read) tool may not reach: kept only to say so (F794).
+    read_only: Tuple[str, ...] = ()
 
 
 #: Nothing granted: today's boundary. A tuple, so the shared default cannot be mutated.
@@ -1595,6 +1602,7 @@ def _parse_reach(value: Any, tool_name: str) -> _Reach:
         if not isinstance(data, dict):
             return _Reach()
         roots: List[str] = []
+        read_only: List[str] = []
         for entry in data.get("roots") or []:
             if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
                 continue
@@ -1603,6 +1611,8 @@ def _parse_reach(value: Any, tool_name: str) -> _Reach:
                 path = entry["path"]
                 if os.path.isabs(path):
                     roots.append(os.path.realpath(path))
+            elif access == "read" and os.path.isabs(entry["path"]):
+                read_only.append(os.path.realpath(entry["path"]))
         hosts: List[Tuple[str, bool, Optional[int]]] = []
         for entry in data.get("hosts") or []:
             match = _GRANT_HOST_RE.match(entry) if isinstance(entry, str) else None
@@ -1616,14 +1626,15 @@ def _parse_reach(value: Any, tool_name: str) -> _Reach:
                     None if port in (None, "*") else int(port),
                 )
             )
-        return _Reach(tuple(roots), tuple(hosts))
+        return _Reach(tuple(roots), tuple(hosts), tuple(read_only))
     except (ValueError, TypeError, OSError):
         return _Reach()
 
 
-def _in_granted_root(resolved: str) -> bool:
-    """Whether `resolved` (already a real path) is, or lies beneath, a root granted to this call."""
-    for granted in _REACH.get().roots:
+def _in_granted_root(resolved: str, roots: Optional[Tuple[str, ...]] = None) -> bool:
+    """Whether `resolved` (already a real path) is, or lies beneath, a root granted to this call
+    (or, given `roots`, beneath one of those)."""
+    for granted in _REACH.get().roots if roots is None else roots:
         try:
             shared = os.path.commonpath([granted, resolved])
         except ValueError:  # different drives on Windows
@@ -1671,6 +1682,8 @@ def _judge_resolved(absolute: str, resolved: str, root: str) -> Optional[str]:
     if shared is None or os.path.normcase(shared) != os.path.normcase(root):
         if _in_shared_dependency(resolved, root) or _in_granted_root(resolved):
             return None
+        if _in_granted_root(resolved, _REACH.get().read_only):
+            return _READ_ONLY_ROOT
         return _resolves_elsewhere(absolute, resolved)
     return None
 

@@ -252,8 +252,14 @@ async def take_checkpoint(
     # keep offering a decision the operator has already made — and leaving it `final` would keep
     # showing a warning that cannot be dismissed, about a checkpoint that now exists. `dismissed`
     # too (F234): it means "declined this checkpoint", and there is now a checkpoint, so the next
-    # crossing must be offered again rather than read as already declined.
-    if conversation.checkpoint_warning in ("due", "final", "dismissed"):
+    # crossing must be offered again rather than read as already declined. Only a checkpoint that
+    # exists answers it (F817): an `unwritten` press answered nothing, and clearing the warning
+    # left no trace on screen of either the offer or the failure after a reload.
+    if checkpoint.status == "ready" and conversation.checkpoint_warning in (
+        "due",
+        "final",
+        "dismissed",
+    ):
         conversation.checkpoint_warning = None
         await session.commit()
     await sse_manager.broadcast(

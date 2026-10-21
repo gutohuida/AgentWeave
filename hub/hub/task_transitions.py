@@ -131,8 +131,12 @@ TRANSITIONS: Mapping[str, Mapping[str, FrozenSet[str]]] = {
         "assigned": _OPERATOR_ONLY,
         "rejected": _OPERATOR_ONLY,
     },
+    # `revision_needed` is the operator's only: the Land refusals tell the operator to "send the
+    # task back", and from `completed` the machine offered no such move (F832). An agent still
+    # reaches it only through `under_review`, where the judgement is a review's.
     "completed": {
         "under_review": _BOTH,
+        "revision_needed": _OPERATOR_ONLY,
         "rejected": _OPERATOR_ONLY,
     },
     "under_review": {

@@ -1,3 +1,4 @@
+import { useSpecDeletionStore } from '@/store/specDeletionStore'
 import * as React from 'react'
 import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
@@ -136,7 +137,12 @@ export interface SpecPhaseControls {
  * is the feature — the gate it replaced was a skill instructing the agent to read the document's
  * own status and stop, which is the agent checking its own permission slip.
  */
-export function useSpecPhaseControls(path: string, onOpenLoop?: (loop: LoopSummary) => void): SpecPhaseControls | null {
+export function useSpecPhaseControls(
+  path: string,
+  onOpenLoop?: (loop: LoopSummary) => void,
+  /** Called once the Hub has deleted this document (F829): the host leaves it. */
+  onDeleted?: () => void,
+): SpecPhaseControls | null {
   const { data } = useSpecDocuments()
   // `delivery_status` (design D5) rides the same `spec/<path>` query `SpecDocumentPanel` and
   // `SpecApprovalReport` already hold — one cache entry, not a second fetch.
@@ -289,8 +295,11 @@ export function useSpecPhaseControls(path: string, onOpenLoop?: (loop: LoopSumma
   async function onConfirmDelete() {
     setDeleteRefusal(null)
     try {
-      await deleteDocument.mutateAsync({ path })
+      const result = await deleteDocument.mutateAsync({ path })
+      // F829: the page the operator lands on says what went; this panel is gone by then.
+      useSpecDeletionStore.getState().set({ path, title: document?.title ?? path, tasks: result.tasks?.length ?? 0 })
       setConfirmingDelete(false)
+      onDeleted?.()
     } catch (error) {
       setDeleteRefusal(readableApiError(error, 'The Hub refused to delete this document.'))
     }

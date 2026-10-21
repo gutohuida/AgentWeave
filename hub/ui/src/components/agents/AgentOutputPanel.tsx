@@ -253,7 +253,11 @@ export function AgentOutputPanel({
   // The same selector the card renders from. Deriving it separately here was safe while only one
   // question could be outstanding; with a batch the two could order differently, and the operator
   // would read one question while answering another.
-  const pendingQuestion = activeQuestionFor(openQuestions, agent.name).question
+  const pendingQuestion = activeQuestionFor(
+    openQuestions,
+    agent.name,
+    startingFresh ? null : (conversationId ?? null),
+  ).question
   /** A permission request the run is blocked on is showing. It floats over the foot of the
    *  conversation in a tray (F345) rather than stacking in the composer's own column, where an
    *  unbounded card squeezed the transcript to nothing and could push the composer itself off the
@@ -1094,8 +1098,10 @@ export function AgentOutputPanel({
 
   const handleComposerSubmit = async (typedMessage: string): Promise<void> => {
     // A waiting question owns the composer until it is answered — otherwise the operator's
-    // reply becomes a new message and the agent keeps waiting for one that never comes.
-    if (pendingQuestion) {
+    // reply becomes a new message and the agent keeps waiting for one that never comes. One nobody
+    // waits on has no such claim (F804): its options still answer it, but typed text is a message,
+    // not an answer the agent will never receive.
+    if (pendingQuestion && (pendingQuestion.asker_waiting !== false || !typedMessage.trim())) {
       await answerPendingQuestion(typedMessage)
       return
     }
@@ -1301,6 +1307,7 @@ export function AgentOutputPanel({
       <ConversationComposerDock
         areaRef={composerAreaRef}
         questions={pendingQuestion ? openQuestions : []}
+        conversationId={startingFresh ? null : (conversationId ?? null)}
         selected={questionSelection}
         onToggleOption={handleQuestionToggle}
         onDecline={handleDeclineQuestion}

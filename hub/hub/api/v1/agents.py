@@ -645,6 +645,18 @@ async def create_operator_agent(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Agent name '{body.name}' already exists in this project",
         )
+    # F811: archived rows count, as do names a synced session declares.
+    twin = route_words.agent_case_twin(
+        body.name,
+        [
+            *(
+                await session.execute(select(Agent.name).where(Agent.project_id == project_id))
+            ).scalars(),
+            *configured_names,
+        ],
+    )
+    if twin is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=twin)
 
     if body.runner_id is not None:
         runner = await session.get(Runner, body.runner_id)
@@ -2732,6 +2744,9 @@ async def request_agent(
     existing_names = set(rows_by_name)
     if body.name in existing_names:
         raise HTTPException(status_code=409, detail=f"Agent '{body.name}' already exists")
+    twin = route_words.agent_case_twin(body.name, existing_names)
+    if twin is not None:
+        raise HTTPException(status_code=409, detail=twin)
 
     project_row = await session.get(Project, project_id)
     if project_row is None:
@@ -3100,7 +3115,12 @@ async def patch_agent(
         and not set(body.keys()) <= _unrestricted_fields
     ):
         raise HTTPException(
-            status_code=409, detail=f"Agent name '{name}' is reserved for a configured agent"
+            status_code=409,
+            detail=(
+                f"Agent '{name}' is named in this project's last session sync, which owns its "
+                'config. Release it with POST /session/sync {"data": {}} (this leaves the '
+                "roster alone), or change the config there."
+            ),
         )
 
     result = await session.execute(
@@ -3186,7 +3206,7 @@ async def patch_agent(
         try:
             agent_row.reach_grants = validated_grants(body["reach_grants"])
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=f"reach_grants: {exc}") from exc
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     bound_runner = (
         await session.get(Runner, agent_row.runner_id) if agent_row.runner_id is not None else None

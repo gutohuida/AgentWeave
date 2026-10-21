@@ -43,6 +43,9 @@ CREATED = "created"
 REWORDED = "reworded"
 RETIRED_CLASSIFICATION = "retired"
 RESTORED = "restored"
+# Not stored: what a `reworded` revision was when its statement stood and the digest moved anyway,
+# because the digest covers the criteria (F833). Derived on read, so no migration.
+CRITERIA = "criteria"
 
 
 @dataclass
@@ -131,6 +134,47 @@ def requirements_from_payload(
         )
 
     return indexed
+
+
+def change_kind(
+    revision: SpecRequirementRevision, previous: Optional[SpecRequirementRevision]
+) -> str:
+    """What a revision was, by what it left unchanged: a `reworded` one whose statement equals the
+    revision before it changed the criteria. A revision recorded before 0131 holds no wording and
+    stays `reworded` -- the digest cannot say which part moved."""
+    if (
+        revision.classification == REWORDED
+        and previous is not None
+        and revision.statement is not None
+        and revision.statement == previous.statement
+    ):
+        return CRITERIA
+    return revision.classification
+
+
+async def stale_cause(session: AsyncSession, requirement_id: str, digest: str) -> str:
+    """Why a digest taken earlier no longer matches: `criteria` when the requirement's statement
+    is what it was then, otherwise `reworded`."""
+    rows = (
+        (
+            await session.execute(
+                select(SpecRequirementRevision)
+                .where(SpecRequirementRevision.requirement_id == requirement_id)
+                .order_by(SpecRequirementRevision.created_at, SpecRequirementRevision.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    then = next((r for r in reversed(rows) if r.digest == digest), None)
+    if (
+        then is not None
+        and rows
+        and then.statement is not None
+        and rows[-1].statement == then.statement
+    ):
+        return CRITERIA
+    return REWORDED
 
 
 async def _existing(session: AsyncSession, document_id: str) -> Dict[str, SpecRequirement]:

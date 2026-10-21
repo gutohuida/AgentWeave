@@ -35,10 +35,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import run_liveness, traces, worktrees
+from . import run_liveness, spec_index, traces, worktrees
 from .db.models import (
     Agent,
     EvidenceFootprint,
@@ -90,6 +90,8 @@ class Footprint:
     branch: Optional[str] = None
     entries: Dict[str, str] = None  # type: ignore[assignment]
     reachable_from_main: Optional[bool] = None
+    #: Whether the commit was named by the recorder, not taken as the checkout's HEAD (F761).
+    commit_named: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------
@@ -678,6 +680,7 @@ def _apply_footprint(
     row.entries = taken.entries or {}
     row.reachable_from_main = taken.reachable_from_main
     row.watched_from = list(taken.watched_from)
+    row.commit_named = taken.commit_named
     row.outside_workspace_writes = outside_writes
     return row
 
@@ -837,15 +840,34 @@ def _line_of_work_base(root: Path, commit: str, main: str) -> Optional[str]:
     return _git(root, "rev-parse", "--verify", f"{commit}^")
 
 
-def work_diff(root: Path, commit: Optional[str], main_branch: Optional[str]) -> Dict[str, Any]:
+def work_diff(
+    root: Path,
+    commit: Optional[str],
+    main_branch: Optional[str],
+    *,
+    unnamed_branch: Optional[str] = None,
+) -> Dict[str, Any]:
     """`{files: [{path, status, patch}], base, commit, truncated, reason}` for the work *commit*
-    carries on its line of work. Never raises: a missing commit or repository is a `reason`."""
+    carries on its line of work. Never raises: a missing commit or repository is a `reason`.
+
+    *unnamed_branch* is the branch a piece that named no commit was recorded on. When that is the
+    main line, its footprint's commit is whatever HEAD happened to be, already on main, and its
+    parent is no base for work that piece never did (F761). It answers no files and says so.
+    """
     empty: Dict[str, Any] = {"files": [], "base": None, "commit": commit, "truncated": False}
     if not commit:
         return {**empty, "reason": "this piece names no commit, so there is no work to diff"}
     if _git(root, "rev-parse", "--verify", f"{commit}^{{commit}}") is None:
         return {**empty, "reason": f"commit {commit[:12]} is not in this repository"}
     main = _main_ref(root, main_branch)
+    if unnamed_branch and unnamed_branch == main and is_reachable_from(root, commit, main):
+        return {
+            **empty,
+            "reason": (
+                f"this piece names no commit; it was recorded with the checkout at "
+                f"{commit[:12]} on {main}, which is not work of its own, so there is no work to diff"
+            ),
+        }
     base = _line_of_work_base(root, commit, main) if main else None
     if base is None:
         base = _git(root, "rev-parse", "--verify", f"{commit}^")
@@ -992,6 +1014,7 @@ def read_footprint(
                 if main_branch
                 else is_reachable_from_main(root, commit)
             ),
+            commit_named=bool(named),
         )
 
     if at:
@@ -1249,10 +1272,24 @@ async def decide(
         # says that. Rejecting it stays open; accepting it would count a stale demonstration.
         requirement = await session.get(SpecRequirement, evidence.requirement_id)
         if requirement is not None and evidence.digest != requirement.digest:
+            name = requirement.identifier or "its requirement"
+            if await spec_index.stale_cause(session, requirement.id, evidence.digest) == (
+                spec_index.CRITERIA
+            ):
+                # F833: the statement stands; its acceptance criteria are what moved.
+                said = (
+                    f"{evidence.id} was recorded before the acceptance criteria of {name} "
+                    "changed (its statement is unchanged); it cannot be accepted. Record new "
+                    "evidence against the current criteria."
+                )
+            else:
+                said = (
+                    f"{evidence.id} was recorded for an earlier wording of {name}, which has "
+                    "been reworded since; it cannot be accepted. Record new evidence against "
+                    "the current wording."
+                )
             raise EvidenceRefusedError(
-                f"{evidence.id} was recorded for an earlier wording of "
-                f"{requirement.identifier or 'its requirement'}, which has been reworded since; "
-                "it cannot be accepted. Record new evidence against the current wording.",
+                said,
                 code="evidence_stale",
                 http_status=409,
             )
@@ -1304,6 +1341,18 @@ async def decide(
     # Materialised from the append-only reviews so coverage is a join rather than a correlated
     # subquery. `evidence_reviews` is what governs; this follows it.
     evidence.review_state = decision
+    if decision == REJECTED:
+        # F759: a drift candidate asks whether the code moved away from what *accepted* evidence
+        # showed. Rejecting the piece answers it; left open it outranks `rejected` in the coverage
+        # precedence and hid the rejection from the approval gate.
+        await session.execute(
+            update(RequirementDrift)
+            .where(
+                RequirementDrift.evidence_id == evidence.id,
+                RequirementDrift.state == "candidate",
+            )
+            .values(state="superseded")
+        )
     return review
 
 
@@ -1629,6 +1678,7 @@ async def restamp_run_footprints(
             entries=entries,
             watched_from=watched_from,
             reachable_from_main=reachable,
+            commit_named=False,
         )
 
     # Read once per run, like the footprint above it, and for the same reason: it is one fact about

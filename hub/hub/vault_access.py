@@ -2,7 +2,7 @@
 
 `the-vault-map-is-shaped-by-what-agents-ask-for`. The agents' `vault_read` at offset 0 adds one to
 that entry's count (`record_fetch`, in its own transaction, so the read never waits on or fails
-with it), and, since `the-vault-names-who-read-an-entry` (F836), one to that agent's count of it.
+with it), and, since `the-vault-names-who-read-an-entry` (F901), one to that agent's count of it.
 Both maps and both entry routes list the count, the last read and the readers (`annotate`, `shape`),
 and `shape` orders the map: an area is a source with the facts citing it, the most-read area leads,
 the source leads its area, and its facts follow most-read first. Nothing here runs a model; with no

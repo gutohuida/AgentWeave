@@ -70,7 +70,14 @@ async def sync_session(
     # way to flip isolation under held work (F242). Checked for every agent the payload names that
     # already has a row, before anything is written; the first refusal refuses the payload whole.
     old_data = row.data if row else {}
-    named = list((body.data.get("agents") or {}).keys())
+    given = body.data.get("agents")
+    if given is not None and not isinstance(given, dict):
+        # F812: a list or a string used to reach `.keys()` and answer 500.
+        raise HTTPException(
+            422,
+            detail="agents must be an object of agent name -> config",
+        )
+    named = list((given or {}).keys())
     if named:
         rows_by_name = {
             agent_row.name: agent_row
@@ -135,6 +142,14 @@ async def sync_session(
             if route_refusal is not None:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, route_refusal)
 
+    # F811: a name this sync would add may not differ from another in the project, or in this
+    # payload, only by case. Pairs that already exist are left to sync, like route words.
+    added_names = [name for name in agents_data if name not in existing_agents]
+    for position, agent_name in enumerate(added_names):
+        twin = route_words.agent_case_twin(agent_name, [*existing_agents, *added_names[:position]])
+        if twin is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, twin)
+
     removed_agent_names = (
         [name for name in existing_agents if name not in current_agent_names]
         if roster_given
@@ -167,6 +182,20 @@ async def sync_session(
         await session.delete(existing_agents[agent_name])
 
     await session.commit()
+
+    # F812: the answer and the Activity feed name what the sync deleted; before this, an agent
+    # vanished with only the roster that remained to show for it. Kept apart from
+    # `removed_agent_names`, which the worktree release below empties when it has no workspace.
+    deleted_agent_names = sorted(removed_agent_names)
+    for agent_name in deleted_agent_names:
+        await persist_event(
+            session,
+            project_id,
+            "agent_removed",
+            {"agent": agent_name, "by": "session_sync"},
+            agent=agent_name,
+            severity="warn",
+        )
 
     # Task 5.4: an agent no longer in the synced roster is "removed from the project" —
     # release its isolated worktree (if any), never discarding unmerged work silently.
@@ -224,9 +253,11 @@ async def sync_session(
     roster = sorted(agents_data) if roster_given else sorted(existing_agents)
 
     # Broadcast so the UI refreshes agent list immediately
-    await sse_manager.broadcast(project_id, "session_synced", {"agents": roster})
+    await sse_manager.broadcast(
+        project_id, "session_synced", {"agents": roster, "removed": deleted_agent_names}
+    )
 
-    return {"ok": True, "agents": roster}
+    return {"ok": True, "agents": roster, "removed": deleted_agent_names}
 
 
 @router.get("/sync")

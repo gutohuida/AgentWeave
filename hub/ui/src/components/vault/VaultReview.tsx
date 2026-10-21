@@ -149,10 +149,13 @@ export function ReportCard({
   report,
   onOpenEntry,
   onClose,
+  onReview,
 }: {
   report: VaultReport
   onOpenEntry: (id: string) => void
   onClose: (reportId: string, note: string) => VaultActionResult
+  /** Asks the manager to look into a pending report now (F801); absent, a pending report waits. */
+  onReview?: (reportId: string) => VaultActionResult
 }) {
   const status = REPORT_STATUS[report.status] ?? { label: report.status }
   return (
@@ -183,7 +186,50 @@ export function ReportCard({
       ) : null}
       {report.close ? <p className="vault-report-answer">Closed: {report.close.note}</p> : null}
       {report.status === 'referred' ? <CloseReportForm report={report} onClose={onClose} /> : null}
+      {report.status === 'pending' && onReview ? <ReviewReportButton report={report} onReview={onReview} /> : null}
     </article>
+  )
+}
+
+/** A pending report the manager has not reached, looked into on request (F801): the job that
+ *  answers reports runs on its own schedule, and a report that missed it otherwise just waits. */
+function ReviewReportButton({
+  report,
+  onReview,
+}: {
+  report: VaultReport
+  onReview: (reportId: string) => VaultActionResult
+}) {
+  const [state, setState] = React.useState<'idle' | 'pending' | 'queued'>('idle')
+  const [error, setError] = React.useState<string | null>(null)
+  return (
+    <div className="vault-report-review">
+      <Button
+        variant="ghost"
+        size="xs"
+        data-testid={`vault-report-${report.id}-review`}
+        disabled={state === 'pending'}
+        title="Ask the manager to look into this report now"
+        onClick={async () => {
+          setState('pending')
+          setError(null)
+          const result = await onReview(report.id)
+          if (result?.error) {
+            setError(result.error)
+            setState('idle')
+          } else setState('queued')
+        }}
+      >
+        Look into it
+      </Button>
+      {error ? (
+        <p className="vault-report-review-error" role="alert">
+          {error}
+        </p>
+      ) : state === 'queued' ? (
+        <p className="vault-report-answer">Looking into it in the background. The answer appears here when it finishes.</p>
+      ) : null}
+    </div>
   )
 }
 

@@ -22,7 +22,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from . import vault
 from .project_workspace import configured_workspace_root
@@ -185,7 +185,7 @@ def _short(name: str) -> str:
 def _named(file: Path, folder: Optional[Path], within: Sequence[Path]) -> str:
     """The name a file is listed by: its path inside the nearest of *within* (the caller's
     workspace, the project directory) that holds it, so two `README.md` files stay told apart
-    (F835); else, for a folder's file, the folder's name and the path beneath it; else its name."""
+    (F900); else, for a folder's file, the folder's name and the path beneath it; else its name."""
     holders = [root for root in within if _inside(file, (root,))]
     if holders:
         nearest = max(holders, key=lambda root: len(root.parts))
@@ -195,16 +195,38 @@ def _named(file: Path, folder: Optional[Path], within: Sequence[Path]) -> str:
     return _short(file.name)
 
 
-def _walk(folder: Path) -> List[Path]:
-    """The files under *folder*, sorted, leaving out hidden names (`.git`, `.agentweave`, ...)."""
+def _walk(
+    folder: Path,
+    unlistable: List[Tuple[Path, str]],
+    seen: Set[Path],
+    room: int,
+) -> List[Path]:
+    """The files under *folder*, sorted, leaving out hidden names (`.git`, `.agentweave`, ...).
+    A folder the Hub cannot list is recorded in *unlistable* with the reason and walked no
+    further; it never fails the walk. A folder is walked once, by its resolved path in *seen*, so
+    a junction or link back up the tree is not followed round again. The walk stops at the first
+    file past *room*: the caller refuses the batch then, and the rest of the tree is not read."""
+    try:
+        seen.add(folder.resolve())
+        children = sorted(folder.iterdir(), key=lambda p: p.name.lower())
+    except OSError as exc:
+        unlistable.append((folder, exc.strerror or str(exc)))
+        return []
     found: List[Path] = []
-    for child in sorted(folder.iterdir(), key=lambda p: p.name.lower()):
+    for child in children:
         if child.name.startswith("."):
             continue
         if child.is_dir():
-            found += _walk(child)
+            try:
+                if child.resolve() in seen:
+                    continue
+            except OSError:
+                continue
+            found += _walk(child, unlistable, seen, room - len(found))
         elif child.is_file():
             found.append(child)
+        if len(found) > room:
+            break
     return found
 
 
@@ -222,8 +244,18 @@ def expand(paths: Sequence[str], reach: Reach, within: Sequence[Path] = ()) -> B
             batch.items.append(Item(given=given, refused=refusal))
             continue
         if located.is_dir():
-            files = _walk(located)
-            if not files:
+            unlistable: List[Tuple[Path, str]] = []
+            room = MAX_BATCH_FILES - sum(1 for item in batch.items if item.path is not None)
+            files = _walk(located, unlistable, set(), room)
+            for blocked, why in unlistable:
+                batch.items.append(
+                    Item(
+                        given=given,
+                        path=None,
+                        refused=f"The Hub could not list the folder {blocked}: {why}.",
+                    )
+                )
+            if not files and not unlistable:
                 batch.items.append(
                     Item(given=given, path=located, refused=f"The folder {given!r} holds no files.")
                 )

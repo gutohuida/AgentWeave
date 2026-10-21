@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agent_roster import require_known_agent
 from ...auth import get_project
+from ...checkpoint_cutover import handover_of
 from ...context_readings import usable_context_reading
 from ...conversations import (
     archivable,
@@ -662,9 +663,26 @@ async def unarchive_conversation(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Reopen an archived conversation. Never refused — reopening obstructs nothing."""
+    """Reopen an archived conversation, unless a Checkpoint handed its work to a successor.
+
+    F816: reopening that predecessor made a second live line of work -- a working composer on the
+    old session while the successor holds the same work -- so it is refused, naming the successor.
+    Its history stays readable, archived.
+    """
     project_id, _ = project
     conversation = await _owned_conversation(session, project_id, agent, conversation_id)
+
+    prior = await handover_of(session, conversation_id)
+    if prior is not None:
+        handed_by, successor = prior
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Conversation {conversation_id} was cut over to {successor} (checkpoint "
+                f"{handed_by}), which holds its work; continue there. This one stays archived "
+                "and readable."
+            ),
+        )
 
     unarchive(conversation)
     await session.commit()

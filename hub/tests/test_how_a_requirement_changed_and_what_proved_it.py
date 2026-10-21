@@ -60,6 +60,51 @@ async def test_each_revision_records_its_wording_and_who_changed_it(
     assert body["drift"] == []
 
 
+async def test_a_criterion_only_change_is_not_a_rewording(
+    app, auth_headers, builder, tmp_path  # noqa: F811
+):
+    """F833: changing a criterion is a new revision (the digest covers criteria), but the story
+    called it "reworded" and showed the same statement twice. A revision whose statement is
+    unchanged from the one before it is `criteria`, whatever the stored classification."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    criterion = {
+        "key": "c-today",
+        "requirement": "alpha",
+        "given": "two items are due",
+        "when": "the list is read",
+        "then": "it returns 2",
+    }
+    for then in ("it returns 2", "it returns 2, as an int"):
+        saved = await app.put(
+            f"{BASE}/documents/{PATH}/content",
+            json={
+                "document": {
+                    **document([ALPHA]),
+                    "acceptance_criteria": [{**criterion, "then": then}],
+                }
+            },
+            headers=auth_headers,
+        )
+        assert saved.status_code == 200, saved.text
+
+    body = await detail(app, auth_headers)
+    assert [(r["classification"], r["change"]) for r in body["revisions"]] == [
+        ("created", "created"),
+        ("reworded", "criteria"),
+        ("reworded", "criteria"),
+    ]
+    # A real rewording stays one.
+    reworded = await app.put(
+        f"{BASE}/documents/{PATH}/content",
+        json={"document": document([{**ALPHA, "statement": REWORDED}])},
+        headers=auth_headers,
+    )
+    assert reworded.status_code == 200, reworded.text
+    body = await detail(app, auth_headers)
+    assert body["revisions"][-1]["change"] == "reworded"
+
+
 async def test_a_retirement_records_no_wording(app, auth_headers, builder, tmp_path):  # noqa: F811
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)

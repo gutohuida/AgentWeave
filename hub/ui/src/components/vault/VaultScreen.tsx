@@ -5,6 +5,7 @@ import {
   isFact,
   isNoVault,
   useCloseVaultReport,
+  useReviewVaultReport,
   useDistilVaultSource,
   useResolveContradiction,
   useUpdateVaultSettings,
@@ -109,6 +110,7 @@ export function VaultScreen() {
   const distil = useDistilVaultSource()
   const resolve = useResolveContradiction()
   const closeReport = useCloseVaultReport()
+  const reviewReport = useReviewVaultReport()
   const updateSettings = useUpdateVaultSettings()
 
   if (isNoVault(map.error) || isNoVault(settings.error)) {
@@ -267,6 +269,13 @@ export function VaultScreen() {
           toast({ title: 'Report closed', tone: 'success' })
         } catch (error) {
           return { error: readableApiError(error, 'Could not close that report.') }
+        }
+      }}
+      onReviewReport={async (id) => {
+        try {
+          await reviewReport.mutateAsync(id)
+        } catch (error) {
+          return { error: readableApiError(error, 'Could not look into this report.') }
         }
       }}
       onSaveSettings={async (next) => {

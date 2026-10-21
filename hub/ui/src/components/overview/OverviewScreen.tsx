@@ -31,8 +31,11 @@ function sentence(text: string): string {
 export function OverviewScreen({
   onNavigate,
   onOpenConversation,
+  onAddAgent,
 }: {
   onNavigate: (page: string) => void
+  /** Opens the Add-agent dialog for this project (F808). */
+  onAddAgent?: () => void
   /** Opens one conversation; without it a row opens its agent's latest conversation. */
   onOpenConversation?: (agent: string, conversationId: string) => void
 }) {
@@ -170,6 +173,7 @@ export function OverviewScreen({
       onOpenTasks={() => onNavigate('tasks')}
       onOpenLedger={() => onNavigate('activity')}
       onOpenQuestions={() => onNavigate('questions')}
+      onAddAgent={onAddAgent}
       notice={
         failures.some(([, error]) => error) || accounting?.budget.exhausted ? (
           <>

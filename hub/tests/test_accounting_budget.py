@@ -106,23 +106,33 @@ async def test_exhausted_budget_keeps_autonomous_entries_queued(
 
 
 @pytest.mark.asyncio
-async def test_status_keeps_budget_reason_beside_an_operator_entry_in_another_conversation(
+async def test_status_does_not_claim_budget_beside_an_operator_entry_in_another_conversation(
     app, auth_headers, bind_runner
 ) -> None:
-    """F133: the status route reads the turn the scheduler would build, not every queued entry."""
+    """F133 read the earlier autonomous entry's turn and called it held; F814 reversed that.
+
+    The operator's message in the second conversation is the turn that runs on a spent budget, so
+    the status route names no budget hold, and the scheduler starts it.
+    """
     name = "paused-beside-operator"
     await _configure_agent(app, auth_headers, bind_runner, name)
     await _set_budget_and_usage(limit=100, used=100)
     await _queue(name, "agent")
     await _queue(name, "operator")
 
-    # The scheduler's turn is the earlier autonomous entry's conversation alone, so it refuses.
-    result = await schedule_agent("proj-test", name)
-    assert result.waiting_reason == "token budget exhausted"
-
     status = await app.get(f"/api/v1/projects/proj-test/queue/{name}/status", headers=auth_headers)
     assert status.json()["waiting_count"] == 2
-    assert status.json()["waiting_reason"] == "token budget exhausted"
+    assert status.json()["waiting_reason"] != "token budget exhausted"
+
+    with (
+        patch(
+            "hub.api.v1.agent_trigger.PtySession.spawn", _completed_claude_spawn("beside-session")
+        ),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
+    ):
+        result = await schedule_agent("proj-test", name)
+        assert result.response is not None
+        await asyncio_gather_background_runs()
 
 
 @pytest.mark.asyncio

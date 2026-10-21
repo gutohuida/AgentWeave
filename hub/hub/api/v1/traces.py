@@ -17,7 +17,7 @@ from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import traces
+from ... import trace_export, traces
 from ...auth import get_project
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Run, TraceSettings
@@ -183,6 +183,9 @@ async def update_trace_settings(
         raise HTTPException(status_code=422, detail="Set an OTLP endpoint before enabling export")
     await session.commit()
     traces.set_record_reads(project_id, bool(row.record_reads))
+    if fields & {"otlp_endpoint", "otlp_headers", "export_enabled"}:
+        # A saved export setting is tried at the next pass, not after the old endpoint's backoff.
+        trace_export.forget_backoff(project_id)
     return await _settings_body(session, project_id)
 
 

@@ -85,6 +85,7 @@ export function OverviewView({
   onOpenTasks,
   notice,
   loading,
+  onAddAgent,
   now,
 }: {
   needs: NeedItem[]
@@ -102,6 +103,8 @@ export function OverviewView({
   /** A project-wide condition worth one line above everything (a paused budget). */
   notice?: React.ReactNode
   loading?: boolean
+  /** Opens the Add-agent dialog (F808: agents are added in the app, not with a CLI command). */
+  onAddAgent?: () => void
   now: Date
 }) {
   if (loading) {
@@ -262,7 +265,18 @@ export function OverviewView({
 
         <section className="aw-ov-section" aria-labelledby="ov-agents">
           <h2 id="ov-agents" className="aw-ov-heading">Agents</h2>
-          {agents.length === 0 ? <div className="aw-ov-calm">No agents yet. Add one from the sidebar.</div> : null}
+          {agents.length === 0 ? (
+            <div className="aw-ov-calm">
+              No agents yet.{' '}
+              {onAddAgent ? (
+                <button data-slot="add-agent" type="button" className="aw-overview-link" onClick={onAddAgent}>
+                  Add agent
+                </button>
+              ) : (
+                'Add one from the sidebar.'
+              )}
+            </div>
+          ) : null}
           <ul className="aw-ov-list">
             {agents.map((a) => {
               const color = agentColorVars(a.colorIndex)

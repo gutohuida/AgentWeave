@@ -190,6 +190,8 @@ export interface TaskCheckResult {
   timed_out: boolean
   duration_seconds: number
   output_tail: string
+  /** True when this check fails on main too, so the failure is not the task's work. */
+  preexisting?: boolean
 }
 
 /** One run of the project's checks on the work this task's approval would merge. */
@@ -388,6 +390,8 @@ export type StoryEvent =
     }
   /** Something that went wrong with the task's checkout (F711): today a release that failed. */
   | { kind: 'workspace'; id: string; at: string | null; outcome: string; reason: string | null }
+  /** The flow could not staff this task's review (F768); `reason` names the remedy. */
+  | { kind: 'review_unstaffed'; id: string; at: string | null; reason: string | null }
 
 export interface TaskStory {
   task: { id: string; title: string; status: string }
@@ -675,8 +679,27 @@ export function useDeleteTask() {
     mutationFn: async ({ id }: { id: string }) => {
       await fetchWithAuth(`/api/v1/projects/${projectId}/tasks/${id}`, { method: 'DELETE' })
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
+    onSuccess: (_void, { id }) => {
+      // F824: the task is gone, so nothing may ask for it again. Invalidating the whole `tasks`
+      // prefix refetched the dead task's own story while the drawer was still mounted (404, over
+      // and over), and left its card on the board until the list's refetch landed. Its own keys are
+      // left alone, not removed: removing a query a mounted observer holds only makes the observer
+      // build it again and refetch. They are collected once the drawer lets go.
+      queryClient.setQueriesData<{ tasks?: { id: string }[]; total?: number }>(
+        { queryKey: ['project', projectId, 'tasks'] },
+        (page) => {
+          if (!page || !Array.isArray(page.tasks) || !page.tasks.some((t) => t.id === id)) return page
+          return {
+            ...page,
+            tasks: page.tasks.filter((t) => t.id !== id),
+            ...(typeof page.total === 'number' ? { total: page.total - 1 } : {}),
+          }
+        },
+      )
+      queryClient.invalidateQueries({
+        queryKey: ['project', projectId, 'tasks'],
+        predicate: (q) => q.queryKey[3] !== id,
+      })
     },
   })
 }

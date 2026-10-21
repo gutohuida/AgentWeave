@@ -938,8 +938,8 @@ async def enter_selected_task(
     noticing, and nothing on the board said anything was wrong.
 
     It also makes the reviewer's own instructions true. The turn context tells a reviewer to report
-    through `revision_needed`, and `TRANSITIONS` does not offer that edge from `completed` --
-    `completed` reaches only `under_review`. A reviewer that followed the instruction literally was
+    through `revision_needed`, and `TRANSITIONS` does not offer an agent that edge from `completed`
+    (F832 gave the operator one) -- an agent's `completed` reaches only `under_review`. A reviewer that followed the instruction literally was
     refused, and one that found the work correct had no legal exit at all; measured across this
     Hub's history, no flow-dispatched reviewer had ever recorded a transition. Entering the review
     at `under_review` puts both `approved` and `revision_needed` one legal edge away.
@@ -1375,7 +1375,11 @@ async def _agents_a_loop_may_staff(session: AsyncSession, loop: Loop) -> "list[s
     A single-agent project still reaches the general refusal with no branch of its own.
 
     A loop that declares a specification document is a flow (`agent-flows:13`, design D7) and
-    draws the pool unfiltered: flow width is unaffected by this function existing.
+    draws the project's pool, **less the agents its document names to judge work** (F767): the
+    ladder will not substitute for a named reviewer, and an agent that built a task is excluded
+    from reviewing it, so handing the reviewer fresh work made that task unreviewable by
+    construction. The reviewer is withheld only while somebody else could take the work -- a
+    pool that would shrink to nothing keeps them, since a flow with no builder is not a flow.
 
     *Why not a parameter on `_agents_that_are_free` instead:* that function answers a question
     about a **project** and knows nothing about loops (its own docstring, design D5); filtering
@@ -1383,7 +1387,18 @@ async def _agents_a_loop_may_staff(session: AsyncSession, loop: Loop) -> "list[s
     """
     if loop.spec_document_id is None:
         return []
-    return await _agents_that_are_free(session, loop.project_id)
+    from . import review_turn
+
+    free = await _agents_that_are_free(session, loop.project_id)
+    judges = await review_turn.named_reviewers(session, loop.project_id, loop.spec_document_id)
+    if not judges:
+        return free
+    # Somebody besides a judge must be able to build, now or later, or withholding them strands
+    # the flow: judged against the roster, not the free list, so a busy builder is waited for.
+    roster = await _roster_availability(session, loop.project_id)
+    if not any(record.has_runner and record.name not in judges for record in roster):
+        return free
+    return [name for name in free if name not in judges]
 
 
 #: Design D2/D3's rung-3 prefix (task 2.3, R8) -- "reviewer", not the pre-REV "nobody is free.",
@@ -2047,6 +2062,16 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                         )
                     )
                     continue
+                abandonment = attendance.abandonment(task.id, agent)
+                if abandonment is not None:
+                    # The Hub gave up delivering this task to `agent` after repeated failed runs
+                    # (F819). Briefing again would spend three more failures on the same agent, and
+                    # the loop reading "Active" hid it. Surfaced with the run's own words until
+                    # something newer happens on the pair.
+                    in_flight.append((task.id, agent))
+                    surfaced_rows.add(task.id)
+                    unstaffed.append((task.id, _abandoned_work_reason(task, agent, abandonment)))
+                    continue
                 if agent in taken:
                     deferred.append(
                         (
@@ -2477,6 +2502,19 @@ def _waiting_review_turn(
     if how.how != ATTENDING_REFUSED:
         return agent, None
     return agent, _refused_staffing_reason(task, agent, how.refusal or "", how.refused_here)
+
+
+def _abandoned_work_reason(task: Task, agent: str, words: str) -> str:
+    """Ordinary work whose delivery the Hub stopped retrying; no firing will brief it again (F819)."""
+
+    def _sentence(title: str, words: str) -> str:
+        return (
+            f"{agent} could not start: {words} The Hub stopped retrying, and {task.id} ({title!r}) "
+            f"is still assigned to {agent}. Fix {agent}'s runner and message {agent}, or reassign "
+            f"the task."
+        )
+
+    return _fit_sentence(_sentence, task.title, words)
 
 
 def _refused_work_reason(task: Task, agent: str, refusal: str, refused_here: bool) -> str:

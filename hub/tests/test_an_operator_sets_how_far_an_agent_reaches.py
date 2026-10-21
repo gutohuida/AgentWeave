@@ -263,6 +263,37 @@ async def test_a_grant_that_is_not_an_absolute_root_is_refused(app, auth_headers
         assert resp.status_code == 422, (bad, resp.text)
 
 
+@pytest.mark.asyncio
+async def test_a_refused_agent_grant_names_the_field_and_the_bad_value(
+    app, auth_headers, bind_runner
+):
+    """F795: the agent route's 400 detail was pydantic's raw dump with a docs URL; the page could
+    show nothing of it. It is now the `field: message` sentence the project's Reach group shows."""
+    await _agents(app, auth_headers, bind_runner, **{"reach-bad": "claude"})
+    cases = (
+        (
+            {"roots": [{"path": "rel", "access": "read"}], "hosts": []},
+            "reach_grants.roots.0.path: a granted root is an absolute path",
+            "'rel'",
+        ),
+        (
+            {"roots": [], "hosts": ["http://bad host"]},
+            "reach_grants.hosts: a granted host is host, host:port, host:* or *.domain",
+            "'http://bad host'",
+        ),
+    )
+    for bad, field_and_words, value in cases:
+        resp = await app.patch(
+            f"/api/v1/projects/{PROJECT}/agents/reach-bad",
+            json={"reach_grants": bad},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400, resp.text
+        detail = resp.json()["detail"]
+        assert field_and_words in detail and value in detail, detail
+        assert "errors.pydantic.dev" not in detail and "validation error" not in detail, detail
+
+
 def test_the_judge_restates_the_hubs_host_pattern():
     """`mcp_server` imports only the stdlib, so it restates `reach.GRANT_HOST_RE`."""
     from hub import reach

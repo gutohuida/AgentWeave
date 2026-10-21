@@ -15098,6 +15098,8 @@ door are probed, because closing one leaves the other.
 
 **Re-verified 2026-10-15** (full sweep, G1: Charters): still open; duplicate charter names are accepted, visible as "Tester, Tester" in the Add-agent charter select.
 
+**Re-verified 2026-10-20** (day sweep `sweep-agents-sweep`, scratch :8149): still open. `POST /charters {"name": "Developer"}` -> 201 beside the seeded Developer, and Environment -> Charters lists "Developer" twice.
+
 ## F184 (C) — a whitespace-only charter name is accepted by the API and renders as a blank row
 
 **Status:** fixed (this commit) [Round 4, 2026-09-23] — a whitespace-only charter name is refused; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `CharterCreate.name`
@@ -36773,7 +36775,7 @@ A task serves FR-1, a builder records evidence for it (`awaiting`), the requirem
 
 ## F759 (B) -- an open drift candidate on evidence the operator overturned to rejected hides the rejection from the approval gate
 
-**Status:** open 2026-10-19. Found in the evidence sweep (`scripts/drive/s1019_evidence.py` + `s1019_evidence_p2.py`, scratch Hub :8150).
+**Status:** fixed aa37fd7 2026-10-21 (night iteration 15, Tier 0): `requirement_evidence.decide` supersedes the piece's open drift candidates when the decision is `rejected`, so coverage reads `rejected` and the approval gate answers 409 `gate_unsatisfied`. Driven through the real routes in-process (`hub/tests/test_an_overturned_piece_supersedes_its_drift.py`: overturn, coverage, and the task walk to `approved`); all three failed before the fix. Not re-run on a live Hub (labelled). Found in the evidence sweep (`scripts/drive/s1019_evidence.py` + `s1019_evidence_p2.py`, scratch Hub :8150).
 **Source:** drive
 **Theme:** Requirements & evidence
 **Ready:** yes -- repro below, control included.
@@ -36793,7 +36795,7 @@ FR-3 (sketch rigor) has one operator piece with `locator: todo/other.py` (accept
 
 ## F761 (B) -- a piece that names no commit shows, as its work, whatever commit HEAD happened to be
 
-**Status:** open 2026-10-19. Found in the evidence sweep (`scripts/drive/s1019_evidence.py`, scratch Hub :8150), seen in a browser.
+**Status:** fixed 5f86cd4 2026-10-21 night iteration 16 (Tier 0, with one nullable column). A footprint now records whether the recorder named its commit (`evidence_footprints.commit_named`, migration `0139`; an operator's `commit` or a locator that is one is named, the checkout's HEAD is not, an agent re-stamp is not). `GET /spec/evidence/{id}/diff` passes the recorded branch to `work_diff` for a piece whose `commit_named` is false, and where that branch is the main line and the commit is already on it, answers no files and a reason naming the checkout's commit; the `commit^` fallback stays for a named commit or a task line that has merged. NULL (rows from before) reads as it did. Why a column: a first cut read `watched_from`, and the drive caught it misfiring on a piece that named a commit and also a file locator (watches `locator`, not `commit`), so the fact has to be stored. Tests `hub/tests/test_evidence_carries_what_it_takes_to_judge_it.py` (the repro failed before the fix; a commit plus locator on main still diffs its commit) and `hub/tests/test_migration_0139_footprint_commit_named.py`. Drive: scratch Hub :8153 (`scripts/drive/s1021_f761_drive.py`): the no-commit piece answered 200, no files, 'this piece names no commit; it was recorded with the checkout at 617128272ca2 on master...'; the commit-plus-locator piece answered `todo/fix.py`. Not measured: an agent piece recorded on master, or in a task checkout before its first commit (the finding's 'by the same path' cases).
 **Source:** drive
 **Theme:** Requirements & evidence
 **Ready:** yes -- repro below.
@@ -36876,7 +36878,7 @@ Expected: a "Roadmap slice" control on a change document's page, or "Link a chan
 
 ## F767 (B) -- a flow hands fresh work to its own named reviewer, and the task that reviewer builds can then never be reviewed: one event, and nothing on the loop or the task
 
-**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns).
+**Status:** fixed 2026-10-21 night iteration 17, 997519b (Tier 0). `scheduler._agents_a_loop_may_staff` withholds the agents a flow's document names to judge work (`review_turn.named_reviewers`: each task's `reviewer`, `delivery.reviewer`, `delivery.tester`) from fresh work, unless no other agent with a runner exists on the roster (a pool that would empty keeps them). Tests `hub/tests/test_a_flow_does_not_hand_fresh_work_to_its_named_reviewer.py` (reviewer and tester cases failed before; control: no named reviewer still runs two builds; sole-agent flow still runs). Drive: scratch Hub :8154 (profile f767), the finding's own shape (flow, builder + rev Haiku, two ready tasks, `rev` named reviewer, approve_anyway, `POST /jobs/{id}/run`): one build, on builder (`scripts/drive/s1021_f767_drive.py`). Not done: the second half of the finding's expectation (a reviewer that must build says on the task that it waits on the operator) is F768's story fix. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns). Original: open 2026-10-19.
 **Source:** drive
 **Theme:** Flows & review
 **Ready:** yes -- repro below.
@@ -36892,7 +36894,7 @@ Expected: a flow that names a reviewer does not hand that reviewer fresh work wh
 
 ## F768 (C) -- a task's story leaves out the flow's refusal to staff its review, so an unreviewable task's story ends at "completed" and says nothing more
 
-**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser.
+**Status:** fixed 2026-10-21 night iteration 19 (Tier 0), 9eade29. `task_story` reads `review_unstaffed` from `event_logs` for the task (`data.task_id`) as its own story kind, with the reason, and `TaskStory.tsx` renders it ("Nobody could be found to review this"). Tests: `test_a_tasks_whole_story_is_in_its_drawer.py::test_a_review_the_flow_could_not_staff_is_in_the_story` (failed before; another task's event is excluded), `taskStory.test.tsx` (F768). Drive: the route in the test app and the component test stand in for the browser; not re-seen on a live Hub (labelled). Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser. Original: open 2026-10-19.
 **Source:** drive
 **Theme:** Tasks
 **Ready:** yes -- repro is F767's.
@@ -36904,7 +36906,7 @@ Expected: the story carries a `review_unstaffed` event, with its reason, at its 
 
 ## F769 (B) -- the integration note hides a merge behind a later "already in master" skip and keeps a resolved "no main branch" line, so merged work reads "Not merged" twice
 
-**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks_p2.py`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser.
+**Status:** fixed 2026-10-21 at 1df4f02. `newestPerTarget` lets a merged row outrank a skip for the same commit and drops a null-commit skip once any row merged. Test: `taskIntegrationRetry.test.tsx` (F769, route's order). Found in the tasks sweep (`scripts/drive/s1019_tasks_p2.py`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser.
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes -- repro below.
@@ -36918,7 +36920,7 @@ Expected: an `ALREADY_INTEGRATED` skip does not replace a `merged` row for the s
 
 ## F770 (C) -- the checks row never says a failure also fails on main: the drawer shows a red "Checks failed" with the output, and only the Land refusal says it is not the task's
 
-**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py div`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser.
+**Status:** fixed 2026-10-21 night iteration 20 (Tier 0, UI) at 4c1013c. `TaskCheckResult` types `preexisting`; `TaskChecksRow` adds a line "<checks> fails on main too, not this task's work" under a failed latest run and the same words on each earlier run's result. Tests `hub/ui/src/__tests__/taskChecksRow.test.tsx` (3 new, failing before); full UI suite 216 files, 2210 tests pass; eslint and tsc clean. Bundle rebuilt and committed. Drive: component test with the finding's result shape stands in for the browser (labelled: not re-seen on a live Hub). Found in the tasks sweep (`scripts/drive/s1019_tasks.py div`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser.
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes -- repro below.
@@ -36930,7 +36932,7 @@ Expected: a failed result with `preexisting: true` reads "tests failed -- fails 
 
 ## F771 (C) -- a review turn is not told which of the document's requirements are someone else's, and a Haiku reviewer sent correct work back twice for the sibling task's requirement
 
-**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns).
+**Status:** fixed 2026-10-21 night iteration 21 (Tier 0), 089bb89, the briefing half. `review_turn._other_requirements_sentence` joins `verdict_evidence_sentence` (so the loop briefing and the turn context both carry it): "This task serves `FR-1`. The document's other requirements belong to other tasks (`FR-2`: `task-...` (Add sub())): do not send this task back for them." A requirement the task also serves is not called the other's; a one-task document says nothing. Test `hub/tests/test_review_briefing_names_other_tasks_requirements.py` (3, failed before). Not built: `read_spec_document` marking the reviewed task's requirements (the run-to-task lookup and the budgeted view make it more than a one-line change); the briefing line is what the reviewer reads first. Not re-seen with a live Haiku reviewer (labelled).
 **Source:** drive
 **Theme:** Flows & review
 **Ready:** yes -- repro below; behavioural, measured 2 of 2 here, and once in F606's drive.
@@ -36942,7 +36944,7 @@ Expected: the review briefing adds one line: "This task serves FR-1. The documen
 
 ## F772 (C) -- Land on a task with awaiting evidence also says its commit is "on neither master nor inside any commit the accepted evidence names" and asks the author to record evidence they already recorded
 
-**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170).
+**Status:** fixed 2026-10-21 (night iteration 22, Tier 0, 9db0fa8). `GateRefusal._unlanded_detail` returns nothing when every commit in the `unlanded` entry is named by a piece in `unaccepted`, so the 409 message carries only "nobody has judged it ... accept the evidence"; the body's `unlanded` list and `refuses` are unchanged. A commit no awaiting piece names (or nothing awaiting) keeps the paragraph. `hub/tests/test_land_gate_does_not_ask_for_evidence_already_recorded.py` (the awaiting-piece case failed before; 4 tests). Not re-seen on a live Hub: the gate object with the route's field shapes stands in (labelled). Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170).
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes -- repro below.
@@ -36954,7 +36956,7 @@ Expected: when every unlanded commit is named by an awaiting piece in `unaccepte
 
 ## F773 (C) -- a flow task's checks never run while it waits for review: the reviewer judges without them, and its approval is first refused "checks are still running"
 
-**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns).
+**Status:** fixed a8bbbde 2026-10-21 (night iteration 23, Tier 0). `project_checks.request_run`, resolving its own targets, falls back to `task_integration.review_target` when `merge_targets` is empty and the task is `completed`/`under_review`, so `_after_run` starts a run on the commit the review will be given (the approval gate passes its own targets and is untouched). `hub/tests/test_a_flow_tasks_checks_run_while_it_waits_for_review.py` (failed first: no run; a flow task with no evidence naming a commit is still not checked); project-checks files 53 passed. Not re-seen with a live Haiku turn (labelled). Original report: open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns).
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes -- repro below.
@@ -36992,7 +36994,7 @@ Expected: a turn's changed files include its own commits. For example, take the 
 
 ## F776 (C) -- a turn bound to a task already `completed` (waiting for its reviewer) records an open divergence, "builder ended completed with Fix add() still completed"
 
-**Status:** open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger_p2.py`, `_p3.py`, `_ui.py`).
+**Status:** fixed bc6715d 2026-10-21 (night iteration 24, Tier 0). `evaluate_run_end`'s non-review branch returns None for a task in `completed`/`under_review` (same reasoning as the F548 terminal exclusion), before the policy and `retry` are consulted. `hub/tests/test_run_divergence.py::test_a_turn_bound_to_a_task_waiting_for_its_reviewer_records_nothing` (4 cases, surface/retry x completed/under_review; failed first). Two older fixtures built an open divergence on a completed task by the operator completing it under a live run, which is now correctly nothing; `_completed_with_an_open_divergence` (shared with `test_an_event_is_announced_after_commit.py`) now records the divergence at `in_progress`, then writes the status directly. Hub slice 813 passed. Not re-seen on a live Hub (labelled). Original report: open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger_p2.py`, `_p3.py`, `_ui.py`).
 **Source:** drive
 **Theme:** Logs, events & SSE
 **Ready:** yes -- repro below.
@@ -37136,7 +37138,7 @@ Expected: a run's routine read (a GET that answered 2xx, was fast and emitted no
 
 ## F789 (B) -- a Copilot run whose ACP startup request times out fails with an empty error: the run, its `run_failed` event and the conversation say nothing about why
 
-**Status:** open 2026-10-20. Found in the F782/F783 acceptance drive (`scripts/drive/c1019_copilot_s4.py ask`, `c1019_copilot_s3.py`, scratch Hub :8110, `proj-ecfcc899dc34`, real Copilot CLI) while the full Hub suite ran with `-n auto` on the same machine.
+**Status:** fixed 937ae0d 2026-10-21 (night iteration 13, Tier 0): `ACPProcess.request` turns a timed-out request into a `CopilotACPError` reading "Copilot did not answer `initialize` within 30 s" (method and stderr tail attached), and both the pre-spawn `run.error` and `_transport_failure_fields` fall back to `type(exc).__name__`, so a bare timeout is never empty. Driven: a real stand-in child process that never answers (`test_a_copilot_startup_timeout_names_itself.py`) and the trigger route with a scripted `run_turn` raising each shape (`test_copilot_trigger.py`); both failed before. Not driven against a loaded real Copilot CLI (labelled). Found in the F782/F783 acceptance drive (`scripts/drive/c1019_copilot_s4.py ask`, `c1019_copilot_s3.py`, scratch Hub :8110, `proj-ecfcc899dc34`, real Copilot CLI) while the full Hub suite ran with `-n auto` on the same machine.
 **Source:** drive
 **Theme:** Runs
 **Ready:** yes -- the seam and the repro are below.
@@ -37148,7 +37150,7 @@ Expected: a pre-prompt timeout fails with an error naming what timed out, for ex
 
 ## F790 (B) -- a run's `aw.permission_wait` span stores the tool call's arguments unredacted, while the same call's `execute_tool` span redacts them; the download and the OTLP push carry the raw value
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141, `scripts/drive/s1020_traces.py`).
+**Status:** fixed a0fed3c 2026-10-21 (night iteration 14). The wait span's arguments pass `runner_events.redact_secrets` before `traces.redact`, as the tool event's input does; test `test_trace_seams.py::test_a_permission_wait_redacts_its_arguments_as_the_tool_call_does` failed first. Drive (scratch Hub :8152, `scripts/drive/s1021_f790_drive.py`): a real Haiku turn under `manual`, card approved, run-8fb3f84d26c5 completed; `execute_tool PowerShell` and `aw.permission_wait PowerShell` (same call id) both read `print('build', '<redacted>')` in `/traces/by-run` and in the OTLP export; the permission row keeps the raw value. The prompt, queue content and model text still carry the token, as the conversation's own text rows do (FR-3 binds spans to the redaction recorded output passes), so that is not this finding. Opened 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141, `scripts/drive/s1020_traces.py`).
 **Source:** drive
 **Theme:** Traces
 **Ready:** yes
@@ -37165,7 +37167,7 @@ Expected: the permission span's arguments pass the same redaction as the tool ev
 
 ## F791 (C) -- every run's trace shows two routine `git rev-parse --verify --quiet MERGE_HEAD` probes as red error spans
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
+**Status:** fixed 2a060e9 2026-10-21 night iteration 25 (Tier 0). `traces.run` and `traces.exited` take `ok_codes` (default `(0,)`); `worktrees._run_git` passes it through and the two `MERGE_HEAD` probes (`_is_mid_merge`, `_merge_head`) pass `(0, 1)`, so their exit code 1 is recorded on the span with status `ok`. Any other command, and any other exit of git, is still an `error` span. Tests `hub/tests/test_a_merge_head_probe_is_not_a_failed_command.py` (failed before: span status `error`; 2 cases, the second pins that another failing git command stays an error); two fakes of `_run_git` in `test_a_task_checkout_catches_up.py` take the new keyword. Drive: real git repository and real subprocess under a current work span; not re-seen in the app's trace drawer (labelled). Slice `-k "trace or worktree or isolation or merge or checkout or review"` 853 passed after the fakes were fixed. Found by the day sweep `sweep-traces-sweep`.
 **Source:** drive
 **Theme:** Traces
 **Ready:** yes
@@ -37179,7 +37181,7 @@ Expected: a probe whose non-zero exit is an answer records its exit code without
 
 ## F792 (C) -- a stopped run's trace reads `ok`, and its stop is recorded as an `aw.status.completed` event; the trace list and drawer cannot tell a stopped turn from a completed one
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
+**Status:** fixed 17c14d5 (iteration 26, Tier 0). `finish_run` leaves a stopped/interrupted/abandoned root `unset` with a message naming how it ended; the trace summary carries `run_status`; the drawer header and the Traces list show it. Left alone: the `aw.status.completed` event name for a stop's status line. Drive: real route + real finish_run in tests, not re-seen in a live Hub drawer. Was: open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
 **Source:** drive
 **Theme:** Traces
 **Ready:** yes
@@ -37193,7 +37195,7 @@ Expected: a run that did not complete is not `ok`. Leave the status `unset` with
 
 ## F793 (C) -- after the OTLP collector was down, a fixed endpoint receives nothing for up to 300 s while Settings -> Traces shows no error and "Never"
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
+**Status:** fixed 2026-10-21 (night iteration 27, Tier 0, e850402). `trace_export.forget_backoff` runs when the settings route saves the endpoint, headers or enable flag; `test_saving_trace_settings_ends_the_backoff.py` (3 of 4 failed before). Drive: real route + real pusher against a live local receiver; not re-seen on a live Hub. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
 **Source:** drive
 **Theme:** Traces
 **Ready:** yes
@@ -37207,7 +37209,7 @@ Expected: saving the endpoint, its headers or the enable flag resets that projec
 
 ## F794 (C) -- a shell or write call on a path inside a root granted for reading only is refused as "is outside your workspace", the same words as an ungranted path; neither the agent nor the operator is told the root is granted for the file-reading tool
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach.py` steps T and W).
+**Status:** fixed 2026-10-21 (night iteration 28, Tier 0, 308121a). `_Reach` keeps the roots granted `read` that a non-read tool may not reach (`read_only`); `_judge_resolved` answers `_READ_ONLY_ROOT` (names the read grant, the file-reading tool, and that writing needs read and write) for a path in one. `test_a_read_only_root_refusal_says_so.py` (2 of 4 failed before; the read tool still allowed, an ungranted path still "outside your workspace"). Drive: `_decide` over real directories for Bash and Write; not re-seen in the Questions panel (labelled). The mcp_server copy a Hub spawns is pinned at its start, so a running Hub's agents get the wording on its next restart.
 **Source:** drive
 **Theme:** Permissions & sandbox
 **Ready:** yes
@@ -37221,7 +37223,7 @@ Expected: when a refused path lies in a root granted `read` and the tool is not 
 
 ## F795 (C) -- an agent's granted-reach save the Hub refuses shows only "Could not save the granted reach."; the route's own detail is pydantic's raw dump with a docs URL
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach_ui.py`, Playwright on the served bundle).
+**Status:** fixed 2026-10-21 (night iteration 29, Tier 0, a2176e9). `reach.validated_grants` raises the `reach_grants.<field>: <message>` sentence (no pydantic dump, no docs URL), which the agent route's 400 carries as its detail; `ReachGrantsSetting` shows it through `readableApiError`, keeping the fixed sentence when the failure has none. `test_a_refused_agent_grant_names_the_field_and_the_bad_value` and `agentReachGrantsRefusal.test.tsx` failed before. Drive: real route over a real agent (relative root, bad host); component with a real `ApiError`; not re-seen in a browser (labelled). Original: open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach_ui.py`, Playwright on the served bundle).
 **Source:** drive
 **Theme:** Permissions & sandbox
 **Ready:** yes
@@ -37235,7 +37237,7 @@ Expected: the route's detail is the same `loc: msg` sentence the project route y
 
 ## F796 (C) -- a host typed into Granted host but not added with Enter or "Add host" is silently dropped when the settings are saved, and stays in the field as if it were granted
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach_ui.py`).
+**Status:** fixed 2026-10-21 (night iteration 30; commit b330255). Drive: a real `userEvent` type-then-click-Save over a stateful form carrying the real editor submitted `hosts: ['localhost:*','registry.npmjs.org']` and cleared the field; test `hub/ui/src/__tests__/reachGrantsHostDraft.test.tsx` (failed before the fix). The editor adds a typed host on blur, so both the project and agent pages are covered; not re-seen in a browser. Original: open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach_ui.py`).
 **Source:** drive
 **Theme:** Permissions & sandbox
 **Ready:** yes
@@ -37259,7 +37261,7 @@ Expected: a non-empty host draft is either added on save (and validated by the H
 
 ## F798 (B) -- adding a folder by path that holds one unreadable subfolder answers a bare 500, adds nothing, and the agent's `vault_add` reads only "Internal Server Error"
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143, branch tip 636ce55).
+**Status:** fixed 2026-10-20 (night iteration 3; sha in the commit that carries this line). Drive: a real `icacls /deny (RD)` subfolder through `vault_intake.expand` gave one refusal "The Hub could not list the folder ...\locked: Access is denied." and `ok.md` kept. Test: `hub/tests/test_vault_paths.py::test_a_folder_that_cannot_be_listed_is_refused_by_name_and_the_rest_is_added` (failed before the fix). Original: open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143, branch tip 636ce55).
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes
@@ -37271,7 +37273,7 @@ Expected: the unreadable folder becomes one `refused` result naming it ("The Hub
 
 ## F799 (C) -- the folder walk follows junctions and directory links (a loop adds each file 64 times to the batch), and the 200-file cap is checked only after the whole folder is walked
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143, `scripts/drive/s1020_vault.py` steps L and B).
+**Status:** fixed 2026-10-21 f3e013c (night iteration 31). Drive: `vault_intake.expand` over the real `hub/ui/node_modules` refused in 0.1 s (was 14.1 s). Tests: `hub/tests/test_vault_paths.py::test_a_folder_holding_a_link_to_itself_yields_each_file_once` (a real junction) and `::test_a_folder_past_the_limit_is_refused_without_walking_all_of_it` (both failed before the fix). Original: open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143, `scripts/drive/s1020_vault.py` steps L and B).
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes
@@ -37286,7 +37288,7 @@ Expected: the walk does not descend into a directory link or junction (or tracks
 
 ## F800 (B) -- `agentweave reset --profile <name> --all` deletes the shared `~/.agentweave/hub/.env` (the default profile's bootstrap key and ticket secret) and every other instance's `*.log`
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row), reproduced with `USERPROFILE`/`HOME` pointed at `testbed/life1020-home`, so no real state was touched.
+**Status:** fixed 2026-10-20 (night iteration 2; sha in the commit that carries this line). Drive: sandboxed home, `reset --profile life --all --yes` removed `profiles/life` and `hub-life-8144.log`, left `.env` and `hub-trial-8010.log`. Tests: `tests/test_hub_commands.py::TestResetAllIsScopedToTheNamedProfile` (two failed before the fix). Original: open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row), reproduced with `USERPROFILE`/`HOME` pointed at `testbed/life1020-home`, so no real state was touched.
 **Source:** drive
 **Theme:** CLI & lifecycle
 **Ready:** yes
@@ -37298,7 +37300,7 @@ Expected: with a named profile, `--all` touches only that profile (its own logs,
 
 ## F801 (C) -- a vault report filed while the reports job has no runner stays `pending` forever: choosing a runner never looks into it, and the operator cannot close a pending report
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143).
+**Status:** fixed 62d3062 2026-10-21 (a door, not auto-pickup): `POST /vault/reports/{id}/review` (202; 404 unknown report, 409 not pending / job off / no runner) and a "Look into it" button on each pending report; the no-runner and failed-spawn firings now say the report stays pending and name the door. Tests: `test_a_pending_report_is_looked_into_again_once_the_job_has_a_runner`, vaultTab "looks into a pending report again". Drive: real route over ASGI with a faked worker; component over a real ApiError; not driven through a live Hub with a real Haiku turn (labelled). Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143).
 **Source:** drive
 **Theme:** Manager jobs
 **Ready:** yes
@@ -37310,7 +37312,7 @@ Expected: a pending report can be looked into again (a "Look into it" door on th
 
 ## F802 (C) -- `agentweave doctor --profile <name> --port N` tells the operator to start `agentweave --port N`, which starts the default profile's database on that port; doctor also prints bare `diagnostic_check_warn` lines
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row, sandboxed home).
+**Status:** fixed 2026-10-21 (night iteration 33, Tier 0, sha 8efcf90). `collect_diagnostics(start_command=)` carries `_hub_start_hint(profile, port)` into `check_hub_instance`'s hint; `_emit_diagnostic_log` logs at INFO (the stderr handler shows WARNING+; the JSONL file and Hub handler still get the full result). Tests in `tests/test_doctor_port_names_its_profile.py` (hint for named and default profile; a real subprocess whose stderr must be empty), failing before. Drive: `py -3.11 -m agentweave doctor --profile life1020 --port 8149` printed `Start it with ``agentweave --profile life1020 --port 8149``` and wrote 0 bytes to stderr. Side note: `tests/test_skill_sync.py` was failing on a clean tree (stale untracked local skill mirrors, the F585 class); re-running `scripts/sync_skills.py` made it pass, no diff. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row, sandboxed home).
 **Source:** drive
 **Theme:** CLI & lifecycle
 **Ready:** yes
@@ -37336,7 +37338,7 @@ Expected: quote paths as written (reuse `_quote`), decode text with `utf-8-sig`,
 
 ## F804 (B) -- a question nobody waits on, asked in one conversation, takes over the composer of every other conversation with that agent (archived ones included): the operator's next instruction there is stored as its answer and reaches the agent as "Question: ... Answer: <instruction>"
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8146, Chromium against the served bundle).
+**Status:** fixed 2026-10-21 (night iteration 10, Tier 0; sha in the commit that carries this line). The questions payload now carries `conversation_id` (`QuestionResponse`, the column already existed); `activeQuestionFor(questions, agent, conversationId)` shows only questions asked in the conversation on screen (or naming none), the card and the panel both pass it, and the composer sends typed text as a message when the active question has `asker_waiting === false` (picking an option still answers it). Tests `hub/tests/test_a_question_names_its_conversation.py` and `hub/ui/src/__tests__/questionTrayConversation.test.tsx`, failing before. Drive: scratch Hub :8150 (profile f804, seeded stale question in conversation A, no agent asked it), Chromium against the rebuilt served bundle (`scripts/drive/s1021_f804_ui.py b|a`): in B no card, placeholder "Message asker…", Send started a run in B and the question stayed unanswered; in A the card shows ("Answer asker…") and typed text started a run in A, question still unanswered. Not done: the "no longer waiting" question in its own conversation still renders as the composer's placeholder owner; archived-conversation questions are covered by the same scoping but not driven separately. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8146, Chromium against the served bundle).
 **Source:** drive
 **Theme:** Questions
 **Ready:** yes -- repro below, driven twice.
@@ -37364,7 +37366,7 @@ Expected: the oversized sentence uses readable sizes and names the alternative (
 
 ## F806 (B) -- one folder-browser listing, project open or relocate of a path on an unreachable network host freezes the whole Hub for about 21 s: the filesystem calls run on the event loop
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147).
+**Status:** fixed (this commit, night 2026-10-21 iteration 11). Listing, open, create and relocate now run their filesystem work through `asyncio.to_thread` (`fs_browse.py`, `ProjectLifecycleService._canonicalize`, marker reads, create's `exists`); `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py` stalls each call 1.5 s and fails before the fix (`/health` waited the whole stall), passes after. Drive: the real unreachable address answered at once on this machine (no 21 s stall reproduced; network state differs from the sweep's), so the real-share timing is unverified. `GET /projects`' per-project refresh (`_refresh_project_observation`) is still synchronous and was not measured.
 **Source:** drive
 **Theme:** Projects
 **Ready:** yes -- measured three times, each against a fresh blackholed address (Windows caches a failed host, so a repeat answers at once).
@@ -37382,7 +37384,7 @@ Expected: the filesystem work runs off the loop (`await asyncio.to_thread(list_d
 
 ## F807 (B) -- switching the checkpoint runner to a Copilot or Codex runner keeps a Claude checkpoint model the screen no longer shows, and Save is refused naming it
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
+**Status:** fixed 29f099a 2026-10-21 (night iteration 12; drive: scratch Hub :8151, Chromium on the rebuilt bundle, `scripts/drive/s1021_f807_ui.py` -- stored claude runner + model `haiku`, picking the copilot runner showed "Use the runner's model", Save said "Settings saved." and stored runner-885c5930c473 with checkpoint_model null; the copilot option read "r-cop — Claude Haiku 4.5 (copilot)", no "(unrecognised)"). Originally open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
 **Source:** drive
 **Theme:** Runners & models
 **Ready:** yes
@@ -37396,7 +37398,7 @@ Expected: changing the checkpoint runner to one whose CLI does not declare the s
 
 ## F808 (C) -- every project with no agents tells the operator to run `agentweave start`, a command the CLI refuses
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
+**Status:** fixed (night iteration 34, Tier 0; 06528cd). The empty roster reads "No agents yet. Agents are added here, in the app." with an Add agent button that opens the dialog for the project (`OverviewPage` `onAddAgent`, wired in `App.tsx`). Test `hub/ui/src/__tests__/overviewEmptyRoster.test.tsx`, failing before. Drive: jsdom with real click events; not re-seen in a browser. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
 **Source:** drive
 **Theme:** Projects
 **Ready:** yes
@@ -37421,9 +37423,469 @@ Expected: the empty state names the way that works ("No agents yet." plus a butt
 
 Expected: the literal `…`, a lint or test that fails on mojibake sequences in `hub/ui/src`, the in-Hub browser's toggle outside the area the picker covers (or the picker opening below it), reasons quoted as written, and runner names truncated with a title tooltip. Tests: a source scan in `hub/ui/src/__tests__/`, `hub/tests/test_fs_browse*.py` for the reason text, and a RunnersPage snapshot with a long name. Seam: Projects (Add-project dialog) x Runners & models (Runners page).
 
-## F835 (C) -- two files added to the vault by path, each named `README.md`, are both listed as "README.md"
+## F810 (B) -- `POST /session/sync` deletes an agent whose messages are still queued, which archive refuses to do: the entries and the conversation are orphaned, the rail calls them "agent archived", and a later agent of the same name inherits them
 
-**Status:** fixed (uncommitted on `ui/finesse-mocks`) 2026-10-20 (Tier 0): a file added by path inside the project directory or the agent's workspace is named by its path there (`app/README.md`, `plugins/export/README.md`), the nearest root winning; a folder outside both keeps its name in front as before.
+**Status:** fixed 2026-10-20 night iteration 4 (Tier 0). `launchability.agent_removal_refusal` now counts `InboundQueueEntry.state == 'queued'` and names the entry ids (`held.queue_entries`); sync answers the same 409 `agent_removal_under_held_work` archive does, row and entry kept. Tests `hub/tests/test_session_sync.py` (queued -> 409; spent queue -> still removed), failing before. Drive: through the real ASGI app and database (no scratch Hub). Not done: the rail still says "agent archived" for conversations of an agent already deleted by an older sync, and F812 (non-object agents -> 500) left for its own item.
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes
+**Tier:** 0
+
+F774's guard (`launchability.agent_removal_refusal`, `hub/hub/launchability.py:668`) refuses a sync that would delete an agent holding a live run or an unfinished task. It does not count **queued inbound entries**. Archive, on the same agents, does: `POST /agents/gamma/archive` answered `409 "gamma has 1 queued message, and nothing delivers to an archived agent, so archiving it now would strand them. Bind a runner so it can deliver them, or discard them to archive the agent now."` (`hub/hub/api/v1/agents.py:3341`). Sync then deletes the same agent with the same message:
+
+```
+gamma, delta: runner unbound, one operator message each queued (waiting_reason "No runner is bound ...")
+POST /session/sync {"data": {"agents": {"alpha": {}, "beta": {}}}}
+  -> 200 {"ok": true, "agents": ["alpha", "beta"]}       gamma and delta rows gone
+inbound_queue_entries: entry-d3f9a75962e5 (delta) queued, entry-7a274edd13f4 (gamma) queued
+conversations conv-b5dbabe96813 (delta), conv-834a29b23fb1 (gamma): lifecycle open
+```
+
+What happens afterwards:
+- gamma's entry: the scheduler retried it three times and logged `queue_entry_abandoned` "delivery failed 3 times (gamma is not an agent in this project ...)". The row ends `withdrawn`.
+- gamma's conversation: the rail lists it under **Archived agents** as "held for gamma — agent archived". Opening it (`?agent=gamma&conversation=conv-834a29b23fb1`) shows only "gamma is not on this project's roster.", with no Unarchive button and no way to read it. `GET /agents/gamma/chat/{id}` returns 404. Screenshot: `testbed/ui-judge/s1020-a-orphan/114315/orphan-gamma.png`.
+- delta's entry stays `queued`. `POST /agents {"name": "delta", "runner_id": ...}` (201) creates a *new* agent of that name. `GET /queue/delta/status` then reads "the last delivery attempt was refused: No runner is bound to this agent", which is false, since the new delta has a runner. On the new agent's first trigger, the scheduler delivers the deleted agent's message first ("held for delta", `run-c9b86b8d9fda`), in the deleted agent's conversation, and only then the operator's new message (`run-604b5014e273`). That is a paid turn spent on someone else's message.
+
+Expected: removal by sync is refused like archive (409, the same `agent_removal_under_held_work` shape, naming the queued entry ids), or the omitted agent's queued entries are withdrawn with an event saying why. Either way, a deleted agent's open conversations are not shown as "agent archived". Fix: `held_work`/`agent_removal_refusal` counts `InboundQueueEntry.state == 'queued'` for removal, not for the isolation check. Failing test: `hub/tests/test_session_sync.py`, an agent with a queued entry omitted from the payload -> 409, with the row and the entry kept. Seam: Agents (roster sync) x Inbound queue & messages x Conversations.
+
+## F811 (B) -- two agents whose names differ only in case are both accepted; on Windows and macOS the second shares the first's worktree folder and can never run, and the refusal tells the operator to `rm -r` the other agent's checkout
+
+**Status:** fixed (this commit, 2026-10-20 night). `route_words.agent_case_twin` refuses a name equal to an existing agent's (archived included) or a synced session's name case-insensitively, 409 with a sentence naming the existing agent, at `POST /agents`, `request_agent` and `POST /session/sync` (also two new names in one payload); an existing pair still syncs. Drive: real ASGI app against the real test database (`hub/tests/test_agent_names_differing_only_in_case.py`, 7 tests, 6 failed before the fix), not a scratch Hub; the related suites (59 tests) pass. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8149, a real trigger).
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes
+**Tier:** 0
+
+Agent-name uniqueness is case-sensitive: `Agent.name == body.name` (`hub/hub/api/v1/agents.py:639`), the same in `request_agent` (`:2734`) and in sync. Reserved names and route words are compared case-insensitively. Worktrees live at `.agentweave/worktrees/<name>` on a filesystem that is case-insensitive by default on Windows and macOS.
+
+```
+eps: an agent that has run once (worktree .agentweave/worktrees/eps, branch agentweave/eps), then archived
+POST /agents {"name": "eps", ...}  -> 409 "Agent name 'eps' already exists in this project"
+POST /agents {"name": "EPS", ...}  -> 201
+POST /agent/trigger {"agent": "EPS", "message": "..."}
+  -> 200 status "queued", waiting_reason: "Could not prepare EPS's own workspace: refusing existing
+     path C:\...\aw-a-1020\.agentweave\worktrees\EPS: it is not the registered git worktree for
+     refs/heads/agentweave/EPS. Move or delete that directory (`rm -r C:\...\worktrees\EPS`) once you
+     have salvaged anything in it; ..."
+GET /queue/EPS/status -> waiting_count 2, the same sentence
+```
+
+`worktrees\EPS` is `worktrees\eps`: the remedy the Hub prints deletes another agent's checkout, which may hold unmerged work. If the operator doesn't follow it, EPS waits for ever. `eps` and `EPS` were both `open` after an Unarchive from eps's old conversation. Branch refs `agentweave/eps` and `agentweave/EPS` also collide as loose refs on these filesystems.
+
+Expected: a name that equals an existing agent's name case-insensitively, archived included, is refused at creation with a sentence ("an agent named 'eps' already exists (archived); names differ by more than case"), on `POST /agents`, `request_agent` and sync. It is not added to `RESERVED_AGENT_NAMES`, which is checked at every use. Failing test: `hub/tests/test_operator_agent_creation*.py`, create `eps` then `EPS` -> 409, and the same for `request_agent`. Seam: Agents x Worktrees & integration.
+
+## F812 (C) -- `POST /session/sync` answers 500 to an `agents` that is not an object, never says which agents it deleted, and leaves every agent it named with a `config` the operator can no longer PATCH ("reserved for a configured agent")
+
+**Status:** fixed (night iteration 35, Tier 0; f0f51ee). `agents` that is not an object answers 422 "agents must be an object of agent name -> config" (roster untouched); the answer carries `removed: [...]` and each deletion persists an `agent_removed` warn event (also in the `session_synced` broadcast); the patch 409 now says the last session sync owns the agent's config and that `POST /session/sync {"data": {}}` releases it (leaves the roster alone). Tests: `test_session_sync.py` (list/str/int -> 422, removed listed + event rows, nothing removed -> `[]`) and `test_patch_agent_refuses_unknown_fields.py` (409 text), all seen failing first. Drive: real routes over ASGI, no live Hub, no agent turns (labelled). Dropping the lock outright was not done: the sync row still outranks `Agent.config` for isolation.
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes
+**Tier:** 0
+
+The route is reached only by direct API calls (its own docstring, `hub/hub/api/v1/session_sync.py:1-19`). Three gaps were measured after F774:
+
+1. `{"data": {"agents": ["alpha"]}}` and `{"data": {"agents": "alpha"}}` each answer **500 Internal Server Error**: `list((body.data.get("agents") or {}).keys())` (`:73`) calls `.keys()` on a list or a str. The roster is untouched. `{"agents": null}` is 200, treated as no key.
+2. A sync that deletes agents answers `200 {"ok": true, "agents": ["alpha", "beta"]}`, the roster that remains. Nothing names the two agents it just deleted. No event is persisted either: `session_synced` is only broadcast (`:221`), so `event_logs` holds nothing for the deletion (queried: no `session_synced`, no `agent_removed`). In the Activity feed, an agent vanishes with no record.
+3. Once a sync names an agent, `PATCH /agents/<name>` with any `config` key answers `409 "Agent name 'beta' is reserved for a configured agent"` (`hub/hub/api/v1/agents.py:3096-3104`). Measured: `PATCH /agents/beta {"config": {"read_only": true}}` -> 409, before and after. The sentence names neither the stored sync row nor the way out (`POST /session/sync {"data": {}}` clears it, as found by reading the code). The operator never knowingly made beta "configured".
+
+Expected: (1) 422 "agents must be an object of name -> config"; (2) the answer carries `removed: [...]`, and an `agent_removed` (or `session_synced` with `removed`) event is persisted; (3) the 409 says the agent's config is owned by the last session sync and names how to release it, or the lock is dropped now that no CLI pushes session.json. Failing tests: `hub/tests/test_session_sync.py` (list -> 422, removed listed, event row) and `test_patch_agent_refuses_unknown_fields.py` (the 409's text). Seam: Agents (roster sync) x Logs, events & SSE.
+
+## F813 (D) -- `request_agent` and Add agent refuse an archived agent's name as merely "already exists", without saying it is archived or that names are never reused
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8149, a real Haiku turn `run-b1b305376af9`).
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes
+**Tier:** 0
+
+With `eps` archived, alpha's `request_agent {"name": "eps", "template": "beta"}` came back `Hub rejected POST /agents/request (409): Agent 'eps' already exists` (`hub/hub/api/v1/agents.py:2734`). `POST /agents {"name": "eps"}` gives `409 "Agent name 'eps' already exists in this project"` (`:646`). eps is in no picker, so an operator or agent that looks for it finds nothing to act on. The design keeps archived names taken on purpose (F465's note: "a name is never reused"), and the sentence should say so. The budget refusal beside it already reads well: "Project agent budget exhausted (4/4) ... Ask the operator to archive an agent ... or to raise the agent budget in Settings."
+
+Expected: "'eps' belongs to an archived agent; a name is never reused. Unarchive eps, or choose another name." on both doors. Failing test: in `hub/tests/test_request_agent*.py`, archive then request the same name, asserting the 409 detail contains "archived". Seam: Agents.
+
+## F814 (B) -- with the token budget spent, the operator's own message waits "Queued — token budget exhausted" behind an agent's budget-held message, so "operator messages can still run" does not hold
+
+**Status:** fixed 2026-10-21 (night iteration 9, Tier 0; sha in the commit that carries this line). Scheduler and status route select the operator's conversation when the budget is spent (`inbound_queue.select_operator_turn`). Drive: real ASGI app and database, scripted spawn, not a scratch Hub. The Continue control on the held peer conversation still offers a start that answers "Not started" -- left alone, arguably by design. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150, profile c1020, real Haiku turns, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 0
+
+`PATCH /accounting/budget {"token_budget": 1000}` (used 1,004,695, `exhausted: true`). beta's operator turn (`run-07b58ed50efd`, `budget_note` returned, as F456 promises) sent alpha a message. That entry (`entry-3572d64d8b7d`, `origin_type: agent`, sequence 6, alpha's peer conversation) was held, correctly, `waiting_reason: "token budget exhausted"`. The operator then typed "Reply with the single word PRED." into one of alpha's own conversations from the composer. The screen said **"Queued — token budget exhausted"**. `entry-8e67483040e9` (`origin_type: operator`, sequence 7) stayed `queued`, and no run started until the budget was cleared (`PATCH {"token_budget": null}`). Then both drained (`run-2b0f9ff394ca`, `run-919f757fb747` "PRED"). `BudgetExhaustionNotice.tsx:12` and the trigger's own `budget_note` tell the operator that operator messages still run.
+
+Cause: `schedule_agent` (`hub/hub/turn_scheduler.py:456`) takes `select_turn`'s oldest eligible entry, here the autonomous one in another conversation. `initiator` (`:476`) is computed from that head only, so the budget gate (`:492-501`) holds the whole agent. The provider-allowance hold just above (`:477-490`) already handles this case: "their message can sit in a conversation behind an autonomous head", via `operator_would_probe(entries, hold)`. The budget gate has no such case. **Continue** on the held peer conversation does nothing either: "start it without sending a message" answers `started: false`, "Not started — token budget exhausted" (`POST /conversations/{id}/continue`). That one is arguably by design (the entry is autonomous), but the control still offers it.
+
+Expected: with the budget spent, an operator entry anywhere in the agent's queue is the turn that runs (select the operator-controlled turn first, as the allowance path probes with operator input), and the autonomous head stays held. Failing test: in `hub/tests/test_a_budget_passed_over_is_said.py` (or a sibling), queue an autonomous entry in conversation A, exhaust the budget, then `POST /agent/trigger` as the operator into conversation B. Assert that a run starts for B, and that A's entry is still `queued` with "token budget exhausted". Seam: Accounting & allowance x Inbound queue & messages (the scheduler).
+
+## F815 (C) -- an agent's `send_message` while the token budget is spent answers plain success, so the sender waits for a reply that cannot come
+
+**Status:** fixed (night iteration 36, Tier 0; 2f12806). `create_message_for_actor` returns `Held("token_budget", ...)` for an agent's message when the budget is exhausted (after the hop-budget and no-runner holds); `MessageResponse.held` accepts it and `send_message` passes it through unchanged. The operator's own message is never held (F814). Tests `hub/tests/test_a_message_on_a_spent_budget_says_held.py`, the first failing before. Drive: real route over ASGI and database (no scratch Hub, no agent turns; labelled). Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150).
+**Source:** drive
+**Theme:** Inbound queue & messages
+**Ready:** yes
+**Tier:** 0
+
+With the budget spent (see F814), beta's `send_message {"to_agent": "alpha", ...}` returned `{"ok": true, "result": {"success": true, "message_id": "msg-f7cb9fe5754d"}}` (the tool result in `agent_outputs` of `run-07b58ed50efd`). beta replied "Message sent to alpha — waiting for their one-word reply". alpha's turn was held "token budget exhausted" until the operator raised the budget. The two other holds already tell the sender: hop budget (`held_by_hop_budget` + `delivery_note`, F361) and no runner (`held: "no_runner"`, `no_runner_note`, F623; `hub/hub/api/v1/messages.py:47-70`, `hub/hub/mcp_server.py:305-323`). A spent token budget is the third hold, and the only one that says nothing.
+
+Expected: `create_message_for_actor` returns a `Held("token_budget", note)` when the project's budget is exhausted, since the recipient's turn would be autonomous. Suggested note: "Recorded as msg-…, but not delivered yet: the project's token budget is spent, so alpha's turn waits until the operator raises it. Do not tell anyone it was delivered; if it matters now, ask the operator with ask_user." The tool passes it through as it does the others. Failing test: beside the F623 test (messages), with the budget exhausted, `POST /agent-actions/messages` returns `held == "token_budget"` and a `delivery_note` naming the budget. Seam: Inbound queue & messages x Accounting & allowance.
+
+## F816 (C) -- unarchiving a conversation that was cut over reopens it as a live line of work: no notice, a working composer on the old session, while the successor holds the same work
+
+**Status:** fixed feb1947 (2026-10-21, Tier 0). `POST .../unarchive` on a handed-over conversation is 409 naming the successor (via `handover_of`); the UI's existing error path shows the sentence; an ordinary archived conversation still reopens. Driven over the real route and database (not in a browser, labelled); the F293 test now reopens through the database helper. The sheet's "carried into a new conversation" link to the successor is not done. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Checkpoints
+**Ready:** yes
+**Tier:** 0
+
+`POST /checkpoints/ckpt-8a3375a6ae49/cutover` -> 200: successor `conv-1dbec82e6c34`, predecessor `conv-5bf3fe5c7c84` archived. `POST /agent/alpha/conversations/conv-5bf3fe5c7c84/unarchive` (`hub/hub/api/v1/agent_chat.py:659`) -> 200 with the plain conversation. Nothing in the body says it was handed over, and nothing was refused. A second cutover and a Checkpoint now on it are refused correctly, naming the successor (F716 holds). On screen the predecessor looks like any open conversation. There is no "continued in …" notice, and its composer is live. The Checkpoints sheet says only "Probe: passed · carried into a new conversation" (`CheckpointsPanel.tsx:47`), without naming or linking the conversation. A message typed there ran a real turn on the predecessor's old provider session (`run-919f757fb747`, reply "PRED"). That leaves two open conversations for one line of work: the checkpoint went to one, and the other keeps the full old context.
+
+Expected: either unarchive of a handed-over conversation is refused, naming the successor ("conv-… was cut over to conv-…; continue there"; `checkpoint_cutover.handover_of` already answers it), or it reopens read-only with a notice linking the successor. The sheet's "carried into a new conversation" should link `cut_over_to_conversation_id`. Failing test: in `hub/tests/test_checkpoint_cutover.py`, cut over, then unarchive the predecessor. Assert a 409 naming the successor (or, if reopening is kept, a `handed_over_to` field and a refused trigger). Seam: Checkpoints x Conversations & composer.
+
+## F817 (C) -- a failed Checkpoint now clears the conversation's checkpoint warning: after a reload the offer and the failure are both gone
+
+**Status:** fixed 0657be1 (2026-10-21, Tier 0). `take_checkpoint` clears `due`/`final`/`dismissed` only when `checkpoint.status == "ready"`; an `unwritten` press leaves the warning standing so the banner still offers Checkpoint now. Test `test_a_failed_checkpoint_press_leaves_the_warning_standing` (3 params) failed before. Driven over the real route and database with a failing runner stub; not re-seen in a browser.
+**Source:** drive
+**Theme:** Checkpoints
+**Ready:** yes
+**Tier:** 0
+
+The project's `checkpoint_runner_id` was pointed at a Codex runner that cannot run here. alpha's peer conversation `conv-bcf112b0ce9b` showed the threshold banner ("This conversation has reached its checkpoint threshold. Nothing has been written yet — checkpoint now, or dismiss this and keep working."). Pressing **Checkpoint now** -> `POST /conversations/{id}/checkpoint` 201 with `status: "unwritten"` and `generation_error: "exited 1: Reading additional input from stdin..."`. The screen showed "Checkpoint failed: exited 1: …" in a toast. In the database `checkpoint_warning` went from `due` to NULL. After a reload, the banner is gone, no failure is shown, and only the header's Checkpoint control remains (`testbed/ui-judge/s1020-c-reload/120418/failed-reloaded.png`). `take_checkpoint` (`hub/hub/api/v1/checkpoints.py:256`) clears `due`/`final`/`dismissed` whatever `checkpoint.status` came back. Its comment says "the warning has been answered by doing the thing it asked about", which is false for `unwritten`. F540's failure banner covers only an *automatic* checkpoint, so an operator's failed press leaves no trace on screen.
+
+Also: the error is `hub/hub/worker.py:304`'s *last* stderr line, which for Codex is its "Reading additional input from stdin..." banner, not a cause. That wording is general, but Codex is undrivable here, so its real stderr was not read.
+
+Expected: clear the warning only when the checkpoint is `ready`; an `unwritten` press leaves `due` (or `final`) in place, so the banner still offers Checkpoint now and can show the failure. Failing test: in `hub/tests/test_checkpoint*.py`, a worker stub that exits non-zero on a conversation with `checkpoint_warning = "due"`; after `POST .../checkpoint`, assert `status == "unwritten"` and the warning is still `"due"`. Seam: Checkpoints (operator press) x Runners (a failing worker).
+
+## F818 (D) -- the dismiss refusal tells a conversation far past its threshold that it "has not reached its threshold"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150).
+**Source:** drive
+**Theme:** Checkpoints
+**Ready:** yes
+**Tier:** 0
+
+The successor `conv-1dbec82e6c34` was at 38,493 tokens against an 8,000-token threshold. Its warning had been cleared by a Checkpoint now. `POST /conversations/conv-1dbec82e6c34/dismiss-checkpoint-warning` -> 409 "This conversation has no checkpoint warning to dismiss: it has not reached its threshold. …" (`hub/hub/api/v1/checkpoints.py:320`). The refusal's reason is wrong for this case. The conversation has no warning because a checkpoint was just taken, or because nothing new happened since.
+
+Expected: word it from the state: "This conversation has no checkpoint warning showing, so there is nothing to dismiss; a dismissal answers a warning that is showing." Failing test: dismiss on a conversation whose usage is past the threshold and whose warning is NULL; assert the detail does not say "has not reached". Seam: Checkpoints.
+
+## F819 (C) -- a loop whose agent cannot run gives up on the delivery, but the loop does not say so: its task stays `in_progress` with that agent, the card reads "Active", and the next Run briefs the same broken agent again
+
+**Status:** fixed d3ec267 (2026-10-21, Tier 0). `task_attendance` gains `abandoned`: a `(task, agent)` pair whose entry the delivery-attempt limit withdrew (it keeps `delivered_in_run_id`) and for which the agent has no newer run on the task. The loop walk's ordinary-work arm records it in flight and unstaffed with `_abandoned_work_reason` ("<agent> could not start: <the run's own error> The Hub stopped retrying, and <task> is still assigned to <agent>. Fix <agent>'s runner and message <agent>, or reassign the task."), so `stall_reason` and the card name it and no further briefing is queued. A newer run, or reassigning the task, ends it. Tests `hub/tests/test_a_loop_says_its_delivery_was_abandoned.py` (first failed before). Drive: `decide_firing` and real firings over the real database (labelled: not a scratch Hub, no live Codex, no browser). Not done: the task itself stays `in_progress` (not released to `pending`); the `JobRun` `error_summary: null` stays with F123/F147.
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+A documentless loop on agent `delta`, bound to a Codex runner (Codex cannot run on this machine: every spawn exits 1). `POST /jobs {"name": "loop E codex", "agent": "delta", "initial_tasks": [{"title": "Write E.txt", ...}], "stop_when_queue_empties": true, ...}` and then `POST /jobs/{id}/run`:
+
+```
+POST /jobs/job-7f2da45bc1f4/run -> 200 {"success": true, "job_run_id": "run-01e70a76375a"}
+runs:  run-5b905c738b6c, run-d4342da5642c, run-2f31974989c5  delta  failed exit 1
+       error: "The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."
+queue: entry-74c856ce3103  state withdrawn  delivery_attempts 3
+       abandoned_reason "delivery failed 3 times; the Hub stopped retrying"
+task-21832111a8e0 "Write E.txt"   in_progress  assignee delta     (left there)
+GET /loops/loop-8fb2d27d2497 -> queue {"in_progress": 1}, stall_reason null
+GET /queue/delta/status       -> waiting_count 0, waiting_reason null
+POST /jobs/{id}/run (again)   -> 200 success; a new briefing ("It is `in_progress` now ...") and
+                                 three more failed runs (429), withdrawn the same way
+```
+
+So once the Hub has stopped retrying, nothing on the loop says that its one task is held by an agent whose every delivery failed. The card (Jobs tab) reads "Active", and the queue says "in_progress: 1". The task is never released, so another agent cannot take it, and the operator's only remedy, pressing Run, spends another three attempts on the same agent. The run's own error, which names the cause, is not on the loop or on the task. (The firing's `JobRun` being `failed` with `error_summary: null` is the openspec leftover `a-retried-firing-records-how-its-work-ended`, F123/F147, re-measured here. It is not part of this finding.)
+
+**Expected:** after a loop's delivery is abandoned, the loop's `stall_reason` (and the card) names the task, the agent and the last run's error ("delta could not start: <error>; its task Write E.txt is still assigned to it"). The task goes back to `pending` or `assigned`, so that a press or a flow can staff it again, or the press refuses with that sentence instead of briefing the same agent.
+**Seam:** `inbound_queue.py`'s abandonment (the `DELIVERY_ATTEMPT_LIMIT` path) never reaches the loop's task. The loop's stall check (`scheduler._loop_stop_reason` / the stall text in `api/v1/jobs.py`) reads no abandoned entry. **Test:** in `hub/tests/test_scheduler.py` (or a new `test_a_loop_says_its_delivery_was_abandoned.py`): a loop entry abandoned after three failed runs leaves `GET /loops/{id}` with a non-null `stall_reason` naming the agent, and a second `POST /run` does not create a fourth delivery to that agent. Both fail today.
+
+## F820 (B) -- Land during a passing git failure approves the task and records the permanent skip "this project is not a git repository": its commit is never merged, and the screen offers no Retry, though the API's retry would merge it
+
+**Status:** fixed 2026-10-21 night iteration 7 (Tier 0). `_integrate_task` now asks `task_integration.repository_fault` (git's own stderr) and, when git fails for a project the Hub has proof was a repository (`repository_proof`: the task's own worktree directory exists, or accepted/awaiting evidence for it names a git commit), records a `failed` row (`GIT_UNREADABLE`, quoting git) instead of the permanent skip, so `is_retryable` is True and the retry merges once git is back. A project with no such proof keeps `NOT_A_REPOSITORY`. Tests `hub/tests/test_task_integration.py` (`..._unreadable_for_a_moment...`, `..._worktree_exists_proves...`), failing before. Drive: real git, `.git` renamed away while the real ASGI app approved, then restored and the retry route merged (labelled: real ASGI app and database, not a scratch Hub). Not done: the drawer still has no Retry control (a separate finding, filed below); a task with neither signal and a vanished `.git` still reads as not a repository. Found by the day sweep `sweep-loops-sweep` (Resilience, failure injection; scratch Hub :8160, project `proj-205b3b4c85ec`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+This is a real git repository with task branches. Its `.git` was moved aside for a few seconds, the way an unreadable or locked `.git`, a git that drops off the Hub's PATH, or a sync tool holding the folder would look. During those seconds the operator pressed Land on two completed loop tasks:
+
+```
+POST /tasks/task-8d36435b40ca/land -> 200 status "approved"
+  latest_integration: {"outcome": "skipped", "reason": "this project is not a git repository, so there is nothing to merge"}
+  story: workspace release_failed "git status --porcelain failed (128): fatal: not a git repository: .../.git/worktrees/task-8d36435b40ca"
+(.git restored)
+git log agentweave/task/task-8d36435b40ca -> fe1e4b7 "Write C.txt"   (not on master)
+Tasks tab / drawer (Chromium, served bundle): "Not merged — this project is not a git repository, so there is nothing to merge", no Retry control
+POST /tasks/task-8d36435b40ca/integrations/retry -> 200; new row outcome "merged"; master dd86047 "Integrate approved work fe1e4b76521b"
+```
+
+Reproduced a second time on `task-68d5b577682f` ("Write D.txt"), which is still unmerged and approved, with the same drawer text and no button.
+
+**What is wrong:** `is_repository(root)` (`hub/hub/task_integration.py:167-169`) answers False for any git failure. Integration then records `NOT_A_REPOSITORY`, which the module classes as unretryable because it is "nothing this screen can change" (`task_integration.py:134`). So a passing fault becomes a permanent fact. The task reads `approved`, the work is on a branch nobody will merge, and the operator is told the project is not a repository, which is false. The retry route itself does not honour the classification, and merges.
+
+**Expected:** a project the Hub already knows is a repository (it has task branches and recorded worktrees, or `GET /worktrees` reported `repository: true` before) records a git failure as `failed`, with git's stderr, so it can be retried. Or Land refuses (409) while git cannot be read, naming the error. Either way the drawer offers Retry once git is back.
+**Test:** in `hub/tests/test_task_integration.py`: make `_git(root, "rev-parse", ...)` fail in a repository that has a task branch, then approve. Today the row is `skipped`/`NOT_A_REPOSITORY` and `is_retryable` is False. The test asserts `failed` and retryable.
+
+## F821 (D) -- Run on a loop that has ended answers 400 "Job is disabled", whose remedy, enabling it, is refused 409 "loop_ended"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8160).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+```
+loop B (stop_at reached by the scheduler's own tick): ending_state "stopped"
+POST /jobs/job-8805289b78c5/run          -> 400 "Job is disabled"
+PATCH /jobs/job-8805289b78c5 {"enabled": true} -> 409 {"code": "loop_ended", "message": "This loop has ended (loop stop time reached (...)) at ... and cannot be restarted ... Create a new loop with the work instead."}
+```
+
+F222 fixed exactly this shape for an archived job: `run_job` checks `archived_at` before `enabled`, because "disabled" names a remedy the guard refuses (`hub/hub/api/v1/jobs.py:1753-1762`). An ended loop takes the same path and still gets the misleading word. The UI disables the Run button on an ended loop's card (measured in Chromium), so this reaches an agent's `run_job` or the agent plane, and anyone using the API. It was recorded as held on 2026-08-29 (row 11, before F222). **Expected:** before the `enabled` check, a job whose loop has `ending_state` answers 409 with the same `loop_ended` body as the PATCH. **Test:** next to F222's in `hub/tests/test_an_archived_job_stays_retired.py`: an ended loop's run answers 409 `loop_ended`.
+
+## F822 (D) -- a job firing's id and an agent run's id share the `run-` prefix, so a firing id pasted into a run route reads "This run has no trace"
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8160).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+`POST /jobs/{id}/run` answers `"job_run_id": "run-9b02d383538b"`, and the turn it started is `run-7d179cba3a19`. Both are minted `f"run-{short_id()}"` (`hub/hub/scheduler.py:3693`, `:4190`, `:4410` for `JobRun`; the same prefix as `Run`). `job_fired` events carry `job_run_id` with that prefix. `GET /traces/by-run/run-9b02d383538b` -> 404 "This run has no trace", but it is not a run at all, and `GET /traces/by-run/run-7d179cba3a19` -> 200. A reader correlating a firing with its turn by id, as the skill's own trap list warns ("Job events carry `job_run_id`, not `run_id`"), has nothing in the id to tell them apart. **Expected:** new `JobRun` ids use their own prefix (`jrun-`). Existing rows keep theirs, since ids are opaque and nothing parses the prefix (grep before changing). **Test:** a firing's `job_run_id` does not start with `run-`.
+
+## F823 (C) -- a failed merge's Retry ("Try again") exists only on the board card: the task drawer, where the failure is read, offers none, and a retry that fails again looks exactly like nothing happened
+
+**Status:** fixed 5af9d2e, 2026-10-21 night iteration 40 (Tier 0). `TaskDetailDrawer` renders `TaskIntegrationNote` above both views (Story and Details), so the failure and its Try again sit together; the note's non-merged rows now carry a `<time>` ("tried HH:MM", ISO in `dateTime`/`title`) so a retry that fails the same way no longer reads identically. Tests `taskDetailDrawer.test.tsx` (retry inside `task-drawer-<id>`; nothing when no merge) and `taskIntegrationRetry.test.tsx` (newest row's time), failing before; full vitest 2219 passed, lint and tsc clean, bundle refreshed. Drive: the real components rendered in jsdom with fixture rows (labelled: no Chromium, no scratch Hub, no real git hook). Not done: a button-press feedback beyond the time stamp. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+```
+project repo: .git/hooks/pre-merge-commit -> echo "policy: merges into master are frozen for the release (hook)" >&2; exit 1
+POST /tasks/task-6d2ada38a152/land {}  -> 200, latest_integration {"outcome": "failed", "reason": "policy: merges into master are frozen ... (hook)\nNot committing merge; ...", "retryable": true}
+Chromium, served bundle, Tasks tab:
+  drawer, Story view:   "Not merged (failed) ... policy: merges into master are frozen ..."  -- task-integration-retry-<id>: 0
+  drawer, Details view: no mention of the merge at all                                         -- task-integration-retry-<id>: 0
+  board card (behind the modal): "Merge failed -- policy: ... Try again"                       -- 1
+card "Try again" with the hook still there -> a second `failed` row (GET .../integrations: 2 rows); the card text is identical before and after
+hook removed, card "Try again" -> "Merged 87a62644 into master"; master b511a00 "Integrate approved work 87a6264407b9"
+```
+
+The integration note and its button are rendered only by `TaskCard` (`hub/ui/src/components/tasks/TaskCard.tsx:589`, the sole user of `TaskIntegrationNote`). The drawer's Story renders the failure (`TaskStory`) but has no control, and the Details view does not render the note. An operator who opens the task to read why its work is not on master has to close the drawer and find the card to act. And `newestPerTarget` keeps one row per target, so a repeated failure renders identically: the operator cannot tell that the press did anything. **Expected:** the drawer (Story's "Not merged" event, or Details beside Status) offers the same Try again when the newest row is `retryable`; after a press, the note shows the attempt time (or "failed again at HH:MM"). **Test:** `taskDetailDrawer.test.tsx`: a task whose integrations answer one `failed` retryable row renders `task-integration-retry-<id>` inside `task-drawer-<id>`; `taskIntegrationRetry.test.tsx`: two failed rows for one target render the newer row's time. Not F820 (that one is a reason classed unretryable; this one is retryable and still unreachable from the drawer).
+
+## F824 (C) -- deleting a task from its drawer makes the page request the deleted task's story ~110 times in five seconds, and the card stays on the board for 5-10 s
+
+**Status:** fixed f5435c3, 2026-10-21 night iteration 41 (Tier 0, UI only). `useDeleteTask.onSuccess` takes the card out of every cached task page (and its `total`) on the 204 and invalidates the `tasks` prefix with a predicate that skips the deleted task's own keys, so its story is never refetched. Plain `removeQueries` was tried first and failed the test: removing a query a mounted observer holds makes the observer rebuild it and refetch, so the keys are left to garbage collection. Test `tasksApi.test.tsx` `useDeleteTask` (live story observer plus a cached board; failed before: one story GET after the 204); full vitest 2220 passed, lint and tsc clean, bundle refreshed. Drive: real hooks over a real QueryClient with a stubbed fetch (labelled: no Chromium, no 104-task scratch Hub, so the ~110-request loop itself and the 5-10 s persistence were not re-measured). Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
+**Source:** drive
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+```
+Chromium, served bundle, project with 104 tasks: open "bulk 004"'s drawer -> Details -> Delete -> Delete task
+DELETE /tasks/task-d5dfdb335e86 -> 204 (drawer closes)
+404 responses recorded by page.on("response") after the click:
+  t+2s  card task-open-task-d5dfdb335e86 present  404s=57
+  t+5s  card present                               404s=113
+  t+10s card gone                                  404s=113
+  all 113: GET projects/<p>/tasks/task-d5dfdb335e86/story
+(a first delete of "bulk 002" the same way: 90 console 404s, card still on the board at t+2.5s)
+```
+
+`useTaskStory` has `retry: false` (`hub/ui/src/api/tasks.ts:397-405`), so 113 requests are not React Query retries. Something re-subscribes the story query of the deleted task in a tight loop until the board's own refetch drops the card; the delete mutation invalidates the whole `['project', p, 'tasks']` prefix (`tasks.ts:647-649`), which includes the deleted task's `story` key. **Expected:** after a 204 the deleted task's queries are removed (`removeQueries` for `['project', p, 'tasks', id]`) before the list is invalidated, and the card leaves the board on the 204, not on a later refetch. **Test:** a UI test that deletes from the drawer and counts calls to the story `queryFn` for that id after the mutation resolves: at most 0. The 5-10 s card persistence on a 104-task project is measured once; on a small board it may not show.
+
+## F825 (C) -- deleting a prerequisite answers 204 and silently releases every task that waited on it; the confirm says only "Its dependencies ... go with it", and nothing names the released tasks
+
+**Status:** fixed 5be6c22, 2026-10-21 night iteration 42 (Tier 0). `DELETE /tasks/{id}` reads the tasks that depend on the one being deleted before the rows go and puts them in the `task_deleted` event as `released_dependents` (`[{id, title}]`); the drawer's inline confirm lists them by title ("2 tasks wait on this one: ... -- they will be free to start"), its wording now says "Its own prerequisites" so it no longer reads as the dependents, and it takes focus on Cancel. Tests `test_the_operator_can_delete_a_document_a_task_or_an_archived_agent.py::test_deleting_a_prerequisite_names_the_tasks_it_releases` (failed before: KeyError), `taskDetailDrawer.test.tsx` (names the dependents and Cancel has focus; silent when none; both failed before the first); full vitest 2222 passed, lint and tsc clean, bundle refreshed, hub `-k "ui_build_stamp or ui_staleness or static or delet or task"` 1287 passed. Drive: real route over ASGI and database, real components in jsdom (labelled: no Chromium, no scratch Hub). Not done: whether deleting an approved, merged task should be refused is the operator's call and is not decided here. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+```
+POST /tasks/<bulk001>/dependencies {"depends_on": "<bulk000>"} -> 201 added; bulk001 dependency_state "gated"
+DELETE /tasks/<bulk000> -> 204
+GET /tasks/<bulk001> -> prerequisites [], dependency_state null   (now startable)
+event_logs: task_deleted {"id": "<bulk000>", "title": "bulk 000 ..."}   -- nothing about bulk001
+Chromium: bulk003 depends on bulk002; bulk002's drawer -> Delete:
+  confirm text: "Delete this task? Its dependencies, links, transitions and evidence go with it. This cannot be undone."
+  focus after opening the confirm: the opener "Delete" button, not Cancel
+  Delete task -> bulk003 prerequisites [], dependency_state null
+DELETE /tasks/task-d58872f60abf (approved, merged into master, C depended on it) -> 204: its transitions and integration rows are gone; the merge commit stays on master
+```
+
+`deletion.delete_task` refuses only an active run (`hub/hub/deletion.py:192-195`); documents refuse archived and folded ones (`:206-223`), tasks refuse nothing. A gate the operator set up (or a document declared) disappears without a word, and the dependent can start on work that no longer exists. "Its dependencies ... go with it" reads as the deleted task's *own* prerequisites. **Expected:** the confirm names the tasks it will release ("2 tasks wait on this one: bulk 003, ... -- they will be free to start"), using the drawer's `dependents`; the `task_deleted` event carries `released_dependents`; and the inline confirm takes focus on Cancel like every other confirm (Keyboard & dialogs row). Whether deleting an approved, merged task should be refused (as an archived document is) is the operator's call; record the answer. **Test:** `hub/tests/test_task_delete.py`: delete a prerequisite of a gated task; the event payload names the dependent. UI: the confirm text contains the dependent's title.
+
+## F826 (D) -- once approved, a task's card credits the reviewer (B: "@gamma") or nobody (Land: "Unassigned"); the author appears only in the story
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
+**Source:** drive
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+```
+B: beta in_progress -> completed (run-2d1f9cc60be2); POST /agent/trigger {"agent": "gamma", "review_task_id": B} -> gamma under_review -> approved
+GET /tasks/B -> assignee "gamma"; Dependencies view card: "@gamma"
+A: alpha completed; POST /tasks/A/land -> assignee null (tasks.py:1996 "the author's hold"); drawer Details: "Assignee Unassigned"
+```
+
+Staffing a review writes the reviewer into `assignee` (by design, F70's ordering) and Land clears it, and nothing restores the author when the task reaches `approved`. Two approved tasks built by alpha and beta read "Unassigned" and "@gamma" on the board. The story ("beta worked", "alpha worked") is right. **Expected:** at `approved` the card names who built it (the last completer from `task_transitions`), or labels the reviewer as reviewer ("reviewed by @gamma"). **Test:** a board-card test with an approved task whose assignee is its reviewer renders the completer's name. Design gap, small.
+
+## F827 (D) -- a hand-made task whose prerequisite was rejected is told to "edit the document that declared this dependency": there is no document
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+```
+X -> Y -> Z, all hand-made (POST /tasks/{id}/dependencies); PATCH Y {"status": "rejected"} -> 200; Z dependency_state "gated_on_rejected"
+PATCH Z {"status": "in_progress"} -> 409 dependency_unmet: "... 'bulk 006 ...' (task-6668d193dfa1) was rejected and will not become approved on its own -- reopen it, or edit the document that declared this dependency."
+```
+
+`DependencyRefusal.detail` (`hub/hub/dependency_gate.py:62-66`) predates hand-authored `depends_on`: for a task with no `spec_document_id` the dependency was declared in the drawer's "Depends on" (or at creation), and the Dependencies view itself says "Hand-made tasks belong to no document". **Expected:** for a task with no document, the remedy reads "reopen it, or remove the dependency in this task's Depends on". **Test:** `hub/tests/test_dependency_gate.py`: a documentless task gated on a rejected prerequisite gets a message without "document".
+
+## F828 (C) -- deleting a document (or a task) leaves the deleted task's checkout and branch, with the agent's unmerged commit, listed under a task id that no longer exists; neither the response nor the dialog mentions them
+
+**Status:** fixed 5198a1b, 2026-10-21 night iteration 43 (Tier 0, backend). `worktrees.discard_task_checkout` removes a deleted task's checkout and branch when the branch holds no commit the primary HEAD lacks, no uncommitted edit and no half-resolved merge; otherwise both are kept. `DELETE /tasks/{id}` and the document delete call `deletion.discard_checkouts` after the rows commit and record a `task_checkout_kept` event (task_id, branch, unmerged_commits, uncommitted) for each kept one; the document delete's 200 also carries `kept_work` with the same entries. Tests `hub/tests/test_deleting_a_task_names_the_work_it_leaves.py` (4, all failed before: leftover checkout/branch, no event, no `kept_work`) against a real tmp git repo; delete/worktree test files 61 passed; ruff, black clean. Drive: real routes over ASGI and database with real git worktrees (labelled: no scratch Hub, no Chromium). Not done: the dialogs do not show `kept_work` yet, and the task 204 has no body, so the operator sees it only in the event log. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, `scripts/drive/s1020_s_api.py` + real Haiku turns).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+```
+approved change spec/changes/slug-speed, task task-67b0bf33dda8 worked by a real Haiku turn (builder):
+  commit a15d775 on agentweave/task/task-67b0bf33dda8, task completed, two evidence pieces
+DELETE /projects/<p>/project/documents/spec/changes/slug-speed/spec.json
+  -> 200 {"deleted": true, "tasks": ["task-67b0bf33dda8"], "requirements": 1, "diagnostics": [...]}
+git -C <project> worktree list
+  .../.agentweave/tasks/task-67b0bf33dda8  a15d775 [agentweave/task/task-67b0bf33dda8]   <- still there
+GET /projects/<p>/worktrees -> {"kind": "task", "name": "task-67b0bf33dda8", ...}            <- still listed
+GET /projects/<p>/tasks/task-67b0bf33dda8 -> 404
+```
+
+The delete dialog says "Its file, its requirements and their evidence, and every task it put on the board go with it". The code the agent wrote does not go with it: `deletion.delete_document` / `delete_task` (`hub/hub/deletion.py:177-198`) delete rows only, and `DELETE /tasks/{id}` (`hub/hub/api/v1/tasks.py:1459`) is the same. The operator can't tell whether the work was discarded or kept, and Worktrees lists a checkout named after a task that 404s. **Expected:** the delete removes a deleted task's checkout and branch when the branch holds nothing unmerged. When it does hold unmerged commits, the checkout is kept and the response (and the dialog's result) names the branch and its unmerged commit count. **Test:** `hub/tests/` next to the F532 deletion tests: a task with a checkout and a commit on its branch, deleted through the document route; assert the response names the branch (or the checkout is gone), and fail on the current rows-only delete.
+
+## F829 (C) -- after Delete document in the app, the page stays on the deleted document: its old title and phase, three load failures, and 404s, with no word that it was deleted
+
+**Status:** fixed 2026-10-21 night iteration 44 (Tier 0; commit ad358d2). `useDeleteSpecDocument` now takes the path out of the cached `specs` and `specDocuments` lists and invalidates the corpus with a predicate that skips the dead path's own keys; `SpecPhaseBar` takes `onDeleted`, records `{path,title,tasks}` in `specDeletionStore` and calls it; the Spec screen goes to the home document (`onOpenDocument(null)`), the conversation panel closes the tab (`onClose`); `SpecDeletedNote` says "Deleted “T” and its N tasks." above the phase bar until dismissed. Tests: `specDeleteApi.test.tsx` (failed before: one GET of the dead path after the 200), `specFold.test.tsx` (+2). Drive: real hook over a real QueryClient with fetch stubbed, real components in jsdom (labelled: no Chromium, no scratch Hub). Not done: the conversation host shows the note only if another spec tab remains. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, `scripts/drive/s1020_s_ui2.py`), seen in Chromium on the served bundle.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+```
+Chromium: ?tab=spec&document=spec/changes/ui-delete-131858/spec.json -> spec-delete -> "Delete document"
+DELETE .../documents/spec/changes/ui-delete-131858/spec.json -> 200 {"deleted": true}
+the page 3 s later (testbed/ui-judge/s1020-spec2/132004/03_after_delete.png):
+  title "UI delete 131858", chips change-spec / exploring / sketch, "No requirements yet."
+  "Drift could not be read: no specification document at spec/changes/ui-delete-131858/spec.json"
+  "Could not load retired requirements: no specification document at ..."
+  "This document's decided proposals could not be read."
+  URL still ...&document=spec%2Fchanges%2Fui-delete-131858%2Fspec.json; 15 console 404s
+```
+
+`onConfirmDelete` (`hub/ui/src/components/spec/SpecPhaseBar.tsx:306-314`) closes the dialog and does nothing else. `useDeleteSpecDocument` (`hub/ui/src/api/spec.ts:1344`) invalidates the corpus but leaves the selected document in place, and its per-document queries then fail one by one. This is the document twin of F824 (task drawer). **Expected:** on a 200, the page leaves the deleted document for the document browser (or the home document) and says what was deleted, with the response's task count. The deleted path's queries are removed rather than refetched. **Test:** a UI test that deletes from the phase bar and asserts the selected document changes and no query for the deleted path runs after the mutation resolves.
+
+## F830 (D) -- the `steps_skipped` approval gap tells the operator, on screen, to make raw HTTP calls, and the recipe it gives leaves out re-proposing
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, `scripts/drive/s1020_s_ui.py`), seen in Chromium.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+```
+proposed change written in one PUT -> Approve (Chromium) -> approval-warnings:
+  "steps_skipped — the document is at step 'intake'; this project's journey (no size, so every step) goes on to
+   threat-model, ... delivery, which it never reached. If it already holds what those steps produce, record that:
+   send it back first, POST /api/v1/projects/proj-e5b03b955646/project/documents/phase?path=...&to=exploring,
+   then POST /api/v1/projects/.../documents/journey?path=... {"step": "delivery"} (the step control on its phase bar)"
+-> Approve anyway -> the same text is kept on the document as "Approved over these gaps"
+```
+
+The message is built once for agents and the operator alike (`hub/hub/spec_service.py:1874-1892`, F574/F730/F752). On the app's approval card it reads as an API recipe, although the phase bar has the controls. It also stops one step short: after "send it back" and the step move, the document is `exploring` again and has to be proposed again before Approve shows. **Expected:** the finding carries the steps as data (or a second operator-facing sentence) and the card names the controls: "Send back, choose the step on the journey bar, Propose, then Approve". The agent-facing text keeps the routes and adds the propose step. **Test:** `test_the_journey_steps_a_document_never_reached_are_a_gap_naming_them` extended: a proposed document's remedy names propose after the journey move; plus a UI test that the approval card renders no `POST /api/` text.
+
+## F831 (D) -- the note answering a cannot-satisfy report runs the operator's reason into the next sentence with no full stop
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, real Haiku reporter `builder`).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+```
+POST .../documents/spec/changes/slug-speed/spec.json/amendments/amd-6ab5b83b9196/respond
+  {"response": "amend", "reason": "a typo for microseconds", "change": {"then": "it returns in under 100 microseconds"}}
+inbound_queue_entries (builder): "... how_to_check: time it with time.perf_counter_ns. Their reason: a typo for
+  microseconds The task is unblocked; continue the work against the criterion as it now reads."
+```
+
+`hub/hub/spec_amendments.py:845` appends `" Their reason: {reason}"`, and the next sentence follows directly. An operator's reason rarely ends in a full stop, so this happens every time. **Expected:** the reason is closed with a full stop when it lacks terminal punctuation (or is quoted). **Test:** next to the F700 respond tests: an amend with a reason without a full stop; assert the delivered note contains `"microseconds. The task"`.
+
+## F832 (B) -- a refused Land tells the operator to "send the task back (revision_needed)", a move the Hub never offers the operator from `completed`; the one control that might, "Move to under review", is refused with "Land it"
+
+**Status:** fixed 2026-10-21 night iteration 8 (Tier 0; the cleaner of the two expected options). `task_transitions.TRANSITIONS['completed']` gains `revision_needed` for the operator only (an agent still reaches a verdict through `under_review`), so the Land refusals' "send the task back (revision_needed)" now names a legal move, and the drawer menu (built from `/tasks/transitions/allowed`) offers it as "Move to Revision needed" with no UI change or bundle refresh. The send-back returns to the author (F495, asserted). Tests `hub/tests/test_operator_sends_completed_work_back.py` (failing before); `test_review_leaves_the_pool` updated to say agents have no verdict from `completed`. Drive: the real ASGI app and database through `PATCH /tasks/{id}` (labelled: not a scratch Hub, no Chromium); 159 tests across transitions, review and revision files pass. Not done: a dedicated "Send back" label in the drawer; the rejected-requirement refusal still quotes reviewer text (`REVIEWER_SENDS_BACK_REJECTED`) to the operator. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8190, real Haiku `builder`; `scripts/drive/s1020_v_ui2.py`).
+**Source:** drive
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+```
+task-8c50aa06ab24 completed by builder (real turn); its requirement FR-2 not verified (rejected, then amendment_unreviewed)
+POST /tasks/{id}/land {}  -> 409 gate_unsatisfied, message ends:
+  "... Ask the task's author to record it, accept it, and approve again; or send the task back (revision_needed) naming the commits."
+  (with FR-2 rejected it also says "If you are reviewing this task, ... move the task to revision_needed with notes ...")
+PATCH /tasks/{id} {"status":"revision_needed"}  -> 409 "Cannot move a task from 'completed' to 'revision_needed'.
+  From 'completed' the available transitions are: rejected, under_review."
+Drawer status menu (Chromium): ["Move to rejected", "Move to under review"] -- no send-back item
+"Move to under review" -> 403 "... with 'builder' as its holder: it is the agent recorded as completing this task ...
+  Land it, on the task, to review it yourself, or dispatch a different agent's review turn (POST /agent/trigger with review_task_id)."
+```
+
+The operator goes round a loop: Land says send it back, the menu has no send-back, and the menu's only other move says Land it. A way out exists, but no sentence names it. `PATCH {"status":"under_review","assignee":null}` answers 200, and `revision_needed` then works and returns the task to `builder` (F495). The remedy strings are `OPERATOR_ON_UNLANDED` and `OPERATOR_ON_FAILING_CHECKS` (`hub/hub/requirement_gate.py:111-125`). The rejected refusal also hands the operator `REVIEWER_SENDS_BACK_REJECTED` (`:134`), which is reviewer text. The table is `task_transitions.py:134` (`completed` -> `under_review`, `rejected` only). This is F353's class: a refusal naming a remedy that does not work. **Expected:** either the operator can send completed work back in one move (a `completed -> revision_needed` edge for the operator, offered in the drawer as "Send back"), or every operator-facing remedy names the move that works. The first is the cleaner one: the gate already says "send it back" in four places. **Test:** beside `test_revision_returns_to_the_author.py`: a task completed by an agent, whose Land is refused, can be sent back by the operator with one PATCH and returns to its author; plus a check that no operator-facing Land refusal names `revision_needed` unless that move is legal from the task's status.
+
+## F833 (C) -- a criterion-only amendment is recorded and shown as "reworded it" with the same wording twice, and the stale-evidence refusal says the requirement "has been reworded"
+
+**Status:** fixed (iteration 45, Tier 0, commit f798785). Found 2026-10-20 by the day sweep `sweep-evidence-sweep`. Fix: the requirement detail route adds `change` to each revision (`spec_index.change_kind`: a `reworded` revision whose statement equals the one before is `criteria`; stored classification unchanged, so no migration), the story says "changed its acceptance criteria" with no repeated wording, and the `evidence_stale` refusal says the criteria changed when the statement stood (`spec_index.stale_cause`). Tests: `test_a_criterion_only_change_is_not_a_rewording`, `test_stale_refusal_for_a_criterion_change_does_not_say_reworded`, `requirementStory.test.tsx`. Drive: real routes over ASGI and database, real component in jsdom; no Chromium, no scratch Hub. Not done: the story does not name which criterion moved or its before/after. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8190, a real Haiku `checker` test turn calling `amend_spec_document`, Chromium: `scripts/drive/s1020_v_ui.py`).
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes
+**Tier:** 0
+
+```
+checker (review turn on t-count) amend_spec_document op=change_criterion criterion=c-count change={"then": "it returns 3, as an int"}
+GET /spec/requirements/FR-2 -> revisions: [created "The package MUST offer count() ...",
+                                           reworded (actor checker) "The package MUST offer count() ..."]  -- same statement
+RequirementStory (Chromium): "You wrote it ... The package MUST offer count() ...  /  checker reworded it ... The package MUST offer count() ..."
+  chip "current"; Evidence "2 for an earlier wording"; nothing names criterion c-count or the unreviewed amendment
+decide_evidence(ev-a650d4cd3b7a, accepted) -> 409 "ev-a650d4cd3b7a was recorded for an earlier wording of FR-2, which has been
+  reworded since; it cannot be accepted."
+```
+
+The requirement's digest covers its criteria, so changing a criterion is correctly a new revision, and correctly makes earlier evidence stale. But `spec_index.py:268-277` classifies every digest change `REWORDED` and stores only the statement. The story (`RequirementStory.tsx:26`) then shows two identical wordings under "reworded it". The refusal (`requirement_evidence.py:1254`) sends the reader to compare statements that did not change. The story also reads "current" while coverage reads `amendment_unreviewed`. **Expected:** a revision whose statement is unchanged is classified as a criterion change. The story names the criterion and its before/after (the amendment row already holds `before` and `change`), and the stale refusal says "its criteria changed since" in that case. **Test:** in the spec-index tests: a change to a criterion alone records a revision that is not `reworded`; and the `evidence_stale` message for that piece names the criterion rather than a rewording.
+
+## F834 (D) -- a drift candidate re-raised after "Code corrected" or "Spec updated" looks like new drift: nothing on the row says it was answered, or when
+
+**Status:** open 2026-10-20. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8190, `scripts/drive/s1020_v_p2.py` + `s1020_v_ui.py`, Chromium).
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes
+**Tier:** 0
+
+```
+three candidates on FR-3 answered: no_change_required, implementation_corrected, specification_updated (all 200)
+POST /spec/drift/detect (no new commit) -> {"raised": ["drift-f58c2a17b807", "drift-e89f2f95fdd8"]}
+  -- the two "corrected"/"updated" ones again, by design (requirement_evidence.resolve_drift docstring, D8/F730)
+Drift panel: "Drifting: 3 to answer -- say which one was wrong", each re-raised row reads exactly like a first one:
+  "FR-3 · verified by total() == 6, watched by locator (operator)  todo/total.py: 723004c -> a870e62  [Spec updated][Code corrected][No change]"
+```
+
+Asking again is right: the code was not put back and the requirement was not reworded. But the operator who answered a minute ago sees the same row return with no hint why, which reads as "my answer was lost". The reason sits only in the buttons' hover titles. **Expected:** the re-raised row says it was answered before, e.g. "You said Code corrected at 12:31; todo/total.py still differs." `GET /spec/drift` can carry the previous resolved candidate's answer for the same piece and fingerprint. **Test:** in the drift tests: a candidate raised again after `implementation_corrected` carries `previously` (resolution, time). A UI test renders it on the row.
+
+
+_F900-F906 were filed as F835-F841 on 2026-10-20 on `ui/finesse-mocks`, and renumbered on 2026-10-21 when the day window filed its own F835-F837 on the cycle branch the same morning._
+
+## F900 (C) -- two files added to the vault by path, each named `README.md`, are both listed as "README.md"
+
+**Status:** fixed a92a822 2026-10-20 (Tier 0): a file added by path inside the project directory or the agent's workspace is named by its path there (`app/README.md`, `plugins/export/README.md`), the nearest root winning; a folder outside both keeps its name in front as before.
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes
@@ -37431,9 +37893,9 @@ Expected: the literal `…`, a lint or test that fails on mojibake sequences in 
 
 Found on the Terra replica (`:8130`, `proj-cd006955cbe2`) during the ui-finesse mock review (handoff 0204): one operator batch at 2026-10-20T18:16:19 added `app/README.md`, `plugins/export/README.md` and `plugins/export/docs/format.md` by path, and the map listed them as `README.md`, `README.md` and `format.md` (`GET /vault/map`). The Library could only tell the two READMEs apart by their opening lines. `vault_intake.expand` named a single file `located.name`, and a folder's files `<folder name>/<path beneath it>`, never the path from the project. Test: `test_files_named_alike_in_different_folders_keep_the_path_that_tells_them_apart` (`hub/tests/test_vault_paths.py`), failing before the fix (`'README.md' != 'app/README.md'`). Seam: Knowledge vault (add by path) x the Vault tab's Library. Not covered: two files with the same name outside the project and the workspace still share a name (no root to name them from).
 
-## F836 (C) -- the Vault reader's "Used by" can say how often an entry was read, never by which agent
+## F901 (C) -- the Vault reader's "Used by" can say how often an entry was read, never by which agent
 
-**Status:** fixed (uncommitted on `ui/finesse-mocks`) 2026-10-20 (Tier 2, migration 0139, change `the-vault-names-who-read-an-entry`): an agent's `vault_read` at offset 0 is recorded against the run credential's agent in `vault_readers`, and both maps and both entry routes list `readers` ({agent, count, last_read_at}, most recent first). The reader's Used by tab names each agent with its count and last read, and says how many earlier reads predate the record (`vaultAccess.test.tsx`).
+**Status:** fixed a92a822 2026-10-20 (Tier 2, migration 0140 -- renumbered from 0139 at the merge with the night branch, whose F761 took 0139 -- change `the-vault-names-who-read-an-entry`): an agent's `vault_read` at offset 0 is recorded against the run credential's agent in `vault_readers`, and both maps and both entry routes list `readers` ({agent, count, last_read_at}, most recent first). The reader's Used by tab names each agent with its count and last read, and says how many earlier reads predate the record (`vaultAccess.test.tsx`).
 **Source:** operator
 **Theme:** Knowledge vault
 **Ready:** yes
@@ -37441,7 +37903,7 @@ Found on the Terra replica (`:8130`, `proj-cd006955cbe2`) during the ui-finesse 
 
 The ui-finesse mock's reader has a "Used by" tab (`hub/ui/src/components/vault/VaultReader.tsx`), and the operator asked for it to name the agents (handoff 0204, open question 2; answered "Build as Tier 0/1 now" on 2026-10-20). `vault_fetches` (migration 0126) holds one count per entry, no agent, so the tab could only say "Read 3 times". Tests: `hub/tests/test_vault_readers.py` (written first; failed on `KeyError: 'readers'` and the missing model), `test_migration_vault_readers_creates_the_table_and_its_downgrade_drops_only_it`. Reads counted before 0139 stay unattributed, so `fetches` may exceed the readers' sum. Seam: Knowledge vault (agent reads) x the Vault tab.
 
-## F837 (C) -- the compact task card shows one fact at a time: a task both waiting and stalled shows only "waiting"
+## F902 (C) -- the compact task card shows one fact at a time: a task both waiting and stalled shows only "waiting"
 
 **Status:** open 2026-10-20. Found applying the ui-finesse mock (`ui/finesse-mocks`), porting the old `TaskCard` tests to `TaskCardCompact`.
 **Source:** code
@@ -37451,9 +37913,9 @@ The ui-finesse mock's reader has a "Used by" tab (`hub/ui/src/components/vault/V
 
 `cardStatus()` (`hub/ui/src/lib/taskCardStatus.ts`) returns the first matching fact for the card's one status line. The old card showed blocked/waiting and stalled side by side; now a task that is waiting on the operator *and* whose last run ended without changing its status shows only "waiting", and the drawer shows no divergence state either (only the policy control), so "stalled" is shown nowhere. Expected: the status line carries the second fact (e.g. "Waiting on you · stalled"), or the drawer states it. Test: a `taskCardCompact` case with both facts set. Seam: Tasks (card) x Runs.
 
-## F838 (C) -- a requirement awaiting review lost its own tone on the task card and in the drawer
+## F903 (C) -- a requirement awaiting review lost its own tone on the task card and in the drawer
 
-**Status:** open 2026-10-20. Found in the same port as F837.
+**Status:** open 2026-10-20. Found in the same port as F902.
 **Source:** code
 **Theme:** Tasks
 **Ready:** yes
@@ -37461,9 +37923,9 @@ The ui-finesse mock's reader has a "Used by" tab (`hub/ui/src/components/vault/V
 
 The old card's per-requirement chips gave a requirement awaiting review a pending tone. The compact card replaces the chips with a tally (`N/M FR`) that does not count it, and the drawer's Serves list has no coverage tone, so "this requirement is waiting for review" is shown nowhere. Expected: the tally's title or the drawer's Serves list names requirements awaiting review. Test: `taskRequirementLinks.test.tsx`, a requirement in review. Seam: Tasks x Spec (coverage).
 
-## F839 (C) -- the Overview's "Needs you" lost two question behaviours: blocking questions first, and no "waiting" claim for a non-blocking one
+## F904 (C) -- the Overview's "Needs you" lost two question behaviours: blocking questions first, and no "waiting" claim for a non-blocking one
 
-**Status:** open 2026-10-20. Found in the same port as F837.
+**Status:** open 2026-10-20. Found in the same port as F902.
 **Source:** code
 **Theme:** Overview
 **Ready:** yes
@@ -37471,9 +37933,9 @@ The old card's per-requirement chips gave a requirement awaiting review a pendin
 
 `QuestionInterruptCard` (now rendered by nothing, kept so this is not lost) put the question an agent is blocked on first, and did not say anyone waits on a non-blocking question. `OverviewScreen`/`OverviewView` order "Needs you" by time and word every question alike. Expected: blocking questions first; a non-blocking one is not described as something an agent waits on. Test: `overviewScreen.test.tsx`, one blocking and one non-blocking question. Then delete `QuestionInterruptCard.tsx`. Seam: Overview x Questions.
 
-## F840 (C) -- the compact task card offers Retry on every unmerged task, even one a retry can never clear
+## F905 (C) -- the compact task card offers Retry on every unmerged task, even one a retry can never clear
 
-**Status:** open 2026-10-20. Found in the same port as F837.
+**Status:** open 2026-10-20. Found in the same port as F902.
 **Source:** code
 **Theme:** Tasks
 **Ready:** yes
@@ -37482,7 +37944,7 @@ The old card's per-requirement chips gave a requirement awaiting review a pendin
 `TaskCardCompact` shows Retry whenever `latest_integration` is not merged. `latest_integration` in the task-list payload carries no retryability, so a skip that retrying cannot clear ("already in master; nothing to merge", a missing main branch) still shows the button; `TaskIntegrationNote` in the drawer gets it right from the integration route. The same goes for the Overview's "approved but not merged" rows. Expected: the list payload carries `retryable` (Hub) and the card shows Retry only then. Tests: `hub/tests` for the field, `taskCardCompact` for the button. Seam: Tasks x Integration.
 
 
-## F841 (B) -- the clientless-route ratchet measures nothing: `n10_route_reachability.py` reads 0 declared `/api/v1` routes
+## F906 (B) -- the clientless-route ratchet measures nothing: `n10_route_reachability.py` reads 0 declared `/api/v1` routes
 
 **Status:** open 2026-10-20. Found by the n11 ratchet repair during the ui-finesse apply.
 **Source:** code

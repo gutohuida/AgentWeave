@@ -7,111 +7,31 @@
     "branch": "autonomous/2026-10-18-daily",
     "parent_branch": "master",
     "parent_sha": "75e6edb",
-    "stop_at": "2026-10-20T07:00:00+01:00",
-    "iteration": 13,
-    "log_file": ".claude/autonomous/2026-10-19-night-log.md",
+    "stop_at": "2026-10-21T07:00:00+01:00",
+    "iteration": 45,
+    "log_file": ".claude/autonomous/2026-10-20-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F759-F761-impl",
-    "next_action": "Do queue item F759-F761-impl (Tier 0 each): F759 evidence: drift candidate on overturned evidence; F761 a piece that names no commit shows the HEAD commit as its work (hub/hub/requirement_evidence.py work_diff: the commit^ fallback is right only for a commit the piece named; answer no files and a reason otherwise). Read each finding in scripts/drive/FINDINGS.md for the repro. Test first at the seam, fix, drive on a scratch Hub (e2e.py hub-up <profile> <port>, free port not 8000/8010; the evidence drive is scripts/drive/s1019_evidence.py). Set Status lines, METRICS row, log, STATE, commit, push. Run the full hub suite to a FILE (py -3.11 -m pytest tests -q -rf > /tmp/x.out, from hub/), ~1 hour: start it in the background early.",
+    "current": "D-next",
+    "next_action": "Do queue item D-next: take the next open Ready:yes finding from the D list, in this order: F778, F779, F797, F803, F805, F809, F813, F818, F821, F822, F826, F827, F830, F831, F834 (grep the heading in scripts/drive/FINDINGS.md; skip any whose Status is not open or Ready is not yes). Write a failing test at the seam the finding names, fix, set Status to 'fixed <sha>' with a drive line. One finding per firing. Skip F788 (waits on OPEN decision trace-5) and F787 (no repro). No scratch Hubs running.",
     "queue": [
         {
-            "id": "trace-hub-wide-spec",
-            "status": "done",
-            "title": "Tier 2 change doc on :8010 + failing acceptance drive",
-            "detail": "Done iter 2: spdoc-19e17276aeac approved anyway; acceptance test 6 strict-xfail.",
-            "model": "opus"
-        },
-        {
-            "id": "trace-hub-wide-1-impl",
-            "status": "done",
-            "title": "Slice 1: per-request ASGI span, parented under run tool span",
-            "detail": "Done iter 3: RequestTraceMiddleware (hub/hub/trace_requests.py), span queue + lifespan writer (traces.enqueue/flush_spans/_write_spans/run_span_writer, lock retry LOCKED_ATTEMPTS=3), actor/project stamped by auth deps, migration 0138 round-tripped on a trial-DB copy, operation= filter, settings record_reads/dropped_spans/spans_by_operation. Drive d1020 requests+nested green on scratch :8027.",
-            "model": "opus"
-        },
-        {
-            "id": "trace-hub-wide-2-impl",
-            "status": "done",
-            "title": "Slice 2: persist_event attaches a span event / short span",
-            "detail": "Done iter 4: traces.record_event called from persist_event: on the current request PendingSpan until enqueued (keep=True so a read that emitted is recorded), on the run root under traces.within_run (wraps _execute_run at its one create_task), else an aw.event span staged in the event's session. Drive events step green on scratch :8027: 8/8 event rows in a trace.",
-            "model": "opus"
-        },
-        {
-            "id": "trace-hub-wide-3-impl",
-            "status": "done",
-            "title": "Slice 3: background work traces + git/check child spans",
-            "detail": "Done iter 5: traces.work (Work: sync/async, nests in work, aw.caused_by under request/run, quiet), traces.command/exited/run (aw.command children written with parent; RunTrace nests), wired into check_run, job/loop_tick, inbound_queue, worktree_create/release, task_integration, review_staffing, spec_fold, distil(_batch), titles, vault_report, spec_vault_check; snapshot to_thread. Drive work step green on scratch :8027 proj-9c510080c45f. Filed F788.",
-            "model": "opus"
-        },
-        {
-            "id": "trace-hub-wide-4-impl",
-            "status": "done",
-            "title": "Slice 4: WARNING+ log records on trace, OTLP logs export, redaction",
-            "detail": "Done iter 6: TraceLogHandler (WARNING+ on current span / run root via writer attach; lastResort kept), resourceLogs in the download, /v1/logs push, app kind filter (default Runs) + labels, bundle rebuilt. Whole drive green on :8027 into otlp_receiver: nested MCP request, job + check_run traces, warning on /v1/logs with its traceId, 0 operator polls. F788 built then reverted: contradicts trace-D4 (OPEN trace-5). Fold blocked: no traces capability, base change proposed (OPEN trace-6).",
-            "model": "opus"
-        },
-        {
-            "id": "F782-F783-spec",
-            "status": "done",
-            "title": "Tier 1: Copilot 600s deadline redelivery (A) and ask_user clock (A)",
-            "detail": "Done iter 8: spec/changes/the-turn-clock-counts-work-not-waiting (spdoc-8cdbaa6d6f9f) approved anyway on :8010; FR-1 clock-pauses-for-operator, FR-2 deadline-cut-is-not-rerun; tasks test/build/drive created. Turn-limit setting scoped out (Tier 2).",
-            "model": "opus"
-        },
-        {
-            "id": "F782-F783-impl",
-            "status": "done",
-            "title": "Build F782+F783",
-            "detail": "Done iter 10: hub/hub/run_waits.py; ask route begins a wait per blocking question, answer/decline/wait-ended end it, Copilot answer_permission brackets the card, run_turn clears at its end; _send_and_wait moves state[\"deadline\"] while paused; turn_timeout in UNRETRYABLE_ERROR_KINDS, withdrawal reason names 600 s + advice. 7 tests failing first. Drive on scratch :8110 proj-ecfcc899dc34: s4 ask answered at 620 s completed in the same run (627 s); s3 cut at 600 s withdrawn with the reason. Folded into inbound-queue-delivery + agent-capability-plane. F782 expectation 2 (setting, Tier 2) stays open. Filed F789.",
-            "model": "opus"
-        },
-        {
-            "id": "F784-F785-F786-impl",
-            "status": "done",
-            "title": "Copilot Ask-me unanswered card, refusal continuation text, deadline cut record (B,B,C; T0)",
-            "detail": "Done iter 11: card_status stamped on the subject (expired vs denied) and the continuation/notices say nobody answered; outside-workspace continuation says every tool is refused; deadline waits the Stop grace so the cut records its premium request. 9 tests, 4 failing first. Driven on :8110 with real Copilot (card, s2, s3: 0.33 recorded)."
-        },
-        {
-            "id": "F774-impl",
-            "status": "done",
-            "title": "session/sync must not delete an agent holding task+live run (B,T0)",
-            "detail": "Done iter 12: launchability.held_work shared; agent_removal_refusal -> 409 agent_removal_under_held_work; payload without an agents key leaves the roster alone. 4 tests (2 failing first). Driven on :8120 with a live Haiku turn (d1020_f774_sync_keeps_held_agents.py)."
-        },
-        {
-            "id": "F775-F777-impl",
-            "status": "done",
-            "title": "checkpoint files_changed when agent committed (B); non-ASCII filename git-quoted in picker (B)",
-            "detail": "Done iter 13 together with F760 (same git-decoding fix): UTF-8 + core.quotepath=off in three git callers; files_committed_between for checkpoints. 4 tests failing first; driven on :8130 (d1020_f775_f777_git_reads.py)."
-        },
-        {
-            "id": "F759-F761-impl",
+            "id": "D-next",
             "status": "open",
-            "title": "Evidence: drift candidate on overturned evidence (B); piece with no commit shows unrelated commit (B)",
-            "detail": "T0 each, repro in findings."
+            "title": "next open Ready:yes D finding (F833 fixed iteration 45)"
         },
         {
-            "id": "F760-impl",
-            "status": "done",
-            "title": "Evidence diff reads git output as cp1252: 500 (B,T0)",
-            "detail": "Done iter 13 with F775/F777."
+            "id": "F788-blocked",
+            "status": "blocked",
+            "title": "F788 waits on operator decision trace-5 (OPEN in DECISIONS.md); built then reverted on 2026-10-19; do not build"
         },
         {
-            "id": "F767-F769-impl",
-            "status": "open",
-            "title": "Flow hands fresh work to its own reviewer (B); integration note hides merge (B)",
-            "detail": "T0."
-        },
-        {
-            "id": "F763-spec",
-            "status": "open",
-            "title": "Tier 1: rejected cannot-satisfy report leaves task stuck (B)",
-            "detail": "If time remains; then F763-impl.",
-            "model": "opus"
+            "id": "F787-blocked",
+            "status": "blocked",
+            "title": "F787 needs a repro (Ready: no)"
         }
     ],
-    "decisions_for_user": [
-        "trace-5",
-        "trace-6"
-    ],
+    "decisions_for_user": [],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. Only the day window's merge gate (day-window.md, 'The merge gate') may fast-forward master. This window never merges.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
@@ -129,7 +49,7 @@
         "model": "sonnet",
         "skill": ".claude/skills/night-briefing/SKILL.md"
     },
-    "armed_at": "2026-10-19T22:55:02+01:00",
+    "armed_at": "2026-10-20T22:55:07+01:00",
     "driver_log": ".claude/autonomous/driver-night.log",
-    "briefing_url": "https://claude.ai/code/artifact/2a5f197c-7665-4e32-ae7c-a429453030b4"
+    "briefing_url": "https://claude.ai/artifact/Qfaxxuyh6GP87G4zJ9A5YH"
 }

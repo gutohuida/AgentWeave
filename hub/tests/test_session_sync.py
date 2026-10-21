@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from hub import worktrees
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent
+from hub.db.models import Agent, EventLog
 from hub.sse import sse_manager
 
 # Named import, for the reason `test_task_worktrees.py` states: conftest's autouse
@@ -267,9 +267,74 @@ async def test_sync_omitting_an_agent_with_an_unfinished_task_and_a_live_run_is_
     assert response.status_code == 409, response.text
     detail = response.json()["detail"]
     assert detail["code"] == "agent_removal_under_held_work"
-    assert detail["held"] == {"runs": ["run-f774"], "tasks": ["task-f774"]}
+    assert detail["held"] == {"runs": ["run-f774"], "tasks": ["task-f774"], "queue_entries": []}
     assert "task-f774" in detail["message"] and "run-f774" in detail["message"]
     assert await _names() == {"builder", "rev"}
+
+
+async def test_sync_omitting_an_agent_with_a_queued_message_is_refused_like_archive(
+    app, auth_headers, add_agent
+):
+    """F810: archive refuses an agent with queued messages (nothing delivers to a gone agent), so
+    removal by omission must too, naming the entry, and keep both the row and the entry."""
+    from hub.db.models import InboundQueueEntry
+
+    await add_agent("gamma")
+    await add_agent("rev")
+    async with async_session_factory() as db:
+        db.add(
+            InboundQueueEntry(
+                id="entry-f810",
+                project_id="proj-test",
+                agent="gamma",
+                origin_type="operator",
+                content="still waiting",
+                hop_depth=0,
+                state="queued",
+            )
+        )
+        await db.commit()
+
+    response = await app.post(SYNC, json={"data": {"agents": {"rev": {}}}}, headers=auth_headers)
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert detail["code"] == "agent_removal_under_held_work"
+    assert detail["held"]["queue_entries"] == ["entry-f810"]
+    assert "entry-f810" in detail["message"] and "queued" in detail["message"]
+    assert await _names() == {"gamma", "rev"}
+    async with async_session_factory() as db:
+        entry = (
+            await db.execute(select(InboundQueueEntry).where(InboundQueueEntry.id == "entry-f810"))
+        ).scalar_one()
+    assert entry.state == "queued"
+
+
+async def test_sync_omitting_an_agent_whose_queue_is_spent_still_removes_it(
+    app, auth_headers, add_agent
+):
+    from hub.db.models import InboundQueueEntry
+
+    await add_agent("gamma")
+    await add_agent("rev")
+    async with async_session_factory() as db:
+        db.add(
+            InboundQueueEntry(
+                id="entry-f810-done",
+                project_id="proj-test",
+                agent="gamma",
+                origin_type="operator",
+                content="read",
+                hop_depth=0,
+                state="withdrawn",
+            )
+        )
+        await db.commit()
+
+    response = await app.post(SYNC, json={"data": {"agents": {"rev": {}}}}, headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert await _names() == {"rev"}
 
 
 async def test_sync_omitting_an_agent_whose_work_is_finished_still_removes_it(
@@ -351,3 +416,54 @@ async def test_sync_without_an_agents_key_keeps_each_agents_synced_entry(
     async with async_session_factory() as db:
         config = await get_agent_config("proj-test", "builder", db)
     assert not worktrees.is_writing_agent(config), config
+
+
+@pytest.mark.parametrize("bad", [["alpha"], "alpha", 3])
+async def test_sync_with_agents_that_is_not_an_object_is_refused_not_a_500(
+    app, auth_headers, add_agent, bad
+):
+    """F812: `agents` of a list or a string used to answer 500 from `.keys()`."""
+    await add_agent("alpha")
+
+    response = await app.post(SYNC, json={"data": {"agents": bad}}, headers=auth_headers)
+
+    assert response.status_code == 422, response.text
+    assert "object" in response.json()["detail"]
+    assert await _names() == {"alpha"}
+
+
+async def test_sync_that_deletes_agents_names_them_and_records_the_removal(
+    app, auth_headers, add_agent
+):
+    """F812: the answer was the roster that remains; nothing said which agents were gone."""
+    await add_agent("alpha")
+    await add_agent("beta")
+    await add_agent("gamma")
+
+    response = await app.post(SYNC, json={"data": {"agents": {"alpha": {}}}}, headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["agents"] == ["alpha"]
+    assert response.json()["removed"] == ["beta", "gamma"]
+    async with async_session_factory() as db:
+        rows = (
+            (
+                await db.execute(
+                    select(EventLog).where(
+                        EventLog.project_id == "proj-test", EventLog.event_type == "agent_removed"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert sorted(row.agent for row in rows) == ["beta", "gamma"]
+    assert all(row.severity == "warn" for row in rows)
+
+
+async def test_sync_that_deletes_nothing_says_so(app, auth_headers, add_agent):
+    await add_agent("alpha")
+
+    response = await app.post(SYNC, json={"data": {"agents": {"alpha": {}}}}, headers=auth_headers)
+
+    assert response.json()["removed"] == []

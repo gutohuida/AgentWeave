@@ -788,24 +788,27 @@ async def _divergence(db, divergence_id: str) -> RunDivergence:
 
 
 async def _completed_with_an_open_divergence(task_id: str) -> str:
-    """Built through the product (R3, design D13): a worker's run bound to the task, the operator
-    completing the task while the run is still running, and the run's end evaluated."""
+    """A worker's run bound to the task and ended with it unmoved (the divergence, built through
+    the product), then the task standing `completed` with that divergence still open. Every actor
+    move into `completed` closes it, and the operator completing the task under a live run no
+    longer records one (F776), so the status is written directly: the state a review is handed."""
     async with async_session_factory() as db:
         task = Task(id=task_id, project_id="proj-test", title="div", status="pending")
         run = Run(id="run-rr-div", project_id="proj-test", agent=WORKER, status="running")
         db.add_all([task, run])
         await db.flush()
         await bind_run_to_task(db, run, task)  # pending -> in_progress, origin runtime
-        await db.commit()
-        await apply_transition(db, task, "completed", operator())
-        await db.commit()
         run.status = "completed"
         await db.commit()
     divergence_id = await evaluate_run_end("run-rr-div")
     assert divergence_id is not None
     async with async_session_factory() as db:
+        (await db.get(Task, task_id)).status = "completed"
+        await db.commit()
+    async with async_session_factory() as db:
         divergence = await _divergence(db, divergence_id)
-        assert divergence.task_status_at_end == "completed"
+        assert divergence.task_status_at_end == "in_progress"
+        assert (await db.get(Task, task_id)).status == "completed"
         assert divergence.outcome == "surfaced"
         assert divergence.resolved_at is None
         await _evidence(

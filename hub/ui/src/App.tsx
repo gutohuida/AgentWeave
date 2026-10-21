@@ -424,7 +424,9 @@ export default function App() {
     if (destination.tab === 'overview') {
       projectContent = overviewQuestionsOpen
         ? <QuestionsPanel />
-        : <OverviewScreen onNavigate={navigate} onOpenConversation={openConversation} />
+        : <OverviewScreen onNavigate={navigate} onOpenConversation={openConversation}
+            onAddAgent={() => setAgentCreateProjectId(destination.projectId)}
+          />
     } else if (destination.tab === 'tasks') {
       // A task's requirement chip, clicked: land on that requirement in its document, scrolled
       // into view — the other direction of F4's cross-tab navigation.

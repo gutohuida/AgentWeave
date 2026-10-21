@@ -294,6 +294,43 @@ async def test_refused_turns_and_a_failed_checkout_release_are_in_the_story(
 
 
 @pytest.mark.asyncio
+async def test_a_review_the_flow_could_not_staff_is_in_the_story(
+    app, auth_headers, builder, tmp_path
+):
+    """F768: `review_unstaffed` is the one record of why a completed task waited, and the story
+    ended at "completed" without it. Another task's event is not this task's."""
+    from hub.utils import persist_event
+
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    async with async_session_factory() as session:
+        await persist_event(
+            session,
+            "proj-test",
+            "review_unstaffed",
+            {"task_id": task, "reason": "No agent can review this: add one."},
+            severity="warn",
+            commit=False,
+        )
+        await persist_event(
+            session,
+            "proj-test",
+            "review_unstaffed",
+            {"task_id": "task-someone-else", "reason": "not this one"},
+            severity="warn",
+            commit=False,
+        )
+        await session.commit()
+
+    body = await story(app, auth_headers, task)
+
+    (unstaffed,) = [event for event in body["events"] if event["kind"] == "review_unstaffed"]
+    assert unstaffed["reason"] == "No agent can review this: add one."
+    assert unstaffed["at"]
+
+
+@pytest.mark.asyncio
 async def test_a_flows_move_names_its_job_kind_as_the_details_history_does(
     app, auth_headers, builder, tmp_path
 ):

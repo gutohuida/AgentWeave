@@ -164,7 +164,7 @@ def test_a_merge_git_does_not_finish_in_time_is_aborted(repo, monkeypatch):
     real = worktrees._run_git
     calls = []
 
-    def run_git(cwd, *args, check=True):
+    def run_git(cwd, *args, check=True, ok_codes=(0,)):
         calls.append(args)
         if "merge" in args and "--no-ff" in args:
             raise subprocess.TimeoutExpired(["git", *args], 60)
@@ -185,7 +185,7 @@ def test_a_task_with_no_approved_prerequisites_asks_git_nothing(repo, monkeypatc
     real = worktrees._run_git
     asked = []
 
-    def run_git(cwd, *args, check=True):
+    def run_git(cwd, *args, check=True, ok_codes=(0,)):
         asked.append(args[0] if args else "")
         return real(cwd, *args, check=check)
 

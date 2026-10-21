@@ -241,7 +241,7 @@ def _port_is_available(port: int) -> bool:
         return False
 
 
-def check_hub_instance(port: int = 8000) -> DiagnosticResult:
+def check_hub_instance(port: int = 8000, start_command: str | None = None) -> DiagnosticResult:
     """Ask the Hub on `port` what it is, rather than reasoning about it from the outside (F34).
 
     The one check here that contacts the instance the operator actually uses. Without it `doctor`
@@ -262,11 +262,13 @@ def check_hub_instance(port: int = 8000) -> DiagnosticResult:
         except (ValueError, UnicodeDecodeError):
             body = {}
     except (urllib.error.URLError, OSError) as exc:
+        # The caller knows the profile; a bare `agentweave --port N` starts the default one (F802).
+        command = start_command or f"agentweave --port {port}"
         return warn(
             "hub_not_running",
             f"port:{port}",
             f"No Hub answered on port {port} ({exc}).",
-            hint=f"Start it with `agentweave --port {port}`, if it should be running.",
+            hint=f"Start it with `{command}`, if it should be running.",
             category="environment",
             data={"port": port},
         )
@@ -1162,7 +1164,11 @@ def check_jobs() -> list[DiagnosticResult]:
 
 
 def collect_diagnostics(
-    *, include_network: bool = True, port: int = 8000, profile: str = "default"
+    *,
+    include_network: bool = True,
+    port: int = 8000,
+    profile: str = "default",
+    start_command: str | None = None,
 ) -> list[DiagnosticResult]:
     """Collect non-mutating readiness checks for the single native runtime.
 
@@ -1182,7 +1188,7 @@ def collect_diagnostics(
         check_hub_runtime(),
         check_runner_clis(),
     ]
-    instance = check_hub_instance(port)
+    instance = check_hub_instance(port, start_command)
     results.append(instance)
     # The port check reads the instance result rather than probing again: "in use" means something
     # different once you know the Hub itself is what is holding it.

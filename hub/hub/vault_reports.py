@@ -40,6 +40,9 @@ from .worker import run_worker
 logger = logging.getLogger(__name__)
 
 TRIGGER = "report_filed"
+# The operator's "Look into it" on a report still pending (F801).
+REQUESTED = "report_requested"
+STILL_PENDING = "The report stays pending: use Look into it on the Vault tab once the job can run."
 PROMPT_VERSION = "vault-reports-4"
 SOURCE_CHARS = vault.PAGE_CHARS
 REPORT_START = "--- report ---"
@@ -86,8 +89,10 @@ class ReportAnswer(BaseModel):
 class CannotReviewError(Exception):
     """Why a report is not looked into now; it stays pending."""
 
-    def __init__(self, reason: str, *, no_runner: bool = False) -> None:
+    def __init__(self, reason: str, *, no_runner: bool = False, status: int = 409) -> None:
         super().__init__(reason)
+        self.reason = reason
+        self.status = status
         # On, with no runner: the background entry records it instead of staying silent (F626).
         self.no_runner = no_runner
 
@@ -125,10 +130,6 @@ async def prepare(project_id: str, report_id: str) -> Plan:
         job = await manager.get_job_row(db, project_id, manager.REPORTS)
         runner = await db.get(Runner, job.runner_id) if job is not None and job.runner_id else None
         model = (job.model if job is not None else None) or (runner.model if runner else None)
-    if job is None or not job.enabled:
-        raise CannotReviewError("The vault reports job is disabled.")
-    if runner is None or runner.project_id != project_id:
-        raise CannotReviewError("The vault reports job has no runner.", no_runner=True)
     root, private = workspace.root, Path(settings["effective_private_location"])
 
     def read() -> (
@@ -150,8 +151,14 @@ async def prepare(project_id: str, report_id: str) -> Plan:
         return report, entry, source_id, None, source
 
     report, entry, source_id, text, source = await asyncio.to_thread(read)
-    if report is None or report["status"] != "pending":
-        raise CannotReviewError(f"No pending report '{report_id}'.")
+    if report is None:
+        raise CannotReviewError(f"No report '{report_id}'.", status=404)
+    if report["status"] != "pending":
+        raise CannotReviewError(f"Report {report_id} is {report['status']}, not pending.")
+    if job is None or not job.enabled:
+        raise CannotReviewError("The vault reports job is disabled.")
+    if runner is None or runner.project_id != project_id:
+        raise CannotReviewError("The vault reports job has no runner.", no_runner=True)
     if entry is None:
         raise CannotReviewError(f"Report {report_id} names an entry that is gone.")
     # F741: a file held here and not read yet is not "not on this machine"; the model hears what
@@ -251,7 +258,7 @@ def _apply(plan: Plan, answer: ReportAnswer) -> Tuple[str, str]:
     return "written", f"corrected: new fact {fact['id']} replaces {entry['id']}"
 
 
-async def review(plan: Plan) -> str:
+async def review(plan: Plan, trigger: str = TRIGGER) -> str:
     """Spawn the model once on the planned report and record the firing. Answers the outcome."""
     report = plan.report
     text = plan.source_text
@@ -271,10 +278,10 @@ async def review(plan: Plan) -> str:
         model=plan.model,
         runner_id=plan.runner_id,
         # Filed by an agent or the operator, the review that follows is the Hub's own (F240).
-        initiator="autonomous",
+        initiator="operator" if trigger == REQUESTED else "autonomous",
     )
     if not result.ok or not isinstance(result.parsed, ReportAnswer):
-        outcome, detail = "failed", f"{result.error or result.outcome}; the report stays pending"
+        outcome, detail = "failed", f"{result.error or result.outcome}. {STILL_PENDING}"
     else:
         try:
             outcome, detail = await asyncio.to_thread(_apply, plan, result.parsed)
@@ -285,7 +292,7 @@ async def review(plan: Plan) -> str:
             db,
             plan.project_id,
             job=manager.REPORTS,
-            trigger=TRIGGER,
+            trigger=trigger,
             subject={"report": report["id"], "entry": report["entry"]},
             runner_id=plan.runner_id,
             cli=plan.cli,
@@ -308,7 +315,11 @@ async def review_in_background(project_id: str, report_id: str) -> None:
     except CannotReviewError as refusal:
         if refusal.no_runner:
             await manager.record_no_runner(
-                project_id, job=manager.REPORTS, trigger=TRIGGER, subject={"report": report_id}
+                project_id,
+                job=manager.REPORTS,
+                trigger=TRIGGER,
+                subject={"report": report_id},
+                then=STILL_PENDING,
             )
         return
     except Exception:  # noqa: BLE001 -- a background task must not raise

@@ -25,6 +25,8 @@ export interface TraceSummary {
   agent: string | null
   conversation_id: string | null
   task_id: string | null
+  /** The run's own outcome (`aw.run.status`); null for a trace that is not a run's. */
+  run_status?: string | null
   status: SpanStatus
   status_message: string | null
   start_time: string

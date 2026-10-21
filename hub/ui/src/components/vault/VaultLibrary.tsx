@@ -58,6 +58,8 @@ export interface VaultLibraryProps {
   onExtractFacts: (id: string) => void
   onResolve: (contradictionId: string, stands: string | null, note: string) => VaultActionResult
   onCloseReport?: (reportId: string, note: string) => VaultActionResult
+  /** Asks the manager to look into a pending report now (F801). */
+  onReviewReport?: (reportId: string) => VaultActionResult
   /** Absent where the Hub has no route to remove an entry. */
   onDelete?: (id: string) => void
   onSaveSettings: (next: { default_visibility: VaultVisibility; private_location: string | null }) => VaultActionResult | void
@@ -342,6 +344,7 @@ export function VaultLibrary(props: VaultLibraryProps) {
                   report={r}
                   onOpenEntry={openEntry}
                   onClose={props.onCloseReport ?? (async () => undefined)}
+                  onReview={props.onReviewReport}
                 />
               ))}
             </div>

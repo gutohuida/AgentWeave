@@ -1,3 +1,4 @@
+import { SpecDeletedNote } from './SpecDeletedNote'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { readableApiError } from '@/api/client'
@@ -52,6 +53,9 @@ const DETAIL_TITLE: Record<HealthFactKey, string> = {
 }
 
 interface SpecDocumentPanelProps {
+  /** Where to go once this document has been deleted (F829). Falls back to `onClose`; the Spec
+   *  screen has no close control, so it names its own way out. */
+  onDeleted?: () => void
   /** The document open beside the conversation. The panel does not render without one — being
    *  open *is* having a path, which is why it lives in the destination. */
   path: string
@@ -125,12 +129,13 @@ export function SpecDocumentPanel({
   initialAnchor,
   onOpenTasks,
   onOpenLoop,
+  onDeleted,
   compact = false,
 }: SpecDocumentPanelProps) {
   const { mode } = useConfigStore()
   const { data: specDoc } = useSpec(path)
   const frameRef = useRef<SpecFrameHandle>(null)
-  const controls = useSpecPhaseControls(path, onOpenLoop)
+  const controls = useSpecPhaseControls(path, onOpenLoop, onDeleted ?? onClose)
 
   const readablePaths = useMemo(
     () => new Set(inventory.nodes.filter((node) => !node.missing).map((node) => node.path)),
@@ -305,6 +310,7 @@ export function SpecDocumentPanel({
 
   return (
     <div className="aw-spec-main" data-testid="spec-document-panel" data-compact={compact ? 'true' : 'false'}>
+      <SpecDeletedNote />
       {controls ? (
         <SpecPhaseHeader
           path={path}

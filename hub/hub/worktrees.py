@@ -104,9 +104,12 @@ class ReviewCommitUnavailableError(RuntimeError):
     """
 
 
-def _run_git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+def _run_git(
+    cwd: Path, *args: str, check: bool = True, ok_codes: Sequence[int] = (0,)
+) -> subprocess.CompletedProcess:
     result = traces.run(
         ["git", "-c", "core.quotepath=off", *args],
+        ok_codes=ok_codes,
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -551,13 +554,17 @@ def _refuse_a_ref_that_names_no_commit(repo_root: Path, ref: str) -> None:
 
 def _is_mid_merge(worktree: Path) -> bool:
     """True when a merge was started in *worktree* and never finished or aborted."""
-    result = _run_git(worktree, "rev-parse", "--verify", "--quiet", "MERGE_HEAD", check=False)
+    result = _run_git(
+        worktree, "rev-parse", "--verify", "--quiet", "MERGE_HEAD", check=False, ok_codes=(0, 1)
+    )
     return result.returncode == 0
 
 
 def _merge_head(worktree: Path) -> Optional[str]:
     """The commit an unfinished merge in *worktree* is bringing in, or `None` when there is none."""
-    result = _run_git(worktree, "rev-parse", "--verify", "--quiet", "MERGE_HEAD", check=False)
+    result = _run_git(
+        worktree, "rev-parse", "--verify", "--quiet", "MERGE_HEAD", check=False, ok_codes=(0, 1)
+    )
     if result.returncode != 0:
         return None
     return result.stdout.strip() or None
@@ -1559,6 +1566,61 @@ def release_task_worktree(repo_root: Path, task_id: str) -> ReleaseResult:
         snapshot_commit=snapshot_commit,
         unmerged_commits=_commits_not_on_head(repo_root, branch),
     )
+
+
+@dataclass
+class DiscardResult:
+    """What became of a deleted task's checkout and branch (F828)."""
+
+    task_id: str
+    branch: str
+    #: The checkout and the branch are gone.
+    discarded: bool = False
+    #: Commits on the branch that the primary checkout's HEAD does not have.
+    unmerged_commits: int = 0
+    #: The checkout holds edits that were never committed.
+    uncommitted: bool = False
+    #: Why a half-resolved merge held the checkout back, when it did.
+    kept_reason: Optional[str] = None
+
+    @property
+    def kept(self) -> bool:
+        return not self.discarded and bool(
+            self.unmerged_commits or self.uncommitted or self.kept_reason
+        )
+
+
+def discard_task_checkout(repo_root: Path, task_id: str) -> DiscardResult:
+    """Remove a *deleted* task's checkout and branch, unless they hold work nothing else has.
+
+    The counterpart of `release_task_worktree` for a task that no longer exists: there is no
+    reopened task to resume the branch, so leaving it only lists a checkout under an id that 404s.
+    Work is never discarded, though -- a branch with a commit the primary checkout's HEAD lacks,
+    a checkout with uncommitted edits, or a half-resolved merge keeps the checkout *and* the
+    branch, and the result says how much is there so the caller can tell the operator.
+    """
+    path = task_worktree_path(repo_root, task_id)
+    branch = task_branch_name(task_id)
+    unmerged = len(_commits_not_on_head(repo_root, branch))
+    unresolved = unresolved_merge_paths(path) if path.exists() else []
+    uncommitted = path.exists() and _has_uncommitted_changes(path)
+    if unmerged or uncommitted or unresolved:
+        return DiscardResult(
+            task_id=task_id,
+            branch=branch,
+            unmerged_commits=unmerged,
+            uncommitted=uncommitted,
+            kept_reason=(
+                "its merge is unfinished, still conflicted in " + ", ".join(unresolved)
+                if unresolved
+                else None
+            ),
+        )
+    if path.exists():
+        _run_git(repo_root, "worktree", "remove", "--force", str(path))
+    if _resolves(repo_root, branch):
+        _run_git(repo_root, "branch", "-D", branch)
+    return DiscardResult(task_id=task_id, branch=branch, discarded=True)
 
 
 @dataclass(frozen=True)

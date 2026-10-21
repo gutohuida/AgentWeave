@@ -234,3 +234,26 @@ describe('F711 — a jammed task tells its jam', () => {
     }
   })
 })
+
+describe('F768 — a completed task that waited for a reviewer says why', () => {
+  it('shows the review_unstaffed event with its reason', () => {
+    storyOverride.current = {
+      ...STORY,
+      events: [
+        ...STORY.events,
+        {
+          kind: 'review_unstaffed', id: 'ev-unstaffed', at: '2026-10-16T14:50:00Z',
+          reason: 'No agent can review this: add one.',
+        },
+      ],
+    }
+    try {
+      render(<TaskStory taskId="task-1" />)
+      const row = screen.getByTestId('story-event-ev-unstaffed')
+      expect(row.textContent).toContain('Nobody could be found to review this')
+      expect(row.textContent).toContain('No agent can review this: add one.')
+    } finally {
+      storyOverride.current = null
+    }
+  })
+})

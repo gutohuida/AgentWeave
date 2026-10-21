@@ -123,5 +123,6 @@
 .aw-overview-link:hover { color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; }
 .aw-overview-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
 .aw-overview-status .aw-overview-link { font-size: inherit; }
+.aw-ov-calm .aw-overview-link { font-size: inherit; color: var(--text-2); }
 .aw-overview-notice { margin-bottom: 14px; padding: 8px 12px; border-radius: var(--radius-md); background: color-mix(in srgb, var(--amber) 10%, transparent); font-size: 12.5px; }
 .aw-ov-agent-extra { padding: 0 12px 10px 30px; }

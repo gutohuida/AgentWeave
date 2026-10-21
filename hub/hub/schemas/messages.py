@@ -65,7 +65,7 @@ class MessageResponse(BaseModel):
     # `None` on every listed message: the list routes do not compute it, and `False` would be a claim.
     held_by_hop_budget: Optional[bool] = None
     # Why the Hub is holding the message, when it is: `hop_budget` or `no_runner` (F623).
-    held: Optional[Literal["hop_budget", "no_runner"]] = None
+    held: Optional[Literal["hop_budget", "no_runner", "token_budget"]] = None
     delivery_note: Optional[str] = Field(default=None, max_length=2000)
 
     model_config = {"populate_by_name": True, "from_attributes": True}

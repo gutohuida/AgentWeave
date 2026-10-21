@@ -9,8 +9,8 @@ import {
   useUpdateProjectSettings,
   type ProjectSettings,
 } from '@/api/projects'
-import { permissionModeValues, resolveCatalogModel, useModelCatalog } from '@/api/modelCatalog'
-import { useRunners } from '@/api/runners'
+import { permissionModeValues, resolveCatalogModel, useModelCatalog, type ModelCatalogResponse } from '@/api/modelCatalog'
+import { useRunners, type Runner } from '@/api/runners'
 import { DeleteProjectDialog } from '@/components/environment/DeleteProjectDialog'
 import { projectCeilingNotes } from '@/components/environment/describeThreshold'
 import { SettingsLoading, SettingsNotice, SettingsPage } from '@/components/ui/settings'
@@ -23,6 +23,19 @@ import { catalogModelOptions, runnerChoiceOptions } from '../settingsOptions'
 /** Project settings → General, on the Hub. Each change is its own save, sending only the fields
  *  it changed (the route merges onto what is stored), so a change made in another section since
  *  this page loaded is never written back over. */
+/** Whether *runner*'s CLI declares *model*, by id or alias: the Hub checks `checkpoint_model` against
+ *  the runner's own CLI and refuses one it does not declare (F807). No catalog yet means no
+ *  evidence either way, so nothing is dropped. */
+function runnerDeclaresModel(
+  runner: Runner | undefined,
+  catalog: ModelCatalogResponse | undefined,
+  model: string | null,
+): boolean {
+  if (!model || !runner || !catalog) return true
+  const entry = catalog.providers.find((provider) => provider.provider === runner.cli)
+  return resolveCatalogModel(entry, model) !== null
+}
+
 export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { data: projects = [], error: projectsError, refetch: refetchProjects } = useProjects()
@@ -93,6 +106,16 @@ export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => 
     })
   }
 
+  // The model menu lists the chosen runner's CLI's models only, so a stored model that CLI does not
+  // declare would stay unseen and the switch would be refused naming it (F807): clear it with the switch.
+  const saveSetting = (patch: Partial<ProjectSettings>, said: string) => {
+    if ('checkpoint_runner_id' in patch && !('checkpoint_model' in patch)) {
+      const nextRunner = runners.find((runner) => runner.id === patch.checkpoint_runner_id)
+      if (!runnerDeclaresModel(nextRunner, catalog, shown.checkpoint_model)) patch = { ...patch, checkpoint_model: null }
+    }
+    save(patch, said)
+  }
+
   const checkpointRunner = runners.find((runner) => runner.id === shown.checkpoint_runner_id)
   const checkpointProvider = catalog?.providers.find((provider) => provider.provider === checkpointRunner?.cli)
   const contextWindow = resolveCatalogModel(checkpointProvider, shown.checkpoint_model)?.context_window ?? null
@@ -105,7 +128,10 @@ export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => 
           runners,
           { label: 'None', detail: 'Checkpointing stays off until a runner is chosen' },
           // F268: the model a choice runs on, which is the project's checkpoint model when set.
-          (runner) => runnerModelPart(runner, catalog, { model: shown.checkpoint_model }),
+          (runner) =>
+            runnerModelPart(runner, catalog, {
+              model: runnerDeclaresModel(runner, catalog, shown.checkpoint_model) ? shown.checkpoint_model : null,
+            }),
         )}
         modelOptions={catalogModelOptions(checkpointProvider?.models ?? [], { stored: shown.checkpoint_model })}
         permissionModes={permissionModeValues(catalog)}
@@ -145,7 +171,7 @@ export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => 
             ) : null}
           </>
         }
-        onChange={save}
+        onChange={saveSetting}
         onRelocate={(path) =>
           relocate.mutate(
             { path },

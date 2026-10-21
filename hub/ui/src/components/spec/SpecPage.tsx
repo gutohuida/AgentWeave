@@ -181,6 +181,8 @@ export function SpecPage({
         initialAnchor={anchor}
         onOpenTasks={onOpenTasks}
         onOpenLoop={onOpenLoop}
+        // F829: back to the home document, which the inventory resolves.
+        onDeleted={() => onOpenDocument(null)}
       />
     )
   } else {

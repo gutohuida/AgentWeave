@@ -76,6 +76,40 @@ describe('the task drawer shows the latest check run', () => {
   })
 })
 
+describe('F770 — a failure that also fails on main says so', () => {
+  const onMain = { name: 'tests', exit_code: 1, timed_out: false, duration_seconds: 0.5, output_tail: 'FAILED', preexisting: true }
+
+  it('says so in the latest row', () => {
+    checks = { configured: true, running: false, runs: [run('failed', { results: [onMain] })] }
+    render(<TaskChecksRow taskId="task-1" />)
+    expect(screen.getByTestId('task-checks-preexisting-task-1')).toHaveTextContent(
+      'fails on main too, not this task’s work',
+    )
+  })
+
+  it('says so in an earlier run, and not for a failure main does not share', () => {
+    checks = {
+      configured: true,
+      running: false,
+      runs: [
+        run('passed', { id: 'chk-3' }),
+        run('failed', { id: 'chk-2', results: [onMain] }),
+        run('failed', { id: 'chk-1', results: [{ ...onMain, preexisting: false }] }),
+      ],
+    }
+    render(<TaskChecksRow taskId="task-1" />)
+    fireEvent.click(screen.getByTestId('task-checks-history-toggle-task-1'))
+    expect(screen.getByTestId('task-check-result-chk-2-tests')).toHaveTextContent('fails on main too')
+    expect(screen.getByTestId('task-check-result-chk-1-tests')).not.toHaveTextContent('fails on main too')
+  })
+
+  it('does not say it for a plain failure', () => {
+    checks = { configured: true, running: false, runs: [run('failed', { results: [{ ...onMain, preexisting: false }] })] }
+    render(<TaskChecksRow taskId="task-1" />)
+    expect(screen.queryByTestId('task-checks-preexisting-task-1')).toBeNull()
+  })
+})
+
 describe('slice remaining-hidden-data — earlier check runs are in the drawer', () => {
   beforeEach(() => {
     rerun.mockReset()

@@ -49,11 +49,16 @@ KIND_ORDER = {
     "divergence": 7,
     "turn": 8,
     "workspace": 9,
+    "review_unstaffed": 10,
 }
 
 #: Event-log entries about a task's checkout that the story tells (F711). Only the failure: a
 #: release that worked is the ordinary end of a decided task and says nothing new.
 _WORKSPACE_EVENTS = {"task_worktree_release_failed": "release_failed"}
+
+#: The flow's refusal to staff this task's review (F768): the one record of why a completed task
+#: waited, with the sentence naming the remedy. It is not about the checkout, so it is its own kind.
+_REVIEW_UNSTAFFED = "review_unstaffed"
 
 
 def _iso(value: Optional[datetime]) -> Optional[str]:
@@ -136,7 +141,7 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
         session,
         select(EventLog).where(
             EventLog.project_id == task.project_id,
-            EventLog.event_type.in_(list(_WORKSPACE_EVENTS)),
+            EventLog.event_type.in_([*_WORKSPACE_EVENTS, _REVIEW_UNSTAFFED]),
             EventLog.data["task_id"].as_string() == task.id,
         ),
     )
@@ -322,6 +327,16 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
 
     for row in workspace_events:
         data = row.data if isinstance(row.data, dict) else {}
+        if row.event_type == _REVIEW_UNSTAFFED:
+            events.append(
+                {
+                    "kind": "review_unstaffed",
+                    "id": row.id,
+                    "at": _iso(row.timestamp),
+                    "reason": data.get("reason"),
+                }
+            )
+            continue
         events.append(
             {
                 "kind": "workspace",

@@ -82,7 +82,7 @@ def _already_handed_over(
         )
     return CutoverRefusedError(
         f"Conversation {conversation_id} was already handed over to {successor} (checkpoint "
-        f"{handed_by}); continue there, or keep working in this one."
+        f"{handed_by}); continue there."
     )
 
 

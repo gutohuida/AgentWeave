@@ -126,6 +126,29 @@ describe('RequirementStory', () => {
     expect([...third.querySelectorAll('del')].map((n) => n.textContent)).toEqual(['renamed.'])
   })
 
+  it('shows a criterion-only change as one, not as the same wording twice (F833)', () => {
+    served = {
+      ...DETAIL,
+      revisions: [
+        revision({ id: 'sprev-a', classification: 'created', change: 'created', statement: 'It counts.' }),
+        revision({
+          id: 'sprev-b', change: 'criteria', actor: 'checker', statement: 'It counts.',
+          created_at: '2026-10-12T10:00:00Z',
+        }),
+      ],
+    }
+    try {
+      story()
+      const second = screen.getByTestId('requirement-revision-sprev-b')
+      expect(second.textContent).toContain('checker changed its acceptance criteria')
+      expect(second.textContent).not.toContain('reworded')
+      expect(second.textContent).toContain('The statement is unchanged')
+      expect(second.querySelector('.aw-req-wording')).toBeNull()
+    } finally {
+      served = DETAIL
+    }
+  })
+
   it('names the change a folded revision came from, and opens it', async () => {
     const { onOpenDocument } = story()
     const folded = screen.getByTestId('requirement-revision-folded-sprev-a')

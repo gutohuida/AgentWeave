@@ -1967,7 +1967,16 @@ class ACPProcess:
             await self._write({"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params})
             if timeout is None:
                 return await future
-            return await asyncio.wait_for(future, timeout=timeout)
+            try:
+                return await asyncio.wait_for(future, timeout=timeout)
+            except asyncio.TimeoutError:
+                # A bare `TimeoutError` stringifies to '' -- the run, its `run_failed` event and
+                # the conversation then said nothing at all (F789). Name what did not answer.
+                raise CopilotACPError(
+                    f"Copilot did not answer `{method}` within {timeout:g} s",
+                    method=method,
+                    stderr_tail=self.stderr_tail(),
+                ) from None
         finally:
             self._pending.pop(msg_id, None)
 

@@ -114,6 +114,11 @@ export function ReachGrantsChips({
               e.preventDefault()
               submit()
             }}
+            // F796: a host or folder typed but not added was lost when focus left the form. Leaving
+            // it adds what is typed; Cancel and Escape, inside the form, still discard it.
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) submit()
+            }}
           >
             <Input
               autoFocus

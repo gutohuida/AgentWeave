@@ -1168,7 +1168,18 @@ async def _integrate_task(session: AsyncSession, task: Task, actor: Actor) -> li
         )
 
     root = workspace.root
-    if not task_integration.is_repository(root):
+    fault = task_integration.repository_fault(root)
+    if fault is not None:
+        if await task_integration.repository_proof(session, task, root):
+            # F820: git failed for a project the Hub has worked in through git. A passing fault
+            # must not become the permanent fact "this is not a repository"; `failed` is retryable.
+            return _record(
+                task_integration.IntegrationResult(
+                    outcome=task_integration.FAILED,
+                    reason=task_integration.GIT_UNREADABLE.format(error=fault),
+                    target_branch=project.main_branch,
+                )
+            )
         return _record(
             task_integration.IntegrationResult(
                 outcome=task_integration.SKIPPED,

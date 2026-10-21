@@ -6,6 +6,8 @@ authentication like every other Hub endpoint (`local-project-workspace` spec: "D
 listing is authenticated and bounded").
 """
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ...auth import get_operator
@@ -23,7 +25,7 @@ async def list_fs_directory(
 ):
     del operator
     try:
-        listing = list_directory(path)
+        listing = await asyncio.to_thread(list_directory, path)
     except DirectoryBrowseError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return DirectoryListingResponse(

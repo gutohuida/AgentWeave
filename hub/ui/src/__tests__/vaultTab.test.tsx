@@ -605,6 +605,26 @@ describe('the Vault tab', () => {
     })
   })
 
+  it('looks into a pending report again on request and shows why the Hub refused (F801)', async () => {
+    const PENDING_RPT = { ...REFERRED_RPT, id: 'rpt-cccccccccccc', status: 'pending', answer: null }
+    vault = withReports([PENDING_RPT, REFERRED_RPT], (url, init) =>
+      url.endsWith('/vault/reports/rpt-cccccccccccc/review') && init?.method === 'POST'
+        ? { status: 409, body: { detail: 'The vault reports job has no runner.' } }
+        : undefined,
+    )
+    render(<VaultScreen />, { wrapper })
+    await openReports()
+    // Only a pending report has the door; a referred one has the close form.
+    expect(await screen.findByTestId('vault-report-rpt-bbbbbbbbbbbb-close')).toBeInTheDocument()
+    expect(screen.queryByTestId('vault-report-rpt-bbbbbbbbbbbb-review')).toBeNull()
+    fireEvent.click(screen.getByTestId('vault-report-rpt-cccccccccccc-review'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('has no runner')
+    expect(sent[0]).toMatchObject({
+      url: 'http://hub/api/v1/projects/proj-a/vault/reports/rpt-cccccccccccc/review',
+      method: 'POST',
+    })
+  })
+
   it('reads a 404 from the reports route as no section', async () => {
     vault = withReports([], (url) => (url.endsWith('/vault/reports') ? { status: 404, body: { detail: 'Not Found' } } : undefined))
     render(<VaultScreen />, { wrapper })

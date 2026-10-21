@@ -37,6 +37,9 @@ export interface Question {
    *  question of record for a refused capability — so no agent's tray or composer owns it. Absent
    *  means a Hub too old to say, and is read as "asked by a run", as before. */
   created_by_run_id?: string | null
+  /** The conversation the asking run belonged to. A conversation's tray shows only its own
+   *  questions (F804); `null`/absent means none is named, and the question shows in any. */
+  conversation_id?: string | null
   /** Whether anyone is still waiting on this. False once the asking run has ended — its `ask_user`
    *  call is gone, so nothing receives an answer as a result any more. Absent means "assume yes",
    *  which matches the Hub's own presumption for a question with no recorded asker. */

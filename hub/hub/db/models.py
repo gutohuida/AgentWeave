@@ -1166,9 +1166,9 @@ class VaultFetch(Base):
 
 
 class VaultReader(Base):
-    """Which agents have read one vault entry, and how often (migration 0139).
+    """Which agents have read one vault entry, and how often (migration 0140).
 
-    `the-vault-names-who-read-an-entry` (F836). One row per entry per agent per project, bumped
+    `the-vault-names-who-read-an-entry` (F901). One row per entry per agent per project, bumped
     beside `VaultFetch` by the agents' `vault_read` at offset 0, the agent taken from the run's
     credential. Reads counted before this table existed have no row, so an entry's `fetches` may
     exceed the sum of its readers' counts. A Hub table for the reason `VaultFetch` is one.
@@ -2902,6 +2902,11 @@ class EvidenceFootprint(Base):
     # NULL is a row recorded before footprints recorded this: its `entries` are a whole tree, it is
     # not scanned, and Scan for drift rebuilds it where its merge into the main line can be found.
     watched_from: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Whether the recorder named the commit this footprint is at (an operator's `commit` or a
+    # locator that is one) rather than the footprint taking the checkout's HEAD. NULL is a row from
+    # before this was recorded: unknown, and read as it always was. The diff route needs it: a
+    # HEAD already on the main line is no work of its own (F761).
+    commit_named: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (

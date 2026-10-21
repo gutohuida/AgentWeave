@@ -20,7 +20,7 @@ import re
 import tempfile
 from typing import Any, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 #: The environment variable a run's judge reads its grants from.
 REACH_GRANTS_ENV = "AW_REACH_GRANTS"
@@ -81,10 +81,19 @@ class ReachGrants(BaseModel):
 
 
 def validated_grants(value: Any) -> Optional[dict]:
-    """`value` as stored grants, or `None`. Raises `ValueError` (pydantic's) when it is not."""
+    """`value` as stored grants, or `None`. Raises `ValueError` when it is not, its text the
+    `reach_grants.<field>: <message>` sentence the project's settings route yields (F795), not
+    pydantic's dump with a docs URL."""
     if value is None:
         return None
-    return ReachGrants.model_validate(value).model_dump()
+    try:
+        return ReachGrants.model_validate(value).model_dump()
+    except ValidationError as exc:
+        parts = []
+        for item in exc.errors(include_url=False, include_context=False):
+            field = ".".join(["reach_grants", *(str(piece) for piece in item["loc"])])
+            parts.append(f"{field}: {item['msg'].removeprefix('Value error, ')}")
+        raise ValueError("; ".join(parts)) from exc
 
 
 def effective_grants(project_grants: Any, agent_grants: Any) -> Optional[dict]:

@@ -312,6 +312,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const landTask = useLandTask()
   const deleteTask = useDeleteTask()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null)
   const renameTask = useRenameTask()
   const setHandling = useSetDivergenceHandling()
   const { data: agents } = useAgents()
@@ -344,6 +345,11 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
     setPickedPrerequisite('')
     setDependencyRefusal(null)
   }, [task?.id])
+
+  // The inline confirm takes the keyboard on Cancel, the safe side, like every other confirm (F825).
+  useEffect(() => {
+    if (confirmingDelete) cancelDeleteRef.current?.focus()
+  }, [confirmingDelete])
 
   // Same reasoning as the blocking-reason field just below: focus is applied here, once, rather
   // than via `autoFocus`, which would race the drawer's own mount/focus handling.
@@ -533,6 +539,9 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         className={`flex-1 px-6 py-5 space-y-5${storyAvailable ? ' aw-scroll-fade' : ''}`}
         style={{ overflowY: 'auto', minHeight: 0 }}
       >
+        {/* Where the failure is read is where it is acted on (F823): the card behind this panel
+            carried the only Try again. Above both views, so Story and Details offer it alike. */}
+        <TaskIntegrationNote taskId={task.id} status={task.status} />
         {storyAvailable && view === 'story' ? (
           <TaskStory taskId={task.id} />
         ) : (
@@ -698,11 +707,22 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
           >
             <span className="flex-1">
-              Delete this task? Its dependencies, links, transitions and evidence go with it. This
-              cannot be undone.
+              Delete this task? Its own prerequisites, links, transitions and evidence go with it.
+              This cannot be undone.
+              {/* F825: deleting a prerequisite frees whatever waited on it, so the confirm names it. */}
+              {(task.dependents ?? []).length > 0 && (
+                <span data-testid={`task-delete-releases-${task.id}`} className="block mt-1">
+                  {(task.dependents ?? []).length === 1
+                    ? '1 task waits on this one: '
+                    : `${(task.dependents ?? []).length} tasks wait on this one: `}
+                  {(task.dependents ?? []).map((d) => d.title).join(', ')} — they will be free to
+                  start.
+                </span>
+              )}
             </span>
             <button
               type="button"
+              ref={cancelDeleteRef}
               className="px-2 py-0.5 rounded hover:bg-[var(--row-hover)]"
               onClick={() => setConfirmingDelete(false)}
               disabled={deleteTask.isPending}
@@ -892,11 +912,6 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             <p className="mt-0.5">{task.proceeded_without_answer_reason}</p>
           </div>
         )}
-
-        {/* Approval merges, so an approved task owes an answer about where the work went: each
-            target's newest attempt, a retry only where retrying can clear it, and the commits that
-            rode along (F58). The board card states only the newest outcome, on its status line. */}
-        <TaskIntegrationNote taskId={task.id} status={task.status} />
 
         {/* Full description */}
         {task.description && (

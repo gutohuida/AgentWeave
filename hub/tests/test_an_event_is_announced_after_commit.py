@@ -12,14 +12,13 @@ import pytest
 
 from hub import sse as sse_module
 from hub.db.engine import async_session_factory
-from hub.db.models import Run, Task
-from hub.run_divergence import evaluate_run_end
-from hub.run_task_binding import bind_run_to_task
+from hub.db.models import Task
 from hub.sse import defer_broadcast
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import operator
 
 from .test_a_refused_review_leaves_nothing_behind import (
+    _completed_with_an_open_divergence,
     _divergence,
     _divergence_leg,
     _events,
@@ -41,23 +40,6 @@ def published(monkeypatch):
     return frames
 
 
-async def _completed_with_open_divergence(task_id: str) -> str:
-    async with async_session_factory() as db:
-        task = Task(id=task_id, project_id="proj-test", title="div", status="pending")
-        run = Run(id=f"run-{task_id}", project_id="proj-test", agent=WORKER, status="running")
-        db.add_all([task, run])
-        await db.flush()
-        await bind_run_to_task(db, run, task)
-        await db.commit()
-        await apply_transition(db, task, "completed", operator())
-        await db.commit()
-        run.status = "completed"
-        await db.commit()
-    divergence_id = await evaluate_run_end(f"run-{task_id}")
-    assert divergence_id is not None
-    return divergence_id
-
-
 # 1.1 (F335)
 
 
@@ -77,7 +59,7 @@ async def test_a_refused_review_announces_no_resolution(
 
 
 async def test_a_true_resolution_is_announced_once_after_its_commit(app, published):
-    await _completed_with_open_divergence("task-ev-ctl")
+    await _completed_with_an_open_divergence("task-ev-ctl")
     async with async_session_factory() as db:
         task = await db.get(Task, "task-ev-ctl")
         await apply_transition(db, task, "under_review", operator())
@@ -92,7 +74,7 @@ async def test_a_true_resolution_is_announced_once_after_its_commit(app, publish
 
 
 async def test_the_route_announces_the_resolution_before_task_updated(app, auth_headers, published):
-    await _completed_with_open_divergence("task-ev-route")
+    await _completed_with_an_open_divergence("task-ev-route")
     resp = await app.patch(
         "/api/v1/projects/proj-test/tasks/task-ev-route",
         json={"status": "under_review"},

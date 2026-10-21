@@ -73,7 +73,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 
 from . import run_secrets
 from .db.models import PermissionRequest, Question, Run, TraceSettings, TraceSpan
-from .runner_events import redact_text_secrets
+from .runner_events import redact_secrets, redact_text_secrets
 from .subprocess_windows import no_console_kwargs
 from .version import __version__
 
@@ -576,6 +576,13 @@ async def record_deliveries(
         db.add(span)
 
 
+_NOT_COMPLETED = {
+    "stopped": "stopped by the operator",
+    "interrupted": "interrupted",
+    "abandoned": "abandoned",
+}
+
+
 async def finish_run(db: AsyncSession, run_id: str, usage: Any = None) -> None:
     """Close *run_id*'s trace when the run ends, in the transaction that records its end.
 
@@ -648,8 +655,9 @@ async def finish_run(db: AsyncSession, run_id: str, usage: Any = None) -> None:
                     if request.workspace_verdict
                     else None
                 ),
+                # The tool event's own input rule first, so both spans of one call agree (F790).
                 "gen_ai.tool.call.arguments": json.dumps(
-                    redact(run_id, request.tool_input or {}), ensure_ascii=False
+                    redact(run_id, redact_secrets(request.tool_input or {})), ensure_ascii=False
                 ),
             }.items()
             if v is not None
@@ -730,6 +738,10 @@ async def finish_run(db: AsyncSession, run_id: str, usage: Any = None) -> None:
     if run is not None and run.status == "failed":
         root.status = "error"
         root.status_message = redact(run_id, run.error) if run.error else "run failed"
+    elif run is not None and run.status in _NOT_COMPLETED:
+        # OTel keeps `error` for failures: a run that was cut short ended, but did not succeed.
+        root.status = "unset"
+        root.status_message = _NOT_COMPLETED[run.status]
     else:
         root.status = "ok"
 
@@ -1072,26 +1084,38 @@ def command(
             logger.debug("recording a command span failed", exc_info=True)
 
 
-def exited(span: Optional[PendingSpan], code: Optional[int], *, why: str = "") -> None:
-    """Record a command's exit (*code* `None`: it did not exit by itself, e.g. a timeout)."""
+def exited(
+    span: Optional[PendingSpan],
+    code: Optional[int],
+    *,
+    why: str = "",
+    ok_codes: Sequence[int] = (0,),
+) -> None:
+    """Record a command's exit (*code* `None`: it did not exit by itself, e.g. a timeout).
+
+    An exit in *ok_codes* is an answer, not a failure (`git rev-parse --verify --quiet` exits 1
+    for "absent"): its code is recorded and the span is not an error."""
     if span is None:
         return
     if code is not None:
         span.attributes["process.exit.code"] = code
-    if code != 0:
+    if code not in ok_codes:
         span.status = "error"
         span.status_message = why or (f"exit code {code}" if code is not None else "did not exit")
     elif span.status == "unset":
         span.status = "ok"
 
 
-def run(args: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess:
-    """`subprocess.run(args, **kwargs)`, recorded as a `command` span, with no console window."""
+def run(
+    args: Sequence[str], *, ok_codes: Sequence[int] = (0,), **kwargs: Any
+) -> subprocess.CompletedProcess:
+    """`subprocess.run(args, **kwargs)`, recorded as a `command` span, with no console window.
+    *ok_codes* are the exit codes that are an answer, not an error on the span."""
     with command(args) as span:
         result = subprocess.run(  # noqa: S603 -- the caller's argv, as before
             args, **{**no_console_kwargs(), **kwargs}
         )
-        exited(span, result.returncode)
+        exited(span, result.returncode, ok_codes=ok_codes)
     return result
 
 
@@ -1615,6 +1639,7 @@ def _summary(root: TraceSpan, span_count: int) -> Dict[str, Any]:
         "conversation_id": attributes.get("gen_ai.conversation.id"),
         "task_id": attributes.get("aw.task.id"),
         "worker_kind": attributes.get("aw.worker.kind"),
+        "run_status": attributes.get("aw.run.status"),
         "status": root.status,
         "status_message": root.status_message,
         "start_time": root.start_time.isoformat(),

@@ -225,11 +225,12 @@ async def record_firing(
 
 
 async def record_no_runner(
-    project_id: str, *, job: str, trigger: str, subject: Dict[str, Any]
+    project_id: str, *, job: str, trigger: str, subject: Dict[str, Any], then: str = ""
 ) -> None:
     """A firing for a job that is on but has no runner: it did nothing, said where the operator
     looks (F626). Its background entries used to return silently, leaving the activity empty.
-    Never raises: it runs in a background task."""
+    `then` says what becomes of the work item meanwhile (F801). Never raises: it runs in a background task.
+    """
     from .db.engine import async_session_factory
 
     spec = job_spec(job)
@@ -248,7 +249,7 @@ async def record_no_runner(
                 outcome="failed",
                 detail=(
                     f"Did nothing: the {title} job is on but has no runner. Choose one on the "
-                    "Manager page."
+                    "Manager page." + (f" {then}" if then else "")
                 ),
                 duration_ms=0,
                 usage=None,

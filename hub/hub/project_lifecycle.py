@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -51,6 +52,16 @@ class ProjectLifecycleService:
             workspace_root = configured_workspace_root()
         self.workspace_root = workspace_root
 
+    async def _canonicalize(self, directory: str | Path) -> CanonicalProjectPath:
+        """Resolve *directory* off the event loop: on an unreachable network share the resolve
+        blocks for about 21 s, and the whole Hub must not wait with it (F806)."""
+        return await asyncio.to_thread(
+            canonicalize_project_directory,
+            directory,
+            hub_data_directory=self.hub_data_directory,
+            workspace_root=self.workspace_root,
+        )
+
     async def open_existing(
         self,
         directory: str | Path,
@@ -67,11 +78,7 @@ class ProjectLifecycleService:
         deleted -- that marker may be another database's binding, and the operator did not ask
         for this folder. Only an open the operator asks for re-registers it under a new id (F609).
         """
-        canonical = canonicalize_project_directory(
-            directory,
-            hub_data_directory=self.hub_data_directory,
-            workspace_root=self.workspace_root,
-        )
+        canonical = await self._canonicalize(directory)
         existing_by_path = await self.session.scalar(
             select(Project).where(Project.path_key == canonical.path_key)
         )
@@ -82,7 +89,7 @@ class ProjectLifecycleService:
             seed_repo_excludes(canonical.path)
             return existing_by_path
 
-        marker = _read_marker(canonical.path)
+        marker = await asyncio.to_thread(_read_marker, canonical.path)
         await self._refuse_inside_another_project(
             canonical, marker["project_id"] if marker is not None else None
         )
@@ -167,16 +174,12 @@ class ProjectLifecycleService:
         target = Path(directory).expanduser()
         if not target.is_absolute():
             raise ProjectPathError("new project directory must be an absolute path")
-        if target.exists():
+        if await asyncio.to_thread(target.exists):
             raise ProjectPathError(
                 "create requires a target that does not exist; "
                 "use open for a directory that already exists"
             )
-        parent = canonicalize_project_directory(
-            target.parent,
-            hub_data_directory=self.hub_data_directory,
-            workspace_root=self.workspace_root,
-        ).path
+        parent = (await self._canonicalize(target.parent)).path
         target = parent / target.name
         try:
             target.mkdir()
@@ -194,15 +197,11 @@ class ProjectLifecycleService:
             raise
 
     async def relocate(self, project_id: str, directory: str | Path) -> Project:
-        canonical = canonicalize_project_directory(
-            directory,
-            hub_data_directory=self.hub_data_directory,
-            workspace_root=self.workspace_root,
-        )
+        canonical = await self._canonicalize(directory)
         project = await self.session.get(Project, project_id)
         if project is None:
             raise ProjectPathError("unknown project", code="project_not_found")
-        marker = _read_marker(canonical.path)
+        marker = await asyncio.to_thread(_read_marker, canonical.path)
         if marker is None or marker["project_id"] != project.id:
             raise ProjectIdentityConflict(
                 await self._relocation_marker_refusal(project, canonical, marker)

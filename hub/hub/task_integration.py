@@ -63,6 +63,9 @@ GIT_UNANSWERED = (
     "the Hub could not ask git what approval would merge; approval asks again when pressed"
 )
 NOT_A_REPOSITORY = "this project is not a git repository, so there is nothing to merge"
+# A `failed` reason, not a skip: git could not be read for a project the Hub has already worked in
+# through git (F820), so the row is retryable and quotes git's own words.
+GIT_UNREADABLE = "git could not be read in the project's folder, so nothing was merged: {error}"
 NOTHING_TO_MERGE = "no accepted evidence names a commit, so there is nothing to merge"
 # Both of these used to end "and the next approval will merge". By the time the operator reads one
 # the task is already `approved`, and restating a status is deliberately a no-op — so following the
@@ -164,9 +167,39 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
     )
 
 
-def is_repository(root: Path) -> bool:
+def repository_fault(root: Path) -> Optional[str]:
+    """None when *root* is a work tree; otherwise what git said, for a row that must quote it."""
     result = _git(root, "rev-parse", "--is-inside-work-tree")
-    return result.returncode == 0 and result.stdout.strip() == "true"
+    if result.returncode == 0 and result.stdout.strip() == "true":
+        return None
+    return (result.stderr or result.stdout).strip()[:2000] or "git did not answer"
+
+
+def is_repository(root: Path) -> bool:
+    return repository_fault(root) is None
+
+
+async def repository_proof(session: AsyncSession, task: Task, root: Path) -> bool:
+    """Does the Hub already hold something only a working git produced for *task* (F820)?
+
+    `is_repository` answers False for any git failure, and a `.git` moved aside, locked, or a git
+    off the PATH for a few seconds looks exactly like a folder that never was a repository. Told
+    apart by what exists independently of git's answer now: the task's own worktree directory
+    (only `git worktree add` makes it), or evidence whose footprint names a commit. Either one means the
+    skip "this project is not a git repository" would be false, and permanent on a screen that
+    offers no Retry; the caller records a retryable failure instead.
+    """
+    try:
+        if worktrees.task_worktree_path(root, task.id).exists():
+            return True
+    except (ValueError, OSError):
+        pass
+    return any(
+        [
+            await _targets(session, task, requirement_evidence.ACCEPTED),
+            await _targets(session, task, requirement_evidence.AWAITING),
+        ]
+    )
 
 
 def detect_main_branch(root: Path) -> Optional[str]:

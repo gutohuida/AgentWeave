@@ -209,10 +209,10 @@ async def test_the_route_refuses_a_second_cutover_and_the_list_says_where_it_wen
     first = await app.post(f"{base}/checkpoints/{checkpoint_id}/cutover", headers=auth_headers)
     assert first.status_code == 200, first.text
     successor_id = first.json()["successor_conversation_id"]
-    reopened = await app.post(
-        f"{base}/agent/{AGENT}/conversations/conv-1/unarchive", headers=auth_headers
-    )
-    assert reopened.status_code == 200, reopened.text
+    # F816: the route no longer reopens a handed-over conversation, so the reopen that F293 was
+    # about is made the way only the database can.
+    async with async_session_factory() as db:
+        await _reopen(db, await get_conversation_by_id(db, "conv-1"))
 
     again = await app.post(f"{base}/checkpoints/{checkpoint_id}/cutover", headers=auth_headers)
     assert again.status_code == 409
@@ -223,6 +223,47 @@ async def test_the_route_refuses_a_second_cutover_and_the_list_says_where_it_wen
     assert row["cut_over_to_conversation_id"] == successor_id
     # F235: no checkpoint can restrict itself, so the route no longer carries a field for it.
     assert "visibility" not in row
+
+
+@pytest.mark.asyncio
+async def test_a_handed_over_conversation_is_not_reopened_as_a_second_line_of_work(
+    app, auth_headers
+):
+    """F816: unarchiving the predecessor answered 200 with a plain, live conversation, so the
+    checkpoint's work sat in two open conversations. It is refused, naming the successor."""
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        checkpoint_id = (await _ready_checkpoint(db, conversation)).id
+    base = f"/api/v1/projects/{PROJECT}"
+    first = await app.post(f"{base}/checkpoints/{checkpoint_id}/cutover", headers=auth_headers)
+    assert first.status_code == 200, first.text
+    successor_id = first.json()["successor_conversation_id"]
+
+    reopened = await app.post(
+        f"{base}/agent/{AGENT}/conversations/conv-1/unarchive", headers=auth_headers
+    )
+
+    assert reopened.status_code == 409, reopened.text
+    detail = reopened.json()["detail"]
+    assert successor_id in detail and "continue there" in detail
+    async with async_session_factory() as db:
+        assert (await get_conversation_by_id(db, "conv-1")).lifecycle == "archived"
+
+
+@pytest.mark.asyncio
+async def test_an_ordinary_archived_conversation_still_reopens(app, auth_headers):
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        conversation.lifecycle = "archived"
+        await db.commit()
+
+    reopened = await app.post(
+        f"/api/v1/projects/{PROJECT}/agent/{AGENT}/conversations/conv-1/unarchive",
+        headers=auth_headers,
+    )
+
+    assert reopened.status_code == 200, reopened.text
+    assert reopened.json()["lifecycle"] == "open"
 
 
 @pytest.mark.asyncio
