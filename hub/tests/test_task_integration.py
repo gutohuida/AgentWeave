@@ -782,13 +782,15 @@ async def test_a_project_without_a_repository_approves_unchanged(
 
 
 @pytest.mark.asyncio
-async def test_git_unreadable_for_a_moment_is_a_retryable_failure_not_a_permanent_skip(
+async def test_git_unreadable_for_a_moment_refuses_approval_and_a_retry_merges(
     app, auth_headers, builder, tmp_path
 ):
-    """F820: a repository whose `.git` is out of reach while Land is pressed is not "not a
-    repository". The Hub has recorded commits for this task, so it knows better: the row is a
-    `failed` one carrying git's words, the retry route merges once git is back, and the story is
-    not the false sentence that nothing can be merged here."""
+    """F820 -> F865: a repository whose `.git` is out of reach while Land is pressed is not "not a
+    repository", and it is not "nothing to check, approve" either. The Hub has recorded commits for
+    this task, so it knows better: whether the work merges is unknown, and approval is refused with
+    a sentence saying so (F820 once approved here and recorded a retryable `failed` row; F865 found
+    that this approved work the gate would have refused for a conflict). Nothing is recorded, and
+    pressing again once git is back merges."""
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
@@ -799,22 +801,53 @@ async def test_git_unreadable_for_a_moment_is_a_retryable_failure_not_a_permanen
 
     (tmp_path / ".git").rename(tmp_path / ".git-away")
     try:
-        approved = await approve(app, auth_headers, task)
-        assert approved.status_code == 200, approved.text
+        refused = await approve(app, auth_headers, task)
     finally:
         (tmp_path / ".git-away").rename(tmp_path / ".git")
 
-    recorded = await integrations(app, auth_headers, task)
-    assert recorded[0]["outcome"] == "failed", recorded
-    assert "nothing to merge" not in recorded[0]["reason"]
-    assert "not a git repository" in recorded[0]["reason"]  # git's own stderr, quoted
-    assert recorded[0]["retryable"] is True, recorded[0]
+    assert refused.status_code == 409, refused.text
+    body = refused.json()["detail"]
+    assert body["git_unreadable"], body
+    assert "could not be read" in body["message"]
+    assert "try again" in body["message"]
+    task_now = await app.get(f"{TASKS}/{task}", headers=auth_headers)
+    assert task_now.json()["status"] == "under_review"
+    assert await integrations(app, auth_headers, task) == []
     assert work not in commits_on(tmp_path, "main")
 
-    retried = await app.post(f"{TASKS}/{task}/integrations/retry", headers=auth_headers)
-    assert retried.status_code == 200, retried.text
-    assert [row["outcome"] for row in await integrations(app, auth_headers, task)][-1] == "merged"
+    again = await app.patch(f"{TASKS}/{task}", json={"status": "approved"}, headers=auth_headers)
+    assert again.status_code == 200, again.text
+    assert [row["outcome"] for row in await integrations(app, auth_headers, task)] == ["merged"]
     assert work in commits_on(tmp_path, "main")
+
+
+@pytest.mark.asyncio
+async def test_git_unreadable_does_not_approve_work_that_conflicts(
+    app, auth_headers, builder, tmp_path
+):
+    """F865's own repro: the work conflicts with main, so approval is refused with git readable --
+    and it must be refused, not approved unchecked, when git is unreadable for a moment."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+    commit_on_branch(tmp_path, AGENT_BRANCH, "shared.txt", "from the agent\n")
+    await accept_evidence(app, auth_headers, builder)
+    git(tmp_path, "checkout", "-q", "main")
+    (tmp_path / "shared.txt").write_text("from the operator\n", encoding="utf-8")
+    git(tmp_path, "add", "shared.txt")
+    git(tmp_path, "commit", "-q", "-m", "operator's own change")
+    task = await linked_task(app, auth_headers)
+
+    (tmp_path / ".git").rename(tmp_path / ".git-away")
+    try:
+        refused = await approve(app, auth_headers, task)
+    finally:
+        (tmp_path / ".git-away").rename(tmp_path / ".git")
+
+    assert refused.status_code == 409, refused.text
+    task_now = await app.get(f"{TASKS}/{task}", headers=auth_headers)
+    assert task_now.json()["status"] == "under_review"
+    assert await integrations(app, auth_headers, task) == []
 
 
 @pytest.mark.asyncio

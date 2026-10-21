@@ -190,6 +190,10 @@ class GateRefusal:
     # conflicted and was left for the author. A seventh kind of claim: "this is missing work it
     # was built on". See `_check_prerequisites_merged`.
     unmerged_prerequisites: List[Dict[str, Any]] = field(default_factory=list)
+    # F865: git could not be read in a project the Hub has worked in through git, so whether the
+    # work merges is *unknown* -- an eighth kind of claim, and not "not checked, approve". One
+    # entry, carrying git's own words.
+    git_unreadable: List[Dict[str, str]] = field(default_factory=list)
 
     @property
     def refuses(self) -> bool:
@@ -202,6 +206,7 @@ class GateRefusal:
             or self.unfinished
             or self.checks
             or self.unmerged_prerequisites
+            or self.git_unreadable
         )
 
     def detail(self) -> str:
@@ -223,6 +228,7 @@ class GateRefusal:
                 self._unfinished_detail(),
                 self._checks_detail(),
                 self._prerequisites_detail(),
+                self._git_unreadable_detail(),
             )
             if sentence
         )
@@ -465,6 +471,16 @@ class GateRefusal:
             f"turn too."
         )
 
+    def _git_unreadable_detail(self) -> str:
+        """Say git could not be read, quote it, and say a moment later it clears itself (F865)."""
+        if not self.git_unreadable:
+            return ""
+        error = str(self.git_unreadable[0].get("error") or "git did not answer")
+        return (
+            "git could not be read in the project's folder, so whether this work merges is "
+            f"unknown ({error}). Nothing is wrong with the work: try again in a moment."
+        )
+
     def _checks_detail(self) -> str:
         """What the checks said, quoting the failing output, and who acts on it."""
         if not self.checks:
@@ -563,6 +579,7 @@ class GateRefusal:
             "unfinished": list(self.unfinished),
             "reported": list(self.reported),
             "unmerged_prerequisites": list(self.unmerged_prerequisites),
+            "git_unreadable": list(self.git_unreadable),
             "message": self.detail(),
         }
 
@@ -635,35 +652,59 @@ class _MergeSituation:
 async def merge_situation(session: AsyncSession, task: Task) -> Optional["_MergeSituation"]:
     """The four preconditions, or `None` where integration could not be attempted at all.
 
+    `None` does not say why. `situation_or_fault` does, for the one caller (the gate) that must
+    tell "the question does not apply here" from "git could not be asked" (F865).
+
     Public because the approval preview asks the same question, through this, before the operator
     presses Approve (`the-approval-preview-asks-the-gates-merge-question`, D1). Its git calls
     raise rather than answer `None`: here "unknown" must not read as "not checked -- approve"
     (F424's repair belongs in the gate's checks, which refuse)."""
+    return (await situation_or_fault(session, task))[0]
+
+
+async def situation_or_fault(
+    session: AsyncSession, task: Task
+) -> tuple[Optional["_MergeSituation"], Optional[str]]:
+    """`(situation, fault)`: the situation, or why there is none.
+
+    *fault* is git's own words and is set only where the Hub holds proof the project is a
+    repository (`task_integration.repository_proof`) and git failed anyway: a `.git` moved aside, a
+    lock, a git off the PATH for a moment. That is *unknown*, which the gate must not read as "not
+    checked -- approve" (F865: Land approved a task whose commit conflicts with main, and every
+    retry then failed on the conflict). A folder that never was a repository still gives
+    `(None, None)`, and approves unchanged.
+    """
     from . import project_workspace, task_integration
     from .db.models import Project
 
     project = await session.get(Project, task.project_id)
     if project is None or not project.main_branch:
-        return None
+        return None, None
 
     try:
         workspace = await project_workspace.resolve_project_workspace(session, task.project_id)
     except Exception:
         # An unreachable workspace is a reason to not know, never a reason to refuse.
-        return None
+        return None, None
 
     root = workspace.root
     # Off the event loop: a hung git must delay the request that asked, not the Hub (the four git
     # call sites `approval_held_for_operator` reaches). None of them touches the session.
-    if not await asyncio.to_thread(task_integration.is_repository, root):
-        return None
+    fault = await asyncio.to_thread(task_integration.repository_fault, root)
+    if fault is not None:
+        if await task_integration.repository_proof(session, task, root):
+            return None, fault
+        return None, None
     if not await asyncio.to_thread(task_integration.branch_exists, root, project.main_branch):
-        return None
+        return None, None
 
-    return _MergeSituation(
-        root=root,
-        main_branch=project.main_branch,
-        will_merge=await task_integration.merge_targets(session, task, root),
+    return (
+        _MergeSituation(
+            root=root,
+            main_branch=project.main_branch,
+            will_merge=await task_integration.merge_targets(session, task, root),
+        ),
+        None,
     )
 
 
@@ -1055,7 +1096,9 @@ async def evaluate(
     # Both repository-aware checks, and both **above** the early return two statements down. That
     # return fires whenever no linked document is above `sketch`, which is every default project —
     # a check placed after it would be dead exactly where the defect it fixes lives.
-    situation = await merge_situation(session, task)
+    situation, fault = await situation_or_fault(session, task)
+    if fault is not None:
+        refusal.git_unreadable.append({"error": fault})
     if situation is not None:
         await _check_mergeable(session, task, refusal, situation)
         await _check_unaccepted(session, task, refusal, situation)
