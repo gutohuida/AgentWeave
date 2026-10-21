@@ -8,19 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F864-impl",
-    "next_action": "Do queue item F864-impl (read its finding in scripts/drive/FINDINGS.md, test-first, fix, drive, set Status). Keep `current` equal to the item id.",
+    "current": "F852-impl",
+    "next_action": "Do queue item F852-impl (read its finding in scripts/drive/FINDINGS.md, test-first, fix, drive, set Status). Keep `current` equal to the item id.",
     "queue": [
-        {
-            "id": "F864-impl",
-            "status": "open",
-            "title": "F864 (B,T0): flow whose agent is its own reviewer still hands the review to it",
-            "detail": "Finding text and repro in scripts/drive/FINDINGS.md (grep '^#* F<n>'). Test-first at the seam the finding names, fix, drive, set Status line."
-        },
         {
             "id": "F852-impl",
             "status": "open",
