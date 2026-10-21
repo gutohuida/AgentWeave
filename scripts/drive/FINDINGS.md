@@ -38434,7 +38434,7 @@ Expected: the default-agent arm applies the same rule as the pool. A default age
 
 ## F865 (B) -- with git unreadable for a moment, Land approves a task the preview said approval would refuse for a conflict; once git is back every retry fails on the conflict, and the task stays `approved` with its work never merged
 
-**Status:** open 2026-10-21. Found by the day sweep `sweep-loops-sweep` (Resilience, failure injection; scratch Hub :8159), while re-driving F820 live.
+**Status:** fixed 8c95b19 2026-10-21 (Tier 0): `requirement_gate.situation_or_fault` tells git-unreadable-with-proof from no-repository, and `evaluate` refuses with a `git_unreadable` entry ("git could not be read in the project's folder, so whether this work merges is unknown (...): try again in a moment"); a folder that never was a repository approves unchanged. Tested through the real task route with real git (`test_git_unreadable_does_not_approve_work_that_conflicts`, F865's own repro; F820's test now expects the refusal and a merge on the retry); 202 gate/approval/land tests pass. Tested, not driven on a live Hub. Originally: open 2026-10-21, found by the day sweep `sweep-loops-sweep` (Resilience, failure injection; scratch Hub :8159), while re-driving F820 live.
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes
