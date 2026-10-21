@@ -3680,6 +3680,11 @@ async def delete_document(
     defer_broadcast(session, project_id, "spec_updated", {"path": deleted.path})
     await session.commit()
 
+    # F828: the tasks' checkouts and branches go with them unless they hold work.
+    kept_work = deletion.discard_checkouts(workspace.root, deleted.tasks)
+    for entry in kept_work:
+        await persist_event(session, project_id, "task_checkout_kept", entry, severity="warn")
+
     diagnostics: List[Dict[str, Any]] = []
     try:
         spec_documents.delete_document_file(workspace, deleted.path)
@@ -3703,6 +3708,7 @@ async def delete_document(
         "deleted": True,
         "tasks": deleted.tasks,
         "requirements": deleted.requirements,
+        "kept_work": kept_work,
         "diagnostics": diagnostics,
     }
 

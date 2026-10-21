@@ -1568,6 +1568,61 @@ def release_task_worktree(repo_root: Path, task_id: str) -> ReleaseResult:
     )
 
 
+@dataclass
+class DiscardResult:
+    """What became of a deleted task's checkout and branch (F828)."""
+
+    task_id: str
+    branch: str
+    #: The checkout and the branch are gone.
+    discarded: bool = False
+    #: Commits on the branch that the primary checkout's HEAD does not have.
+    unmerged_commits: int = 0
+    #: The checkout holds edits that were never committed.
+    uncommitted: bool = False
+    #: Why a half-resolved merge held the checkout back, when it did.
+    kept_reason: Optional[str] = None
+
+    @property
+    def kept(self) -> bool:
+        return not self.discarded and bool(
+            self.unmerged_commits or self.uncommitted or self.kept_reason
+        )
+
+
+def discard_task_checkout(repo_root: Path, task_id: str) -> DiscardResult:
+    """Remove a *deleted* task's checkout and branch, unless they hold work nothing else has.
+
+    The counterpart of `release_task_worktree` for a task that no longer exists: there is no
+    reopened task to resume the branch, so leaving it only lists a checkout under an id that 404s.
+    Work is never discarded, though -- a branch with a commit the primary checkout's HEAD lacks,
+    a checkout with uncommitted edits, or a half-resolved merge keeps the checkout *and* the
+    branch, and the result says how much is there so the caller can tell the operator.
+    """
+    path = task_worktree_path(repo_root, task_id)
+    branch = task_branch_name(task_id)
+    unmerged = len(_commits_not_on_head(repo_root, branch))
+    unresolved = unresolved_merge_paths(path) if path.exists() else []
+    uncommitted = path.exists() and _has_uncommitted_changes(path)
+    if unmerged or uncommitted or unresolved:
+        return DiscardResult(
+            task_id=task_id,
+            branch=branch,
+            unmerged_commits=unmerged,
+            uncommitted=uncommitted,
+            kept_reason=(
+                "its merge is unfinished, still conflicted in " + ", ".join(unresolved)
+                if unresolved
+                else None
+            ),
+        )
+    if path.exists():
+        _run_git(repo_root, "worktree", "remove", "--force", str(path))
+    if _resolves(repo_root, branch):
+        _run_git(repo_root, "branch", "-D", branch)
+    return DiscardResult(task_id=task_id, branch=branch, discarded=True)
+
+
 @dataclass(frozen=True)
 class WorkspaceBranch:
     """One currently registered Hub-owned checkout, and what it belongs to.
