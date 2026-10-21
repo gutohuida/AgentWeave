@@ -19,6 +19,7 @@ from hub.db.models import (
     AIJob,
     Base,
     Conversation,
+    EventLog,
     EvidenceFootprint,
     InboundQueueEntry,
     Loop,
@@ -339,6 +340,32 @@ async def test_deleting_a_task_takes_its_links_and_clears_history(app, auth_head
             await session.execute(select(RunDivergence).where(RunDivergence.id == "div-del"))
         ).scalar_one()
         assert kept.task_id is None and kept.agent == "alice"
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_prerequisite_names_the_tasks_it_releases(app, auth_headers, tmp_path):
+    """F825: the 204 silently freed every task that waited on the deleted one; the event names them."""
+    first = (await app.post(TASKS, json={"title": "Prerequisite"}, headers=auth_headers)).json()
+    waiting = (await app.post(TASKS, json={"title": "Waits on it"}, headers=auth_headers)).json()
+    bystander = (await app.post(TASKS, json={"title": "Unrelated"}, headers=auth_headers)).json()
+    linked = await app.post(
+        f"{TASKS}/{waiting['id']}/dependencies",
+        json={"depends_on": first["id"]},
+        headers=auth_headers,
+    )
+    assert linked.status_code == 201, linked.text
+
+    response = await app.delete(f"{TASKS}/{first['id']}", headers=auth_headers)
+
+    assert response.status_code == 204, response.text
+    async with async_session_factory() as session:
+        rows = (
+            await session.execute(select(EventLog).where(EventLog.event_type == "task_deleted"))
+        ).scalars()
+        event = next(r for r in rows if (r.data or {}).get("id") == first["id"])
+        released = event.data["released_dependents"]
+    assert released == [{"id": waiting["id"], "title": "Waits on it"}]
+    assert bystander["id"] not in str(released)
 
 
 @pytest.mark.asyncio

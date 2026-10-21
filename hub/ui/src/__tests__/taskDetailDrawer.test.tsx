@@ -410,6 +410,36 @@ describe('deleting a task (F532)', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  it('names the tasks that wait on it, and takes focus on Cancel (F825)', async () => {
+    renderDrawer(
+      makeTask({
+        id: 'task-9',
+        dependents: [
+          { id: 'task-10', title: 'Bulk three', status: 'pending', spec_document_id: null },
+          { id: 'task-11', title: 'Bulk four', status: 'pending', spec_document_id: null },
+        ],
+      }),
+      vi.fn(),
+    )
+
+    await userEvent.click(screen.getByTestId('task-delete-task-9'))
+
+    const confirm = screen.getByTestId('task-delete-confirm-task-9')
+    expect(confirm).toHaveTextContent(/2 tasks wait on this one/)
+    expect(confirm).toHaveTextContent(/Bulk three/)
+    expect(confirm).toHaveTextContent(/Bulk four/)
+    expect(confirm).toHaveTextContent(/free to start/)
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+  })
+
+  it('says nothing about released tasks when none wait on it (F825)', async () => {
+    renderDrawer(makeTask({ id: 'task-9', dependents: [] }), vi.fn())
+
+    await userEvent.click(screen.getByTestId('task-delete-task-9'))
+
+    expect(screen.getByTestId('task-delete-confirm-task-9')).not.toHaveTextContent(/wait on this one/)
+  })
+
   it('shows the Hub’s refusal and keeps the drawer open', async () => {
     deleteMutate = vi.fn((_vars, opts) =>
       opts?.onError?.(
