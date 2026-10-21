@@ -37476,7 +37476,7 @@ Expected: a name that equals an existing agent's name case-insensitively, archiv
 
 ## F812 (C) -- `POST /session/sync` answers 500 to an `agents` that is not an object, never says which agents it deleted, and leaves every agent it named with a `config` the operator can no longer PATCH ("reserved for a configured agent")
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8149, `scripts/drive/s1020_a_sync.py`).
+**Status:** fixed (night iteration 35, Tier 0; f0f51ee). `agents` that is not an object answers 422 "agents must be an object of agent name -> config" (roster untouched); the answer carries `removed: [...]` and each deletion persists an `agent_removed` warn event (also in the `session_synced` broadcast); the patch 409 now says the last session sync owns the agent's config and that `POST /session/sync {"data": {}}` releases it (leaves the roster alone). Tests: `test_session_sync.py` (list/str/int -> 422, removed listed + event rows, nothing removed -> `[]`) and `test_patch_agent_refuses_unknown_fields.py` (409 text), all seen failing first. Drive: real routes over ASGI, no live Hub, no agent turns (labelled). Dropping the lock outright was not done: the sync row still outranks `Agent.config` for isolation.
 **Source:** drive
 **Theme:** Agents
 **Ready:** yes
