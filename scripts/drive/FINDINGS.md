@@ -36994,7 +36994,7 @@ Expected: a turn's changed files include its own commits. For example, take the 
 
 ## F776 (C) -- a turn bound to a task already `completed` (waiting for its reviewer) records an open divergence, "builder ended completed with Fix add() still completed"
 
-**Status:** open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger_p2.py`, `_p3.py`, `_ui.py`).
+**Status:** fixed bc6715d 2026-10-21 (night iteration 24, Tier 0). `evaluate_run_end`'s non-review branch returns None for a task in `completed`/`under_review` (same reasoning as the F548 terminal exclusion), before the policy and `retry` are consulted. `hub/tests/test_run_divergence.py::test_a_turn_bound_to_a_task_waiting_for_its_reviewer_records_nothing` (4 cases, surface/retry x completed/under_review; failed first). Two older fixtures built an open divergence on a completed task by the operator completing it under a live run, which is now correctly nothing; `_completed_with_an_open_divergence` (shared with `test_an_event_is_announced_after_commit.py`) now records the divergence at `in_progress`, then writes the status directly. Hub slice 813 passed. Not re-seen on a live Hub (labelled). Original report: open 2026-10-19. Found in the ledger sweep (`scripts/drive/s1019_ledger_p2.py`, `_p3.py`, `_ui.py`).
 **Source:** drive
 **Theme:** Logs, events & SSE
 **Ready:** yes -- repro below.
