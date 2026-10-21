@@ -8,17 +8,17 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T07:00:00+01:00",
-    "iteration": 21,
+    "iteration": 22,
     "log_file": ".claude/autonomous/2026-10-20-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F772-impl",
-    "next_action": "Do queue item F772-impl: read F772 in scripts/drive/FINDINGS.md (grep the heading), write a failing hub test (Land gate: when every unlanded commit is named by an awaiting evidence piece, the `unlanded` paragraph is not added / does not ask the author to record evidence already recorded; see `_unlanded_detail`, hub/hub/requirement_gate.py), fix, set Status to 'fixed <sha>' with a drive line. One finding per firing. After F772: the remaining C-severity Ready:yes findings (F773..F834 range), severity first. Skip F788 (waits on OPEN decision trace-5) and F787 (no repro). No scratch Hubs running.",
+    "current": "F773-impl",
+    "next_action": "Do queue item F773-impl: read F773 in scripts/drive/FINDINGS.md (grep the heading), write a failing hub test (`project_checks._after_run` for a completed flow task with one awaiting piece naming a commit on the task branch creates a TaskCheckRun; targets come from `task_integration.merge_targets`, `request_run` returns None when only awaiting evidence exists; run on `review_target`), fix, set Status to 'fixed <sha>' with a drive line. One finding per firing. After F773: the remaining C-severity Ready:yes findings (F776.., F786, F791..F796, F799, F801, F802, F808, F812, F815..), severity first (B before C). Skip F788 (waits on OPEN decision trace-5) and F787 (no repro). No scratch Hubs running.",
     "queue": [
         {
-            "id": "F772-impl",
+            "id": "F773-impl",
             "status": "open",
-            "title": "F772 (C,T0): Land gate unlanded paragraph when every commit is named by an awaiting piece"
+            "title": "F773 (C,T0): a flow task's checks never run while it waits for review"
         },
         {
             "id": "F788-blocked",

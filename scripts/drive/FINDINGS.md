@@ -36944,7 +36944,7 @@ Expected: the review briefing adds one line: "This task serves FR-1. The documen
 
 ## F772 (C) -- Land on a task with awaiting evidence also says its commit is "on neither master nor inside any commit the accepted evidence names" and asks the author to record evidence they already recorded
 
-**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170).
+**Status:** fixed 2026-10-21 (night iteration 22, Tier 0, 9db0fa8). `GateRefusal._unlanded_detail` returns nothing when every commit in the `unlanded` entry is named by a piece in `unaccepted`, so the 409 message carries only "nobody has judged it ... accept the evidence"; the body's `unlanded` list and `refuses` are unchanged. A commit no awaiting piece names (or nothing awaiting) keeps the paragraph. `hub/tests/test_land_gate_does_not_ask_for_evidence_already_recorded.py` (the awaiting-piece case failed before; 4 tests). Not re-seen on a live Hub: the gate object with the route's field shapes stands in (labelled). Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170).
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes -- repro below.
