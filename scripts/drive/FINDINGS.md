@@ -36920,7 +36920,7 @@ Expected: an `ALREADY_INTEGRATED` skip does not replace a `merged` row for the s
 
 ## F770 (C) -- the checks row never says a failure also fails on main: the drawer shows a red "Checks failed" with the output, and only the Land refusal says it is not the task's
 
-**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py div`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser.
+**Status:** fixed 2026-10-21 night iteration 20 (Tier 0, UI) at 4c1013c. `TaskCheckResult` types `preexisting`; `TaskChecksRow` adds a line "<checks> fails on main too, not this task's work" under a failed latest run and the same words on each earlier run's result. Tests `hub/ui/src/__tests__/taskChecksRow.test.tsx` (3 new, failing before); full UI suite 216 files, 2210 tests pass; eslint and tsc clean. Bundle rebuilt and committed. Drive: component test with the finding's result shape stands in for the browser (labelled: not re-seen on a live Hub). Found in the tasks sweep (`scripts/drive/s1019_tasks.py div`, `s1019_tasks_ui.py`, scratch Hub :8170), seen in a browser.
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes -- repro below.
