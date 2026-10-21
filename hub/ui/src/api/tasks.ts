@@ -177,6 +177,8 @@ export interface TaskCheckResult {
   timed_out: boolean
   duration_seconds: number
   output_tail: string
+  /** True when this check fails on main too, so the failure is not the task's work. */
+  preexisting?: boolean
 }
 
 /** One run of the project's checks on the work this task's approval would merge. */
