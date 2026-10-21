@@ -38305,3 +38305,59 @@ menu: "FR-1 Stale  FR-2 Verified on master  FR-3 Drifting on master"
 ```
 
 `SpecHealthLine.tsx:66-68` computes `working = coverage.length - verified - rejected` and labels it "in progress". Nobody is working on FR-1 (it needs new evidence) or FR-3 (it needs a drift answer), and the line never says "stale" anywhere, so the operator learns it only by opening the menu. **Expected:** the label counts states that need the operator apart from work underway, e.g. "1/3 verified · 1 stale · 1 drifting", or "2 need you" for stale / drifting / evidence awaiting review / changed-unreviewed, keeping "in progress" for `in_progress` and `not_started`. **Test:** the SpecHealthLine test: coverage [verified, stale, drifting] renders no "2 in progress".
+
+## F856 (C) -- a GitHub token (`ghp_...`) in an operator message or an agent reply is stored and exported verbatim in the run's trace, while an `sk-` key beside it in the same string is redacted
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8156, `scripts/drive/s1021_tr_traces.py redact`, `proj-65bd45d1fb38`, run-19d5dfe8bbb5, one real Haiku 4.5 turn).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 2 -- secrets (CLAUDE.md's table); the diff itself is one alternative in a regex.
+
+```
+POST /projects/{p}/agent/trigger {"agent":"tracer","overrides":{"permission_mode":"workspace"},
+  "message":"Run exactly this one shell command ... echo token=ghp_Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2 key=sk-ant-api03-FAKEfake0987654321zyxwvuABC"}
+GET /traces/by-run/run-19d5dfe8bbb5 -> "...token=ghp_Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2 key=<redacted>..."
+  ghp_ token present in: aw.deliver `aw.queue.content`, invoke_agent `gen_ai.input.messages`,
+  chat `gen_ai.output.messages` (Haiku declined the command and quoted the token back)
+GET /traces/export -> ghp_ token present, sk- key absent; agent_outputs text row: ghp_ present
+event_logs and /events/history for the run: neither value present
+```
+
+The prose floor `runner_events.redact_text_secrets` knows only `aw_live_`, `aw_run_` and `sk-` tokens plus credential-named fields (`_TEXT_TOKEN_RE`, `hub/hub/runner_events.py:127`). That is deliberate: F602 keeps the high-entropy catch-all out of prose so that commit SHAs and paths survive, and F790 confirmed that the prompt and the model text follow the conversation's rule. But GitHub's token prefixes (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`) are as unambiguous as `sk-`. They are the credential an operator of a git-centred tool is most likely to paste, and with export enabled the trace pushes them to an external OTLP collector. **Expected:** `_TEXT_TOKEN_RE` (and so `run_secrets.scrub_stream`'s joined-prose match) also names `gh[pousr]_[A-Za-z0-9]{36,}` and `github_pat_[A-Za-z0-9_]{22,}`, anchored at a word start as the others are. Then the queue content, the prompt, the model text, the text row and the export all read `<redacted>`. **Test:** in `test_a_secret_in_reply_text_is_redacted.py`, a text row and a trace's `gen_ai.input.messages` carrying `ghp_` + 36 base62 characters store `<redacted>`, while a 40-hex commit SHA in the same row is kept. The spec to amend is the requirement in `spec/changes/a-secret-in-reply-text-is-redacted` that names the patterns.
+
+## F857 (D) -- a Copilot startup timeout names its request twice: "Copilot did not answer `initialize` within 30 s during initialize"
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8156 with a never-answering native `copilot.exe` stand-in first on PATH, `testbed/scratch/s1021_copilot_hang/hang.cs`; `scripts/drive/s1021_tr_traces.py f789`, `s1021_tr_traces_ui.py all`).
+**Source:** drive
+**Theme:** Runs
+**Ready:** yes
+**Tier:** 0
+
+The F789 fix holds live (see the log). Its message reads "Copilot did not answer `initialize` within 30 s during initialize" on each of the three runs (`runs.error`), on their `run_failed` events, on the trace root's `status_message`, and in the conversation under the "not delivered" entry ("Last attempt failed: ..."). `ACPProcess.request` (`hub/hub/copilot_acp.py:1975`) puts the method in the message *and* passes `method=`, and the `AppServerError` constructor appends `" during {method}"` (`hub/hub/codex_appserver.py:721-722`). **Expected:** the method named once: "Copilot did not answer `initialize` within 30 s". Either drop it from the message, or skip the suffix when the message already contains the method. **Test:** the existing `test_a_copilot_startup_timeout_names_itself.py` asserts `str(exc).count("initialize") == 1`.
+
+## F858 (D) -- a Copilot launchability probe that fails with a bare exception logs "failed: " with nothing after it, and when no verdict exists yet the error is discarded
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8156, the never-answering stand-in of F857).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 0
+
+```
+Hub log (twice): WARNI [hub.copilot_probe] Copilot launchability probe of ...\s1021_copilot_hang\copilot.exe failed:
+GET /projects/{p}/runners/launchability -> runner-b53cbdb612a1: runnable true, reason null, "verdict_pending": true
+  (after both probes ran, and after three runs had failed on `initialize`)
+```
+
+`ProbeCache._refresh` (`hub/hub/copilot_probe.py:315-320`) logs `"%s", exc`, which is '' for a bare `TimeoutError` (F789's shape, on the probe's own path). It stores `probe_error = str(exc) or type(exc).__name__` only `if previous is not None`, so on a first probe nothing anywhere says why the verdict is still pending. Not gating is deliberate (R3: one slow spawn must not make every Copilot agent unlaunchable). **Expected:** the log line uses `str(exc) or type(exc).__name__`, and a first probe's failure is kept as well, for example on a pending entry, so that `launchability` can carry `probe_error` beside `verdict_pending`. **Test:** a `probe_copilot` patched to raise `asyncio.TimeoutError()` on a fresh cache: the warning text names `TimeoutError`, and the next `launchability` answer carries it.
+
+## F859 (D) -- a message whose every delivery attempt failed before any output has no trace button: the conversation says "Last attempt failed" but cannot open the attempt's trace
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8156, Chromium on the served bundle, `scripts/drive/s1021_tr_traces_ui.py all`, conversation conv-3bd380095252).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+The Copilot message "Say hello." failed three times on `initialize` (run-ca958336bc27, run-2af252a61d67, run-5f2ffc334eea; entry `withdrawn`, "delivery failed 3 times; the Hub stopped retrying", `delivered_in_run_id` = the last run). The conversation renders "NOT DELIVERED · delivery failed 3 times ... Last attempt failed: Copilot did not answer `initialize` ..." and no `turn-trace-*` button (count 0), because no turn rendered. All three traces exist (`GET /traces?run_id=...`, status `error`), and Settings -> Traces lists them, but only by time and agent. **Expected:** the not-delivered entry links the last attempt's trace (`delivered_in_run_id`), or each attempt's, through the same `TraceDrawer` the turn button opens. **Test:** an `AgentTimeline` test: an abandoned entry with `delivered_in_run_id` renders a trace control that opens `/traces/by-run/<that run>`.
