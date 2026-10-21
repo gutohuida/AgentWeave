@@ -10,11 +10,12 @@ import {
 } from '@/api/projects'
 import {
   useModelCatalog,
+  type ModelCatalogResponse,
   catalogModelLabel,
   permissionModeValues,
   resolveCatalogModel,
 } from '@/api/modelCatalog'
-import { useRunners } from '@/api/runners'
+import { useRunners, type Runner } from '@/api/runners'
 import { Button } from '@/components/ui/button'
 import { ProjectChecksEditor } from '@/components/environment/ProjectChecksEditor'
 import { ReachGrantsEditor } from '@/components/environment/ReachGrantsEditor'
@@ -44,6 +45,19 @@ function toCanonical(mode: string, entered: string): number | null {
   const parsed = Number(entered)
   if (!Number.isFinite(parsed) || parsed <= 0) return null
   return mode === 'tokens' ? Math.round(parsed * TOKENS_PER_UNIT) : Math.round(parsed)
+}
+
+/** Whether *runner*'s CLI declares *model*, by id or alias: the Hub checks `checkpoint_model` against
+ *  the runner's own CLI and refuses one it does not declare (F807). No catalog yet means no
+ *  evidence either way, so nothing is dropped. */
+function runnerDeclaresModel(
+  runner: Runner | undefined,
+  catalog: ModelCatalogResponse | undefined,
+  model: string | null,
+): boolean {
+  if (!model || !runner || !catalog) return true
+  const entry = catalog.providers.find((provider) => provider.provider === runner.cli)
+  return resolveCatalogModel(entry, model) !== null
 }
 
 const MODE_DESCRIPTION: Record<string, string> = {
@@ -365,14 +379,30 @@ export function ProjectSettingsPanel({ onNavigate }: { onNavigate?: (page: strin
         <Select
           aria-label="Checkpoint runner"
           value={form.checkpoint_runner_id ?? ''}
-          onChange={(event) => set('checkpoint_runner_id', event.target.value || null)}
+          onChange={(event) => {
+            // The model select lists the new runner's CLI's models only, so a stored model that
+            // CLI does not declare would stay in the form unseen and be refused on Save (F807).
+            const next = event.target.value || null
+            const nextRunner = runners.find((runner) => runner.id === next)
+            setForm((current) => current && {
+              ...current,
+              checkpoint_runner_id: next,
+              checkpoint_model: runnerDeclaresModel(nextRunner, catalog, current.checkpoint_model)
+                ? current.checkpoint_model
+                : null,
+            })
+          }}
           wrapperClassName="w-48"
           className="px-2 py-1.5 text-xs"
         >
           <option value="">None — checkpointing stays off</option>
           {runners.map((runner) => (
             <option key={runner.id} value={runner.id}>
-              {runnerOptionLabel(runner, catalog, { model: form.checkpoint_model })}
+              {runnerOptionLabel(runner, catalog, {
+                model: runnerDeclaresModel(runner, catalog, form.checkpoint_model)
+                  ? form.checkpoint_model
+                  : null,
+              })}
             </option>
           ))}
         </Select>

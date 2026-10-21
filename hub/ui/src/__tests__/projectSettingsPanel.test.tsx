@@ -92,6 +92,7 @@ vi.mock('@/api/runners', () => ({
     data: [
       { id: 'runner-haiku', name: 'Haiku 4.5', cli: 'claude', model: null },
       { id: 'runner-titles', name: 'Titler', cli: 'claude', model: 'claude-opus-5' },
+      { id: 'runner-cop', name: 'Copilot', cli: 'copilot', model: 'claude-haiku-4.5' },
     ],
   }),
 }))
@@ -101,6 +102,11 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => ({
   useModelCatalog: () => ({
     data: {
       providers: [{
+        provider: 'copilot',
+        models: [
+          { id: 'claude-haiku-4.5', label: 'Copilot Haiku 4.5', aliases: [], context_window: 200_000 },
+        ],
+      }, {
         provider: 'claude',
         models: [
           { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', aliases: ['haiku'], context_window: 200_000 },
@@ -326,6 +332,45 @@ describe('phase 5 project settings and locate repair', () => {
     const select = screen.getByLabelText('Checkpoint runner')
     expect(within(select).getByRole('option', { name: 'Haiku 4.5 — Provider default (claude)' })).toBeInTheDocument()
     expect(within(select).getByRole('option', { name: 'Titler — Opus 5 (claude)' })).toBeInTheDocument()
+  })
+})
+
+describe('F807 switching the checkpoint runner to a CLI that does not declare the stored model', () => {
+  beforeEach(() => {
+    update.mockReset()
+    settings = makeSettings()
+    settings.checkpoint_model = 'haiku'
+    settingsError = null
+    projectAgents = []
+    useConfigStore.setState({ selectedProjectId: 'proj-a' })
+  })
+
+  it('clears the model the screen no longer shows, so Save does not send it', () => {
+    render(<ProjectSettingsPanel />)
+    fireEvent.change(screen.getByLabelText('Checkpoint runner'), { target: { value: 'runner-cop' } })
+    expect(screen.getByLabelText('Checkpoint model')).toHaveValue('')
+    fireEvent.click(screen.getByText('Save settings'))
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      checkpoint_runner_id: 'runner-cop',
+      checkpoint_model: null,
+    }))
+  })
+
+  it('keeps a model the new runner does declare (an alias of the same CLI)', () => {
+    render(<ProjectSettingsPanel />)
+    fireEvent.change(screen.getByLabelText('Checkpoint runner'), { target: { value: 'runner-titles' } })
+    fireEvent.click(screen.getByText('Save settings'))
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      checkpoint_runner_id: 'runner-titles',
+      checkpoint_model: 'haiku',
+    }))
+  })
+
+  it('offers each runner its own model, not an override its CLI cannot run', () => {
+    render(<ProjectSettingsPanel />)
+    const select = screen.getByLabelText('Checkpoint runner')
+    expect(within(select).getByRole('option', { name: 'Copilot — Copilot Haiku 4.5 (copilot)' })).toBeInTheDocument()
+    expect(within(select).getByRole('option', { name: 'Haiku 4.5 — haiku (latest) (claude)' })).toBeInTheDocument()
   })
 })
 

@@ -37384,7 +37384,7 @@ Expected: the filesystem work runs off the loop (`await asyncio.to_thread(list_d
 
 ## F807 (B) -- switching the checkpoint runner to a Copilot or Codex runner keeps a Claude checkpoint model the screen no longer shows, and Save is refused naming it
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
+**Status:** fixed SHA_PLACEHOLDER 2026-10-21 (night iteration 12; drive: scratch Hub :8151, Chromium on the rebuilt bundle, `scripts/drive/s1021_f807_ui.py` -- stored claude runner + model `haiku`, picking the copilot runner showed "Use the runner's model", Save said "Settings saved." and stored runner-885c5930c473 with checkpoint_model null; the copilot option read "r-cop — Claude Haiku 4.5 (copilot)", no "(unrecognised)"). Originally open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
 **Source:** drive
 **Theme:** Runners & models
 **Ready:** yes
