@@ -37518,7 +37518,7 @@ Expected: with the budget spent, an operator entry anywhere in the agent's queue
 
 ## F815 (C) -- an agent's `send_message` while the token budget is spent answers plain success, so the sender waits for a reply that cannot come
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150).
+**Status:** fixed (night iteration 36, Tier 0; 2f12806). `create_message_for_actor` returns `Held("token_budget", ...)` for an agent's message when the budget is exhausted (after the hop-budget and no-runner holds); `MessageResponse.held` accepts it and `send_message` passes it through unchanged. The operator's own message is never held (F814). Tests `hub/tests/test_a_message_on_a_spent_budget_says_held.py`, the first failing before. Drive: real route over ASGI and database (no scratch Hub, no agent turns; labelled). Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150).
 **Source:** drive
 **Theme:** Inbound queue & messages
 **Ready:** yes
