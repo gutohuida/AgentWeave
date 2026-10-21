@@ -878,6 +878,44 @@ describe('AgentTimeline — execution-order work blocks (2026-08-04-hub-charcoal
     expect(screen.getByText('completed')).toBeInTheDocument()
     expect(screen.queryByText('awaiting result')).toBeNull()
   })
+
+  it('F860: an expanded tool row shows the result payload output, not only its one-word summary', () => {
+    const refusal =
+      "Denied: 'C:/notes.txt' is in a folder the operator granted for reading only: read it with your file-reading tool"
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({ id: 'tool_1', kind: 'agent_output', output_kind: 'tool_use', content: 'Called Bash', payload: { call_id: 'c1', tool: 'Bash', input: { command: 'cat C:/notes.txt' } }, run_id: 'run-r', timestamp: '2026-08-02T00:00:00Z' }),
+          entry({ id: 'tool_result_1', kind: 'agent_output', output_kind: 'tool_result', content: 'tool failed', payload: { call_id: 'c1', is_error: true, output: refusal }, run_id: 'run-r', timestamp: '2026-08-02T00:00:01Z' }),
+        ]}
+        roster={[agent]}
+        runs={{}}
+        isRunning={false}
+      />,
+    )
+    fireEvent.click(screen.getByText(/Work · [0-9]+ step/))
+    fireEvent.click(screen.getByRole('button', { name: /Bash/ }))
+    expect(screen.getByText(refusal)).toBeInTheDocument()
+  })
+
+  it('F860: a result with no recorded output still falls back to its summary', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({ id: 'tool_1', kind: 'agent_output', output_kind: 'tool_use', content: 'Called Bash', payload: { call_id: 'c1', tool: 'Bash', input: { command: 'true' } }, run_id: 'run-r', timestamp: '2026-08-02T00:00:00Z' }),
+          entry({ id: 'tool_result_1', kind: 'agent_output', output_kind: 'tool_result', content: 'tool completed', payload: { call_id: 'c1' }, run_id: 'run-r', timestamp: '2026-08-02T00:00:01Z' }),
+        ]}
+        roster={[agent]}
+        runs={{}}
+        isRunning={false}
+      />,
+    )
+    fireEvent.click(screen.getByText(/Work · [0-9]+ step/))
+    fireEvent.click(screen.getByRole('button', { name: /Bash/ }))
+    expect(screen.getByText('tool completed')).toBeInTheDocument()
+  })
 })
 
 describe('AgentTimeline — WorkRow tool icon and label (Q7 D2)', () => {

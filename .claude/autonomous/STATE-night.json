@@ -8,19 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T07:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F860-impl",
-    "next_action": "Do queue item F860-impl (read its finding in scripts/drive/FINDINGS.md, test-first, fix, drive, set Status). Keep `current` equal to the item id.",
+    "current": "F906-impl",
+    "next_action": "Do queue item F906-impl (read its finding in scripts/drive/FINDINGS.md, test-first, fix, drive, set Status). Keep `current` equal to the item id.",
     "queue": [
-        {
-            "id": "F860-impl",
-            "status": "open",
-            "title": "F860 (B,T0, UI): conversation never shows a tool's output",
-            "detail": "Finding text and repro in scripts/drive/FINDINGS.md (grep '^#* F<n>'). Test-first at the seam the finding names, fix, drive, set Status line. UI: browser drive on served bundle, refresh bundle via scripts/refresh_ui_bundle.py."
-        },
         {
             "id": "F906-impl",
             "status": "open",

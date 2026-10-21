@@ -958,7 +958,15 @@ function WorkRow({
   const stat = entry.output_kind === 'tool_use' ? editDiffStat(entry.payload) : null
   // The result body is worth reading; the tool_use content is just "Called X", which the label
   // beside it already says. Repeating it was most of why expanding felt empty.
-  const resultBody = paired && paired.content !== entry.content ? paired.content : ''
+  // F860: `content` is only "<tool> completed|failed"; the output itself (already redacted and
+  // capped by the Hub) is `payload.output`, and it is where a refusal's sentence lives.
+  const pairedOutput = (paired?.payload as Record<string, unknown> | null | undefined)?.output
+  const resultBody =
+    typeof pairedOutput === 'string' && pairedOutput.trim()
+      ? pairedOutput
+      : paired && paired.content !== entry.content
+        ? paired.content
+        : ''
   const statusSuffix = paired
     ? toolResultSuffix(paired)
     : entry.output_kind === 'tool_use'

@@ -38364,7 +38364,7 @@ The Copilot message "Say hello." failed three times on `initialize` (run-ca95833
 
 ## F860 (B) -- the conversation never shows a tool's output: an expanded tool row reads only "tool completed" or "tool failed", so a Hub refusal's sentence (F794's read grant included) never reaches the place the operator watches the turn
 
-**Status:** open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, Chromium on the served bundle, `scripts/drive/s1021_rc_reach_ui.py`, conversation conv-e5e9db86ecb0, run-e34a086c8e63).
+**Status:** fixed 2026-10-22 (Tier 0): `WorkRow` (`AgentTimeline.tsx`) now shows the paired result's `payload.output`, falling back to `content`. Tests in `agentTimeline.test.tsx` (the refusal case failed before; the fallback case pins the old reading); full vitest 2228 passed, eslint and tsc clean; UI bundle refreshed. Tested through the real component, not driven in a browser. Originally: open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, Chromium on the served bundle, `scripts/drive/s1021_rc_reach_ui.py`, conversation conv-e5e9db86ecb0, run-e34a086c8e63).
 **Source:** drive
 **Theme:** Conversations & composer
 **Ready:** yes
