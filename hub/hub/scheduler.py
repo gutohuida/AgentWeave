@@ -1387,18 +1387,31 @@ async def _agents_a_loop_may_staff(session: AsyncSession, loop: Loop) -> "list[s
     """
     if loop.spec_document_id is None:
         return []
+    free = await _agents_that_are_free(session, loop.project_id)
+    withheld = await _agents_withheld_from_fresh_work(session, loop)
+    return [name for name in free if name not in withheld]
+
+
+async def _agents_withheld_from_fresh_work(session: AsyncSession, loop: Loop) -> "set[str]":
+    """The agents a flow's document names to judge work, while somebody else could build (F767).
+
+    Asked by both ways fresh work reaches an agent -- the recruitment pool above and
+    `decide_firing`'s default-agent arm (F864: a flow whose `agent` is also its `reviewer`) -- so
+    the rule has one home. Empty for a documentless loop, and empty when withholding the judges
+    would leave nobody who could build: somebody besides a judge must have a runner, now or later,
+    judged against the roster and not the free list, so a busy builder is waited for.
+    """
+    if loop.spec_document_id is None:
+        return set()
     from . import review_turn
 
-    free = await _agents_that_are_free(session, loop.project_id)
-    judges = await review_turn.named_reviewers(session, loop.project_id, loop.spec_document_id)
+    judges = set(await review_turn.named_reviewers(session, loop.project_id, loop.spec_document_id))
     if not judges:
-        return free
-    # Somebody besides a judge must be able to build, now or later, or withholding them strands
-    # the flow: judged against the roster, not the free list, so a busy builder is waited for.
+        return set()
     roster = await _roster_availability(session, loop.project_id)
     if not any(record.has_runner and record.name not in judges for record in roster):
-        return free
-    return [name for name in free if name not in judges]
+        return set()
+    return judges
 
 
 #: Design D2/D3's rung-3 prefix (task 2.3, R8) -- "reviewer", not the pre-REV "nobody is free.",
@@ -1803,6 +1816,9 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     # narrows that pool to empty for a documentless loop (design D1, D2) — resumption is untouched
     # because it never reads `free` at all.
     free = await _agents_a_loop_may_staff(session, loop)
+    # The default agent is a judge the flow names (F864): the pool withholds judges, and so must
+    # the arm that offers the job's own agent first, or one agent builds what it must then review.
+    default_withheld = default_agent in await _agents_withheld_from_fresh_work(session, loop)
     # Agents that hold no task's work (F425): the dispatch refuses a read-only agent's work turn,
     # so staffing one would stage a step that cannot start. Narrows only fresh work below -- the
     # pool and the job's own default -- never the reviewer ladder, because reviewing is what a
@@ -2083,6 +2099,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                     continue
             elif (
                 not default_taken
+                and not default_withheld
                 and default_agent not in read_only
                 and default_agent not in running
                 and default_agent not in held_agents

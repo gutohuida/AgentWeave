@@ -38420,7 +38420,7 @@ Side, same sentence: "Unbind before deleting" names no place to do it, and "back
 
 ## F864 (B) -- a flow whose own agent is also its named reviewer still hands that agent fresh work while another agent is free, so the task it builds can never be reviewed (F767's species, through the default-agent arm)
 
-**Status:** open 2026-10-21. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8159, profile l1021, project `proj-4420966f352c`).
+**Status:** fixed 2026-10-21 (Tier 0): `scheduler._agents_withheld_from_fresh_work` is now the one home of F767's withholding rule (pool and default-agent arm both ask it); `decide_firing` skips its default-agent branch when that agent is a named judge and somebody else has a runner, so alpha (agent == reviewer) is kept for review and beta builds. Test `test_the_flows_own_agent_is_not_offered_fresh_work_when_it_is_also_the_reviewer` failed before (selected alpha), passes; 374 flow/loop/review/scheduler tests pass. Tested at `decide_firing`, not driven on a live Hub. Originally: open 2026-10-21. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8159, profile l1021, project `proj-4420966f352c`).
 **Source:** drive
 **Theme:** Flows & review
 **Ready:** yes

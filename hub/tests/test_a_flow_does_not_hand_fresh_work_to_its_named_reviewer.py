@@ -132,3 +132,18 @@ async def test_a_flow_whose_only_other_agent_is_the_reviewer_still_runs_its_buil
         loop = await _flow(db, repo, delivery={"reviewer": "rev", "agent": "rev"})
         decision = await decide_firing(db, loop, default_agent="rev")
     assert [s.agent for s in decision.selections] == ["rev"]
+
+
+async def test_the_flows_own_agent_is_not_offered_fresh_work_when_it_is_also_the_reviewer(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """F864 -- the default-agent arm is the other way a named reviewer reached fresh work: with
+    `agent` and `reviewer` the same agent, both tasks were built, and the one alpha built could
+    never be reviewed by alpha. Beta is free, so beta builds and alpha is kept for review."""
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    await _roster(app, auth_headers, bind_runner, "alpha", "beta")
+    async with async_session_factory() as db:
+        loop = await _flow(db, repo, delivery={"agent": "alpha", "reviewer": "alpha"})
+        decision = await decide_firing(db, loop, default_agent="alpha")
+    assert [s.agent for s in decision.selections] == ["beta"]
