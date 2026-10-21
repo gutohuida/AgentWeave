@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T17:00:00+01:00",
-    "iteration": 15,
+    "iteration": 16,
     "log_file": ".claude/autonomous/2026-10-21-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-7",
-    "next_action": "Do the 'D-7' queue item: merge gate and close-out. Check git diff --name-only master..HEAD for migrations; if any, log 'HOLD: migration <files>' and add an OPEN row to spec-queue/DECISIONS.md (check none exists), no fast-forward. Then the closing entry with usage_report output; set next_action null.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "plan-review",
@@ -105,7 +105,7 @@
         },
         {
             "id": "D-7",
-            "status": "open",
+            "status": "done",
             "title": "Merge gate and close-out",
             "model": "sonnet",
             "effort": "medium",

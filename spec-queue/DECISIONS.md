@@ -20,7 +20,7 @@ DECIDED. Absence is not consent.
 
 ## Open
 
-- OPEN      merge-hold-1020  The cycle branch `autonomous/2026-10-18-daily` is not landed on master. HOLD: migration, as `hub/hub/migrations/versions/0135_reach_settings.py`, `0137_trace_spans.py` and `0138_trace_hub_wide.py` are new against master, and `:8000` runs this checkout, so its next restart would run them on real data. Also, `origin/master` (c5de63b) holds one commit the branch lacks, so it is no longer a fast-forward. Land it awake: merge or rebase master, then fast-forward.
+- OPEN      merge-hold-1020  The cycle branch `autonomous/2026-10-18-daily` is not landed on master. HOLD: migration, as `hub/hub/migrations/versions/0135_reach_settings.py`, `0137_trace_spans.py`, `0138_trace_hub_wide.py`, `0139_footprint_commit_named.py` and `0140_vault_readers.py` are new against master, and `:8000` runs this checkout, so its next restart would run them on real data. As of 2026-10-21 day close, `origin/master` is an ancestor of the branch (master merged in), so landing is a plain fast-forward once the operator accepts the migrations.
 
 ### flow-1018: editable flow stages -- eight OPEN -- 2026-10-18 night
 
