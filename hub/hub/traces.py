@@ -1053,26 +1053,38 @@ def command(
             logger.debug("recording a command span failed", exc_info=True)
 
 
-def exited(span: Optional[PendingSpan], code: Optional[int], *, why: str = "") -> None:
-    """Record a command's exit (*code* `None`: it did not exit by itself, e.g. a timeout)."""
+def exited(
+    span: Optional[PendingSpan],
+    code: Optional[int],
+    *,
+    why: str = "",
+    ok_codes: Sequence[int] = (0,),
+) -> None:
+    """Record a command's exit (*code* `None`: it did not exit by itself, e.g. a timeout).
+
+    An exit in *ok_codes* is an answer, not a failure (`git rev-parse --verify --quiet` exits 1
+    for "absent"): its code is recorded and the span is not an error."""
     if span is None:
         return
     if code is not None:
         span.attributes["process.exit.code"] = code
-    if code != 0:
+    if code not in ok_codes:
         span.status = "error"
         span.status_message = why or (f"exit code {code}" if code is not None else "did not exit")
     elif span.status == "unset":
         span.status = "ok"
 
 
-def run(args: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess:
-    """`subprocess.run(args, **kwargs)`, recorded as a `command` span, with no console window."""
+def run(
+    args: Sequence[str], *, ok_codes: Sequence[int] = (0,), **kwargs: Any
+) -> subprocess.CompletedProcess:
+    """`subprocess.run(args, **kwargs)`, recorded as a `command` span, with no console window.
+    *ok_codes* are the exit codes that are an answer, not an error on the span."""
     with command(args) as span:
         result = subprocess.run(  # noqa: S603 -- the caller's argv, as before
             args, **{**no_console_kwargs(), **kwargs}
         )
-        exited(span, result.returncode)
+        exited(span, result.returncode, ok_codes=ok_codes)
     return result
 
 

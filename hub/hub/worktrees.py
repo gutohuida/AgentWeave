@@ -104,9 +104,12 @@ class ReviewCommitUnavailableError(RuntimeError):
     """
 
 
-def _run_git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+def _run_git(
+    cwd: Path, *args: str, check: bool = True, ok_codes: Sequence[int] = (0,)
+) -> subprocess.CompletedProcess:
     result = traces.run(
         ["git", "-c", "core.quotepath=off", *args],
+        ok_codes=ok_codes,
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -551,13 +554,17 @@ def _refuse_a_ref_that_names_no_commit(repo_root: Path, ref: str) -> None:
 
 def _is_mid_merge(worktree: Path) -> bool:
     """True when a merge was started in *worktree* and never finished or aborted."""
-    result = _run_git(worktree, "rev-parse", "--verify", "--quiet", "MERGE_HEAD", check=False)
+    result = _run_git(
+        worktree, "rev-parse", "--verify", "--quiet", "MERGE_HEAD", check=False, ok_codes=(0, 1)
+    )
     return result.returncode == 0
 
 
 def _merge_head(worktree: Path) -> Optional[str]:
     """The commit an unfinished merge in *worktree* is bringing in, or `None` when there is none."""
-    result = _run_git(worktree, "rev-parse", "--verify", "--quiet", "MERGE_HEAD", check=False)
+    result = _run_git(
+        worktree, "rev-parse", "--verify", "--quiet", "MERGE_HEAD", check=False, ok_codes=(0, 1)
+    )
     if result.returncode != 0:
         return None
     return result.stdout.strip() or None
