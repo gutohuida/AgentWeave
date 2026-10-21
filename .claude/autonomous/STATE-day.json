@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T17:00:00+01:00",
-    "iteration": 11,
+    "iteration": 12,
     "log_file": ".claude/autonomous/2026-10-21-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-projects-sweep",
-    "next_action": "Do the 'sweep-projects-sweep' queue item per .claude/loops/day-window.md 'A sweep firing' (time guard first: 16:15 or later -> defer). Read .claude/skills/e2e-loop/SKILL.md in full; drive the new paths named in the item's detail first on a scratch Hub 8110+ (not 8130: something else listens there); file findings Ready+Tier (next free number F863; F900-F906 came from master); log SWEPT. ui-finesse moved controls: Activity's sub-views are a Segmented radiogroup 'Activity view' (the top nav also has a button 'Activity'), agent settings use switches and autosaving chips (no Save buttons), the Questions panel opens from the Overview's 'overview-questions-link'.",
+    "current": "sweep-loops-sweep",
+    "next_action": "Do the 'sweep-loops-sweep' queue item per .claude/loops/day-window.md 'A sweep firing' (time guard first: 16:15 or later -> defer). Read .claude/skills/e2e-loop/SKILL.md in full; scratch Hub 8110+ (not 8130: something else listens there; 8154-8158 used today); file findings Ready+Tier (next free number F864; F900-F906 came from master); log SWEPT. ui-finesse moved controls: Activity's sub-views are a Segmented radiogroup 'Activity view', settings autosave (MenuSelect menus, no Save), the Overview has no Collaboration block, the Questions panel opens from 'overview-questions-link'.",
     "queue": [
         {
             "id": "plan-review",
@@ -77,7 +77,7 @@
         },
         {
             "id": "sweep-projects-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Projects x Runners & models x Keyboard & dialogs",
             "detail": "Touched last night: folder listing/open/create/relocate off the event loop (F806); switching checkpoint runner clears an undeclared stored model (F807, browse Settings); empty roster offers Add agent (F808). Then runner delete holders, aliases, keyboard-only pass in a browser."
         },
@@ -93,7 +93,7 @@
             "title": "Re-drive last night's fixes live",
             "model": "sonnet",
             "effort": "medium",
-            "detail": "Night 2026-10-20 (45 iterations) fixed 43 findings; re-drive those touching a route, run, gate or UI: F759 F761 F767 F769 F773 F776 F789-F796 F798 F804 F806 F807 F810 F811 F812 F814-F817 F819 F820 F824 F829 F832 F833 (CLI-only F808 by command). Log CONFIRMED F<n> or REOPENED F<n> (set Status back to open with evidence). Scratch Hub 8110+, haiku-4-5 only. F823 F825 F828 held in sweep-tasks-sweep, F829 (+F828 document route) in sweep-spec-sweep, F800 F801 F802 in sweep-vault-sweep, F804 in sweep-questions-sweep, F814 F815 F816 F817 in sweep-checkpoints-sweep: skip, F811 F812 in sweep-agents-sweep: skip. F761 F833 driven in sweep-evidence-sweep: skip. F789 F792 F793 driven in sweep-traces-sweep: skip. F794 F795 F796 driven in sweep-reach-sweep: skip."
+            "detail": "Night 2026-10-20 (45 iterations) fixed 43 findings; re-drive those touching a route, run, gate or UI: F759 F761 F767 F769 F773 F776 F789-F796 F798 F804 F810 F811 F812 F814-F817 F819 F820 F824 F829 F832 F833 . Log CONFIRMED F<n> or REOPENED F<n> (set Status back to open with evidence). Scratch Hub 8110+, haiku-4-5 only. F823 F825 F828 held in sweep-tasks-sweep, F829 (+F828 document route) in sweep-spec-sweep, F800 F801 F802 in sweep-vault-sweep, F804 in sweep-questions-sweep, F814 F815 F816 F817 in sweep-checkpoints-sweep: skip, F811 F812 in sweep-agents-sweep: skip. F761 F833 driven in sweep-evidence-sweep: skip. F789 F792 F793 driven in sweep-traces-sweep: skip. F794 F795 F796 driven in sweep-reach-sweep: skip. F806 F807 F808 driven in sweep-projects-sweep: skip."
         },
         {
             "id": "ledger-tidy",

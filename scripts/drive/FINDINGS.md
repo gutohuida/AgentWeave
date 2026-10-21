@@ -37367,7 +37367,7 @@ Expected: the oversized sentence uses readable sizes and names the alternative (
 
 ## F806 (B) -- one folder-browser listing, project open or relocate of a path on an unreachable network host freezes the whole Hub for about 21 s: the filesystem calls run on the event loop
 
-**Status:** fixed (this commit, night 2026-10-21 iteration 11). Listing, open, create and relocate now run their filesystem work through `asyncio.to_thread` (`fs_browse.py`, `ProjectLifecycleService._canonicalize`, marker reads, create's `exists`); `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py` stalls each call 1.5 s and fails before the fix (`/health` waited the whole stall), passes after. Drive: the real unreachable address answered at once on this machine (no 21 s stall reproduced; network state differs from the sweep's), so the real-share timing is unverified. `GET /projects`' per-project refresh (`_refresh_project_observation`) is still synchronous and was not measured.
+**Status:** fixed (this commit, night 2026-10-21 iteration 11). Listing, open, create and relocate now run their filesystem work through `asyncio.to_thread` (`fs_browse.py`, `ProjectLifecycleService._canonicalize`, marker reads, create's `exists`); `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py` stalls each call 1.5 s and fails before the fix (`/health` waited the whole stall), passes after. Drive: the real unreachable address answered at once on this machine (no 21 s stall reproduced; network state differs from the sweep's), so the real-share timing is unverified. `GET /projects`' per-project refresh (`_refresh_project_observation`) is still synchronous and was not measured. Confirmed live 2026-10-21 (day sweep `sweep-projects-sweep`, scratch Hub :8158, `scripts/drive/s1021_p_api.py block 31`): on fresh blackholed hosts each of list/open/create/relocate still took 21.04-21.05 s, and `/health` sent meanwhile answered in 0.00-0.11 s every time, so the real-share timing now holds. `GET /projects` with a registered project on a dead share still not reached.
 **Source:** drive
 **Theme:** Projects
 **Ready:** yes -- measured three times, each against a fresh blackholed address (Windows caches a failed host, so a repeat answers at once).
@@ -37385,7 +37385,7 @@ Expected: the filesystem work runs off the loop (`await asyncio.to_thread(list_d
 
 ## F807 (B) -- switching the checkpoint runner to a Copilot or Codex runner keeps a Claude checkpoint model the screen no longer shows, and Save is refused naming it
 
-**Status:** fixed 29f099a 2026-10-21 (night iteration 12; drive: scratch Hub :8151, Chromium on the rebuilt bundle, `scripts/drive/s1021_f807_ui.py` -- stored claude runner + model `haiku`, picking the copilot runner showed "Use the runner's model", Save said "Settings saved." and stored runner-885c5930c473 with checkpoint_model null; the copilot option read "r-cop — Claude Haiku 4.5 (copilot)", no "(unrecognised)"). Originally open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
+**Status:** fixed 29f099a 2026-10-21 (night iteration 12; drive: scratch Hub :8151, Chromium on the rebuilt bundle, `scripts/drive/s1021_f807_ui.py` -- stored claude runner + model `haiku`, picking the copilot runner showed "Use the runner's model", Save said "Settings saved." and stored runner-885c5930c473 with checkpoint_model null; the copilot option read "r-cop — Claude Haiku 4.5 (copilot)", no "(unrecognised)"). Originally open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle). Confirmed live 2026-10-21 on the ui-finesse autosaving Checkpointing group (day sweep, :8158, `scripts/drive/s1021_p_ui.py checkpoint`): picking r-cop stored the runner with `checkpoint_model` null and the model menu read "Use the runner's model"; copilot `claude-haiku-4.5` -> back to a claude runner also cleared; claude -> claude kept `claude-opus-5-5`; no refusal notice.
 **Source:** drive
 **Theme:** Runners & models
 **Ready:** yes
@@ -37399,7 +37399,7 @@ Expected: changing the checkpoint runner to one whose CLI does not declare the s
 
 ## F808 (C) -- every project with no agents tells the operator to run `agentweave start`, a command the CLI refuses
 
-**Status:** fixed (night iteration 34, Tier 0; 06528cd). The empty roster reads "No agents yet. Agents are added here, in the app." with an Add agent button that opens the dialog for the project (`OverviewPage` `onAddAgent`, wired in `App.tsx`). Test `hub/ui/src/__tests__/overviewEmptyRoster.test.tsx`, failing before. Drive: jsdom with real click events; not re-seen in a browser. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
+**Status:** fixed (night iteration 34, Tier 0; 06528cd). The empty roster reads "No agents yet. Agents are added here, in the app." with an Add agent button that opens the dialog for the project (`OverviewPage` `onAddAgent`, wired in `App.tsx`). Test `hub/ui/src/__tests__/overviewEmptyRoster.test.tsx`, failing before. Drive: jsdom with real click events; not re-seen in a browser. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle). Confirmed in Chromium 2026-10-21 (day sweep, :8158, `s1021_p_ui.py empty`): "No agents yet. Add agent", no `agentweave start`; Enter on the button opened Create agent with focus in the name, Escape returned focus to it, and Create made `first` in that project only.
 **Source:** drive
 **Theme:** Projects
 **Ready:** yes
@@ -38403,3 +38403,17 @@ Cause: `describe` (`hub/ui/src/components/agents/PermissionRequestCard.tsx:21-46
 Cause: `_NETWORK` (`hub/hub/mcp_server.py:1473-1476`) is one fixed sentence, used at `:2533`, `:2543`, `:2631` and `:2637` whatever `_REACH.get().hosts` holds.
 
 **Expected:** when the run has granted hosts, the refusal names them, e.g. `... may name only this run's own Hub ($HUB_URL) and the hosts the operator granted (github.com); for another address, ask the operator with ask_user`. With none granted it reads as today. **Test:** in `hub/tests/test_an_operator_sets_how_far_an_agent_reaches.py`, `_decide` for `Bash` `curl https://other.example` with `AW_REACH_GRANTS` naming host `github.com` denies with a reason containing `github.com`; with no hosts granted, the reason is unchanged. Seam: Permissions & sandbox (shell judge) x reach grants (hosts).
+
+## F863 (C) -- the Runners page calls the project's checkpoint runner "Unused", and deleting it is then refused: "Runner is bound to the project's checkpoint runner setting. Unbind before deleting."
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8158, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 0
+
+Repro (`py -3.11 scripts/drive/s1021_p_ui.py extra`): `PUT /projects/{p}/settings {"checkpoint_runner_id": <r-sonnet>}`, with no agent and no manager job on r-sonnet. On Environment -> Runners the row reads "r-sonnet Claude Code · sonnet (latest) **Unused**". Pressing Delete r-sonnet: `DELETE /projects/{p}/runners/{id}` -> 409, and the page shows "The runner was not deleted. Runner is bound to the project's checkpoint runner setting. Unbind before deleting." (screenshot `testbed/ui-judge/s1021-p-extra/122340/50_checkpoint_runner_delete.png`). The refusal is right and the count is wrong: the page told the operator nothing used it. Cause: `usedBy` (`hub/ui/src/components/settings/sections/RunnersSection.tsx:51-54`) counts agents and manager jobs only, while the Hub's holder list (`hub/hub/api/v1/runners.py:270-288`) also counts the checkpoint setting. A runner held by an agent and a manager job read "2 using it", which matched the 409 (held, same drive).
+
+Side, same sentence: "Unbind before deleting" names no place to do it, and "background job(s)" is a word the app does not use (the screen calls them Manager jobs). With the checkpoint setting the operator must know that Settings -> Checkpointing -> Checkpoint runner is where it is "unbound".
+
+**Expected:** the checkpoint setting counts as a use, e.g. "Checkpoints" or "1 using it" with the title naming it, so a runner that cannot be deleted never reads Unused; ideally the 409 names where each holder is released ("... the project's checkpoint runner (Settings -> Checkpointing)"; "Manager job(s): conversation-titles"). **Test:** in `hub/ui/src/__tests__/runnersUi.test.tsx`, render the Runners section with project settings whose `checkpoint_runner_id` is a runner no agent or manager job holds, and assert its row does not read "Unused". Seam: Runners & models (Runners page) x Projects (settings, Checkpointing).
