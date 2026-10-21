@@ -1,124 +1,40 @@
 {
-    "purpose": "DRIVE. Operator, 2026-10-18: drive AgentWeave end to end and file everything wrong with it, as ready findings (repro, severity, seam, tier) for the night to fix. Open with plan-review (the e2e checklist checked against the code: unreached, new, gone), then anything today's DIRECTION.md adds, then re-drive last night's fixes, then a full sweep: every e2e checklist row once, two or three rows per sweep item (operator, 2026-10-19), with no sweep started after 16:15. Close with the merge gate. No product code unless DIRECTION.md asks. Playbook: .claude/loops/day-window.md",
-    "playbook": ".claude/loops/day-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-18-daily",
-    "parent_branch": "master",
-    "parent_sha": "75e6edb",
-    "stop_at": "2026-10-20T17:00:00+01:00",
-    "iteration": 16,
-    "log_file": ".claude/autonomous/2026-10-20-day-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-7",
-    "next_action": null,
-    "queue": [
-        {
-            "id": "plan-review",
-            "status": "done",
-            "title": "Check the e2e checklist against the code; queue the full sweep",
-            "detail": "Playbook 'The pretask'. Edit only the checklist. Insert sweep items (2-3 rows each, every row once) before night-recheck-drive."
-        },
-        {
-            "id": "night-recheck-drive",
-            "status": "done",
-            "title": "Re-drive last night's fixes live",
-            "detail": "Findings fixed 2026-10-19/20 night: F760, F774, F775, F777, F782, F783, F784, F785, F786. Drive each through the path its finding names (git reads/checkpoint file lists F775/F777/F760; others per FINDINGS.md). Log CONFIRMED/REOPENED F<n>."
-        },
-        {
-            "id": "sweep-traces-sweep",
-            "status": "done",
-            "title": "Traces x Runs x Logs, events & SSE",
-            "detail": "NEW first: a turn's trace button and the task story's (GET /traces/by-run/{run_id}), Settings -> Traces (list, kind filter, one trace, OTLP export, clear, settings); every event in a trace, background work and commands as traces, warnings on the trace; secret redaction in spans. Then Runs (stop, MCP status, aw-tool fallback) and Logs/SSE (/events/history, stream_gap, F419)."
-        },
-        {
-            "id": "sweep-reach-sweep",
-            "status": "done",
-            "title": "Permissions & sandbox x Capability plane x Agent environment",
-            "detail": "NEW first: project default_permission_mode, project + agent reach grants (read/readwrite roots, {temp}/{project}, hosts; agent's replace the project's), Claude and Copilot judged alike, Copilot spec turn under Full access, the turn context stating the run's reach, the agent page's granted reach (check the bundle carries the Reach UI). Then allow_agent_jobs refusal->question->grant, and what a Hub-launched agent sees (F453/F454)."
-        },
-        {
-            "id": "sweep-vault-sweep",
-            "status": "done",
-            "title": "Knowledge vault x Manager jobs x CLI & lifecycle",
-            "detail": "NEW first: vault_add from an agent (folder recursion, hidden skipped, outside path / bad type / oversized refused per file, granted root counts inside), POST /vault/paths, and `agentweave vault add` (cmd_vault, needs --port with a named profile). Then distillation on a vault job runner, manager firings, doctor/status/stop/reset on a throwaway profile."
-        },
-        {
-            "id": "sweep-questions-sweep",
-            "status": "done",
-            "title": "Questions x Conversations & composer",
-            "detail": "NEW first: the turn clock counts work, not waiting (F782/F783): an ask_user left open past where the old 600 s clock cut, a deadline cut not re-delivered unchanged. Then answer/decline/timeout/late answer; composer @file over GET /workspace/paths|file (outside path, binary, huge file -- unreached until 10-19)."
-        },
-        {
-            "id": "sweep-projects-sweep",
-            "status": "done",
-            "title": "Projects x Runners & models x Keyboard & dialogs",
-            "detail": "Unreached-until-10-19 first: the in-app folder browser (GET /fs/roots, /fs/list) behind the typed path; delete-project dialog in a browser. Then runner aliases/undeclared model refusal/409 holders, and keyboard-only dialog focus."
-        },
-        {
-            "id": "sweep-agents-sweep",
-            "status": "done",
-            "title": "Agents x Charters x Inbound queue & messages",
-            "detail": "Unreached first: POST /session/sync after F774 (agent holding work kept, no agents key leaves roster alone; does the response say so?). Then reserved/route-word names, request_agent budget, charters CRUD, hop-budget chain, Withdraw/Continue, held message drained on bind (F96)."
-        },
-        {
-            "id": "sweep-checkpoints-sweep",
-            "status": "done",
-            "title": "Checkpoints x Accounting & allowance",
-            "detail": "Night-touched: checkpoint files changed list includes files the agent committed itself; git reads UTF-8 with unquoted paths (F775/F777/F760 -- the recheck drives the fix; this drives the row). Checkpoints sheet, cut over once, grants. Then per-conversation usage, budget exhaustion via an operator turn (F456), quiet hours."
-        },
-        {
-            "id": "sweep-loops-sweep",
-            "status": "done",
-            "title": "Jobs & loops x Flows & review x Resilience",
-            "detail": "Never swept in a day log: a loop that fires/claims/drains/stops both endings, Run's held reason, waiting_reason firing; a flow with parallel firing and a verdict withdrawing waiting reviews; kill the Hub mid-run and restart, concurrent triggers (F349), failure injection."
-        },
-        {
-            "id": "sweep-tasks-sweep",
-            "status": "done",
-            "title": "Tasks x Dependencies x Worktrees & integration",
-            "detail": "Swept 10-19 (Tasks, Worktrees): actor-boundary refusals, the story vs task_history; A->B->C with B's checkout merging A on its next turn; integration Retry (least driven), isolation flip under held work."
-        },
-        {
-            "id": "sweep-spec-sweep",
-            "status": "done",
-            "title": "Spec documents x Corpus & folding",
-            "detail": "Swept 10-19: the journey one step at a time, approve with approval_warnings, report_cannot_satisfy + respond, fold with retire-what-it-supersedes, coverage after a fold (F593)."
-        },
-        {
-            "id": "sweep-evidence-sweep",
-            "status": "done",
-            "title": "Requirements, evidence & coverage x Drift",
-            "detail": "Swept 10-19: list_evidence/decide_evidence from an agent (least driven), a rejected requirement at contract/gate rigor, stale on reword, Scan for drift and its three answers. Also (from sweep-spec): after a criterion amend, the pre-amend piece lists review_state awaiting and counts in coverage evidence_count; only the decision refuses it (evidence_stale). How does the Evidence view show it?"
-        },
-        {
-            "id": "ledger-tidy",
-            "status": "done",
-            "title": "Regenerate backlog; check Ready/Tier on today's findings",
-            "detail": "py -3.11 scripts/backlog_page.py; every finding filed today needs **Ready:** and **Tier:** lines."
-        },
-        {
-            "id": "D-7",
-            "status": "done",
-            "title": "Merge gate",
-            "detail": "Four conditions per playbook. Known: branch adds migrations 0135, 0137, 0138 vs master -> HOLD: migration; add OPEN DECISIONS.md row. Then closing entry; next_action null."
-        }
-    ],
-    "decisions_for_user": [
-        "merge-hold-1020"
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window's merge-gate item (.claude/loops/day-window.md, 'The merge gate'), which may fast-forward master to this branch with 'git fetch . <branch>:master' and 'git push origin master' when all four gate conditions hold and the branch adds no migration -- operator, 2026-10-11 and 2026-10-18. Never a merge commit, never a conflict resolved.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, 'Something new'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "DRIVE. Operator, 2026-10-18: drive AgentWeave end to end and file everything wrong with it, as ready findings (repro, severity, seam, tier) for the night to fix. Open with plan-review (the e2e checklist checked against the code: unreached, new, gone), then anything today\u0027s DIRECTION.md adds, then re-drive last night\u0027s fixes, then a full sweep: every e2e checklist row once, two or three rows per sweep item (operator, 2026-10-19), with no sweep started after 16:15. Close with the merge gate. No product code unless DIRECTION.md asks. Playbook: .claude/loops/day-window.md",
+    "playbook":  ".claude/loops/day-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-10-18-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "75e6edb",
+    "stop_at":  "2026-10-21T17:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-10-21-day-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window\u0027s merge-gate item (.claude/loops/day-window.md, \u0027The merge gate\u0027), which may fast-forward master to this branch with \u0027git fetch . \u003cbranch\u003e:master\u0027 and \u0027git push origin master\u0027 when all four gate conditions hold and the branch adds no migration -- operator, 2026-10-11 and 2026-10-18. Never a merge commit, never a conflict resolved.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, \u0027Something new\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
