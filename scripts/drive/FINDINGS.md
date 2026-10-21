@@ -37557,7 +37557,7 @@ Expected: clear the warning only when the checkpoint is `ready`; an `unwritten` 
 
 ## F818 (D) -- the dismiss refusal tells a conversation far past its threshold that it "has not reached its threshold"
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150).
+**Status:** open 2026-10-20. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150). Re-verified 2026-10-21 (sweep-checkpoints-sweep, :8153): `conv-0d23c17ee50a` at 31,779 tokens against 8,000, warning cleared by a Checkpoint now, dismiss -> 409 "... it has not reached its threshold." Still open.
 **Source:** drive
 **Theme:** Checkpoints
 **Ready:** yes
@@ -38080,3 +38080,45 @@ Nothing in B says the turn is in another conversation, or that it is waiting on 
 A fresh Haiku turn in C (`conv-0d3fea18114c`) asked `q-59bfc787766e` ("Which colour for the footer?", wait 30 s); nobody answered; the run ended ("No answer came within the timeout."); the route lists it `asker_waiting: false`. In C the card shows the "no longer waiting" chip **and** "Pick one, or write your own answer below.", and the placeholder reads "Answer asker…" (screenshot `testbed/ui-judge/s1021-q-stale/101335/C_own_stale_after.png`). Typing "Reply with the single word gamma." and Send started `run-eb20350b5343` in C with that bare text (entry `entry-d54f17a114d3`) and left the question `answered 0`. That is F804's intended behaviour (`AgentOutputPanel.tsx:1049`: typed text answers only while `asker_waiting !== false`), but the screen still promises the opposite: an operator who types "green" as a late answer sends the agent a bare "green" with no question attached, and the question stays in the Questions list as unanswered. Sources: placeholder `AgentOutputPanel.tsx:1416` (`pendingQuestion ? 'Answer …'`), hint `AgentQuestionCard.tsx:187-188`, though the card already computes `nobodyWaiting` (`AgentQuestionCard.tsx:78`).
 
 **Expected:** when `asker_waiting === false`, the hint reads "Pick one to answer it; anything you type below is sent as a new message." and the placeholder is the ordinary "Message asker…". **Test:** `hub/ui/src/__tests__/questionTrayConversation.test.tsx`: a stale question in the conversation on screen renders neither "write your own answer below" nor an "Answer" placeholder; fails today. Seam: Questions x Conversations & composer.
+
+## F846 (C) -- a conversation cut over by a checkpoint opens from the rail with a live composer and no word of its successor; Send is refused "Unarchive it to continue it", the one door F816 now shuts
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8153, profile c1021, Chromium against the served bundle, `scripts/drive/s1021_c_ui.py unarch|predsend|sheet`). The residue of F816's fix: the refusal moved to unarchive, but the routes and screens that point there were not changed.
+**Source:** drive
+**Theme:** Checkpoints
+**Ready:** yes
+**Tier:** 0
+
+alpha's `conv-29d1e4cd542c` was checkpointed (`ckpt-dcf21c885f7d`, ready, probe passed) and cut over to `conv-0198f7d71d7c` (`POST /checkpoints/{id}/cutover` 200). In the rail, Show archived -> the predecessor's row menu -> **Unarchive** -> 409, and the row shows "Conversation conv-29d1e4cd542c was cut over to conv-0198f7d71d7c (checkpoint ckpt-dcf21c885f7d), which holds its work; continue there. This one stays archived and readable." (F816 holds.) Opening that archived row, though: no notice that it is archived or cut over, "Continuing this conversation" above an enabled composer, placeholder "Message alpha…" (`testbed/ui-judge/s1021-c-unarch/102850/unarch-pred-open.png`). Typing "Reply with the single word PRED." and Send -> `POST /agent/trigger` 409 `{"detail":"Conversation conv-29d1e4cd542c is archived. Unarchive it to continue it, or omit conversation_id to start a new conversation with alpha."}`, shown under the composer. The way out it names is the one F816 refuses, and it does not name the successor that holds the work. The Checkpoints sheet on the predecessor still reads "Probe: passed · carried into a new conversation" with no name or link (`CheckpointsPanel.tsx:47`; F816's own note: "not done").
+
+Cause: `conversation_unavailable_reason` (`hub/hub/conversations.py:200`) has one sentence for every archived conversation; `checkpoint_cutover.handover_of` (`hub/hub/checkpoint_cutover.py:61`) already answers the successor.
+
+**Expected:** for a handed-over conversation the trigger refusal names the successor ("conv-… was cut over to conv-… (checkpoint ckpt-…); continue there, or omit conversation_id to start a new conversation with alpha."); the opened predecessor says it was cut over and links the successor; the sheet's "carried into a new conversation" links `cut_over_to_conversation_id`. **Test:** beside the F816 test in `hub/tests/test_checkpoint_cutover.py`: cut over, then `POST /agent/trigger` with the predecessor's `conversation_id` -> 409 whose detail names the successor and does not say "Unarchive"; fails today. Seam: Checkpoints x Conversations & composer.
+
+## F847 (D) -- after a failed Checkpoint now and a reload, the banner says "Nothing has been written yet" and nothing on the conversation says the attempt failed
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8153, Chromium against the served bundle, `scripts/drive/s1021_c_ui.py failed|reload`). The residue of F817's fix ("so the banner still offers Checkpoint now and can show the failure").
+**Source:** drive
+**Theme:** Checkpoints
+**Ready:** yes
+**Tier:** 0
+
+Checkpoint runner pointed at a Codex runner (undrivable here). On alpha's `conv-29d1e4cd542c` (warning `due`), **Checkpoint now** -> `POST .../checkpoint` 201 `ckpt-bdb1be928049` `status: unwritten`, `generation_error: "exited 1: Reading additional input from stdin..."`; the toast "Checkpoint failed: exited 1: …" showed and the warning stayed `due` (F817 holds). After a reload: the banner reads "This conversation has reached its checkpoint threshold. Nothing has been written yet — checkpoint now, or dismiss this and keep working." with no mention of the failure (`testbed/ui-judge/s1021-c-reload/102759/failed-reloaded.png`). The failure is only in the Checkpoints sheet, as an `unwritten` entry with its error. An operator who comes back presses Checkpoint now again, not knowing it fails the same way until the runner changes.
+
+Cause: F540's failure line (`hub/ui/src/components/agents/AgentOutputPanel.tsx:649-654`) counts only a newest checkpoint with `trigger === 'context_pressure'`; an `operator` one with `unwritten`/`failed` is ignored.
+
+**Expected:** while the warning stands and the newest checkpoint is an `unwritten`/`failed` operator press, the banner says the last attempt failed and why ("The last checkpoint attempt failed: <error>. Check the checkpoint runner in Settings, or dismiss this."). **Test:** `hub/ui/src/__tests__/agentHandoff.test.tsx`: a conversation with `checkpoint_warning: 'due'` whose newest checkpoint is `{trigger: 'operator', status: 'unwritten', generation_error: 'x'}` renders the failure text; fails today. Seam: Checkpoints (banner) x Runners.
+
+## F848 (D) -- under `automatic` checkpointing with the token budget spent, the threshold banner reads exactly as `offered` does: nothing says the automatic checkpoint was held by the budget
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8153, Chromium against the served bundle, `scripts/drive/s1021_c_ui.py autospent`).
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 0
+
+`PUT /settings {"checkpoint_mode": "automatic"}` (threshold 8,000 tokens, Haiku checkpoint runner). With the budget open, a gamma turn crossed it and the Hub wrote `ckpt-e5494f68d13e` (`context_pressure`, ready, probe passed) and cut over: automatic works. Then `PATCH /accounting/budget {"token_budget": 1000}` (exhausted) and a fresh gamma operator turn (`run-cdcdf958d787`, "42"): no checkpoint, `checkpoint_warning: due` (F240 design D3a holds: warn, do not spend). On screen: "This conversation has reached its checkpoint threshold. Nothing has been written yet — checkpoint now, or dismiss this and keep working." (`testbed/ui-judge/s1021-c-autospent/103426/autospent-before.png`), word for word the `offered` banner. The operator chose automatic, and nothing says why it did not happen. **Checkpoint now** then wrote `ckpt-3083d2f71cf9` (operator, ready) on the spent budget, by design (`worker.py:327`, "the operator's path is never gated"), but the banner does not say that pressing it spends past the budget either.
+
+Cause: the warn path (`hub/hub/checkpoint_trigger.py:376-404`) broadcasts `checkpoint_due` with no reason and sets the same `due` as `offered`; the banner (`AgentOutputPanel.tsx:767`) has one text.
+
+**Expected:** when the warning was raised under `automatic` because the budget is spent, the banner says so: "Automatic checkpointing is paused: the project's token budget is spent. Checkpoint now runs as your own act and is counted." (a `reason` on `checkpoint_due`, or the banner reading the budget state it already has for the budget notice). **Test:** `hub/tests/test_checkpoint_trigger*.py`: automatic policy, budget exhausted, a reading over the threshold -> the `checkpoint_due` payload carries a budget reason; fails today. Seam: Checkpoints x Accounting & allowance.
