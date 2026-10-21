@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from hub import worktrees
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent
+from hub.db.models import Agent, EventLog
 from hub.sse import sse_manager
 
 # Named import, for the reason `test_task_worktrees.py` states: conftest's autouse
@@ -382,3 +382,54 @@ async def test_sync_with_an_explicitly_empty_roster_is_still_a_replace(
 
     assert response.status_code == 200, response.text
     assert await _names() == set()
+
+
+@pytest.mark.parametrize("bad", [["alpha"], "alpha", 3])
+async def test_sync_with_agents_that_is_not_an_object_is_refused_not_a_500(
+    app, auth_headers, add_agent, bad
+):
+    """F812: `agents` of a list or a string used to answer 500 from `.keys()`."""
+    await add_agent("alpha")
+
+    response = await app.post(SYNC, json={"data": {"agents": bad}}, headers=auth_headers)
+
+    assert response.status_code == 422, response.text
+    assert "object" in response.json()["detail"]
+    assert await _names() == {"alpha"}
+
+
+async def test_sync_that_deletes_agents_names_them_and_records_the_removal(
+    app, auth_headers, add_agent
+):
+    """F812: the answer was the roster that remains; nothing said which agents were gone."""
+    await add_agent("alpha")
+    await add_agent("beta")
+    await add_agent("gamma")
+
+    response = await app.post(SYNC, json={"data": {"agents": {"alpha": {}}}}, headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["agents"] == ["alpha"]
+    assert response.json()["removed"] == ["beta", "gamma"]
+    async with async_session_factory() as db:
+        rows = (
+            (
+                await db.execute(
+                    select(EventLog).where(
+                        EventLog.project_id == "proj-test", EventLog.event_type == "agent_removed"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert sorted(row.agent for row in rows) == ["beta", "gamma"]
+    assert all(row.severity == "warn" for row in rows)
+
+
+async def test_sync_that_deletes_nothing_says_so(app, auth_headers, add_agent):
+    await add_agent("alpha")
+
+    response = await app.post(SYNC, json={"data": {"agents": {"alpha": {}}}}, headers=auth_headers)
+
+    assert response.json()["removed"] == []

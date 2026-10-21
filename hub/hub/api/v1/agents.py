@@ -3115,7 +3115,12 @@ async def patch_agent(
         and not set(body.keys()) <= _unrestricted_fields
     ):
         raise HTTPException(
-            status_code=409, detail=f"Agent name '{name}' is reserved for a configured agent"
+            status_code=409,
+            detail=(
+                f"Agent '{name}' is named in this project's last session sync, which owns its "
+                'config. Release it with POST /session/sync {"data": {}} (this leaves the '
+                "roster alone), or change the config there."
+            ),
         )
 
     result = await session.execute(

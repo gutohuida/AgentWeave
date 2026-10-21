@@ -118,3 +118,26 @@ async def test_every_field_the_ui_sends_is_still_accepted(app, auth_headers):
 
     assert resp.status_code == 200, resp.text
     assert (await _row("settled")).question_timeout_seconds == 300
+
+
+@pytest.mark.asyncio
+async def test_the_409_for_a_synced_agent_names_the_sync_and_how_to_release_it(app, auth_headers):
+    """F812: the operator never knowingly made the agent "configured"; the refusal has to say the
+    last session sync owns its config and what clears that."""
+    sync = await app.post(
+        f"/api/v1/projects/{PROJECT}/session/sync",
+        json={"data": {"agents": {"synced2": {}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200, sync.text
+
+    resp = await app.patch(
+        f"/api/v1/projects/{PROJECT}/agents/synced2",
+        json={"config": {"read_only": True}},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert "session sync" in detail
+    assert "POST /session/sync" in detail
