@@ -37670,7 +37670,7 @@ The integration note and its button are rendered only by `TaskCard` (`hub/ui/src
 
 ## F824 (C) -- deleting a task from its drawer makes the page request the deleted task's story ~110 times in five seconds, and the card stays on the board for 5-10 s
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
+**Status:** fixed f5435c3, 2026-10-21 night iteration 41 (Tier 0, UI only). `useDeleteTask.onSuccess` takes the card out of every cached task page (and its `total`) on the 204 and invalidates the `tasks` prefix with a predicate that skips the deleted task's own keys, so its story is never refetched. Plain `removeQueries` was tried first and failed the test: removing a query a mounted observer holds makes the observer rebuild it and refetch, so the keys are left to garbage collection. Test `tasksApi.test.tsx` `useDeleteTask` (live story observer plus a cached board; failed before: one story GET after the 204); full vitest 2220 passed, lint and tsc clean, bundle refreshed. Drive: real hooks over a real QueryClient with a stubbed fetch (labelled: no Chromium, no 104-task scratch Hub, so the ~110-request loop itself and the 5-10 s persistence were not re-measured). Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8170).
 **Source:** drive
 **Theme:** Tasks
 **Ready:** yes
