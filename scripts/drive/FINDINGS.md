@@ -37223,7 +37223,7 @@ Expected: when a refused path lies in a root granted `read` and the tool is not 
 
 ## F795 (C) -- an agent's granted-reach save the Hub refuses shows only "Could not save the granted reach."; the route's own detail is pydantic's raw dump with a docs URL
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach_ui.py`, Playwright on the served bundle).
+**Status:** fixed 2026-10-21 (night iteration 29, Tier 0, a2176e9). `reach.validated_grants` raises the `reach_grants.<field>: <message>` sentence (no pydantic dump, no docs URL), which the agent route's 400 carries as its detail; `ReachGrantsSetting` shows it through `readableApiError`, keeping the fixed sentence when the failure has none. `test_a_refused_agent_grant_names_the_field_and_the_bad_value` and `agentReachGrantsRefusal.test.tsx` failed before. Drive: real route over a real agent (relative root, bad host); component with a real `ApiError`; not re-seen in a browser (labelled). Original: open 2026-10-20. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8142, `scripts/drive/s1020_reach_ui.py`, Playwright on the served bundle).
 **Source:** drive
 **Theme:** Permissions & sandbox
 **Ready:** yes
