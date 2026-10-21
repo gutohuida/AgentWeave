@@ -38417,3 +38417,69 @@ Repro (`py -3.11 scripts/drive/s1021_p_ui.py extra`): `PUT /projects/{p}/setting
 Side, same sentence: "Unbind before deleting" names no place to do it, and "background job(s)" is a word the app does not use (the screen calls them Manager jobs). With the checkpoint setting the operator must know that Settings -> Checkpointing -> Checkpoint runner is where it is "unbound".
 
 **Expected:** the checkpoint setting counts as a use, e.g. "Checkpoints" or "1 using it" with the title naming it, so a runner that cannot be deleted never reads Unused; ideally the 409 names where each holder is released ("... the project's checkpoint runner (Settings -> Checkpointing)"; "Manager job(s): conversation-titles"). **Test:** in `hub/ui/src/__tests__/runnersUi.test.tsx`, render the Runners section with project settings whose `checkpoint_runner_id` is a runner no agent or manager job holds, and assert its row does not read "Unused". Seam: Runners & models (Runners page) x Projects (settings, Checkpointing).
+
+## F864 (B) -- a flow whose own agent is also its named reviewer still hands that agent fresh work while another agent is free, so the task it builds can never be reviewed (F767's species, through the default-agent arm)
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8159, profile l1021, project `proj-4420966f352c`).
+**Source:** drive
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+Repro (`scripts/drive/s1021_l_flow.py hold|start|fire`): two Haiku agents, alpha and beta. A change with two independent tasks (`t-cv`, `t-trunc`) and `delivery: {mode: flow, agent: alpha, reviewer: alpha}`, approved with `approve_anyway`. `POST /jobs/{id}/run` started **both** tasks: t-cv to **alpha**, t-trunc to beta. Both completed. The next firing staged t-trunc's review to alpha (approved it) and emitted `review_unstaffed` for t-cv: "this task names 'alpha' as its reviewer, and that agent is the one that completed this task. Naming a different reviewer, or reviewing it yourself, is the way forward -- the flow will not substitute somebody else for a named reviewer." The loop then reads `stalled` with that sentence, and t-cv waits on the operator.
+
+F767's fix withholds named reviewers from the flow's recruitment pool (`scheduler._agents_a_loop_may_staff`, `hub/hub/scheduler.py:1366-1402`). That docstring states the job's own agent "never comes from this pool": `decide_firing`'s ordinary-work arm takes `default_agent` first for the first unstaffed task (`scheduler.py:2084-2102`), tested against `running`/`held_agents`/`taken` only. So when the delivery's `agent` and `reviewer` are the same agent, the withholding never applies, and the outcome is exactly F767's: unreviewable by construction while beta was free to build.
+
+Expected: the default-agent arm applies the same rule as the pool. A default agent the document names to judge work takes fresh work only when no other agent with a runner could (the same roster test `_agents_a_loop_may_staff` uses), so here alpha reviews and beta builds both tasks in turn. **Test:** beside `hub/tests/test_a_flow_does_not_hand_fresh_work_to_its_named_reviewer.py`, a flow with `delivery.agent == delivery.reviewer == "alpha"`, two ready independent tasks and alpha and beta free: `decide_firing` selects alpha for neither task. Seam: Flows & review (D2's default agent x the named reviewer).
+
+## F865 (B) -- with git unreadable for a moment, Land approves a task the preview said approval would refuse for a conflict; once git is back every retry fails on the conflict, and the task stays `approved` with its work never merged
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-loops-sweep` (Resilience, failure injection; scratch Hub :8159), while re-driving F820 live.
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+Repro (`scripts/drive/s1021_l_resil.py land_nogit task-9ad5210fd05c`, after the F864 flow): t-trunc was approved and merged, so t-cv's commit `fb04875` conflicts on `mathkit/registry.py`. Its evidence accepted, `GET /tasks/{id}/integration-preview` -> `"conflicts": [{"paths": ["mathkit/registry.py"]}]`, `"reason": "approval will be refused: mathkit/registry.py in commit fb04875d1692 conflict with master"`. Move the project's `.git` aside, `POST /tasks/{id}/land {}` -> **200, `status: approved`**, and the integration row is F820's `failed` "git could not be read in the project's folder ...", `retryable: true`. Restore `.git`; in Chromium the drawer's **Try again** (F823) records a second `failed` row, "CONFLICT (content): Merge conflict in mathkit/registry.py". The task is `approved`, its work is not in master, and every further retry fails the same way. The flow's loop then reads `complete` in the Loops panel.
+
+Cause: the gate's merge question is skipped when git cannot be read. `requirement_gate.merge_situation` returns `None` when `task_integration.is_repository(root)` is false (`hub/hub/requirement_gate.py:658-659`), and `None` means "not checked, approve" (`_check_mergeable` is never asked). F820's fix taught `_integrate_task` to tell an unreadable repository from no repository (`repository_proof`), but the gate in front of it still reads a git failure as "no repository". With git readable, the preview says the same Land is refused naming the conflict (not re-pressed: the task had already been approved).
+
+Expected: where the Hub has proof the project is a repository (F820's `repository_proof`: the task's worktree exists, or its evidence names a commit), an unreadable git refuses approval with a sentence ("git could not be read in the project's folder, so whether this work merges is unknown: try again in a moment"), rather than approving unchecked. **Test:** in `hub/tests/test_task_integration.py` (beside F820's `..._unreadable_for_a_moment...`), a task whose commit conflicts with master and whose worktree exists, with `.git` renamed away: `POST /land` does not answer 200 `approved`. Seam: Worktrees & integration (approval gate) x Resilience (git fault).
+
+## F866 (C) -- a flow's stall reason for an unstaffed review says "this task names 'alpha' as its reviewer" in the Loops panel and on the loop, where "this task" names no task
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8159, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+Repro: F864's flow after its second firing. `GET /loops/{id}` -> `stall_reason`: "this task names 'alpha' as its reviewer, and that agent is the one that completed this task. Naming a different reviewer, or reviewing it yourself, ...". In Chromium, the conversation's side panel -> Loops shows the flow `stalled` with that line under it (screenshot `testbed/ui-judge/s1021-l/123619/loops-index.png`). The queue holds two tasks, and nothing on the line says which one waits. The sentence is written for the task's own story (where F768's fix also shows it, correctly) and is promoted verbatim to the loop's `stall_reason` (`hub/hub/scheduler.py:1627`, the ladder's reason, which `decide_firing` lifts). By contrast F819's stall reason names its task: "task-bd411ade853a ('Write E.txt') is still assigned to delta".
+
+Expected: a loop-level stall reason names the task, e.g. "Add coefficient_of_variation() names 'alpha' as its reviewer, and alpha completed it. ...". **Test:** in the `decide_firing` tests for rung 1b, the stalled decision's `stall_reason` contains the task's title or id. Seam: Flows & review (review ladder) x Jobs & loops (stall reason).
+
+## F867 (C) -- a loop's history reads the bare "loop tasks adopted." when it takes over an archived loop's unfinished tasks: no task, no source loop
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8159, Chromium against the served bundle).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro (`scripts/drive/s1021_l_loops.py adopt`): an approved two-task document with no delivery; loop A created on it (`enabled: false`) adopts both tasks; one task is rejected; `POST /jobs/{A}/archive`; loop B created on the same document -> the pending task moves to B (held: F53), and `event_logs` gets the `loop_tasks_adopted` pair, `{"from_loop": A, "to_loop": B, "task_ids": ["task-95df0452d781"]}`. In Chromium, loop B's Loop tab -> History reads "loop stopped. / **loop tasks adopted.** / The operator created this loop from the jobs page, ..." (screenshot `testbed/ui-judge/s1021-l/124329/looptab-loop-3d285888fed7.png`). `loopEventSentence` (`hub/ui/src/lib/loopHistory.ts:30-46`) knows `loop_created` and `loop_tasks_added`, and anything else falls to `event_type.replace(/_/g, ' ')`. The archived loop's history gets the same line, so neither side says what moved where. "loop stopped." is the same fallback and does not carry the stop reason either.
+
+Side, same tab: Settings reads "Document: spdoc-e0968b6104bc", an id, where the rest of the app names the document by title or path.
+
+Expected: "Took over 1 unfinished task from "loop A on the document" (archived): "Write M2.txt"." on B, and "Gave 1 unfinished task to "loop B adopts": ..." on A. The event carries ids only, so the sentence needs the titles (add them to the event as `loop_tasks_added` does, or resolve them in the history route). **Test:** `hub/ui/src/__tests__/loopHistory.test.ts`, a `loop_tasks_adopted` event renders a sentence naming its tasks and the other loop. Seam: Jobs & loops (history) x Spec documents (a document's tasks across loops).
+
+## F868 (D) -- an ended or archived loop reports a `stall_reason` while every agent is busy ("alpha is already running a turn"), and the Loops panel prints any stall reason in amber, ended or not
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8159). API-observed; the panel line was not caught on screen in the moment (labelled).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro (`scripts/drive/s1021_l_loops.py adopt|stop`, while alpha and beta were both running F864's builder turns): `GET /loops/{A}` for the **archived** loop A -> `ending_state: "stopped"`, `archived_at` set, `stall_reason: "alpha is already running a turn"`. `PATCH /jobs/{B} {"stop_reason": ...}` -> loop B `ending_state: "stopped"`, and `GET /loops/{B}` -> `stall_reason: "alpha is already running a turn"`. Both went back to `null` once beta was free. The list route computes `decide_firing` and the busy guard for every loop in the batch, ended ones included (`hub/hub/api/v1/jobs.py:498-515`), and `LoopsIndexTab` renders `loop.stall_reason` with no check of `ending_state` (`hub/ui/src/components/spec/LoopsIndexTab.tsx:237-246`). The jobs card is not affected: it checks `finished` first (`hub/ui/src/components/jobs/JobsView.tsx:270-276`).
+
+Expected: an ended loop has no stall reason (its state is the ending, with its `stop_reason`), and the panel shows nothing amber for it. **Test:** in the loops route tests, a stopped loop whose agent has a running turn reads `stall_reason: null`. Seam: Jobs & loops (list route x the busy guard).

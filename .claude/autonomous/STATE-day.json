@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T17:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-21-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-loops-sweep",
-    "next_action": "Do the 'sweep-loops-sweep' queue item per .claude/loops/day-window.md 'A sweep firing' (time guard first: 16:15 or later -> defer). Read .claude/skills/e2e-loop/SKILL.md in full; scratch Hub 8110+ (not 8130: something else listens there; 8154-8158 used today); file findings Ready+Tier (next free number F864; F900-F906 came from master); log SWEPT. ui-finesse moved controls: Activity's sub-views are a Segmented radiogroup 'Activity view', settings autosave (MenuSelect menus, no Save), the Overview has no Collaboration block, the Questions panel opens from 'overview-questions-link'.",
+    "current": "night-recheck-drive",
+    "next_action": "Do the 'night-recheck-drive' queue item per .claude/loops/day-window.md 'Re-driving last night's fixes' (read that section first). Re-drive only the fixes its detail lists, on a scratch Hub 8110+ (not 8130; 8154-8159 used today), haiku-4-5 only; log CONFIRMED/REOPENED per finding; next free finding number F869 (F900-F906 came from master). ui-finesse moved controls: the side panel opens from 'More conversation actions' -> 'Show side panel'; settings autosave; Activity's sub-views are a Segmented radiogroup 'Activity view'.",
     "queue": [
         {
             "id": "plan-review",
@@ -83,7 +83,7 @@
         },
         {
             "id": "sweep-loops-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Jobs & loops x Flows & review x Resilience",
             "detail": "Least recent. A loop fire/claim/drain and both endings; a flow on an approved document with a parallel firing and a verdict withdrawing waiting reviews; flow refusal to staff a review in the task story (F768); kill the Hub mid-run and restart; failure injection on one route."
         },
@@ -93,7 +93,7 @@
             "title": "Re-drive last night's fixes live",
             "model": "sonnet",
             "effort": "medium",
-            "detail": "Night 2026-10-20 (45 iterations) fixed 43 findings; re-drive those touching a route, run, gate or UI: F759 F761 F767 F769 F773 F776 F789-F796 F798 F804 F810 F811 F812 F814-F817 F819 F820 F824 F829 F832 F833 . Log CONFIRMED F<n> or REOPENED F<n> (set Status back to open with evidence). Scratch Hub 8110+, haiku-4-5 only. F823 F825 F828 held in sweep-tasks-sweep, F829 (+F828 document route) in sweep-spec-sweep, F800 F801 F802 in sweep-vault-sweep, F804 in sweep-questions-sweep, F814 F815 F816 F817 in sweep-checkpoints-sweep: skip, F811 F812 in sweep-agents-sweep: skip. F761 F833 driven in sweep-evidence-sweep: skip. F789 F792 F793 driven in sweep-traces-sweep: skip. F794 F795 F796 driven in sweep-reach-sweep: skip. F806 F807 F808 driven in sweep-projects-sweep: skip."
+            "detail": "Night 2026-10-20 fixed 43 findings; the day sweeps re-drove most of them. Still to re-drive live (route, run, gate or UI): F759 F767 F769 F773 F776 F790 F791 F798 F810 F824 F832. Log CONFIRMED F<n> or REOPENED F<n> (set Status back to open with evidence). Scratch Hub 8110+ (not 8130; 8154-8159 used today), haiku-4-5 only. F767: its own shape (reviewer is not the job's agent); F864 is the same-agent variant."
         },
         {
             "id": "ledger-tidy",
