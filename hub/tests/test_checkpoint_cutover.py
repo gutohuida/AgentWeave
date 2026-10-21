@@ -1409,6 +1409,37 @@ async def test_taking_the_checkpoint_answers_a_dismissal_too(app, auth_headers, 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("warning", ["due", "final", "dismissed"])
+async def test_a_failed_checkpoint_press_leaves_the_warning_standing(
+    app, auth_headers, monkeypatch, warning
+):
+    """F817: a press that came back `unwritten` cleared the warning anyway, so after a reload
+    the offer and the failure were both gone. The warning is answered only by a checkpoint that
+    exists; an `unwritten` one leaves it in place, so the banner still offers the press."""
+
+    def failing_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="runner is not signed in")
+
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        conversation = await _conversation(db)
+        conversation.checkpoint_warning = warning
+        await db.commit()
+    monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+    monkeypatch.setattr(subprocess, "run", failing_run)
+
+    response = await app.post(
+        f"/api/v1/projects/{PROJECT}/conversations/conv-1/checkpoint", headers=auth_headers
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "unwritten"
+    async with async_session_factory() as db:
+        conversation = await get_conversation_by_id(db, "conv-1")
+    assert conversation.checkpoint_warning == warning
+
+
+@pytest.mark.asyncio
 async def test_the_backstop_does_not_depend_on_the_configured_threshold(app, monkeypatch):
     """The regression that live testing caught and the unit tests did not.
 

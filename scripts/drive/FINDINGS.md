@@ -37542,7 +37542,7 @@ Expected: either unarchive of a handed-over conversation is refused, naming the 
 
 ## F817 (C) -- a failed Checkpoint now clears the conversation's checkpoint warning: after a reload the offer and the failure are both gone
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8150, failure injected with an unauthenticated Codex checkpoint runner, Chromium).
+**Status:** fixed SHA (2026-10-21, Tier 0). `take_checkpoint` clears `due`/`final`/`dismissed` only when `checkpoint.status == "ready"`; an `unwritten` press leaves the warning standing so the banner still offers Checkpoint now. Test `test_a_failed_checkpoint_press_leaves_the_warning_standing` (3 params) failed before. Driven over the real route and database with a failing runner stub; not re-seen in a browser.
 **Source:** drive
 **Theme:** Checkpoints
 **Ready:** yes
