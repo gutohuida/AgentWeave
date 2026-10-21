@@ -1165,6 +1165,28 @@ class VaultFetch(Base):
     __table_args__ = (PrimaryKeyConstraint("project_id", "entry_id", name="pk_vault_fetches"),)
 
 
+class VaultReader(Base):
+    """Which agents have read one vault entry, and how often (migration 0140).
+
+    `the-vault-names-who-read-an-entry` (F901). One row per entry per agent per project, bumped
+    beside `VaultFetch` by the agents' `vault_read` at offset 0, the agent taken from the run's
+    credential. Reads counted before this table existed have no row, so an entry's `fetches` may
+    exceed the sum of its readers' counts. A Hub table for the reason `VaultFetch` is one.
+    """
+
+    __tablename__ = "vault_readers"
+
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"))
+    entry_id: Mapped[str] = mapped_column(String(64))
+    agent: Mapped[str] = mapped_column(String(64))
+    count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    last_read_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("project_id", "entry_id", "agent", name="pk_vault_readers"),
+    )
+
+
 class VaultSettings(Base):
     """Where a project's knowledge vault puts what it is given (migration 0124).
 

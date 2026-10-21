@@ -63,7 +63,6 @@ function firing(id: string, overrides: Partial<AgentConversation> = {}): AgentCo
 
 function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
   const props: React.ComponentProps<typeof Sidebar> = {
-    activePage: 'overview',
     activeAgent: null,
     onOpenProject: vi.fn(),
     onOpenAgent: vi.fn(),

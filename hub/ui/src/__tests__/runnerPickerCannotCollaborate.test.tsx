@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentLaunchabilityResponse } from '@/api/agents'
-import { RunnerPicker } from '@/components/agents/AgentSettingsControls'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 
 // F178: `collaboration_ready`/`collaboration_reason` reached no screen once `AgentCard` stopped being
@@ -16,7 +17,7 @@ let launchability: AgentLaunchabilityResponse | undefined
 
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
-  return { ...actual, useAgentLaunchability: () => ({ data: launchability, error: null }) }
+  return { ...actual, useAgents: () => ({ data: roster, isLoading: false }), useAgentLaunchability: () => ({ data: launchability, error: null }) }
 })
 
 vi.mock('@/api/runners', () => ({
@@ -27,16 +28,29 @@ vi.mock('@/api/runners', () => ({
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }))
 
-vi.mock('@/api/modelCatalog', () => ({
+vi.mock('@/api/modelCatalog', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/modelCatalog')>()),
   useModelCatalog: () => ({ data: MODEL_CATALOG_FIXTURE }),
 }))
+
+/** The runner's row lives on the agent's Execution page; the page is rendered for real, with the
+ *  roster answering `agent` and a query client for the writes it holds. */
+let roster: unknown[] = []
+function renderExecution(summary: { name: string }) {
+  roster = [summary]
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <AgentSettingsPage agent={summary.name} section="execution" onSelectSection={vi.fn()} onBack={vi.fn()} />
+    </QueryClientProvider>,
+  )
+}
 
 const agent = { name: 'q1', status: 'idle', message_count: 0, active_task_count: 0, runner_id: 'runner-codex' }
 const runnable = { runner: 'codex', present: true, authorized: true, runnable: true, reason: null }
 
 function verdict(fields: Record<string, unknown>) {
   launchability = { agents: { q1: fields as never } }
-  render(<RunnerPicker agent={agent as never} />)
+  renderExecution(agent)
 }
 
 describe('the runner picker says when an agent will run but cannot collaborate (F178)', () => {

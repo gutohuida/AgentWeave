@@ -2,11 +2,11 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { JobCard } from '@/components/jobs/JobCard'
+import { JobsScreen } from '@/components/jobs/JobsScreen'
 import type { Job } from '@/api/jobs'
 
 /**
- * `JobCard`'s loop block (design D5, tasks.md 5.4): present only when `job.loop` is set, absent —
+ * A job row's loop block (formerly `JobCard`'s; re-targeted to the wired Jobs tab in ui-finesse) (design D5, tasks.md 5.4): present only when `job.loop` is set, absent —
  * byte-identical to before this change — otherwise (human-only check 8.1's own concern, verified
  * here the one way a test can: the DOM has no trace of it).
  */
@@ -14,14 +14,31 @@ import type { Job } from '@/api/jobs'
 let loopTasks: unknown[] = []
 
 /** What `useJobHistory` returns for the card under test — the runs, and whether they are in flight. */
-let jobHistory: { data?: unknown[]; isLoading: boolean } = { data: [], isLoading: false }
+let jobHistory: { data?: unknown[]; isLoading: boolean; error?: Error | null } = { data: [], isLoading: false }
+
+/** The jobs the tab lists: the one job under test. */
+let pageJobs: Job[] = []
+const archiveMutate = vi.fn()
 
 vi.mock('@/api/jobs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/jobs')>()
+  const idle = () => ({ mutate: vi.fn(), isPending: false })
   return {
     ...actual,
     useJobHistory: () => jobHistory,
+    useJobs: () => ({ data: pageJobs, isLoading: false }),
+    useArchivedJobs: () => ({ data: [], isLoading: false }),
+    useRunJob: idle,
+    usePauseJob: idle,
+    useResumeJob: idle,
+    useArchiveJob: () => ({ mutate: archiveMutate, isPending: false }),
+    useCreateJob: idle,
   }
+})
+
+vi.mock('@/api/agents', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/agents')>()
+  return { ...actual, useAgents: () => ({ data: [] }) }
 })
 
 vi.mock('@/api/tasks', async (importOriginal) => {
@@ -51,46 +68,31 @@ function baseJob(overrides: Partial<Job> = {}): Job {
   }
 }
 
-const noop = () => {}
-
 function renderCard(job: Job, onOpenTasks?: (taskIds: string[]) => void) {
+  pageJobs = [job]
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <JobCard
-        job={job}
-        onRun={noop}
-        onPause={noop}
-        onResume={noop}
-        onArchive={noop}
-        isPending={false}
-        onOpenTasks={onOpenTasks}
-      />
+      <JobsScreen onOpenTasks={onOpenTasks} />
     </QueryClientProvider>,
   )
 }
 
+/** The job's own row: the filter above it also says "Active" and "Paused". */
+const row = () => screen.getByRole('list', { name: 'Jobs' })
+
 describe('JobCard loop block', () => {
   it('offers an honest archive action and confirms it', async () => {
     const user = userEvent.setup()
-    const onArchive = vi.fn()
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <JobCard
-          job={baseJob()}
-          onRun={noop}
-          onPause={noop}
-          onResume={noop}
-          onArchive={onArchive}
-          isPending={false}
-        />
-      </QueryClientProvider>,
-    )
+    archiveMutate.mockClear()
+    renderCard(baseJob())
 
-    await user.click(screen.getByLabelText('Archive'))
-    await user.click(screen.getByRole('button', { name: 'Archive' }))
-    expect(onArchive).toHaveBeenCalledWith('job-1')
+    await user.click(screen.getByRole('button', { name: 'More for Nightly audit' }))
+    await user.click(await screen.findByRole('menuitem', { name: /Archive/ }))
+    // A confirm step, not a one-click archive: nothing has happened yet.
+    expect(archiveMutate).not.toHaveBeenCalled()
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Archive' }))
+    expect(archiveMutate.mock.calls[0][0]).toBe('job-1')
     expect(screen.queryByLabelText('Delete')).not.toBeInTheDocument()
   })
 
@@ -272,10 +274,10 @@ describe('JobCard loop block', () => {
         },
       }),
     )
-    expect(screen.getByText('Complete')).toBeInTheDocument()
-    expect(screen.queryByText('Paused')).toBeNull()
-    expect(screen.queryByTitle('Resume')).toBeNull()
-    expect(screen.queryByTitle('Pause')).toBeNull()
+    expect(within(row()).getByText('Complete')).toBeInTheDocument()
+    expect(within(row()).queryByText('Paused')).toBeNull()
+    // No switch at all: neither Resume nor Pause is offered for an ended loop.
+    expect(within(row()).queryByRole('switch')).toBeNull()
   })
 
   it('reads Stopping on the collapsed card once a loop is past its stop time (F714)', () => {
@@ -295,14 +297,14 @@ describe('JobCard loop block', () => {
         },
       }),
     )
-    expect(screen.getByText('Stopping')).toBeInTheDocument()
-    expect(screen.queryByText('Active')).toBeNull()
+    expect(within(row()).getByText('Stopping')).toBeInTheDocument()
+    expect(within(row()).queryByText('Active')).toBeNull()
   })
 
   it('still reads a paused plain job as Paused, with Resume', () => {
     renderCard(baseJob({ enabled: false }))
-    expect(screen.getByText('Paused')).toBeInTheDocument()
-    expect(screen.getByTitle('Resume')).toBeInTheDocument()
+    expect(within(row()).getByText('Paused')).toBeInTheDocument()
+    expect(within(row()).getByRole('switch', { name: 'Resume Nightly audit' })).toBeInTheDocument()
   })
 
   it('opens every loop task id on clicking the current item, and only when onOpenTasks is given', async () => {
@@ -370,6 +372,17 @@ describe('JobCard run history', () => {
     await user.click(screen.getByLabelText('Expand job details'))
     expect(screen.queryByText('No runs yet')).not.toBeInTheDocument()
     expect(screen.getByText('Loading runs…')).toBeInTheDocument()
+  })
+
+  it('says the history could not be read, never "No runs yet", when its query failed', async () => {
+    const user = userEvent.setup()
+    loopTasks = []
+    jobHistory = { data: undefined, isLoading: false, error: new Error('the Hub is down') }
+    renderCard(baseJob())
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    expect(screen.queryByText('No runs yet')).not.toBeInTheDocument()
+    expect(screen.getByTestId('job-runs-error')).toHaveTextContent('Its run history could not be read: the Hub is down')
   })
 
   it('still says "No runs yet" for a job that genuinely has not fired', async () => {
@@ -490,8 +503,8 @@ describe('JobCard: what the row and the chips actually claim', () => {
     }
     renderCard(baseJob({ run_count: 0 }))
 
-    expect(screen.getByText('0 fired')).toBeInTheDocument()
-    expect(screen.queryByText(/\bruns\b/)).not.toBeInTheDocument()
+    expect(within(row()).getByText('0 fired')).toBeInTheDocument()
+    expect(within(row()).queryByText(/\bruns\b/)).not.toBeInTheDocument()
     expect(screen.getByTestId('job-refused-job-1')).toHaveTextContent('1 refused')
 
     await user.click(screen.getByLabelText('Expand job details'))

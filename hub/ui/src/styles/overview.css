@@ -1,0 +1,128 @@
+/* Overview (ui-finesse). */
+
+.aw-overview { width: min(100%, 1100px); margin-inline: auto; padding: 22px clamp(20px, 3vw, 32px) 96px; }
+
+.aw-overview-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 6px; }
+.aw-overview-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+.aw-overview-status-need { color: var(--amber); font-weight: 600; }
+.aw-overview-spend {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 28px; padding: 0 4px 0 10px;
+  border-radius: var(--radius-md);
+  font-size: 12.5px; color: var(--text-2);
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.aw-overview-spend:hover { background: var(--row-hover); color: var(--text); }
+.aw-overview-spend:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-overview-spend .tabular { color: var(--text); font-weight: 500; }
+.aw-overview-spend-link { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 0 6px; height: 22px; border-radius: 6px; background: var(--surface-2); color: var(--text-2); font-weight: 500; }
+
+.aw-ov-section { margin-top: 26px; min-width: 0; }
+.aw-ov-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13.5px; font-weight: 600; color: var(--text); }
+.aw-ov-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+  background: var(--surface-3); color: var(--text-2);
+}
+.aw-ov-count[data-tone="amber"] { background: color-mix(in oklab, var(--amber) 20%, transparent); color: var(--amber); }
+.aw-ov-count[data-tone="green"] { background: color-mix(in oklab, var(--green) 18%, transparent); color: var(--green); }
+.aw-ov-calm { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border: 1px dashed var(--border-hi); border-radius: var(--radius-lg); font-size: 13px; color: var(--text-3); }
+.aw-ov-calm svg { color: var(--green); }
+
+/* Needs you: the one place on the page that is allowed to be loud. */
+.aw-ov-needs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.aw-ov-need {
+  --tone: var(--amber);
+  display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; column-gap: 14px; align-items: start;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in oklab, var(--tone) 28%, var(--border));
+  border-radius: var(--radius-lg);
+  background: linear-gradient(to right, color-mix(in oklab, var(--tone) 6%, var(--surface)), var(--surface) 55%);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .08), inset 0 1px var(--lift-hi);
+}
+.aw-ov-need[data-tone="red"] { --tone: var(--red); }
+.aw-ov-need[data-tone="blue"] { --tone: var(--blue); }
+.aw-ov-need-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--tone) 15%, transparent); color: var(--tone);
+}
+.aw-ov-need-body { min-width: 0; }
+.aw-ov-need-title { font-size: 14px; font-weight: 600; line-height: 1.4; color: var(--text); }
+.aw-ov-need-detail { margin-top: 3px; max-width: 72ch; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.aw-ov-need-meta { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; color: var(--text-3); }
+.aw-ov-agent { display: inline-flex; align-items: center; gap: 5px; color: var(--text-2); }
+.aw-ov-need-actions { display: flex; align-items: center; gap: 6px; padding-top: 1px; }
+.aw-ov-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.aw-ov-option {
+  height: 28px; padding: 0 12px;
+  border: 1px solid var(--border-hi); border-radius: 999px;
+  background: var(--surface-2); color: var(--text); font-size: 12.5px; font-weight: 500;
+  transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease, transform 100ms ease;
+}
+.aw-ov-option:hover { background: var(--surface-3); border-color: color-mix(in oklab, var(--tone) 50%, var(--border-hi)); }
+.aw-ov-option:active { transform: scale(.97); }
+.aw-ov-option:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+
+/* Quiet lists: running, finished, agents. */
+.aw-ov-list { list-style: none; margin: 0; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.aw-ov-row {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; column-gap: 12px; align-items: center;
+  width: 100%; min-height: 48px; padding: 7px 10px;
+  border-radius: calc(var(--radius-lg) - 3px);
+  text-align: left; color: var(--text);
+  transition: background-color var(--dur-fast) ease;
+}
+.aw-ov-row:hover { background: var(--row-hover); }
+.aw-ov-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-ov-row-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 7px; background: var(--surface-2); color: var(--text-2);
+}
+.aw-ov-row-icon[data-kind="merged"] { color: var(--purple); background: color-mix(in oklab, var(--purple) 12%, var(--surface-2)); }
+.aw-ov-row-icon[data-kind="approved"] { color: var(--green); background: color-mix(in oklab, var(--green) 12%, var(--surface-2)); }
+.aw-ov-row-text { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+.aw-ov-row-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-ov-row-title strong { font-weight: 600; color: var(--agent-accent, var(--text)); }
+.aw-ov-row-detail { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-ov-row-detail[data-state="waiting"] { color: var(--amber); }
+.aw-ov-row-detail[data-state="running"] { color: var(--text-2); }
+.aw-ov-row-detail[data-state="no-runner"] { color: var(--text-3); font-style: italic; }
+.aw-ov-row-end { display: inline-flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.aw-ov-running { min-height: 54px; }
+.aw-ov-running-badge {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 8px;
+  background: var(--agent-tint); color: var(--agent-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--agent-accent) 40%, transparent);
+  font-size: 11.5px; font-weight: 700;
+}
+.aw-ov-running-dot { position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; border-radius: 999px; border: 2px solid var(--surface); background: var(--green); }
+.aw-ov-elapsed { color: var(--text); font-weight: 500; }
+.aw-ov-open { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; height: 24px; border-radius: 6px; background: var(--surface-2); color: var(--text-2); font-weight: 500; }
+.aw-ov-row:hover .aw-ov-open { color: var(--text); background: var(--surface-3); }
+
+.aw-ov-agent-row { grid-template-columns: 12px minmax(0, 1fr) auto; min-height: 46px; }
+.aw-ov-agent-row .aw-agent-dot { justify-self: center; }
+.aw-ov-agent-row[data-state="idle"] .aw-agent-dot, .aw-ov-agent-row[data-state="no-runner"] .aw-agent-dot { opacity: .55; }
+
+.aw-ov-columns { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 1000px) { .aw-ov-columns { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+@media (max-width: 760px) {
+  .aw-ov-need { grid-template-columns: 30px minmax(0, 1fr); }
+  .aw-ov-need-actions { grid-column: 2; margin-top: 10px; }
+}
+
+/* Applied (ui-finesse wiring). */
+.aw-ov-row-detail[data-state="stalled"] { color: var(--amber); }
+.aw-ov-heading-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.aw-overview-link { font-size: 12px; color: var(--text-3); border-radius: 4px; }
+.aw-overview-link:hover { color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; }
+.aw-overview-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-overview-status .aw-overview-link { font-size: inherit; }
+.aw-ov-calm .aw-overview-link { font-size: inherit; color: var(--text-2); }
+.aw-overview-notice { margin-bottom: 14px; padding: 8px 12px; border-radius: var(--radius-md); background: color-mix(in srgb, var(--amber) 10%, transparent); font-size: 12.5px; }
+.aw-ov-agent-extra { padding: 0 12px 10px 30px; }

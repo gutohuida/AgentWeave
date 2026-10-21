@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ChartersPage } from '@/components/charters/ChartersPage'
+import { ChartersSection as ChartersPage } from '@/components/settings/sections/ChartersSection'
 import { charterSummary } from '@/components/charters/charterSummary'
 
 const updateMutate = vi.fn()
@@ -40,6 +40,12 @@ vi.mock('@/api/charters', async (importOriginal) => ({
   useDeleteCharter: () => ({ mutate: deleteMutate, isPending: false }),
 }))
 
+// The list names the agents each charter is given to; the roster is not what these test.
+vi.mock('@/api/agents', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/agents')>()),
+  useAgents: () => ({ data: [], isLoading: false }),
+}))
+
 function expand(name: string) {
   fireEvent.click(screen.getByRole('button', { name: `Expand ${name}` }))
 }
@@ -73,7 +79,13 @@ describe('charter read view', () => {
 
     const region = container.querySelector('#charter-content-charter-001')
     expect(region).not.toBeNull()
-    expect(region!.textContent).toBe(TECH_LEAD_BODY)
+    // Rendered, not raw: the heading is a heading, each bullet a list item, and nothing is cut.
+    expect(region!.querySelector('h2')).toHaveTextContent('You Are Accountable For')
+    expect([...region!.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+      "The system's structure: how it is divided, and what crosses the boundaries",
+      'Making the call when two approaches are both defensible',
+    ])
+    expect(region!.textContent).not.toContain('# ')
   })
 
   it('keeps the whole document out of the DOM while collapsed', () => {
@@ -191,7 +203,7 @@ describe('charter read view', () => {
     render(<ChartersPage />)
     expand('Tech Lead')
 
-    expect(screen.queryByRole('dialog', { name: 'Edit Charter' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Edit Tech Lead' })).not.toBeInTheDocument()
   })
 
   it('keeps a charter open across a refetch that re-renders the rows', () => {
@@ -210,7 +222,7 @@ describe('charter read view', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit Tech Lead' }))
 
-    expect(screen.getByRole('dialog', { name: 'Edit Charter' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Edit Tech Lead' })).toBeInTheDocument()
     expect(screen.getByLabelText('Charter content')).toHaveValue(TECH_LEAD_BODY)
   })
 })

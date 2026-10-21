@@ -51,7 +51,7 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 
 function renderIdentity(summary: AgentSummary) {
   roster = [summary]
-  return render(<AgentSettingsPage agent={summary.name} section="identity" />)
+  return render(<AgentSettingsPage agent={summary.name} section="identity" onSelectSection={vi.fn()} onBack={vi.fn()} />)
 }
 
 const field = () => screen.getByLabelText('Description for codex-1')
@@ -89,10 +89,10 @@ describe('what an agent is for', () => {
     expect(describeMutate).not.toHaveBeenCalled()
 
     fireEvent.blur(field())
-    expect(describeMutate).toHaveBeenCalledWith({
-      agent: 'codex-1',
-      description: 'Reviews migrations.',
-    })
+    expect(describeMutate).toHaveBeenCalledWith(
+      { agent: 'codex-1', description: 'Reviews migrations.' },
+      expect.anything(),
+    )
   })
 
   it('clears to null rather than saving a blank', () => {
@@ -101,7 +101,7 @@ describe('what an agent is for', () => {
     renderIdentity(agent({ description: 'Reviews migrations.' }))
     fireEvent.change(field(), { target: { value: '   ' } })
     fireEvent.blur(field())
-    expect(describeMutate).toHaveBeenCalledWith({ agent: 'codex-1', description: null })
+    expect(describeMutate).toHaveBeenCalledWith({ agent: 'codex-1', description: null }, expect.anything())
   })
 
   it('does not save a value that has not changed', () => {
@@ -118,7 +118,7 @@ describe('what an agent is for', () => {
     identity.unmount()
 
     for (const section of ['execution', 'charter', 'interaction', 'workspace'] as const) {
-      const { unmount } = render(<AgentSettingsPage agent="codex-1" section={section} />)
+      const { unmount } = render(<AgentSettingsPage agent="codex-1" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} />)
       expect(screen.queryByLabelText('Description for codex-1')).not.toBeInTheDocument()
       unmount()
     }

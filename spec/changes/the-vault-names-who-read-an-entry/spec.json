@@ -1,0 +1,103 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "two run credentials, Builder's and QA1's, and a vault source",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_readers.py (written first: failed before the build)",
+      "key": "names-readers",
+      "requirement": "readers-are-named",
+      "then": "both maps and both entry routes list readers [QA1 x1, Builder x2], most recent first, and fetches is 3",
+      "when": "Builder reads it twice at offset 0 and once at a later page, then QA1 reads it once with a header naming Builder"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a vault source",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_readers.py",
+      "key": "operator-unnamed",
+      "requirement": "readers-are-named",
+      "then": "its readers are empty and its fetches 0",
+      "when": "only the operator reads it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a database at 0138 with a vault_fetches row",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_migrations.py -k vault_readers",
+      "key": "migration",
+      "requirement": "counts-are-untouched",
+      "then": "upgrade adds an empty vault_readers keyed by (project_id, entry_id, agent); downgrade drops only it and the count is still 4",
+      "when": "it is upgraded to 0140 and downgraded to 0139"
+    }
+  ],
+  "algorithms": [],
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2: a migration. HAZARD: migration 0140 reaches the operator's real database the next time their :8000 Hub restarts on a checkout that holds it. It only creates a table (guarded for one already present); no existing row is read or rewritten and nothing is backfilled. ROLLBACK: alembic downgrade to 0138 drops vault_readers and loses only the attribution; vault_fetches is untouched. D1. A table beside vault_fetches, keyed (project_id, entry_id, agent), with count and last_read_at, bumped in the same own-transaction record_fetch the read already uses, so a failure to record never fails the read. D2. The agent is AgentActor.agent, from the run credential; nothing in the request names it. D3. Every route that lists fetches lists readers ({agent, count, last_read_at}, most recent first, [] when none); a count from before 0140 stays unattributed, so fetches may exceed the readers' sum and the UI says so. D4. Project deletion sweeps the table like every project-scoped table.",
+  "evidence": {
+    "checked": [
+      "vault_access.record_fetch is the only writer of vault_fetches, called from agent_actions.read_vault_entry at offset 0",
+      "the operator's GET /vault/entries/{id} does not count a read",
+      "project_lifecycle sweeps every table with a project_id column (test_project_delete_api introspects it)"
+    ],
+    "limits": [
+      "Not driven against a live Hub: no running Hub serves the ui-finesse worktree; the acceptance check is the route-level test with real run credentials"
+    ]
+  },
+  "hub": {
+    "phase": "proposed",
+    "rigor": "sketch",
+    "size": null,
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "The Vault reader's Used by tab could say how often agents read an entry but never which agents: vault_fetches (migration 0126) holds one count per entry and no agent (F901).",
+  "requirements": [
+    {
+      "key": "readers-are-named",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Which agents rely on an entry is what tells the operator whether a wrong entry has already misled work (F901).",
+      "statement": "An agent's read of a vault entry at offset 0 MUST be recorded against the agent its run credential names, and no request field or header MAY name it. GET /vault/map, GET /vault/entries/{id} and the agents' map and entry routes MUST list readers on each entry: one {agent, count, last_read_at} per agent that read it, most recent first, and an empty list when none is known. The operator's own reads MUST NOT be recorded as a reader."
+    },
+    {
+      "key": "counts-are-untouched",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The map's ordering is built on fetches; attribution must not change it.",
+      "statement": "Recording readers MUST NOT change how fetches and last_fetched_at are counted or how the map is ordered, and the migration that adds the readers' table MUST leave every existing row as it was, its downgrade removing only that table."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "vault_access: per-agent read counts beside the per-entry ones",
+      "the four vault read routes: a readers list on each entry",
+      "migration 0140 vault_readers"
+    ],
+    "non_goals": [
+      "Attributing reads counted before 0140",
+      "The Vault tab's rendering of readers (the ui-finesse apply wires it)",
+      "Counting the operator's reads"
+    ]
+  },
+  "summary": "The vault records which agent read each entry, from the run credential, and lists readers on every entry so the Vault tab's Used by can name them (F901).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "VaultReader model + migration 0140, vault_access._bump/readers_for/annotate/shape, routes in api/v1/vault.py and agent_actions.read_vault_entry, UI type VaultEntry.readers.",
+      "from": null,
+      "key": "t1",
+      "requirements": ["readers-are-named", "counts-are-untouched"],
+      "reviewer": null,
+      "title": "Record and list the agents that read a vault entry"
+    }
+  ],
+  "title": "The vault names who read an entry"
+}

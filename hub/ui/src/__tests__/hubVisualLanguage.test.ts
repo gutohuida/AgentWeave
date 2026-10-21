@@ -8,14 +8,14 @@ import { join } from 'node:path'
 import appSource from '@/App.tsx?raw'
 import projectManagerSource from '@/components/projects/ProjectManagerModal.tsx?raw'
 import sidebarSource from '@/components/layout/Sidebar.tsx?raw'
-import projectHeaderSource from '@/components/layout/ProjectHeader.tsx?raw'
-import projectTabsSource from '@/components/layout/ProjectTabs.tsx?raw'
-import conversationControlsSource from '@/components/agents/ConversationControls.tsx?raw'
+import topBarSource from '@/components/layout/TopBar.tsx?raw'
+import conversationBarSource from '@/components/conversation/ConversationBar.tsx?raw'
 import composerSource from '@/components/agents/Composer.tsx?raw'
 import agentTimelineSource from '@/components/agents/AgentTimeline.tsx?raw'
 import { HUB_NEUTRALS, withHubTheme } from '@/components/spec/hubTheme'
 
 const cssSource = readFileSync('src/index.css', 'utf8')
+const shellCssSource = readFileSync('src/styles/shell.css', 'utf8')
 
 describe('Hub UI mock alignment contracts', () => {
   it('uses the neutral graphite palette and related shell planes in both modes', () => {
@@ -74,9 +74,13 @@ describe('Hub UI mock alignment contracts', () => {
     expect(sidebarSource).toContain('name="chevron_right"')
   })
 
-  it('replaces the permanent status strip with a project header and bounded content', () => {
+  it('replaces the permanent status strip with one top bar and bounded content', () => {
     expect(appSource).not.toContain('<StatusBar')
-    expect(appSource).toContain('<ProjectHeader')
+    // One 48px bar carries the project, the tabs and settings (ui-finesse); the old header stack
+    // and separate tab strip are gone.
+    expect(appSource).toContain('<TopBar')
+    expect(appSource).not.toContain('<ProjectHeader')
+    expect(appSource).not.toContain('<ProjectTabs')
     expect(appSource).toContain('workspace-content')
     expect(cssSource).toContain('@media (max-width: 760px)')
   })
@@ -89,26 +93,31 @@ describe('Hub UI mock alignment contracts', () => {
     expect(narrowShell).toMatch(/\.workspace-rail\s*\{[^}]*max-height:\s*38vh;[^}]*overflow-y:\s*auto;/s)
   })
 
-  it('adopts the Button primitive in the shell and conversation controls rather than hand-rolled buttons', () => {
-    // A `<button` opening tag carrying its own `style={…}` attribute is exactly the pattern the
-    // Button primitive replaces — every control in these files should either render <Button> or,
-    // where a shared row treatment applies, a plain <button className="row-item" ...> with no
-    // inline style.
-    const handRolledButtonWithStyle = /<button(?:(?!>)[\s\S])*?style=\{/
+  it('styles every shell control from a primitive or a named slot, never a hand-rolled inline style', () => {
+    // A `<button` opening tag carrying its own `style={…}` is the pattern the primitives replace.
+    // The shell's buttons are either `<Button>` or a plain `<button data-slot=…>` styled by
+    // shell.css; the only inline style a shell button may carry hands it an agent's colour as a
+    // custom property.
+    const buttonStyles = /<button(?:(?!>)[\s\S])*?style=\{\{([^}]*)\}\}/g
     for (const [name, source] of [
       ['App.tsx', appSource],
       ['Sidebar.tsx', sidebarSource],
-      ['ProjectHeader.tsx', projectHeaderSource],
-      ['ProjectTabs.tsx', projectTabsSource],
-      ['ConversationControls.tsx', conversationControlsSource],
+      ['TopBar.tsx', topBarSource],
+      ['ConversationBar.tsx', conversationBarSource],
       ['Composer.tsx', composerSource],
     ] as const) {
-      expect(source, `${name} should not render a <button style={…}>`).not.toMatch(handRolledButtonWithStyle)
+      for (const match of source.matchAll(buttonStyles)) {
+        expect(match[1].trim(), `${name}: a <button style={…}> may only set custom properties`).toMatch(/^'--/)
+      }
     }
-    expect(sidebarSource).toContain("from '@/components/ui/button'")
-    expect(projectHeaderSource).toContain("from '@/components/ui/button'")
-    expect(projectTabsSource).toContain("from '@/components/ui/button'")
-    expect(conversationControlsSource).toContain("from '@/components/ui/button'")
+    // index.css's baseline button rule outranks a class on any button without a `data-slot`
+    // (mock/README.md rule 3), so a raw shell button without one would silently be restyled.
+    for (const [name, source] of [['Sidebar.tsx', sidebarSource], ['TopBar.tsx', topBarSource]] as const) {
+      const buttons = source.match(/<button\s[^>]*/g) ?? []
+      expect(buttons.length, `${name} renders buttons`).toBeGreaterThan(0)
+      for (const tag of buttons) expect(tag, `${name}: every <button> carries data-slot`).toMatch(/data-slot=/)
+    }
+    expect(conversationBarSource).toContain("from '@/components/ui/button'")
     expect(composerSource).toContain("from '@/components/ui/button'")
   })
 
@@ -145,27 +154,23 @@ describe('Hub UI mock alignment contracts', () => {
     }
   })
 
-  it('the project header sheds its box and presents a segmented, middle-elided path (2026-08-04-hub-charcoal-visual-refresh)', () => {
-    expect(projectHeaderSource).not.toContain('borderBottom')
-    expect(projectHeaderSource).not.toContain('border-region')
-    expect(projectHeaderSource).toContain('elidePathSegments')
-    expect(projectHeaderSource).toMatch(/title=\{pathDisplay/)
+  it('the top bar sheds its box and keeps a segmented, middle-elided path in its project menu', () => {
+    expect(topBarSource).not.toContain('borderBottom')
+    expect(topBarSource).toContain('elidePathSegments')
+    expect(topBarSource).toMatch(/title=\{project\.path/)
   })
 
-  // F554: the rule under the header and the tabs lives in index.css, which the TSX checks above
-  // never read. The operator kept it (overhaul-header-rules), so hub-workspace-shell now asks for
-  // a faint rule in the region-border colour, and this reads the stylesheet that draws it.
-  it.each([['project-header'], ['project-tabs']])(
-    'the %s is closed by one faint rule in the region-border colour and paints no fill',
-    (selector) => {
-      const declarations = [...cssSource.matchAll(new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`, 'g'))]
-        .map((m) => m[1])
-        .join(';')
-      expect(declarations).toMatch(/border-bottom:\s*1px solid var\(--border-region\)/)
-      expect(declarations).not.toMatch(/background/)
-      expect(declarations).not.toMatch(/border-(top|left|right)\b/)
-    },
-  )
+  // F554: the rule under the header lives in a stylesheet, which the TSX checks above never read.
+  // The operator kept it (overhaul-header-rules): one faint rule in the region-border colour, and
+  // no fill of its own. The tabs now sit inside the same bar, so there is one rule, not two.
+  it('the top bar is closed by one faint rule in the region-border colour and paints no fill', () => {
+    const declarations = [...shellCssSource.matchAll(/\.aw-topbar\s*\{([^}]*)\}/g)].map((m) => m[1]).join(';')
+    expect(declarations).toMatch(/border-bottom:\s*1px solid var\(--border-region\)/)
+    expect(declarations).not.toMatch(/background/)
+    expect(declarations).not.toMatch(/border-(top|left|right)\b/)
+    const tabs = [...shellCssSource.matchAll(/\.aw-topbar-tabs\s*\{([^}]*)\}/g)].map((m) => m[1]).join(';')
+    expect(tabs).not.toMatch(/background|border-bottom/)
+  })
 
   it('writes no data-theme attribute to the application document (2026-08-04-hub-charcoal-visual-refresh)', () => {
     // SpecFrame.tsx writes data-theme into an *embedded spec document*, which has its own
@@ -182,14 +187,12 @@ describe('Hub UI mock alignment contracts', () => {
     expect(composerSource).toContain("from '@/components/ui/button'")
   })
 
-  it('the tab strip paints no line or plane change of its own in its markup (§6; the faint rule is CSS, F554)', () => {
-    // §6 removed the line and kept a plane change. The operator then read the remaining plane
-    // as a band laid over the screen — "it pops up in a bad way… make it the same color" — so
-    // the strip now paints nothing at all and sits on `--bg` with everything else.
-    expect(projectTabsSource).not.toMatch(/borderBottom/)
-    // Scoped to the style attribute so prose about the removal does not trip it.
-    expect(projectTabsSource).not.toMatch(/style=\{\{[^}]*background/)
-    expect(projectTabsSource).not.toMatch(/var\(--top\)/)
+  it('the tabs paint no line or plane change of their own in their markup (§6; the faint rule is CSS, F554)', () => {
+    // The operator read a separate plane as a band laid over the screen — "it pops up in a bad
+    // way… make it the same color" — so the tabs paint nothing and sit on `--bg` with the bar.
+    expect(topBarSource).not.toMatch(/borderBottom/)
+    expect(topBarSource).not.toMatch(/style=\{\{[^}]*background/)
+    expect(topBarSource).not.toMatch(/var\(--top\)/)
   })
 
   it('nothing paints a darker region around the composer (2026-08-06-hub-collaboration-and-conversation-fixes §4)', () => {

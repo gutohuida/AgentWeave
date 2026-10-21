@@ -1,0 +1,356 @@
+/* Primitives and motion recipes (ui-finesse). Built only on index.css's tokens, so both themes
+   follow. Values come from T3 Code's renderer and from published guidance (Emil Kowalski, Vercel's
+   interface guidelines, Radix defaults); see the UI review for the table. */
+
+:root {
+  /* Enter/exit for anything that appears; drawers; colour-only hover changes. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-pop: 160ms;
+  --dur-overlay: 200ms;
+  --dur-exit: 140ms;
+  --row-h: 30px;
+  --control-h: 32px;
+}
+
+/* ── Switch ───────────────────────────────────────────────────────────── */
+.aw-switch {
+  --w: 30px; --h: 18px; --t: 14px;
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  width: var(--w);
+  height: var(--h);
+  padding: 0 2px;
+  border: 1px solid var(--border-hi);
+  border-radius: 999px;
+  background: var(--surface-3);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+.aw-switch[data-size="sm"] { --w: 26px; --h: 16px; --t: 12px; }
+.aw-switch[data-state="checked"] {
+  border-color: transparent;
+  background: var(--green);
+}
+.aw-switch-thumb {
+  display: block;
+  width: var(--t);
+  height: var(--t);
+  border-radius: 999px;
+  background: var(--text);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  transform: translateX(0);
+  transition: transform var(--dur-fast) var(--ease-out), width 100ms ease 60ms, background-color var(--dur-fast) ease;
+}
+.aw-switch[data-state="checked"] .aw-switch-thumb {
+  background: #fff;
+  transform: translateX(calc(var(--w) - var(--t) - 6px));
+}
+/* The squish: stretch toward the direction of travel while pressed. */
+.aw-switch:active .aw-switch-thumb { width: calc(var(--t) + 4px); transition-delay: 0ms; }
+.aw-switch[data-state="checked"]:active .aw-switch-thumb { transform: translateX(calc(var(--w) - var(--t) - 10px)); }
+/* Light mode: a white thumb with an edge, as on every platform switch; --text would draw it black. */
+[data-mode="light"] .aw-switch-thumb { background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.14), 0 1px 2px rgb(0 0 0 / 0.18); }
+.aw-switch:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+.aw-switch:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Segmented ────────────────────────────────────────────────────────── */
+.aw-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.aw-segmented-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+}
+.aw-segmented[data-size="xs"] .aw-segmented-option { height: 22px; padding: 0 8px; font-size: 12px; }
+.aw-segmented-option:hover { color: var(--text); }
+.aw-segmented-option[data-active="true"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18), inset 0 1px var(--lift-hi);
+}
+.aw-segmented-option:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-segmented-count { font-variant-numeric: tabular-nums; color: var(--text-3); font-size: 11px; }
+.aw-segmented-option[data-active="true"] .aw-segmented-count { color: var(--text-2); }
+
+/* ── Select trigger and menus ─────────────────────────────────────────── */
+.aw-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--control-h);
+  min-width: 140px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) ease, background-color var(--dur-fast) ease;
+}
+.aw-select-trigger:hover { border-color: var(--border-hi); }
+.aw-select-trigger[data-state="open"] { border-color: var(--border-hi); background: var(--surface-3); }
+.aw-select-trigger:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+.aw-select-trigger:disabled { opacity: .5; cursor: default; }
+.aw-select-icon { display: inline-flex; color: var(--text-2); }
+.aw-select-chevron { color: var(--text-3); flex: none; transition: transform var(--dur-fast) var(--ease-out); }
+.aw-select-trigger[data-state="open"] .aw-select-chevron { transform: rotate(180deg); }
+
+.aw-menu {
+  z-index: 60;
+  min-width: 200px;
+  max-width: min(360px, calc(100vw - 24px));
+  max-height: min(420px, var(--radix-dropdown-menu-content-available-height, 420px));
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  backdrop-filter: blur(14px) saturate(1.1);
+  box-shadow: 0 16px 40px -18px rgb(0 0 0 / 0.55), 0 2px 6px rgb(0 0 0 / 0.18), inset 0 1px var(--lift-hi);
+  color: var(--text);
+}
+.aw-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: calc(var(--radius-lg) - 4px);
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  cursor: default;
+  user-select: none;
+}
+.aw-menu-item[data-two-line="true"] { align-items: flex-start; padding-block: 6px; }
+.aw-menu-item[data-highlighted] { background: var(--row-active); }
+.aw-menu-item[data-disabled] { opacity: .5; }
+.aw-menu-item[data-destructive="true"] { color: var(--red); }
+.aw-menu-item-icon { display: inline-flex; width: 16px; flex: none; justify-content: center; color: var(--text-2); }
+.aw-menu-item[data-destructive="true"] .aw-menu-item-icon { color: var(--red); }
+.aw-menu-item-detail { display: block; margin-top: 1px; font-size: 11.5px; line-height: 1.35; color: var(--text-3); white-space: normal; }
+.aw-menu-check { display: inline-flex; color: var(--text); flex: none; }
+.aw-menu-label { padding: 6px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.aw-menu-separator { height: 1px; margin: 4px -4px; background: var(--border); }
+.aw-kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 4px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface-3); color: var(--text-3);
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10.5px;
+}
+
+/* Pop: menus and popovers grow from their trigger. Exit is shorter than entry. */
+.aw-pop { transform-origin: var(--radix-dropdown-menu-content-transform-origin, top); }
+.aw-pop[data-state="open"] { animation: aw-pop-in var(--dur-pop) var(--ease-out); }
+.aw-pop[data-state="closed"] { animation: aw-pop-out var(--dur-exit) ease forwards; }
+@keyframes aw-pop-in { from { opacity: 0; transform: scale(.97); } }
+@keyframes aw-pop-out { to { opacity: 0; transform: scale(.98); } }
+
+/* ── Dialog ──────────────────────────────────────────────────────────── */
+.aw-dialog-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  backdrop-filter: blur(4px);
+}
+.aw-dialog-overlay[data-state="open"] { animation: aw-fade-in var(--dur-overlay) ease; }
+.aw-dialog-overlay[data-state="closed"] { animation: aw-fade-out var(--dur-exit) ease forwards; }
+.aw-dialog {
+  position: fixed; z-index: 51;
+  top: max(10vh, 48px); left: 50%;
+  translate: -50% 0;
+  display: flex; flex-direction: column;
+  max-height: calc(100vh - max(10vh, 48px) - 32px);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: 0 24px 64px -24px rgb(0 0 0 / .6), 0 2px 8px rgb(0 0 0 / .2), inset 0 1px var(--lift-hi);
+  outline: none;
+}
+.aw-dialog[data-state="open"] { animation: aw-dialog-in var(--dur-overlay) var(--ease-out); }
+.aw-dialog[data-state="closed"] { animation: aw-dialog-out var(--dur-exit) ease forwards; }
+@keyframes aw-dialog-in { from { opacity: 0; transform: scale(.98) translateY(4px); } }
+@keyframes aw-dialog-out { to { opacity: 0; transform: scale(.98); } }
+@keyframes aw-fade-in { from { opacity: 0; } }
+@keyframes aw-fade-out { to { opacity: 0; } }
+.aw-dialog-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 12px; }
+.aw-dialog-head > div { flex: 1; }
+.aw-dialog-title { font-size: 15px; font-weight: 600; letter-spacing: -.005em; }
+.aw-dialog-desc { margin-top: 4px; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.aw-dialog-body { min-height: 0; overflow-y: auto; padding: 4px 20px 16px; }
+.aw-dialog-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+
+/* ── Toast ───────────────────────────────────────────────────────────── */
+.aw-toast-viewport {
+  position: fixed; z-index: 70; right: 20px; bottom: 20px;
+  display: flex; flex-direction: column; gap: 8px;
+  width: min(360px, calc(100vw - 32px));
+  margin: 0; padding: 0; list-style: none; outline: none;
+}
+.aw-toast {
+  position: relative;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 36px 11px 14px;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface-3) 94%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 16px 40px -18px rgb(0 0 0 / .55), 0 2px 6px rgb(0 0 0 / .18), inset 0 1px var(--lift-hi);
+  color: var(--text);
+}
+.aw-toast[data-state="open"] { animation: aw-toast-in 320ms var(--ease-out); }
+.aw-toast[data-state="closed"] { animation: aw-toast-out 180ms ease forwards; }
+.aw-toast[data-swipe="move"] { transform: translateX(var(--radix-toast-swipe-move-x)); }
+.aw-toast[data-swipe="end"] { animation: aw-toast-swipe 160ms ease-out forwards; }
+@keyframes aw-toast-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+@keyframes aw-toast-out { to { opacity: 0; transform: translateY(4px) scale(.98); } }
+@keyframes aw-toast-swipe { from { transform: translateX(var(--radix-toast-swipe-end-x)); } to { transform: translateX(110%); opacity: 0; } }
+.aw-toast-icon { margin-top: 1px; flex: none; }
+.aw-toast[data-tone="success"] .aw-toast-icon { color: var(--green); }
+.aw-toast[data-tone="error"] .aw-toast-icon { color: var(--red); }
+.aw-toast-title { font-size: 13px; font-weight: 600; line-height: 1.35; }
+.aw-toast-desc { margin-top: 2px; font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.aw-toast-action {
+  align-self: center; flex: none; height: 26px; padding: 0 10px;
+  border: 1px solid var(--border-hi); border-radius: var(--radius-sm);
+  background: var(--surface-2); font-size: 12.5px; font-weight: 500;
+}
+.aw-toast-action:hover { background: var(--surface); }
+.aw-toast-close {
+  position: absolute; top: 8px; right: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 999px; color: var(--text-3);
+}
+.aw-toast-close:hover { background: var(--row-hover); color: var(--text); }
+
+/* ── Drop zone ───────────────────────────────────────────────────────── */
+.aw-dropzone {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px;
+  border: 1px dashed var(--border-hi);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) ease, background-color var(--dur-fast) ease;
+}
+.aw-dropzone[data-compact="true"] { padding: 10px 12px; }
+.aw-dropzone:hover, .aw-dropzone[data-over="true"] {
+  border-color: color-mix(in oklab, var(--ring) 70%, transparent);
+  background: color-mix(in oklab, var(--ring) 7%, var(--surface-2));
+}
+.aw-dropzone:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+.aw-dropzone-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 34px; height: 34px; border-radius: var(--radius-md);
+  background: var(--surface-3); color: var(--text-2);
+}
+.aw-dropzone[data-compact="true"] .aw-dropzone-icon { width: 28px; height: 28px; }
+.aw-dropzone-title { display: block; font-size: 13px; font-weight: 500; color: var(--text); }
+.aw-dropzone-or { color: var(--ring); font-weight: 500; }
+.aw-dropzone-hint { display: block; margin-top: 2px; font-size: 12px; color: var(--text-3); }
+
+/* ── Settings ────────────────────────────────────────────────────────── */
+.aw-settings-page { width: min(100%, 880px); margin-inline: auto; padding: 28px clamp(20px, 4vw, 40px) 64px; }
+.aw-settings-page-head { display: flex; align-items: flex-start; gap: 14px; padding-bottom: 8px; }
+.aw-settings-page-title { font-size: 18px; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; }
+.aw-settings-page-desc { margin-top: 3px; max-width: 62ch; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.aw-settings-group { margin-top: 36px; }
+.aw-settings-group-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.aw-settings-group-title { font-size: 13.5px; font-weight: 600; }
+.aw-settings-group-desc { margin-top: 2px; font-size: 12.5px; color: var(--text-3); max-width: 62ch; line-height: 1.45; }
+.aw-settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  column-gap: 32px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  transition: opacity var(--dur-fast) ease;
+}
+.aw-settings-row[data-stacked="true"] { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
+.aw-settings-row[data-inactive="true"] .aw-settings-row-text,
+.aw-settings-row[data-inactive="true"] .aw-settings-row-control { opacity: .45; }
+.aw-settings-row-text { min-width: 0; }
+.aw-settings-row-label { display: block; font-size: 13.5px; font-weight: 500; color: var(--text); }
+.aw-settings-row-desc { margin-top: 3px; max-width: 58ch; font-size: 12.5px; line-height: 1.45; color: var(--text-3); }
+.aw-settings-row-control { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
+.aw-settings-row[data-stacked="true"] .aw-settings-row-control { justify-content: flex-start; }
+.aw-settings-row-control > .aw-select-trigger, .aw-settings-row-control > .control-field { flex: 1; max-width: 280px; }
+.aw-settings-row[data-stacked="true"] .aw-settings-row-control > .control-field,
+.aw-settings-row[data-stacked="true"] .aw-settings-row-control > .aw-field { flex: 1; max-width: 640px; }
+.aw-settings-reset-slot { display: inline-flex; width: 22px; flex: none; justify-content: center; }
+.aw-settings-row[data-stacked="true"] .aw-settings-reset-slot { display: none; }
+.aw-settings-row-children { grid-column: 1 / -1; margin-top: 10px; }
+@media (max-width: 720px) {
+  .aw-settings-row { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
+  .aw-settings-row-control { justify-content: flex-start; }
+}
+
+.aw-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.aw-field-label { font-size: 12.5px; font-weight: 500; color: var(--text-2); }
+.aw-field-note { min-height: 16px; font-size: 11.5px; line-height: 16px; color: var(--text-3); }
+.aw-field-note[data-tone="error"] { color: var(--red); }
+.aw-field-note[data-tone="warning"] { color: var(--amber); }
+
+.aw-icon-button {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 24px; height: 24px; border-radius: var(--radius-sm);
+  color: var(--text-3);
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.aw-icon-button:hover { background: var(--row-hover); color: var(--text); }
+.aw-icon-button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+
+/* ── Loading: never flash a skeleton for a fast load ─────────────────── */
+/* A loader that appears and vanishes within a frame or two reads as a flicker. This holds it
+   invisible for 300ms, then fades it in; a load faster than that shows nothing at all. */
+.aw-delayed { animation: aw-delayed-in 200ms ease 300ms both; }
+@keyframes aw-delayed-in { from { opacity: 0; } }
+
+/* Status dot pulse in 6 steps: calmer than a per-frame fade, and cheaper. */
+.aw-pulse { animation: aw-pulse 2s steps(6) infinite; }
+@keyframes aw-pulse { 50% { opacity: .45; } }
+
+/* Hover-reveal: actions fade into the slot a timestamp leaves, so the row never changes width. */
+.aw-reveal-host .aw-reveal { opacity: 0; transition: opacity var(--dur-fast) ease; }
+.aw-reveal-host .aw-reveal-rest { transition: opacity var(--dur-fast) ease; }
+.aw-reveal-host:hover .aw-reveal, .aw-reveal-host:focus-within .aw-reveal { opacity: 1; }
+.aw-reveal-host:hover .aw-reveal-rest, .aw-reveal-host:focus-within .aw-reveal-rest { opacity: 0; }
+
+/* Theme switches never animate. Set on <html> for one frame around the switch. */
+.no-transitions *, .no-transitions *::before, .no-transitions *::after { transition: none !important; animation: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .aw-pop[data-state], .aw-dialog[data-state], .aw-toast[data-state] { animation-name: aw-fade-in; animation-duration: 120ms; }
+  .aw-pop[data-state="closed"], .aw-dialog[data-state="closed"], .aw-toast[data-state="closed"] { animation-name: aw-fade-out; }
+  .aw-switch-thumb, .aw-select-chevron { transition: none; }
+  .aw-pulse { animation: none; }
+}
+
+/* A screen's queries that the Hub did not answer (QueryErrorNotice). */
+.aw-query-error {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 12px;
+  padding: 8px 12px; border-radius: var(--radius-md);
+  font-size: 12.5px; color: var(--amber);
+  background: color-mix(in oklab, var(--amber) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--amber) 28%, transparent);
+}

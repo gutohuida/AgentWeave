@@ -42,13 +42,14 @@ vi.mock('@/api/status', () => ({
   useStatus: () => ({ data: { project_id: 'proj-test', project_name: 'AgentWeave' } }),
   useSessionSync: () => ({ data: undefined }),
 }))
-vi.mock('@/api/questions', () => ({
+vi.mock('@/api/questions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/questions')>()),
   useQuestions: () => ({ data: [] }),
   useDeclineQuestion: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
-vi.mock('@/components/overview/OverviewPage', () => ({
-  OverviewPage: ({ onNavigate }: { onNavigate: (destination: string) => void }) => (
+vi.mock('@/components/overview/OverviewScreen', () => ({
+  OverviewScreen: ({ onNavigate }: { onNavigate: (destination: string) => void }) => (
     <div data-testid="project-overview">
       <button onClick={() => onNavigate('agent:claude')}>Open claude from overview</button>
     </div>
@@ -68,15 +69,12 @@ vi.mock('@/components/agents/AgentOutputPanel', () => ({
   ),
 }))
 
-vi.mock('@/components/tasks/TasksBoard', () => ({ TasksBoard: () => <div /> }))
+vi.mock('@/components/tasks/TasksScreen', () => ({ TasksScreen: () => <div /> }))
 vi.mock('@/components/questions/QuestionsPanel', () => ({ QuestionsPanel: () => <div /> }))
-vi.mock('@/components/activity/ActivityLog', () => ({ ActivityLog: () => <div /> }))
-vi.mock('@/components/logs/LogsView', () => ({ LogsView: () => <div /> }))
-vi.mock('@/components/jobs/JobsPage', () => ({ JobsPage: () => <div /> }))
-vi.mock('@/components/instructions/InstructionsPage', () => ({ InstructionsPage: () => <div /> }))
-vi.mock('@/components/quality/QualityHealthPanel', () => ({ QualityHealthPanel: () => <div /> }))
+vi.mock('@/components/activity/ActivityScreen', () => ({ ActivityScreen: () => <div /> }))
+vi.mock('@/components/jobs/JobsScreen', () => ({ JobsScreen: () => <div /> }))
+vi.mock('@/components/settings/ProjectSettingsScreen', () => ({ ProjectSettingsScreen: () => <div /> }))
 vi.mock('@/components/spec/SpecPage', () => ({ SpecPage: () => <div /> }))
-vi.mock('@/components/layout/StatusBar', () => ({ StatusBar: () => <div /> }))
 vi.mock('@/components/layout/SetupModal', () => ({ SetupModal: () => null }))
 
 import App from '@/App'
@@ -105,9 +103,9 @@ describe('phase 1 conversation-first shell', () => {
   it('keeps project-name navigation separate from expansion', () => {
     render(withClient(<App />))
     expect(screen.getByTestId('project-overview')).toBeInTheDocument()
-    expect(screen.getByTestId('rail-agent-color-proj-test-claude')).toHaveStyle({
-      background: 'var(--agent-3)',
-    })
+    // The dot takes the agent's colour from its row (`--agent-accent`, shell.css).
+    const row = screen.getByTestId('rail-agent-color-proj-test-claude').closest('.aw-rail-agent-row') as HTMLElement
+    expect(row.style.getPropertyValue('--agent-accent')).toBe('var(--agent-3)')
     fireEvent.click(screen.getByTestId('project-expander-proj-test'))
     expect(screen.queryByTestId('rail-agent-proj-test-claude')).not.toBeInTheDocument()
     expect(screen.getByTestId('project-overview')).toBeInTheDocument()

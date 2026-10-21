@@ -1,15 +1,13 @@
 import { useMemo, useState } from 'react'
-import { formatDistanceToNow } from 'date-fns'
 import { useProjectConversations, type AgentConversation } from '@/api/agentChat'
 import type { ProjectAgentSummary } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
-import { Button } from '@/components/ui/button'
 import { agentColorVars } from '@/lib/agentColors'
 import { capRows, groupConsecutiveFirings } from '@/lib/loopGrouping'
 import { ConversationRow } from './ConversationRow'
 import { LoopFiringGroup } from './LoopFiringGroup'
 import { RowMenu, type RowMenuItem } from './RowMenu'
-import { hubDate } from '@/lib/hubTime'
+import { formatAgo, formatDateTime } from '@/lib/format'
 
 /** How many of an agent's conversations the tree shows before the rest go behind an expander.
  *
@@ -89,7 +87,7 @@ export function AgentTree({
   }, [archived.data])
 
   return (
-    <div className="ml-7 flex flex-col gap-0.5">
+    <div className="aw-rail-children">
       {agents.map((agent) => {
         const colors = agentColorVars(agent.color_index)
         const active = activeProject && activeAgent === agent.name
@@ -103,9 +101,15 @@ export function AgentTree({
         const capped = capRows(rows, expandedAll ? rows.length : CONVERSATION_DISPLAY_CAP)
         const visible = capped.visible
         const hidden = capped.hiddenConversations
-        // Waiting anywhere beneath a collapsed agent still has to be visible, or collapsing the
-        // agent hides the thing the attention state exists to surface.
-        const needsAttention = conversations.some((c) => c.attention === 'waiting')
+        // Waiting anywhere beneath the agent has to be visible on its row, or collapsing the agent
+        // hides the thing the attention state exists to surface.
+        const waiting = conversations.some((c) => c.attention === 'waiting')
+        const running =
+          agent.status === 'running' ||
+          agent.status === 'working' ||
+          conversations.some((c) => c.attention === 'running')
+        const attention: 'running' | 'waiting' | 'idle' = waiting ? 'waiting' : running ? 'running' : 'idle'
+        const containsActive = activeProject && conversations.some((c) => c.id === activeConversation)
         const archivedCount = data?.archived_by_agent?.[agent.name] ?? 0
         const archivedShown = showArchived[agent.name] ?? false
 
@@ -135,75 +139,89 @@ export function AgentTree({
 
         return (
           <div key={agent.id}>
-            <div className="row-group flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon-xs"
+            <div
+              className="aw-rail-row aw-rail-agent-row aw-reveal-host row-group"
+              data-attention={attention}
+              data-active={active && !containsActive ? 'true' : 'false'}
+              style={{ '--agent-accent': colors.accent } as React.CSSProperties}
+            >
+              <button
+                data-slot="rail-chevron"
+                type="button"
+                className="aw-rail-chevron-button"
                 aria-label={`${expanded ? 'Collapse' : 'Expand'} ${agent.name}`}
                 aria-expanded={expanded}
                 data-testid={`agent-expander-${projectId}-${agent.name}`}
                 onClick={() => onToggleAgent(agent.name)}
               >
-                <span
-                  style={{
-                    transform: expanded ? 'rotate(90deg)' : undefined,
-                    transition: 'transform var(--dur-fast) var(--ease)',
-                  }}
-                >
-                  <Icon name="chevron_right" size={14} />
+                <span className="aw-rail-chevron" data-open={expanded ? 'true' : 'false'}>
+                  <Icon name="chevron_right" size={12} />
                 </span>
-              </Button>
+              </button>
               <button
+                data-slot="rail-row-main"
                 type="button"
+                className="aw-rail-row-main"
                 data-testid={`rail-agent-${projectId}-${agent.name}`}
                 data-active={active ? 'true' : 'false'}
-                /* Level 2 of the rail's selection ladder — weight and colour, no fill. See the
-                 * `.row-item[data-active]` block in index.css for the whole scale. */
+                /* Level 2 of the rail's selection ladder. */
                 data-depth="agent"
                 onClick={() => onOpenAgent(projectId, agent.name)}
-                className="row-item min-w-0 flex-1"
               >
                 <span
                   data-testid={`rail-agent-color-${projectId}-${agent.name}`}
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: colors.accent }}
+                  className={['aw-agent-dot', attention === 'running' ? 'aw-pulse' : ''].join(' ')}
+                  aria-hidden="true"
                 />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{agent.name}</span>
-                  <span className="block truncate text-[10px]" style={{ color: 'var(--text-3)' }}>
-                    {agent.status === 'running'
-                      ? 'Running now'
-                      : agent.last_seen
-                        ? `Seen ${formatDistanceToNow(hubDate(agent.last_seen), { addSuffix: true })}`
-                        : 'No activity yet'}
-                  </span>
-                </span>
-                {!expanded && needsAttention && (
+                <span className="aw-rail-agent-name min-w-0 flex-1 truncate">{agent.name}</span>
+              </button>
+              <span className="aw-rail-row-end">
+                {/* One status signal, in words: working, waiting, or how long ago it was active —
+                    with the exact time in its title. It gives way to the row's actions on hover. */}
+                {attention === 'waiting' ? (
                   <span
                     data-testid={`rail-agent-attention-${projectId}-${agent.name}`}
-                    className="h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ background: 'var(--amber)' }}
+                    className="aw-reveal-rest aw-rail-meta"
                     title="A conversation is waiting for you"
                     aria-label="A conversation is waiting for you"
                     role="img"
-                  />
+                  >
+                    waiting
+                  </span>
+                ) : (
+                  <span
+                    className="aw-reveal-rest aw-rail-meta"
+                    data-testid={`rail-agent-meta-${projectId}-${agent.name}`}
+                    title={agent.last_seen ? `Last active ${formatDateTime(agent.last_seen)}` : 'No activity yet'}
+                  >
+                    {attention === 'running' ? 'working' : agent.last_seen ? formatAgo(agent.last_seen) : ''}
+                  </span>
                 )}
-                <span
-                  className="h-1.5 w-1.5 shrink-0 rounded-full"
-                  title={agent.status}
-                  style={{ background: agent.status === 'running' ? 'var(--green)' : 'var(--text-3)' }}
-                />
-              </button>
-              <RowMenu
-                label={`Actions for ${agent.name}`}
-                testId={`agent-menu-${projectId}-${agent.name}`}
-                persistent={active}
-                items={menuItems}
-              />
+                <span className="aw-reveal aw-rail-actions">
+                  <button
+                    data-slot="icon-button"
+                    type="button"
+                    className="aw-icon-button"
+                    aria-label={`New conversation with ${agent.name}`}
+                    title="New conversation"
+                    onClick={() => onNewConversation?.(projectId, agent.name)}
+                  >
+                    <Icon name="add" size={13} />
+                  </button>
+                  <RowMenu
+                    label={`Actions for ${agent.name}`}
+                    testId={`agent-menu-${projectId}-${agent.name}`}
+                    items={menuItems}
+                  />
+                </span>
+              </span>
             </div>
 
             {expanded && (
-              <div className="rail-conversation-group ml-7 flex flex-col gap-0.5" data-testid={`agent-conversations-${projectId}-${agent.name}`}>
+              <div
+                className="aw-rail-conversations rail-conversation-group"
+                data-testid={`agent-conversations-${projectId}-${agent.name}`}
+              >
                 {visible.map((row) =>
                   row.kind === 'loopGroup' ? (
                     <LoopFiringGroup
@@ -234,18 +252,16 @@ export function AgentTree({
                 )}
                 {(hidden > 0 || expandedAll) && (
                   <button
+                    data-slot="rail-more"
                     type="button"
-                    className="row-item"
+                    className="aw-rail-more"
                     data-testid={`conversation-expander-${projectId}-${agent.name}`}
                     aria-expanded={expandedAll}
                     onClick={() =>
                       setShowAll((state) => ({ ...state, [agent.name]: !expandedAll }))
                     }
-                    style={{ color: 'var(--text-3)' }}
                   >
-                    {expandedAll
-                      ? `Show fewer`
-                      : `Show ${hidden} more`}
+                    {expandedAll ? `Show fewer` : `Show ${hidden} more`}
                   </button>
                 )}
                 {archivedShown &&
@@ -259,35 +275,22 @@ export function AgentTree({
                       testId={`rail-archived-${conversation.id}`}
                     />
                   ))}
-                {/* An expanded agent with nothing under it. This was a bare line of grey text
-                    in the one branch where the operator has nothing to click — the same pass
-                    that dressed the empty states on the pages skipped the rail. Dressed at rail
-                    scale rather than with the page-level `EmptyState`, whose 52px tile and
-                    `py-12` do not fit 252px of width, and carrying the single action reachable
-                    from this spot: a new conversation with *this* agent, which the row menu
-                    above otherwise hides two clicks deep. */}
+                {/* An expanded agent with nothing under it carries the single action reachable
+                    from this spot: a new conversation with *this* agent. */}
                 {conversations.length === 0 && (
-                  <div
-                    className="rail-empty"
-                    data-testid={`no-conversations-${projectId}-${agent.name}`}
-                  >
-                    <div className="rail-empty-head">
-                      <span className="rail-empty-icon" aria-hidden="true">
-                        <Icon name="forum" size={14} />
-                      </span>
-                      <span className="rail-empty-title">No conversations yet</span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full justify-start"
+                  <div className="rail-empty" data-testid={`no-conversations-${projectId}-${agent.name}`}>
+                    <span className="sr-only">No conversations yet</span>
+                    <button
+                      data-slot="rail-empty"
+                      type="button"
+                      className="aw-rail-empty"
                       data-testid={`agent-new-conversation-${projectId}-${agent.name}`}
                       aria-label={`Start a conversation with ${agent.name}`}
                       onClick={() => onNewConversation?.(projectId, agent.name)}
                     >
-                      <Icon name="add" size={14} />
-                      New conversation
-                    </Button>
+                      <Icon name="add" size={13} />
+                      Start a conversation
+                    </button>
                   </div>
                 )}
               </div>
@@ -296,10 +299,8 @@ export function AgentTree({
         )
       })}
       {orphans.length > 0 && (
-        <div data-testid={`rail-archived-agents-${projectId}`} className="mt-1 flex flex-col gap-0.5">
-          <span className="px-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
-            Archived agents
-          </span>
+        <div data-testid={`rail-archived-agents-${projectId}`} className="aw-rail-orphans">
+          <span className="aw-rail-section-label">Archived agents</span>
           {orphans.map(([name, conversations]) =>
             conversations.map((conversation) => (
               <ConversationRow
@@ -316,16 +317,19 @@ export function AgentTree({
           )}
         </div>
       )}
-      <button
-        type="button"
-        className="row-item"
-        data-testid={`rail-add-agent-${projectId}`}
-        aria-label={`Add agent to this project`}
-        onClick={() => onAddAgent?.(projectId)}
-      >
-        <Icon name="person_add" size={14} />
-        Add agent
-      </button>
+      {agents.length === 0 && (
+        <button
+          data-slot="rail-empty"
+          type="button"
+          className="aw-rail-empty"
+          data-testid={`rail-first-agent-${projectId}`}
+          aria-label="Add agent to this project"
+          onClick={() => onAddAgent?.(projectId)}
+        >
+          <Icon name="person_add" size={13} />
+          Add the first agent
+        </button>
+      )}
     </div>
   )
 }

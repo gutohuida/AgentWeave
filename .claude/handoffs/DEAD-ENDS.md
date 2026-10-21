@@ -2513,3 +2513,18 @@ When `hub/hub/mcp_server.py` changes, its tool-server digest is new, and several
 ## 2026-10-21 (day sweep, CLI in a sandboxed home)
 
 - **`py -3.11` exits 109 with no output when `USERPROFILE`/`HOME` point at a sandbox folder** (even `py -3.11 -c "print(1)"`), so a sandboxed `agentweave reset`/`doctor` drive silently prints nothing. Call the interpreter directly: `C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe -m agentweave ...` works under the same variables. (2026-10-21)
+
+## 2026-10-20 (interactive, ui-finesse mocks)
+
+- **index.css's baseline button rule outranks any class.** `button:not([data-slot…]):not(.row-item):not(.row-action)` is specificity (0,3,1), so a `<button className="aw-switch">` lost its background and border to it (transparent) and the switch drew no track. On `ui/finesse-mocks` the rule exempts any `[data-slot]`; every new button or `role="button"` carries `data-slot="<name>"` (no existing button had a slot other than `"button"`, so nothing else moved). (2026-10-20)
+- **`src/__tests__/hubTime.test.ts` fails on any `new Date(<arg>)` outside its exempt list.** Parse Hub timestamps with `hubDate()` (`lib/hubTime.ts`); for a typed calendar day or a copy, build `new Date()` and set its fields. (2026-10-20)
+- **The Artifact tool refuses a bundle containing U+FFFD** ("replacement character … replace it"). micromark (react-markdown) carries the literal on purpose; build with `esbuild: { charset: 'ascii' }` (done in `hub/ui/vite.mock.config.ts`) so it is emitted as `�`. The tool also only publishes files under the working directory or the session scratchpad: copy `dist-mock/` into the scratchpad first. (2026-10-20)
+- **A worktree whose `hub/ui/node_modules` is a junction into the main checkout gets 403s from Vite for fonts** (the real path is outside the worktree root). `server.fs.strict: false` in the mock's Vite config. (2026-10-20)
+- **Don't kill processes by command-line match from the Bash tool.** `Stop-Process` on every process whose command line contains `vite.mock.config` also matched the Bash tool's own shell (its command line contained the string), killing the call (exit 255). Run servers with `run_in_background` and stop them by task or by the port's PID. (2026-10-20)
+- **Playwright theme captures:** `add_init_script` runs before `documentElement` exists (wrap it in try), and the app transitions `color`/`background` for 250ms, so a screenshot taken right after flipping `data-mode` is mid-fade (white text on light). Add `no-transitions` to `<html>` around the flip (`hub/ui/mock/shoot.py`). (2026-10-20)
+- **Never run the Hub suite serially; `| tail` hides that it is slow, not hung.** On 2026-10-20 a serial
+  `pytest hub/tests/ -q | tail -8` (8758 tests) had done ~4000 after 47 minutes, about 100 minutes in
+  all, and looked hung because tail prints nothing until the end. `-n auto --dist loadfile
+  --timeout=300 --timeout-method=thread` (CI's flags) took 11m44s. Under it,
+  `test_project_checks_gate.py::test_asking_without_a_result_starts_a_run_and_answers_at_once`
+  failed once and passed alone (21/21). (2026-10-21)

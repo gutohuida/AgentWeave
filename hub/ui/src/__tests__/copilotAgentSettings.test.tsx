@@ -71,7 +71,7 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 
 function renderExecution(summary: AgentSummary) {
   roster = [summary]
-  return render(<AgentSettingsPage agent={summary.name} section="execution" />)
+  return render(<AgentSettingsPage agent={summary.name} section="execution" onSelectSection={vi.fn()} onBack={vi.fn()} />)
 }
 
 const checkbox = (label: string) => screen.getByLabelText(`Consult ${label} for cp5`)
@@ -147,7 +147,7 @@ describe('a copilot agent has a review-agents setting', () => {
     execution.unmount()
 
     for (const section of ['identity', 'charter', 'interaction', 'workspace'] as const) {
-      const { unmount } = render(<AgentSettingsPage agent="cp5" section={section} />)
+      const { unmount } = render(<AgentSettingsPage agent="cp5" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} />)
       expect(screen.queryByLabelText('Consult code-review for cp5')).not.toBeInTheDocument()
       unmount()
     }
@@ -231,7 +231,7 @@ describe('a copilot agent has a GitHub-server setting', () => {
     execution.unmount()
 
     for (const section of ['identity', 'charter', 'interaction', 'workspace'] as const) {
-      const { unmount } = render(<AgentSettingsPage agent="cp5" section={section} />)
+      const { unmount } = render(<AgentSettingsPage agent="cp5" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} />)
       expect(screen.queryByLabelText('Enable the GitHub MCP server for cp5')).not.toBeInTheDocument()
       unmount()
     }

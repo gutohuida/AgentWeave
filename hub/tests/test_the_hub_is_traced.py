@@ -581,3 +581,100 @@ async def test_a_request_nests_under_a_tool_call_whose_line_arrived_after_it_beg
     [tool] = [span for span in spans if span["operation"] == "execute_tool"]
     [request] = [span for span in spans if span["operation"] == "aw.request"]
     assert request["parent_span_id"] == tool["span_id"]
+
+
+@pytest.mark.asyncio
+async def test_a_backend_that_takes_no_logs_still_gets_every_span_once(app, auth_headers):
+    """Review 0203: an endpoint that implements traces only (Jaeger, Tempo) answers 404 on
+    `/v1/logs`. The log records are best-effort beside the spans, so one warning must not hold the
+    accepted spans back: they are marked exported, later spans still go, nothing is sent twice."""
+    receiver = _Receiver(answers={"/v1/logs": 404})
+    try:
+        settings = await app.put(
+            f"{BASE}/traces/settings",
+            json={"otlp_endpoint": receiver.url, "export_enabled": True},
+            headers=auth_headers,
+        )
+        assert settings.status_code == 200, settings.text
+        with traces.work("spec_fold", PROJECT):
+            logging.getLogger("hub.spec_fold").warning("one warning")
+        await _flush()
+        assert await trace_export.push_once() == 2  # the settings PUT's request span, the fold
+        with traces.work("spec_fold", PROJECT):
+            logging.getLogger("hub.spec_fold").warning("another warning")
+        await _flush()
+        trace_export._retry_after.clear()
+        assert await trace_export.push_once() == 1
+
+        sent = [
+            span["spanId"]
+            for post in receiver.posts
+            if post["path"] == "/v1/traces"
+            for resource in post["body"]["resourceSpans"]
+            for scope in resource["scopeSpans"]
+            for span in scope["spans"]
+        ]
+        assert len(sent) == 3 and len(set(sent)) == 3, "every span once, none re-sent"
+        read = (await app.get(f"{BASE}/traces/settings", headers=auth_headers)).json()
+        assert read["exported_spans"] == 3
+        assert "404" in read["last_error"], "the operator still sees the refused log records"
+    finally:
+        receiver.close()
+
+
+@pytest.mark.asyncio
+async def test_an_event_its_transaction_rolled_back_is_not_on_the_request(app, auth_headers):
+    """Review 0203: `persist_event(commit=False)` inside a savepoint that rolls back (a flow that
+    would be empty, `spec.py`'s `_FlowWouldBeEmptyError`) leaves no `event_logs` row, so its
+    request's trace must not show it either; the one that commits is shown."""
+    span = traces.PendingSpan(
+        project_id="", name="POST /x", operation="aw.request", start_time=datetime.now(timezone.utc)
+    )
+    token = traces.set_current(span)
+    try:
+        async with async_session_factory() as db:
+            try:
+                async with db.begin_nested():
+                    await persist_event(db, PROJECT, "loop_created", {"id": "loop-x"}, commit=False)
+                    raise RuntimeError("the flow would be empty")
+            except RuntimeError:
+                pass
+            await persist_event(db, PROJECT, "loop_kept", {"id": "loop-y"}, commit=False)
+            assert [event["name"] for event in span.events] == [], "nothing before the commit"
+            await db.commit()
+        async with async_session_factory() as db:
+            await persist_event(db, PROJECT, "never_committed", {}, commit=False)
+    finally:
+        traces.reset_current(token)
+    assert [event["name"] for event in span.events] == ["loop_kept"]
+    assert span.keep
+
+
+@pytest.mark.asyncio
+async def test_the_writer_and_a_runs_session_both_keep_their_event_on_the_root(app, auth_headers):
+    """Review 0203: the writer's attach (a warning) and a run's own session (an event) each append
+    to the run root's `events`; neither may write back a copy it read before the other committed."""
+    run_id = f"run-{short_id()}"
+    async with async_session_factory() as db:
+        run = Run(id=run_id, project_id=PROJECT, agent="tracer", status="running", turn_depth=0)
+        db.add(run)
+        traces.start_run(db, run, prompt="Work.", runner="claude", model=None)
+        await db.commit()
+
+    token = traces.set_current(traces.RunTrace(project_id=PROJECT, run_id=run_id))
+    try:
+        session = async_session_factory()
+        await persist_event(session, PROJECT, "some_event", {"x": 1}, agent="tracer", commit=False)
+        logging.getLogger("hub.agent_trigger").warning("runner hiccup")
+        flush = asyncio.create_task(traces.flush_spans())
+        await asyncio.sleep(0.5)  # the writer is waiting on the run session's write lock
+        await session.commit()
+        await session.close()
+        await flush
+    finally:
+        traces.reset_current(token)
+    await _flush()
+    by_run = await app.get(f"{BASE}/traces/by-run/{run_id}", headers=auth_headers)
+    root = next(span for span in by_run.json()["spans"] if span["parent_span_id"] is None)
+    names = [event["name"] for event in root["events"]]
+    assert "some_event" in names and "log" in names, names

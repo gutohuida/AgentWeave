@@ -323,6 +323,45 @@ async def test_a_folder_the_operator_granted_is_in_an_agents_reach(
 
 
 @pytest.mark.asyncio
+async def test_files_named_alike_in_different_folders_keep_the_path_that_tells_them_apart(
+    app, auth_headers, tmp_path
+) -> None:
+    """F900: two `README.md` files added by path both listed as "README.md". A file inside the
+    project (or an agent's workspace) is named by its path there; a folder's files keep the
+    folder's name in front, as before, when the folder is outside it."""
+    for folder, text in (("app", b"# App\n"), ("plugins/export", b"# Export\n")):
+        (tmp_path / folder).mkdir(parents=True)
+        (tmp_path / folder / "README.md").write_bytes(text)
+    (tmp_path / "plugins/export/docs").mkdir()
+    (tmp_path / "plugins/export/docs/format.md").write_bytes(b"# Format\n")
+
+    got = await app.post(
+        f"{BASE}/vault/paths",
+        json={
+            "paths": [str(tmp_path / "app" / "README.md"), str(tmp_path / "plugins")],
+            "distil": False,
+        },
+        headers=auth_headers,
+    )
+    assert got.status_code == 200, got.text
+    names = [r["source"]["name"] for r in got.json()["results"] if r["status"] == "added"]
+    assert names == [
+        "app/README.md",
+        "plugins/export/docs/format.md",
+        "plugins/export/README.md",
+    ]
+
+    workspace = tmp_path / "ws"
+    (workspace / "notes" / "deep").mkdir(parents=True)
+    (workspace / "notes" / "deep" / "README.md").write_bytes(b"# Deep notes\n")
+    headers = await _run_headers("run-ingest-names", "alpha", workspace)
+    agent = await app.post(
+        AGENT_ROUTE, json={"paths": ["notes/deep/README.md"], "distil": False}, headers=headers
+    )
+    assert [r["source"]["name"] for r in agent.json()["results"]] == ["notes/deep/README.md"]
+
+
+@pytest.mark.asyncio
 async def test_a_folder_that_cannot_be_listed_is_refused_by_name_and_the_rest_is_added(
     app, auth_headers, tmp_path_factory, monkeypatch
 ) -> None:

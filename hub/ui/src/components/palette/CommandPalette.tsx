@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { OPEN_PALETTE_EVENT } from '@/lib/palette'
 import { Command } from 'cmdk'
 import * as Dialog from '@radix-ui/react-dialog'
 import { formatDistanceToNow } from 'date-fns'
@@ -82,8 +83,22 @@ export function CommandPalette({
         return !value
       })
     }
+    // The TopBar's Search button asks through an event (`openCommandPalette`): it only opens, so
+    // a second click while open is not a toggle that closes it under the operator's cursor.
+    const handleOpenRequest = () => {
+      setOpen((value) => {
+        if (!value && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+          openerRef.current = document.activeElement
+        }
+        return true
+      })
+    }
     document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    document.addEventListener(OPEN_PALETTE_EVENT, handleOpenRequest)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener(OPEN_PALETTE_EVENT, handleOpenRequest)
+    }
   }, [])
 
   const close = () => {

@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ManagerPanel } from '@/components/environment/ManagerPanel'
+import { ManagerSection } from '@/components/settings/sections/ManagerSection'
+import { chooseMenuOption, menuSelect, openMenuSelect } from './support/menuSelect'
 import { useConfigStore } from '@/store/configStore'
 
 /** `the-hubs-background-jobs-are-configured-on-a-manager-page`, task manager-section. The routes are
@@ -81,10 +83,10 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('Environment > Manager', () => {
+describe('Project settings → Manager', () => {
   it('says this Hub has no manager yet when the routes answer 404', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
-    render(<ManagerPanel />, { wrapper })
+    render(<ManagerSection />, { wrapper })
     expect(await screen.findByText(/This Hub has no manager yet/)).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull()
     expect(errors).not.toHaveBeenCalled()
@@ -92,29 +94,42 @@ describe('Environment > Manager', () => {
   })
 
   it('lists each job with its switch, runner and model, and the firings newest first', async () => {
+    const user = userEvent.setup()
     manager = (url) => {
       if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [JOB] } }
       if (url.includes('/manager/activity')) return { status: 200, body: { firings: FIRINGS } }
       return undefined
     }
-    render(<ManagerPanel />, { wrapper })
+    render(<ManagerSection />, { wrapper })
 
-    const job = await screen.findByTestId('manager-job-conversation-titles')
-    expect(within(job).getByText('Conversation titles')).toBeInTheDocument()
-    expect(screen.getByTestId('manager-job-conversation-titles-enabled')).toBeChecked()
-    await waitFor(() =>
-      expect(screen.getByTestId('manager-job-conversation-titles-runner')).toHaveValue('runner-titles'),
-    )
-    const runner = screen.getByTestId('manager-job-conversation-titles-runner')
-    // Each runner named by its own model (F268), as every runner select is.
-    expect(within(runner).getByRole('option', { name: 'Titler — Opus 5 (claude)' })).toBeInTheDocument()
-    expect(screen.getByTestId('manager-job-conversation-titles-model')).toHaveValue('claude-haiku-4-5-20251001')
+    await screen.findByTestId('manager-job-conversation-titles')
+    expect(screen.getByRole('heading', { name: 'Conversation titles' })).toBeInTheDocument()
+    expect(screen.getByTestId('manager-job-conversation-titles-enabled')).toHaveAttribute('aria-checked', 'true')
+    await waitFor(() => expect(menuSelect('Conversation titles runner')).toHaveTextContent('Titler'))
+    // Each runner named by its own model (F268), as every runner menu is.
+    const options = await openMenuSelect(user, 'Conversation titles runner')
+    expect(options.find((o) => o.textContent?.startsWith('Titler'))).toHaveTextContent('Opus 5 · claude')
+    await user.keyboard('{Escape}')
+    expect(menuSelect('Conversation titles model')).toHaveTextContent('Haiku 4.5')
 
     const first = await screen.findByTestId('manager-firing-0')
-    expect(within(first).getByText(/empty/i)).toBeInTheDocument()
+    expect(within(first).getByText('Nothing to do')).toBeInTheDocument()
     const second = screen.getByTestId('manager-firing-1')
-    expect(within(second).getByText('Bakery naming ideas')).toBeInTheDocument()
-    expect(within(second).getByText(/written/i)).toBeInTheDocument()
+    expect(within(second).getByText('Written')).toBeInTheDocument()
+  })
+
+  it('names a firing’s conversation by its title when the Hub knows it', async () => {
+    manager = (url) => {
+      if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [JOB] } }
+      if (url.includes('/manager/activity')) return { status: 200, body: { firings: FIRINGS } }
+      if (url.includes('/conversations')) {
+        return { status: 200, body: { conversations: [{ id: 'conv-1', agent: 'a', title: 'Bakery naming ideas', lifecycle: 'open', updated_at: '2026-10-09T15:01:00+00:00' }] } }
+      }
+      return undefined
+    }
+    render(<ManagerSection />, { wrapper })
+    expect(await screen.findByTestId('manager-firing-1-subject')).toHaveTextContent('Bakery naming ideas')
+    expect(screen.getByTestId('manager-firing-0-subject')).toHaveTextContent('conversation conv-2')
   })
 
   it('badges an answered report and opens what the model answered (F641, F581)', async () => {
@@ -128,12 +143,15 @@ describe('Environment > Manager', () => {
       if (url.includes('/manager/activity')) return { status: 200, body: { firings: [answered] } }
       return undefined
     }
-    render(<ManagerPanel />, { wrapper })
+    render(<ManagerSection />, { wrapper })
     const row = await screen.findByTestId('manager-firing-0')
-    expect(within(row).getByText('answered')).toBeInTheDocument()
-    const reply = within(row).getByText('What the model answered')
-    expect(reply.closest('details')).not.toHaveAttribute('open')
+    expect(within(row).getByText('Answered')).toBeInTheDocument()
+    // Closed, since it runs long; opened by the row.
+    expect(within(row).queryByText(/The source says 437 euros/)).toBeNull()
+    fireEvent.click(within(row).getByRole('row', { expanded: false }))
+    expect(within(row).getByRole('row', { expanded: true })).toBeInTheDocument()
     expect(within(row).getByText(/The source says 437 euros/)).toBeInTheDocument()
+    expect(within(row).getByText('answered: the entry stands')).toBeInTheDocument()
   })
 
   it('says what each firing worked on, a vault source by its name (F719)', async () => {
@@ -158,7 +176,7 @@ describe('Environment > Manager', () => {
       }
       return undefined
     }
-    render(<ManagerPanel />, { wrapper })
+    render(<ManagerSection />, { wrapper })
     expect(await screen.findByText('source "On-call handbook" (src-aaa)')).toBeInTheDocument()
     expect(screen.getByTestId('manager-firing-1-subject')).toHaveTextContent('source "Refunds" (src-bbb)')
     expect(screen.getByTestId('manager-firing-2-subject')).toHaveTextContent('document spec/changes/x')
@@ -168,6 +186,7 @@ describe('Environment > Manager', () => {
   })
 
   it('words the empty runner choice by what the job does with none (F590)', async () => {
+    const user = userEvent.setup()
     const vault = {
       ...JOB, key: 'vault-distillation', title: 'Vault distillation', needs_runner: true,
       runner_id: null, model: null,
@@ -177,18 +196,23 @@ describe('Environment > Manager', () => {
       if (url.includes('/manager/activity')) return { status: 200, body: { firings: [] } }
       return undefined
     }
-    render(<ManagerPanel />, { wrapper })
+    render(<ManagerSection />, { wrapper })
 
-    const titles = await screen.findByTestId('manager-job-conversation-titles')
-    expect(within(titles).getByRole('option', { name: "The agent's own runner" })).toBeInTheDocument()
+    await screen.findByTestId('manager-job-conversation-titles')
+    const titles = (await openMenuSelect(user, 'Conversation titles runner')).map((o) => o.textContent)
+    expect(titles[0]).toMatch(/^The agent’s own runner/)
+    await user.keyboard('{Escape}')
+    const distilChoices = (await openMenuSelect(user, 'Vault distillation runner')).map((o) => o.textContent)
+    expect(distilChoices[0]).toMatch(/^No runner/)
+    expect(distilChoices.some((t) => /agent’s own runner/.test(t ?? ''))).toBe(false)
+    await user.keyboard('{Escape}')
     const distil = screen.getByTestId('manager-job-vault-distillation')
-    expect(within(distil).queryByRole('option', { name: "The agent's own runner" })).toBeNull()
-    expect(within(distil).getByRole('option', { name: 'No runner (the job does nothing)' })).toBeInTheDocument()
-    expect(within(distil).queryByText(/own agent's runner/)).toBeNull()
     expect(within(distil).getByText(/does nothing until a runner is chosen/i)).toBeInTheDocument()
+    expect(within(distil).getByText(/On, but it has no runner, so it will not run/)).toBeInTheDocument()
   })
 
   it('sends only what changed when a control is used', async () => {
+    const user = userEvent.setup()
     manager = (url, init) => {
       if (url.includes('/manager/jobs') && init?.method === 'PATCH') {
         return { status: 200, body: { ...JOB, enabled: false } }
@@ -197,21 +221,34 @@ describe('Environment > Manager', () => {
       if (url.includes('/manager/activity')) return { status: 200, body: { firings: [] } }
       return undefined
     }
-    render(<ManagerPanel />, { wrapper })
+    render(<ManagerSection />, { wrapper })
 
     fireEvent.click(await screen.findByTestId('manager-job-conversation-titles-enabled'))
     await waitFor(() => expect(patches).toHaveLength(1))
     expect(patches[0].url).toBe('http://hub/api/v1/projects/proj-a/manager/jobs/conversation-titles')
     expect(patches[0].body).toEqual({ enabled: false })
 
-    await waitFor(() =>
-      expect(screen.getByTestId('manager-job-conversation-titles-model')).not.toBeDisabled(),
-    )
-    fireEvent.change(screen.getByTestId('manager-job-conversation-titles-model'), {
-      target: { value: '' },
-    })
+    await waitFor(() => expect(menuSelect('Conversation titles model')).not.toBeDisabled())
+    await chooseMenuOption(user, 'Conversation titles model', /The runner’s model/)
     await waitFor(() => expect(patches).toHaveLength(2))
     expect(patches[1].body).toEqual({ model: null })
+  })
+
+  it('clears a model chosen for another CLI when the runner changes', async () => {
+    const user = userEvent.setup()
+    const runners = [...RUNNERS, { id: 'runner-codex', name: 'Codex', cli: 'codex', model: null, model_unrecognised: false }]
+    manager = (url, init) => {
+      if (url.includes('/manager/jobs') && init?.method === 'PATCH') return { status: 200, body: JOB }
+      if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [JOB] } }
+      if (url.includes('/manager/activity')) return { status: 200, body: { firings: [] } }
+      if (url.endsWith('/runners')) return { status: 200, body: runners }
+      return undefined
+    }
+    render(<ManagerSection />, { wrapper })
+    await waitFor(() => expect(menuSelect('Conversation titles runner')).toHaveTextContent('Titler'))
+    await chooseMenuOption(user, 'Conversation titles runner', /^Codex/)
+    await waitFor(() => expect(patches).toHaveLength(1))
+    expect(patches[0].body).toEqual({ runner_id: 'runner-codex', model: null })
   })
 
   it('withholds the job controls when the runners cannot be read, rather than misstate the runner', async () => {
@@ -221,9 +258,9 @@ describe('Environment > Manager', () => {
       if (url.endsWith('/runners')) return { status: 500, body: { detail: 'boom' } }
       return undefined
     }
-    render(<ManagerPanel />, { wrapper })
+    render(<ManagerSection />, { wrapper })
     expect(await screen.findByRole('alert')).toBeInTheDocument()
-    expect(screen.queryByTestId('manager-job-conversation-titles-runner')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Conversation titles runner' })).toBeNull()
   })
 
   it('says when nothing has fired yet', async () => {
@@ -232,7 +269,7 @@ describe('Environment > Manager', () => {
       if (url.includes('/manager/activity')) return { status: 200, body: { firings: [] } }
       return undefined
     }
-    render(<ManagerPanel />, { wrapper })
+    render(<ManagerSection />, { wrapper })
     expect(await screen.findByText(/No job has spawned a model yet/)).toBeInTheDocument()
   })
 })

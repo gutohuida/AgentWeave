@@ -59,7 +59,13 @@ function themeOverride(mode: 'light' | 'dark'): string {
     `--border:${n.border} !important;` +
     `--fg:${n.fg} !important;` +
     `--muted:${n.muted} !important;` +
-    `}</style>`
+    `}` +
+    // A reading measure. At 1440 the body ran ~150 characters a line; prose reads best near 70.
+    `body{max-width:52rem !important;margin-inline:auto !important;}` +
+    // Embedded, the Hub's document header already shows the title, kind, phase and rigor; the
+    // document's own copy of them is hidden here only, never in the file.
+    `body>h1:first-of-type,body>p.aw-meta{display:none !important;}` +
+    `</style>`
   )
 }
 

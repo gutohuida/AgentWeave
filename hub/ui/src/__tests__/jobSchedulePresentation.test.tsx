@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { JobCard } from '@/components/jobs/JobCard'
 import { JobForm } from '@/components/jobs/JobForm'
-import { JobsPage } from '@/components/jobs/JobsPage'
+import { JobsScreen } from '@/components/jobs/JobsScreen'
 import userEvent from '@testing-library/user-event'
 import type { Job, JobRun } from '@/api/jobs'
 
@@ -29,6 +28,7 @@ vi.mock('@/api/jobs', async (importOriginal) => {
     ...actual,
     useJobHistory: () => jobHistory,
     useJobs: () => ({ data: pageJobs, isLoading: false }),
+    useArchivedJobs: () => ({ data: [], isLoading: false }),
     useRunJob: idle,
     usePauseJob: idle,
     useResumeJob: idle,
@@ -70,27 +70,30 @@ function run(id: string, status: string): JobRun {
 
 const noop = () => {}
 
+/** The job's row on the wired Jobs tab (the card these tests were written against became a row). */
 function renderCard(job: Job) {
+  pageJobs = [job]
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <JobCard job={job} onRun={noop} onPause={noop} onResume={noop} onArchive={noop} isPending={false} />
+      <JobsScreen />
     </QueryClientProvider>,
   )
 }
 
 describe('JobCard schedule presentation', () => {
-  it('says the cron expression in English beside the raw chip', () => {
+  it('says the cron expression in English, with the raw expression in its title', () => {
     renderCard(baseJob())
-    expect(screen.getByText('0 9 * * 1-5')).toBeInTheDocument()
-    expect(screen.getByText('Weekdays at 9:00 AM')).toBeInTheDocument()
+    const sentence = screen.getByText('Weekdays at 09:00 UTC')
+    expect(sentence).toHaveAttribute('title', '0 9 * * 1-5 (UTC)')
   })
 
   it('says nothing at all for a schedule it cannot translate exactly', () => {
     // Day-of-month and day-of-week both restricted: OR in Vixie cron, AND in APScheduler.
-    const { container } = renderCard(baseJob({ cron: '0 9 15 * 1' }))
-    expect(container.querySelector('.job-cron-plain')).toBeNull()
+    renderCard(baseJob({ cron: '0 9 15 * 1' }))
+    // No sentence that would be wrong: the expression itself is all that is said.
     expect(screen.getByText('0 9 15 * 1')).toBeInTheDocument()
+    expect(screen.queryByText(/^(Weekdays|Daily) at/)).toBeNull()
   })
 })
 
@@ -138,9 +141,12 @@ describe('JobCard action and category colour', () => {
     expect(badge.getAttribute('style')).not.toContain('--amber')
   })
 
-  it('gives Archive the destructive vocabulary instead of an outline that swallowed its red', () => {
+  it('gives Archive the destructive vocabulary instead of an outline that swallowed its red', async () => {
+    const user = userEvent.setup()
     renderCard(baseJob())
-    const archive = screen.getByLabelText('Archive')
+    await user.click(screen.getByRole('button', { name: 'More for Nightly audit' }))
+    await user.click(await screen.findByRole('menuitem', { name: /Archive/ }))
+    const archive = within(await screen.findByRole('dialog')).getByRole('button', { name: 'Archive' })
     // The outline variant forces its own SVG to --text-2, so the inline red this used to carry
     // rendered nothing; `destructive` is the variant the confirm step already uses.
     expect(archive.className).toContain('--error-cont')
@@ -210,7 +216,7 @@ describe('a cron restricting both day fields is refused on screen, not previewed
     // 2027-05-15. The number was 260 days wrong and rendered as fact.
     renderCard(baseJob({ cron: '0 0 15 * 5', next_run: '2026-08-28T00:00:00Z' }))
     expect(screen.getByTestId('job-cron-ambiguity-job-1')).toHaveTextContent('not knowable')
-    expect(screen.queryByText(/^Next: in /)).toBeNull()
+    expect(screen.queryByText(/^Next: (in |now)/)).toBeNull()
   })
 
   it('an ordinary job still shows its next run', () => {
@@ -233,7 +239,7 @@ describe('the schedule is labelled UTC, which is the clock it actually uses (F2)
     expect(preview).not.toHaveTextContent('server time')
   })
 
-  it('the page footer names the same clock, since it is the same scheduler', () => {
+  it('the page names the same clock, since it is the same scheduler', () => {
     // Both surfaces said "server time" and only one of them is a computed preview. The footer is a
     // flat sentence, which is exactly why it is worth pinning: nothing else would ever fail if it
     // silently went back to naming a clock the scheduler does not use.
@@ -241,10 +247,11 @@ describe('the schedule is labelled UTC, which is the clock it actually uses (F2)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
-        <JobsPage />
+        <JobsScreen />
       </QueryClientProvider>,
     )
-    expect(screen.getByText('Jobs fire on a UTC clock')).toBeInTheDocument()
+    expect(screen.getByText('Times in UTC')).toBeInTheDocument()
+    expect(screen.getByTitle("Schedules fire on the Hub's UTC clock")).toBeInTheDocument()
     expect(screen.queryByText(/server time/)).toBeNull()
   })
 })

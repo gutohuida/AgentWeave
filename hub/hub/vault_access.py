@@ -2,7 +2,8 @@
 
 `the-vault-map-is-shaped-by-what-agents-ask-for`. The agents' `vault_read` at offset 0 adds one to
 that entry's count (`record_fetch`, in its own transaction, so the read never waits on or fails
-with it). Both maps and both entry routes list the count and the last read (`annotate`, `shape`),
+with it), and, since `the-vault-names-who-read-an-entry` (F901), one to that agent's count of it.
+Both maps and both entry routes list the count, the last read and the readers (`annotate`, `shape`),
 and `shape` orders the map: an area is a source with the facts citing it, the most-read area leads,
 the source leads its area, and its facts follow most-read first. Nothing here runs a model; with no
 reads the order is the newest-first order `vault.build_map` already produced.
@@ -13,46 +14,63 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import VaultFetch
+from .db.models import VaultFetch, VaultReader
 
 #: An entry's count and when it was last read, as `counts_for` returns them.
 Count = Tuple[int, str]
+
+#: An entry's readers as `readers_for` returns them: `{agent, count, last_read_at}`, newest first.
+Readers = List[Dict[str, Any]]
 
 
 def _iso(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-async def record_fetch(db: AsyncSession, project_id: str, entry_id: str) -> Count:
-    """Add one to the entry's count and stamp it now; returns the new count.
-
-    An UPDATE that adds in the database, so two reads at the same moment are both counted, and an
-    INSERT only when there is no row yet (a lost race on it is an UPDATE again).
-    """
+async def _bump(db: AsyncSession, model: Any, keys: Dict[str, str], stamp: str) -> int:
+    """Add one to the row *keys* name in *model*'s table and set its *stamp* column to now; returns
+    the new count. An UPDATE that adds in the database, so two reads at the same moment are both
+    counted, and an INSERT only when there is no row yet (a lost race on it is an UPDATE again)."""
     now = datetime.now(timezone.utc)
-    table = VaultFetch.__table__
-    where = (table.c.project_id == project_id) & (table.c.entry_id == entry_id)
+    table = model.__table__
+    where = and_(*(table.c[column] == value for column, value in keys.items()))
     for _ in range(3):
         bumped = await db.execute(
-            update(table).where(where).values(count=table.c.count + 1, last_fetched_at=now)
+            update(table).where(where).values(count=table.c.count + 1, **{stamp: now})
         )
         if bumped.rowcount:
             break
-        db.add(VaultFetch(project_id=project_id, entry_id=entry_id, count=1, last_fetched_at=now))
+        db.add(model(**keys, count=1, **{stamp: now}))
         try:
             await db.commit()
-            return 1, _iso(now)
+            return 1
         except IntegrityError:
             await db.rollback()
     else:
-        raise RuntimeError(f"could not count a read of {entry_id}")
+        raise RuntimeError(f"could not count a read of {keys['entry_id']}")
     await db.commit()
-    row = (await db.execute(select(VaultFetch.count).where(where))).scalar_one()
-    return int(row), _iso(now)
+    return int((await db.execute(select(table.c.count).where(where))).scalar_one())
+
+
+async def record_fetch(
+    db: AsyncSession, project_id: str, entry_id: str, agent: Optional[str] = None
+) -> Count:
+    """Add one to the entry's count and stamp it now, and to *agent*'s count of it when one is
+    named (the run credential's agent, never a request's word); returns the entry's new count."""
+    keys = {"project_id": project_id, "entry_id": entry_id}
+    count = await _bump(db, VaultFetch, keys, "last_fetched_at")
+    if agent:
+        await _bump(db, VaultReader, {**keys, "agent": agent}, "last_read_at")
+    last = await db.execute(
+        select(VaultFetch.last_fetched_at).where(
+            (VaultFetch.project_id == project_id) & (VaultFetch.entry_id == entry_id)
+        )
+    )
+    return count, _iso(last.scalar_one())
 
 
 async def counts_for(db: AsyncSession, project_id: str) -> Dict[str, Count]:
@@ -60,13 +78,34 @@ async def counts_for(db: AsyncSession, project_id: str) -> Dict[str, Count]:
     return {row.entry_id: (row.count, _iso(row.last_fetched_at)) for row in rows.scalars()}
 
 
-def annotate(entry: Dict[str, Any], count: Optional[Count]) -> Dict[str, Any]:
-    """*entry* with `fetches` (0 when never read) and `last_fetched_at` (null when never read)."""
+async def readers_for(db: AsyncSession, project_id: str) -> Dict[str, Readers]:
+    rows = await db.execute(
+        select(VaultReader)
+        .where(VaultReader.project_id == project_id)
+        .order_by(VaultReader.last_read_at.desc(), VaultReader.agent)
+    )
+    found: Dict[str, Readers] = {}
+    for row in rows.scalars():
+        found.setdefault(row.entry_id, []).append(
+            {"agent": row.agent, "count": row.count, "last_read_at": _iso(row.last_read_at)}
+        )
+    return found
+
+
+def annotate(
+    entry: Dict[str, Any], count: Optional[Count], readers: Optional[Readers] = None
+) -> Dict[str, Any]:
+    """*entry* with `fetches` (0 when never read), `last_fetched_at` (null when never read) and
+    `readers` (the agents that read it, most recent first; empty when none is known)."""
     fetches, last = count or (0, None)
-    return {**entry, "fetches": fetches, "last_fetched_at": last}
+    return {**entry, "fetches": fetches, "last_fetched_at": last, "readers": readers or []}
 
 
-def shape(entries: List[Dict[str, Any]], counts: Dict[str, Count]) -> List[Dict[str, Any]]:
+def shape(
+    entries: List[Dict[str, Any]],
+    counts: Dict[str, Count],
+    readers: Optional[Dict[str, Readers]] = None,
+) -> List[Dict[str, Any]]:
     """The map with counts listed and areas ordered by them.
 
     A fact belongs to the first of its sources that is in the map; one with none is in a last area
@@ -74,7 +113,10 @@ def shape(entries: List[Dict[str, Any]], counts: Dict[str, Count]) -> List[Dict[
     newest first; within an area the source leads and facts go by reads, then newest first. A count
     for an id that is not in *entries* is never listed.
     """
-    listed = [annotate(entry, counts.get(entry["id"])) for entry in entries]
+    readers = readers or {}
+    listed = [
+        annotate(entry, counts.get(entry["id"]), readers.get(entry["id"])) for entry in entries
+    ]
     sources = [e for e in listed if e["kind"] == "source"]
     known = {e["id"] for e in sources}
     under: Dict[str, List[Dict[str, Any]]] = {e["id"]: [] for e in sources}

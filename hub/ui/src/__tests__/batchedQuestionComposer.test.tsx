@@ -178,7 +178,7 @@ describe('answering a batch through the composer', () => {
     openQuestions = [batched(0, 2, true), batched(1, 2)]
     render(<AgentOutputPanel agent={agent} />)
 
-    const composer = screen.getByPlaceholderText('Answer codex-1…')
+    const composer = screen.getByPlaceholderText('Answer codex-1, or pick an option above…')
     fireEvent.change(composer, { target: { value: 'neither, use C' } })
     fireEvent.keyDown(composer, { key: 'Enter' })
 

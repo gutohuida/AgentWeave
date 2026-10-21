@@ -103,10 +103,10 @@ describe('starting a conversation', () => {
     )
   })
 
-  it('asks what the bound agent should work on, by name', () => {
+  it('names the bound agent it is about to talk to', () => {
     renderSurface('claude')
     expect(screen.getByTestId('new-conversation-headline')).toHaveTextContent(
-      'What should claude work on?',
+      'New conversation with claude',
     )
   })
 
@@ -120,7 +120,7 @@ describe('starting a conversation', () => {
     fireEvent.click(screen.getByTestId('new-conversation-agent-codex'))
     await waitFor(() =>
       expect(screen.getByTestId('new-conversation-headline')).toHaveTextContent(
-        'What should codex work on?',
+        'New conversation with codex',
       ),
     )
   })
@@ -185,7 +185,7 @@ describe('starting a conversation', () => {
     )
     expect(screen.getByTestId('new-conversation-agent-codex')).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByTestId('new-conversation-headline')).toHaveTextContent(
-      'What should claude work on?',
+      'New conversation with claude',
     )
 
     // And the message actually goes where the operator redirected it.

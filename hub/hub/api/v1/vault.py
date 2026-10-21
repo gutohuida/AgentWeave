@@ -117,9 +117,9 @@ def _refused(exc: vault.VaultError) -> HTTPException:
 async def read_map(session: AsyncSession, project_id: str) -> Dict[str, Any]:
     root, private = await roots(session, project_id)
     entries = await asyncio.to_thread(vault.build_map, root, private)
-    return {
-        "entries": vault_access.shape(entries, await vault_access.counts_for(session, project_id))
-    }
+    counts = await vault_access.counts_for(session, project_id)
+    readers = await vault_access.readers_for(session, project_id)
+    return {"entries": vault_access.shape(entries, counts, readers)}
 
 
 async def read_one(
@@ -136,7 +136,8 @@ async def read_one(
         except Exception:  # noqa: BLE001 -- a note that cannot be refined keeps the general one
             logger.warning("could not say why %s is unread", entry_id, exc_info=True)
     counts = await vault_access.counts_for(session, project_id)
-    return vault_access.annotate(entry, counts.get(entry_id))
+    readers = await vault_access.readers_for(session, project_id)
+    return vault_access.annotate(entry, counts.get(entry_id), readers.get(entry_id))
 
 
 @router.get("/settings")
@@ -284,7 +285,7 @@ async def add_paths(
         visibility = (await vault.get_settings(session, project_id))["default_visibility"]
     try:
         vault_intake.check_fields(body.type, visibility, body.dated)
-        batch = await asyncio.to_thread(vault_intake.expand, body.paths, reach)
+        batch = await asyncio.to_thread(vault_intake.expand, body.paths, reach, (root,))
     except vault_intake.IntakeError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     if body.distil:

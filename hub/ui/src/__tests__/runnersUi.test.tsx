@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
 import type { ModelCatalogResponse } from '@/api/modelCatalog'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
-import { RunnersPage } from '@/components/runners/RunnersPage'
+import { RunnersSection as RunnersPage } from '@/components/settings/sections/RunnersSection'
+import { chooseMenuOption, menuSelect } from './support/menuSelect'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 
 const createMutate = vi.fn()
@@ -17,13 +18,15 @@ const bindMutate = vi.fn()
 // has no `error` to render and no `reset()` to clear, which is the whole of section 3.
 let refuseCreate: unknown = null
 let refuseUpdate: unknown = null
+let runnersError: Error | null = null
+let managerJobsError: Error | null = null
 
 // Armed by a test to swap in a catalog with a different Codex `source`
 // (`the-codex-models-offered-are-the-ones-its-cli-lists`, design test 9).
 let catalogOverride: ModelCatalogResponse | null = null
 
 vi.mock('@/api/runners', () => ({
-  useRunners: () => ({
+  useRunners: () => runnersError ? { data: undefined, isLoading: false, error: runnersError, refetch: vi.fn() } : ({
     data: [
       {
         id: 'runner-default',
@@ -137,6 +140,12 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
   }
 })
 
+// The list counts what uses each runner; the manager's jobs are one of those, not what these test.
+vi.mock('@/api/manager', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/manager')>()),
+  useManagerJobs: () => (managerJobsError ? { data: undefined, error: managerJobsError } : { data: [] }),
+}))
+
 function optionsOf(select: HTMLElement): (string | null)[] {
   return [...select.querySelectorAll('option')].map((option) => option.textContent)
 }
@@ -149,13 +158,28 @@ describe('runner management UI', () => {
     refuseCreate = null
     refuseUpdate = null
     catalogOverride = null
+    runnersError = null
+    managerJobsError = null
+  })
+
+  it('says the runners could not be read, rather than waiting on a skeleton', () => {
+    runnersError = new Error('500')
+    render(<RunnersPage />)
+    expect(screen.queryByLabelText('Loading runners')).toBeNull()
+    expect(screen.getByRole('alert')).toHaveTextContent('The runners could not be read.')
+  })
+
+  it('warns that "used by" leaves out manager jobs when they cannot be read', () => {
+    managerJobsError = new Error('500')
+    render(<RunnersPage />)
+    expect(screen.getByTestId('runners-usage-error')).toHaveTextContent('The counts below leave out manager jobs.')
   })
 
   it('offers copilot as a runner CLI (a-copilot-agent-runs-over-acp task 1.19)', async () => {
     const user = userEvent.setup()
     render(<RunnersPage />)
 
-    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.click(screen.getByRole('button', { name: 'New runner' }))
     expect(optionsOf(screen.getByLabelText('CLI'))).toEqual(['claude', 'codex', 'copilot'])
   })
 
@@ -163,7 +187,7 @@ describe('runner management UI', () => {
     const user = userEvent.setup()
     render(<RunnersPage />)
 
-    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.click(screen.getByRole('button', { name: 'New runner' }))
     await user.selectOptions(screen.getByLabelText('CLI'), 'codex')
 
     expect(screen.getByText('Built-in list: no Codex model cache')).toBeInTheDocument()
@@ -188,7 +212,7 @@ describe('runner management UI', () => {
     }
     render(<RunnersPage />)
 
-    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.click(screen.getByRole('button', { name: 'New runner' }))
     await user.selectOptions(screen.getByLabelText('CLI'), 'codex')
 
     expect(
@@ -200,7 +224,7 @@ describe('runner management UI', () => {
     const user = userEvent.setup()
     render(<RunnersPage />)
 
-    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.click(screen.getByRole('button', { name: 'New runner' }))
     // Claude is the default CLI when the dialog opens.
     expect(screen.queryByText(/Built-in list|As listed by your installed Codex CLI/)).not.toBeInTheDocument()
   })
@@ -209,7 +233,7 @@ describe('runner management UI', () => {
     const user = userEvent.setup()
     render(<RunnersPage />)
 
-    const trigger = screen.getByRole('button', { name: 'New Runner' })
+    const trigger = screen.getByRole('button', { name: 'New runner' })
     trigger.focus()
     await user.click(trigger)
 
@@ -227,7 +251,7 @@ describe('runner management UI', () => {
 
     expect(screen.getByText('Claude Default')).toBeInTheDocument()
     expect(screen.getByText('Claude Opus')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.click(screen.getByRole('button', { name: 'New runner' }))
     // 'e.g. Claude Opus' is the *Name* field, not the model: Save is disabled on an empty name.
     await user.type(screen.getByPlaceholderText('e.g. Claude Opus'), 'Claude Sonnet')
 
@@ -258,7 +282,7 @@ describe('runner management UI', () => {
     const user = userEvent.setup()
     render(<RunnersPage />)
 
-    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.click(screen.getByRole('button', { name: 'New runner' }))
     await user.type(screen.getByPlaceholderText('e.g. Claude Opus'), 'Claude Plain')
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -273,7 +297,7 @@ describe('runner management UI', () => {
     const user = userEvent.setup()
     render(<RunnersPage />)
 
-    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.click(screen.getByRole('button', { name: 'New runner' }))
     await user.selectOptions(screen.getByLabelText('Model'), 'claude-opus-5')
     expect((screen.getByLabelText('Model') as HTMLSelectElement).value).toBe('claude-opus-5')
 
@@ -290,8 +314,8 @@ describe('runner management UI', () => {
     render(<RunnersPage />)
 
     // The list says which runners need attention without opening each one.
-    expect(screen.getByText('claude-3-legacy-9')).toBeInTheDocument()
-    expect(screen.getByText('Unrecognised')).toBeInTheDocument()
+    expect(screen.getByText(/Claude Code · claude-3-legacy-9/)).toBeInTheDocument()
+    expect(screen.getByText(/model not in the catalog/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Edit Claude Legacy' }))
     const modelSelect = screen.getByLabelText('Model') as HTMLSelectElement
@@ -337,7 +361,7 @@ describe('runner management UI', () => {
     refuseCreate = new ApiError(400, JSON.stringify({ detail: "'opus' is not a model 'claude' declares" }))
     render(<RunnersPage />)
 
-    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.click(screen.getByRole('button', { name: 'New runner' }))
     await user.type(screen.getByPlaceholderText('e.g. Claude Opus'), 'Claude Opus 5')
     await user.selectOptions(screen.getByLabelText('Model'), 'claude-opus-5')
     await user.click(screen.getByRole('button', { name: 'Save' }))
@@ -358,7 +382,7 @@ describe('runner management UI', () => {
     )
     render(<RunnersPage />)
 
-    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.click(screen.getByRole('button', { name: 'New runner' }))
     await user.type(screen.getByPlaceholderText('e.g. Claude Opus'), 'x')
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -370,13 +394,13 @@ describe('runner management UI', () => {
     refuseCreate = new ApiError(400, JSON.stringify({ detail: "'opus' is not a model 'claude' declares" }))
     render(<RunnersPage />)
 
-    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.click(screen.getByRole('button', { name: 'New runner' }))
     await user.type(screen.getByPlaceholderText('e.g. Claude Opus'), 'Claude Opus 5')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByRole('alert')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.click(screen.getByRole('button', { name: 'New runner' }))
 
     // The mutation outlives the dialog, so without a reset the refusal is on screen before
     // anything has been submitted.
@@ -387,8 +411,8 @@ describe('runner management UI', () => {
     const user = userEvent.setup()
     render(<RunnersPage />)
 
-    const row = screen.getByText('Claude Code — opus (latest)').closest('.row-group') as HTMLElement
-    expect(within(row).queryByText('Unrecognised')).not.toBeInTheDocument()
+    const row = screen.getByText('Claude Code — opus (latest)').closest('li') as HTMLElement
+    expect(within(row).queryByText(/model not in the catalog/)).not.toBeInTheDocument()
 
     await user.click(within(row).getByRole('button', { name: 'Edit Claude Code — opus (latest)' }))
     const modelSelect = screen.getByLabelText('Model') as HTMLSelectElement
@@ -398,9 +422,10 @@ describe('runner management UI', () => {
 
   it('rebinds an agent to a different runner', async () => {
     const user = userEvent.setup()
-    render(<AgentSettingsPage agent="claude" section="execution" />)
+    render(<AgentSettingsPage agent="claude" section="execution" onSelectSection={vi.fn()} onBack={vi.fn()} />)
 
-    await user.selectOptions(screen.getByLabelText('Runner for claude'), 'runner-opus')
-    expect(bindMutate).toHaveBeenCalledWith({ agent: 'claude', runnerId: 'runner-opus' })
+    expect(menuSelect('Runner for claude')).toHaveTextContent('Claude Default')
+    await chooseMenuOption(user, 'Runner for claude', /^Claude Opus/)
+    expect(bindMutate).toHaveBeenCalledWith({ agent: 'claude', runnerId: 'runner-opus' }, expect.anything())
   })
 })

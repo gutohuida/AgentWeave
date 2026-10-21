@@ -153,15 +153,18 @@ describe('conversation controls — the resting header', () => {
 
     expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument()
     expect(screen.getAllByText('claude').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Fold all turns' })).toBeInTheDocument()
+    // Checkpoint stays on the bar at rest; the turn actions are one click away in its menu.
     expect(screen.getByTestId('conversation-handoff')).toBeInTheDocument()
+    await userEvent.setup().click(screen.getByTestId('conversation-more'))
+    expect(await screen.findByRole('menuitem', { name: 'Fold all turns' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Hide diagnostics' })).toBeInTheDocument()
 
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Stop turn/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Pause scroll|Resume scroll/ })).not.toBeInTheDocument()
   })
 
-  it('has no conversation-actions overflow menu, and lists no other conversation', async () => {
+  it('lists no other conversation, not even in the bar’s menu', async () => {
     conversations = [
       conversation,
       { ...conversation, id: 'conv-second', title: 'Another conversation' },
@@ -169,9 +172,12 @@ describe('conversation controls — the resting header', () => {
     render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
 
-    expect(screen.queryByRole('button', { name: 'Conversation actions' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     // Not a switcher, not even a passive listing: conversation selection is navigation's job.
+    // The bar's menu holds this conversation's own actions and nothing that navigates to another.
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByTestId('conversation-more'))
+    const menu = await screen.findByRole('menu')
+    expect(menu).not.toHaveTextContent('Another conversation')
     expect(document.body.textContent).not.toContain('Another conversation')
     expect(document.body.textContent).not.toContain('conv-second')
   })
@@ -339,14 +345,21 @@ describe('conversation controls — whole-conversation token total', () => {
   })
 
   it('renders nothing while the rollup has not loaded or has no measured turns', async () => {
+    // Read with the bar's menu open, where the total lives — absent from a closed menu proves nothing.
+    const user = userEvent.setup()
     conversationUsage = undefined
-    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    const first = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    await user.click(screen.getByTestId('conversation-more'))
+    await screen.findByRole('menu')
     expect(screen.queryByTestId('conversation-token-total')).not.toBeInTheDocument()
+    first.unmount()
 
     conversationUsage = { total_tokens: null, measured_turns: 0 }
     const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await user.click(screen.getByTestId('conversation-more'))
+    await screen.findByRole('menu')
     expect(screen.queryByTestId('conversation-token-total')).not.toBeInTheDocument()
   })
 
@@ -354,7 +367,13 @@ describe('conversation controls — whole-conversation token total', () => {
     conversationUsage = { total_tokens: 42_300, measured_turns: 3 }
     render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
-    expect(screen.getByTestId('conversation-token-total')).toHaveTextContent('42,300 tokens')
+    await userEvent.setup().click(screen.getByTestId('conversation-more'))
+    // Compact on screen, exact on hover — the format every figure in the app shares.
+    expect(await screen.findByTestId('conversation-token-total')).toHaveTextContent('42.3K tokens')
+    expect(screen.getByTestId('conversation-token-total')).toHaveAttribute(
+      'title',
+      '42,300 tokens used across this conversation',
+    )
     expect(screen.getByTestId('conversation-token-total')).not.toHaveTextContent('AI credits')
   })
 
@@ -362,8 +381,9 @@ describe('conversation controls — whole-conversation token total', () => {
     conversationUsage = { total_tokens: 42_300, measured_turns: 3, ai_nano_aiu: 275_856_000 }
     render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
-    expect(screen.getByTestId('conversation-token-total')).toHaveTextContent(
-      '42,300 tokens · 0.28 AI credits',
+    await userEvent.setup().click(screen.getByTestId('conversation-more'))
+    expect(await screen.findByTestId('conversation-token-total')).toHaveTextContent(
+      '42.3K tokens · 0.28 AI credits',
     )
   })
 })

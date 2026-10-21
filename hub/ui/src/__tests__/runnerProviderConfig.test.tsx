@@ -3,7 +3,7 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
-import { RunnersPage } from '@/components/runners/RunnersPage'
+import { RunnersSection as RunnersPage } from '@/components/settings/sections/RunnersSection'
 import { NewConversationSurface } from '@/components/agents/NewConversationSurface'
 import { overridesForRunner } from '@/lib/runnerProvider'
 import { useConfigStore } from '@/store/configStore'
@@ -77,6 +77,12 @@ vi.mock('@/api/runners', () => ({
   useDeleteRunner: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
+// The list counts what uses each runner; the manager's jobs are one of those, not what these test.
+vi.mock('@/api/manager', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/manager')>()),
+  useManagerJobs: () => ({ data: [] }),
+}))
+
 vi.mock('@/api/agents', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/agents')>()),
   useAgents: () => ({
@@ -104,7 +110,7 @@ function choosable(select: HTMLElement): string[] {
 
 async function openNewCopilotRunner(user: ReturnType<typeof userEvent.setup>) {
   render(<RunnersPage />)
-  await user.click(screen.getByRole('button', { name: 'New Runner' }))
+  await user.click(screen.getByRole('button', { name: 'New runner' }))
   await user.type(screen.getByPlaceholderText('e.g. Claude Opus'), 'Haiku on Anthropic')
   await user.selectOptions(screen.getByLabelText('CLI'), 'copilot')
 }
@@ -119,7 +125,7 @@ describe('runner management: a Copilot runner on a model provider', () => {
   it('offers provider fields for a copilot runner only', async () => {
     const user = userEvent.setup()
     render(<RunnersPage />)
-    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.click(screen.getByRole('button', { name: 'New runner' }))
 
     for (const cli of ['claude', 'codex']) {
       await user.selectOptions(screen.getByLabelText('CLI'), cli)

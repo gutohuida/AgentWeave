@@ -2,32 +2,48 @@ import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { ReachGrantsEditor } from '@/components/environment/ReachGrantsEditor'
+import { ReachGrantsChips } from '@/components/settings/ReachGrantsChips'
 import type { ReachGrants } from '@/api/projects'
 
-function Form({ onSave }: { onSave: (grants: ReachGrants) => void }) {
-  const [grants, setGrants] = useState<ReachGrants>({ roots: [], hosts: ['localhost:*'] })
+function Editor({ onSave }: { onSave: (grants: ReachGrants | null) => void }) {
+  const [grants, setGrants] = useState<ReachGrants | null>({ roots: [], hosts: ['localhost:*'] })
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault()
-        onSave(grants)
-      }}
-    >
-      <ReachGrantsEditor grants={grants} onChange={setGrants} />
-      <button type="submit">Save settings</button>
-    </form>
+    <>
+      <ReachGrantsChips
+        grants={grants}
+        onChange={(next) => {
+          setGrants(next)
+          onSave(next)
+        }}
+      />
+      <button type="button">Elsewhere</button>
+    </>
   )
 }
 
-describe('F796: a host typed but not added is not lost on save', () => {
-  it('saves the host that is still in the field when Save is pressed', async () => {
+async function typeHost(user: ReturnType<typeof userEvent.setup>, host: string) {
+  await user.click(screen.getByRole('button', { name: /add/i }))
+  await user.click(await screen.findByRole('menuitem', { name: /a host/i }))
+  await user.type(screen.getByLabelText('Host'), host)
+}
+
+describe('F796: a host typed but not added is not lost', () => {
+  it('adds the host still in the field when focus leaves it', async () => {
     const onSave = vi.fn()
     const user = userEvent.setup()
-    render(<Form onSave={onSave} />)
-    await user.type(screen.getByLabelText('Granted host'), 'registry.npmjs.org')
-    await user.click(screen.getByRole('button', { name: 'Save settings' }))
+    render(<Editor onSave={onSave} />)
+    await typeHost(user, 'registry.npmjs.org')
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }))
     expect(onSave).toHaveBeenCalledWith({ roots: [], hosts: ['localhost:*', 'registry.npmjs.org'] })
-    expect((screen.getByLabelText('Granted host') as HTMLInputElement).value).toBe('')
+    expect(screen.queryByLabelText('Host')).toBeNull()
+  })
+
+  it('discards it on Cancel', async () => {
+    const onSave = vi.fn()
+    const user = userEvent.setup()
+    render(<Editor onSave={onSave} />)
+    await typeHost(user, 'registry.npmjs.org')
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onSave).not.toHaveBeenCalled()
   })
 })

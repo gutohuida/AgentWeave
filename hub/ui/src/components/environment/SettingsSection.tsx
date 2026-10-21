@@ -24,41 +24,36 @@ const SECTION_ICONS: Record<string, string> = {
   Workspace: 'folder',
 }
 
-/** The eyebrow above the section title. `scope` exists because this component is shared between the
- *  project settings pages and the per-agent settings pages, and it used to hardcode "Project
- *  configuration" for both — announcing per-agent runner bindings, charter bindings and timeouts as
- *  project scope, which is the one axis the Hub's domain model turns on. */
+/** One settings page in the old row vocabulary, framed like `SettingsPage` (ui/settings.tsx) so
+ *  a section not yet rebuilt on the new rows sits in Project settings and agent settings without a
+ *  second heading style. The "Project configuration" / "Agent configuration" eyebrow is gone: the
+ *  section list beside it already says whose settings these are; `scope` is accepted and unused. */
 export function SettingsSection({
   title,
   description,
   children,
   actions,
-  scope = 'Project configuration',
 }: {
   title: string
   description: string
   children: ReactNode
   actions?: ReactNode
+  /** Retired: the eyebrow it named is gone. */
   scope?: string
 }) {
   const headingId = `settings-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   return (
-    <section className="settings-section" aria-labelledby={headingId}>
-      <div className="settings-section-heading">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="settings-section-icon" aria-hidden="true">
-            <Icon name={SECTION_ICONS[title] ?? 'settings'} size={17} />
-          </span>
-          <div className="min-w-0">
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>
-              {scope}
-            </div>
-            <h2 id={headingId} className="text-base font-semibold" style={{ color: 'var(--text)' }}>{title}</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'var(--text-3)' }}>{description}</p>
-          </div>
+    <section className="aw-settings-page settings-section-framed" aria-labelledby={headingId}>
+      <header className="aw-settings-page-head">
+        <span className="settings-section-icon" aria-hidden="true">
+          <Icon name={SECTION_ICONS[title] ?? 'settings'} size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 id={headingId} className="aw-settings-page-title">{title}</h2>
+          <p className="aw-settings-page-desc">{description}</p>
         </div>
-        {actions}
-      </div>
+        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+      </header>
       <div className="settings-section-rows">{children}</div>
     </section>
   )

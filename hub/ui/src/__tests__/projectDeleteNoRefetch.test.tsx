@@ -47,8 +47,7 @@ vi.stubGlobal(
   }),
 )
 
-vi.mock('@/components/overview/OverviewPage', () => ({ OverviewPage: () => <div data-testid="page-overview" /> }))
-vi.mock('@/components/layout/StatusBar', () => ({ StatusBar: () => null }))
+vi.mock('@/components/overview/OverviewScreen', () => ({ OverviewScreen: () => <div data-testid="page-overview" /> }))
 vi.mock('@/components/layout/SetupModal', () => ({ SetupModal: () => null }))
 
 import App from '@/App'

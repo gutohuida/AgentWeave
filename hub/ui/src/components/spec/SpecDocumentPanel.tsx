@@ -1,6 +1,7 @@
+import { SpecDeletedNote } from './SpecDeletedNote'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
-import { SpecPhaseBar } from './SpecPhaseBar'
+import { readableApiError } from '@/api/client'
 import { SpecApprovalReport } from './SpecApprovalReport'
 import { SpecAmendmentsPanel } from './SpecAmendmentsPanel'
 import { SpecCoverageBar } from './SpecCoverageBar'
@@ -9,16 +10,31 @@ import { SpecVaultWarnings } from './SpecVaultWarnings'
 import { SpecRetiredRequirements } from './SpecRetiredRequirements'
 import { SpecResolvedProposals } from './SpecResolvedProposals'
 import { SpecProposalsPanel } from './SpecProposalsPanel'
-import { SpecDocumentTasksLink } from './SpecDocumentTasksLink'
 import { SpecPlaceUnder } from './SpecPlaceUnder'
+import { SpecDocumentHeader } from './SpecDocumentHeader'
+import { SpecHealthLine, type HealthFactKey } from './SpecHealthLine'
+import { SpecPhaseHeader } from './SpecPhaseBar'
+import { useSpecPhaseControls } from './useSpecPhaseControls'
 import { Button } from '@/components/ui/button'
-import { SpecDeletedNote } from './SpecDeletedNote'
-import { useSpec, type SpecDiagnostic, type SpecListResponse } from '@/api/spec'
+import {
+  useDetectDrift,
+  useSpec,
+  useSpecCoverage,
+  useSpecDocuments,
+  useSpecDrift,
+  type SpecApprovalOutcome,
+  type SpecDiagnostic,
+  type SpecListResponse,
+} from '@/api/spec'
+import { useCheckVaultWarnings, useVaultWarnings } from '@/api/vault'
+import { useDocumentTasks } from '@/api/tasks'
+import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
 import { SpecFrame, type SpecFrameHandle } from './SpecFrame'
 import type { SpecInventory } from './specNavigation'
 import type { TocAnchor } from './specBridge'
 import type { LoopSummary } from '@/api/loops'
+import '@/styles/spec-header.css'
 
 const REJECTION_TEXT: Record<string, string> = {
   external: 'That link points outside the specification and was not opened.',
@@ -27,7 +43,19 @@ const REJECTION_TEXT: Record<string, string> = {
   unknown: 'That document is not in the current specification inventory.',
 }
 
+const DETAIL_TITLE: Record<HealthFactKey, string> = {
+  requirements: 'Requirements',
+  drift: 'Drift',
+  vault: 'Vault',
+  tasks: 'Tasks',
+  index: 'Spec index',
+  approval: 'What approval did',
+}
+
 interface SpecDocumentPanelProps {
+  /** Where to go once this document has been deleted (F829). Falls back to `onClose`; the Spec
+   *  screen has no close control, so it names its own way out. */
+  onDeleted?: () => void
   /** The document open beside the conversation. The panel does not render without one — being
    *  open *is* having a path, which is why it lives in the destination. */
   path: string
@@ -36,8 +64,7 @@ interface SpecDocumentPanelProps {
   listLoading: boolean
   /** Follow a link the document itself resolved to another specification document. */
   onSelectPath: (path: string) => void
-  /** Choosing a document is the Ctrl+K picker, which the conversation view owns because it must
-   *  also be reachable when no document is open at all. The breadcrumb opens it. */
+  /** Choosing a document is the Ctrl+Shift+K picker. The breadcrumb opens it. */
   onOpenPicker: () => void
   /** Omitted on the Spec screen, where there is nothing behind the panel to reveal. Closing a
    *  document is a conversation-view action, because there the conversation is underneath. */
@@ -47,25 +74,48 @@ interface SpecDocumentPanelProps {
    *  inside the document. Applied once per distinct `(path, initialAnchor)` pair it is given,
    *  the same way an in-frame `pendingFragment` is consumed once per navigation (`design.md` D7). */
   initialAnchor?: string | null
-  /** Threaded down to `SpecCoverageBar` — switches to the Tasks tab, filtered. */
+  /** Switches to the Tasks tab, filtered. */
   onOpenTasks?: (taskIds: string[]) => void
-  /** Threaded down to `SpecPhaseBar` — opens the loop tab of the document's flow. */
+  /** Opens the loop tab of the document's flow. */
   onOpenLoop?: (loop: LoopSummary) => void
-  /** Where to go once this document has been deleted (F829). Falls back to `onClose`; the Spec
-   *  screen has no close control, so it names its own way out. */
-  onDeleted?: () => void
+  /** A narrow host (the conversation's side panel): the header tightens. */
+  compact?: boolean
+}
+
+/** Approval's report, as the history fact's sentences (`SpecApprovalReport` has the full form). */
+function approvalHistory(outcome: SpecApprovalOutcome | undefined): string[] {
+  if (!outcome) return []
+  const lines: string[] = []
+  if (outcome.created.length) {
+    lines.push(
+      `Created ${outcome.created.length} ${outcome.created.length === 1 ? 'task' : 'tasks'}: ${outcome.created.map((c) => c.title).join(', ')}.`,
+    )
+  }
+  if (outcome.already_served.length) {
+    lines.push(`${outcome.already_served.length} already served by existing work.`)
+  }
+  if (outcome.failed) lines.push(`Creating its tasks failed: ${outcome.failed}`)
+  if (outcome.dependencies_not_honoured.length) {
+    lines.push(`${outcome.dependencies_not_honoured.length} declared dependencies could not be honoured.`)
+  }
+  lines.push(...(outcome.flow?.messages ?? []))
+  return lines
 }
 
 /**
- * A specification document, open beside a conversation.
+ * A specification document: its header (where it sits, its phase, the one action it waits for,
+ * and one line of facts), then the document itself with its outline.
  *
- * It replaces `SpecPage` + `SpecWorkspace` + `SpecNavigator`: the library column is gone (the
- * picker already searched the full inventory, archives included), and the outline moved in here,
- * next to the page it indexes.
+ * The header replaces eight stacked strips — the phase bar, approval report, vault warnings,
+ * coverage, drift, the tasks link and the manifest-drift row — that pushed the document 380px
+ * down. Every one of them is still a click away: each fact on the health line opens its detail,
+ * and "Show details" opens the old panel, with all its actions, under the header. Amendments and
+ * proposals waiting on the operator are panels of their own under the header, because they are
+ * decisions rather than facts, and appear only when there is one.
  *
  * `SpecFrame`'s contract is carried across untouched — `sandbox="allow-scripts"` without
  * `allow-same-origin`, message identity in place of origin checking, path-allowlisted link
- * resolution. This changed the frame's container and nothing else about it.
+ * resolution.
  */
 export function SpecDocumentPanel({
   path,
@@ -80,10 +130,12 @@ export function SpecDocumentPanel({
   onOpenTasks,
   onOpenLoop,
   onDeleted,
+  compact = false,
 }: SpecDocumentPanelProps) {
   const { mode } = useConfigStore()
   const { data: specDoc } = useSpec(path)
   const frameRef = useRef<SpecFrameHandle>(null)
+  const controls = useSpecPhaseControls(path, onOpenLoop, onDeleted ?? onClose)
 
   const readablePaths = useMemo(
     () => new Set(inventory.nodes.filter((node) => !node.missing).map((node) => node.path)),
@@ -94,33 +146,29 @@ export function SpecDocumentPanel({
   const [activeSection, setActiveSection] = useState<string | null>(null)
   const [pendingFragment, setPendingFragment] = useState<string | null>(initialAnchor ?? null)
   const [navStatus, setNavStatus] = useState<string | null>(null)
+  const [detail, setDetail] = useState<HealthFactKey | null>(null)
   // The last `(path, anchor)` pair already applied, so a repeat render with the same
   // `initialAnchor` (the prop does not clear itself) does not re-fire the scroll, while a fresh
   // chip click — a new anchor, possibly on the document already open — does.
   const appliedAnchorRef = useRef<{ path: string; anchor: string } | null>(
     initialAnchor ? { path, anchor: initialAnchor } : null,
   )
-  /* Open by default, because the bridge does not ask before removing the alternative.
-   *
-   * `specBridge` hides the document's own `nav.toc` as soon as it has collected the anchors —
-   * "safe only now that the shell has a working replacement for it". That replacement is this
-   * strip, and it defaulted to closed: the removal was unconditional while the replacement was
-   * opt-in, so a document opened at rest had no table of contents anywhere. */
+  /* Open by default, because the bridge does not ask before removing the alternative: `specBridge`
+   * hides the document's own `nav.toc` as soon as it has collected the anchors. */
   const [outlineOpen, setOutlineOpen] = useState(true)
-  const [showDriftDetails, setShowDriftDetails] = useState(false)
 
-  // A new document has its own outline and its own active section.
+  // A new document has its own outline, its own active section and its own details.
   useEffect(() => {
     setOutline([])
     setActiveSection(null)
     setNavStatus(null)
+    setDetail(null)
   }, [path])
 
   // A cross-tab anchor for the document already open never triggers a fresh `toc-ready` message
   // (nothing about the document changed), so `pendingFragment` alone would never be consumed —
   // scroll directly in that case. A cross-tab anchor for a *different* document is handled the
-  // same way `pendingFragment` already is for in-frame navigation: set, and consumed once the new
-  // document's outline arrives.
+  // same way `pendingFragment` already is for in-frame navigation.
   useEffect(() => {
     if (!initialAnchor) return
     const already =
@@ -156,197 +204,201 @@ export function SpecDocumentPanel({
 
   // The Hub reports each missing document twice by design: structured in `missing` and as a
   // `missing_document` entry in `diagnostics`. Keep only the `missing` representation so the
-  // banner count and the details list never double-count them.
+  // count and the details list never double-count them.
   const diagnostics: SpecDiagnostic[] = (specList?.diagnostics ?? []).filter(
     (d) => d.code !== 'missing_document',
   )
   const missing = specList?.missing ?? []
-  const driftCount = diagnostics.length + missing.length
+  const indexIssues = diagnostics.length + missing.length
 
   const node = inventory.byPath.get(path)
 
-  return (
-    <div
-      className="flex h-full min-w-0 flex-col overflow-hidden"
-      data-testid="spec-document-panel"
-      style={{ background: 'var(--bg)' }}
-    >
-      {/* No rule under the header. The panel already has a boundary — the divider on its left —
-          and a second horizontal line across the top read as a seam cutting the document off from
-          the control that names it (operator, 2026-08-10). The header's own background is what
-          separates it from the document. */}
-      <div className="spec-reading-header flex shrink-0 items-center gap-2 px-3 py-2">
-        {/* The breadcrumb is the way to another document: it opens the same Ctrl/Cmd+Shift+K
-            search that already covers the whole inventory, rather than a second, worse copy. */}
-        <button
-          type="button"
-          data-testid="spec-document-breadcrumb"
-          onClick={onOpenPicker}
-          className="flex min-w-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1 hover:bg-[var(--row-hover)]"
-          style={{ background: 'none', border: 'none', color: 'var(--text-2)', cursor: 'pointer' }}
-          title={`${node?.path ?? path} — choose another document`}
-        >
-          <Icon name="article" size={14} />
-          <span className="truncate" style={{ fontSize: 12 }}>{node?.title ?? path}</span>
-          <Icon name="expand_more" size={13} />
-        </button>
+  // ── The health line's facts ──────────────────────────────────────────────────────────────
+  const { data: coverage } = useSpecCoverage(path)
+  const { data: drift, isError: driftError } = useSpecDrift(path)
+  const { data: vault } = useVaultWarnings(path)
+  const { data: documents } = useSpecDocuments()
+  const record = documents?.documents.find((entry) => entry.path === path)
+  const { data: documentTasks } = useDocumentTasks(record?.id ?? null)
+  const detect = useDetectDrift()
+  const checkVault = useCheckVaultWarnings()
 
-        {node?.archived && (
-          <span
-            data-testid="spec-archived-marker"
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              padding: '2px 8px',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--surface-3)',
-              color: 'var(--text-2)',
-            }}
-          >
-            Archived{node.archiveDate ? ` · ${node.archiveDate}` : ''}
-          </span>
-        )}
+  const toggleDetail = (fact: HealthFactKey) => setDetail((current) => (current === fact ? null : fact))
 
-        {/* D4 (F206): a filed document, under a valid index, can be placed in the hierarchy. */}
-        {node?.state === 'filed' && specList?.manifest?.state === 'valid' && (
-          <SpecPlaceUnder path={path} parent={node.parent} specList={specList} />
-        )}
+  const health = (
+    <SpecHealthLine
+      coverage={coverage?.requirements ?? []}
+      coverageDiagnostics={coverage?.diagnostics.length ?? 0}
+      driftCount={driftError || !drift ? null : drift.drift.length}
+      vaultWarnings={vault === undefined ? null : vault.length}
+      indexIssues={indexIssues}
+      tasks={(documentTasks ?? []).map((task) => ({ id: task.id, title: task.title, status: task.status }))}
+      history={approvalHistory(specDoc?.approval_outcome)}
+      approvedAt={record?.phase === 'approved' && specDoc?.approval_outcome ? record.updated_at : null}
+      onScanDrift={() =>
+        detect.mutate(undefined, {
+          onSuccess: (result) =>
+            toast({
+              title: result.raised.length ? `${result.raised.length} drifted` : 'No drift found',
+              description: result.raised.length ? 'Answer each under Drift.' : undefined,
+              tone: result.raised.length ? 'neutral' : 'success',
+            }),
+          onError: (error: unknown) =>
+            toast({ title: 'Could not scan for drift', description: readableApiError(error, 'The Hub did not answer.'), tone: 'error' }),
+        })
+      }
+      onCheckVault={() =>
+        checkVault.mutate(path, {
+          onSuccess: () => toast({ title: 'Checking against the vault', description: 'The result arrives here when the check finishes.' }),
+          onError: (error: unknown) =>
+            toast({ title: 'Could not start the check', description: readableApiError(error, 'The Hub did not answer.'), tone: 'error' }),
+        })
+      }
+      onOpenTasks={() => onOpenTasks?.((documentTasks ?? []).map((task) => task.id))}
+      onOpenRequirement={(identifier) => frameRef.current?.scrollToSection(identifier)}
+      activeDetail={detail}
+      onShowDetail={toggleDetail}
+    />
+  )
 
-        <div className="flex-1" />
-
-        {outline.length > 0 && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            data-testid="spec-outline-toggle"
-            aria-pressed={outlineOpen}
-            onClick={() => setOutlineOpen((open) => !open)}
-            aria-label={outlineOpen ? 'Hide page outline' : 'Show page outline'}
-            title={outlineOpen ? 'Hide page outline' : 'Show page outline'}
-          >
-            <Icon name="list_alt" size={16} />
-          </Button>
-        )}
+  const tools = (
+    <>
+      {outline.length > 0 && (
         <Button
           variant="ghost"
           size="icon-sm"
-          onClick={onRefresh}
-          aria-label="Refresh spec"
-          title="Refresh spec"
+          data-testid="spec-outline-toggle"
+          aria-pressed={outlineOpen}
+          onClick={() => setOutlineOpen((open) => !open)}
+          aria-label={outlineOpen ? 'Hide page outline' : 'Show page outline'}
+          title={outlineOpen ? 'Hide page outline' : 'Show page outline'}
         >
-          <Icon name="refresh" size={16} />
+          <Icon name="list_alt" size={15} />
         </Button>
-        {onClose && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            data-testid="spec-document-close"
-            onClick={onClose}
-            aria-label="Close document"
-            title="Close document"
-          >
-            <Icon name="close" size={16} />
-          </Button>
-        )}
-      </div>
+      )}
+      <Button variant="ghost" size="icon-sm" onClick={onRefresh} aria-label="Refresh spec" title="Refresh spec">
+        <Icon name="refresh" size={15} />
+      </Button>
+      {onClose && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          data-testid="spec-document-close"
+          onClick={onClose}
+          aria-label="Close document"
+          title="Close document"
+        >
+          <Icon name="close" size={15} />
+        </Button>
+      )}
+    </>
+  )
 
-      {/* Phase and the operator's decisions. Above the document, because what an operator may
-          do next is part of reading it — and because none of these controls exists on the
-          agent's side, which is what makes the approval gate real. */}
+  const extraBadges = (
+    <>
+      {node?.archived && (
+        <span className="aw-spec-kind" data-testid="spec-archived-marker">
+          Archived{node.archiveDate ? ` · ${node.archiveDate}` : ''}
+        </span>
+      )}
+      {/* D4 (F206): a filed document, under a valid index, can be placed in the hierarchy. */}
+      {node?.state === 'filed' && specList?.manifest?.state === 'valid' && (
+        <SpecPlaceUnder path={path} parent={node.parent} specList={specList} />
+      )}
+    </>
+  )
+
+  return (
+    <div className="aw-spec-main" data-testid="spec-document-panel" data-compact={compact ? 'true' : 'false'}>
       <SpecDeletedNote />
-      <SpecPhaseBar path={path} onOpenLoop={onOpenLoop} onDeleted={onDeleted ?? onClose} />
+      {controls ? (
+        <SpecPhaseHeader
+          path={path}
+          controls={controls}
+          health={health}
+          tools={tools}
+          badges={extraBadges}
+          onOpenLocation={onOpenPicker}
+        />
+      ) : (
+        // A document the Hub keeps no record of (the overview, a file found on disk): no phase,
+        // no decisions, the same header and facts.
+        <SpecDocumentHeader
+          path={path}
+          title={node?.title ?? path}
+          kind={node?.kind ?? ''}
+          phase={null}
+          rigor={null}
+          health={health}
+          tools={tools}
+          badges={extraBadges}
+          onCopyPath={() => {
+            void navigator.clipboard?.writeText(path)
+            toast({ title: 'Path copied', tone: 'success' })
+          }}
+          onOpenLocation={onOpenPicker}
+        />
+      )}
 
-      {/* What approving this document did (design D7, `…-approval-starts-it`). Under the phase
-          bar, beside its own Start a flow…/Flow control — never a second one. */}
-      <SpecApprovalReport path={path} />
+      {detail && (
+        <section className="aw-spec-detail aw-pop" aria-label={DETAIL_TITLE[detail]} data-testid={`spec-detail-${detail}`}>
+          <div className="aw-spec-detail-head">
+            {DETAIL_TITLE[detail]}
+            <Button variant="ghost" size="icon-xs" aria-label="Hide details" title="Hide details" onClick={() => setDetail(null)}>
+              <Icon name="close" size={13} />
+            </Button>
+          </div>
+          <div className="aw-spec-detail-body">
+            {detail === 'requirements' && <SpecCoverageBar path={path} onOpenTasks={onOpenTasks} defaultOpen />}
+            {detail === 'drift' && <SpecDriftPanel path={path} />}
+            {detail === 'vault' && <SpecVaultWarnings path={path} />}
+            {detail === 'approval' && <SpecApprovalReport path={path} />}
+            {detail === 'index' && (
+              <ul className="flex flex-col gap-0.5 px-3 py-1 text-xs" data-testid="spec-index-issues" style={{ color: 'var(--text-3)' }}>
+                {diagnostics.map((d, i) => (
+                  <li key={`d-${i}`}>
+                    {/* The Hub's sentence when it sends one (F643); the code is for an older Hub. */}
+                    {d.message ?? (
+                      <>
+                        {d.code}
+                        {d.path ? ` — ${d.path}` : ''}
+                        {d.field ? ` (${d.field}: ${d.expected} → ${d.actual})` : ''}
+                      </>
+                    )}
+                  </li>
+                ))}
+                {missing.map((m) => (
+                  <li key={`m-${m.path}`}>Named by the index, not on disk: {m.path}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Decisions waiting on the operator, each only when there is one: a tester's amendments,
+          proposed edits (design F1-F3) and what was resolved, and retired requirements with work
+          still pointing at them (F211). */}
       <SpecAmendmentsPanel path={path} />
-      <SpecVaultWarnings path={path} />
-
-      {/* Which requirements this document has work for, and which of that work is actually in the
-          product. Under the phase bar because it is about what the document *says*, not about
-          reading it. */}
-      <SpecCoverageBar path={path} onOpenTasks={onOpenTasks} />
-      <SpecDriftPanel path={path} />
-
-      {/* The requirements coverage leaves out: retired ones, with the work still pointing at them.
-          Right after coverage, because it is the rest of the same answer (F211). */}
-      <SpecRetiredRequirements path={path} onOpenTasks={onOpenTasks} />
-
-      {/* Pending proposals (design F1-F3) — a `contract`/`gate` submission lands here instead of
-          on the document itself. Directly beneath coverage, on the same document view, so a
-          pending change stays discoverable without a separate screen. */}
       <SpecProposalsPanel path={path} />
       <SpecResolvedProposals path={path} />
-      <SpecDocumentTasksLink path={path} onOpenTasks={onOpenTasks} />
-
-      {/* Drift summary — only rendered when the Hub reports manifest drift. */}
-      {driftCount > 0 && (
-        <div
-          className="flex shrink-0 flex-col gap-1.5 px-3 py-2 text-xs"
-          style={{
-            background: 'color-mix(in srgb, var(--amber) 8%, transparent)',
-            color: 'var(--text-2)',
-          }}
-        >
-          <button
-            onClick={() => setShowDriftDetails((v) => !v)}
-            className="flex items-center gap-1.5"
-            style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0 }}
-          >
-            <Icon name="warning" size={14} />
-            <span>
-              {driftCount} spec manifest drift item{driftCount === 1 ? '' : 's'}
-            </span>
-            <Icon name={showDriftDetails ? 'expand_less' : 'expand_more'} size={14} />
-          </button>
-          {showDriftDetails && (
-            <ul className="flex flex-col gap-0.5 pl-5" style={{ color: 'var(--text-3)' }}>
-              {diagnostics.map((d, i) => (
-                <li key={`d-${i}`}>
-                  {/* The Hub's sentence when it sends one (F643); the code is for an older Hub. */}
-                  {d.message ?? (
-                    <>
-                      {d.code}
-                      {d.path ? ` — ${d.path}` : ''}
-                      {d.field ? ` (${d.field}: ${d.expected} → ${d.actual})` : ''}
-                    </>
-                  )}
-                </li>
-              ))}
-              {missing.map((m) => (
-                <li key={`m-${m.path}`}>missing_document — {m.path}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      <SpecRetiredRequirements path={path} onOpenTasks={onOpenTasks} />
 
       {/* An unresolved link must never block reading the current document. */}
       {navStatus && (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="spec-nav-status"
-          className="flex shrink-0 items-center gap-2 px-3 py-1.5 text-xs"
-          style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
-        >
+        <div role="status" aria-live="polite" data-testid="spec-nav-status" className="aw-spec-message mx-6 mt-2">
           <Icon name="info" size={14} />
-          <span className="flex-1">{navStatus}</span>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => setNavStatus(null)}
-            aria-label="Dismiss navigation message"
-          >
+          <span className="aw-spec-message-text">{navStatus}</span>
+          <Button variant="ghost" size="icon-xs" onClick={() => setNavStatus(null)} aria-label="Dismiss navigation message">
             <Icon name="close" size={14} />
           </Button>
         </div>
       )}
 
-      <div className="spec-reading-body flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-hidden">
+      <div className="aw-spec-reading">
+        <div className="aw-spec-body">
           {listLoading ? (
-            <div className="spec-loading-card flex flex-col gap-3" aria-label="Loading specification">
+            <div className="spec-loading-card flex flex-col gap-3 aw-delayed" aria-label="Loading specification">
               <div className="skeleton h-6 w-2/3" />
               <div className="skeleton h-3 w-full" />
               <div className="skeleton h-3 w-5/6" />
@@ -366,7 +418,7 @@ export function SpecDocumentPanel({
               onRejected={handleRejected}
             />
           ) : (
-            <div className="spec-loading-card flex flex-col gap-3" aria-label="Loading specification document">
+            <div className="spec-loading-card flex flex-col gap-3 aw-delayed" aria-label="Loading specification document">
               <div className="skeleton h-6 w-2/3" />
               <div className="skeleton h-3 w-full" />
               <div className="skeleton h-3 w-4/5" />
@@ -374,38 +426,22 @@ export function SpecDocumentPanel({
           )}
         </div>
 
-        {/* The outline sits on the document's far side, next to the page it indexes rather than
-            in a navigation column two panes away from it. */}
+        {/* The outline sits on the document's far side, next to the page it indexes. */}
         {outlineOpen && outline.length > 0 && (
-          <nav
-            aria-label="Page outline"
-            data-testid="spec-outline"
-            className="w-[200px] shrink-0 overflow-y-auto px-2 py-2"
-            style={{ borderLeft: '1px solid var(--border)' }}
-          >
-            <div
-              style={{
-                padding: '0 8px 4px',
-                fontSize: 10,
-                fontWeight: 600,
-                letterSpacing: '.06em',
-                textTransform: 'uppercase',
-                color: 'var(--text-3)',
-              }}
-            >
-              On this page
-            </div>
+          <nav aria-label="Page outline" data-testid="spec-outline" className="aw-spec-outline">
+            <div className="aw-spec-outline-label">On this page</div>
             {outline.map((anchor) => (
               <button
                 key={anchor.id}
                 type="button"
+                data-slot="outline-row"
+                className="aw-spec-outline-row"
                 onClick={() => frameRef.current?.scrollToSection(anchor.id)}
                 aria-current={activeSection === anchor.id ? 'true' : undefined}
                 data-active={activeSection === anchor.id ? 'true' : 'false'}
-                className="row-item"
-                style={{ fontSize: 11 }}
+                title={anchor.label}
               >
-                <span className="truncate">{anchor.label}</span>
+                {anchor.label}
               </button>
             ))}
           </nav>

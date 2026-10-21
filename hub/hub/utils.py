@@ -59,8 +59,9 @@ async def persist_event(
     the transaction, not a passenger in someone else's.
 
     The event is also put in a trace (`traces.record_event`, `everything-the-hub-does-is-in-a-trace`
-    D5): on the current request's span or run's root, else as an `aw.event` span of its own staged
-    in *session*, so it commits (or does not) with the event.
+    D5): on the current request's span once *session* commits, or on the run's root, else as an
+    `aw.event` span of its own staged in *session*; either way it commits (or does not) with the
+    event.
     """
     from . import traces
     from .db.models import EventLog

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Task } from '@/api/tasks'
-import { TaskCard } from '@/components/tasks/TaskCard'
+import { TaskCardCompact } from '@/components/tasks/TaskCardCompact'
 import { TaskCardHost } from './testUtils/TaskCardHost'
 
 /**
@@ -12,7 +12,8 @@ import { TaskCardHost } from './testUtils/TaskCardHost'
  *
  * `blocked` renders as a treatment inside In Progress rather than as a ninth column (R3), which
  * puts the whole burden on the card: if it does not say it is waiting and what for, the operator is
- * back where they were when the card said "in progress" and nothing was happening.
+ * back where they were when the card said "in progress" and nothing was happening. The compact
+ * card says it on its status line (`data-reason="waiting"`).
  *
  * The other half is the control. The Hub requires a reason before it will park a task by hand, so a
  * status menu that sent `blocked` on its own would offer a move that then fails — the exact thing
@@ -60,17 +61,13 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 }
 
 function renderCard(task: Task) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(
-    <QueryClientProvider client={client}>
-      <TaskCard task={task} onOpen={() => {}} />
-    </QueryClientProvider>,
-  )
+  render(<TaskCardCompact task={task} onOpen={() => {}} />)
 }
 
-// The status-transition menu and the blocking-reason input moved into the drawer (F5,
-// `design.md` D8) — this opens it the same way the operator would, via the card's explicit
-// "open" affordance, before driving either control.
+const status = () => screen.queryByTestId('task-card-status-task-1')
+
+// The status-transition menu, the blocking-reason input and the decision record live in the
+// drawer (F5, `design.md` D8) — opened the way the operator would, by clicking the card.
 async function renderCardOpen(task: Task) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
@@ -91,36 +88,34 @@ describe('a waiting task says so on the card', () => {
   it('says it is waiting on the operator, not merely that it is blocked', () => {
     renderCard(makeTask({ status: 'blocked', blocked_reason: 'Waiting on the staging API key' }))
 
-    expect(screen.getByTestId('task-blocked-task-1')).toBeTruthy()
-    expect(screen.getByText('Waiting on you')).toBeTruthy()
+    expect(status()).toHaveAttribute('data-reason', 'waiting')
+    expect(status()).toHaveTextContent('Waiting on you')
   })
 
   it('names what it is waiting for, which is the difference from a bare status', () => {
     renderCard(makeTask({ status: 'blocked', blocked_reason: 'Waiting on the staging API key' }))
 
-    expect(screen.getByText('Waiting on the staging API key')).toBeTruthy()
+    expect(status()).toHaveTextContent('Waiting on the staging API key')
   })
 
   it('still reads as waiting when no reason came through', () => {
     renderCard(makeTask({ status: 'blocked' }))
 
-    expect(screen.getByTestId('task-blocked-task-1')).toBeTruthy()
-    expect(screen.getByText('Waiting on you')).toBeTruthy()
+    expect(status()).toHaveAttribute('data-reason', 'waiting')
+    expect(status()).toHaveTextContent('Waiting on you')
   })
 
   it('shows nothing of the sort on a task that is simply running', () => {
     renderCard(makeTask())
 
-    expect(screen.queryByTestId('task-blocked-task-1')).toBeNull()
+    expect(status()).toBeNull()
   })
 
   it('renders one wait, not two, when the task is both parked and reporting a wait', () => {
     /**
      * Ask-time parking (F14) makes a task carry `blocked` *and* `awaiting_answer_reason` at the
-     * same moment: the status is the park, and the derived field still reports the run's live
-     * wait. No behaviour change was needed for that — the card already coalesces the two — but the
-     * reason it needed none is worth asserting rather than commenting, because a later edit that
-     * split them would tell the operator they owe two answers when they owe one.
+     * same moment. A later edit that split them would tell the operator they owe two answers when
+     * they owe one.
      */
     renderCard(
       makeTask({
@@ -130,20 +125,24 @@ describe('a waiting task says so on the card', () => {
       }),
     )
 
-    expect(screen.getAllByTestId('task-blocked-task-1')).toHaveLength(1)
-    expect(screen.getAllByText('Waiting on your answer: which colour?')).toHaveLength(1)
+    expect(screen.getAllByTestId('task-card-status-task-1')).toHaveLength(1)
+    expect(status()!.textContent!.split('which colour?')).toHaveLength(2)
   })
 
   it('is not the same signal as stalled', () => {
     /**
      * Opposites: one is an agent that dropped the work, the other an agent that correctly refused
-     * to guess. A card showing both at once would be describing two different runs, which is
-     * possible — but the waiting banner and the stalled badge must stay distinguishable.
+     * to guess. The waiting line and the stalled line must stay distinguishable — and with one
+     * status line, the live ask the operator can still answer is the one stated.
      */
     renderCard(makeTask({ status: 'blocked', has_open_divergence: true, blocked_reason: 'Need a decision' }))
+    expect(status()).toHaveAttribute('data-reason', 'waiting')
+    expect(status()).toHaveAttribute('data-tone', 'waiting')
+    cleanup()
 
-    expect(screen.getByTestId('task-blocked-task-1')).toBeTruthy()
-    expect(screen.getByTestId('task-divergence-task-1')).toBeTruthy()
+    renderCard(makeTask({ has_open_divergence: true }))
+    expect(status()).toHaveAttribute('data-reason', 'divergence')
+    expect(status()).toHaveAttribute('data-tone', 'failed')
   })
 })
 
@@ -199,36 +198,37 @@ describe('parking a task by hand collects the reason first', () => {
 })
 
 describe('a task that went ahead without your answer says so, permanently', () => {
-  it('renders the record on a completed task', () => {
+  it('renders the record on a completed task', async () => {
     /**
      * F60: the agent asked, waited out its deadline, chose for itself and finished the work. The
-     * question is still unanswered, and until this the completed card said nothing at all.
+     * card names the fact, with the decision in its title; the drawer carries the record in full.
      */
-    renderCard(
-      makeTask({
-        status: 'completed',
-        proceeded_without_answer_reason: 'Proceeded without your answer: which colour?',
-      }),
-    )
+    const task = makeTask({
+      status: 'completed',
+      proceeded_without_answer_reason: 'Proceeded without your answer: which colour?',
+    })
+    await renderCardOpen(task)
 
-    expect(screen.getByTestId('task-proceeded-task-1')).toBeTruthy()
-    expect(screen.getByText('Decided without you')).toBeTruthy()
-    expect(screen.getByText('Proceeded without your answer: which colour?')).toBeTruthy()
+    expect(status()).toHaveAttribute('data-reason', 'proceeded')
+    expect(status()).toHaveAttribute('title', 'Proceeded without your answer: which colour?')
+    const record = screen.getByTestId('task-proceeded-detail-task-1')
+    expect(record).toHaveTextContent('Decided without you')
+    expect(record).toHaveTextContent('Proceeded without your answer: which colour?')
   })
 
-  it('shows nothing of the sort on a task whose question was answered', () => {
-    renderCard(makeTask({ status: 'completed' }))
+  it('shows nothing of the sort on a task whose question was answered', async () => {
+    await renderCardOpen(makeTask({ status: 'completed' }))
 
-    expect(screen.queryByTestId('task-proceeded-task-1')).toBeNull()
+    expect(status()).toBeNull()
+    expect(screen.queryByTestId('task-proceeded-detail-task-1')).toBeNull()
   })
 
-  it('is drawn distinctly from a live wait, because they call for opposite things', () => {
+  it('is drawn distinctly from a live wait, because they call for opposite things', async () => {
     /**
-     * A wait is an ask the operator can still answer; this is a decision already taken, and an
-     * answer would arrive too late to change it. A card carrying both is describing two different
-     * questions and must say so twice, not once.
+     * A wait is an ask the operator can still answer; this is a decision already taken. The card's
+     * one line states the live ask; the drawer still carries the decision record beside it.
      */
-    renderCard(
+    await renderCardOpen(
       makeTask({
         status: 'blocked',
         blocked_reason: 'Waiting on your answer: which database?',
@@ -236,36 +236,42 @@ describe('a task that went ahead without your answer says so, permanently', () =
       }),
     )
 
-    expect(screen.getByTestId('task-blocked-task-1')).toBeTruthy()
-    expect(screen.getByTestId('task-proceeded-task-1')).toBeTruthy()
+    expect(status()).toHaveAttribute('data-reason', 'waiting')
+    expect(status()).toHaveTextContent('which database?')
+    expect(screen.getByTestId('task-proceeded-detail-task-1')).toHaveTextContent('which colour?')
   })
 })
 
 describe('an approved task keeps the record as one line of history (fix-D14, F659)', () => {
-  it('collapses the block once the task is approved', () => {
-    renderCard(
+  it('collapses the block once the task is approved', async () => {
+    await renderCardOpen(
       makeTask({
         status: 'approved',
         proceeded_without_answer_reason: 'Proceeded without your answer: which colour?',
       }),
     )
 
-    expect(screen.queryByTestId('task-proceeded-task-1')).toBeNull()
-    expect(screen.queryByText('Decided without you')).toBeNull()
-    const line = screen.getByTestId('task-proceeded-history-task-1')
+    // On the card: quiet history, not the amber "went ahead" line that asks for attention.
+    expect(status()).toHaveAttribute('data-reason', 'decided-without-you')
+    expect(status()).toHaveAttribute('data-tone', 'decided')
+    expect(status()).toHaveTextContent('Decided without you earlier')
+    // In the drawer: one line, not the block.
+    expect(screen.queryByTestId('task-proceeded-detail-task-1')).toBeNull()
+    const line = screen.getByTestId('task-proceeded-history-detail-task-1')
     expect(line.textContent).toContain('Earlier, decided without you')
     expect(line.textContent).toContain('which colour?')
   })
 
-  it('keeps the block on a task not yet approved', () => {
-    renderCard(
+  it('keeps the block on a task not yet approved', async () => {
+    await renderCardOpen(
       makeTask({
         status: 'in_progress',
         proceeded_without_answer_reason: 'Proceeded without your answer: which colour?',
       }),
     )
 
-    expect(screen.getByTestId('task-proceeded-task-1')).toBeTruthy()
-    expect(screen.queryByTestId('task-proceeded-history-task-1')).toBeNull()
+    expect(status()).toHaveAttribute('data-reason', 'proceeded')
+    expect(screen.getByTestId('task-proceeded-detail-task-1')).toBeTruthy()
+    expect(screen.queryByTestId('task-proceeded-history-detail-task-1')).toBeNull()
   })
 })

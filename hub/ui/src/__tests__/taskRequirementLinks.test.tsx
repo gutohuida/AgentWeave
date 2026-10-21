@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Task } from '@/api/tasks'
-import { TaskCard } from '@/components/tasks/TaskCard'
+import { useSpecDocuments } from '@/api/spec'
+import { TaskCardCompact } from '@/components/tasks/TaskCardCompact'
+import { useRequirementTallies } from '@/hooks/useRequirementTallies'
 import { TaskCardHost } from './testUtils/TaskCardHost'
 
 /**
@@ -58,7 +60,7 @@ vi.mock('@/api/spec', () => ({
       ],
     },
   }),
-  useSpecCoverageMany: (paths: string[]) => paths.map((path) => ({ data: coverageByPath[path] })),
+  useSpecCoverageMany: (paths: string[]) => paths.map((path) => ({ data: coverageByPath[path], dataUpdatedAt: 0 })),
 }))
 
 function coverageEntry(overrides: Record<string, unknown> = {}) {
@@ -94,14 +96,13 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   }
 }
 
-// The "Serves" block moved into the drawer along with the rest of the inline expansion (F5,
-// `design.md` D8) — opened the same way the operator would, via the card's explicit "open"
-// affordance.
-async function renderExpanded(task: Task) {
+// The "Serves" block lives in the drawer (F5, `design.md` D8) — opened the same way the operator
+// would, by clicking the card.
+async function renderExpanded(task: Task, onOpenRequirement?: (path: string, anchor: string) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <TaskCardHost task={task} />
+      <TaskCardHost task={task} onOpenRequirement={onOpenRequirement} />
     </QueryClientProvider>,
   )
   await userEvent.click(screen.getByTestId(`task-open-${task.id}`))
@@ -131,7 +132,6 @@ describe('a card shows what it is checked against', () => {
     )
 
     expect(screen.getByTestId('task-serves-task-1')).toBeTruthy()
-    // "FR-1" now also renders as a header chip (F4) — scope this assertion to the "Serves" block.
     expect(within(screen.getByTestId('task-serves-task-1')).getByText('FR-1')).toBeTruthy()
     expect(screen.getByText(/It settles the account/)).toBeTruthy()
     // The prose survives, relabelled so the two are not confused for each other.
@@ -176,44 +176,44 @@ describe('a card shows what it is checked against', () => {
 })
 
 /**
- * F4's other half: which requirement(s) a task serves, visible on the collapsed card, and a way
- * to land on the requirement in its document from there.
+ * F4's other half: how a task's requirements stand, visible on the collapsed card, and a way to
+ * land on a requirement in its document. The compact card carries one tally ("N/M FR", read from
+ * each requirement's document coverage, the full count in its title); the requirements one by
+ * one, each a link into its document, are the drawer's "Serves" list.
  */
-describe('the requirement chip row (F4)', () => {
-  function renderCollapsed(task: Task, onOpenRequirement?: (path: string, anchor: string) => void) {
+describe('the requirement tally on the card (F4)', () => {
+  /** The board's own read: `useRequirementTallies` over the tasks and the loaded documents. */
+  function CardOnBoard({ task }: { task: Task }) {
+    const { data } = useSpecDocuments()
+    const tallies = useRequirementTallies([task], data?.documents ?? [])
+    return <TaskCardCompact task={task} tally={tallies[task.id]} onOpen={() => {}} />
+  }
+
+  function renderCollapsed(task: Task) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     return render(
       <QueryClientProvider client={client}>
-        <TaskCard task={task} onOpenRequirement={onOpenRequirement} onOpen={() => {}} />
+        <CardOnBoard task={task} />
       </QueryClientProvider>,
     )
   }
 
-  it('renders one chip per requirement_ids entry without expanding the card', () => {
-    renderCollapsed(
-      makeTask({
-        requirement_ids: ['FR-1', 'FR-2'],
-        requirement_links: [
-          {
-            identifier: 'FR-1',
-            requirement_id: 'spreq-a',
-            document_id: 'spdoc-1',
-            state: 'active',
-            statement: 'Settle to the cent',
-          },
-          {
-            identifier: 'FR-2',
-            requirement_id: 'spreq-b',
-            document_id: 'spdoc-1',
-            state: 'active',
-            statement: 'Round consistently',
-          },
-        ],
-      }),
-    )
+  const tally = () => document.querySelector('.aw-task-card-reqs') as HTMLElement | null
 
-    expect(screen.getByTestId('task-requirement-chip-task-1-FR-1')).toBeTruthy()
-    expect(screen.getByTestId('task-requirement-chip-task-1-FR-2')).toBeTruthy()
+  const links = (ids: string[], overrides: Record<string, Partial<NonNullable<Task['requirement_links']>[number]>> = {}) =>
+    ids.map((identifier) => ({
+      identifier,
+      requirement_id: `spreq-${identifier}`,
+      document_id: 'spdoc-1',
+      state: 'active',
+      statement: null,
+      ...overrides[identifier],
+    }))
+
+  it('counts every requirement_ids entry without expanding the card', () => {
+    renderCollapsed(makeTask({ requirement_ids: ['FR-1', 'FR-2'], requirement_links: links(['FR-1', 'FR-2']) }))
+
+    expect(tally()).toHaveTextContent('0/2 FR')
     // Not expanded — the "Serves" block, which lists the same links with their full statement,
     // is not rendered until the card is opened.
     expect(screen.queryByTestId('task-serves-task-1')).toBeNull()
@@ -222,80 +222,39 @@ describe('the requirement chip row (F4)', () => {
   it('renders nothing when requirement_ids is empty or absent', () => {
     renderCollapsed(makeTask({ requirements: ['just prose'] }))
 
-    expect(screen.queryByTestId(/task-requirement-chip/)).toBeNull()
+    expect(tally()).toBeNull()
   })
 
-  it('gives a chip the rejected tone from its document coverage state, not requirement_links[].state', () => {
-    // Both links carry the same lifecycle state (`active`) — if the chip read `state`, as the
-    // design's first draft wrongly did (R1), the two chips below could not be told apart.
+  it('reads verified and rejected from document coverage, not requirement_links[].state', () => {
+    // Both links carry the same lifecycle state (`active`) — if the tally read `state`, as the
+    // chips' first draft wrongly did (R1), the two could not be told apart.
     setCoverage('spec/example.json', [
       coverageEntry({ identifier: 'FR-1', state: 'rejected' }),
       coverageEntry({ identifier: 'FR-2', state: 'verified' }),
     ])
-    renderCollapsed(
-      makeTask({
-        requirement_ids: ['FR-1', 'FR-2'],
-        requirement_links: [
-          {
-            identifier: 'FR-1',
-            requirement_id: 'spreq-a',
-            document_id: 'spdoc-1',
-            state: 'active',
-            statement: 'Settle to the cent',
-          },
-          {
-            identifier: 'FR-2',
-            requirement_id: 'spreq-b',
-            document_id: 'spdoc-1',
-            state: 'active',
-            statement: 'Round consistently',
-          },
-        ],
-      }),
-    )
+    renderCollapsed(makeTask({ requirement_ids: ['FR-1', 'FR-2'], requirement_links: links(['FR-1', 'FR-2']) }))
 
-    const rejectedChip = screen.getByTestId('task-requirement-chip-task-1-FR-1')
-    const verifiedChip = screen.getByTestId('task-requirement-chip-task-1-FR-2')
-    // The rejected tone is a modifier on the shared chip class now, not an inline colour — the
-    // chip gained a resting border and a hover state that only a stylesheet can carry.
-    expect(rejectedChip).toHaveClass('task-chip-req', 'rejected')
-    expect(verifiedChip).toHaveClass('task-chip-req', 'verified')
-    expect(verifiedChip).not.toHaveClass('rejected')
+    expect(tally()).toHaveTextContent('1/2 FR')
+    expect(tally()).toHaveAttribute('data-rejected', 'true')
+    expect(tally()).toHaveAttribute('data-complete', 'false')
+    expect(tally()).toHaveAttribute('title', '1 of 2 requirements verified, 1 rejected')
   })
 
-  it('gives a chip awaiting review the pending tone, and one with no coverage row the neutral tone', () => {
+  it('does not count a requirement awaiting review, or one with no coverage row, as verified', () => {
     setCoverage('spec/example.json', [coverageEntry({ identifier: 'FR-1', state: 'evidence_awaiting_review' })])
     renderCollapsed(
       makeTask({
         requirement_ids: ['FR-1', 'FR-2'],
-        requirement_links: [
-          {
-            identifier: 'FR-1',
-            requirement_id: 'spreq-a',
-            document_id: 'spdoc-1',
-            state: 'active',
-            statement: 'Settle to the cent',
-          },
-          // FR-2 is retired: a retired requirement has no document-coverage row at all.
-          {
-            identifier: 'FR-2',
-            requirement_id: 'spreq-b',
-            document_id: 'spdoc-1',
-            state: 'retired',
-            statement: null,
-          },
-        ],
+        // FR-2 is retired: a retired requirement has no document-coverage row at all.
+        requirement_links: links(['FR-1', 'FR-2'], { 'FR-2': { state: 'retired' } }),
       }),
     )
 
-    expect(screen.getByTestId('task-requirement-chip-task-1-FR-1')).toHaveClass('pending')
-    const neutralChip = screen.getByTestId('task-requirement-chip-task-1-FR-2')
-    expect(neutralChip).not.toHaveClass('rejected')
-    expect(neutralChip).not.toHaveClass('verified')
-    expect(neutralChip).not.toHaveClass('pending')
+    expect(tally()).toHaveTextContent('0/2 FR')
+    expect(tally()).toHaveAttribute('data-rejected', 'false')
   })
 
-  it('shows a one-line summary by coverage state once there are more than four chips', () => {
+  it('states the whole count by coverage state, however many requirements there are', () => {
     setCoverage('spec/example.json', [
       coverageEntry({ identifier: 'FR-1', state: 'verified' }),
       coverageEntry({ identifier: 'FR-2', state: 'verified' }),
@@ -303,50 +262,29 @@ describe('the requirement chip row (F4)', () => {
       coverageEntry({ identifier: 'FR-4', state: 'evidence_awaiting_review' }),
       coverageEntry({ identifier: 'FR-5', state: 'not_started' }),
     ])
-    renderCollapsed(
-      makeTask({
-        requirement_ids: ['FR-1', 'FR-2', 'FR-3', 'FR-4', 'FR-5'],
-        requirement_links: ['FR-1', 'FR-2', 'FR-3', 'FR-4', 'FR-5'].map((identifier) => ({
-          identifier,
-          requirement_id: `spreq-${identifier}`,
-          document_id: 'spdoc-1',
-          state: 'active',
-          statement: null,
-        })),
-      }),
-    )
+    const ids = ['FR-1', 'FR-2', 'FR-3', 'FR-4', 'FR-5']
+    renderCollapsed(makeTask({ requirement_ids: ids, requirement_links: links(ids) }))
 
-    expect(screen.getByTestId('task-requirement-summary-task-1')).toHaveTextContent(
-      '2 verified · 1 rejected · 2 open',
-    )
+    expect(tally()).toHaveTextContent('2/5 FR')
+    expect(tally()).toHaveAttribute('title', '2 of 5 requirements verified, 1 rejected')
   })
 
-  it('shows no summary for a task with four or fewer linked requirements', () => {
+  it('marks the tally complete once every requirement is verified', () => {
     setCoverage('spec/example.json', [
       coverageEntry({ identifier: 'FR-1', state: 'verified' }),
       coverageEntry({ identifier: 'FR-2', state: 'verified' }),
-      coverageEntry({ identifier: 'FR-3', state: 'rejected' }),
-      coverageEntry({ identifier: 'FR-4', state: 'evidence_awaiting_review' }),
     ])
-    renderCollapsed(
-      makeTask({
-        requirement_ids: ['FR-1', 'FR-2', 'FR-3', 'FR-4'],
-        requirement_links: ['FR-1', 'FR-2', 'FR-3', 'FR-4'].map((identifier) => ({
-          identifier,
-          requirement_id: `spreq-${identifier}`,
-          document_id: 'spdoc-1',
-          state: 'active',
-          statement: null,
-        })),
-      }),
-    )
+    renderCollapsed(makeTask({ requirement_ids: ['FR-1', 'FR-2'], requirement_links: links(['FR-1', 'FR-2']) }))
 
-    expect(screen.queryByTestId('task-requirement-summary-task-1')).toBeNull()
+    expect(tally()).toHaveAttribute('data-complete', 'true')
+    expect(tally()).toHaveAttribute('title', '2 of 2 requirements verified')
   })
+})
 
-  it('clicking a chip resolves the document from document_id and navigates with the anchor', async () => {
+describe('a requirement opens in its document from the drawer (F4)', () => {
+  it('resolves the document from document_id and navigates with the anchor', async () => {
     const onOpenRequirement = vi.fn()
-    renderCollapsed(
+    await renderExpanded(
       makeTask({
         requirement_ids: ['FR-1'],
         requirement_links: [
@@ -363,14 +301,14 @@ describe('the requirement chip row (F4)', () => {
       onOpenRequirement,
     )
 
-    await userEvent.click(screen.getByTestId('task-requirement-chip-task-1-FR-1'))
+    await userEvent.click(within(screen.getByTestId('task-serves-task-1')).getByRole('button', { name: /FR-1/ }))
 
     expect(onOpenRequirement).toHaveBeenCalledWith('spec/example.json', 'FR-1')
   })
 
   it('is not clickable when the requirement resolves to no document', async () => {
     const onOpenRequirement = vi.fn()
-    renderCollapsed(
+    await renderExpanded(
       makeTask({
         requirement_ids: ['FR-9'],
         requirement_links: [
@@ -386,9 +324,9 @@ describe('the requirement chip row (F4)', () => {
       onOpenRequirement,
     )
 
-    const chip = screen.getByTestId('task-requirement-chip-task-1-FR-9')
-    expect(chip).toBeDisabled()
-    await userEvent.click(chip)
+    const link = within(screen.getByTestId('task-serves-task-1')).getByRole('button', { name: /FR-9/ })
+    expect(link).toBeDisabled()
+    await userEvent.click(link)
     expect(onOpenRequirement).not.toHaveBeenCalled()
   })
 })

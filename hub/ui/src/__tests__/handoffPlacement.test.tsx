@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentSummary } from '@/api/agents'
@@ -107,12 +108,13 @@ describe('durable handoff has a persistent place on the conversation', () => {
 
     expect(handoff).toHaveTextContent('Checkpoint')
     expect(handoff).toBeEnabled()
-    // On the header, beside "Fold all turns" — the operator's requirement was an explicit place
+    // On the bar itself, never only in its menu — the operator's requirement was an explicit place
     // they can see, because "users might not know or forget about the handoff".
     expect(screen.getByTestId('conversation-header')).toContainElement(handoff)
-    const foldAll = screen.getByRole('button', { name: 'Fold all turns' })
-    expect(screen.getByTestId('conversation-header')).toContainElement(foldAll)
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByTestId('conversation-more'))
+    await screen.findByRole('menu')
+    expect(screen.queryByRole('menuitem', { name: /^Checkpoint$/ })).not.toBeInTheDocument()
   })
 
   it('states its reason when the runner cannot manage a session', async () => {

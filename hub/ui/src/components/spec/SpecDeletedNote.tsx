@@ -15,10 +15,9 @@ export function SpecDeletedNote() {
     <div
       role="status"
       data-testid="spec-deleted-note"
-      className="flex items-center gap-2 px-4 py-2 text-sm"
-      style={{ color: 'var(--text-2)', borderBottom: '1px solid var(--border)' }}
+      className="aw-spec-deleted-note"
     >
-      <span className="flex-1">{said}</span>
+      <span>{said}</span>
       <Button variant="ghost" size="sm" data-testid="spec-deleted-note-dismiss" onClick={clear}>
         Dismiss
       </Button>

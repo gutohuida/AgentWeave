@@ -1,9 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentRunFacts, AgentSummary } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import { AgentTimeline } from '@/components/agents/AgentTimeline'
-import { ConversationControls } from '@/components/agents/ConversationControls'
+import { ConversationBar } from '@/components/conversation/ConversationBar'
+import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
 
 /**
  * live-thinking-opens-then-collapses and diagnostics-can-be-hidden (F572).
@@ -151,21 +153,45 @@ describe('diagnostics can be hidden', () => {
   ]
   const settled = { isRunning: false, runs: { 'run-1': run('failed', '2026-08-02T00:00:09Z') } }
 
-  function renderControls() {
-    return render(
-      <ConversationControls
-        contextUsage={null}
+  /** The conversation bar wired to the preference the way the panel wires it. */
+  function Controls() {
+    const [hidden, setHidden] = useDiagnosticsHidden()
+    return (
+      <ConversationBar
+        agent={{ ...agent, status: 'idle' }}
+        conversation={null}
+        title="A conversation"
         isRunning={false}
-        isStopping={false}
-        onStop={() => {}}
-        currentConversationId="c1"
-        handoffState="idle"
-        handoffUnavailable={false}
-        interactionLocked={false}
-        onHandoff={() => {}}
+        elapsedSeconds={null}
+        diagnosticsHidden={hidden}
+        onToggleDiagnostics={() => setHidden(!hidden)}
         onFoldAll={() => {}}
-      />,
+      />
     )
+  }
+
+  function renderControls() {
+    return render(<Controls />)
+  }
+
+  /** The toggle lives in the bar's menu: open it, and read the item it offers. */
+  async function diagnosticsItem(name: 'Hide diagnostics' | 'Show diagnostics') {
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'More conversation actions' }))
+    const menu = await screen.findByRole('menu')
+    return { user, item: within(menu).getByRole('menuitem', { name }) }
+  }
+
+  async function chooseDiagnostics(name: 'Hide diagnostics' | 'Show diagnostics') {
+    const { user, item } = await diagnosticsItem(name)
+    await user.click(item)
+  }
+
+  async function expectOffered(name: 'Hide diagnostics' | 'Show diagnostics') {
+    const { user, item } = await diagnosticsItem(name)
+    expect(item).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await act(async () => {})
   }
 
   it('shows diagnostics by default', () => {
@@ -173,11 +199,11 @@ describe('diagnostics can be hidden', () => {
     expect(screen.getByText('runner stderr noise')).toBeInTheDocument()
   })
 
-  it('removes only the diagnostic card, and the preference survives a remount', () => {
+  it('removes only the diagnostic card, and the preference survives a remount', async () => {
     const controls = renderControls()
-    fireEvent.click(screen.getByRole('button', { name: 'Hide diagnostics' }))
+    await chooseDiagnostics('Hide diagnostics')
     expect(localStorage.getItem(PREFERENCE_KEY)).toBe('hidden')
-    expect(screen.getByRole('button', { name: 'Show diagnostics' })).toBeInTheDocument()
+    await expectOffered('Show diagnostics')
 
     const first = renderTimeline(diagnosticTurn(), settled)
     expect(screen.queryByText('runner stderr noise')).not.toBeInTheDocument()
@@ -187,25 +213,25 @@ describe('diagnostics can be hidden', () => {
     first.unmount()
     controls.unmount()
     renderControls()
-    expect(screen.getByRole('button', { name: 'Show diagnostics' })).toBeInTheDocument()
+    await expectOffered('Show diagnostics')
     renderTimeline(diagnosticTurn(), settled)
     expect(screen.queryByText('runner stderr noise')).not.toBeInTheDocument()
   })
 
-  it('hides a card already on screen when the button is clicked, and brings it back', () => {
+  it('hides a card already on screen when the item is chosen, and brings it back', async () => {
     renderControls()
     renderTimeline(diagnosticTurn(), settled)
     expect(screen.getByText('runner stderr noise')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Hide diagnostics' }))
+    await chooseDiagnostics('Hide diagnostics')
     expect(screen.queryByText('runner stderr noise')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Show diagnostics' }))
+    await chooseDiagnostics('Show diagnostics')
     expect(screen.getByText('runner stderr noise')).toBeInTheDocument()
   })
 
-  it('treats an unreadable stored value as shown', () => {
+  it('treats an unreadable stored value as shown', async () => {
     localStorage.setItem(PREFERENCE_KEY, '{not json')
     renderControls()
-    expect(screen.getByRole('button', { name: 'Hide diagnostics' })).toBeInTheDocument()
+    await expectOffered('Hide diagnostics')
     renderTimeline(diagnosticTurn(), settled)
     expect(screen.getByText('runner stderr noise')).toBeInTheDocument()
   })

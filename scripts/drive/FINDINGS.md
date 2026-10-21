@@ -38164,3 +38164,76 @@ Cause: the rail's agents are the projects summary (`Sidebar.tsx:433` `agents={pr
 Asked to "call request_agent with name 'Beta' and template 'beta'", alpha's first call failed for a missing argument. Its thinking: "`request_agent` requires three arguments: name, template, and task ... no details on what task should be. Let me try with ... a simple task identifier". It listed the project's tasks and called again with `task: "task-e32b0b7a5aec"`. That call was refused for F811's case twin, which is the only reason no new agent was created whose entire brief was a bare task id. The route treats `task` as free text: it becomes the delegation `Message.content` and the queue entry's `content` (`hub/hub/api/v1/agents.py:2799`, `:2813`; `AgentRequest.task`, up to 100,000 characters, `:100`). The MCP docstring (`hub/hub/mcp_server.py:802-808`) never mentions `task`. The `aw-tool` listing (`agents.py:1515-1526`) gives `args="name, template, task"` with text about the budget and the template only.
 
 **Expected:** both descriptions say what `task` is: "`task`: the new agent's first message, the work you are handing it, in prose; it is delivered to it as a message from you, and it is not a task id". If the field is meant to accept a task id too, the route resolves one. **Test:** `hub/tests/test_mcp_tool_docs*.py` (or beside the aw-tool listing tests): `request_agent`'s docstring and its `_Operation.text` both mention `task` and "first message"; fails today. Seam: Agents x Capability plane (agent tool descriptions).
+
+_F900-F906 were filed as F835-F841 on 2026-10-20 on `ui/finesse-mocks`, and renumbered on 2026-10-21 when the day window filed its own F835-F837 on the cycle branch the same morning._
+
+## F900 (C) -- two files added to the vault by path, each named `README.md`, are both listed as "README.md"
+
+**Status:** fixed a92a822 2026-10-20 (Tier 0): a file added by path inside the project directory or the agent's workspace is named by its path there (`app/README.md`, `plugins/export/README.md`), the nearest root winning; a folder outside both keeps its name in front as before.
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+Found on the Terra replica (`:8130`, `proj-cd006955cbe2`) during the ui-finesse mock review (handoff 0204): one operator batch at 2026-10-20T18:16:19 added `app/README.md`, `plugins/export/README.md` and `plugins/export/docs/format.md` by path, and the map listed them as `README.md`, `README.md` and `format.md` (`GET /vault/map`). The Library could only tell the two READMEs apart by their opening lines. `vault_intake.expand` named a single file `located.name`, and a folder's files `<folder name>/<path beneath it>`, never the path from the project. Test: `test_files_named_alike_in_different_folders_keep_the_path_that_tells_them_apart` (`hub/tests/test_vault_paths.py`), failing before the fix (`'README.md' != 'app/README.md'`). Seam: Knowledge vault (add by path) x the Vault tab's Library. Not covered: two files with the same name outside the project and the workspace still share a name (no root to name them from).
+
+## F901 (C) -- the Vault reader's "Used by" can say how often an entry was read, never by which agent
+
+**Status:** fixed a92a822 2026-10-20 (Tier 2, migration 0140 -- renumbered from 0139 at the merge with the night branch, whose F761 took 0139 -- change `the-vault-names-who-read-an-entry`): an agent's `vault_read` at offset 0 is recorded against the run credential's agent in `vault_readers`, and both maps and both entry routes list `readers` ({agent, count, last_read_at}, most recent first). The reader's Used by tab names each agent with its count and last read, and says how many earlier reads predate the record (`vaultAccess.test.tsx`).
+**Source:** operator
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 2
+
+The ui-finesse mock's reader has a "Used by" tab (`hub/ui/src/components/vault/VaultReader.tsx`), and the operator asked for it to name the agents (handoff 0204, open question 2; answered "Build as Tier 0/1 now" on 2026-10-20). `vault_fetches` (migration 0126) holds one count per entry, no agent, so the tab could only say "Read 3 times". Tests: `hub/tests/test_vault_readers.py` (written first; failed on `KeyError: 'readers'` and the missing model), `test_migration_vault_readers_creates_the_table_and_its_downgrade_drops_only_it`. Reads counted before 0139 stay unattributed, so `fetches` may exceed the readers' sum. Seam: Knowledge vault (agent reads) x the Vault tab.
+
+## F902 (C) -- the compact task card shows one fact at a time: a task both waiting and stalled shows only "waiting"
+
+**Status:** open 2026-10-20. Found applying the ui-finesse mock (`ui/finesse-mocks`), porting the old `TaskCard` tests to `TaskCardCompact`.
+**Source:** code
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+`cardStatus()` (`hub/ui/src/lib/taskCardStatus.ts`) returns the first matching fact for the card's one status line. The old card showed blocked/waiting and stalled side by side; now a task that is waiting on the operator *and* whose last run ended without changing its status shows only "waiting", and the drawer shows no divergence state either (only the policy control), so "stalled" is shown nowhere. Expected: the status line carries the second fact (e.g. "Waiting on you · stalled"), or the drawer states it. Test: a `taskCardCompact` case with both facts set. Seam: Tasks (card) x Runs.
+
+## F903 (C) -- a requirement awaiting review lost its own tone on the task card and in the drawer
+
+**Status:** open 2026-10-20. Found in the same port as F902.
+**Source:** code
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+The old card's per-requirement chips gave a requirement awaiting review a pending tone. The compact card replaces the chips with a tally (`N/M FR`) that does not count it, and the drawer's Serves list has no coverage tone, so "this requirement is waiting for review" is shown nowhere. Expected: the tally's title or the drawer's Serves list names requirements awaiting review. Test: `taskRequirementLinks.test.tsx`, a requirement in review. Seam: Tasks x Spec (coverage).
+
+## F904 (C) -- the Overview's "Needs you" lost two question behaviours: blocking questions first, and no "waiting" claim for a non-blocking one
+
+**Status:** open 2026-10-20. Found in the same port as F902.
+**Source:** code
+**Theme:** Overview
+**Ready:** yes
+**Tier:** 0
+
+`QuestionInterruptCard` (now rendered by nothing, kept so this is not lost) put the question an agent is blocked on first, and did not say anyone waits on a non-blocking question. `OverviewScreen`/`OverviewView` order "Needs you" by time and word every question alike. Expected: blocking questions first; a non-blocking one is not described as something an agent waits on. Test: `overviewScreen.test.tsx`, one blocking and one non-blocking question. Then delete `QuestionInterruptCard.tsx`. Seam: Overview x Questions.
+
+## F905 (C) -- the compact task card offers Retry on every unmerged task, even one a retry can never clear
+
+**Status:** open 2026-10-20. Found in the same port as F902.
+**Source:** code
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+`TaskCardCompact` shows Retry whenever `latest_integration` is not merged. `latest_integration` in the task-list payload carries no retryability, so a skip that retrying cannot clear ("already in master; nothing to merge", a missing main branch) still shows the button; `TaskIntegrationNote` in the drawer gets it right from the integration route. The same goes for the Overview's "approved but not merged" rows. Expected: the list payload carries `retryable` (Hub) and the card shows Retry only then. Tests: `hub/tests` for the field, `taskCardCompact` for the button. Seam: Tasks x Integration.
+
+
+## F906 (B) -- the clientless-route ratchet measures nothing: `n10_route_reachability.py` reads 0 declared `/api/v1` routes
+
+**Status:** open 2026-10-20. Found by the n11 ratchet repair during the ui-finesse apply.
+**Source:** code
+**Theme:** Tooling
+**Ready:** yes
+**Tier:** 0
+
+`test_no_new_route_without_a_client` warns "routes with no client anywhere dropped to 0 from a ceiling of 21". The drop is not a repair: `n10` finds zero declared routes, in this worktree and in the main checkout alike, so the count is 0 whatever the clients do and the ratchet cannot fail. Expected: `n10` reads the route table (or the test fails, rather than passes, when it reads none). Test: assert the declared-route count is > 0 before ratcheting. Seam: Tooling (surface ratchets) x the Hub route table.

@@ -1,37 +1,22 @@
 import { useEffect, useState } from 'react'
 import {
   AgentSummary,
-  MAX_AGENT_DESCRIPTION_CHARS,
   useUpdateAgentCheckpointMode,
   useUpdateAgentCheckpointOverride,
-  useUpdateAgentDescription,
   useUpdateAgentGithubMcp,
-  useUpdateAgentGrant,
-  useUpdateAgentPermissionDefault,
-  useUpdateAgentReachGrants,
   useUpdateAgentReviewAgents,
-  useAgentLaunchability,
 } from '@/api/agents'
-import type { ReachGrants } from '@/api/projects'
-import { Button } from '@/components/ui/button'
-import { ReachGrantsEditor } from '@/components/environment/ReachGrantsEditor'
-import { EMPTY_GRANTS, cleanGrants, describeGrants } from '@/lib/reachGrants'
-import { readableApiError } from '@/api/client'
-import { permissionModeValues, useModelCatalog } from '@/api/modelCatalog'
 import { useBindAgentCharter, useCharters } from '@/api/charters'
 import {
   MAX_WAITING_SECONDS,
   MIN_WAITING_SECONDS,
-  useBindAgentRunner,
-  useRunners,
   useUpdateAgentWaiting,
 } from '@/api/runners'
 import { SettingsRow } from '@/components/environment/SettingsSection'
 import { runnerCeilingNote } from '@/components/environment/describeThreshold'
 import { useProjectSettings } from '@/api/projects'
 import { useConfigStore } from '@/store/configStore'
-import { Select, Textarea } from '@/components/ui/input'
-import { runnerOptionLabel } from '@/lib/runnerLabel'
+import { Select } from '@/components/ui/input'
 
 /**
  * The editable per-agent controls, shared by the settings page and — until it is retired — the
@@ -42,54 +27,6 @@ import { runnerOptionLabel } from '@/lib/runnerLabel'
  * requires that no setting be editable from two surfaces; that is a statement about where these
  * are *placed*, which is why the placement is deliberately not baked into the controls.
  */
-
-/** What this agent is for, in the operator's own words.
- *
- * Committed on blur, like `WaitingSetting` and for the same reason: a mutation per keystroke would
- * write a sentence a character at a time. Blank clears it — the API stores no description rather
- * than an empty one, so clearing and never having written are the same state.
- *
- * It is a note to the human reading a roster, not an instruction to the agent: nothing injects it
- * into a turn. The charter is where behaviour is stated, and a second field that also shaped it
- * would leave two places to look when an agent acts wrongly.
- */
-export function DescriptionSetting({ agent }: { agent: AgentSummary }) {
-  const update = useUpdateAgentDescription()
-  const stored = agent.description ?? ''
-  const [draft, setDraft] = useState(stored)
-
-  useEffect(() => {
-    setDraft(stored)
-  }, [stored])
-
-  const commit = () => {
-    const trimmed = draft.trim()
-    if (trimmed === stored) return
-    update.mutate({ agent: agent.name, description: trimmed === '' ? null : trimmed })
-  }
-
-  return (
-    <div>
-      <Textarea
-        value={draft}
-        rows={2}
-        maxLength={MAX_AGENT_DESCRIPTION_CHARS}
-        placeholder="What this agent is for."
-        aria-label={`Description for ${agent.name}`}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        disabled={update.isPending}
-        className="control-field w-full px-3 py-2 rounded-md text-sm resize-y"
-        style={{
-          opacity: update.isPending ? 0.6 : 1,
-        }}
-      />
-      {update.isError && (
-        <p className="mt-1 text-[11px]" style={{ color: 'var(--red)' }}>Could not save.</p>
-      )}
-    </div>
-  )
-}
 
 /** One wait, in seconds, or blank for the built-in default.
  *
@@ -173,207 +110,6 @@ export function WaitingSetting({
         )}
       </div>
     </SettingsRow>
-  )
-}
-
-/** What this agent may do when the conversation has not said.
- *
- * The same four postures the composer's Permissions pill offers, and deliberately the same
- * labels: this is not a second vocabulary for the same choice, it is that choice applied when no
- * run states one. Blank means the built-in default rather than a stored copy of today's — the
- * same reasoning as `WaitingSetting`.
- *
- * The options come from the catalog's union across providers rather than from the agent's bound
- * runner, because an agent may have none bound and rebinding one must not invalidate a default
- * the operator already chose.
- */
-export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
-  const { data: catalog, isLoading } = useModelCatalog()
-  const update = useUpdateAgentPermissionDefault()
-  const options = permissionModeValues(catalog)
-  // What clearing the default gives this agent's run, as the Hub computes it (without Full access,
-  // which clearing also clears). Unknown with no runner bound, or from a Hub older than F283's fix.
-  const builtIn = agent.permission_mode_built_in
-  const builtInLabel = builtIn
-    ? (options.find((option) => option.id === builtIn)?.label ?? builtIn)
-    : 'depends on the runner'
-  // reach-1019: when the project states a default, clearing this agent's gives the project's.
-  const inherited = agent.permission_mode_from_project ? 'Project default' : 'Built-in default'
-
-  if (isLoading) {
-    return <span className="text-xs" style={{ color: 'var(--text-3)' }}>Loading postures...</span>
-  }
-
-  return (
-    <div>
-      <Select
-        value={agent.default_permission_mode ?? ''}
-        onChange={(event) => update.mutate({ agent: agent.name, mode: event.target.value || null })}
-        disabled={update.isPending}
-        aria-label={`Default permissions for ${agent.name}`}
-        className="control-field w-full px-3 py-2 rounded-md text-sm"
-        style={{
-          opacity: update.isPending ? 0.6 : 1,
-        }}
-      >
-        <option value="">{inherited} ({builtInLabel})</option>
-        {options.map((option) => (
-          <option key={option.id} value={option.id}>{option.label}</option>
-        ))}
-      </Select>
-      <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
-        Used when a conversation has not chosen one — including runs a peer or a schedule starts,
-        where there is no composer to choose in.
-      </p>
-      {agent.default_permission_mode === 'manual' && agent.runner === 'claude' && (
-        // F453: measured twice on Claude. Its CLI approves commands it judges read-only before the
-        // Hub is asked, so "Ask me" is not every command. Said here, since the Hub cannot change it.
-        <p data-testid="ask-me-readonly-note" className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
-          Claude Code still runs commands it treats as read-only (such as <code>echo</code> or{' '}
-          <code>git status</code>) without asking; writes and other commands come to you.
-        </p>
-      )}
-      {update.isError && (
-        <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
-          Could not update the default posture.
-        </p>
-      )}
-    </div>
-  )
-}
-
-/** What this agent may reach beyond its workspace under Workspace only (reach-1019).
- *
- * Either the project's grants, inherited, or the agent's own, which replace them whole -- so an
- * empty list narrows this agent back to its workspace while the project's other agents keep theirs.
- * Edited as a draft and saved with a button, since a list is not one value to commit on blur.
- */
-export function ReachGrantsSetting({ agent }: { agent: AgentSummary }) {
-  const update = useUpdateAgentReachGrants()
-  const own = agent.reach_grants ?? null
-  const [draft, setDraft] = useState<ReachGrants>(own ?? EMPTY_GRANTS)
-
-  useEffect(() => {
-    setDraft(own ?? EMPTY_GRANTS)
-  }, [own])
-
-  const projectGrants = agent.project_reach_grants ?? null
-
-  return (
-    <div>
-      <Select
-        aria-label={`Granted reach for ${agent.name}`}
-        value={own === null ? 'inherit' : 'own'}
-        onChange={(event) =>
-          update.mutate({
-            agent: agent.name,
-            grants: event.target.value === 'inherit' ? null : (projectGrants ?? EMPTY_GRANTS),
-          })
-        }
-        disabled={update.isPending}
-        className="control-field w-full px-3 py-2 rounded-md text-sm"
-      >
-        <option value="inherit">The project's ({describeGrants(projectGrants)})</option>
-        <option value="own">This agent's own</option>
-      </Select>
-      {own !== null && (
-        <div className="mt-2 space-y-2">
-          <ReachGrantsEditor grants={draft} onChange={setDraft} label={`Granted reach for ${agent.name}`} />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={update.isPending}
-            onClick={() => update.mutate({ agent: agent.name, grants: cleanGrants(draft) ?? EMPTY_GRANTS })}
-          >
-            Save granted reach
-          </Button>
-        </div>
-      )}
-      <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
-        Applies under Workspace only, to Claude and Copilot runs. Everything not granted is refused as
-        before; writes outside the workspace are still recorded on the run.
-      </p>
-      {update.isError && (
-        <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
-          {readableApiError(update.error, 'Could not save the granted reach.')}
-        </p>
-      )}
-    </div>
-  )
-}
-
-/** Rebinds this one agent. Deliberately not a link through to the Runner record: rebinding one
- *  agent and editing a record bound by many are different acts, and offering them from the same
- *  control invites the second when the operator meant the first.
- *
- *  Under the control it says what the Hub says when this agent cannot run (F179). "No runner" is
- *  not a neutral value: `probe_agent` reports the agent unrunnable, and a message sent to it waits
- *  in its queue with that same sentence as its `waiting_reason`. The sentence is the Hub's own,
- *  from `GET /agents/launchability`, so a missing CLI or credential reads here too. */
-export function RunnerPicker({ agent }: { agent: AgentSummary }) {
-  const { data: runners = [], isLoading } = useRunners()
-  const { data: catalog, error: catalogError } = useModelCatalog()
-  const bindRunner = useBindAgentRunner()
-  const { data: launchability, error: launchabilityError } = useAgentLaunchability()
-  const verdict = launchability?.agents[agent.name]
-  const cannotRun = verdict?.runnable === false
-  // The Hub judges collaboration only for a runnable agent, so the two lines never meet (F178).
-  const cannotCollaborate = verdict?.runnable === true && verdict.collaboration_ready === false
-
-  if (isLoading) {
-    return <span className="text-xs" style={{ color: 'var(--text-3)' }}>Loading runners...</span>
-  }
-
-  return (
-    <div>
-      <Select
-        value={agent.runner_id ?? ''}
-        onChange={(event) => {
-          bindRunner.mutate({ agent: agent.name, runnerId: event.target.value || null })
-        }}
-        disabled={bindRunner.isPending}
-        aria-label={`Runner for ${agent.name}`}
-        className="control-field w-full px-3 py-2 rounded-md text-sm"
-        style={{
-          opacity: bindRunner.isPending ? 0.6 : 1,
-        }}
-      >
-        <option value="">No runner (cannot run)</option>
-        {runners.map((runner) => (
-          <option key={runner.id} value={runner.id}>
-            {runnerOptionLabel(runner, catalog)}
-          </option>
-        ))}
-      </Select>
-      {cannotRun && (
-        <p role="status" className="text-xs mt-2" style={{ color: 'var(--amber)' }}>
-          This agent cannot run: {verdict.reason ?? 'the Hub reports it as not runnable.'}
-        </p>
-      )}
-      {cannotCollaborate && (
-        <p role="status" className="text-xs mt-2" style={{ color: 'var(--amber)' }}>
-          This agent will run, but cannot collaborate:{' '}
-          {verdict.collaboration_reason ?? 'the Hub reports its tool calls would be refused.'}
-        </p>
-      )}
-      {/* A failed check is not a clean one: say so rather than going quiet. */}
-      {!verdict && launchabilityError && (
-        <p role="status" className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>
-          Could not check whether this agent can run.
-        </p>
-      )}
-      {catalogError && (
-        <p role="status" className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>
-          Could not load the model catalog; runner options above show plain model IDs.
-        </p>
-      )}
-      {bindRunner.isError && (
-        <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
-          Could not update runner binding.
-        </p>
-      )}
-    </div>
   )
 }
 
@@ -622,98 +358,6 @@ export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
         <p className="text-xs" style={{ color: 'var(--red)' }}>
           Could not update the checkpoint policy.
         </p>
-      )}
-    </div>
-  )
-}
-
-/**
- * The two access grants.
- *
- * Separate controls because they are separate permissions: a checkpoint is a bounded summary,
- * while recall returns another agent's recorded output verbatim. Both are closed by default, and
- * neither can be granted from a charter — a charter is text the model reads, so it must not be
- * able to widen what the model may reach.
- */
-export function CheckpointGrantsSetting({ agent }: { agent: AgentSummary }) {
-  const update = useUpdateAgentGrant()
-
-  const rows: Array<{ grant: 'can_read_checkpoints' | 'can_recall'; label: string; hint: string }> = [
-    {
-      grant: 'can_read_checkpoints',
-      label: 'Read other agents’ checkpoints',
-      hint: 'Summaries of where their conversations got to, from every conversation in this project.',
-    },
-    {
-      grant: 'can_recall',
-      label: 'Recall the observations behind them',
-      hint: 'The original recorded output a checkpoint cites, verbatim. Requires the grant above.',
-    },
-  ]
-
-  return (
-    <div className="space-y-3">
-      {rows.map((row) => (
-        <label key={row.grant} className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            checked={Boolean(agent[row.grant])}
-            onChange={(event) =>
-              update.mutate({ agent: agent.name, grant: row.grant, enabled: event.target.checked })
-            }
-            aria-label={`${row.label} for ${agent.name}`}
-            className="control-choice mt-0.5"
-          />
-          <span>
-            <span className="text-sm" style={{ color: 'var(--text)' }}>{row.label}</span>
-            <span className="block text-[11px]" style={{ color: 'var(--text-3)' }}>{row.hint}</span>
-          </span>
-        </label>
-      ))}
-      {update.isError && (
-        <p className="text-xs" style={{ color: 'var(--red)' }}>Could not update the grant.</p>
-      )}
-    </div>
-  )
-}
-
-/**
- * Separate from the checkpoint grants, deliberately.
- *
- * Those two widen what an agent may read. This one decides whether work is allowed to merge:
- * approval integrates nothing until some evidence for the requirement has been accepted. Grouping
- * them under one heading would tell the operator that authority over what ships is a kind of
- * reading.
- */
-export function EvidenceGrantSetting({ agent }: { agent: AgentSummary }) {
-  const update = useUpdateAgentGrant()
-
-  return (
-    <div className="space-y-3">
-      <label className="flex items-start gap-2">
-        <input
-          type="checkbox"
-          checked={Boolean(agent.can_accept_evidence)}
-          onChange={(event) =>
-            update.mutate({
-              agent: agent.name,
-              grant: 'can_accept_evidence',
-              enabled: event.target.checked,
-            })
-          }
-          aria-label={`Accept evidence for ${agent.name}`}
-          className="control-choice mt-0.5"
-        />
-        <span>
-          <span className="text-sm" style={{ color: 'var(--text)' }}>Accept or reject evidence</span>
-          <span className="block text-[11px]" style={{ color: 'var(--text-3)' }}>
-            Accepted evidence is what lets approving a task merge the work. This agent still cannot
-            accept its own — another agent, or you, decides that.
-          </span>
-        </span>
-      </label>
-      {update.isError && (
-        <p className="text-xs" style={{ color: 'var(--red)' }}>Could not update the grant.</p>
       )}
     </div>
   )

@@ -62,19 +62,17 @@ vi.mock('@/api/agents', () => ({
 // Stub every page component with a marker div that includes the page id in
 // its testid. This lets us assert which page is mounted without depending
 // on the real components' data fetching.
-vi.mock('@/components/overview/OverviewPage', () => ({
-  OverviewPage: ({ onNavigate }: { onNavigate?: (p: string) => void }) => (
+vi.mock('@/components/overview/OverviewScreen', () => ({
+  OverviewScreen: ({ onNavigate }: { onNavigate?: (p: string) => void }) => (
     <div data-testid="page-overview">
       <button onClick={() => onNavigate?.('tasks')}>go to tasks</button>
       <button onClick={() => onNavigate?.('questions')}>Answer</button>
+      <button onClick={() => onNavigate?.('logs')}>open logs</button>
     </div>
   ),
 }))
-vi.mock('@/components/tasks/TasksBoard', () => ({
-  TasksBoard: () => <div data-testid="page-tasks" />,
-}))
-vi.mock('@/components/tasks/DependencyBoardView', () => ({
-  DependencyBoardView: () => <div data-testid="page-tasks-dependencies" />,
+vi.mock('@/components/tasks/TasksScreen', () => ({
+  TasksScreen: () => <div data-testid="page-tasks" />,
 }))
 // There is no Spec page and no Spec tab any more — a specification is opened from the composer's
 // Spec pill, in the conversation the operator is already in. Mocked so the conversation view's
@@ -92,44 +90,23 @@ vi.mock('@/api/spec', async (importOriginal) => ({
   useSpec: () => ({ data: undefined, refetch: () => {} }),
   useSpecEvents: () => {},
 }))
-vi.mock('@/components/jobs/JobsPage', () => ({
-  JobsPage: () => <div data-testid="page-jobs" />,
+vi.mock('@/components/jobs/JobsScreen', () => ({
+  JobsScreen: () => <div data-testid="page-jobs" />,
 }))
 vi.mock('@/components/questions/QuestionsPanel', () => ({
   QuestionsPanel: () => <div data-testid="page-questions-inline" />,
 }))
-vi.mock('@/components/activity/ActivityLog', () => ({
-  ActivityLog: () => <div data-testid="page-activity" />,
+vi.mock('@/components/activity/ActivityScreen', () => ({
+  ActivityScreen: ({ initialView }: { initialView?: string }) => (
+    <div data-testid="page-activity" data-view={initialView} />
+  ),
 }))
-vi.mock('@/components/activity/ProjectLedger', () => ({
-  ProjectLedger: () => <div data-testid="page-ledger" />,
-}))
-vi.mock('@/components/logs/LogsView', () => ({
-  LogsView: () => <div data-testid="page-logs" />,
-}))
-vi.mock('@/components/quality/QualityHealthPanel', () => ({
-  QualityHealthPanel: () => <div data-testid="page-quality" />,
-}))
-vi.mock('@/components/instructions/InstructionsPage', () => ({
-  InstructionsPage: () => <div data-testid="page-instructions" />,
-}))
-vi.mock('@/components/runners/RunnersPage', () => ({
-  RunnersPage: () => <div data-testid="page-runners" />,
-}))
-vi.mock('@/components/charters/ChartersPage', () => ({
-  ChartersPage: () => <div data-testid="page-charters" />,
-}))
-vi.mock('@/components/environment/WorktreesPanel', () => ({
-  WorktreesPanel: () => <div data-testid="page-worktrees" />,
-}))
-vi.mock('@/components/environment/DiagnosticsPanel', () => ({
-  DiagnosticsPanel: () => <div data-testid="page-diagnostics" />,
-}))
-vi.mock('@/components/accounting/AccountingPanel', () => ({
-  AccountingPanel: () => <div data-testid="page-budgets" />,
-}))
-vi.mock('@/components/environment/ProjectSettingsPanel', () => ({
-  ProjectSettingsPanel: () => <div data-testid="page-settings" />,
+vi.mock('@/components/settings/ProjectSettingsScreen', () => ({
+  ProjectSettingsScreen: ({ section, onSelectSection }: { section: string; onSelectSection: (s: string) => void }) => (
+    <div data-testid="page-settings" data-section={section}>
+      <button onClick={() => onSelectSection('runners')}>Runners section</button>
+    </div>
+  ),
 }))
 vi.mock('@/components/agents/AgentOutputPanel', () => ({
   AgentOutputPanel: () => <div data-testid="page-conversation" />,
@@ -143,9 +120,6 @@ vi.mock('@/components/spec/SpecPage', () => ({
 }))
 
 // Stub the layout chrome too so the test focuses on routing.
-vi.mock('@/components/layout/StatusBar', () => ({
-  StatusBar: () => <div data-testid="status-bar" />,
-}))
 vi.mock('@/components/layout/SetupModal', () => ({
   SetupModal: () => null,
 }))
@@ -219,9 +193,8 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     )
     render(withQueryClient(<App />))
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Switch project' }), {
-      target: { value: 'proj-other' },
-    })
+    fireEvent.keyDown(screen.getByTestId('project-switcher'), { key: 'Enter' })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Client work' }))
 
     expect(window.location.search).toContain('project=proj-other')
     expect(window.location.search).toContain('tab=overview')
@@ -229,7 +202,7 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     expect(window.location.search).not.toContain('conversation=')
     expect(window.location.search).not.toContain('document=')
     expect(useConfigStore.getState().selectedProjectId).toBe('proj-other')
-    expect(screen.getByRole('combobox', { name: 'Switch project' })).toHaveValue('proj-other')
+    expect(screen.getByTestId('project-switcher')).toHaveTextContent('Client work')
   })
 
   it('offers the Spec tab as a place to focus on the specification', () => {
@@ -266,53 +239,45 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     expect(window.location.search).toContain('tab=overview')
   })
 
-  it('Tasks contains Dependencies as an internal sub-view, the seven-column board still the default (task 8.11)', () => {
+  // The Board/Dependencies toggle is the Tasks screen's own (tasksScreen.test.tsx); the App only
+  // mounts it.
+  it('mounts the Tasks screen from its tab', () => {
     render(withQueryClient(<App />))
     fireEvent.click(screen.getByTestId('project-tab-tasks'))
     expect(screen.getByTestId('page-tasks')).toBeInTheDocument()
-    expect(screen.queryByTestId('page-tasks-dependencies')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByTestId('tasks-view-dependencies'))
-    expect(screen.queryByTestId('page-tasks')).not.toBeInTheDocument()
-    expect(screen.getByTestId('page-tasks-dependencies')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByTestId('tasks-view-board'))
-    expect(screen.getByTestId('page-tasks')).toBeInTheDocument()
-    expect(screen.queryByTestId('page-tasks-dependencies')).not.toBeInTheDocument()
+    expect(screen.getByTestId('project-tab-tasks')).toHaveAttribute('aria-current', 'page')
   })
 
-  it('Activity opens on the ledger and contains Activity and Logs as internal sub-views', () => {
+  // Ledger, Activity and Logs are the Activity screen's own views (activityScreen.test.tsx); the
+  // App decides which one it opens on.
+  it('Activity opens on the ledger, and the logs route opens it on Logs', () => {
     render(withQueryClient(<App />))
-    fireEvent.click(screen.getByTestId('project-tab-activity'))
-    // F718: the ledger leads, whichever sub-view was open before the tab was clicked.
-    expect(screen.getByTestId('page-ledger')).toBeInTheDocument()
-    fireEvent.click(screen.getByTestId('activity-subview-activity'))
-    expect(screen.getByTestId('page-activity')).toBeInTheDocument()
-    fireEvent.click(screen.getByTestId('activity-subview-logs'))
-    expect(screen.queryByTestId('page-activity')).not.toBeInTheDocument()
-    expect(screen.getByTestId('page-logs')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('open logs'))
+    expect(window.location.search).toContain('tab=activity')
+    expect(screen.getByTestId('page-activity')).toHaveAttribute('data-view', 'logs')
     fireEvent.click(screen.getByTestId('project-tab-tasks'))
     fireEvent.click(screen.getByTestId('project-tab-activity'))
-    expect(screen.getByTestId('page-ledger')).toBeInTheDocument()
+    // F718: the ledger leads, whichever view was open before the tab was clicked.
+    expect(screen.getByTestId('page-activity')).toHaveAttribute('data-view', 'ledger')
   })
 
-  it('Environment contains Quality, Instructions, Runners, Charters, Worktrees, Diagnostics, Budgets, and Settings', () => {
+  it('opens Project settings at General from the top bar and from a project row, with its own section nav', () => {
     render(withQueryClient(<App />))
+    fireEvent.click(screen.getByTestId('topbar-settings'))
+    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', 'settings')
+    expect(screen.getByTestId('topbar-settings')).toHaveAttribute('aria-current', 'page')
+    // No tab is current while settings are open.
+    expect(screen.getByTestId('project-tab-overview')).not.toHaveAttribute('aria-current')
+
+    fireEvent.click(screen.getByText('Runners section'))
+    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', 'runners')
+    expect(window.location.search).toContain('runners')
+
+    fireEvent.click(screen.getByTestId('project-tab-overview'))
     fireEvent.click(screen.getAllByRole('button', { name: /^Configure /i })[0])
-    const sections: Array<[string, string]> = [
-      ['environment-section-quality', 'page-quality'],
-      ['environment-section-instructions', 'page-instructions'],
-      ['environment-section-runners', 'page-runners'],
-      ['environment-section-charters', 'page-charters'],
-      ['environment-section-worktrees', 'page-worktrees'],
-      ['environment-section-diagnostics', 'page-diagnostics'],
-      ['environment-section-budgets', 'page-budgets'],
-      ['environment-section-settings', 'page-settings'],
-    ]
-    for (const [sectionTestId, pageTestId] of sections) {
-      fireEvent.click(screen.getByTestId(sectionTestId))
-      expect(screen.getByTestId(pageTestId)).toBeInTheDocument()
-    }
+    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', 'settings')
+    // The rail stays the project tree on a settings screen (operator, 2026-10-20).
+    expect(screen.getByTestId('rail-project-proj-test')).toBeInTheDocument()
   })
 
   it('mounts a direct agent conversation URL straight into the conversation view', () => {

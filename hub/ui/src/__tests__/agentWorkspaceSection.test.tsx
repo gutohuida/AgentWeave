@@ -71,7 +71,7 @@ function renderWorkspace(data: AgentWorkspaceInfo | undefined, loading = false) 
   roster = [
     { name: 'codex-1', status: 'idle', message_count: 0, active_task_count: 0, lifecycle: 'open' },
   ]
-  return render(<AgentSettingsPage agent="codex-1" section="workspace" />)
+  return render(<AgentSettingsPage agent="codex-1" section="workspace" onSelectSection={vi.fn()} onBack={vi.fn()} />)
 }
 
 describe('where an agent works on disk', () => {

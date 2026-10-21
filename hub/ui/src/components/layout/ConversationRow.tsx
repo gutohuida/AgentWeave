@@ -153,6 +153,15 @@ export function ConversationRow({
             setRenaming(true)
           },
         },
+        ...(loop
+          ? [
+              {
+                id: 'open-loop',
+                label: `Open loop “${loop.label}”`,
+                onSelect: () => openTab(projectId, loopTabId(loop.id)),
+              },
+            ]
+          : []),
         {
           id: 'archive',
           label: 'Archive',
@@ -168,12 +177,12 @@ export function ConversationRow({
       ]
 
   return (
-    <div className="row-group flex flex-col">
-      <div className="flex items-center gap-1">
+    <div className="row-group aw-rail-conversation-host flex flex-col">
+      <div className="flex items-center">
         {renaming ? (
           <input
             ref={inputRef}
-            className="row-item"
+            className="aw-rail-rename"
             data-testid={`${testId}-rename`}
             aria-label={`Rename ${label}`}
             value={draft}
@@ -189,12 +198,12 @@ export function ConversationRow({
                 setRenaming(false)
               }
             }}
-            style={{ color: 'var(--text)', outline: 'none' }}
           />
         ) : (
           <button
+            data-slot="rail-row"
             type="button"
-            className="row-item min-w-0 flex-1"
+            className="aw-rail-row aw-rail-conversation min-w-0 flex-1"
             data-testid={testId}
             data-active={active ? 'true' : 'false'}
             /* Level 3 of the rail's selection ladder, and its leaf: the one row in navigation
@@ -212,11 +221,27 @@ export function ConversationRow({
               <span
                 data-testid={`${testId}-edge`}
                 aria-hidden="true"
-                className="h-4 w-[2px] shrink-0 rounded-full"
+                className="aw-rail-agent-edge"
                 style={{ background: agentColor }}
               />
             )}
             <span className="min-w-0 flex-1 truncate">{label}</span>
+            {/* Which loop a thread came from is what tells it apart from one the operator typed, so
+                it is named on the row, legibly, while scanning. A proportional cap keeps the title
+                first: a fixed-width marker once truncated real titles to "taste…". Opening the
+                loop's drill-down tab is the row menu's "Open loop" — one destination per control,
+                and no button nested in the row's own. */}
+            {loop && (
+              <span
+                className="aw-rail-loop"
+                data-testid={`${testId}-loop`}
+                data-loop-id={loop.id}
+                title={`Fired by the loop “${loop.label}”`}
+              >
+                <Icon name="sync" size={11} className="shrink-0" aria-hidden="true" />
+                <span className="truncate">{loop.label}</span>
+              </span>
+            )}
             {agentArchived && (
               <span
                 data-testid={`${testId}-agent-archived`}
@@ -241,9 +266,11 @@ export function ConversationRow({
                 the row and its position against the row's right edge has to be stable, or a
                 waiting run appears to move when a neighbour's age changes width. The `title`
                 carries the unabbreviated reading, since "2m" on its own is a guess. */}
-            {age && (
+            {/* The attention dot takes the age's place: one signal per row, and a running or
+                waiting conversation's age is not what the operator needs from it. */}
+            {age && !attention && (
               <span
-                className="row-meta"
+                className="aw-rail-meta"
                 data-testid={`${testId}-age`}
                 title={`Last activity ${formatDistanceToNow(hubDate(conversation.updated_at), { addSuffix: true })}`}
               >
@@ -253,8 +280,7 @@ export function ConversationRow({
             {attention && (
               <span
                 data-testid={`${testId}-attention`}
-                className="h-1.5 w-1.5 shrink-0 rounded-full"
-                style={{ background: attention.color }}
+                className={conversation.attention === 'running' ? 'aw-live-dot aw-pulse' : 'aw-waiting-dot'}
                 title={attention.label}
                 aria-label={attention.label}
                 role="img"
@@ -262,53 +288,21 @@ export function ConversationRow({
             )}
           </button>
         )}
-        {!renaming && loop && (
-          /* A sibling of the row button, not a child of it: nesting one button inside another is
-           * invalid, and this one has its own destination. It opens the loop's existing drill-down
-           * tab rather than introducing a second place loop history lives — the rejected
-           * alternative was a whole extra level in this rail (design D2: never give "open on the
-           * right" two meanings).
-           *
-           * Deliberately not `.row-action`: that class hides at rest and reveals on hover, which is
-           * right for an action and wrong for this. Which loop a thread came from is the fact that
-           * tells it apart from one the operator typed, so it has to be legible while scanning. */
-          <button
-            type="button"
-            /* `min-w-0` and a proportional cap rather than `shrink-0` and a fixed width: the rail
-             * is narrow, and a fixed 96px marker truncated real conversation titles to "taste…"
-             * — which loses the thing the row is primarily for to the thing that qualifies it.
-             * The icon never shrinks, so a firing stays identifiable even when the name is cut;
-             * the full name is on the tooltip and the accessible name either way. */
-            className="flex min-w-0 items-center gap-0.5 rounded px-1 py-0.5 text-[11px]"
-            data-testid={`${testId}-loop`}
-            data-loop-id={loop.id}
-            style={{ color: 'var(--text-3)', maxWidth: '40%' }}
-            title={`Fired by the loop “${loop.label}” — open it`}
-            aria-label={`Open loop ${loop.label}`}
-            onClick={(event) => {
-              event.stopPropagation()
-              openTab(projectId, loopTabId(loop.id))
-            }}
-          >
-            <Icon name="sync" size={13} className="shrink-0" aria-hidden="true" />
-            <span className="truncate">{loop.label}</span>
-          </button>
-        )}
         {!renaming && (
+          <span className="aw-rail-row-menu">
           <RowMenu
             label={`Actions for ${label}`}
             testId={`${testId}-menu`}
-            persistent={active}
             items={items}
           />
+          </span>
         )}
       </div>
       {error && (
         <span
-          className="px-2 pb-1 text-[11px]"
+          className="aw-rail-error"
           role="alert"
           data-testid={`${testId}-error`}
-          style={{ color: 'var(--red)' }}
         >
           {error}
         </span>

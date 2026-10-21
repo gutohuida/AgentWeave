@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AccountingSnapshot } from '@/api/accounting'
-import { AccountingPanel } from '@/components/accounting/AccountingPanel'
+import { BudgetsSection } from '@/components/settings/sections/BudgetsSection'
+import { useToastStore } from '@/lib/toast'
 import { BudgetExhaustionNotice } from '@/components/accounting/BudgetExhaustionNotice'
 import { accountingDisplayLabel } from '@/components/accounting/accountingDisplay'
 import * as accountingDisplayModule from '@/components/accounting/accountingDisplay'
@@ -17,6 +18,8 @@ function readFormatAiCredits(): ((nano: number | null) => string | null) | undef
 }
 
 let snapshot: AccountingSnapshot
+let accountingError: Error | null = null
+const refetchAccounting = vi.fn()
 const mutate = vi.fn()
 /** The mutation's reported outcome. The panel reports success and failure in-section, so the
  *  tests have to be able to put it in each of those states. */
@@ -32,10 +35,19 @@ vi.mock('@/api/accounting', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/accounting')>()
   return {
     ...actual,
-    useAccounting: () => ({ data: snapshot, isLoading: false }),
+    useAccounting: () =>
+      accountingError
+        ? { data: undefined, isLoading: false, error: accountingError, refetch: refetchAccounting }
+        : { data: snapshot, isLoading: false, error: null, refetch: refetchAccounting },
     useUpdateTokenBudget: () => ({ mutate, ...mutationState }),
   }
 })
+
+vi.mock('@/api/agents', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/agents')>()),
+  // The page names each agent's colour from the roster; the roster is not what these test.
+  useAgents: () => ({ data: [], isLoading: false }),
+}))
 
 function baseSnapshot(): AccountingSnapshot {
   return {
@@ -85,10 +97,22 @@ function baseSnapshot(): AccountingSnapshot {
   }
 }
 
+/** Leaves the limit field with `value` typed in it, which is what saves it. */
+function commitLimit(value: string) {
+  const field = screen.getByLabelText('After')
+  fireEvent.change(field, { target: { value } })
+  fireEvent.blur(field)
+}
+
+function toastTitles(): string[] {
+  return useToastStore.getState().items.map((item) => item.title)
+}
+
 describe('accounting presentation', () => {
   beforeEach(() => {
     snapshot = baseSnapshot()
     mutate.mockReset()
+    useToastStore.setState({ items: [] })
     mutationState = {
       isPending: false,
       isSuccess: false,
@@ -99,13 +123,15 @@ describe('accounting presentation', () => {
   })
 
   it('shows totals, unavailable usage, allowance precedence, and exhaustion control', () => {
-    render(<AccountingPanel />)
+    render(<BudgetsSection />)
 
-    expect(screen.getByText('1,234 tokens')).toBeInTheDocument()
-    expect(screen.getByText('Rate-limit allowance')).toBeInTheDocument()
+    expect(within(screen.getByText('Tokens').closest('.aw-usage-tile') as HTMLElement).getByTitle('1,234 tokens')).toHaveTextContent('1.2K')
+    expect(screen.getByTestId('budgets-display')).toHaveTextContent('Rate-limit allowance')
     expect(screen.queryByText(/API-equivalent estimate/)).not.toBeInTheDocument()
-    expect(screen.getByText(/1 usage unavailable/)).toBeInTheDocument()
-    expect(screen.getByText('codex: Unavailable · 1 unavailable')).toBeInTheDocument()
+    expect(screen.getByTestId('budgets-caption')).toHaveTextContent('2 measured turns · 1 unavailable')
+    const codex = screen.getByTestId('budget-agent-codex')
+    expect(codex).toHaveTextContent('Unavailable')
+    expect(codex).toHaveTextContent('1 unavailable')
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Autonomous turns are paused; operator messages can still run.',
     )
@@ -122,8 +148,8 @@ describe('accounting presentation', () => {
         unpriced_turns: 0,
       },
     }
-    render(<AccountingPanel />)
-    expect(screen.getByText('$0.0125 API-equivalent estimate')).toBeInTheDocument()
+    render(<BudgetsSection />)
+    expect(screen.getByTestId('budgets-display')).toHaveTextContent('$0.0125 API-equivalent estimate')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -138,10 +164,15 @@ describe('accounting presentation', () => {
         unpriced_turns: 10,
       },
     }
-    render(<AccountingPanel />)
-    expect(
-      screen.getByText('$0.0125 API-equivalent estimate — excludes 10 turns with no reported cost'),
-    ).toBeInTheDocument()
+    render(<BudgetsSection />)
+    expect(screen.getByTestId('budgets-display')).toHaveTextContent(
+      '$0.0125 API-equivalent estimate — excludes 10 turns with no reported cost',
+    )
+  })
+
+  it('says how many turns the spent figure could not price', () => {
+    render(<BudgetsSection />)
+    expect(screen.getByText('API-equivalent; 1 turns could not be priced')).toBeInTheDocument()
   })
 
   it('turns a runner allowance payload into readable operator language instead of raw JSON', () => {
@@ -155,7 +186,7 @@ describe('accounting presentation', () => {
         overageDisabledReason: 'out_of_credits',
       },
     }
-    render(<AccountingPanel />)
+    render(<BudgetsSection />)
 
     expect(screen.getByText(/Weekly allowance exhausted/)).toBeInTheDocument()
     expect(screen.queryByText(/\{"status"/)).not.toBeInTheDocument()
@@ -166,15 +197,16 @@ describe('accounting presentation', () => {
       { kind: 'checkpoint', input_tokens: 400, output_tokens: 100, total_tokens: 500, measured_calls: 2, unmeasured_calls: 0, api_equivalent_usd_micros: null },
       { kind: 'conversation_title', input_tokens: 50, output_tokens: 10, total_tokens: 60, measured_calls: 1, unmeasured_calls: 1, api_equivalent_usd_micros: null },
     ]
-    render(<AccountingPanel />)
+    render(<BudgetsSection />)
 
     // Every worker call that ran: measured, credited or not (F665, D1).
-    expect(screen.getByText(/2 measured turns · 4 worker calls · 1 usage unavailable/)).toBeInTheDocument()
-    const lines = screen.getByLabelText('Usage by worker').querySelectorAll('.aw-chip')
-    expect([...lines].map((line) => line.textContent)).toEqual([
-      'Checkpoints: 500 tokens',
-      'Conversation titles: 60 tokens · 1 unavailable',
-    ])
+    expect(screen.getByTestId('budgets-caption')).toHaveTextContent('2 measured turns · 4 Hub job calls · 1 unavailable')
+    const lines = screen.getByLabelText('Usage by worker').querySelectorAll('li')
+    expect([...lines].map((line) => line.getAttribute('data-testid'))).toEqual(['budget-worker-checkpoint', 'budget-worker-conversation_title'])
+    expect(screen.getByTestId('budget-worker-checkpoint')).toHaveTextContent('Checkpoints')
+    expect(screen.getByTestId('budget-worker-checkpoint')).toHaveTextContent('500 tokens')
+    expect(screen.getByTestId('budget-worker-conversation_title')).toHaveTextContent('Conversation titles')
+    expect(screen.getByTestId('budget-worker-conversation_title')).toHaveTextContent('1 unavailable')
     // After the agents, never ahead of them.
     const agents = screen.getByLabelText('Usage by agent')
     expect(agents.compareDocumentPosition(screen.getByLabelText('Usage by worker')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -184,10 +216,11 @@ describe('accounting presentation', () => {
     snapshot.workers = [
       { kind: 'checkpoint', input_tokens: null, output_tokens: null, total_tokens: null, measured_calls: 0, credited_calls: 1, unmeasured_calls: 0, api_equivalent_usd_micros: null, ai_nano_aiu: 1_102_140_000, premium_requests: 1 },
     ]
-    render(<AccountingPanel />)
-    const [line] = screen.getByLabelText('Usage by worker').querySelectorAll('.aw-chip')
-    expect(line.textContent).toBe('Checkpoints: 1.10 AI credits · 1 premium request')
-    expect(screen.getByText(/2 measured turns · 1 worker call · 1 usage unavailable/)).toBeInTheDocument()
+    render(<BudgetsSection />)
+    const line = screen.getByTestId('budget-worker-checkpoint')
+    expect(line).toHaveTextContent('1.10 AI credits · 1 premium request')
+    expect(line).not.toHaveTextContent('Unavailable')
+    expect(screen.getByTestId('budgets-caption')).toHaveTextContent('2 measured turns · 1 Hub job call · 1 unavailable')
   })
 
   it('names Copilot AI credits as the headline unit when they are the only spend reported (F665)', () => {
@@ -201,90 +234,89 @@ describe('accounting presentation', () => {
     snapshot.agents = snapshot.agents.map((agent) =>
       agent.agent === 'codex' ? { ...agent, estimated_input_tokens: 333_102 } : agent,
     )
-    render(<AccountingPanel />)
-    expect(
-      screen.getByText('≈333,102 input tokens, not measured — not counted against the budget'),
-    ).toBeInTheDocument()
+    render(<BudgetsSection />)
+    expect(screen.getByTestId('budgets-estimate')).toHaveTextContent(
+      '≈333,102 input tokens, not measured, not counted against the limit',
+    )
     // The measured total stays as it was; the estimate is never folded into it.
-    expect(screen.getByText('1,234 tokens')).toBeInTheDocument()
-    expect(
-      screen.getByText('codex: Unavailable · 1 unavailable (≈333,102 input tokens, not measured)'),
-    ).toBeInTheDocument()
+    expect(within(screen.getByText('Tokens').closest('.aw-usage-tile') as HTMLElement).getByTitle('1,234 tokens')).toHaveTextContent('1.2K')
+    expect(screen.getByTestId('budget-agent-codex')).toHaveTextContent('1 unavailable · ≈333,102 input tokens, not measured')
   })
 
   it('shows no estimate line when no turn was estimated', () => {
-    render(<AccountingPanel />)
+    render(<BudgetsSection />)
     expect(screen.queryByText(/not measured/)).toBeNull()
   })
 
   it('keeps the turns-only caption when there are no worker calls', () => {
-    render(<AccountingPanel />)
-    expect(screen.getByText(/2 measured · 1 usage unavailable/)).toBeInTheDocument()
+    render(<BudgetsSection />)
+    expect(screen.getByTestId('budgets-caption')).toHaveTextContent(/^2 measured turns · 1 unavailable$/)
     expect(screen.queryByLabelText('Usage by worker')).toBeNull()
   })
 
-  it('updates or disables the project token budget', () => {
-    render(<AccountingPanel />)
-    const input = screen.getByLabelText('Project token budget')
-    fireEvent.change(input, { target: { value: '5000' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
-    expect(mutate).toHaveBeenCalledWith(5000)
+  it('updates or turns off the project token limit', () => {
+    snapshot.budget = { limit_tokens: 40_000_000, used_tokens: 1234, remaining_tokens: 39_998_766, exhausted: false }
+    render(<BudgetsSection />)
+    expect(screen.getByLabelText('After')).toHaveValue('40')
+    commitLimit('12.5')
+    expect(mutate).toHaveBeenCalledWith(12_500_000, expect.anything())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Disable' }))
-    expect(mutate).toHaveBeenCalledWith(null)
+    fireEvent.click(screen.getByRole('switch', { name: 'Pause agents working on their own' }))
+    expect(mutate).toHaveBeenLastCalledWith(null, expect.anything())
   })
 
-  describe('the budget control reports what happened (contextual-navigation 4.7)', () => {
-    it('refuses a value that is not a budget, and says why, without calling the API', () => {
-      render(<AccountingPanel />)
-      const input = screen.getByLabelText('Project token budget')
+  it('turns a limit on at a round amount above what is already used', () => {
+    snapshot.budget = { limit_tokens: null, used_tokens: 1234, remaining_tokens: null, exhausted: false }
+    render(<BudgetsSection />)
+    expect(screen.queryByLabelText('After')).toBeNull()
+    fireEvent.click(screen.getByRole('switch', { name: 'Pause agents working on their own' }))
+    expect(mutate).toHaveBeenCalledWith(1_000_000, expect.anything())
+  })
 
-      fireEvent.change(input, { target: { value: '-5' } })
-      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+  describe('the limit control reports what happened (contextual-navigation 4.7)', () => {
+    beforeEach(() => {
+      snapshot.budget = { limit_tokens: 40_000_000, used_tokens: 1234, remaining_tokens: 39_998_766, exhausted: false }
+    })
 
+    it('refuses a value that is not a limit, and says why, without calling the API', () => {
+      render(<BudgetsSection />)
+      commitLimit('-5')
       // The whole defect: this used to do nothing at all, which from the operator's chair is
       // indistinguishable from a save that silently failed.
       expect(mutate).not.toHaveBeenCalled()
-      expect(screen.getByText(/whole number of tokens greater than zero/)).toHaveAttribute(
-        'role',
-        'alert',
-      )
-      expect(input).toHaveAttribute('aria-invalid', 'true')
+      expect(screen.getByRole('alert')).toHaveTextContent('Millions of tokens, like 40 or 12.5.')
+      expect(screen.getByLabelText('After')).toHaveAttribute('aria-invalid', 'true')
     })
 
-    it('points an empty field at Disable rather than refusing silently', () => {
-      render(<AccountingPanel />)
-      fireEvent.change(screen.getByLabelText('Project token budget'), { target: { value: '' } })
-      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
-
+    it('refuses an empty field rather than saving nothing (the switch turns the limit off)', () => {
+      render(<BudgetsSection />)
+      commitLimit('')
       expect(mutate).not.toHaveBeenCalled()
-      expect(screen.getByText(/press Disable to remove the limit/)).toBeInTheDocument()
+      expect(screen.getByRole('alert')).toHaveTextContent('Millions of tokens')
     })
 
     it('clears its objection as soon as the operator answers it', () => {
-      render(<AccountingPanel />)
-      const input = screen.getByLabelText('Project token budget')
+      render(<BudgetsSection />)
+      const input = screen.getByLabelText('After')
       fireEvent.change(input, { target: { value: '0' } })
-      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
-      expect(screen.getByText(/greater than zero/)).toBeInTheDocument()
-
-      fireEvent.change(input, { target: { value: '5000' } })
-      expect(screen.queryByText(/greater than zero/)).not.toBeInTheDocument()
+      expect(screen.getByRole('alert')).toBeInTheDocument()
+      fireEvent.change(input, { target: { value: '50' } })
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
       expect(input).not.toHaveAttribute('aria-invalid')
     })
 
-    it('confirms a saved budget', () => {
-      mutationState = { ...mutationState, isSuccess: true, variables: 5000 }
-      snapshot.budget.exhausted = false
-      render(<AccountingPanel />)
-      expect(screen.getByRole('status')).toHaveTextContent('Budget saved.')
+    it('confirms a saved limit', () => {
+      render(<BudgetsSection />)
+      commitLimit('50')
+      mutate.mock.calls[0][1].onSuccess()
+      expect(toastTitles()).toContain('Agents pause after 50M tokens')
     })
 
     it('says a removal was a removal, not a save', () => {
-      mutationState = { ...mutationState, isSuccess: true, variables: null }
-      snapshot.budget.exhausted = false
-      render(<AccountingPanel />)
-      expect(screen.getByRole('status')).toHaveTextContent('Budget removed')
+      render(<BudgetsSection />)
+      fireEvent.click(screen.getByRole('switch', { name: 'Pause agents working on their own' }))
+      mutate.mock.calls[0][1].onSuccess()
+      expect(toastTitles()).toContain('Token limit off: agents are no longer paused')
     })
 
     it('reports a server failure in the section', () => {
@@ -294,16 +326,15 @@ describe('accounting presentation', () => {
         error: new Error('nope'),
         variables: 5000,
       }
-      snapshot.budget.exhausted = false
-      render(<AccountingPanel />)
-      expect(screen.getByRole('alert')).toHaveTextContent(/could not be saved|nope/)
+      render(<BudgetsSection />)
+      expect(screen.getByRole('alert')).toHaveTextContent(/not saved|could not be saved/)
     })
 
-    it('does not offer Disable while a save is in flight', () => {
+    it('does not offer the controls while a save is in flight', () => {
       mutationState = { ...mutationState, isPending: true }
-      render(<AccountingPanel />)
-      expect(screen.getByRole('button', { name: 'Disable' })).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
+      render(<BudgetsSection />)
+      expect(screen.getByRole('switch', { name: 'Pause agents working on their own' })).toBeDisabled()
+      expect(screen.getByLabelText('After')).toBeDisabled()
     })
   })
 
@@ -382,11 +413,8 @@ describe('accounting presentation', () => {
     })
   })
 
-  describe('AI credits on the Budgets panel (task 1.18)', () => {
-    /** `project.ai_nano_aiu`/`premium_requests` land at task 6.1 (design D6's byte-identity test);
-     *  the headline caption and per-agent chips land at an unticked UI task. Cast past today's
-     *  `UsageSummary`/`AgentUsageSummary` types rather than widening them here. */
-    it('adds a second headline line with AI credits and premium requests when the project reports them', () => {
+  describe('AI credits on the Budgets page (task 1.18)', () => {
+    it('adds a line with AI credits and premium requests when the project reports them', () => {
       snapshot = {
         ...baseSnapshot(),
         project: {
@@ -395,26 +423,41 @@ describe('accounting presentation', () => {
           premium_requests: 1.5,
         } as unknown as AccountingSnapshot['project'],
       }
-      const { container } = render(<AccountingPanel />)
-      expect(container.textContent).toContain(
-        '0.28 AI credits · 1.5 premium requests (Copilot) — not counted against the budget',
+      render(<BudgetsSection />)
+      expect(screen.getByTestId('budgets-credits')).toHaveTextContent(
+        '0.28 AI credits · 1.5 premium requests (Copilot), not counted against the limit',
       )
     })
 
     it('shows no credits line when the project has nothing to report (control)', () => {
-      const { container } = render(<AccountingPanel />)
+      const { container } = render(<BudgetsSection />)
       expect(container.textContent).not.toContain('AI credits')
     })
 
-    it('adds AI credits to a per-agent chip only for the agent that reports them', () => {
+    it('adds AI credits to an agent’s line only for the agent that reports them', () => {
       snapshot = baseSnapshot()
       snapshot.agents = [
         { ...snapshot.agents[0], ai_nano_aiu: 275_856_000 } as unknown as AccountingSnapshot['agents'][number],
         snapshot.agents[1],
       ]
-      render(<AccountingPanel />)
-      expect(screen.getByText('claude: 1,234 tokens · 0.28 AI credits')).toBeInTheDocument()
-      expect(screen.getByText('codex: Unavailable · 1 unavailable')).toBeInTheDocument()
+      render(<BudgetsSection />)
+      expect(screen.getByTestId('budget-agent-claude')).toHaveTextContent('0.28 AI credits')
+      expect(screen.getByTestId('budget-agent-codex')).not.toHaveTextContent('AI credits')
     })
+  })
+})
+
+describe('Budgets when the usage cannot be read', () => {
+  it('says so with a Retry instead of a skeleton that never resolves', () => {
+    accountingError = new Error('the Hub is down')
+    try {
+      render(<BudgetsSection />)
+      expect(screen.queryByLabelText('Loading budgets')).toBeNull()
+      expect(screen.getByRole('alert')).toHaveTextContent("This project's usage could not be read.")
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+      expect(refetchAccounting).toHaveBeenCalled()
+    } finally {
+      accountingError = null
+    }
   })
 })

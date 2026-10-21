@@ -251,7 +251,7 @@ def _files_from_runs(runs: List[Run], repo_root: Optional[Path]) -> List[str]:
                 logger.warning(
                     "could not read files for snapshot %s", run.snapshot_commit_sha, exc_info=True
                 )
-        branch = _branch_of(run)
+        branch = _branch_of(run, repo_root)
         if branch is None:
             continue
         try:
@@ -263,16 +263,20 @@ def _files_from_runs(runs: List[Run], repo_root: Optional[Path]) -> List[str]:
     return sorted(paths)
 
 
-def _branch_of(run: Run) -> Optional[str]:
+def _branch_of(run: Run, repo_root: Optional[Path] = None) -> Optional[str]:
     """The branch whose commits are this turn's own work, or None when it has none to read (F775).
 
     The checkout's checked-out branch when it still exists (a detached HEAD is a review, which
     writes nothing). Once the checkout is released, the branch is rebuilt from what the run was
-    bound to: its task's branch, else its agent's.
+    bound to: its task's branch, else its agent's. A turn that ran in the project's own checkout
+    (*repo_root*: a read-only agent, `resolve_agent_workspace`) has none: what lands on that
+    branch during the turn is the operator's and every merge's, not the turn's (review 0203).
     """
     if run.workspace_dir:
         checkout = Path(run.workspace_dir)
         if checkout.is_dir():
+            if repo_root is not None and repo_root.is_dir() and checkout.samefile(repo_root):
+                return None
             head = worktrees._run_git(
                 checkout, "symbolic-ref", "--short", "-q", "HEAD", check=False
             )

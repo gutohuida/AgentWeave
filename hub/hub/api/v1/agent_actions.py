@@ -559,7 +559,8 @@ async def read_vault_entry(
     """One vault entry with a page of its text, from *offset*.
 
     The first page of an entry that exists counts as one read by an agent
-    (`the-vault-map-is-shaped-by-what-agents-ask-for`); a later page, and a 404, do not.
+    (`the-vault-map-is-shaped-by-what-agents-ask-for`), recorded against the credential's agent
+    (`the-vault-names-who-read-an-entry`); a later page, and a 404, do not.
     """
     from ... import vault_access
     from . import vault as vault_routes
@@ -568,8 +569,11 @@ async def read_vault_entry(
     if offset == 0:
         try:
             async with async_session_factory() as own:
-                count = await vault_access.record_fetch(own, actor.project_id, entry_id)
-            entry = vault_access.annotate(entry, count)
+                count = await vault_access.record_fetch(
+                    own, actor.project_id, entry_id, actor.agent
+                )
+                readers = await vault_access.readers_for(own, actor.project_id)
+            entry = vault_access.annotate(entry, count, readers.get(entry_id))
         except Exception:
             logger.warning("could not count a vault read of %s", entry_id, exc_info=True)
     return entry

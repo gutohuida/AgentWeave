@@ -6,8 +6,10 @@
  *
  * The question and permission cards used to stack in the composer's column, which cannot shrink:
  * an unbounded card took the transcript's height, down to nothing, and could push the composer
- * off the panel. They now float over the conversation's foot in a tray, and the tray's height is
- * reserved below the newest entry so the conversation's end still scrolls into view above it.
+ * off the panel. A permission request now floats over the conversation's foot in a tray, and the
+ * tray's height is reserved below the newest entry so the conversation's end still scrolls into
+ * view above it. A question docks inside the composer's own surface (ui-finesse: the box below it
+ * is where the answer is written), capped so it can never take the transcript's height.
  */
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -122,6 +124,23 @@ function askUser(overrides: Partial<Question> = {}): Question {
   }
 }
 
+function permission(overrides: Partial<PermissionRequest> = {}): PermissionRequest {
+  return {
+    id: 'perm-1',
+    agent: 'architect',
+    run_id: 'run-1',
+    tool_name: 'Bash',
+    tool_use_id: 'toolu-1',
+    tool_input: { command: 'git push' },
+    status: 'pending',
+    dismissed: false,
+    created_at: '2026-09-13T10:01:00Z',
+    decided_at: null,
+    decided_by: null,
+    ...overrides,
+  }
+}
+
 function entry(id: string): TimelineEntry {
   return {
     id,
@@ -209,35 +228,30 @@ describe('interjections float over the conversation', () => {
     Element.prototype.getClientRects = originalGetClientRects
   })
 
-  it('puts a pending question in the tray over the conversation, not in the composer column', () => {
+  it('docks a pending question inside the composer surface, capped, and floats no tray for it', () => {
     openQuestions = [askUser()]
     const { container } = render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
 
-    const tray = screen.getByTestId('conversation-interject-tray')
-    expect(tray).toContainElement(screen.getByTestId('agent-question-q-1'))
-    // The composer's column no longer holds it, so the card cannot take the composer's height.
-    const composerColumn = container.querySelector('.conversation-composer-fade') as HTMLElement
-    expect(composerColumn).not.toContainElement(screen.getByTestId('agent-question-q-1'))
-    expect(composerColumn.querySelector('textarea')).not.toBeNull()
+    const question = screen.getByTestId('agent-question-q-1')
+    const surface = container.querySelector('.conversation-composer-surface') as HTMLElement
+    // One object: the question is the surface's top section, the text box below it the answer.
+    expect(surface).toContainElement(question)
+    expect(surface.querySelector('textarea')).not.toBeNull()
+    expect(surface).toHaveAttribute('data-has-question', 'true')
+    // Capped and scrolling inside itself, so it cannot take the transcript's height or push the
+    // send button -- which confirms a chosen option -- off the panel.
+    expect(question.style.maxHeight).toBe('min(40vh, 320px)')
+    expect(question).toHaveStyle({ overflowY: 'auto' })
+    expect(screen.queryByTestId('conversation-interject-tray')).toBeNull()
+    expect(screen.getByTestId('conversation-tray-inset')).toHaveStyle({ height: '0px' })
   })
 
-  it('puts a permission request in the same tray', () => {
-    permissionRequests = [
-      {
-        id: 'perm-1',
-        agent: 'architect',
-        run_id: 'run-1',
-        tool_name: 'Bash',
-        tool_use_id: 'toolu-1',
-        tool_input: { command: 'git push' },
-        status: 'pending',
-        dismissed: false,
-        created_at: '2026-09-13T10:01:00Z',
-        decided_at: null,
-        decided_by: null,
-      },
-    ]
-    render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
+  it('puts a permission request in the tray over the conversation, not in the composer column', () => {
+    permissionRequests = [permission()]
+    const { container } = render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
+
+    const composerColumn = container.querySelector('.conversation-composer-fade') as HTMLElement
+    expect(composerColumn).not.toContainElement(screen.getByTestId('permission-request-perm-1'))
 
     expect(screen.getByTestId('conversation-interject-tray')).toContainElement(
       screen.getByTestId('permission-request-perm-1'),
@@ -251,17 +265,33 @@ describe('interjections float over the conversation', () => {
     expect(screen.getByTestId('conversation-tray-inset')).toHaveStyle({ height: '0px' })
   })
 
-  it('shows no tray for another agent’s question', () => {
+  it('neither docks nor floats another agent’s question or permission request', () => {
     openQuestions = [askUser({ from_agent: 'someone-else' })]
-    render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
+    permissionRequests = [permission({ agent: 'someone-else' })]
+    const { container } = render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
 
     expect(screen.queryByTestId('conversation-interject-tray')).toBeNull()
+    expect(screen.queryByTestId('agent-question-q-1')).toBeNull()
+    expect(container.querySelector('.conversation-composer-surface')).toHaveAttribute('data-has-question', 'false')
+  })
+
+  it('docks the question and floats the permission request when both are pending', () => {
+    openQuestions = [askUser()]
+    permissionRequests = [permission()]
+    const { container } = render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
+
+    expect(container.querySelector('.conversation-composer-surface')).toContainElement(
+      screen.getByTestId('agent-question-q-1'),
+    )
+    const tray = screen.getByTestId('conversation-interject-tray')
+    expect(tray).toContainElement(screen.getByTestId('permission-request-perm-1'))
+    expect(tray).not.toContainElement(screen.getByTestId('agent-question-q-1'))
   })
 
   it('reserves the tray’s height below the newest entry, so the end still scrolls into view', () => {
     layOut({ tray: 200, turn: 120 })
     entries = [entry('1')]
-    openQuestions = [askUser()]
+    permissionRequests = [permission()]
     const { rerender } = render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
     viewport(screen.getByTestId('conversation-output'), 600)
 
@@ -282,8 +312,8 @@ describe('a conversation too short for the tray to float over it', () => {
   // showed 41px of an eight-option question, and at 420×560 — where the project rail stacks above
   // the panel — nothing at all, with its fold control unreachable.
   beforeEach(() => {
-    openQuestions = [askUser()]
-    permissionRequests = []
+    openQuestions = []
+    permissionRequests = [permission()]
     entries = [entry('1')]
     useConfigStore.setState({ apiKey: 'aw_live_test', isConfigured: true, selectedProjectId: 'proj-test' })
   })
@@ -295,20 +325,20 @@ describe('a conversation too short for the tray to float over it', () => {
     Element.prototype.getClientRects = originalGetClientRects
   })
 
-  it('puts the question in the composer column instead, and reserves nothing over the conversation', () => {
+  it('puts the request in the composer column instead, and reserves nothing over the conversation', () => {
     layOut({ tray: 144, turn: 120, room: () => 150 })
     const { container } = render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
 
     const inline = screen.getByTestId('conversation-interject-inline')
-    expect(inline).toContainElement(screen.getByTestId('agent-question-q-1'))
+    expect(inline).toContainElement(screen.getByTestId('permission-request-perm-1'))
     expect(container.querySelector('.conversation-composer-fade')).toContainElement(inline)
     expect(screen.queryByTestId('conversation-interject-tray')).toBeNull()
     expect(screen.getByTestId('conversation-tray-inset')).toHaveStyle({ height: '0px' })
   })
 
   it('takes the room the conversation had, not the composer’s', () => {
-    // The send button is what confirms a chosen option, so pushing the composer off the panel makes
-    // the question unanswerable. 100px of room: the question gets 100 - 8 (its gap) = 92px.
+    // Pushing the composer off the panel takes the conversation's controls with it. 100px of
+    // room: the request gets 100 - 8 (its gap) = 92px.
     layOut({ tray: 300, turn: 120, room: () => 100 })
     render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
 
@@ -363,7 +393,7 @@ describe('a conversation too short for the tray to float over it', () => {
       observers.fire()
 
       expect(screen.getByTestId('conversation-interject-tray')).toContainElement(
-        screen.getByTestId('agent-question-q-1'),
+        screen.getByTestId('permission-request-perm-1'),
       )
       expect(screen.queryByTestId('conversation-interject-inline')).toBeNull()
       expect(screen.getByTestId('conversation-tray-inset')).toHaveStyle({ height: '152px' })

@@ -163,7 +163,7 @@ describe('the composer and a question nobody waits on', () => {
     openQuestions = [asked({ conversation_id: 'conv-1', asker_waiting: false })]
     render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
 
-    const composer = screen.getByPlaceholderText('Answer codex-1…')
+    const composer = screen.getByPlaceholderText(/^Answer codex-1/)
     fireEvent.change(composer, { target: { value: 'New task: add subtract()' } })
     fireEvent.keyDown(composer, { key: 'Enter' })
 
@@ -186,7 +186,7 @@ describe('the composer and a question nobody waits on', () => {
   it('still routes typed text to a question that is waited on', async () => {
     openQuestions = [asked({ conversation_id: 'conv-1', asker_waiting: true })]
     render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
-    const composer = screen.getByPlaceholderText('Answer codex-1…')
+    const composer = screen.getByPlaceholderText(/^Answer codex-1/)
     fireEvent.change(composer, { target: { value: 'triple' } })
     fireEvent.keyDown(composer, { key: 'Enter' })
     await waitFor(() => expect(answerMutation).toHaveBeenCalled())

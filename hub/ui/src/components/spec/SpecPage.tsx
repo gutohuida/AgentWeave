@@ -1,10 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { useSpecDocumentRename, useSpecEvents, useSpecList } from '@/api/spec'
+import {
+  useProjectEvidence,
+  useSpecDocumentRename,
+  useSpecDocuments,
+  useSpecEvents,
+  useSpecList,
+  type SpecDocumentRecord,
+} from '@/api/spec'
 import { SpecDocumentPanel } from './SpecDocumentPanel'
 import { SpecDocumentPicker } from './SpecDocumentPicker'
-import { buildInventory, resolveSelection } from './specNavigation'
+import { SpecDocumentList, type SpecListDocument } from './SpecDocumentList'
+import { SpecDefectsReport } from './SpecDefectsReport'
+import { buildInventory, resolveSelection, type SpecInventory } from './specNavigation'
 import type { LoopSummary } from '@/api/loops'
+import '@/styles/spec-header.css'
 
 interface SpecPageProps {
   /** The document open, from the destination — so this screen is linkable and survives a reload
@@ -18,6 +28,30 @@ interface SpecPageProps {
   onOpenTasks?: (taskIds: string[]) => void
   /** Opens a flow's loop tab; the Spec screen has no panel shell, so the host navigates too. */
   onOpenLoop?: (loop: LoopSummary) => void
+  /** Opens the Spec tab's evidence view (slice evidence-browser), from the document list. */
+  onOpenEvidence?: () => void
+  /** Which entry of the list is current when `children` replace the document (evidence). */
+  evidenceOpen?: boolean
+  /** Shown in place of the document beside the list: the evidence view, or one requirement's story. */
+  children?: ReactNode
+}
+
+/** The document list's rows: every document the inventory holds, with the kind and phase the
+ *  Hub's records give (a capability is told by its record, or by living under spec/capabilities/). */
+function listDocuments(inventory: SpecInventory, records: SpecDocumentRecord[] | undefined): SpecListDocument[] {
+  const byPath = new Map((records ?? []).map((record) => [record.path, record]))
+  return inventory.nodes.map((node) => {
+    const record = byPath.get(node.path)
+    const kind = record?.kind ?? node.kind ?? (node.path.startsWith('spec/capabilities/') ? 'capability' : 'other')
+    return {
+      path: node.path,
+      title: record?.title ?? node.title,
+      kind,
+      phase: record?.phase ?? node.status ?? (kind === 'capability' ? 'current' : ''),
+      archived: node.archived || record?.phase === 'archived',
+      missing: node.missing,
+    }
+  })
 }
 
 /**
@@ -29,13 +63,25 @@ interface SpecPageProps {
  * view's job, reached from the composer's Spec pill. This is the other half — the specification as
  * the thing you are working on rather than the thing you are working beside.
  *
- * And there is no navigation column either. Choosing a document is the rail's job while this
- * screen is open (`SpecRailNav`), the way it is Environment's job while that is open — a screen
- * that needs navigation uses the rail rather than growing a second one beside it. So what is left
- * here is the document, which is the whole point of the screen.
+ * Documents are chosen from the list beside the document (`SpecDocumentList`, ui-finesse). The
+ * rail used to stand in for it (`SpecRailNav`), which made the agents disappear whenever a
+ * document was open; now the rail stays and the list, with Evidence and the defects report the
+ * rail carried, lives in the tab. The evidence view and one requirement's story render beside the
+ * same list (`children`), so moving between them never loses it.
  */
-export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpenTasks, onOpenLoop }: SpecPageProps) {
+export function SpecPage({
+  document: openDocument,
+  anchor,
+  onOpenDocument,
+  onOpenTasks,
+  onOpenLoop,
+  onOpenEvidence,
+  evidenceOpen = false,
+  children,
+}: SpecPageProps) {
   const { data: specList, isLoading, refetch } = useSpecList()
+  const { data: records } = useSpecDocuments()
+  const { data: evidence, isError: evidenceError } = useProjectEvidence(!!onOpenEvidence)
   useSpecEvents()
   /* The agent renames the document it is exploring, so the open path can move under this screen. */
   useSpecDocumentRename(openDocument, onOpenDocument)
@@ -46,11 +92,11 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
    * destination with `replace`, because resolving "the specification" to a document is not a
    * navigation the operator performed. */
   useEffect(() => {
-    if (openDocument) return
+    if (openDocument || children) return
     if (inventory.nodes.length === 0) return
     const resolved = resolveSelection(inventory, null, specList?.home)
     if (resolved) onOpenDocument(resolved)
-  }, [openDocument, inventory, specList?.home, onOpenDocument])
+  }, [openDocument, children, inventory, specList?.home, onOpenDocument])
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const searchOriginRef = useRef<HTMLElement | null>(null)
@@ -82,9 +128,24 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [openPicker])
 
-  if (!isLoading && inventory.nodes.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center">
+  const list = (
+    <SpecDocumentList
+      documents={listDocuments(inventory, records?.documents)}
+      active={children ? null : openDocument}
+      evidenceCount={evidenceError ? 'error' : (evidence?.evidence?.length ?? null)}
+      evidenceActive={evidenceOpen}
+      onOpen={(path) => onOpenDocument(path)}
+      onOpenEvidence={onOpenEvidence}
+      footer={<SpecDefectsReport currentPath={openDocument} onSelect={(path) => onOpenDocument(path)} />}
+    />
+  )
+
+  let main: ReactNode
+  if (children) {
+    main = <div className="aw-spec-main min-h-0 overflow-auto">{children}</div>
+  } else if (!isLoading && inventory.nodes.length === 0) {
+    main = (
+      <div className="aw-spec-main items-center justify-center">
         <EmptyState
           icon="article"
           title="No specification yet"
@@ -92,52 +153,54 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
         />
       </div>
     )
-  }
-
-  // Every document present is archived (or missing) — resolveSelection above has nothing to hand
-  // to onOpenDocument and the effect never fires, so without this branch the screen sits on
-  // "Loading…" forever with no visible way out. Ctrl/Cmd+Shift+K still works — its listener is
-  // registered unconditionally above — but nothing on screen says so.
-  if (!isLoading && !openDocument && resolveSelection(inventory, null, specList?.home) === null) {
-    return (
-      <div className="flex h-full items-center justify-center">
+  } else if (!isLoading && !openDocument && resolveSelection(inventory, null, specList?.home) === null) {
+    // Every document present is archived (or missing) — resolveSelection above has nothing to hand
+    // to onOpenDocument and the effect never fires, so without this branch the screen sits on
+    // "Loading…" forever with no visible way out.
+    main = (
+      <div className="aw-spec-main items-center justify-center">
         <EmptyState
           icon="archive"
           title="Everything here is archived"
-          description="Open a document from history — press Ctrl/Cmd+Shift+K, or choose one from the rail."
+          description="Open one from Archived in the list, or press Ctrl/Cmd+Shift+K to search."
         />
+      </div>
+    )
+  } else if (openDocument) {
+    main = (
+      <SpecDocumentPanel
+        path={openDocument}
+        inventory={inventory}
+        specList={specList}
+        listLoading={isLoading}
+        onSelectPath={onOpenDocument}
+        onOpenPicker={openPicker}
+        onRefresh={() => void refetch()}
+        // No close control: there is nothing behind this panel to reveal. Closing a document is
+        // what the conversation view offers, because there the conversation is underneath.
+        initialAnchor={anchor}
+        onOpenTasks={onOpenTasks}
+        onOpenLoop={onOpenLoop}
+        // F829: back to the home document, which the inventory resolves.
+        onDeleted={() => onOpenDocument(null)}
+      />
+    )
+  } else {
+    main = (
+      <div className="aw-spec-main">
+        <div className="spec-loading-card flex flex-col gap-3 aw-delayed" aria-label="Loading specification">
+          <div className="skeleton h-6 w-2/3" />
+          <div className="skeleton h-3 w-full" />
+          <div className="skeleton h-3 w-5/6" />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex h-full min-w-0 overflow-hidden" data-testid="spec-page">
-      <div className="min-h-0 min-w-0 flex-1">
-        {openDocument ? (
-          <SpecDocumentPanel
-            path={openDocument}
-            inventory={inventory}
-            specList={specList}
-            listLoading={isLoading}
-            onSelectPath={onOpenDocument}
-            onOpenPicker={openPicker}
-            onRefresh={() => void refetch()}
-            // No close control: there is nothing behind this panel to reveal. Closing a document
-            // is what the conversation view offers, because there the conversation is underneath.
-            initialAnchor={anchor}
-            onOpenTasks={onOpenTasks}
-            onOpenLoop={onOpenLoop}
-            // F829: back to the home document, which the effect above resolves from the inventory.
-            onDeleted={() => onOpenDocument(null)}
-          />
-        ) : (
-          <div className="spec-loading-card flex flex-col gap-3" aria-label="Loading specification">
-            <div className="skeleton h-6 w-2/3" />
-            <div className="skeleton h-3 w-full" />
-            <div className="skeleton h-3 w-5/6" />
-          </div>
-        )}
-      </div>
+    <div className="aw-spec" data-testid="spec-page">
+      {inventory.nodes.length > 0 || children ? list : null}
+      {main}
 
       <SpecDocumentPicker
         open={pickerOpen}

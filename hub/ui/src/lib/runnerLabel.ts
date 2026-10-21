@@ -57,3 +57,14 @@ export function runnerOptionLabel(
   const base = runner.name.endsWith(suffix) ? runner.name : `${runner.name}${suffix}`
   return `${base} (${runner.cli})`
 }
+
+/** The model half of `runnerOptionLabel` on its own, for a choice that shows the runner's name and
+ *  its model on two lines (the settings menus): "Haiku 4.5", "Provider default", "opus (latest)". */
+export function runnerModelPart(
+  runner: Runner,
+  catalog: ModelCatalogResponse | undefined,
+  options?: { model?: string | null },
+): string {
+  const modelId = options?.model || runner.model
+  return runner.provider_config ? providerModelPart(modelId, catalog) : modelPartFor(modelId, runner.cli, catalog)
+}

@@ -384,6 +384,40 @@ async def test_sync_with_an_explicitly_empty_roster_is_still_a_replace(
     assert await _names() == set()
 
 
+async def test_sync_without_an_agents_key_keeps_each_agents_synced_entry(
+    app, auth_headers, add_agent
+):
+    """Review 0203: a payload with no `agents` key says nothing about the agents, so it must not
+    drop their synced entries either: that flipped a read-only agent to writing while it held
+    work, past the F242 guard, which only checks the agents a payload names."""
+    from hub.db.models import Task
+    from hub.launchability import get_agent_config
+
+    await add_agent("builder")
+    synced = await app.post(
+        SYNC, json={"data": {"agents": {"builder": {"read_only": True}}}}, headers=auth_headers
+    )
+    assert synced.status_code == 200, synced.text
+    async with async_session_factory() as db:
+        db.add(
+            Task(
+                id="task-0203",
+                project_id="proj-test",
+                title="w",
+                status="in_progress",
+                assignee="builder",
+            )
+        )
+        await db.commit()
+
+    response = await app.post(SYNC, json={"data": {"mode": "peer"}}, headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    async with async_session_factory() as db:
+        config = await get_agent_config("proj-test", "builder", db)
+    assert not worktrees.is_writing_agent(config), config
+
+
 @pytest.mark.parametrize("bad", [["alpha"], "alpha", 3])
 async def test_sync_with_agents_that_is_not_an_object_is_refused_not_a_500(
     app, auth_headers, add_agent, bad

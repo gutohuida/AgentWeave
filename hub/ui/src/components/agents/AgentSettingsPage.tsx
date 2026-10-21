@@ -1,24 +1,43 @@
+import * as React from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { AgentSummary, useAgents, useAgentSessions, useArchiveAgent } from '@/api/agents'
+import {
+  AgentSummary,
+  MAX_AGENT_DESCRIPTION_CHARS,
+  useAgentLaunchability,
+  useAgents,
+  useAgentSessions,
+  useArchiveAgent,
+  useUpdateAgentDescription,
+  useUpdateAgentGrant,
+  useUpdateAgentPermissionDefault,
+  useUpdateAgentReachGrants,
+} from '@/api/agents'
+import { ApiError, readableApiError } from '@/api/client'
+import { permissionModeValues, useModelCatalog } from '@/api/modelCatalog'
+import { useBindAgentRunner, useRunners } from '@/api/runners'
 import { Button } from '@/components/ui/button'
-import { ApiError } from '@/api/client'
+import { SettingsGroup, SettingsLoading, SettingsNotice, SettingsRow as GridRow } from '@/components/ui/settings'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
+import { SettingsNavLayout } from '@/components/settings/SettingsNavLayout'
+import { runnerChoiceOptions } from '@/components/settings/settingsOptions'
 import { useAgentWorkspace, type TaskCheckoutInfo } from '@/api/workspace'
 import { useCopy } from '@/hooks/useCopy'
 import { tint } from '@/lib/colorTint'
+import { runnerModelPart } from '@/lib/runnerLabel'
+import { toast } from '@/lib/toast'
 import {
   CharterPicker,
-  CheckpointGrantsSetting,
+  CheckpointOverrideSetting,
   CopilotGithubMcpSetting,
   CopilotReviewAgentsSetting,
-  EvidenceGrantSetting,
-  CheckpointOverrideSetting,
-  DescriptionSetting,
-  PermissionDefaultSetting,
-  ReachGrantsSetting,
-  RunnerPicker,
   WaitingSetting,
 } from './AgentSettingsControls'
+import {
+  AgentAccessSettings,
+  AgentExecutionSettings,
+  AgentIdentitySettings,
+  type AgentPatch,
+} from './settings/AgentSettingsSections'
 import type { AgentSettingsSection } from '@/lib/navigation'
 import { hubDate } from '@/lib/hubTime'
 import { PERMISSION_WAIT_FALLBACK_SECONDS, QUESTION_WAIT_FALLBACK_SECONDS } from '@/lib/agentWaits'
@@ -26,126 +45,266 @@ import { PERMISSION_WAIT_FALLBACK_SECONDS, QUESTION_WAIT_FALLBACK_SECONDS } from
 interface AgentSettingsPageProps {
   agent: string
   section: AgentSettingsSection
+  onSelectSection: (section: AgentSettingsSection) => void
+  /** Where the back control goes: the agent's conversations (the caller decides which). */
+  onBack: () => void
 }
 
+const SECTIONS: ReadonlyArray<{ id: AgentSettingsSection; label: string; icon: string }> = [
+  { id: 'identity', label: 'Identity', icon: 'badge' },
+  { id: 'execution', label: 'Execution', icon: 'terminal' },
+  { id: 'charter', label: 'Charter', icon: 'menu_book' },
+  { id: 'interaction', label: 'Interaction', icon: 'forum' },
+  { id: 'context', label: 'Context', icon: 'memory' },
+  { id: 'access', label: 'Access', icon: 'lock' },
+  { id: 'workspace', label: 'Workspace', icon: 'folder' },
+]
+
 /**
- * An agent's configuration, as a destination rather than a dialog.
+ * An agent's configuration, as a destination rather than a dialog: its own section list and a way
+ * back to its conversations, inside the content area (the app's rail stays put).
  *
- * The section list and the back control live in the rail (see `Sidebar`), following the shape the
- * project's own configuration already uses — so this component renders one section's contents and
- * nothing else.
- *
- * *Context* and *Access* are defined here ahead of the change that fills them
- * (`2026-08-07-conversation-handoff-rework` section 8). They render what exists at the time, which
- * is today nothing — stated plainly, because a section that renders blank is indistinguishable
- * from one that failed to load.
+ * Identity, Execution and Access are on the settings grid and apply on change with a toast;
+ * Charter, Interaction, Context and Workspace keep their controls, framed the same way.
  */
-export function AgentSettingsPage({ agent, section }: AgentSettingsPageProps) {
+export function AgentSettingsPage({ agent, section, onSelectSection, onBack }: AgentSettingsPageProps) {
   // `all`, not the default open roster: an archived agent must still resolve here, because this
   // is the only surface that can unarchive it.
   const { data: roster = [], isLoading } = useAgents('all')
+  const { data: runners = [] } = useRunners()
   const summary = roster.find((candidate) => candidate.name === agent) ?? null
+  const runnerName = summary?.runner_id ? runners.find((runner) => runner.id === summary.runner_id)?.name : null
 
+  let body: React.ReactNode
   if (isLoading) {
-    return (
-      <div className="workspace-content space-y-3" aria-label="Loading agent settings">
-        <div className="skeleton h-6 w-32" />
-        <div className="skeleton h-4 w-80 max-w-full" />
-        {[0, 1, 2].map((row) => <div key={row} className="skeleton h-20 w-full" />)}
+    body = (
+      <div className="aw-settings-page" aria-label="Loading agent settings">
+        <SettingsLoading label="Loading agent settings" rows={3} />
+      </div>
+    )
+  } else if (!summary) {
+    body = <Shell>This agent is no longer in the roster.</Shell>
+  } else {
+    body = (
+      <div className="min-w-0" data-testid={`agent-settings-${section}`}>
+        <SectionContent agent={summary} section={section} />
       </div>
     )
   }
-  if (!summary) {
-    return <Shell>This agent is no longer in the roster.</Shell>
-  }
 
   return (
-    <div className="min-w-0 h-full overflow-auto" data-testid={`agent-settings-${section}`}>
-      <SectionContent agent={summary} section={section} />
+    <div className="h-full min-h-0">
+      <SettingsNavLayout
+        title={`${agent} settings`}
+        subtitle={summary ? (runnerName ?? (summary.runner_id ? undefined : 'No runner')) : undefined}
+        back={{ label: `Back to ${agent}`, onClick: onBack }}
+        items={SECTIONS}
+        active={section}
+        onSelect={onSelectSection}
+      >
+        {body}
+      </SettingsNavLayout>
     </div>
   )
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-6 py-6 text-xs" style={{ color: 'var(--text-3)' }} data-testid="agent-settings-empty">
+    <div className="aw-settings-page text-xs" style={{ color: 'var(--text-3)' }} data-testid="agent-settings-empty">
       {children}
     </div>
   )
 }
 
+type Mutation<V> = { mutate: (vars: V, options: { onSuccess: () => void; onError: (e: unknown) => void }) => void }
+
+/** One field's write: the mutation that owns it and what it is sent. */
+type Write = [Mutation<never>, unknown]
+
+/**
+ * Applies a patch as the writes a section names (each field has its own route), says so in a
+ * toast, and keeps the last refusal for the page to show.
+ *
+ * `mutate` with callbacks rather than `mutateAsync`, so each write keeps its hook's own
+ * invalidation. Each section builds only the mutations it uses.
+ */
+function usePatchWrites() {
+  const [refusal, setRefusal] = React.useState<string | null>(null)
+  const run = (writes: Write[], said: string) => {
+    setRefusal(null)
+    Promise.all(
+      writes.map(
+        ([mutation, vars]) =>
+          new Promise((resolve, reject) =>
+            (mutation as Mutation<unknown>).mutate(vars, { onSuccess: () => resolve(undefined), onError: reject }),
+          ),
+      ),
+    ).then(
+      () => toast({ title: said, tone: 'success' }),
+      (error: unknown) => {
+        const reason = readableApiError(error, 'The Hub did not return a reason.')
+        setRefusal(reason)
+        toast({ title: 'Not saved', description: reason, tone: 'error' })
+      },
+    )
+  }
+  const notices = refusal ? (
+    <SettingsNotice tone="error" title="That change was not saved.">
+      <p>{refusal}</p>
+    </SettingsNotice>
+  ) : null
+  return { run, notices }
+}
+
+const w = <V,>(mutation: Mutation<V>, vars: V): Write => [mutation as unknown as Mutation<never>, vars]
+
+function IdentitySection({ agent }: { agent: AgentSummary }) {
+  const description = useUpdateAgentDescription()
+  const { run: write, notices } = usePatchWrites()
+  const apply = (patch: AgentPatch, said: string) =>
+    write('description' in patch ? [w(description, { agent: agent.name, description: patch.description ?? null })] : [], said)
+  const archive = useArchiveAgent()
+  const queueRefusal = archive.error instanceof ApiError ? parseQueueArchiveRefusal(archive.error) : null
+  const refusal =
+    archive.error instanceof ApiError ? (queueRefusal?.message ?? archive.error.message) : archive.error ? 'Could not save.' : null
+  const run = (archived: boolean, discardQueueEntryIds?: string[]) =>
+    archive.mutate(
+      { agent: agent.name, archived, discardQueueEntryIds },
+      { onSuccess: () => toast({ title: archived ? `${agent.name} archived` : `${agent.name} is back`, tone: 'success' }) },
+    )
+
+  return (
+    <>
+      <AgentIdentitySettings
+        agent={agent}
+        notices={notices}
+        now={new Date()}
+        descriptionMax={MAX_AGENT_DESCRIPTION_CHARS}
+        archiving={archive.isPending}
+        onChange={apply}
+        onArchive={() => run(true)}
+        onUnarchive={() => run(false)}
+        archiveRefusal={
+          refusal ? (
+            // Archiving is refused, with the reason, while a run is in progress or messages are
+            // undelivered: the refusal is the operator's next instruction, not a failure.
+            <>
+              <p>{refusal}</p>
+              {queueRefusal ? (
+                <Button variant="destructive" size="sm" disabled={archive.isPending} onClick={() => run(true, queueRefusal.ids)}>
+                  Discard {queueRefusal.ids.length} queued message{queueRefusal.ids.length === 1 ? '' : 's'} and archive — cannot be undone
+                </Button>
+              ) : null}
+            </>
+          ) : undefined
+        }
+      />
+    </>
+  )
+}
+
+function ExecutionSection({ agent }: { agent: AgentSummary }) {
+  const runner = useBindAgentRunner()
+  const permission = useUpdateAgentPermissionDefault()
+  const reach = useUpdateAgentReachGrants()
+  const { run, notices } = usePatchWrites()
+  const apply = (patch: AgentPatch, said: string) => {
+    const name = agent.name
+    const writes: Write[] = []
+    if ('runner_id' in patch) writes.push(w(runner, { agent: name, runnerId: patch.runner_id ?? null }))
+    if ('default_permission_mode' in patch) writes.push(w(permission, { agent: name, mode: patch.default_permission_mode ?? null }))
+    if ('reach_grants' in patch) writes.push(w(reach, { agent: name, grants: patch.reach_grants ?? null }))
+    run(writes, said)
+  }
+  const { data: runners = [], error: runnersError } = useRunners()
+  const { data: catalog, error: catalogError } = useModelCatalog()
+  const { data: launchability, error: launchabilityError } = useAgentLaunchability()
+  const options = permissionModeValues(catalog)
+  const verdict = launchability?.agents[agent.name]
+  const cannotRun = verdict?.runnable === false
+  // The Hub judges collaboration only for a runnable agent, so the two lines never meet (F178).
+  const cannotCollaborate = verdict?.runnable === true && verdict.collaboration_ready === false
+  // What clearing the default gives this agent's run, as the Hub computes it.
+  const builtIn = agent.permission_mode_built_in
+  const builtInLabel = builtIn ? (options.find((option) => option.id === builtIn)?.label ?? builtIn) : 'depends on the runner'
+
+  const runnerNotes = (
+    <>
+      {!agent.runner_id && !verdict ? <span className="aw-control-warning" role="status">This agent cannot run until it has a runner.</span> : null}
+      {cannotRun ? (
+        <span className="aw-control-warning" role="status">
+          This agent cannot run: {verdict.reason ?? 'the Hub reports it as not runnable.'}
+        </span>
+      ) : null}
+      {cannotCollaborate ? (
+        <span className="aw-control-warning" role="status">
+          This agent will run, but cannot collaborate: {verdict.collaboration_reason ?? 'the Hub reports its tool calls would be refused.'}
+        </span>
+      ) : null}
+      {!verdict && launchabilityError ? <span className="aw-row-note" role="status">Could not check whether this agent can run.</span> : null}
+      {catalogError ? <span className="aw-row-note" role="status">Could not load the model catalog; runners show plain model ids.</span> : null}
+      {/* An empty runner list here would read as "this project has no runners". */}
+      {runnersError ? (
+        <span className="aw-control-warning" role="alert" data-testid="agent-runners-error">
+          Could not load this project's runners, so the list below is incomplete.
+        </span>
+      ) : null}
+    </>
+  )
+
+  return (
+    <AgentExecutionSettings
+      agent={agent}
+      runners={runners}
+      runnerOptions={runnerChoiceOptions(runners, { label: 'No runner', detail: 'The agent cannot run until it has one' }, (runner) => runnerModelPart(runner, catalog))}
+      permissionModes={options}
+      permissionUnset={{
+        label: `${agent.permission_mode_from_project ? 'Project default' : 'Built-in default'} (${builtInLabel})`,
+        detail: 'What a run gets when neither its conversation nor this agent has chosen.',
+      }}
+      projectGrants={agent.project_reach_grants ?? null}
+      runnerNotes={runnerNotes}
+      permissionNote={
+        agent.default_permission_mode === 'manual' && agent.runner === 'claude' ? (
+          // F453: Claude's CLI approves commands it judges read-only before the Hub is asked.
+          <span className="aw-row-note" data-testid="ask-me-readonly-note">
+            Claude Code still runs commands it treats as read-only (such as <code>echo</code> or <code>git status</code>) without asking; writes and other commands come to you.
+          </span>
+        ) : null
+      }
+      notices={notices}
+      onChange={apply}
+    >
+      {agent.runner === 'copilot' ? (
+        <SettingsGroup title="Copilot" description="Settings only a Copilot runner has.">
+          <GridRow label="Review agents" description="Copilot's own built-in agents this agent may consult before recording a review verdict." stacked control={<CopilotReviewAgentsSetting agent={agent} />} />
+          <GridRow label="GitHub server" description="Copilot's own built-in GitHub MCP server for this agent." stacked control={<CopilotGithubMcpSetting agent={agent} />} />
+        </SettingsGroup>
+      ) : null}
+    </AgentExecutionSettings>
+  )
+}
+
+function AccessSection({ agent }: { agent: AgentSummary }) {
+  const grant = useUpdateAgentGrant()
+  const { run, notices } = usePatchWrites()
+  const apply = (patch: AgentPatch, said: string) =>
+    run(
+      (['can_read_checkpoints', 'can_recall', 'can_accept_evidence'] as const)
+        .filter((key) => key in patch)
+        .map((key) => w(grant, { agent: agent.name, grant: key, enabled: Boolean(patch[key]) })),
+      said,
+    )
+  return <AgentAccessSettings agent={agent} onChange={apply} notices={notices} />
+}
+
 function SectionContent({ agent, section }: { agent: AgentSummary; section: AgentSettingsSection }) {
   switch (section) {
     case 'identity':
-      return (
-        <SettingsSection scope="Agent configuration" title="Identity" description="What this agent is called, and whether it is in use.">
-          <SettingsRow
-            label="Name"
-            description="How this agent is addressed — by you, and by its peers when they send it a message."
-          >
-            <span className="text-sm" style={{ color: 'var(--text)' }}>{agent.name}</span>
-          </SettingsRow>
-          <SettingsRow
-            label="Description"
-            description="What this agent is for, for you. Nothing reads it into a turn — the charter is where behaviour is stated."
-          >
-            <DescriptionSetting agent={agent} />
-          </SettingsRow>
-          <SettingsRow
-            label={agent.lifecycle === 'archived' ? 'Archived' : 'Archive'}
-            description={
-              agent.lifecycle === 'archived'
-                ? 'This agent is no longer offered anywhere an agent is chosen. Its conversations, runs and messages are unchanged, and you can bring it back at any time.'
-                : 'Take this agent out of the rail, task assignment and peer recipients without losing anything it has done. There is no way to delete an agent, by design — its name is the attribution on everything it produced.'
-            }
-          >
-            <ArchiveControl agent={agent} />
-          </SettingsRow>
-        </SettingsSection>
-      )
+      return <IdentitySection agent={agent} />
 
     case 'execution':
-      return (
-        <SettingsSection scope="Agent configuration"
-          title="Execution"
-          description="What this agent runs as when you give it a turn."
-        >
-          <SettingsRow
-            label="Runner"
-            description="The execution capability this agent is bound to — its CLI, model and flags."
-          >
-            <RunnerPicker agent={agent} />
-          </SettingsRow>
-          <SettingsRow
-            label="Default permissions"
-            description="What this agent may do when a conversation has not chosen a posture. The composer's Permissions pill overrides it for one conversation; this is what everything else starts from."
-          >
-            <PermissionDefaultSetting agent={agent} />
-          </SettingsRow>
-          <SettingsRow
-            label="Granted reach"
-            description="What this agent may reach beyond its workspace under Workspace only: the project's grants, or its own in their place."
-          >
-            <ReachGrantsSetting agent={agent} />
-          </SettingsRow>
-          {agent.runner === 'copilot' && (
-            <SettingsRow
-              label="Review agents"
-              description="Copilot's own built-in agents this agent may consult before recording a review verdict."
-            >
-              <CopilotReviewAgentsSetting agent={agent} />
-            </SettingsRow>
-          )}
-          {agent.runner === 'copilot' && (
-            <SettingsRow
-              label="GitHub server"
-              description="Copilot's own built-in GitHub MCP server for this agent."
-            >
-              <CopilotGithubMcpSetting agent={agent} />
-            </SettingsRow>
-          )}
-        </SettingsSection>
-      )
+      return <ExecutionSection agent={agent} />
 
     case 'charter':
       return (
@@ -201,25 +360,7 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
       )
 
     case 'access':
-      return (
-        <SettingsSection scope="Agent configuration"
-          title="Access"
-          description="What this agent may read of other agents' work, and what it may decide about it."
-        >
-          <SettingsRow
-            label="Grants"
-            description="Both closed by default. Reading a summary of a peer's work and reading the raw output behind it are different permissions, so they are granted separately."
-          >
-            <CheckpointGrantsSetting agent={agent} />
-          </SettingsRow>
-          <SettingsRow
-            label="Evidence"
-            description="Separate from the grants above, because this is not a widening of what can be read — it is authority over whether work is allowed to merge."
-          >
-            <EvidenceGrantSetting agent={agent} />
-          </SettingsRow>
-        </SettingsSection>
-      )
+      return <AccessSection agent={agent} />
 
     case 'workspace':
       return (
@@ -239,55 +380,6 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
   }
 }
 
-/**
- * Archive and unarchive.
- *
- * The refusal is the interesting case. Archiving is refused — with the reason — while a run is in
- * progress or messages are undelivered, rather than stopping the run or dropping the messages to
- * get its way. So the error is rendered as the operator's next instruction, not as a failure.
- */
-function ArchiveControl({ agent }: { agent: AgentSummary }) {
-  const archive = useArchiveAgent()
-  const archived = agent.lifecycle === 'archived'
-  const queueRefusal = archive.error instanceof ApiError ? parseQueueArchiveRefusal(archive.error) : null
-  const refusal = archive.error instanceof ApiError
-    ? queueRefusal?.message ?? archive.error.message
-    : archive.error ? 'Could not save.' : null
-
-  return (
-    <div>
-      <Button
-        variant={archived ? 'outline' : 'destructive'}
-        size="sm"
-        data-testid="agent-archive-toggle"
-        disabled={archive.isPending}
-        onClick={() => archive.mutate({ agent: agent.name, archived: !archived })}
-      >
-        {archived ? 'Unarchive agent' : 'Archive agent'}
-      </Button>
-      {refusal && (
-        <div role="alert" className="mt-2 space-y-2 text-[11px]" style={{ color: 'var(--amber)' }}>
-          <p>{refusal}</p>
-          {queueRefusal && (
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={archive.isPending}
-              onClick={() => archive.mutate({
-                agent: agent.name,
-                archived: true,
-                discardQueueEntryIds: queueRefusal.ids,
-              })}
-            >
-              Discard {queueRefusal.ids.length} queued message{queueRefusal.ids.length === 1 ? '' : 's'} and archive — cannot be undone
-            </Button>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function parseQueueArchiveRefusal(error: ApiError): { message: string; ids: string[] } | null {
   try {
     const detail = (JSON.parse(error.message) as { detail?: unknown }).detail
@@ -300,6 +392,7 @@ function parseQueueArchiveRefusal(error: ApiError): { message: string; ids: stri
     return null
   }
 }
+
 
 /**
  * Where this agent works, and whether its isolated checkout exists yet.

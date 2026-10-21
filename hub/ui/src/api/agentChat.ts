@@ -242,10 +242,23 @@ function useConversationMutation<Variables extends ConversationRef>(
   })
 }
 
+/** Plain functions for the conversation bar, which is rendered in tests without a
+ *  QueryClientProvider (see `releaseConversationTask`). The Hub broadcasts `conversation_updated`
+ *  for each, and both conversation listings refetch on it, so nothing is left stale. */
+export function renameConversation(variables: ConversationRef & { title: string }): Promise<AgentConversation> {
+  return patchJson<AgentConversation>(conversationPath(variables), { title: variables.title })
+}
+
+export function archiveConversation(variables: ConversationRef): Promise<AgentConversation> {
+  return postJson<AgentConversation>(`${conversationPath(variables)}/archive`)
+}
+
+export function unarchiveConversation(variables: ConversationRef): Promise<AgentConversation> {
+  return postJson<AgentConversation>(`${conversationPath(variables)}/unarchive`)
+}
+
 export function useRenameConversation() {
-  return useConversationMutation<ConversationRef & { title: string }>((variables) =>
-    patchJson<AgentConversation>(conversationPath(variables), { title: variables.title }),
-  )
+  return useConversationMutation<ConversationRef & { title: string }>(renameConversation)
 }
 
 /**
@@ -270,15 +283,11 @@ export function releaseConversationTask(
 }
 
 export function useArchiveConversation() {
-  return useConversationMutation<ConversationRef>((variables) =>
-    postJson<AgentConversation>(`${conversationPath(variables)}/archive`),
-  )
+  return useConversationMutation<ConversationRef>(archiveConversation)
 }
 
 export function useUnarchiveConversation() {
-  return useConversationMutation<ConversationRef>((variables) =>
-    postJson<AgentConversation>(`${conversationPath(variables)}/unarchive`),
-  )
+  return useConversationMutation<ConversationRef>(unarchiveConversation)
 }
 
 const QUEUE_EVENT_TYPES = new Set([

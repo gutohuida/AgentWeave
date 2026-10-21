@@ -62,6 +62,7 @@ vi.mock('@/api/agents', () => ({
 
 import { ConversationView } from '@/components/agents/ConversationView'
 import { usePanelTabsStore } from '@/store/panelTabsStore'
+import { openMenu } from './testUtils/menus'
 
 const PROJECT_ID = 'proj-drift-report-test'
 
@@ -96,6 +97,13 @@ function renderPanel(document: string | null = 'spec/spec.json') {
   )
 }
 
+/** Opens the index fact's popover and its "Show details". */
+function showIndexDetails() {
+  openMenu(screen.getByTestId('spec-health-index'))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Show details' }))
+  expect(screen.getByTestId('spec-detail-index')).toBeInTheDocument()
+}
+
 describe('the document panel — manifest drift report', () => {
   beforeEach(() => {
     cleanup()
@@ -122,9 +130,12 @@ describe('the document panel — manifest drift report', () => {
     })
   })
 
-  it('shows no drift banner when there is no drift', () => {
+  // The manifest drift is the health line's "index issues" fact since ui-finesse; its detail
+  // (the fact's "Show details") lists each issue in the Hub's words.
+  it('shows no index fact when there is no drift', () => {
     renderPanel()
-    expect(screen.queryByText(/drift item/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('spec-document-header')).toBeInTheDocument()
+    expect(screen.queryByTestId('spec-health-index')).not.toBeInTheDocument()
   })
 
   it('shows the drift banner with a count when the Hub reports drift', () => {
@@ -133,7 +144,7 @@ describe('the document panel — manifest drift report', () => {
       { code: 'stale_row', path: 'spec/old.json' },
     ]
     renderPanel()
-    expect(screen.getByText('2 spec manifest drift items')).toBeInTheDocument()
+    expect(screen.getByTestId('spec-health-index')).toHaveTextContent('2 index issues')
   })
 
   it('does not double-count missing documents reported in both diagnostics and missing', () => {
@@ -143,8 +154,8 @@ describe('the document panel — manifest drift report', () => {
     ]
     specListResult.data.missing = [{ path: 'spec/changes/gone/spec.json' }]
     renderPanel()
-    expect(screen.getByText('2 spec manifest drift items')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('2 spec manifest drift items'))
+    expect(screen.getByTestId('spec-health-index')).toHaveTextContent('2 index issues')
+    showIndexDetails()
     // The missing path appears exactly once (from `missing`, not duplicated by the
     // `missing_document` diagnostic).
     expect(screen.getAllByText(/spec\/changes\/gone\/spec.json/)).toHaveLength(1)
@@ -154,7 +165,7 @@ describe('the document panel — manifest drift report', () => {
     specListResult.data.diagnostics = [{ code: 'unfiled_document', path: 'spec/extra.json' }]
     renderPanel()
     expect(screen.queryByText(/unfiled_document/)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('1 spec manifest drift item'))
+    showIndexDetails()
     expect(screen.getByText(/unfiled_document — spec\/extra.json/)).toBeInTheDocument()
   })
 
@@ -163,7 +174,7 @@ describe('the document panel — manifest drift report', () => {
       { code: 'unfiled_document', path: 'spec/extra.json', message: 'spec/extra.json is on disk but not in the index.' },
     ]
     renderPanel()
-    fireEvent.click(screen.getByText('1 spec manifest drift item'))
+    showIndexDetails()
     expect(screen.getByText('spec/extra.json is on disk but not in the index.')).toBeInTheDocument()
     expect(screen.queryByText(/unfiled_document/)).not.toBeInTheDocument()
   })
@@ -172,7 +183,8 @@ describe('the document panel — manifest drift report', () => {
     specListResult.data.diagnostics = [{ code: 'stale_row', path: 'spec/old.json' }]
     renderPanel()
 
-    expect(screen.getByText('1 spec manifest drift item')).toBeInTheDocument()
+    expect(screen.getByTestId('spec-health-index')).toHaveTextContent('1 index issue')
+    showIndexDetails()
     // The button instructed an uninstalled skill. A deterministic reindexer belongs in B2,
     // where the manifest format it repairs against will exist.
     expect(screen.queryByText('Repair manifest')).not.toBeInTheDocument()

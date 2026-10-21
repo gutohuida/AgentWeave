@@ -9,7 +9,7 @@ vi.mock('@/api/client', async (importOriginal) => {
 })
 
 import { getJson, putJson } from '@/api/client'
-import { InstructionsPage } from '@/components/instructions/InstructionsPage'
+import { InstructionsSection as InstructionsPage } from '@/components/settings/sections/InstructionsSection'
 
 // F686: instructions ride every agent turn, and 300,000 characters were accepted with nothing on
 // screen. The page now shows the size against the Hub's limit and will not send a save over it.
@@ -41,7 +41,7 @@ describe('project instructions show their size against the limit (F686)', () => 
     const size = await screen.findByTestId('instructions-size')
     // The size line first renders with the editor's initial '' and is seeded from `data` by an
     // effect, so the first paint reads "0 of 20"; wait for the seeded count rather than race it.
-    await waitFor(() => expect(size).toHaveTextContent('11 of 20 characters'))
+    await waitFor(() => expect(size).toHaveTextContent('11 / 20'))
     expect(size).toHaveTextContent(/every agent turn/)
   })
 

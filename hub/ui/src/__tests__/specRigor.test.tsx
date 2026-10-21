@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useConfigStore } from '@/store/configStore'
+import { openMenu } from './testUtils/menus'
 
 /* The rigor control.
  *
@@ -85,7 +86,9 @@ function mount(record: Record<string, unknown>, postResponse?: { ok: boolean; te
 
 /** A rigor change is confirmed, not posted on change (design D2); a promotion needs no reason. */
 async function choose(rigor: string) {
-  fireEvent.change(await screen.findByTestId('spec-rigor'), { target: { value: rigor } })
+  // The rigor chip opens the three rigors (a themed menu since ui-finesse, not a native select).
+  openMenu(await screen.findByTestId('spec-rigor'))
+  fireEvent.click(await screen.findByRole('menuitemradio', { name: new RegExp(`^${rigor}`, 'i') }))
   fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }))
 }
 
@@ -104,9 +107,10 @@ describe('setting a document rigor', () => {
   it('shows the rigor the document carries, separately from its phase', async () => {
     mount(document_({ rigor: 'gate', phase: 'approved' }))
 
-    const control = (await screen.findByTestId('spec-rigor')) as HTMLSelectElement
-    expect(control.value).toBe('gate')
-    expect(screen.getByTestId('spec-phase')).toHaveTextContent('approved')
+    const control = await screen.findByTestId('spec-rigor')
+    expect(control).toHaveAttribute('data-value', 'gate')
+    expect(control).toHaveTextContent('Gate rigor')
+    expect(screen.getByTestId('spec-phase')).toHaveAttribute('data-phase', 'approved')
   })
 
   it('sends the digest it read, so the change cannot land on an edited document', async () => {

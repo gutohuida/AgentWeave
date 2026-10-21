@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import type { Task } from '@/api/tasks'
-import { OverviewPage } from '@/components/overview/OverviewPage'
-import { TasksBoard } from '@/components/tasks/TasksBoard'
+import { OverviewScreen } from '@/components/overview/OverviewScreen'
+import { TasksScreen } from '@/components/tasks/TasksScreen'
 
 /**
  * F202: the Overview read `tasks.length` off a page the Hub had cut at `limit=100`, so a project
@@ -37,14 +37,17 @@ let page: { tasks: Task[]; total: number; has_more: boolean } = CUT_PAGE
 vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: [{ name: 'worker' }], isLoading: false }),
 }))
-vi.mock('@/api/questions', () => ({ useQuestions: () => ({ data: [] }) }))
-vi.mock('@/api/status', () => ({ useStatus: () => ({ data: { project_name: 'AgentWeave' } }) }))
-vi.mock('@/hooks/useSSE', () => ({ getBufferedEvents: () => [] }))
-vi.mock('@/components/overview/OverviewBudgetSummary', () => ({
-  OverviewBudgetSummary: () => null,
+vi.mock('@/api/questions', () => ({
+  useQuestions: () => ({ data: [] }),
+  useAnswerQuestion: () => ({ mutate: vi.fn() }),
 }))
-// Not this test's subject; each reads hooks the mocks above do not provide.
-vi.mock('@/components/overview/CollaborationSummary', () => ({ CollaborationSummary: () => null }))
+vi.mock('@/api/agentChat', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/agentChat')>()
+  return { ...actual, useProjectConversations: () => ({ data: { conversations: [] } }) }
+})
+vi.mock('@/api/ledger', () => ({ useProjectLedger: () => ({ data: undefined }) }))
+vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: undefined }) }))
+// Not this test's subject; it reads hooks the mocks above do not provide.
 vi.mock('@/components/overview/AgentPostureChips', () => ({ AgentPostureChips: () => null }))
 vi.mock('@/api/spec', () => ({
   useSpecDocuments: () => ({ data: { documents: [] } }),
@@ -59,6 +62,7 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     useUpdateTask: () => ({ mutate: vi.fn(), isPending: false }),
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),
     useStartWorkOnTask: () => ({ mutate: vi.fn() }),
+    useRetryIntegration: () => ({ mutate: vi.fn() }),
   }
 })
 
@@ -71,14 +75,14 @@ function board() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <TasksBoard />
+      <TasksScreen />
     </QueryClientProvider>,
   )
 }
 
 describe('the task count the Overview shows', () => {
   it("is the ledger's own total, not the length of the page it was handed", () => {
-    const { container } = render(<OverviewPage onNavigate={vi.fn()} />)
+    const { container } = render(<OverviewScreen onNavigate={vi.fn()} />)
     const text = container.textContent ?? ''
 
     expect(text).toContain('241 task')
@@ -86,9 +90,11 @@ describe('the task count the Overview shows', () => {
     expect(text).not.toContain('3 tasks')
   })
 
-  it('carries the same total into the card that navigates to the board', () => {
-    render(<OverviewPage onNavigate={vi.fn()} />)
-    expect(screen.getByText('241 total')).toBeTruthy()
+  it('carries the same total into the link that navigates to the board', () => {
+    const onNavigate = vi.fn()
+    render(<OverviewScreen onNavigate={onNavigate} />)
+    fireEvent.click(screen.getByRole('button', { name: '241 tasks' }))
+    expect(onNavigate).toHaveBeenCalledWith('tasks')
   })
 })
 

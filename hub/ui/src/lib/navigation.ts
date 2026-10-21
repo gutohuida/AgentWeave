@@ -26,6 +26,16 @@ export interface RailProject {
 export const PROJECT_TABS = ['overview', 'tasks', 'spec', 'vault', 'jobs', 'activity'] as const
 export type ProjectTab = (typeof PROJECT_TABS)[number]
 
+/** What each project tab is called on screen (the top bar). */
+export const TAB_LABELS: Record<ProjectTab, string> = {
+  overview: 'Overview',
+  tasks: 'Tasks',
+  spec: 'Spec',
+  vault: 'Vault',
+  jobs: 'Jobs',
+  activity: 'Activity',
+}
+
 export const ENVIRONMENT_SECTIONS = [
   'quality',
   'instructions',

@@ -69,6 +69,17 @@ def _post(url: str, body: bytes, headers: Dict[str, str]) -> int:
         return response.status
 
 
+async def _send(url: str, body: bytes, headers: Dict[str, str]) -> Optional[str]:
+    """POST *body* to *url*; the error to record, or None when the endpoint accepted it."""
+    try:
+        status = await asyncio.to_thread(_post, url, body, headers)
+    except urllib.error.HTTPError as exc:
+        return f"the endpoint answered {exc.code}"
+    except Exception as exc:  # noqa: BLE001 -- recorded for the operator, retried next pass
+        return f"{type(exc).__name__}: {exc}"
+    return f"the endpoint answered {status}" if status >= 300 else None
+
+
 async def push_project(project_id: str) -> int:
     """Push one batch of the project's ended, unexported spans. Returns how many were accepted."""
     async with async_session_factory() as db:
@@ -101,19 +112,12 @@ async def push_project(project_id: str) -> int:
             else None
         )
         ids = [span.span_id for span in spans]
-    error: Optional[str] = None
-    try:
-        # The batch's log records go with its spans: both accepted, or the batch is retried.
-        posts = [(traces_url(endpoint), body)] + ([(logs_url(endpoint), logs)] if logs else [])
-        for url, payload in posts:
-            status = await asyncio.to_thread(_post, url, payload, headers)
-            if status >= 300:
-                error = f"the endpoint answered {status}"
-                break
-    except urllib.error.HTTPError as exc:
-        error = f"the endpoint answered {exc.code}"
-    except Exception as exc:  # noqa: BLE001 -- recorded for the operator, retried next pass
-        error = f"{type(exc).__name__}: {exc}"
+    error = await _send(traces_url(endpoint), body, headers)
+    # The log records are best-effort beside the spans (review 0203): an endpoint that takes traces
+    # but not logs (Jaeger, Tempo) answers 404 on `/v1/logs`, and holding the accepted spans back
+    # for that would re-send them on every pass and export nothing after them. The failure is still
+    # shown in the settings' `last_error`.
+    logs_error = await _send(logs_url(endpoint), logs, headers) if logs and error is None else None
     now = datetime.now(timezone.utc)
     async with async_session_factory() as db:
         settings = await db.get(TraceSettings, project_id)
@@ -125,7 +129,7 @@ async def push_project(project_id: str) -> int:
                 .execution_options(synchronize_session=False)
             )
         if settings is not None:
-            settings.last_error = error
+            settings.last_error = error or (f"log records: {logs_error}" if logs_error else None)
             if error is None:
                 settings.last_export_at = now
                 settings.exported_spans = (settings.exported_spans or 0) + len(ids)

@@ -36,7 +36,7 @@ vi.mock('@/api/agents', async (importOriginal) => {
 /** The page resolves its agent from the roster, so a test supplies one and names it. */
 function renderInteraction(summary: AgentSummary) {
   roster = [summary]
-  return render(<AgentSettingsPage agent={summary.name} section="interaction" />)
+  return render(<AgentSettingsPage agent={summary.name} section="interaction" onSelectSection={vi.fn()} onBack={vi.fn()} />)
 }
 
 function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
@@ -133,19 +133,19 @@ describe('per-agent waiting settings', () => {
 
   it('puts each binding in its own section', () => {
     roster = [agent()]
-    const { unmount } = render(<AgentSettingsPage agent="codex-1" section="execution" />)
+    const { unmount } = render(<AgentSettingsPage agent="codex-1" section="execution" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.getByLabelText('Runner for codex-1')).toBeInTheDocument()
     expect(screen.queryByLabelText('Charter for codex-1')).not.toBeInTheDocument()
     unmount()
 
-    render(<AgentSettingsPage agent="codex-1" section="charter" />)
+    render(<AgentSettingsPage agent="codex-1" section="charter" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.getByLabelText('Charter for codex-1')).toBeInTheDocument()
     expect(screen.queryByLabelText('Runner for codex-1')).not.toBeInTheDocument()
   })
 
   it('says so when the agent is not in the roster, rather than rendering an empty page', () => {
     roster = []
-    render(<AgentSettingsPage agent="codex-1" section="interaction" />)
+    render(<AgentSettingsPage agent="codex-1" section="interaction" onSelectSection={vi.fn()} onBack={vi.fn()} />)
     expect(screen.getByTestId('agent-settings-empty')).toHaveTextContent(/no longer in the roster/i)
   })
 })

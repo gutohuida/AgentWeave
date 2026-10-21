@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentCreateDialog } from '@/components/agents/AgentCreateDialog'
-import { ProjectHeader } from '@/components/layout/ProjectHeader'
+import { TopBar } from '@/components/layout/TopBar'
 
 const mutate = vi.fn()
 let mutationError: Error | null = null
@@ -51,8 +51,21 @@ describe('operator agent creation dialog', () => {
     mutationError = null
   })
 
-  it('keeps agent creation out of the project header', () => {
-    render(<ProjectHeader projectName="Website" directoryAvailable onOpenSetup={vi.fn()} />)
+  it('keeps agent creation out of the top bar', () => {
+    render(
+      <TopBar
+        project={{ id: 'p', name: 'Website', path: 'C:/work/website' }}
+        projects={[]}
+        tabs={['overview']}
+        active="overview"
+        onSelectTab={vi.fn()}
+        onSelectProject={vi.fn()}
+        onOpenPalette={vi.fn()}
+        onOpenSettings={vi.fn()}
+        mode="dark"
+        onToggleMode={vi.fn()}
+      />,
+    )
     expect(screen.queryByRole('button', { name: 'Add agent' })).not.toBeInTheDocument()
   })
 

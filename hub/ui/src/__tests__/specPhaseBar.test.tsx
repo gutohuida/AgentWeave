@@ -5,6 +5,20 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
 import { ApiError } from '@/api/client'
 
+/** The decisions other than the one primary action live in the header's overflow menu. */
+async function openMore() {
+  await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+}
+async function chooseMore(name: string | RegExp) {
+  await openMore()
+  await userEvent.click(await screen.findByRole('menuitem', { name }))
+}
+/** The rigor chip opens the three rigors; choosing one waits for its reason (design D2). */
+async function chooseRigorOption(rigor: string) {
+  await userEvent.click(screen.getByTestId('spec-rigor'))
+  await userEvent.click(await screen.findByRole('menuitemradio', { name: new RegExp(`^${rigor}`, 'i') }))
+}
+
 /**
  * The controls an operator has and an agent does not.
  *
@@ -76,7 +90,8 @@ describe('SpecPhaseBar', () => {
   it('shows the phase the Hub reports, not one read from the document', () => {
     documents = [doc({ phase: 'proposed' })]
     renderBar()
-    expect(screen.getByTestId('spec-phase')).toHaveTextContent('proposed')
+    expect(screen.getByTestId('spec-phase')).toHaveAttribute('data-phase', 'proposed')
+    expect(screen.getByTestId('spec-phase')).toHaveTextContent(/^proposed$/i)
   })
 
   it('renders nothing for a path the Hub does not track', () => {
@@ -108,7 +123,7 @@ describe('SpecPhaseBar', () => {
         'step',
       )
       expect(screen.getByTestId('spec-journey-step-intake')).not.toHaveAttribute('aria-current')
-      expect(screen.getByTestId('spec-journey-size')).toHaveValue('small')
+      expect(within(screen.getByTestId('spec-journey-size')).getByRole('radio', { name: 'Small' })).toHaveAttribute('aria-checked', 'true')
     })
 
     it('moves the document to any step, back or forward', async () => {
@@ -124,7 +139,7 @@ describe('SpecPhaseBar', () => {
     it('changes the size', async () => {
       documents = [exploring()]
       renderBar()
-      await userEvent.selectOptions(screen.getByTestId('spec-journey-size'), 'large')
+      await userEvent.click(within(screen.getByTestId('spec-journey-size')).getByRole('radio', { name: 'Large' }))
       expect(setJourney).toHaveBeenCalledWith(
         { path: 'spec/changes/demo/spec.json', size: 'large' },
         expect.anything(),
@@ -247,25 +262,28 @@ describe('SpecPhaseBar', () => {
     documents = [doc({ phase: 'approved', explore_closed: true })]
     renderBar()
 
-    await userEvent.click(screen.getByText('Reopen'))
+    await chooseMore('Reopen for changes')
 
-    expect(setPhase).toHaveBeenCalledWith({
-      path: 'spec/changes/demo/spec.json',
-      to: 'exploring',
-    })
+    // With a callback since ui-finesse: the outcome is said in a toast either way.
+    expect(setPhase).toHaveBeenCalledWith(
+      { path: 'spec/changes/demo/spec.json', to: 'exploring' },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    )
   })
 
-  it('does not offer reopening a document that is already exploring', () => {
+  it('does not offer reopening a document that is already exploring', async () => {
     renderBar()
-    expect(screen.queryByText('Reopen')).not.toBeInTheDocument()
+    await openMore()
+    expect(screen.queryByRole('menuitem', { name: /Reopen/ })).not.toBeInTheDocument()
   })
 
   // F205: `spec_lifecycle.TRANSITIONS` has archive edges from `exploring` and `proposed` as well,
   // added for F37's empty mistaken document, and no screen offered them.
-  it.each(['approved', 'exploring', 'proposed'])('offers archiving a %s document', (phase) => {
+  it.each(['approved', 'exploring', 'proposed'])('offers archiving a %s document', async (phase) => {
     documents = [doc({ phase })]
     renderBar()
-    expect(screen.getByText('Archive')).toBeInTheDocument()
+    await openMore()
+    expect(screen.getByRole('menuitem', { name: 'Archive' })).toBeInTheDocument()
   })
 
   it("shows the Hub's refusal in the dialog when the document has produced work", async () => {
@@ -281,7 +299,7 @@ describe('SpecPhaseBar', () => {
     documents = [doc({ phase: 'exploring' })]
     renderBar()
 
-    await userEvent.click(screen.getByText('Archive'))
+    await chooseMore('Archive')
     await userEvent.click(within(screen.getByRole('dialog')).getByText('Archive'))
 
     const dialog = screen.getByRole('dialog')
@@ -292,7 +310,7 @@ describe('SpecPhaseBar', () => {
     documents = [doc({ phase: 'approved', title: 'Demo' })]
     renderBar()
 
-    await userEvent.click(screen.getByText('Archive'))
+    await chooseMore('Archive')
 
     expect(setPhase).not.toHaveBeenCalled()
     const dialog = screen.getByRole('dialog')
@@ -304,7 +322,7 @@ describe('SpecPhaseBar', () => {
     documents = [doc({ phase: 'approved' })]
     renderBar()
 
-    await userEvent.click(screen.getByText('Archive'))
+    await chooseMore('Archive')
     await userEvent.click(screen.getByText('Cancel'))
 
     expect(setPhase).not.toHaveBeenCalled()
@@ -315,7 +333,7 @@ describe('SpecPhaseBar', () => {
     documents = [doc({ phase: 'approved' })]
     renderBar()
 
-    await userEvent.click(screen.getByText('Archive'))
+    await chooseMore('Archive')
     await userEvent.click(within(screen.getByRole('dialog')).getByText('Archive'))
 
     expect(setPhase).toHaveBeenCalledWith(
@@ -326,17 +344,19 @@ describe('SpecPhaseBar', () => {
 
   it.each(['archived', 'current'])(
     'does not offer archiving a %s document',
-    (phase) => {
+    async (phase) => {
       documents = [doc({ phase })]
       renderBar()
-      expect(screen.queryByText('Archive')).not.toBeInTheDocument()
+      await openMore()
+      expect(screen.queryByRole('menuitem', { name: 'Archive' })).not.toBeInTheDocument()
     },
   )
 
-  it.each(['archived', 'current'])('does not offer reopening a %s document', (phase) => {
+  it.each(['archived', 'current'])('does not offer reopening a %s document', async (phase) => {
     documents = [doc({ phase })]
     renderBar()
-    expect(screen.queryByText('Reopen')).not.toBeInTheDocument()
+    await openMore()
+    expect(screen.queryByRole('menuitem', { name: /Reopen/ })).not.toBeInTheDocument()
   })
 
   it.each(['exploring', 'proposed', 'approved', 'archived', 'current'])(
@@ -344,7 +364,8 @@ describe('SpecPhaseBar', () => {
     (phase) => {
       documents = [doc({ phase })]
       renderBar()
-      expect(screen.getByTestId('spec-phase')).toHaveTextContent(phase)
+      expect(screen.getByTestId('spec-phase')).toHaveAttribute('data-phase', phase)
+      expect(screen.getByTestId('spec-phase')).toHaveTextContent(new RegExp(`^${phase}$`, 'i'))
     },
   )
 })
@@ -371,32 +392,35 @@ describe('SpecPhaseBar — rigor history and the reason for a change', () => {
     ]
     renderBar()
 
+    await openMore()
     const toggle = screen.getByTestId('spec-rigor-history-toggle')
-    expect(toggle).toHaveTextContent('History (2)')
+    expect(toggle).toHaveTextContent('Rigor history (2)')
     await userEvent.click(toggle)
 
     const items = within(screen.getByTestId('spec-rigor-history')).getAllByRole('listitem')
     expect(items).toHaveLength(2)
-    expect(items[0]).toHaveTextContent('contract → gate')
+    expect(items[0]).toHaveTextContent(/contract → gate/i)
     expect(items[0]).toHaveTextContent('ready to enforce')
-    expect(items[1]).toHaveTextContent('sketch → contract')
+    expect(items[1]).toHaveTextContent(/sketch → contract/i)
     expect(items[1]).toHaveTextContent('no reason given')
     expect(items[0]).toHaveTextContent('operator')
   })
 
-  it('offers no history toggle when the rigor has never changed', () => {
+  it('offers no history toggle when the rigor has never changed', async () => {
     documents = [doc({ rigor: 'sketch' })]
     rigorEvents = []
     renderBar()
+    await openMore()
     expect(screen.queryByTestId('spec-rigor-history-toggle')).not.toBeInTheDocument()
   })
 
   // D5: a failed history read is said, and not mistaken for "never changed" (no toggle).
-  it('says the history could not be loaded when its read fails', () => {
+  it('says the history could not be loaded when its read fails', async () => {
     documents = [doc({ rigor: 'gate' })]
     rigorHistoryError = new ApiError(500, 'database is locked')
     renderBar()
     expect(screen.getByTestId('spec-rigor-history-error')).toHaveTextContent('database is locked')
+    await openMore()
     expect(screen.queryByTestId('spec-rigor-history-toggle')).not.toBeInTheDocument()
   })
 
@@ -405,7 +429,7 @@ describe('SpecPhaseBar — rigor history and the reason for a change', () => {
     documents = [doc({ rigor: 'gate', content_digest: 'abc' })]
     renderBar()
 
-    await userEvent.selectOptions(screen.getByTestId('spec-rigor'), 'sketch')
+    await chooseRigorOption('sketch')
 
     expect(setRigor).not.toHaveBeenCalled()
     const row = screen.getByTestId('spec-rigor-confirm')
@@ -436,7 +460,7 @@ describe('SpecPhaseBar — rigor history and the reason for a change', () => {
     documents = [doc({ rigor: 'sketch', content_digest: 'abc' })]
     renderBar()
 
-    await userEvent.selectOptions(screen.getByTestId('spec-rigor'), 'gate')
+    await chooseRigorOption('gate')
 
     expect(setRigor).not.toHaveBeenCalled()
     const row = screen.getByTestId('spec-rigor-confirm')
@@ -457,14 +481,14 @@ describe('SpecPhaseBar — rigor history and the reason for a change', () => {
     documents = [doc({ rigor: 'sketch', content_digest: 'abc' })]
     renderBar()
 
-    await userEvent.selectOptions(screen.getByTestId('spec-rigor'), 'gate')
+    await chooseRigorOption('gate')
     await userEvent.click(
       within(screen.getByTestId('spec-rigor-confirm')).getByRole('button', { name: 'Cancel' }),
     )
 
     expect(setRigor).not.toHaveBeenCalled()
     expect(screen.queryByTestId('spec-rigor-confirm')).not.toBeInTheDocument()
-    expect((screen.getByTestId('spec-rigor') as HTMLSelectElement).value).toBe('sketch')
+    expect(screen.getByTestId('spec-rigor')).toHaveAttribute('data-value', 'sketch')
   })
 
   // 1.5 (D2) control. The refusal display is kept; it now arrives after Confirm.
@@ -484,7 +508,7 @@ describe('SpecPhaseBar — rigor history and the reason for a change', () => {
     documents = [doc({ rigor: 'sketch', content_digest: 'abc' })]
     renderBar()
 
-    await userEvent.selectOptions(screen.getByTestId('spec-rigor'), 'gate')
+    await chooseRigorOption('gate')
     await userEvent.click(
       within(screen.getByTestId('spec-rigor-confirm')).getByRole('button', { name: 'Confirm' }),
     )
