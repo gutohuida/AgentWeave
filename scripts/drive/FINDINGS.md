@@ -37167,7 +37167,7 @@ Expected: the permission span's arguments pass the same redaction as the tool ev
 
 ## F791 (C) -- every run's trace shows two routine `git rev-parse --verify --quiet MERGE_HEAD` probes as red error spans
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141).
+**Status:** fixed 2a060e9 2026-10-21 night iteration 25 (Tier 0). `traces.run` and `traces.exited` take `ok_codes` (default `(0,)`); `worktrees._run_git` passes it through and the two `MERGE_HEAD` probes (`_is_mid_merge`, `_merge_head`) pass `(0, 1)`, so their exit code 1 is recorded on the span with status `ok`. Any other command, and any other exit of git, is still an `error` span. Tests `hub/tests/test_a_merge_head_probe_is_not_a_failed_command.py` (failed before: span status `error`; 2 cases, the second pins that another failing git command stays an error); two fakes of `_run_git` in `test_a_task_checkout_catches_up.py` take the new keyword. Drive: real git repository and real subprocess under a current work span; not re-seen in the app's trace drawer (labelled). Slice `-k "trace or worktree or isolation or merge or checkout or review"` 853 passed after the fakes were fixed. Found by the day sweep `sweep-traces-sweep`.
 **Source:** drive
 **Theme:** Traces
 **Ready:** yes
