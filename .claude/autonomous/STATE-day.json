@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T17:00:00+01:00",
-    "iteration": 13,
+    "iteration": 14,
     "log_file": ".claude/autonomous/2026-10-21-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "night-recheck-drive",
-    "next_action": "Do the 'night-recheck-drive' queue item per .claude/loops/day-window.md 'Re-driving last night's fixes' (read that section first). Re-drive only the fixes its detail lists, on a scratch Hub 8110+ (not 8130; 8154-8159 used today), haiku-4-5 only; log CONFIRMED/REOPENED per finding; next free finding number F869 (F900-F906 came from master). ui-finesse moved controls: the side panel opens from 'More conversation actions' -> 'Show side panel'; settings autosave; Activity's sub-views are a Segmented radiogroup 'Activity view'.",
+    "current": "ledger-tidy",
+    "next_action": "Do the 'ledger-tidy' queue item: py -3.11 scripts/backlog_page.py; check every F filed today (F819-F868 range plus F863-F868) has **Ready:** and **Tier:** lines; F824 was reopened as a residual (7 story GETs), give its Status line Ready/Tier if missing. Then D-7 next.",
     "queue": [
         {
             "id": "plan-review",
@@ -89,7 +89,7 @@
         },
         {
             "id": "night-recheck-drive",
-            "status": "open",
+            "status": "done",
             "title": "Re-drive last night's fixes live",
             "model": "sonnet",
             "effort": "medium",
