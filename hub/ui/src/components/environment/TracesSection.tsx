@@ -119,6 +119,9 @@ function RecentTraces() {
                 {KIND_LABEL[trace.kind] ? <span style={{ color: 'var(--text-3)' }}> · {KIND_LABEL[trace.kind]}</span> : null}
               </span>
               {trace.status === 'error' && <Badge variant="danger">error</Badge>}
+              {trace.status !== 'error' && trace.run_status && trace.run_status !== 'completed' && trace.ended && (
+                <Badge variant="default">{trace.run_status}</Badge>
+              )}
               <span className="shrink-0 tabular-nums" style={{ color: 'var(--text-2)' }}>
                 {duration} · {trace.span_count}
               </span>

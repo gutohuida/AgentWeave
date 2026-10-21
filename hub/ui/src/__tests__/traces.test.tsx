@@ -190,6 +190,22 @@ describe('TraceButton', () => {
     expect(screen.getByText('Hello there')).toBeInTheDocument()
   })
 
+  it('reads a stopped run as stopped in the header, not as an ok or merely ended trace (F792)', async () => {
+    const stopped = { ...root, status: 'unset' as const, status_message: 'stopped by the operator', attributes: { ...root.attributes, 'aw.run.status': 'stopped' } }
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...detail, root: stopped, spans: [stopped, ...detail.spans.slice(1)] }),
+    })
+    render(<TraceButton runId="run-1" testId="open" />, { wrapper })
+    fireEvent.click(screen.getByTestId('open'))
+    await screen.findByTestId('trace-waterfall')
+    // The header is the view's first child; the span detail below also prints the attributes.
+    const header = screen.getByTestId('trace-view').firstElementChild
+    expect(header).toHaveTextContent('stopped')
+    expect(header).not.toHaveTextContent(/(^|\s)ok(\s|$)/)
+  })
+
   it('offers paging when the trace has more spans than one page', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
@@ -252,7 +268,10 @@ describe('TracesSection recent traces', () => {
       const traces =
         operation === 'aw.request'
           ? [summary({ trace_id: 'tr', name: 'POST /api/v1/projects/{project_id}/tasks', operation, kind: 'request' })]
-          : [summary({ trace_id: 'tw', name: 'invoke_agent builder', operation: 'invoke_agent', kind: 'run', run_id: 'run-1', agent: 'builder' })]
+          : [
+              summary({ trace_id: 'tw', name: 'invoke_agent builder', operation: 'invoke_agent', kind: 'run', run_id: 'run-1', agent: 'builder', run_status: 'completed' }),
+              summary({ trace_id: 'ts', name: 'invoke_agent stopper', operation: 'invoke_agent', kind: 'run', run_id: 'run-2', agent: 'stopper', run_status: 'stopped' }),
+            ]
       return { ok: true, status: 200, json: async () => ({ traces, next_before: null }) }
     })
   })
@@ -268,6 +287,10 @@ describe('TracesSection recent traces', () => {
     const listed = () => fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => /\/traces\?/.test(url))
     expect(listed()[0]).toContain('operation=invoke_agent')
     expect(screen.getByTestId('trace-kind-invoke_agent')).toHaveAttribute('aria-pressed', 'true')
+    // F792: the list says which run was stopped; a completed one carries no badge.
+    const rows = screen.getByTestId('recent-traces').querySelectorAll('li')
+    expect(rows[0]).not.toHaveTextContent('completed')
+    expect(rows[1]).toHaveTextContent('stopped')
 
     fireEvent.click(screen.getByTestId('trace-kind-aw.request'))
     expect(await screen.findByText(/POST \/api\/v1\/projects/)).toBeInTheDocument()

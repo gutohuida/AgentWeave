@@ -79,6 +79,7 @@ export function TraceView({
   const pageEnd = Math.min(detail.offset + detail.spans.length, detail.total)
   const paged = detail.total > detail.limit
   const agent = detail.root.attributes?.['gen_ai.agent.name']
+  const runStatus = detail.root.attributes?.['aw.run.status']
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="trace-view">
@@ -87,7 +88,7 @@ export function TraceView({
         style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}
       >
         <Badge variant={detail.root.status === 'error' ? 'danger' : live ? 'info' : detail.root.status === 'ok' ? 'success' : 'default'}>
-          {live ? 'running' : detail.root.status === 'unset' ? 'ended' : detail.root.status}
+          {live ? 'running' : detail.root.status === 'unset' ? (typeof runStatus === 'string' ? runStatus : 'ended') : detail.root.status}
         </Badge>
         {typeof agent === 'string' && <span style={{ color: 'var(--text-2)' }}>{agent}</span>}
         <span>{format(hubDate(detail.root.start_time), 'MMM d, HH:mm:ss')}</span>

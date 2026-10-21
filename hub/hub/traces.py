@@ -556,6 +556,13 @@ async def record_deliveries(
         db.add(span)
 
 
+_NOT_COMPLETED = {
+    "stopped": "stopped by the operator",
+    "interrupted": "interrupted",
+    "abandoned": "abandoned",
+}
+
+
 async def finish_run(db: AsyncSession, run_id: str, usage: Any = None) -> None:
     """Close *run_id*'s trace when the run ends, in the transaction that records its end.
 
@@ -711,6 +718,10 @@ async def finish_run(db: AsyncSession, run_id: str, usage: Any = None) -> None:
     if run is not None and run.status == "failed":
         root.status = "error"
         root.status_message = redact(run_id, run.error) if run.error else "run failed"
+    elif run is not None and run.status in _NOT_COMPLETED:
+        # OTel keeps `error` for failures: a run that was cut short ended, but did not succeed.
+        root.status = "unset"
+        root.status_message = _NOT_COMPLETED[run.status]
     else:
         root.status = "ok"
 
@@ -1534,6 +1545,7 @@ def _summary(root: TraceSpan, span_count: int) -> Dict[str, Any]:
         "conversation_id": attributes.get("gen_ai.conversation.id"),
         "task_id": attributes.get("aw.task.id"),
         "worker_kind": attributes.get("aw.worker.kind"),
+        "run_status": attributes.get("aw.run.status"),
         "status": root.status,
         "status_message": root.status_message,
         "start_time": root.start_time.isoformat(),
