@@ -38240,7 +38240,7 @@ The old card's per-requirement chips gave a requirement awaiting review a pendin
 
 ## F852 (B) -- an agent piece that names no commit, recorded in a task checkout before the task's first commit, still shows master's HEAD commit as its work (F761's unmeasured case)
 
-**Status:** open 2026-10-21. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8155, a real Haiku `builder` turn, Chromium on the served bundle: `scripts/drive/s1021_e_f761.py`, `s1021_e_ui.py`). F761's fix holds for the case it measured (an operator piece on master); this is the case its Status line names as not measured.
+**Status:** fixed 2026-10-22 (night window, Tier 0). `work_diff` takes `unnamed`; an unnamed piece whose commit is on main's own first-parent chain answers no files and the F761 reason, whichever branch the checkout was on. Not the stored `reachable_from_main`, which `refresh_reachability` overwrites at merge (the finding's premise missed this); the Hub merges `--no-ff`, so integrated work is never on that chain. Test beside F761's. Not driven on a live Hub. Original: open 2026-10-21. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8155, a real Haiku `builder` turn, Chromium on the served bundle: `scripts/drive/s1021_e_f761.py`, `s1021_e_ui.py`). F761's fix holds for the case it measured (an operator piece on master); this is the case its Status line names as not measured.
 **Source:** drive
 **Theme:** Requirements & evidence
 **Ready:** yes -- repro below.

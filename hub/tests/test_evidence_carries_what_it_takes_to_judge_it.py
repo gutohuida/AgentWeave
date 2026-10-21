@@ -231,6 +231,33 @@ async def test_a_piece_naming_no_commit_does_not_show_the_checkouts_commit_as_it
 
 
 @pytest.mark.asyncio
+async def test_an_agent_piece_naming_no_commit_in_a_task_checkout_at_mains_tip_shows_no_work(
+    app, auth_headers, builder, tmp_path
+):
+    """F852: F761 held only when the checkout was on main itself. A task branch cut at main's tip,
+    before its first commit, took main's HEAD -- another requirement's change -- as this piece's work.
+    """
+    await ready(app, auth_headers, builder, tmp_path)
+    task = await linked_task(app, auth_headers)
+    (tmp_path / "other.py").write_text("print('for FR-9')\n", encoding="utf-8")
+    git(tmp_path, "add", "other.py")
+    git(tmp_path, "commit", "-q", "-m", "made for another requirement")
+    head = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    git(tmp_path, "checkout", "-q", "-b", AGENT_BRANCH)
+
+    recorded = await record(app, builder, task_id=task)
+    assert recorded.status_code == 201, recorded.text
+    git(tmp_path, "checkout", "-q", "main")
+
+    diff = await app.get(f"{BASE}/spec/evidence/{recorded.json()['id']}/diff", headers=auth_headers)
+
+    assert diff.status_code == 200, diff.text
+    body = diff.json()
+    assert body["files"] == []
+    assert head[:12] in body["reason"] and "no commit" in body["reason"]
+
+
+@pytest.mark.asyncio
 async def test_a_piece_naming_a_commit_on_main_still_shows_that_commit(
     app, auth_headers, builder, tmp_path
 ):

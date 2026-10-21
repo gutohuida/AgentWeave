@@ -1908,7 +1908,8 @@ async def evidence_diff(
         }
     main_branch = await _main_branch(session, project_id)
     # A footprint that took the checkout's HEAD rather than a commit the recorder named, on the main
-    # line, is no work of this piece's (F761). A row from before this was recorded reads as it did.
+    # line, is no work of this piece's (F761); nor is one on main's own first-parent chain,
+    # whichever branch the checkout was on (F852). A row from before this reads as it did.
     unnamed = footprint is not None and footprint.commit_named is False
     return await asyncio.to_thread(
         requirement_evidence.work_diff,
@@ -1916,6 +1917,7 @@ async def evidence_diff(
         commit,
         main_branch,
         unnamed_branch=footprint.branch if unnamed else None,
+        unnamed=unnamed,
     )
 
 

@@ -846,6 +846,7 @@ def work_diff(
     main_branch: Optional[str],
     *,
     unnamed_branch: Optional[str] = None,
+    unnamed: bool = False,
 ) -> Dict[str, Any]:
     """`{files: [{path, status, patch}], base, commit, truncated, reason}` for the work *commit*
     carries on its line of work. Never raises: a missing commit or repository is a `reason`.
@@ -853,6 +854,10 @@ def work_diff(
     *unnamed_branch* is the branch a piece that named no commit was recorded on. When that is the
     main line, its footprint's commit is whatever HEAD happened to be, already on main, and its
     parent is no base for work that piece never did (F761). It answers no files and says so.
+    *unnamed* is the same case whichever branch the checkout was on (F852): a task checkout cut at
+    main's tip is on its own branch, yet its HEAD is a commit on main's own first-parent chain. The
+    Hub merges with `--no-ff`, so work it integrated is never on that chain, and a commit that is has
+    not been merged in. (`reachable_from_main` cannot say: the merge-time refresh overwrites it.)
     """
     empty: Dict[str, Any] = {"files": [], "base": None, "commit": commit, "truncated": False}
     if not commit:
@@ -860,12 +865,17 @@ def work_diff(
     if _git(root, "rev-parse", "--verify", f"{commit}^{{commit}}") is None:
         return {**empty, "reason": f"commit {commit[:12]} is not in this repository"}
     main = _main_ref(root, main_branch)
-    if unnamed_branch and unnamed_branch == main and is_reachable_from(root, commit, main):
+    on_main_line = bool(
+        unnamed_branch and unnamed_branch == main and is_reachable_from(root, commit, main)
+    )
+    if on_main_line or (unnamed and main and _merge_into(root, commit, main) == commit):
+        where = unnamed_branch or main
         return {
             **empty,
             "reason": (
                 f"this piece names no commit; it was recorded with the checkout at "
-                f"{commit[:12]} on {main}, which is not work of its own, so there is no work to diff"
+                f"{commit[:12]} on {where}, already on the main line, which is not work of its own, "
+                f"so there is no work to diff"
             ),
         }
     base = _line_of_work_base(root, commit, main) if main else None
