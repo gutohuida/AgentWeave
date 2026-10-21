@@ -36956,7 +36956,7 @@ Expected: when every unlanded commit is named by an awaiting piece in `unaccepte
 
 ## F773 (C) -- a flow task's checks never run while it waits for review: the reviewer judges without them, and its approval is first refused "checks are still running"
 
-**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns).
+**Status:** fixed 2026-10-21 (night iteration 23, Tier 0). `project_checks.request_run`, resolving its own targets, falls back to `task_integration.review_target` when `merge_targets` is empty and the task is `completed`/`under_review`, so `_after_run` starts a run on the commit the review will be given (the approval gate passes its own targets and is untouched). `hub/tests/test_a_flow_tasks_checks_run_while_it_waits_for_review.py` (failed first: no run; a flow task with no evidence naming a commit is still not checked); project-checks files 53 passed. Not re-seen with a live Haiku turn (labelled). Original report: open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns).
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes -- repro below.
