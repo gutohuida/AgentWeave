@@ -4,6 +4,8 @@ profile's Hub records itself in `hub-<profile>-<port>.pid`."""
 
 import json
 import os
+import subprocess
+import sys
 
 import pytest
 
@@ -18,7 +20,7 @@ def hub_home(tmp_path, monkeypatch):
     monkeypatch.setattr(
         diagnostics,
         "check_hub_instance",
-        lambda port: diagnostics.ok(
+        lambda port, start_command=None: diagnostics.ok(
             "hub_running", f"port:{port}", "answering", category="environment"
         ),
     )
@@ -82,3 +84,61 @@ def test_no_port_and_no_profile_is_the_default_profile(hub_home, capsys):
     _register(hub_home, "sweep0925", 8030)
 
     assert _database_target(capsys).endswith("/data/agentweave.db")
+
+
+# F802: with nothing on the port, doctor's hint started the *default* profile's Hub there, and
+# its own log lines reached the terminal as bare event names.
+@pytest.fixture
+def nothing_on_the_port(tmp_path, monkeypatch):
+    monkeypatch.setattr(cli, "HUB_DIR", tmp_path)
+    monkeypatch.setattr(diagnostics, "NATIVE_HUB_DIR", tmp_path)
+    monkeypatch.setattr(diagnostics, "_port_is_available", lambda _p: True)
+
+    def _refused(*_a, **_k):
+        raise OSError("refused")
+
+    monkeypatch.setattr(diagnostics.urllib.request, "urlopen", _refused)
+
+
+def _hub_hint(capsys, *argv) -> str:
+    cli.main(["doctor", "--json", "--no-network", *argv])
+    results = json.loads(capsys.readouterr().out)["results"]
+    (hub,) = [r for r in results if r["id"] == "hub_not_running"]
+    return hub["hint"]
+
+
+def test_the_start_hint_for_a_named_profile_names_the_profile(nothing_on_the_port, capsys):
+    hint = _hub_hint(capsys, "--profile", "life1020", "--port", "8144")
+
+    assert "agentweave --profile life1020 --port 8144" in hint
+
+
+def test_the_start_hint_for_the_default_profile_stays_bare(nothing_on_the_port, capsys):
+    assert "`agentweave --port 8144`" in _hub_hint(capsys, "--port", "8144")
+
+
+def test_doctor_prints_no_bare_event_names(tmp_path):
+    # In a real process: under pytest the logging plugin installs handlers, which hides the
+    # last-resort handler that printed these names to the terminal.
+    env = {**os.environ, "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from agentweave import cli; sys.exit(cli.main(sys.argv[1:]))",
+            "doctor",
+            "--no-network",
+            "--profile",
+            "f802",
+            "--port",
+            "8149",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=tmp_path,
+        timeout=60,
+    )
+
+    assert run.stderr.strip() == "", run.stderr
+    assert "[DOCTOR]" in run.stdout

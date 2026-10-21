@@ -30,8 +30,11 @@ def _emit_diagnostic_log(result: object) -> None:
     event = "diagnostic_check_failed" if data.get("status") == "fail" else "diagnostic_check_warn"
     if data.get("status") not in ("fail", "warn"):
         return
-    log_fn = logger.error if data.get("status") == "fail" else logger.warning
-    log_fn(event, extra={"event": event, "data": data})
+    # INFO, not WARNING/ERROR (F802): the stderr handler shows WARNING and above, and this record's
+    # message is the bare event name -- the operator got two lines reading only "diagnostic_check_warn"
+    # above the report that already prints each check. The JSONL file and the Hub handler (INFO+)
+    # still receive the full result in `data`.
+    logger.info(event, extra={"event": event, "data": data})
 
 
 # DEAD (2026-09-20): both helpers below — _emit_nonfatal_diagnostic and
@@ -192,7 +195,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     if profile == "default" and explicit_port:
         profile = _hub_profile_serving_port(port) or "default"
     results = collect_diagnostics(
-        include_network=not getattr(args, "no_network", False), port=port, profile=profile
+        include_network=not getattr(args, "no_network", False),
+        port=port,
+        profile=profile,
+        start_command=_hub_start_hint(profile, port),
     )
     if getattr(args, "json", False):
         payload = {

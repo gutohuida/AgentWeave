@@ -37312,7 +37312,7 @@ Expected: a pending report can be looked into again (a "Look into it" door on th
 
 ## F802 (C) -- `agentweave doctor --profile <name> --port N` tells the operator to start `agentweave --port N`, which starts the default profile's database on that port; doctor also prints bare `diagnostic_check_warn` lines
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row, sandboxed home).
+**Status:** fixed 2026-10-21 (night iteration 33, Tier 0; sha in the commit that carries this line). `collect_diagnostics(start_command=)` carries `_hub_start_hint(profile, port)` into `check_hub_instance`'s hint; `_emit_diagnostic_log` logs at INFO (the stderr handler shows WARNING+; the JSONL file and Hub handler still get the full result). Tests in `tests/test_doctor_port_names_its_profile.py` (hint for named and default profile; a real subprocess whose stderr must be empty), failing before. Drive: `py -3.11 -m agentweave doctor --profile life1020 --port 8149` printed `Start it with ``agentweave --profile life1020 --port 8149``` and wrote 0 bytes to stderr. Side note: `tests/test_skill_sync.py` was failing on a clean tree (stale untracked local skill mirrors, the F585 class); re-running `scripts/sync_skills.py` made it pass, no diff. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row, sandboxed home).
 **Source:** drive
 **Theme:** CLI & lifecycle
 **Ready:** yes
