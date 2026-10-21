@@ -38046,3 +38046,37 @@ agent (job off): vault_report on an entry with a pending report -> "Entry src-1c
 ```
 
 `vault_reports.prepare` (`hub/hub/vault_reports.py:159-161`) words its refusals bare. The distillation doors add "Enable it on the Manager page." / "Choose one on the Manager page." (`hub/hub/distillation.py:225,229`). `vault_spec_check.prepare` has the same bare pair (`hub/hub/vault_spec_check.py:267-269`; read in code, not driven today). `vault.add_report`'s duplicate refusal (`hub/hub/vault.py:1652-1655`) says "it is being looked into" whatever the job's state; with the job off nothing will look into it, and the agent cannot tell. **Expected:** both prepare functions end with the Manager page's way out, as distillation does. The duplicate refusal says the report is pending and, when the job is off or has no runner, that it waits for the operator. **Tests:** `hub/tests/test_vault_reports.py`: the job-off and no-runner 409 details contain "Manager page"; the same file: a duplicate filed with the job off does not say "being looked into". Both fail today.
+
+## F844 (B) -- a conversation whose agent is busy in another conversation reads as its own live turn: "asker is responding…", a `running` chip and **Stop turn**, which stops the other conversation's run (here, one waiting on the operator's own question)
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8152, profile q1021, Chromium against the served bundle, `scripts/drive/s1021_q_ui.py live|stopb`).
+**Source:** drive
+**Theme:** Conversations & composer
+**Ready:** yes -- driven twice with real Haiku turns.
+**Tier:** 0
+
+Agent `asker` (`claude-haiku-4-5-20251001`). Conversation B (`conv-dcf733acc50f`) had one finished turn. A fresh turn in A (`conv-c328e0e052d5`, `run-1d1f9326627c`) called `ask_user` ("Which colour for the border?", wait 120 s) and was blocked on it. The operator opened B:
+
+```
+B header: asker  [running]  <tokens>  ...  [Stop turn]          (screenshot testbed/ui-judge/s1021-q-stopb/101510/B_stop_before.png)
+B composer placeholder: "asker is responding…"
+B, after typing a message (run live phase): "Queued — agent is already running"   (s1021-q-live/101133/B_while_A_waits_after.png)
+press Stop turn in B -> POST /projects/{p}/agent/asker/stop -> A's run: status 'stopped'; A's question q-78be2ced7918 left open, asker_waiting false
+B afterwards: chip 'idle', nothing saying which conversation's turn was stopped
+```
+
+Nothing in B says the turn is in another conversation, or that it is waiting on the operator's own answer there; the B message waited in the queue for as long as A's question did (up to the question's timeout). Cause: `AgentOutputPanel` takes `isRunning = agent.status === 'running'` (`hub/ui/src/components/agents/AgentOutputPanel.tsx:384`), the agent's state, not the conversation's, and feeds it to the chip, the composer placeholder (`Composer.tsx:316`) and the Stop control (`ConversationControls.tsx:91`). `handleStop` (`AgentOutputPanel.tsx:878-887`) posts `POST /agent/{agent}/stop`, which stops the agent's newest running run whatever its conversation (`hub/hub/api/v1/agent_trigger.py:2547-2553`).
+
+**Expected:** in a conversation that is not the one the live run belongs to, the header says the agent is busy in another conversation (named, linked) and, when that run waits on a question, says so ("waiting on your answer in <conversation>"); the placeholder says the message will queue; Stop turn is either absent there or names the conversation it stops. **Tests:** a UI test beside `hub/ui/src/__tests__/questionTrayConversation.test.tsx`: with the agent `running` on a run whose `conversation_id` is A, rendering conversation B shows no "Stop turn" (or one labelled with A) and no "is responding" placeholder; fails today. Seam: Conversations & composer x Runs x Questions.
+
+## F845 (C) -- in its own conversation, a question nobody waits on still says "Pick one, or write your own answer below." with the composer placeholder "Answer asker…", but typed text is now sent as a plain message and the question stays open
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8152, Chromium against the served bundle, `scripts/drive/s1021_q_ui.py stale`). The residue F804's own fix note named ("still renders as the composer's placeholder owner").
+**Source:** drive
+**Theme:** Questions
+**Ready:** yes
+**Tier:** 0
+
+A fresh Haiku turn in C (`conv-0d3fea18114c`) asked `q-59bfc787766e` ("Which colour for the footer?", wait 30 s); nobody answered; the run ended ("No answer came within the timeout."); the route lists it `asker_waiting: false`. In C the card shows the "no longer waiting" chip **and** "Pick one, or write your own answer below.", and the placeholder reads "Answer asker…" (screenshot `testbed/ui-judge/s1021-q-stale/101335/C_own_stale_after.png`). Typing "Reply with the single word gamma." and Send started `run-eb20350b5343` in C with that bare text (entry `entry-d54f17a114d3`) and left the question `answered 0`. That is F804's intended behaviour (`AgentOutputPanel.tsx:1049`: typed text answers only while `asker_waiting !== false`), but the screen still promises the opposite: an operator who types "green" as a late answer sends the agent a bare "green" with no question attached, and the question stays in the Questions list as unanswered. Sources: placeholder `AgentOutputPanel.tsx:1416` (`pendingQuestion ? 'Answer …'`), hint `AgentQuestionCard.tsx:187-188`, though the card already computes `nobodyWaiting` (`AgentQuestionCard.tsx:78`).
+
+**Expected:** when `asker_waiting === false`, the hint reads "Pick one to answer it; anything you type below is sent as a new message." and the placeholder is the ordinary "Message asker…". **Test:** `hub/ui/src/__tests__/questionTrayConversation.test.tsx`: a stale question in the conversation on screen renders neither "write your own answer below" nor an "Answer" placeholder; fails today. Seam: Questions x Conversations & composer.
