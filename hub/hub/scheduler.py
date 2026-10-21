@@ -1375,7 +1375,11 @@ async def _agents_a_loop_may_staff(session: AsyncSession, loop: Loop) -> "list[s
     A single-agent project still reaches the general refusal with no branch of its own.
 
     A loop that declares a specification document is a flow (`agent-flows:13`, design D7) and
-    draws the pool unfiltered: flow width is unaffected by this function existing.
+    draws the project's pool, **less the agents its document names to judge work** (F767): the
+    ladder will not substitute for a named reviewer, and an agent that built a task is excluded
+    from reviewing it, so handing the reviewer fresh work made that task unreviewable by
+    construction. The reviewer is withheld only while somebody else could take the work -- a
+    pool that would shrink to nothing keeps them, since a flow with no builder is not a flow.
 
     *Why not a parameter on `_agents_that_are_free` instead:* that function answers a question
     about a **project** and knows nothing about loops (its own docstring, design D5); filtering
@@ -1383,7 +1387,18 @@ async def _agents_a_loop_may_staff(session: AsyncSession, loop: Loop) -> "list[s
     """
     if loop.spec_document_id is None:
         return []
-    return await _agents_that_are_free(session, loop.project_id)
+    from . import review_turn
+
+    free = await _agents_that_are_free(session, loop.project_id)
+    judges = await review_turn.named_reviewers(session, loop.project_id, loop.spec_document_id)
+    if not judges:
+        return free
+    # Somebody besides a judge must be able to build, now or later, or withholding them strands
+    # the flow: judged against the roster, not the free list, so a busy builder is waited for.
+    roster = await _roster_availability(session, loop.project_id)
+    if not any(record.has_runner and record.name not in judges for record in roster):
+        return free
+    return [name for name in free if name not in judges]
 
 
 #: Design D2/D3's rung-3 prefix (task 2.3, R8) -- "reviewer", not the pre-REV "nobody is free.",

@@ -23,7 +23,7 @@ import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -155,6 +155,48 @@ async def resolve_declared_reviewer(
     return ReviewerResolution(declared=declared, agent=declared)
 
 
+async def _document_payload(
+    session: AsyncSession, project_id: str, document_id: str
+) -> Optional[dict]:
+    """The payload of the stored document *document_id*, or `None` when it cannot be read.
+
+    A gone document, a moved project directory, a bad path and a file that is not a payload are all
+    ordinary states, none of them worth an error.
+    """
+    document = await session.get(SpecDocument, document_id)
+    if document is None:
+        return None
+    try:
+        workspace = await resolve_project_workspace(session, project_id)
+        content = read_document(workspace, document.path)
+    except (ProjectWorkspaceError, SpecPathError, OSError):
+        # Named rather than a blanket `except Exception`, which swallowed a `SpecPathError` during
+        # development and turned "this document path is invalid" into "no reviewer was declared".
+        # A declaration that cannot be read is reported as absent; a bug here should still surface.
+        return None
+    if content is None:
+        return None
+    payload = parse_stored(content)
+    return payload if isinstance(payload, dict) else None
+
+
+async def named_reviewers(session: AsyncSession, project_id: str, document_id: str) -> Set[str]:
+    """Every agent a flow's document names to judge work: each task's `reviewer`, and the
+    delivery's `reviewer` and `tester` (F767). The scheduler withholds these from fresh work, since
+    the ladder will not substitute for a named reviewer and an agent that built a task is excluded
+    from reviewing it."""
+    payload = await _document_payload(session, project_id, document_id)
+    if payload is None:
+        return set()
+    names = [
+        entry.get("reviewer") for entry in payload.get("tasks") or [] if isinstance(entry, dict)
+    ]
+    delivery = payload.get("delivery")
+    if isinstance(delivery, dict):
+        names += [delivery.get("reviewer"), delivery.get("tester")]
+    return {name for name in map(_name, names) if name}
+
+
 async def _declared_reviewer_name(
     session: AsyncSession, task: Task
 ) -> Tuple[Optional[str], Optional[str]]:
@@ -168,22 +210,8 @@ async def _declared_reviewer_name(
     nobody: Tuple[Optional[str], Optional[str]] = (None, None)
     if not task.spec_document_id or not task.spec_task_key:
         return nobody
-    document = await session.get(SpecDocument, task.spec_document_id)
-    if document is None:
-        return nobody
-
-    try:
-        workspace = await resolve_project_workspace(session, task.project_id)
-        content = read_document(workspace, document.path)
-    except (ProjectWorkspaceError, SpecPathError, OSError):
-        # Named rather than a blanket `except Exception`, which swallowed a `SpecPathError` during
-        # development and turned "this document path is invalid" into "no reviewer was declared".
-        # A declaration that cannot be read is reported as absent; a bug here should still surface.
-        return nobody
-    if content is None:
-        return nobody
-    payload = parse_stored(content)
-    if not isinstance(payload, dict):
+    payload = await _document_payload(session, task.project_id, task.spec_document_id)
+    if payload is None:
         return nobody
 
     for entry in payload.get("tasks") or []:
