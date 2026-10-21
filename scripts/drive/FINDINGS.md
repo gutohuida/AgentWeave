@@ -38237,3 +38237,71 @@ The old card's per-requirement chips gave a requirement awaiting review a pendin
 **Tier:** 0
 
 `test_no_new_route_without_a_client` warns "routes with no client anywhere dropped to 0 from a ceiling of 21". The drop is not a repair: `n10` finds zero declared routes, in this worktree and in the main checkout alike, so the count is 0 whatever the clients do and the ratchet cannot fail. Expected: `n10` reads the route table (or the test fails, rather than passes, when it reads none). Test: assert the declared-route count is > 0 before ratcheting. Seam: Tooling (surface ratchets) x the Hub route table.
+
+## F852 (B) -- an agent piece that names no commit, recorded in a task checkout before the task's first commit, still shows master's HEAD commit as its work (F761's unmeasured case)
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8155, a real Haiku `builder` turn, Chromium on the served bundle: `scripts/drive/s1021_e_f761.py`, `s1021_e_ui.py`). F761's fix holds for the case it measured (an operator piece on master); this is the case its Status line names as not measured.
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+```
+master: commit dc83446 "sort names (made for FR-1)" -> todo/items.py  return sorted(...)
+POST /agent/trigger builder, task t-total (FR-3), --perm workspace: "do not edit or commit; run total(); record_evidence FR-3, no commit, no locator"
+  builder (aw-tool record_evidence) -> ev-841c7f0fb485 awaiting, "recorded on the current branch agentweave/task/task-83948495b82c, commit dc83446d"
+evidence_footprints: commit_sha dc83446d.., branch agentweave/task/task-83948495b82c, commit_named 0, reachable_from_main 1, watched_from []
+GET /spec/evidence/ev-841c7f0fb485/diff -> 200 files [todo/items.py M "-    return [n for n, _ in ITEMS] / +    return sorted(n for n, _ in ITEMS)"],
+                                           base e6038937 (dc83446^), reason null
+Evidence view (Chromium), the FR-3 piece opened: "dc83446d on agentweave/task/task-83948495b82c  todo/items.py modified +1-1 ... return sorted(...)"
+```
+
+The piece's task checkout was created at master's tip and has no commit of its own, so the footprint's commit is master's HEAD, which is FR-1's sort change. The guard F761 added (`requirement_evidence.work_diff`, `hub/hub/requirement_evidence.py:862`) fires only when `unnamed_branch == main`; here the branch is the task's, so `_line_of_work_base` finds the commit already on main and falls back to `commit^` (`:840`), and the Evidence view presents an unrelated requirement's change as this piece's work. The footprint already stores what is needed: `commit_named` is 0 and `reachable_from_main` was 1 at recording. **Expected:** a piece that named no commit, whose footprint commit was already on the main line when it was recorded, answers no files and the F761 reason (naming the checkout's commit and branch), whichever branch it was recorded on. Check that an agent re-stamp, which moves the footprint to the agent's own later commit, also clears or recomputes `reachable_from_main`, so a re-stamped piece still diffs its real work. **Test:** beside F761's in `hub/tests/test_evidence_carries_what_it_takes_to_judge_it.py`: create a task branch at main's tip, record an unnamed piece with the checkout there, and read the diff, which should have no files and a reason (fails today: it answers main's HEAD patch).
+
+## F853 (D) -- after a criterion-only change, the piece labels still say "earlier wording" while the story, the decision and the refusal say the criteria changed
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8155, Chromium: `scripts/drive/s1021_e_f833b.py`, `s1021_e_ui.py`). Residue of F833 (whose fix holds: the revision reads `change: criteria`, the story says "You changed its acceptance criteria ... The statement is unchanged", and the 409 says "recorded before the acceptance criteria of FR-3 changed (its statement is unchanged)").
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes
+**Tier:** 0
+
+```
+reopen, change only c-total.then, re-approve -> GET /spec/requirements/FR-3 revisions [created, {classification: reworded, change: criteria}]
+FR-3 story (Chromium): "You changed its acceptance criteria ... Evidence  1 accepted  1 for an earlier wording ... total() printed 6  rejected · earlier wording"
+Evidence view row: "total() printed 6  rejected · earlier wording ... Rejected by you — earlier criteria"
+```
+
+One row says "earlier wording" and "earlier criteria" side by side. The labels come from `EvidenceBrowser.tsx:118` ("· earlier wording", and its title at `:115`) and `RequirementStory.tsx:262` ("for an earlier wording"), which read only `for_current_wording`. **Expected:** where the newest revision's `change` is `criteria`, the label reads "earlier criteria" (or a neutral "earlier version", as the story's own sentence puts it), in the chip, the row and the count. **Test:** `requirementStory.test.tsx` and the EvidenceBrowser test: a requirement whose last revision is `change: criteria` renders no "earlier wording".
+
+## F854 (D) -- the coverage bar shows "<sha> on" with nothing after it when a piece's line of work is unknown
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8155, Chromium: `scripts/drive/s1021_e_ui.py`, shot `03_bar_pieces_FR-3.png`).
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes
+**Tier:** 0
+
+```
+POST /spec/evidence {identifier: FR-3, commit: dc83446 (master's tip), locator: todo/total.py} -> ev-aae23fc840ce accepted
+evidence_footprints.branch = ''   (master, builder's task branch and its agent branch all point at dc83446)
+coverage bar, Evidence (2) on FR-3: "total() printed 6 as an int — operator · todo/total.py · dc83446d5508 on · accepted by operator"
+```
+
+`line_of_work` (`hub/hub/requirement_evidence.py:1049-1069`) answers `""` when several branches point at the commit, and says so in its docstring: "`""` is the only spelling of 'no known line of work'". `EvidencePieces.tsx:69` falls back with `?? 'no branch'`, which does not catch an empty string. A fresh task checkout at master's tip is enough to cause it, so it is common. **Expected:** the empty branch renders as no branch: drop " on ..." or say "on no known branch". Secondary: when the main branch is one of several tips, `line_of_work` could prefer it, since the commit is on the main line. **Test:** the EvidencePieces test: a footprint with `branch: ''` renders no trailing " on".
+
+## F855 (D) -- the document's health line counts stale, drifting, awaiting-review and changed-unreviewed requirements as "in progress"
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8155, Chromium on the ui-finesse bundle: `scripts/drive/s1021_e_ui.py`, `testbed/probe_v1021.py`).
+**Source:** drive
+**Theme:** Requirements & evidence
+**Ready:** yes
+**Tier:** 0
+
+```
+coverage: FR-1 stale (its only evidence is for an earlier wording, rejected), FR-2 verified, FR-3 drifting
+health line (Chromium): "1/3 verified · 2 in progress | 1 drifted | 0/3 tasks decided"
+menu: "FR-1 Stale  FR-2 Verified on master  FR-3 Drifting on master"
+```
+
+`SpecHealthLine.tsx:66-68` computes `working = coverage.length - verified - rejected` and labels it "in progress". Nobody is working on FR-1 (it needs new evidence) or FR-3 (it needs a drift answer), and the line never says "stale" anywhere, so the operator learns it only by opening the menu. **Expected:** the label counts states that need the operator apart from work underway, e.g. "1/3 verified · 1 stale · 1 drifting", or "2 need you" for stale / drifting / evidence awaiting review / changed-unreviewed, keeping "in progress" for `in_progress` and `not_started`. **Test:** the SpecHealthLine test: coverage [verified, stale, drifting] renders no "2 in progress".
