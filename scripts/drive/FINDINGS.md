@@ -36878,7 +36878,7 @@ Expected: a "Roadmap slice" control on a change document's page, or "Link a chan
 
 ## F767 (B) -- a flow hands fresh work to its own named reviewer, and the task that reviewer builds can then never be reviewed: one event, and nothing on the loop or the task
 
-**Status:** open 2026-10-19. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns).
+**Status:** fixed 2026-10-21 night iteration 17, 997519b (Tier 0). `scheduler._agents_a_loop_may_staff` withholds the agents a flow's document names to judge work (`review_turn.named_reviewers`: each task's `reviewer`, `delivery.reviewer`, `delivery.tester`) from fresh work, unless no other agent with a runner exists on the roster (a pool that would empty keeps them). Tests `hub/tests/test_a_flow_does_not_hand_fresh_work_to_its_named_reviewer.py` (reviewer and tester cases failed before; control: no named reviewer still runs two builds; sole-agent flow still runs). Drive: scratch Hub :8154 (profile f767), the finding's own shape (flow, builder + rev Haiku, two ready tasks, `rev` named reviewer, approve_anyway, `POST /jobs/{id}/run`): one build, on builder (`scripts/drive/s1021_f767_drive.py`). Not done: the second half of the finding's expectation (a reviewer that must build says on the task that it waits on the operator) is F768's story fix. Found in the tasks sweep (`scripts/drive/s1019_tasks.py`, scratch Hub :8170, real Haiku turns). Original: open 2026-10-19.
 **Source:** drive
 **Theme:** Flows & review
 **Ready:** yes -- repro below.
