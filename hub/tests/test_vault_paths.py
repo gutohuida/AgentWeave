@@ -374,3 +374,62 @@ async def test_a_folder_that_cannot_be_listed_is_refused_by_name_and_the_rest_is
     assert top.status_code == 200, top.text
     [only] = top.json()["results"]
     assert only["status"] == "refused" and "could not list" in only["reason"]
+
+
+def _link_dir(link: Path, target: Path) -> None:
+    """A directory link: a junction on Windows (no privilege needed), a symlink elsewhere."""
+    import os
+    import subprocess
+    import sys
+
+    if sys.platform == "win32":
+        done = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True
+        )
+        if done.returncode != 0:
+            pytest.skip("cannot create a junction here")
+    else:
+        os.symlink(target, link, target_is_directory=True)
+
+
+def test_a_folder_holding_a_link_to_itself_yields_each_file_once(tmp_path) -> None:
+    """F799: the walk followed `back -> loop` until the path length ended it, so two files were
+    128 results, each counting toward the batch limit."""
+    from hub import vault_intake
+
+    loop = tmp_path / "loop"
+    loop.mkdir()
+    (loop / "a.md").write_bytes(b"# A\n\nOne.\n")
+    (loop / "b.md").write_bytes(b"# B\n\nTwo.\n")
+    _link_dir(loop / "back", loop)
+
+    batch = vault_intake.expand([str(loop)], vault_intake.Reach())
+    reached = [item.path for item in batch.items if item.path is not None]
+    assert sorted(p.name for p in reached) == ["a.md", "b.md"]
+
+
+def test_a_folder_past_the_limit_is_refused_without_walking_all_of_it(
+    tmp_path, monkeypatch
+) -> None:
+    """F799: the 200-file cap was compared only after the whole folder was walked (27,135 files,
+    14 s). The walk stops at the first file past the limit."""
+    from hub import vault_intake
+
+    big = tmp_path / "big"
+    big.mkdir()
+    for n in range(300):
+        (big / f"f{n:03}.md").write_bytes(b"# F\n\nx\n")
+
+    real_is_file = Path.is_file
+    looked_at: list = []
+
+    def is_file(self):
+        looked_at.append(self.name)
+        return real_is_file(self)
+
+    monkeypatch.setattr(Path, "is_file", is_file)
+    monkeypatch.setattr(vault_intake, "MAX_BATCH_FILES", 5)
+    with pytest.raises(vault_intake.IntakeError) as raised:
+        vault_intake.expand([str(big)], vault_intake.Reach())
+    assert "5" in str(raised.value)
+    assert len(looked_at) <= 5 + 1
