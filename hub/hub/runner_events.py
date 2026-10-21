@@ -123,8 +123,13 @@ def _redaction_for(match: "re.Match[str]") -> str:
 #: The secrets an agent's prose can carry, by shape (F602): the Hub's own keys and run tokens, an
 #: `sk-` provider key, and the value of a credential-named field. Prose gets these and nothing
 #: else -- not `_SECRET_VALUE_RE`'s high-entropy catch-all, which would eat the commit SHAs, paths
-#: and identifiers agents write in replies.
-_TEXT_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_])(?:aw_live_|aw_run_|sk-)[A-Za-z0-9_=-]+")
+#: and identifiers agents write in replies. GitHub's token prefixes are as unambiguous as `sk-`
+#: (F856: a `ghp_` token reached the trace and its export verbatim beside a redacted `sk-` key);
+#: their length floors keep a short word such as `gho_name` out.
+_TEXT_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:(?:aw_live_|aw_run_|sk-)[A-Za-z0-9_=-]+"
+    r"|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})"
+)
 _TEXT_FIELD_RE = re.compile(
     r"(?i)(?<![A-Za-z0-9_])"
     r"(?P<name>api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|password)"

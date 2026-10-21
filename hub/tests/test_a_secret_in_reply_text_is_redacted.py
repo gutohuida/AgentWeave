@@ -18,6 +18,10 @@ from hub.runner_events import redact_text_secrets, text_event, thinking_event
 LIVE = "aw_live_" + "Fake0123456789abcdefghijABCDEFGH"
 RUN = "aw_run_" + "fakeRunToken0123456789"
 SK = "sk-" + "fakeOpenAI0123456789abcd"
+#: F856: GitHub's prefixes, as unambiguous as `sk-` (`a-github-token-in-prose-is-redacted`).
+GHP = "ghp_" + "Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2"
+PAT = "github_pat_" + "11FAKE0123456789abcdefgh_" + "Fake0123456789" * 4 + "abc"
+SHA = "3b3aff3c6d5e8f9a0b1c2d3e4f5a6b7c8d9e0f1a"
 
 
 @pytest.fixture(autouse=True)
@@ -37,6 +41,9 @@ def _clean():
         ('{"api_key": "hunter2-fake"}', "hunter2-fake"),
         ("PASSWORD: correct-horse", "correct-horse"),
         ("access_token='tok-abcdef'", "tok-abcdef"),
+        (f"echo token={GHP}", GHP[4:]),
+        (f"ci: {PAT}", PAT[11:]),
+        *[(f"{p}_{GHP[4:]} done", GHP[4:]) for p in ("gho", "ghu", "ghs", "ghr")],
     ],
 )
 def test_a_named_secret_in_prose_is_redacted(text, gone):
@@ -53,11 +60,19 @@ def test_a_named_secret_in_prose_is_redacted(text, gone):
         "The token budget: 500 tokens left; the password policy is in SECURITY.md.",
         "AbcdefghijklmnopqrstuvwxyzABCDEFGHIJ0123456789 is a long identifier",
         "Ask for the password: then wait.",
+        f"nightghp_{GHP[4:]} is not a token at a word start",
+        "a short gho_name and github_pat_x are words",
     ],
 )
 def test_prose_without_a_named_secret_is_kept(text):
     """Not the tool events' high-entropy catch-all: replies keep SHAs, paths and identifiers."""
     assert redact_text_secrets(text) == text
+
+
+def test_a_github_token_is_redacted_while_the_sha_beside_it_is_kept():
+    """F856: the drive's shape -- a SHA and a `ghp_` token in one line, an `sk-` key beside."""
+    redacted = redact_text_secrets(f"pushed {SHA} with {GHP} and {SK}")
+    assert redacted == f"pushed {SHA} with <redacted> and <redacted>"
 
 
 def test_a_payload_field_named_for_a_credential_is_redacted():
@@ -80,6 +95,12 @@ def test_a_key_split_across_two_text_events_is_redacted_with_nothing_registered(
     assert LIVE[14:] not in second.content
     assert second.content.startswith("<redacted>")
     assert second.payload["text"] == second.content
+
+
+def test_a_github_token_split_across_two_text_events_is_redacted():
+    _first, second = _stream("run-602", text_event(f"token {GHP[:10]}"), text_event(GHP[10:]))
+    assert GHP[10:] not in second.content
+    assert second.content.startswith("<redacted>")
 
 
 def test_a_field_value_split_at_its_separator_is_redacted():

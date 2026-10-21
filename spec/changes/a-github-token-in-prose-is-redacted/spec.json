@@ -1,0 +1,123 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on this code, a Haiku agent, and a committed DEPLOY-NOTES.txt holding a fake ghp_ token, a fake github_pat_ token and a 40-hex SHA",
+      "how_to_check": "py -3.11 scripts/drive/d1022_f856_github_token.py <project> (written first: 6 FAIL on a8d1da3, run 2026-10-22)",
+      "key": "drive",
+      "requirement": "github-tokens",
+      "then": "neither token is in the text rows, either run's trace, the export or the route's row; the SHA is in all of them",
+      "when": "the agent quotes the file, a second turn's operator message carries the ghp_ token beside an sk- key, and the operator posts the ghp_ token to the output route"
+    },
+    {
+      "checked_by": "agent",
+      "given": "redact_text_secrets and scrub_stream",
+      "how_to_check": "pytest hub/tests/test_a_secret_in_reply_text_is_redacted.py",
+      "key": "unit",
+      "requirement": "github-tokens",
+      "then": "each is <redacted>",
+      "when": "prose holds each of the six prefixes, or one split across two text events"
+    },
+    {
+      "checked_by": "agent",
+      "given": "prose naming a SHA beside a ghp_ token, and a word like xghp_... or nightghp_...",
+      "how_to_check": "pytest hub/tests/test_a_secret_in_reply_text_is_redacted.py",
+      "key": "kept",
+      "requirement": "prose-kept",
+      "then": "the SHA and the inner-word text are unchanged",
+      "when": "it is redacted"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1740d99459984409c5e07883a6d806b515df691e3d45d63a1ad7d265b823b5bd",
+      "FR-2": "bc5bdcea1f98659999809fdc6e1c6799c21dd516487e3c29fe8b15833cbb0ecb"
+    },
+    "high_water": 2,
+    "requirements": {
+      "github-tokens": "FR-1",
+      "prose-kept": "FR-2"
+    },
+    "retired": {}
+  },
+  "design": "Tier 2 (secrets). No migration, no Hub-restart hazard beyond the code change itself. Rollback: revert the one regex.\nD1. Two alternatives added to `_TEXT_TOKEN_RE`, behind the same word-start lookbehind; the length floors keep short words like gho_x out. Every reader (text_event, thinking_event, scrub_stream via text_secret_spans, output_recording, traces._scrub) already goes through it, so nothing else changes.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "The prose floor `runner_events.redact_text_secrets` names only aw_live_, aw_run_ and sk- tokens plus credential-named fields (`_TEXT_TOKEN_RE`, hub/hub/runner_events.py:127). Driven 2026-10-21 (sweep-traces-sweep) and again 2026-10-22 by scripts/drive/d1022_f856_github_token.py: a ghp_ token in an operator message and in an agent reply was stored verbatim in the text row, the run's trace (aw.queue.content, gen_ai.input.messages, gen_ai.output.messages) and GET /traces/export, while an sk- key in the same string read <redacted>. With export enabled the trace pushes it to an external OTLP collector.",
+  "requirements": [
+    {
+      "key": "github-tokens",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "They are as unambiguous as sk- and the credential an operator of a git-centred tool is most likely to paste.",
+      "statement": "A GitHub token in prose -- gh followed by one of p, o, u, s, r, an underscore and at least 36 letters or digits, or github_pat_ followed by at least 22 letters, digits or underscores -- starting at a word start, MUST be replaced whole with <redacted> wherever the named prose patterns apply: text and thinking rows, a token split across two events, the operator output route, and a run's trace and its export."
+    },
+    {
+      "key": "prose-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F602: replies name commit SHAs, paths and identifiers.",
+      "statement": "A 40-character commit SHA, a path, and a word that only contains one of those prefixes inside it (not at a word start), MUST be stored as written."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "the named prose patterns (`_TEXT_TOKEN_RE`), and so every reader of them: text and thinking events, the stream join, POST /agents/{name}/output, run traces and their export"
+    ],
+    "non_goals": [
+      "the tool events' redactor (its catch-all already eats a token's 36-character body)",
+      "already-stored rows (no backfill)",
+      "other vendors' prefixes"
+    ]
+  },
+  "summary": "GitHub's token prefixes (ghp_, gho_, ghu_, ghs_, ghr_, github_pat_) join aw_live_, aw_run_ and sk- among the named secret patterns that prose gets, so an operator message, an agent reply, a run's trace and its export store <redacted> for them, while commit SHAs and paths stay as written (F856).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1022_f856_github_token.py",
+      "files": [
+        "scripts/drive/d1022_f856_github_token.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "github-tokens",
+        "prose-kept"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "runner_events._TEXT_TOKEN_RE; tests",
+      "files": [
+        "hub/hub/runner_events.py",
+        "hub/tests/test_a_secret_in_reply_text_is_redacted.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "github-tokens",
+        "prose-kept"
+      ],
+      "reviewer": null,
+      "title": "GitHub prefixes in the prose patterns"
+    }
+  ],
+  "title": "A GitHub token in prose is redacted"
+}

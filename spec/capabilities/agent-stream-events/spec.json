@@ -841,6 +841,33 @@
       "requirement": "stop-closes-the-tool-card-it-interrupted-ended-call-reads-ended",
       "then": "the card reads interrupted both live and after the reload",
       "when": "Stop is pressed during a long shell command, then the page is reloaded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on this code, a Haiku agent, and a committed DEPLOY-NOTES.txt holding a fake ghp_ token, a fake github_pat_ token and a 40-hex SHA",
+      "how_to_check": "py -3.11 scripts/drive/d1022_f856_github_token.py <project> (written first: 6 FAIL on a8d1da3, run 2026-10-22)",
+      "key": "a-github-token-in-prose-is-redacted-drive",
+      "requirement": "a-github-token-in-prose-is-redacted-github-tokens",
+      "then": "neither token is in the text rows, either run's trace, the export or the route's row; the SHA is in all of them",
+      "when": "the agent quotes the file, a second turn's operator message carries the ghp_ token beside an sk- key, and the operator posts the ghp_ token to the output route"
+    },
+    {
+      "checked_by": "agent",
+      "given": "redact_text_secrets and scrub_stream",
+      "how_to_check": "pytest hub/tests/test_a_secret_in_reply_text_is_redacted.py",
+      "key": "a-github-token-in-prose-is-redacted-unit",
+      "requirement": "a-github-token-in-prose-is-redacted-github-tokens",
+      "then": "each is <redacted>",
+      "when": "prose holds each of the six prefixes, or one split across two text events"
+    },
+    {
+      "checked_by": "agent",
+      "given": "prose naming a SHA beside a ghp_ token, and a word like xghp_... or nightghp_...",
+      "how_to_check": "pytest hub/tests/test_a_secret_in_reply_text_is_redacted.py",
+      "key": "a-github-token-in-prose-is-redacted-kept",
+      "requirement": "a-github-token-in-prose-is-redacted-prose-kept",
+      "then": "the SHA and the inner-word text are unchanged",
+      "when": "it is redacted"
     }
   ],
   "algorithms": [],
@@ -887,11 +914,15 @@
       "FR-58": "65f447fe46d89821482167a85c3bd8cc536c62125dcb0f7341dc7dfc0333c6fe",
       "FR-59": "8eca1d66be909e66c59ab09b00b485df383ace8e48ee1cef0a6367a6202f9c76",
       "FR-60": "dd8ba7911a7160efd714ac10ffacfef351d63c81f48df86793e9f2bad68f69a4",
-      "FR-61": "4ed4018830e85e3878193b7b061d00f7c4830d7dc0c91327c612478a5a50482e"
+      "FR-61": "4ed4018830e85e3878193b7b061d00f7c4830d7dc0c91327c612478a5a50482e",
+      "FR-62": "1740d99459984409c5e07883a6d806b515df691e3d45d63a1ad7d265b823b5bd",
+      "FR-63": "bc5bdcea1f98659999809fdc6e1c6799c21dd516487e3c29fe8b15833cbb0ecb"
     },
-    "high_water": 61,
+    "high_water": 63,
     "requirements": {
       "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st": "FR-50",
+      "a-github-token-in-prose-is-redacted-github-tokens": "FR-62",
+      "a-github-token-in-prose-is-redacted-prose-kept": "FR-63",
       "a-resumed-copilot-session-s-history-is-not-rendered-again": "FR-48",
       "a-run-s-registered-value-is-removed-even-when-its-events-spl": "FR-49",
       "a-run-s-terminal-status-line-is-persisted": "FR-42",
@@ -1219,6 +1250,20 @@
       "party": null,
       "rationale": "Covers runs written before this change, runs reconciled after a Hub death, and endings with no status line.",
       "statement": "The timeline MUST present a tool call as interrupted when its result carries status \"interrupted\", or when no result for it exists in its turn and its run's facts report stopped, interrupted or failed; as no result when none exists and the run completed; as awaiting result only when it has no result and its run is not known to have ended; and MUST NOT count an interrupted call as a failure."
+    },
+    {
+      "key": "a-github-token-in-prose-is-redacted-github-tokens",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "They are as unambiguous as sk- and the credential an operator of a git-centred tool is most likely to paste.",
+      "statement": "A GitHub token in prose -- gh followed by one of p, o, u, s, r, an underscore and at least 36 letters or digits, or github_pat_ followed by at least 22 letters, digits or underscores -- starting at a word start, MUST be replaced whole with <redacted> wherever the named prose patterns apply: text and thinking rows, a token split across two events, the operator output route, and a run's trace and its export."
+    },
+    {
+      "key": "a-github-token-in-prose-is-redacted-prose-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F602: replies name commit SHAs, paths and identifiers.",
+      "statement": "A 40-character commit SHA, a path, and a word that only contains one of those prefixes inside it (not at a word start), MUST be stored as written."
     }
   ],
   "schema_version": 1,

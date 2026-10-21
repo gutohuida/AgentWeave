@@ -38308,7 +38308,7 @@ menu: "FR-1 Stale  FR-2 Verified on master  FR-3 Drifting on master"
 
 ## F856 (C) -- a GitHub token (`ghp_...`) in an operator message or an agent reply is stored and exported verbatim in the run's trace, while an `sk-` key beside it in the same string is redacted
 
-**Status:** open 2026-10-21. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8156, `scripts/drive/s1021_tr_traces.py redact`, `proj-65bd45d1fb38`, run-19d5dfe8bbb5, one real Haiku 4.5 turn).
+**Status:** fixed 2026-10-22 (night window, Tier 2): `_TEXT_TOKEN_RE` names `gh[pousr]_` + 36 and `github_pat_` + 22 at a word start. Change `a-github-token-in-prose-is-redacted` (spdoc-15471a5288ee, approve_anyway, folded into `agent-stream-events`, archived). Acceptance drive `scripts/drive/d1022_f856_github_token.py`: 6 FAIL before, 19/19 PASS after on scratch :8157. Rows stored before the fix keep their token (no backfill). Was: open 2026-10-21. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8156, `scripts/drive/s1021_tr_traces.py redact`, `proj-65bd45d1fb38`, run-19d5dfe8bbb5, one real Haiku 4.5 turn).
 **Source:** drive
 **Theme:** Traces
 **Ready:** yes

@@ -8,18 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T07:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-10-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F856-spec",
-    "next_action": "Do queue item F856-spec (read its finding in scripts/drive/FINDINGS.md, test-first, fix, drive, set Status). Keep `current` equal to the item id.",
+    "current": "F835-impl",
+    "next_action": "Do queue item F835-impl (read F835, F836, F838 in scripts/drive/FINDINGS.md, test-first, fix, drive, set Status). Keep `current` equal to the item id.",
     "queue": [
         {
             "id": "F856-spec",
-            "status": "open",
+            "status": "done",
             "title": "F856 (C,T2 secrets): ghp_ token in operator message / agent reply not redacted",
-            "detail": "Finding text and repro in scripts/drive/FINDINGS.md (grep '^#* F<n>'). Test-first at the seam the finding names, fix, drive, set Status line. Tier 2: short app change on :8010, acceptance drive failing first; test asserts refusal and allow.",
+            "detail": "Done iteration 9: regex + change folded into agent-stream-events; drive 19/19.",
             "model": "opus"
         },
         {
