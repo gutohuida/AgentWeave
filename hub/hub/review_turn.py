@@ -312,6 +312,7 @@ async def verdict_evidence_sentence(
         part
         for part in (
             await _dependencies_sentence(session, task),
+            await _other_requirements_sentence(session, task),
             _rejected_sentence(await rejected_identifiers(session, task)),
             await _checks_sentence(session, task),
         )
@@ -409,6 +410,57 @@ async def _dependencies_sentence(session: AsyncSession, task: Task) -> Optional[
         f"**This task builds on** {'; '.join(pieces)}. Merged work is on the main branch and "
         "not in this task's diff: judge the change together with it, including tests it wrote "
         "for this task to satisfy."
+    )
+
+
+async def _other_requirements_sentence(session: AsyncSession, task: Task) -> Optional[str]:
+    """F771: which of the document's requirements belong to other tasks. A reviewer that read the
+    whole document sent correct work back twice for the sibling task's requirement. A requirement
+    this task also serves is not another's; None for a task with no document entry or no sibling."""
+    if not task.spec_document_id or not task.spec_task_key:
+        return None
+    payload = await _document_payload(session, task.project_id, task.spec_document_id)
+    if payload is None:
+        return None
+    entries = [e for e in payload.get("tasks") or [] if isinstance(e, dict)]
+    own = next((e for e in entries if e.get("key") == task.spec_task_key), None)
+    if own is None:
+        return None
+    served = {r for r in own.get("requirements") or [] if isinstance(r, str)}
+    siblings = {
+        t.spec_task_key: t
+        for t in (
+            await session.execute(
+                select(Task).where(
+                    Task.project_id == task.project_id,
+                    Task.spec_document_id == task.spec_document_id,
+                    Task.id != task.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    }
+    others: dict = {}
+    for entry in entries:
+        key = entry.get("key")
+        if key == task.spec_task_key:
+            continue
+        sibling = siblings.get(key)
+        who = (
+            f"`{sibling.id}` ({sibling.title})"
+            if sibling is not None
+            else f"`{key}` ({entry.get('title') or 'no title'})"
+        )
+        for requirement in entry.get("requirements") or []:
+            if isinstance(requirement, str) and requirement not in served:
+                others.setdefault(requirement, []).append(who)
+    if not served or not others:
+        return None
+    belongs = "; ".join(f"`{r}`: {', '.join(w)}" for r, w in sorted(others.items()))
+    return (
+        f"**This task serves {', '.join(f'`{r}`' for r in sorted(served))}.** The document's other "
+        f"requirements belong to other tasks ({belongs}): do not send this task back for them."
     )
 
 
