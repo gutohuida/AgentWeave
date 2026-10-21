@@ -37398,7 +37398,7 @@ Expected: changing the checkpoint runner to one whose CLI does not declare the s
 
 ## F808 (C) -- every project with no agents tells the operator to run `agentweave start`, a command the CLI refuses
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
+**Status:** fixed (night iteration 34, Tier 0; commit named in the next commit). The empty roster reads "No agents yet. Agents are added here, in the app." with an Add agent button that opens the dialog for the project (`OverviewPage` `onAddAgent`, wired in `App.tsx`). Test `hub/ui/src/__tests__/overviewEmptyRoster.test.tsx`, failing before. Drive: jsdom with real click events; not re-seen in a browser. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147, Chromium against the served bundle).
 **Source:** drive
 **Theme:** Projects
 **Ready:** yes

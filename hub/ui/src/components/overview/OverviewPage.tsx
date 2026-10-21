@@ -20,6 +20,8 @@ import { hubDate } from '@/lib/hubTime'
 
 interface OverviewPageProps {
   onNavigate: (page: string) => void
+  /** Opens the Add-agent dialog for this project (F808: agents are added in the app). */
+  onAddAgent?: () => void
 }
 
 function AgentHealthCard({ agent, onNavigate }: { agent: AgentSummary; onNavigate: (page: string) => void }) {
@@ -84,7 +86,7 @@ function AgentHealthCard({ agent, onNavigate }: { agent: AgentSummary; onNavigat
   )
 }
 
-export function OverviewPage({ onNavigate }: OverviewPageProps) {
+export function OverviewPage({ onNavigate, onAddAgent }: OverviewPageProps) {
   const { data: agents = [], isLoading: agentsLoading } = useAgents()
   const { data: questions = [] } = useQuestions(false)
   const { data: taskPage } = useTasks()
@@ -178,10 +180,16 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
         ) : (
           <div className="lifted-surface flex flex-col items-center px-6 py-7 text-center">
             <Icon name="smart_toy" size={26} style={{ color: 'var(--text-3)' }} />
-            <h3 className="mt-2 text-[13px] font-semibold" style={{ color: 'var(--text)' }}>No agents connected</h3>
+            <h3 className="mt-2 text-[13px] font-semibold" style={{ color: 'var(--text)' }}>No agents yet</h3>
             <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
-              Run <code className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] px-1.5 py-0.5">agentweave start</code> to connect agents.
+              Agents are added here, in the app.
             </p>
+            {onAddAgent && (
+              <button type="button" className="row-item mt-3" onClick={onAddAgent}>
+                <Icon name="person_add" size={14} />
+                Add agent
+              </button>
+            )}
           </div>
         )}
       </section>
