@@ -32,7 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DRIVE = REPO_ROOT / "scripts" / "drive"
 
 # Measured 2026-09-10. Lower these when the count drops; never raise one.
-CLIENTLESS_ROUTE_CEILING = 21  # 22 -> 21 2026-10-10: F568 retired GET /agents/context (the POST /context-usage one had a CLI client)
+CLIENTLESS_ROUTE_CEILING = 19  # 21 -> 19 2026-10-22: F906, the route table is now read (it read 0 under Starlette 1.x); 22 -> 21 2026-10-10: F568 retired GET /agents/context (the POST /context-usage one had a CLI client)
 UNHANDLED_SITE_CEILING = 76  # 92 -> 76 2026-10-20: ui-finesse applied; the old pages' sites left with their files, and the new screens read their errors (QueryErrorNotice, the settings sections' Retry, job run history); 95 -> 92 2026-10-12: the dead Messages UI subtree is deleted (F260), its three DEAD sites with it; 97 -> 95 2026-10-11: Settings reads its query's error (F197); 100 -> 97 2026-09-23: Logs reads both its errors (F252, F256); so does the resolved-questions list
 # Re-measured 2026-09-22, the one exception to "never raise". The 52 of 2026-09-10 was counted
 # through a table keyed by line number, and by then 5 of its MISREPORT rows already named lines
@@ -78,6 +78,10 @@ def test_no_new_route_without_a_client() -> None:
         rows = n10.route_rows()
     except SystemExit as exc:  # declared_routes() could not import the Hub app
         pytest.skip(f"the Hub route table is not readable here: {exc}")
+    # F906: a count of 0 from a table that was never read is not a repair. The route table came
+    # back empty on Starlette 1.x (`app.routes` holds wrappers, not routes) and the ratchet passed
+    # at 0 for weeks. A readable table that holds no `/api/v1` route fails here rather than skips.
+    assert rows, "the Hub app imported but n10 read no declared /api/v1 route -- nothing measured"
     orphans = n10.clientless_routes(rows)
     _ratchet(len(orphans), CLIENTLESS_ROUTE_CEILING, "routes with no client anywhere")
 

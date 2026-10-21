@@ -104,14 +104,18 @@ METHOD_RX = re.compile(r"method:\s*'(\w+)'")
 
 def declared_routes():
     """Every (method, path) the running app would serve under /api/v1."""
+    # `app.routes` holds `_IncludedRouter` wrappers on Starlette 1.x, with relative paths inside
+    # them, so iterating it finds none of the `/api/v1` routes (F906: the ratchet read 0 for weeks).
+    # `hub/tests/_routing.py` walks either shape and returns full paths.
     code = (
+        "import sys; sys.path.insert(0, 'tests')\n"
         "from hub.main import app\n"
+        "from _routing import iter_api_routes\n"
         "import json\n"
         "rs=[]\n"
-        "for r in app.routes:\n"
-        "    p=getattr(r,'path',None); ms=getattr(r,'methods',None)\n"
-        "    if p and p.startswith('/api/v1'):\n"
-        "        for m in sorted(ms or []):\n"
+        "for p, r in iter_api_routes(app):\n"
+        "    if p.startswith('/api/v1'):\n"
+        "        for m in sorted(r.methods or []):\n"
         "            if m in ('HEAD','OPTIONS'): continue\n"
         "            rs.append([m,p])\n"
         "print(json.dumps(sorted(set(map(tuple,rs)))))"

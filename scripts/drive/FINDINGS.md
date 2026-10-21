@@ -38230,7 +38230,7 @@ The old card's per-requirement chips gave a requirement awaiting review a pendin
 
 ## F906 (B) -- the clientless-route ratchet measures nothing: `n10_route_reachability.py` reads 0 declared `/api/v1` routes
 
-**Status:** open 2026-10-20. Found by the n11 ratchet repair during the ui-finesse apply.
+**Status:** fixed 2026-10-22 (night window, Tier 0). Cause: `app.routes` holds `_IncludedRouter` wrappers with relative paths on Starlette 1.x, so `declared_routes()` found none. It now walks the table with `hub/tests/_routing.py`'s `iter_api_routes` (241 route+method pairs, 19 clientless); `test_no_new_route_without_a_client` asserts the rows are non-empty (failed before), and the ceiling is lowered 21 -> 19 to the real count. Original: open 2026-10-20. Found by the n11 ratchet repair during the ui-finesse apply.
 **Source:** code
 **Theme:** Tooling
 **Ready:** yes
