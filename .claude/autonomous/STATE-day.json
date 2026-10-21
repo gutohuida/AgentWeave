@@ -8,18 +8,84 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T17:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-21-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "plan-review",
-    "next_action": "Do the 'plan-review' queue item per .claude/loops/day-window.md 'The pretask': run the e2e-loop skill's Step 0 plan-against-code inventory, update the SKILL.md checklist (29 rows now), commit SKILL.md alone, log 'PLAN: rows <n> - unreached added <n> - new <n> - gone <n>', then insert sweep-<area>-sweep items (every row in exactly one item, 2-3 rows each) before night-recheck-drive. Drives nothing.",
+    "current": "sweep-tasks-sweep",
+    "next_action": "Do the 'sweep-tasks-sweep' queue item per .claude/loops/day-window.md 'A sweep firing' (time guard first: 16:15 or later -> defer). Read .claude/skills/e2e-loop/SKILL.md in full; drive the new paths named in the item's detail first on a scratch Hub 8110+; file findings Ready+Tier; log SWEPT.",
     "queue": [
         {
             "id": "plan-review",
-            "status": "open",
+            "status": "done",
             "title": "Check the e2e checklist against the code; queue a full sweep",
             "detail": "Playbook 'The pretask'. Checklist has 29 rows today. Insert sweep items (rows with new/unreached paths first, then rows last night's commits touched heavily - drift, tasks/flows, vault, checkpoints, budget - then least recently swept per SWEPT: lines in the last seven day logs) ahead of night-recheck-drive."
+        },
+        {
+            "id": "sweep-tasks-sweep",
+            "status": "open",
+            "title": "Tasks x Dependencies x Worktrees & integration",
+            "detail": "New first: delete a prerequisite -> confirm and task_deleted event name the released tasks (F825); delete discards the clean checkout+branch and names kept work (F828); task drawer TaskIntegrationNote Try again on a failed merge, naming attempt time (F823). Then one representative path per row."
+        },
+        {
+            "id": "sweep-spec-sweep",
+            "status": "open",
+            "title": "Spec documents x Corpus & folding",
+            "detail": "New first: delete a spec document -> page leaves for the home document, SpecDeletedNote says what went (F829); delete discards the document's clean checkout+branch, names kept work (F828). Browse it. Then one path per row (journey, approve-anyway, fold)."
+        },
+        {
+            "id": "sweep-vault-sweep",
+            "status": "open",
+            "title": "Knowledge vault x Manager jobs x CLI & lifecycle",
+            "detail": "New first: POST /vault/reports/{id}/review on a pending report (202) and its refusals (404 unknown; 409 job off / no runner / not pending) plus the Reports-list button (F801). Then vault_add/distil, a manager job with no runner, agentweave vault add / doctor / reset on a throwaway profile (F800, F802 touched)."
+        },
+        {
+            "id": "sweep-questions-sweep",
+            "status": "open",
+            "title": "Questions x Conversations & composer",
+            "detail": "New first: a question open in conversation A, text typed in conversation B is a message there, not an answer (F804). Then ask_user park/answer/timeout, composer @file / workspace paths, live thinking."
+        },
+        {
+            "id": "sweep-checkpoints-sweep",
+            "status": "open",
+            "title": "Checkpoints x Accounting & allowance",
+            "detail": "New first: unarchive a cut-over conversation -> refused naming successor (F816); a failed Checkpoint press leaves the warning (F817); agent message on a spent budget says held (F815); operator turn on spent budget behind another conversation's autonomous head (F814)."
+        },
+        {
+            "id": "sweep-agents-sweep",
+            "status": "open",
+            "title": "Agents x Charters x Inbound queue & messages",
+            "detail": "New first: a name differing only in case refused at creation (F811); session/sync non-object roster refused and the response names what it deleted (F812). Then charters, hop-budget chain, Withdraw/Continue."
+        },
+        {
+            "id": "sweep-evidence-sweep",
+            "status": "open",
+            "title": "Requirements, evidence & coverage x Drift",
+            "detail": "Touched last night: a piece that named no commit, on the main line, answers no files from its diff (F761); a criterion-only change reads as one and the stale refusal names the criteria (F833). Then overturn, evidence view, drift scan."
+        },
+        {
+            "id": "sweep-traces-sweep",
+            "status": "open",
+            "title": "Traces x Runs x Logs, events & SSE",
+            "detail": "Touched last night: a stopped run's trace is not ok, list and drawer say stopped (F792); saving export settings ends old endpoint backoff (F793); Copilot startup timeout names the request (F789, if reachable). Then ledger, stream_gap, redaction."
+        },
+        {
+            "id": "sweep-reach-sweep",
+            "status": "open",
+            "title": "Permissions & sandbox x Capability plane x Agent environment",
+            "detail": "Touched last night: a refusal inside a read-only granted root names the read grant (F794); a refused agent reach save shows the Hub's field-and-message sentence (F795, browse). Then manual approve/deny/expire, allow_agent_jobs grant loop, agent-actions parity."
+        },
+        {
+            "id": "sweep-projects-sweep",
+            "status": "open",
+            "title": "Projects x Runners & models x Keyboard & dialogs",
+            "detail": "Touched last night: folder listing/open/create/relocate off the event loop (F806); switching checkpoint runner clears an undeclared stored model (F807, browse Settings); empty roster offers Add agent (F808). Then runner delete holders, aliases, keyboard-only pass in a browser."
+        },
+        {
+            "id": "sweep-loops-sweep",
+            "status": "open",
+            "title": "Jobs & loops x Flows & review x Resilience",
+            "detail": "Least recent. A loop fire/claim/drain and both endings; a flow on an approved document with a parallel firing and a verdict withdrawing waiting reviews; flow refusal to staff a review in the task story (F768); kill the Hub mid-run and restart; failure injection on one route."
         },
         {
             "id": "night-recheck-drive",
