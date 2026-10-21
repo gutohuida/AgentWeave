@@ -37150,7 +37150,7 @@ Expected: a pre-prompt timeout fails with an error naming what timed out, for ex
 
 ## F790 (B) -- a run's `aw.permission_wait` span stores the tool call's arguments unredacted, while the same call's `execute_tool` span redacts them; the download and the OTLP push carry the raw value
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141, `scripts/drive/s1020_traces.py`).
+**Status:** fixed a0fed3c 2026-10-21 (night iteration 14). The wait span's arguments pass `runner_events.redact_secrets` before `traces.redact`, as the tool event's input does; test `test_trace_seams.py::test_a_permission_wait_redacts_its_arguments_as_the_tool_call_does` failed first. Drive (scratch Hub :8152, `scripts/drive/s1021_f790_drive.py`): a real Haiku turn under `manual`, card approved, run-8fb3f84d26c5 completed; `execute_tool PowerShell` and `aw.permission_wait PowerShell` (same call id) both read `print('build', '<redacted>')` in `/traces/by-run` and in the OTLP export; the permission row keeps the raw value. The prompt, queue content and model text still carry the token, as the conversation's own text rows do (FR-3 binds spans to the redaction recorded output passes), so that is not this finding. Opened 2026-10-20. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8141, `scripts/drive/s1020_traces.py`).
 **Source:** drive
 **Theme:** Traces
 **Ready:** yes
