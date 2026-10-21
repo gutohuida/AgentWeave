@@ -8,19 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-20-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F806-impl",
-    "next_action": "Do queue item F806-impl: read F806 in scripts/drive/FINDINGS.md (grep the heading), write a failing test at the seam it names, fix, drive, set Status to 'fixed <sha>' with a drive line. One finding per firing.",
+    "current": "F807-impl",
+    "next_action": "Do queue item F807-impl: read F807 in scripts/drive/FINDINGS.md (grep the heading), write a failing test at the seam it names, fix, drive, set Status to 'fixed <sha>' with a drive line. One finding per firing.",
     "queue": [
-        {
-            "id": "F806-impl",
-            "status": "open",
-            "title": "F806 (B,T0): folder browse/open/relocate of unreachable network path freezes",
-            "detail": "Bound the filesystem call with a timeout."
-        },
         {
             "id": "F807-impl",
             "status": "open",

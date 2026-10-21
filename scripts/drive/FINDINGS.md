@@ -37366,7 +37366,7 @@ Expected: the oversized sentence uses readable sizes and names the alternative (
 
 ## F806 (B) -- one folder-browser listing, project open or relocate of a path on an unreachable network host freezes the whole Hub for about 21 s: the filesystem calls run on the event loop
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-projects-sweep` (scratch Hub :8147).
+**Status:** fixed (this commit, night 2026-10-21 iteration 11). Listing, open, create and relocate now run their filesystem work through `asyncio.to_thread` (`fs_browse.py`, `ProjectLifecycleService._canonicalize`, marker reads, create's `exists`); `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py` stalls each call 1.5 s and fails before the fix (`/health` waited the whole stall), passes after. Drive: the real unreachable address answered at once on this machine (no 21 s stall reproduced; network state differs from the sweep's), so the real-share timing is unverified. `GET /projects`' per-project refresh (`_refresh_project_observation`) is still synchronous and was not measured.
 **Source:** drive
 **Theme:** Projects
 **Ready:** yes -- measured three times, each against a fresh blackholed address (Windows caches a failed host, so a repeat answers at once).
