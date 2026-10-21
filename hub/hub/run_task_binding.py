@@ -22,7 +22,7 @@ both decides and spawns would be impossible to test without one.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, FrozenSet, Iterable, List, Mapping, NamedTuple, Optional, Set, Tuple
 
@@ -364,11 +364,18 @@ class TaskAttendance:
 
     pairs: Mapping[Tuple[str, str], Attending]
     queued_pairs: FrozenSet[Tuple[str, str]] = frozenset()
+    #: `(task, agent)` -> why the Hub stopped delivering to that agent for the task (F819): the
+    #: failed run's own error, else the entry's reason. Only where nothing newer has happened.
+    abandoned: Mapping[Tuple[str, str], str] = field(default_factory=dict)
 
     def attends(self, task_id: str, agent: str) -> bool:
         """A turn of *agent*'s is running on the task, or will reach it: queued, not refused."""
         found = self.pairs.get((task_id, agent))
         return found is not None and found.how != ATTENDING_REFUSED
+
+    def abandonment(self, task_id: str, agent: str) -> Optional[str]:
+        """Why delivery to *agent* for the task was given up on, while that still stands (F819)."""
+        return self.abandoned.get((task_id, agent))
 
     def attended(self, task_id: str) -> bool:
         """Some agent attends the task (`attends`)."""
@@ -499,7 +506,46 @@ async def task_attendance(session: AsyncSession, project_id: str) -> TaskAttenda
         pairs[(task_id, agent)] = Attending(
             how=ATTENDING_RUNNING, review=bool(previous and previous.review)
         )
-    return TaskAttendance(pairs=pairs, queued_pairs=frozenset(queued_pairs))
+    abandoned = await _standing_abandonments(session, project_id)
+    for key in list(abandoned):
+        if key in pairs:
+            del abandoned[key]
+    return TaskAttendance(pairs=pairs, queued_pairs=frozenset(queued_pairs), abandoned=abandoned)
+
+
+async def _standing_abandonments(
+    session: AsyncSession, project_id: str
+) -> "Dict[Tuple[str, str], str]":
+    """The `(task, agent)` pairs whose delivery the Hub gave up on and nothing has since reopened.
+
+    An entry the delivery-attempt limit withdrew keeps `delivered_in_run_id` (the operator's
+    breadcrumb), which is what tells it from an operator's own withdrawal. It stands until the
+    agent has a newer run bound to the task -- a message or delegation the operator sent after
+    fixing the runner -- or the task is given to someone else, which is a different pair.
+    """
+    rows = await session.execute(
+        select(InboundQueueEntry, Run)
+        .join(Run, Run.id == InboundQueueEntry.delivered_in_run_id)
+        .where(InboundQueueEntry.project_id == project_id)
+        .where(InboundQueueEntry.state == "withdrawn")
+        .where(InboundQueueEntry.abandoned_reason.isnot(None))
+        .where(InboundQueueEntry.task_id.isnot(None))
+        .order_by(InboundQueueEntry.sequence)
+    )
+    standing: "Dict[Tuple[str, str], Tuple[Run, str]]" = {}
+    for entry, run in rows.all():
+        standing[(entry.task_id, entry.agent)] = (run, run.error or entry.abandoned_reason)
+    out: "Dict[Tuple[str, str], str]" = {}
+    for (task_id, agent), (run, words) in standing.items():
+        newer = await session.scalar(
+            select(Run.id)
+            .where(Run.project_id == project_id, Run.agent == agent, Run.task_id == task_id)
+            .where(Run.started_at > run.started_at)
+            .limit(1)
+        )
+        if newer is None:
+            out[(task_id, agent)] = words
+    return out
 
 
 def checkout_held_sentence(holder: str, task_id: str) -> str:

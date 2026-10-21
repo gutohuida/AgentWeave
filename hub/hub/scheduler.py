@@ -2062,6 +2062,16 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                         )
                     )
                     continue
+                abandonment = attendance.abandonment(task.id, agent)
+                if abandonment is not None:
+                    # The Hub gave up delivering this task to `agent` after repeated failed runs
+                    # (F819). Briefing again would spend three more failures on the same agent, and
+                    # the loop reading "Active" hid it. Surfaced with the run's own words until
+                    # something newer happens on the pair.
+                    in_flight.append((task.id, agent))
+                    surfaced_rows.add(task.id)
+                    unstaffed.append((task.id, _abandoned_work_reason(task, agent, abandonment)))
+                    continue
                 if agent in taken:
                     deferred.append(
                         (
@@ -2492,6 +2502,19 @@ def _waiting_review_turn(
     if how.how != ATTENDING_REFUSED:
         return agent, None
     return agent, _refused_staffing_reason(task, agent, how.refusal or "", how.refused_here)
+
+
+def _abandoned_work_reason(task: Task, agent: str, words: str) -> str:
+    """Ordinary work whose delivery the Hub stopped retrying; no firing will brief it again (F819)."""
+
+    def _sentence(title: str, words: str) -> str:
+        return (
+            f"{agent} could not start: {words} The Hub stopped retrying, and {task.id} ({title!r}) "
+            f"is still assigned to {agent}. Fix {agent}'s runner and message {agent}, or reassign "
+            f"the task."
+        )
+
+    return _fit_sentence(_sentence, task.title, words)
 
 
 def _refused_work_reason(task: Task, agent: str, refusal: str, refused_here: bool) -> str:
