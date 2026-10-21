@@ -38361,3 +38361,45 @@ GET /projects/{p}/runners/launchability -> runner-b53cbdb612a1: runnable true, r
 **Tier:** 0
 
 The Copilot message "Say hello." failed three times on `initialize` (run-ca958336bc27, run-2af252a61d67, run-5f2ffc334eea; entry `withdrawn`, "delivery failed 3 times; the Hub stopped retrying", `delivered_in_run_id` = the last run). The conversation renders "NOT DELIVERED · delivery failed 3 times ... Last attempt failed: Copilot did not answer `initialize` ..." and no `turn-trace-*` button (count 0), because no turn rendered. All three traces exist (`GET /traces?run_id=...`, status `error`), and Settings -> Traces lists them, but only by time and agent. **Expected:** the not-delivered entry links the last attempt's trace (`delivered_in_run_id`), or each attempt's, through the same `TraceDrawer` the turn button opens. **Test:** an `AgentTimeline` test: an abandoned entry with `delivered_in_run_id` renders a trace control that opens `/traces/by-run/<that run>`.
+
+## F860 (B) -- the conversation never shows a tool's output: an expanded tool row reads only "tool completed" or "tool failed", so a Hub refusal's sentence (F794's read grant included) never reaches the place the operator watches the turn
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, Chromium on the served bundle, `scripts/drive/s1021_rc_reach_ui.py`, conversation conv-e5e9db86ecb0, run-e34a086c8e63).
+**Source:** drive
+**Theme:** Conversations & composer
+**Ready:** yes
+**Tier:** 0
+
+A Haiku turn under Workspace only with a read root: Read allowed, Bash and Write in the read root refused, a Bash `cat` of an ungranted path refused. In the conversation, with every work block opened and every tool row expanded, each refused row reads `Bash · failed`, the command, and `tool failed`. The Read row reads `tool completed`. The page text has no "granted for reading only", no "outside your workspace" and no "heron-5521". The stored rows hold all of it: `agent_outputs.content` is the summary `tool failed`, and `payload.output` is `Denied: 'C:/Users/huida/Documents/reach1020-read/notes.txt' is in a folder the operator granted for reading only: read it with your file-reading tool ...` (the Read's is `1\tThe word is heron-5521.`). The timeline route returns that payload unchanged (`agent_chat.py:233-243`). The refusal reaches the operator only in Activity and Logs, which do show the sentence.
+
+Cause: `tool_result_event` (`hub/hub/runner_events.py:318-345`) writes `content = "<tool> completed|failed"` and the output into `payload.output` (redacted and capped at `MAX_TOOL_RESULT_BYTES`). `WorkRow` (`hub/ui/src/components/agents/AgentTimeline.tsx:959-961`) takes `resultBody` from `paired.content`, which is always the summary, and nothing under `hub/ui/src` reads `payload.output` (grep: no hit outside evidence). Its own comment says "The result body is worth reading". F144 (2026-09) noted that results record as `tool completed`; the output has since been stored, and the screen was never wired to it.
+
+**Expected:** an expanded tool row shows the paired result's `payload.output` (already redacted and capped), falling back to `content`. A refused call then shows the Hub's sentence under its command. **Test:** an `AgentTimeline` test whose `tool_result` entry carries `content: "tool failed"` and `payload.output: "Denied: ... granted for reading only ..."`, in the order the timeline route returns (tool_use, then tool_result). The expanded row renders the output text. Seam: Runs (runner events) x Conversations (work rows) x Permissions & sandbox (refusal legibility).
+
+## F861 (B) -- an agent's `archive_job` puts a card to the operator that does not say which job: "cla wants to use archive_job — no details given — the provider sent none"
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, Chromium, `scripts/drive/s1021_rc_archive.py`, runs run-d64b7d0cdc12 and run-98d3f8072dca).
+**Source:** drive
+**Theme:** Capability plane
+**Ready:** yes
+**Tier:** 0
+
+With `allow_agent_jobs` on, Haiku called `mcp__agentweave__archive_job` on `job-bdd57e64ad62` ("archive-me", cron `0 4 * * *`). The route opened its always-ask request (409 `operator_direction_required`), and the card in the conversation read in full: "Tool request · cla wants to use archive_job · no details given — the provider sent none · Allow · Deny · The agent is waiting, and will be refused if nobody answers." Deny -> the agent got "archiving this job was not approved: the operator refused this action" and the job stayed; Allow (fresh conversation, job-e91d95486bc7) -> archived. Both decisions held, but the operator made each one without being told which job, its name or its schedule. "The provider sent none" is untrue as well: the Hub opened this request itself (`hub/hub/api/v1/jobs.py:1570-1572`, `tool_input={"job_id": job_id}`), not a provider. This is the one tool whose design (D18, `mcp_server.py:1056-1080`) exists to put "this exact request" to the operator.
+
+Cause: `describe` (`hub/ui/src/components/agents/PermissionRequestCard.tsx:21-46`) knows only `file_path`/`path`/`notebook_path`/`command`/`paths`/`grantRoot`/`cwd`/`reason`, and `job_id` is none of them. The request's `tool_input` carries only the id.
+
+**Expected:** the card names the job: for example, the Hub puts the job's name and schedule into the request (`{"job_id", "job_name", "cron"}`, or a `reason` sentence such as "Archive job 'archive-me' (0 4 * * *, cla)"), and the card renders it. Where nothing matches, the fallback does not blame a provider for a request the Hub opened. **Test:** a Hub test that the archive route's direction request carries the job's name, plus a `PermissionRequestCard` test that a request `{tool_name: "archive_job", tool_input: {job_id, job_name}}` shows the name and not "the provider sent none". Seam: Capability plane (always-ask archive) x Permissions & sandbox (the card).
+
+## F862 (C) -- with a host granted, a shell command naming an ungranted address is refused saying it "may name only this run's own Hub ($HUB_URL)": the granted hosts it may also name go unmentioned
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, a live Haiku turn).
+**Source:** drive
+**Theme:** Permissions & sandbox
+**Ready:** yes
+**Tier:** 0
+
+`PUT /projects/{p}/settings {"default_permission_mode": "workspace", "reach_grants": {"roots": [], "hosts": ["github.com"]}}`. A Claude turn (Haiku) ran `git ls-remote https://github.com/gutohuida/AgentWeave HEAD`, which was allowed (the grant works), and then `git ls-remote https://gitlab.com/gitlab-org/gitlab HEAD`, which was refused with `permission_denied` reason `'https://gitlab.com/gitlab-org/gitlab' is a network address. Under this posture a shell command may name only this run's own Hub ($HUB_URL); if the task needs another address, ask the operator with ask_user`. The decision is right. The sentence is not: this run may also name github.com, the operator granted it, and the refusal is the one place that says what is allowed. This is F794's species for hosts (F794 fixed the same sentence for read roots).
+
+Cause: `_NETWORK` (`hub/hub/mcp_server.py:1473-1476`) is one fixed sentence, used at `:2533`, `:2543`, `:2631` and `:2637` whatever `_REACH.get().hosts` holds.
+
+**Expected:** when the run has granted hosts, the refusal names them, e.g. `... may name only this run's own Hub ($HUB_URL) and the hosts the operator granted (github.com); for another address, ask the operator with ask_user`. With none granted it reads as today. **Test:** in `hub/tests/test_an_operator_sets_how_far_an_agent_reaches.py`, `_decide` for `Bash` `curl https://other.example` with `AW_REACH_GRANTS` naming host `github.com` denies with a reason containing `github.com`; with no hosts granted, the reason is unchanged. Seam: Permissions & sandbox (shell judge) x reach grants (hosts).
