@@ -12,6 +12,7 @@ import { SpecProposalsPanel } from './SpecProposalsPanel'
 import { SpecDocumentTasksLink } from './SpecDocumentTasksLink'
 import { SpecPlaceUnder } from './SpecPlaceUnder'
 import { Button } from '@/components/ui/button'
+import { SpecDeletedNote } from './SpecDeletedNote'
 import { useSpec, type SpecDiagnostic, type SpecListResponse } from '@/api/spec'
 import { useConfigStore } from '@/store/configStore'
 import { SpecFrame, type SpecFrameHandle } from './SpecFrame'
@@ -50,6 +51,9 @@ interface SpecDocumentPanelProps {
   onOpenTasks?: (taskIds: string[]) => void
   /** Threaded down to `SpecPhaseBar` — opens the loop tab of the document's flow. */
   onOpenLoop?: (loop: LoopSummary) => void
+  /** Where to go once this document has been deleted (F829). Falls back to `onClose`; the Spec
+   *  screen has no close control, so it names its own way out. */
+  onDeleted?: () => void
 }
 
 /**
@@ -75,6 +79,7 @@ export function SpecDocumentPanel({
   initialAnchor,
   onOpenTasks,
   onOpenLoop,
+  onDeleted,
 }: SpecDocumentPanelProps) {
   const { mode } = useConfigStore()
   const { data: specDoc } = useSpec(path)
@@ -248,7 +253,8 @@ export function SpecDocumentPanel({
       {/* Phase and the operator's decisions. Above the document, because what an operator may
           do next is part of reading it — and because none of these controls exists on the
           agent's side, which is what makes the approval gate real. */}
-      <SpecPhaseBar path={path} onOpenLoop={onOpenLoop} />
+      <SpecDeletedNote />
+      <SpecPhaseBar path={path} onOpenLoop={onOpenLoop} onDeleted={onDeleted ?? onClose} />
 
       {/* What approving this document did (design D7, `…-approval-starts-it`). Under the phase
           bar, beside its own Start a flow…/Flow control — never a second one. */}

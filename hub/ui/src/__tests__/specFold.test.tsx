@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
 import { ApiError } from '@/api/client'
+import { useSpecDeletionStore } from '@/store/specDeletionStore'
+import { SpecDeletedNote } from '@/components/spec/SpecDeletedNote'
 
 /**
  * `a-finished-change-is-folded-into-its-capability`, the app half: a shipped change in no
@@ -232,6 +234,39 @@ describe('folding a finished change', () => {
     await userEvent.click(screen.getByTestId('delete-confirm'))
 
     await waitFor(() => expect(deleteDocument).toHaveBeenCalledWith({ path: CHANGE }))
+  })
+
+  // F829: Delete document closed the dialog and left the page on the dead document. The bar hands
+  // the host the deletion, and the host leaves; what was deleted is said once, after it has left.
+  it('hands the host the deletion and records what went (F829)', async () => {
+    deleteDocument.mockResolvedValue({ path: CHANGE, deleted: true, tasks: ['task-1', 'task-2'] })
+    useSpecDeletionStore.getState().clear()
+    const onDeleted = vi.fn()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <SpecPhaseBar path={CHANGE} onDeleted={onDeleted} />
+      </QueryClientProvider>,
+    )
+    await userEvent.click(screen.getByTestId('spec-delete'))
+    await userEvent.click(screen.getByTestId('delete-confirm'))
+
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1))
+    expect(useSpecDeletionStore.getState().notice).toEqual({
+      path: CHANGE,
+      title: 'Widgets glow',
+      tasks: 2,
+    })
+  })
+
+  it('says what was deleted, with its task count, until dismissed (F829)', async () => {
+    useSpecDeletionStore.getState().set({ path: CHANGE, title: 'Widgets glow', tasks: 2 })
+    render(<SpecDeletedNote />)
+    expect(screen.getByTestId('spec-deleted-note')).toHaveTextContent(
+      /Deleted “Widgets glow” and its 2 tasks/,
+    )
+    await userEvent.click(screen.getByTestId('spec-deleted-note-dismiss'))
+    expect(screen.queryByTestId('spec-deleted-note')).not.toBeInTheDocument()
   })
 
   it('shows the Hub’s refusal of a delete in the confirm', async () => {

@@ -1342,11 +1342,40 @@ export function useFoldDocument() {
 /** Delete a specification document and what it produced (F532). The Hub refuses a capability, an
  *  archived or folded document, and one with a running flow or a run on its tasks. */
 export function useDeleteSpecDocument() {
-  return useCorpusMutation((projectId, { path }: { path: string }) =>
-    deleteJson<{ path: string; deleted: boolean; tasks: string[] }>(
-      `/api/v1/projects/${projectId}/project/documents/${path}`,
-    ),
-  )
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ path }: { path: string }) =>
+      deleteJson<{ path: string; deleted: boolean; tasks: string[] }>(
+        `/api/v1/projects/${projectId}/project/documents/${path}`,
+      ),
+    onSuccess: (_result, { path }) => {
+      // F829: the document is gone, so nothing may ask for it again. The corpus invalidation
+      // refetched the dead path's own queries while its panel was still mounted (404 after 404).
+      // Its keys are left alone, not removed -- a mounted observer rebuilds a removed query -- and
+      // are collected once the panel lets go. It leaves the cached lists with the 200.
+      queryClient.setQueriesData<{ specs?: { path: string }[] }>(
+        { queryKey: ['project', projectId, 'specs'], exact: true },
+        (list) =>
+          list && Array.isArray(list.specs)
+            ? { ...list, specs: list.specs.filter((s) => s.path !== path) }
+            : list,
+      )
+      queryClient.setQueriesData<{ documents?: { path: string }[] }>(
+        { queryKey: ['project', projectId, 'specDocuments'], exact: true },
+        (list) =>
+          list && Array.isArray(list.documents)
+            ? { ...list, documents: list.documents.filter((d) => d.path !== path) }
+            : list,
+      )
+      for (const key of ['specDocuments', 'specs', 'spec']) {
+        queryClient.invalidateQueries({
+          queryKey: ['project', projectId, key],
+          predicate: (q) => !q.queryKey.includes(path),
+        })
+      }
+    },
+  })
 }
 
 /** Rebuild the requirement index and `spec/index.json`. With no `home`, the Hub answers

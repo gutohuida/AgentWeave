@@ -37765,7 +37765,7 @@ The delete dialog says "Its file, its requirements and their evidence, and every
 
 ## F829 (C) -- after Delete document in the app, the page stays on the deleted document: its old title and phase, three load failures, and 404s, with no word that it was deleted
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, `scripts/drive/s1020_s_ui2.py`), seen in Chromium on the served bundle.
+**Status:** fixed 2026-10-21 night iteration 44 (Tier 0; commit named in the next line's follow-up). `useDeleteSpecDocument` now takes the path out of the cached `specs` and `specDocuments` lists and invalidates the corpus with a predicate that skips the dead path's own keys; `SpecPhaseBar` takes `onDeleted`, records `{path,title,tasks}` in `specDeletionStore` and calls it; the Spec screen goes to the home document (`onOpenDocument(null)`), the conversation panel closes the tab (`onClose`); `SpecDeletedNote` says "Deleted “T” and its N tasks." above the phase bar until dismissed. Tests: `specDeleteApi.test.tsx` (failed before: one GET of the dead path after the 200), `specFold.test.tsx` (+2). Drive: real hook over a real QueryClient with fetch stubbed, real components in jsdom (labelled: no Chromium, no scratch Hub). Not done: the conversation host shows the note only if another spec tab remains. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, `scripts/drive/s1020_s_ui2.py`), seen in Chromium on the served bundle.
 **Source:** drive
 **Theme:** Spec documents
 **Ready:** yes

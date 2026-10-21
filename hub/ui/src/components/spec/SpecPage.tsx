@@ -127,6 +127,8 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
             initialAnchor={anchor}
             onOpenTasks={onOpenTasks}
             onOpenLoop={onOpenLoop}
+            // F829: back to the home document, which the effect above resolves from the inventory.
+            onDeleted={() => onOpenDocument(null)}
           />
         ) : (
           <div className="spec-loading-card flex flex-col gap-3" aria-label="Loading specification">
