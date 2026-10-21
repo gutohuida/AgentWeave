@@ -250,4 +250,34 @@ describe("TaskIntegrationNote", () => {
 
     expect(screen.queryByText(/also landed with this merge/)).toBeNull();
   });
+
+  /**
+   * F823. A retry that fails again appended a second `failed` row, and `newestPerTarget` keeps one
+   * per target, so the note read identically before and after the press: the operator could not
+   * tell that anything had happened. The note names when the newest attempt was made.
+   */
+  it("names the time of the newest attempt, so a repeated failure does not look like nothing happened (F823)", () => {
+    rows = [
+      row({
+        id: "tint-first",
+        outcome: "failed",
+        reason: "hook said no",
+        created_at: "2026-10-20T12:00:00Z",
+      }),
+      row({
+        id: "tint-second",
+        outcome: "failed",
+        reason: "hook said no",
+        created_at: "2026-10-20T12:07:00Z",
+      }),
+    ];
+    const { container } = render(
+      <TaskIntegrationNote taskId="task-12" status="approved" />,
+    );
+
+    const stamps = [...container.querySelectorAll("time")].map((t) =>
+      t.getAttribute("datetime"),
+    );
+    expect(stamps).toEqual(["2026-10-20T12:07:00Z"]);
+  });
 });

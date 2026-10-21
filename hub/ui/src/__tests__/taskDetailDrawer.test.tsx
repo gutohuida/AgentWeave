@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -27,6 +27,8 @@ let transitionsMap: Record<string, string[]> = {}
 let renameMutate = vi.fn()
 // F532's delete, overridden per test like `renameMutate`.
 let deleteMutate = vi.fn()
+// F823's merge note, shown in the drawer as well as on the card. Mutable like the maps above.
+let integrationRows: import('@/api/tasks').TaskIntegration[] = []
 
 vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
@@ -38,6 +40,8 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     // F9's note. Stubbed here for the same reason the three hooks above are: this file is about the
     // drawer's mechanics, and one of its tests renders outside a QueryClientProvider deliberately.
     useTaskIntegrationPreview: () => ({ data: undefined }),
+    useTaskIntegrations: () => ({ data: { integrations: integrationRows } }),
+    useRetryTaskIntegration: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     // The story (slice task-story) is a real query too; idle with no data, the drawer keeps its
     // details view, which is what this file tests. `taskStory.test.tsx` covers the story itself.
     useTaskStory: () => ({ data: undefined, fetchStatus: 'idle', isLoading: false, isError: false }),
@@ -127,6 +131,7 @@ afterEach(() => {
   cleanup()
   transitionsMap = {}
   renameMutate = vi.fn()
+  integrationRows = []
 })
 
 describe('opening and closing the drawer', () => {
@@ -435,5 +440,36 @@ describe('an approved task keeps the decided-without-you record as history (fix-
     expect(screen.getByTestId('task-proceeded-history-detail-task-1').textContent).toContain(
       'which colour?',
     )
+  })
+})
+
+describe('the failed merge, read in the drawer (F823)', () => {
+  const failed = {
+    id: 'tint-1',
+    commit_sha: 'abc123def456',
+    source_branch: 'agentweave/builder',
+    target_branch: 'master',
+    outcome: 'failed' as const,
+    reason: 'policy: merges into master are frozen for the release (hook)',
+    retryable: true,
+    rode_along_commits: [],
+    mechanism: 'local',
+    actor_kind: 'operator',
+    actor: 'operator',
+    created_at: '2026-10-20T12:00:00Z',
+  }
+
+  it('offers Try again inside the drawer, beside the reason, when the newest row is retryable', () => {
+    integrationRows = [failed]
+    renderDrawer(makeTask({ status: 'approved' }), vi.fn())
+    const drawer = screen.getByTestId('task-drawer-task-1')
+    expect(within(drawer).getByTestId('task-integration-retry-task-1')).toBeInTheDocument()
+    expect(within(drawer).getByText(/merges into master are frozen/)).toBeInTheDocument()
+  })
+
+  it('says nothing about a merge when the task has none', () => {
+    renderDrawer(makeTask({ status: 'approved' }), vi.fn())
+    const drawer = screen.getByTestId('task-drawer-task-1')
+    expect(within(drawer).queryByTestId('task-integrations-task-1')).toBeNull()
   })
 })

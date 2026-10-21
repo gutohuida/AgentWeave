@@ -25,6 +25,7 @@ import { useSpecDocuments } from '@/api/spec'
 import { TaskTransitionHistory } from '@/components/tasks/TaskTransitionHistory'
 import { TaskChecksRow } from '@/components/tasks/TaskChecksRow'
 import { TaskStory } from '@/components/tasks/TaskStory'
+import { TaskIntegrationNote } from '@/components/tasks/TaskIntegrationNote'
 import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import { RowMenu } from '@/components/layout/RowMenu'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
@@ -532,6 +533,9 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         className={`flex-1 px-6 py-5 space-y-5${storyAvailable ? ' aw-scroll-fade' : ''}`}
         style={{ overflowY: 'auto', minHeight: 0 }}
       >
+        {/* Where the failure is read is where it is acted on (F823): the card behind this panel
+            carried the only Try again. Above both views, so Story and Details offer it alike. */}
+        <TaskIntegrationNote taskId={task.id} status={task.status} />
         {storyAvailable && view === 'story' ? (
           <TaskStory taskId={task.id} />
         ) : (

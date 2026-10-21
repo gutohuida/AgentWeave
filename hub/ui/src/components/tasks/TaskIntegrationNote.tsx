@@ -4,6 +4,7 @@ import {
   type TaskIntegration,
 } from "@/api/tasks";
 import { Icon } from "@/components/common/Icon";
+import { hubDate } from "@/lib/hubTime";
 
 /**
  * The newest attempt per target, newest last.
@@ -110,7 +111,19 @@ export function TaskIntegrationNote({
                 </>
               ) : (
                 <>
-                  {failed ? "Merge failed" : "Not merged"} — {row.reason}
+                  {failed ? "Merge failed" : "Not merged"} — {row.reason}{" "}
+                  {/* One row is kept per target, so a retry that fails the same way reads
+                      identically; the time is what shows the press did something (F823). */}
+                  <time
+                    dateTime={row.created_at}
+                    title={row.created_at}
+                    className="shrink-0 opacity-80"
+                  >
+                    (tried {hubDate(row.created_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })})
+                  </time>
                 </>
               )}
             </p>
