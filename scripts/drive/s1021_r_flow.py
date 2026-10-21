@@ -1,7 +1,7 @@
 """night-recheck: F767 (reviewer is not the job's agent; two ready tasks, alpha + beta free, beta
 named reviewer -> only alpha builds) and F773 (the completed flow task's checks run before its
 review).  AW_P=<project> py -3.11 scripts/drive/s1021_r_flow.py  (scratch Hub :8160)"""
-import os, pathlib, sys, time, json
+import os, pathlib, sys, time
 os.environ.setdefault("AW_E2E_STATE", "C:/Users/huida/.agentweave/e2e-r1021.json")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / ".claude" / "skills" / "e2e-loop"))
 import e2e  # noqa: E402

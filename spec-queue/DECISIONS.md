@@ -20,8 +20,6 @@ DECIDED. Absence is not consent.
 
 ## Open
 
-- OPEN      merge-hold-1020  The cycle branch `autonomous/2026-10-18-daily` is not landed on master. HOLD: migration, as `hub/hub/migrations/versions/0135_reach_settings.py`, `0137_trace_spans.py`, `0138_trace_hub_wide.py`, `0139_footprint_commit_named.py` and `0140_vault_readers.py` are new against master, and `:8000` runs this checkout, so its next restart would run them on real data. As of 2026-10-21 day close, `origin/master` is an ancestor of the branch (master merged in), so landing is a plain fast-forward once the operator accepts the migrations.
-
 ### flow-1018: editable flow stages -- eight OPEN -- 2026-10-18 night
 
 From the operator's 2026-10-18 brief (`APPROVALS.md` `## 2026-10-18`: "dev -> test -> deploy is edditable. The default is dev ->test but if I want to remove or add steps to be possible"). Night items `flow-stages-map`, `-spike`, `-spec`. The map and the driven Haiku spike are in `spec-queue/research/2026-10-18-editable-flow-stages.md`. Options and reasoning per question are in the change document's design: `spec/changes/editable-flow-stages/spec.json` (`spdoc-9e407ca6ffe8` on `:8010`, phase `exploring`, not proposed). Any build is Tier 2: the lifecycle contract, a migration, and today's flows kept as the default.
@@ -1450,6 +1448,10 @@ serving four-day-old code.
 ---
 
 ## Decided
+
+### 2026-10-21 — the cycle branch lands on master (merge-hold-1020)
+
+- DECIDED   merge-hold-1020  **Accepted: land `autonomous/2026-10-18-daily` on master.** The day window's D-7 held it for migrations 0135/0137/0138/0139/0140, but that check read a stale local `master` (75e6edb): `origin/master` (bffe747) already carried all five, and `:8000` had already run them on its 11:19 restart (alembic 0140, backup in `~/.agentweave/hub/data/backup-before-0140-20261021-111945/`). Review 0204 found it. (operator, 2026-10-21: "accept, fix ci")
 
 ### 2026-10-01 — `each-runner-cli-is-one-adapter` builds `CopilotAdapter` (F471)
 
