@@ -375,6 +375,8 @@ export type StoryEvent =
     }
   /** Something that went wrong with the task's checkout (F711): today a release that failed. */
   | { kind: 'workspace'; id: string; at: string | null; outcome: string; reason: string | null }
+  /** The flow could not staff this task's review (F768); `reason` names the remedy. */
+  | { kind: 'review_unstaffed'; id: string; at: string | null; reason: string | null }
 
 export interface TaskStory {
   task: { id: string; title: string; status: string }

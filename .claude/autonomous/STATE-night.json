@@ -8,17 +8,22 @@
     "parent_branch": "master",
     "parent_sha": "75e6edb",
     "stop_at": "2026-10-21T07:00:00+01:00",
-    "iteration": 18,
+    "iteration": 19,
     "log_file": ".claude/autonomous/2026-10-20-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F768-impl",
-    "next_action": "Do queue item F768-impl: read F768 in scripts/drive/FINDINGS.md (grep the heading), write a failing test in test_task_story (a task with a review_unstaffed event in event_logs has a story event of that kind), fix, drive, set Status to 'fixed <sha>' with a drive line. One finding per firing. After F768: the remaining C-severity Ready:yes findings (F758-F834 range), severity first; F770 (checks row never says the failure is on main too, UI, Tier 0) and F771 (review briefing names other tasks' requirements) are next. Skip F788 (waits on OPEN decision trace-5) and F787 (no repro). No scratch Hubs running.",
+    "current": "F770-impl",
+    "next_action": "Do queue item F770-impl: read F770 in scripts/drive/FINDINGS.md (grep the heading), write a failing UI test (TaskChecksRow given a failed run whose only result has preexisting: true renders 'fails on main too', in the latest row and in Earlier runs), fix in TaskChecksRow / TaskCheckRun types, rebuild the bundle (npm run build, scripts/refresh_ui_bundle.py), set Status to 'fixed <sha>' with a drive line. One finding per firing. After F770: F771 (review briefing names other tasks' requirements), then the remaining C-severity Ready:yes findings (F758-F834 range), severity first. Skip F788 (waits on OPEN decision trace-5) and F787 (no repro). No scratch Hubs running.",
     "queue": [
         {
-            "id": "F768-impl",
+            "id": "F770-impl",
             "status": "open",
-            "title": "F768 (C,T0): task story carries the review_unstaffed event; test in test_task_story"
+            "title": "F770 (C,T0): checks row says a failure also fails on main (preexisting/on_main); UI test in TaskChecksRow"
+        },
+        {
+            "id": "F771-impl",
+            "status": "open",
+            "title": "F771 (C,T0): review briefing names other tasks' requirements"
         },
         {
             "id": "F788-blocked",
