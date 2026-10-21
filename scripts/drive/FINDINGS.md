@@ -36775,7 +36775,7 @@ A task serves FR-1, a builder records evidence for it (`awaiting`), the requirem
 
 ## F759 (B) -- an open drift candidate on evidence the operator overturned to rejected hides the rejection from the approval gate
 
-**Status:** open 2026-10-19. Found in the evidence sweep (`scripts/drive/s1019_evidence.py` + `s1019_evidence_p2.py`, scratch Hub :8150).
+**Status:** fixed aa37fd7 2026-10-21 (night iteration 15, Tier 0): `requirement_evidence.decide` supersedes the piece's open drift candidates when the decision is `rejected`, so coverage reads `rejected` and the approval gate answers 409 `gate_unsatisfied`. Driven through the real routes in-process (`hub/tests/test_an_overturned_piece_supersedes_its_drift.py`: overturn, coverage, and the task walk to `approved`); all three failed before the fix. Not re-run on a live Hub (labelled). Found in the evidence sweep (`scripts/drive/s1019_evidence.py` + `s1019_evidence_p2.py`, scratch Hub :8150).
 **Source:** drive
 **Theme:** Requirements & evidence
 **Ready:** yes -- repro below, control included.
