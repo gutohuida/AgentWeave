@@ -37744,7 +37744,7 @@ PATCH Z {"status": "in_progress"} -> 409 dependency_unmet: "... 'bulk 006 ...' (
 
 ## F828 (C) -- deleting a document (or a task) leaves the deleted task's checkout and branch, with the agent's unmerged commit, listed under a task id that no longer exists; neither the response nor the dialog mentions them
 
-**Status:** open 2026-10-20. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, `scripts/drive/s1020_s_api.py` + real Haiku turns).
+**Status:** fixed 5198a1b, 2026-10-21 night iteration 43 (Tier 0, backend). `worktrees.discard_task_checkout` removes a deleted task's checkout and branch when the branch holds no commit the primary HEAD lacks, no uncommitted edit and no half-resolved merge; otherwise both are kept. `DELETE /tasks/{id}` and the document delete call `deletion.discard_checkouts` after the rows commit and record a `task_checkout_kept` event (task_id, branch, unmerged_commits, uncommitted) for each kept one; the document delete's 200 also carries `kept_work` with the same entries. Tests `hub/tests/test_deleting_a_task_names_the_work_it_leaves.py` (4, all failed before: leftover checkout/branch, no event, no `kept_work`) against a real tmp git repo; delete/worktree test files 61 passed; ruff, black clean. Drive: real routes over ASGI and database with real git worktrees (labelled: no scratch Hub, no Chromium). Not done: the dialogs do not show `kept_work` yet, and the task 204 has no body, so the operator sees it only in the event log. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, `scripts/drive/s1020_s_api.py` + real Haiku turns).
 **Source:** drive
 **Theme:** Spec documents
 **Ready:** yes
