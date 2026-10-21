@@ -20,6 +20,7 @@ from hub import trace_export, traces
 from hub.db.engine import async_session_factory
 from hub.db.models import PermissionRequest, Question, Run, TraceSpan
 from hub.runner_adapters.one_shot import WorkerUsage
+from hub.runner_events import tool_use_event
 from hub.usage_accounting import record_turn_usage
 from hub.worker import WorkerResult, record_invocation
 
@@ -148,6 +149,87 @@ async def test_a_runs_end_closes_its_spans_and_traces_its_waits(app, auth_header
     asked = spans["aw.ask_user"]
     assert asked["attributes"]["aw.question.answer"] == "no"
     assert SECRET not in detail.text
+
+
+@pytest.mark.asyncio
+async def test_a_permission_wait_redacts_its_arguments_as_the_tool_call_does(app, auth_headers):
+    """F790: the wait span stored `tool_input` through the named patterns only, so a credential
+    no pattern names (the high-entropy catch-all's catch) reached the span and the export, while
+    the same call's `execute_tool` span, copied from the already-redacted tool event, hid it."""
+    token = "Q7r8S9t0U1v2W3x4Y5z6A7b8C9d0E1f2G3h4"
+    command = f"py -3.11 -c \"print('build', '{token}')\""
+    started = datetime.now(timezone.utc) - timedelta(seconds=30)
+    run_id = "run-trace-f790"
+    async with async_session_factory() as db:
+        run = Run(
+            id=run_id, project_id=PROJECT, agent="waiter", status="running", started_at=started
+        )
+        db.add(run)
+        traces.start_run(db, run, prompt="build it", runner="claude", model="haiku")
+        await db.commit()
+    event = tool_use_event(
+        tool="PowerShell", category="shell", input_data={"command": command}, call_id="c-f790"
+    )
+    async with async_session_factory() as db:
+        await traces.observe_output(
+            db,
+            project_id=PROJECT,
+            run_id=run_id,
+            kind=event.kind,
+            content=event.content,
+            payload=event.payload,
+            at=started + timedelta(seconds=1),
+        )
+        db.add(
+            PermissionRequest(
+                id="perm-trace-f790",
+                project_id=PROJECT,
+                agent="waiter",
+                run_id=run_id,
+                tool_name="PowerShell",
+                tool_use_id="c-f790",
+                tool_input={"command": command},
+                status="allowed",
+                decided_by="operator",
+                created_at=started + timedelta(seconds=2),
+                decided_at=started + timedelta(seconds=9),
+            )
+        )
+        await db.commit()
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        run.status = "completed"
+        run.ended_at = started + timedelta(seconds=25)
+        await record_turn_usage(
+            db, run_id=run_id, project_id=PROJECT, agent="waiter", runner="claude", sample=None
+        )
+        await db.commit()
+
+    detail = await app.get(
+        f"/api/v1/projects/{PROJECT}/traces/by-run/{run_id}", headers=auth_headers
+    )
+    assert detail.status_code == 200, detail.text
+    spans = {span["operation"]: span for span in detail.json()["spans"]}
+    tool_args = spans["execute_tool"]["attributes"]["gen_ai.tool.call.arguments"]
+    wait_args = spans["aw.permission_wait"]["attributes"]["gen_ai.tool.call.arguments"]
+    assert token not in tool_args
+    # The value is refused, not the arguments dropped: the command is still there, redacted.
+    assert token not in wait_args
+    assert "<redacted>" in wait_args and "print('build'" in wait_args
+    assert token not in detail.text
+
+    today = datetime.now(timezone.utc).date()
+    exported = await app.get(
+        f"/api/v1/projects/{PROJECT}/traces/export",
+        params={"since": today.isoformat(), "until": (today + timedelta(days=1)).isoformat()},
+        headers=auth_headers,
+    )
+    assert exported.status_code == 200, exported.text
+    assert token not in exported.text
+    # The card still needs the raw input; only the span is redacted.
+    async with async_session_factory() as db:
+        request = await db.get(PermissionRequest, "perm-trace-f790")
+        assert request.tool_input == {"command": command}
 
 
 class _Receiver:

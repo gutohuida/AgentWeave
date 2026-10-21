@@ -71,7 +71,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import run_secrets
 from .db.models import PermissionRequest, Question, Run, TraceSettings, TraceSpan
-from .runner_events import redact_text_secrets
+from .runner_events import redact_secrets, redact_text_secrets
 from .subprocess_windows import no_console_kwargs
 from .version import __version__
 
@@ -628,8 +628,9 @@ async def finish_run(db: AsyncSession, run_id: str, usage: Any = None) -> None:
                     if request.workspace_verdict
                     else None
                 ),
+                # The tool event's own input rule first, so both spans of one call agree (F790).
                 "gen_ai.tool.call.arguments": json.dumps(
-                    redact(run_id, request.tool_input or {}), ensure_ascii=False
+                    redact(run_id, redact_secrets(request.tool_input or {})), ensure_ascii=False
                 ),
             }.items()
             if v is not None
