@@ -37333,6 +37333,7 @@ Expected: the hint is the status command's (`_hub_start_hint(profile, port)`), a
 - `agentweave vault add missing.md --no-distil ...` prints `refused  C:\...\missing.md: No file or folder at 'C:\\Users\\huida\\Documents\\aw-vault-1020\\notes\\sub\\missing.md'.` The CLI resolves to a Windows path and `vault_intake._locate` quotes it with `{given!r}` (`hub/hub/vault_intake.py:149-165`), doubling every backslash: the class F656 fixed for permission verdicts (`mcp_server._quote`). Same in the "relative" and "outside" sentences an agent reads.
 - A text file written with a UTF-8 BOM (PowerShell 5.1's `Set-Content -Encoding utf8`) is stored with it: `POST /vault/paths` answered `"opening": "\ufeffinside"`, and the Vault tab's entry preview starts with the invisible character (`in.md`, `loop/a.md`). `add_all` decodes with `data.decode("utf-8")` (`vault_intake.py:298`); `utf-8-sig` drops it.
 - The Manager page's firing for F801's runner-less report reads `failed · runner default · 0.0 s` although there was no runner (the event has `"runner_id": ""`).
+- (2026-10-21, sweep-vault-sweep) `agentweave vault add ... --distil` with the job off prints the Hub's API sentence "Or add the files with distil set to false, and distil them later." The CLI's flag is `--no-distil`, so the CLI could say that instead.
 
 Expected: quote paths as written (reuse `_quote`), decode text with `utf-8-sig`, and word a runner-less firing "no runner". Tests: `hub/tests/test_vault_paths.py` for the first two; a UI test for the firing row. Seam: Knowledge vault (add by path) x Manager jobs (firing list).
 
@@ -37992,3 +37993,56 @@ page after: "No specification yet -- Open a conversation and ask an agent to wri
 ```
 
 `SpecPage` returns the empty state before it mounts `SpecDocumentPanel` (`hub/ui/src/components/spec/SpecPage.tsx:85-95`), and the note is rendered only by the panel (`SpecDocumentPanel.tsx:256`). The store holds the notice, but no mounted component reads it. **Expected:** the empty state (and the "Everything here is archived" state at `SpecPage.tsx:101`) shows `SpecDeletedNote` above it. **Test:** a `SpecPage` test with an empty inventory and a notice in `specDeletionStore` asserts the note renders; fails today.
+
+## F841 (C) -- "Look into it" can be pressed again while the first review runs: each press spawns a paid review of the same report, and the second records a `failed` firing "the outcome could not be stored (Report ... is answered, not pending.)"
+
+**Status:** open 2026-10-21. A residue of F801's door. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8151, `scripts/drive/s1021_v_ui.py`, Chromium on the served bundle, real Haiku 4.5 reviews).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+```
+reports job on, runner Haiku; report rpt-3006877942ba pending (filed by a real Haiku turn while the job was off)
+Vault -> Reports -> "Look into it" -> card: "Looking into it in the background. ..."; 3 s later the button is still enabled -> pressed again
+manager_job_fired 09:02:45 vault-reports answered "answered: the entry stands"                                      cost 17253 micro-USD
+manager_job_fired 09:02:59 vault-reports failed   "the outcome could not be stored (Report rpt-3006877942ba is answered, not pending.)"  cost 24442 micro-USD
+same over the API: two concurrent POST .../vault/reports/rpt-dcaea150ac59/review -> 202, 202 -> two paid firings, one `written` (referred), one `failed`
+```
+
+`vault_reports.prepare` (`hub/hub/vault_reports.py:156`) checks `status == "pending"` and nothing marks the report as under review, so every press inside the review's ~10-13 s passes; the button is disabled only while the POST itself is in flight (`VaultPage.tsx:937`, `disabled={review.isPending}`), and F842 keeps the card reading `pending`, which invites the second press. The same race follows a press while the review a filing started (`review_in_background`, `agent_actions.py:620`) is still running. The Manager page then lists a `failed` firing for work that succeeded. **Expected:** one review per report at a time. The second press gets 409 "Report R is already being looked into", and the card's button goes once a 202 comes back. **Test:** `hub/tests/test_vault_reports.py` (beside `test_a_pending_report_is_looked_into_again_once_the_job_has_a_runner`): two concurrent POSTs with a faked worker that awaits an event -> one 202, one 409, one firing; fails today (two 202s).
+
+## F842 (C) -- after "Look into it", the Reports list never re-reads: the card promises "The answer appears here when it finishes" and stays `pending` until a reload
+
+**Status:** open 2026-10-21. A residue of F801's door. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8151, `scripts/drive/s1021_v_ui.py`, Chromium; screenshots `testbed/ui-judge/s1021-vault/100012/02_runner_after.png`, `.../100233/04_twice_after.png`).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+```
+10:00:18 press "Look into it" on rpt-19be8afdf6a0 -> "Looking into it in the background. The answer appears here when it finishes."
+10:00:29 manager_job_fired vault-reports answered (GET /vault/reports: status "answered", answer "The source directly settles the report ...")
+10:01:03 the same page, card: "pending ... Look into it  Looking into it in the background. ..."   (no refetch)
+reload -> card: "answered ... The source directly settles the report ..."
+```
+
+`useVaultReports` polls only while `VaultPage`'s `watching` is set (`hub/ui/src/components/vault/VaultPage.tsx:72`), and only an upload or a Distil starts the watch; `ReviewReportButton` (`:931`) cannot, and `useReviewVaultReport` (`hub/ui/src/api/vault.ts:355-365`) invalidates the list once, at the 202, while the report is still pending. No SSE handler re-reads reports on `manager_job_fired`. **Expected:** a 202 from the review starts the same watch, or a `manager_job_fired` for `vault-reports` invalidates `['project', p, 'vault', 'reports']`, so the answer shows up as the note promises. **Test:** `hub/ui/src/__tests__/vaultTab.test.tsx` ("looks into a pending report again"): after the 202, a second GET of reports answering `answered` must render the answer without a remount; fails today (one GET).
+
+## F843 (D) -- the vault reports doors refuse without naming the way out: "The vault reports job is disabled." / "... has no runner." on the card, and an agent told a pending report "is being looked into" while the job is off
+
+**Status:** open 2026-10-21. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8151; Chromium for the card, a real Haiku turn's transcript for the agent's sentence).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+```
+POST .../vault/reports/rpt-dcaea150ac59/review   (job off)          -> 409 "The vault reports job is disabled."
+POST .../vault/reports/rpt-dcaea150ac59/review   (on, no runner)    -> 409 "The vault reports job has no runner."
+Vault -> Reports -> Look into it (on, no runner) -> card: "The vault reports job has no runner."      (screenshot testbed/ui-judge/s1021-vault/095732)
+twin doors, same state: POST .../vault/sources/<id>/distil -> 409 "The vault distillation job has no runner. Choose one on the Manager page."
+agent (job off): vault_report on an entry with a pending report -> "Entry src-1cc5d3bb5b78 already has report rpt-dcaea150ac59 (pending); it is being looked into."
+```
+
+`vault_reports.prepare` (`hub/hub/vault_reports.py:159-161`) words its refusals bare. The distillation doors add "Enable it on the Manager page." / "Choose one on the Manager page." (`hub/hub/distillation.py:225,229`). `vault_spec_check.prepare` has the same bare pair (`hub/hub/vault_spec_check.py:267-269`; read in code, not driven today). `vault.add_report`'s duplicate refusal (`hub/hub/vault.py:1652-1655`) says "it is being looked into" whatever the job's state; with the job off nothing will look into it, and the agent cannot tell. **Expected:** both prepare functions end with the Manager page's way out, as distillation does. The duplicate refusal says the report is pending and, when the job is off or has no runner, that it waits for the operator. **Tests:** `hub/tests/test_vault_reports.py`: the job-off and no-runner 409 details contain "Manager page"; the same file: a duplicate filed with the job off does not say "being looked into". Both fail today.
