@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T17:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-10-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-questions-sweep",
-    "next_action": "Run sweep-questions-sweep per .claude/loops/day-window.md: Questions x Conversations & composer; start with the Overview's Needs you list (F904) and F860's expanded tool row, scratch Hub port 8110+, haiku only.",
+    "current": "sweep-tasks-sweep",
+    "next_action": "Run sweep-tasks-sweep per .claude/loops/day-window.md: Tasks x Dependencies x Worktrees & integration; start with the compact board (F902/F903 stalled + awaiting review, card vs drawer), DependencyListView, Retry only where retryable (F905), F835. Scratch Hub port 8110+, haiku (claude-haiku-4-5-20251001) only.",
     "queue": [
         {
             "id": "plan-review",
@@ -31,11 +31,11 @@
             "id": "sweep-traces-sweep",
             "status": "done",
             "title": "Sweep: Traces x Runs x Logs, events & SSE",
-            "detail": "First: the Activity tab's Activity view, the digest (ActivityDigest, lib/activityDigest.ts; unreached until 2026-10-22) \u00e2\u20ac\u201d each sentence against its event, this project only; F844 (a conversation whose agent is busy in another conversation says so, not its own live turn)."
+            "detail": "First: the Activity tab's Activity view, the digest (ActivityDigest, lib/activityDigest.ts; unreached until 2026-10-22) â€” each sentence against its event, this project only; F844 (a conversation whose agent is busy in another conversation says so, not its own live turn)."
         },
         {
             "id": "sweep-questions-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Questions x Conversations & composer",
             "detail": "First: the Overview's Needs you list replacing the Questions takeover (blocked first, 'is waiting'/'is asking', F904); F860 (an expanded tool row shows the tool's output, a refusal's sentence readable); ConversationBar / ConversationComposerDock."
         },
@@ -49,7 +49,7 @@
             "id": "sweep-vault-sweep",
             "status": "open",
             "title": "Sweep: Knowledge vault x Manager jobs x CLI & lifecycle",
-            "detail": "First: the rebuilt Vault screens \u00e2\u20ac\u201d VaultLibrary + page drop (usePageDrop), VaultReader, VaultReview cards, VaultAddDialog, VaultStorageDialog; Manager now under Project settings."
+            "detail": "First: the rebuilt Vault screens â€” VaultLibrary + page drop (usePageDrop), VaultReader, VaultReview cards, VaultAddDialog, VaultStorageDialog; Manager now under Project settings."
         },
         {
             "id": "sweep-agents-sweep",

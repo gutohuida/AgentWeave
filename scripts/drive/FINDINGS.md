@@ -38527,3 +38527,78 @@ alpha agent created
 `task_created` is persisted with `agent=alpha` (the assignee) and data `{"id", "title"}`; the digest's `default:` branch (`hub/ui/src/lib/activityDigest.ts`) renders `lead: e.agent` + `e.event_type.replace(/_/g, ' ')`, and its `taskId` only reads `d.task_id` or `task_updated`'s `d.id`, so the title it holds never reaches the row. The file's own header says the digest replaces "every event by its wire name"; these are the commonest events of a project's first hour (agent created, task created, question asked/answered).
 
 **Expected:** a sentence for `task_created` ("Task created", detail the title, no agent lead unless the event names an actor), `question_asked` ("alpha asked you", detail the question), `question_answered` ("You answered alpha", detail the question) -- neither event carries the question text (`question_asked` data is `{id, from_agent, blocking}`, `question_answered` is `{id, answer}` with `agent` null), so the digest looks it up by id the way it already looks up task titles (a `questionText` in `DigestContext`, from the questions query), `agent_created` ("alpha was added"); the default branch never leads with `e.agent` for an event whose actor it does not know. **Test:** in the `activityDigest.test.ts` F907 adds: a `task_created` event with `agent: 'alpha'` and `data: {id, title}` yields a row whose text is not "task created" and whose detail is the title; same for `question_asked` with its question. Seam: Logs, events & SSE x Tasks / Questions.
+
+## F909 (B) -- a conversation reads "waiting" on the rail and the Overview's agent card says "Waiting for your answer" for a question whose asking run has already ended, while Needs you, on the same screen, says nobody is waiting on it
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8113, profile qs1022, `proj-7716d9f754a0`, Chromium against the served bundle, `scripts/drive/s1022_qs_drive.py timeout` then `scripts/drive/s1022_qs_ui.py needs`).
+**Source:** drive
+**Theme:** Questions
+**Ready:** yes -- reproduced with one real Haiku turn.
+**Tier:** 0
+
+`beta` (`claude-haiku-4-5-20251001`, aw-tool call mode on its first run) asked "Ship the release on Friday?" (yes/no, a 10 s timeout); its shell call timed out and the turn ended ("NOANSWER"), `run-ff00f3895e36` `completed` at 08:38:56. The question `q-f499ff0210f2`: `answered` false, `wait_ended_at` NULL, `wait_expires_at` 08:42:39. Read at ~08:40-08:42:
+
+```
+GET /questions?answered=false   -> q-f499ff0210f2 asker_waiting: false
+GET /conversations              -> conv-8f95d2b762cc (beta) attention: "waiting"
+Overview, Needs you row         -> "The turn that asked has ended; nobody is waiting on this answer any more." / "beta is asking"
+Overview, Agents card (beta)    -> "Waiting for your answer" (amber)
+Rail                            -> beta  waiting
+```
+
+Two readers of one fact disagree: `_with_asker_state` (`hub/hub/api/v1/questions.py:457`) treats a question as inert once its asking run is not `running` **or** its wait is recorded as ended; `conversation_attention`'s question arm (`hub/hub/conversations.py:~455`) checks only `wait_ended_at IS NULL`, so it keeps "waiting" (which outranks running, by design) from the asking run's end until the wait's expiry is swept (`run_task_binding.py:1173`) -- here 3 min 43 s; an agent that asks with a long wait and then gives up keeps it that long. Whether it clears at expiry: by code yes, not measured.
+
+**Expected:** the attention question arm excludes a question whose `created_by_run_id` names a run that is no longer `running`, exactly as `asker_waiting` does (one helper both use). **Test:** in the conversation-attention tests (`hub/tests/`, beside the `wait_ended_at` case): an unanswered question with `wait_ended_at` NULL whose asking run is `completed` leaves the conversation `idle`, not `waiting`. Fails today. Seam: Questions x Conversations (rail, Overview agent strip).
+
+## F910 (C) -- the Overview says an agent blocked on the operator's question is "Working on ..." while the same screen says "Nothing running" and Needs you says it "is waiting"
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-questions-sweep` (same Hub and drive as F909; `scripts/drive/s1022_qs_drive.py ask`, `s1022_qs_ui.py needs|keys`).
+**Source:** drive
+**Theme:** Questions
+**Ready:** yes
+**Tier:** 0
+
+`alpha` asked "Which colour for the border?" (red/blue, blocking) in `conv-457c97270f66` and waited (`run-d62ae7299b06` `running`, question `asker_waiting` true, conversation `attention` "waiting"). The Overview, in Chromium (`testbed/ui-judge/s1022-questions/094012/needs_you.png`): summary "2 things need you · Nothing running", Running now "No agent is working right now", Needs you "alpha is waiting", and alpha's Agents card **"Working on “Reply with the single word OK.”"**. The conversation's own header read "working · 3m 13s" with Stop while the ask card stood below it.
+
+Cause: the strip in `hub/ui/src/components/overview/OverviewScreen.tsx` (~l.136) ranks `a.status === 'running' || live` before `waiting`, the reverse of the Hub's rule ("Waiting outranks running: a run blocked on a question is still a running process, but what the operator needs to see is that it stopped for them", `hub/hub/conversations.py` `conversation_attention` docstring), which Running now and Needs you already follow.
+
+**Expected:** an agent with a conversation whose `attention` is `waiting` reads "Waiting for your answer" on its card even while its status is `running`. **Test:** the OverviewScreen test: agent `status: 'running'`, its one conversation `attention: 'waiting'` -> the card's text is "Waiting for your answer", not "Working on". Fails today. (The header's "working" clock is the same disagreement in `ConversationBar`; fold it in if the same rule is reused, else leave it.) Seam: Questions x Overview.
+
+## F911 (C) -- a question's "Open conversation" on the Overview opens the agent's newest conversation, not the one the question was asked in, so the operator lands where the ask card is not shown
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-questions-sweep` (same Hub; `scripts/drive/s1022_qs_ui.py f804` then `needs`).
+**Source:** drive
+**Theme:** Questions
+**Ready:** yes
+**Tier:** 0
+
+`alpha` waited on "Which colour for the border?" asked in conversation A (`conv-457c97270f66`); the operator then sent a message in alpha's other conversation B (`conv-16eaf2f51006`), so B was the newer. On the Overview, the question's row -> **Open conversation** navigated to `?agent=alpha&conversation=conv-16eaf2f51006` (B): no ask card (F804 scopes it to A, rightly), composer "alpha is busy in another conversation — a message here will queue", header "waiting on your answer in <A>" -- one more click to the question. With A the newer one, the same button landed on A (first `needs` run), so it depends on which conversation was touched last.
+
+Cause: `OverviewScreen.tsx:90` builds the question row's primary action as ``onNavigate(`agent:${q.from_agent}`)`` (agent destination with `conversationId` null), although the question carries `conversation_id` and the screen already has `openConversation(agent, conversationId)` (l.67) that the Running rows use.
+
+**Expected:** a question with a `conversation_id` opens that conversation; one without keeps the agent destination. **Test:** the OverviewScreen test: a question `{from_agent: 'alpha', conversation_id: 'conv-A'}` -> clicking Open conversation calls `onOpenConversation('alpha', 'conv-A')`. Fails today. Seam: Questions x Conversations.
+
+## F912 (C) -- `PATCH /questions/{id}` accepts an empty answer, recording the question answered with nothing, and a label that is not one of its options
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-questions-sweep` (same Hub; `scripts/drive/s1022_qs_drive.py probes`).
+**Source:** drive
+**Theme:** Questions
+**Ready:** yes
+**Tier:** 0
+
+1. `alpha` waited on `q-469b2ee00e69` (options red/blue). `PATCH /projects/{p}/questions/q-469b2ee00e69` `{"answer": ""}` -> **200**, `answered: true, answer: "", answer_labels: []`. Alpha's tool returned it; the transcript: *"the answer returned as an empty string ... It appears the response was not captured correctly. Could you please provide your choice again?"* -- the turn ended asking in prose, and the question is closed (a real answer is now 409 `_REANSWER_DETAIL`).
+2. `q-f499ff0210f2` (options yes/no): `{"answer": "maybe next week", "labels": ["maybe"]}` -> **200**, `answer_labels: ["maybe"]`, delivered to beta as new input.
+
+The app's own forms refuse a blank answer (`AnswerForm.tsx:99`), so this is an API-only hole, but it is the state `2026-08-11-declining-a-question` D1 rejected by name ("a reader that finds `answered=True` with nothing in `answer` has to guess which case it is in"), and `labels` exists to carry *which options were chosen*. `QuestionAnswer` (`hub/hub/schemas/questions.py:45`) has no `min_length`, and `answer_question` (`hub/hub/api/v1/questions.py:498`) checks labels only for refused-capability questions.
+
+**Expected:** a blank answer with no labels -> 400 "An answer cannot be empty; to close it without answering, decline it" (naming `POST /questions/{id}/decline`); a label not among the question's options -> 400 naming the options. **Test:** `hub/tests/` beside the F594 re-answer test: both bodies refused, the question still unanswered. Fails today. Seam: Questions (operator answer route).
+
+## F913 (D) -- Needs you reads "now ago" for a question asked under 45 seconds ago
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-questions-sweep` (Chromium, `testbed/ui-judge/s1022-questions/094012/needs_you.png`: "alpha is waiting  now ago").
+**Source:** drive
+**Theme:** Questions
+**Ready:** yes
+**Tier:** 0
+
+`OverviewView.tsx:207` renders `{formatAgo(need.at, now)} ago`; `formatAgo` (`hub/ui/src/lib/format.ts:84`) returns `now` under 45 s and a calendar day (`formatDay`) past 60 days, so a row reads "now ago" or "Oct 3 ago". **Expected:** "just now" / "3m ago" / "Oct 3" (e.g. `formatAgoLong`, or append " ago" only to a relative value). **Test:** the OverviewView test: a need created 10 s before `now` renders no "now ago". Seam: Overview.
