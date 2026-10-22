@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useProjects, type ProjectSummary } from '@/api/projects'
+import { BrandLoop } from '@/components/common/BrandLoop'
 import { Icon } from '@/components/common/Icon'
 import { agentColorVars } from '@/lib/agentColors'
 import type { AgentSettingsSection, EnvironmentSection } from '@/lib/navigation'
@@ -175,6 +176,9 @@ export function Sidebar({
       <div className="aw-rail-head">
         {!compact && (
           <span className="aw-wordmark">
+            {/* Brand order: the loop leads, then the name, then the live dot. */}
+            <BrandLoop testId="rail-brand-loop" />
+            <span className="aw-wordmark-name">AgentWeave</span>
             {/* Not `aria-hidden`: it is the only report of the stream's health on this screen, so
                 it carries a name and a tooltip rather than being decoration with a colour. */}
             <span
@@ -185,7 +189,6 @@ export function Sidebar({
               aria-label={CONNECTION_LABEL[connection]}
               title={CONNECTION_LABEL[connection]}
             />
-            AgentWeave
           </span>
         )}
         <span className="aw-rail-head-actions">
