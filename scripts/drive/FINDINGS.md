@@ -38924,7 +38924,7 @@ Repro: an approved change with `delivery: {mode: flow}`. Its flow (job-7d424efaf
 
 ## F933 (B) -- a project or agent default of "Ask me" or "Workspace only" reaches an agent with no tool server as `manual` with nobody to answer: every write is refused, no card, no Activity line, and the roster says "manual"
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8118, profile rc1022, project `proj-9c9bf6db138b`; `scripts/drive/s1022_rc_drive.py posture` and `cli`).
+**Status:** fixed 89ce56a 2026-10-23 (night). `agent_trigger` resolves the run's access axes before it applies an inherited default, and an agent or project default that needs an approver (`runner_commands.posture_needs_approver`: `manual`, `workspace`) is skipped when the run has none (`axes.approvals == "none"`), so the runner's own at-rest posture (acceptEdits) applies; the roster's `permission_mode_built_in`/`_at_rest` (`agents.py`) applies the same rule. An operator's explicit per-run choice is untouched (the related composer question is left open). Test: `hub/tests/test_an_inherited_posture_that_needs_an_approver_is_not_given_to_a_run_with_none.py` (4 of 5 failed before). Drive: scratch Hub :8123 (profile f933, torn down), beta on a Haiku runner with `hub_client: cli`, project default Ask me: roster `acceptEdits`; a real turn (`run-225b7e4554c7`) wrote hello.txt with the Write tool, completed, 0 permission requests.
 **Source:** drive
 **Theme:** Permissions & sandbox
 **Ready:** yes
