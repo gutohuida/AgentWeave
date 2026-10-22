@@ -37325,6 +37325,7 @@ Expected: the hint is the status command's (`_hub_start_hint(profile, port)`), a
 ## F803 (D) -- small legibility slips on the vault-by-path doors: doubled backslashes in the CLI's refusals, a UTF-8 BOM kept in a source's text, and a runner-less firing reading "runner default"
 
 **Status:** open 2026-10-20. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8143).
+**Re-verified 2026-10-22** (day sweep `sweep-vault-sweep`): still bites -- `agentweave --profile vt1022 --port 8115 vault add nope.md --no-distil` -> `refused  C:\Users\...\nope.md: No file or folder at 'C:\\Users\\huida\\...\\nope.md'.` (the reason's path doubled, the result's path not).
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes
@@ -38034,6 +38035,7 @@ reload -> card: "answered ... The source directly settles the report ..."
 ## F843 (D) -- the vault reports doors refuse without naming the way out: "The vault reports job is disabled." / "... has no runner." on the card, and an agent told a pending report "is being looked into" while the job is off
 
 **Status:** open 2026-10-21. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8151; Chromium for the card, a real Haiku turn's transcript for the agent's sentence).
+**Extended 2026-10-22** (day sweep `sweep-vault-sweep`, Chromium): the spec page's vault popover -> "Check against the vault again" with the spec-vault-check job off toasts "Could not start the check -- The spec vault check job is disabled." (`hub/hub/vault_spec_check.py:267`), the same sentence without a way out as the reports doors (`vault_reports.py:165`). Fix both in the distillation door's form ("... Turn it on under Project settings -> Manager.").
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes
@@ -38675,3 +38677,133 @@ drawer Story: "Not merged just now ... nothing to merge" twice
 ```
 
 The card and the drawer correctly offer no Retry (F905), so only an API caller reaches this, but the route (`hub/hub/api/v1/tasks.py:1414`) ignores the `is_retryable` verdict it publishes (`task_integration.py:124`) and writes a row plus a `task_integration_retried` event for an attempt that, by that function's own docstring, cannot change anything. **Expected:** 409 when the latest attempt is not retryable, its detail the reason and what does re-attempt it ("accepting evidence re-attempts by itself", "saving the main branch re-attempts"), and no row written. **Test:** `test_task_integration.py`: retry after a `nothing to merge` skip -> 409, integration count unchanged. Fails today. Seam: Worktrees & integration (API).
+
+## F918 (B) -- the Vault's Add dialog and page drop store any file that is not a PDF or an image as a text "transcript": a Word document goes in as zip bytes, is committed under `knowledge/`, shown to every agent's map, and distilled for money
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-vault-sweep` in Chromium on the served bundle (scratch Hub :8115, `scripts/drive/s1022_vt_ui.py add`).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+```
+Vault -> Add -> Files or folders -> browse docs/minutes.docx (a real zip) -> Add      -> dialog closes, toast "Added "minutes"", library "Transcripts 1"
+GET  .../vault/map  -> {"id": "src-9ffa86eec5e7", "type": "transcript", "media_type": "text/plain", "opening": "PK\u0003\u0004\u0014\u0000..."}
+GET  .../vault/entries/src-9ffa86eec5e7 -> 299 chars, 95 NUL, 14 U+FFFD
+Manager activity: vault-distillation on "minutes" -> "Nothing to do", $0.02 (a paid Haiku call on zip bytes)
+the same file by path:  POST .../vault/paths {"paths": [".../docs/minutes.docx"], "distil": false}
+  -> refused: "A .docx file is not a vault source; the vault takes .md, .markdown, .txt, ... .pdf, .png, .jpg, .jpeg, .gif, .webp."
+agentweave vault add docs/minutes.docx --no-distil   -> the same refusal
+```
+
+`VaultScreen.add` (`hub/ui/src/components/vault/VaultScreen.tsx:190-199`) sends a PDF or an image to `POST /vault/files` and **everything else** through `File.text()` to `POST /vault/sources`, and `vault.add_source` (`hub/hub/vault.py:966`) accepts any non-empty string, NULs included. The path door and the CLI hold the type list (`vault_intake.ACCEPTED`, `hub/hub/vault_intake.py:65`); the drop door, the one the dialog advertises ("Text, Markdown, PDF and images"), holds none. A tracked entry lands in the repository, so the garbage is committed with the project, and its opening is in every agent's turn context. **Expected:** (1) the dialog refuses a file whose extension the vault does not take, per file, with the path door's sentence (kept in the list with its reason, as a Hub refusal is kept today); (2) `POST /vault/sources` refuses text containing a NUL character (400, "this looks like a binary file; the vault takes ..."), so an API caller cannot do it either. **Tests:** `hub/tests/test_vault*.py`: `POST /vault/sources` with `"PK\u0003\u0004\u0000..."` -> 400, nothing written under `knowledge/`; a `VaultScreen`/`VaultAddDialog` test: adding a `minutes.docx` File calls neither upload hook and shows the refusal. Both fail today. Seam: Vault Add dialog x `POST /vault/sources` x the by-path door's type list.
+
+## F919 (B) -- `agentweave reset --profile <p> --yes` says "Deleted <dir>" and "Hub data destroyed" while the profile's database is still there, held open by a Hub that is still serving it
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row; throwaway profile `vt1022`, its Hub started from source by `e2e.py hub-up`, so with no PID file).
+**Source:** drive
+**Theme:** CLI & lifecycle
+**Ready:** yes
+**Tier:** 0
+
+```
+agentweave --profile vt1022 --port 8115 status   -> "Status: running (native)" + "[WARN] No PID file for profile 'vt1022' on port 8115: this Hub was started by hand ..."
+agentweave reset --profile vt1022 --yes
+  [INFO] Deleted C:\Users\huida\.agentweave\hub\profiles\vt1022
+  [OK] Hub data destroyed. Run 'agentweave --profile vt1022 --port <port>' to start fresh.     exit 0
+ls profiles/vt1022  -> agentweave.db (1,523,712 bytes) still there; instance_identity.json gone
+GET :8115/api/v1/projects -> 401 (the Hub still serves, on a half-deleted profile)
+after stopping the Hub: the same reset deletes the folder
+```
+
+`cmd_reset` (`src/agentweave/cli.py`, the block after "Stop the Hub first if running") stops only Hubs it finds through the profile's PID files, then calls `shutil.rmtree(data_dir, ignore_errors=True)` and prints `Deleted {data_dir}` and the success line unconditionally. On Windows a file another process holds open cannot be removed, so any Hub serving the profile without a PID file (started by hand, after a stale PID file was cleared, or by another tool), or any process holding the database open, leaves the data in place behind a success message -- and the command is the escape hatch for "when something is wedged", exactly when that happens. **Expected:** after the delete, if `data_dir` still exists, print an error naming what remains and the likely holder ("a process still holds agentweave.db open -- a Hub serving this profile? Stop it with `agentweave --profile vt1022 --port <port> stop`"), and exit 1; never print `Deleted` for a folder that is still there. **Test:** `tests/test_cli*.py`: `cmd_reset` with `shutil.rmtree` patched to leave the directory in place -> exit 1, output does not contain "Hub data destroyed" and names the file left. Fails today. Seam: CLI reset x a running Hub's open database.
+
+## F920 (C) -- the Vault's Add dialog promises folders ("Files or folders", "Drop files or a folder ... Hidden files are skipped"), but its picker refuses a folder and a dropped hidden file vanishes without a word
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-vault-sweep` in Chromium (scratch Hub :8115, `scripts/drive/s1022_vt_ui.py add,drop`) plus the code it points at.
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+```
+Vault -> Add: segmented "Files or folders", drop zone "Drop files or a folder or browse", hint "Text, Markdown, PDF and images. Hidden files are skipped."
+set_input_files(<folder>) on the drop zone's input  -> "Error: File input does not support directories, pass individual files instead"
+page drop of one file named ".env"                  -> the dialog opens with an empty list and "Choose or drop at least one file."; nothing says .env was skipped
+grep -rn "webkitdirectory\|webkitGetAsEntry" hub/ui/src  -> nothing
+```
+
+The input in `DropZone` (`hub/ui/src/components/ui/dropzone.tsx`) has no `webkitdirectory`, and neither `DropZone.onDrop` nor `usePageDrop` walks `DataTransferItem.webkitGetAsEntry()`, so a folder can be neither browsed nor dropped; `visibleFiles` (`VaultAddDialog.tsx`) and the folder-path naming in `VaultScreen.add` read `webkitRelativePath`, which nothing ever sets. (A real OS folder drop arrives in `dataTransfer.files` as one zero-byte entry whose `File.text()` rejects, so it would come back "it could not be read as text" -- inferred from the code, not driven: Playwright cannot drop a real folder.) The only way to add a folder is the path door (`POST /vault/paths`, `vault_add`, the CLI). **Expected:** either the dialog adds folders (a folder input with `webkitdirectory`, and drops walked through `webkitGetAsEntry`, hidden names skipped as the path door does), or it stops promising them ("Files", "Drop files"); and a skipped hidden file is listed as skipped ("1 hidden file skipped: .env") instead of disappearing. **Test:** `VaultAddDialog` test: a drop of `[File(".env")]` renders a line naming `.env` as skipped; and, if folders are kept, a folder input exists with `webkitdirectory`. Fail today. Seam: Vault Add dialog x `DropZone` / `usePageDrop`.
+
+## F921 (C) -- `PATCH /manager/jobs/{key}` with only a new `runner_id` keeps a model the new runner's CLI does not declare; the firing then runs on that CLI and records the undeclared model
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8115, `scripts/drive/s1022_vt_drive.py manager` and a one-off firing).
+**Source:** drive
+**Theme:** Manager jobs
+**Ready:** yes
+**Tier:** 0
+
+```
+PATCH .../manager/jobs/vault-distillation {"runner_id": <claude runner>, "model": "claude-haiku-4-5-20251001"} -> 200
+PATCH .../manager/jobs/vault-distillation {"runner_id": <copilot runner>}                                      -> 200, model still "claude-haiku-4-5-20251001"
+the same pair in one call: {"runner_id": <copilot runner>, "model": "claude-haiku-4-5-20251001"}
+  -> 400 "'claude-haiku-4-5-20251001' is not a model 'copilot' declares; expected one of: auto, ..., claude-haiku-4.5, ..."
+enable + upload a note -> firing: cli "copilot", model "claude-haiku-4-5-20251001", outcome "empty", usage {"premium_requests": 1.0}
+PATCH ... {"runner_id": ""} -> 200, runner_id stored as "" (not null)
+```
+
+The route (`hub/hub/api/v1/manager.py`, `update_manager_job`) judges the model only when the request sets one (F630's fix), so a runner change carries the old CLI's model across. The Manager screen guards it (`ManagerSettings.tsx` `chooseRunner` clears the model when the CLI changes), so only an API caller reaches it today; the firing record then names a model the CLI never ran (Copilot used its own), and the screen shows that model under a Copilot runner. **Expected:** when `runner_id` changes and the stored model is not one the new runner's CLI declares, either clear it (as the screen does, and say so in the answer) or answer 400 with the sentence the one-call PATCH gives; an empty `runner_id` is 400 or treated as null, never stored as "". **Test:** `hub/tests/test_manager*.py`: set a claude runner + haiku model, PATCH a copilot runner alone -> the job's model is null (or 400); PATCH `{"runner_id": ""}` -> `runner_id` null or 400. Fail today. Seam: Manager jobs (API) x runner/model catalog.
+
+## F922 (D) -- Project settings -> Manager tells a vault job with no runner that "with none, the job uses each agent's runner", one row below "This job does nothing until a runner is chosen"
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-vault-sweep` in Chromium (scratch Hub :8115, `scripts/drive/s1022_vt_ui.py manager`).
+**Source:** drive
+**Theme:** Manager jobs
+**Ready:** yes
+**Tier:** 0
+
+```
+Project settings -> Manager -> Spec vault check (no runner):
+  Runner: "This job does nothing until a runner is chosen."   No runner
+  Model:  "Choose a runner first: with none, the job uses each agent's runner, whose models are not known here."
+GET .../manager/jobs -> spec-vault-check needs_runner: true
+```
+
+The Model row's description (`hub/ui/src/components/settings/ManagerSettings.tsx:123`) is the conversation-titles sentence for every job; the Runner row above it already branches on `job.needs_runner`. **Expected:** for a `needs_runner` job with no runner, "Choose a runner first." (the borrowing clause only for `conversation-titles`). **Test:** a `ManagerSettings` test: a `needs_runner: true` job with no runner does not render "each agent" in its Model row. Fails today. Seam: Manager screen.
+
+## F923 (D) -- small legibility slips on the vault doors: the Hub says "Distil" where the button now reads "Extract facts", a resolution is named with a contradiction id, "2026-02-30" is told to use the format it already uses, whitespace-only text is accepted, and the spec health line calls a superseded or missing citation a contradiction
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8115; Chromium for the reader, the library and the spec page).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+```
+reader, an unread PDF: "This PDF has not been read yet, so it has no text. Distil the source to read it."  -- the button beside it reads "Extract facts"
+  (hub/hub/distillation.py:666, :668; also "Distil a source from the Vault tab later." hub/hub/api/v1/vault.py:309, printed by `agentweave vault add`)
+library after Resolve: Decisions -> "Decision on ctr-1d805ef79ab2"   (hub/hub/vault.py:1377; the reader's own rule: an id is behind a copy button, never in a sentence)
+POST .../vault/sources {"dated": "2026-02-30"} -> 400 "dated must be a day written YYYY-MM-DD, such as 2026-09-01, not '2026-02-30'."   (vault.py:868; shown verbatim in the Add dialog)
+POST .../vault/sources {"name": "w", "type": "note", "content": "   \n  "} -> 201 (an empty entry in the library; the dialog blocks it, the route does not: vault.py:966 `if not content`)
+Spec page, a change citing a superseded, a disputed and a missing fact: health line "3 vault conflicts" -> popover "Some requirements contradict facts in the vault."   (SpecHealthLine.tsx:157, :162)
+```
+
+**Expected:** the Hub's sentences name "Extract facts" (or "Extract again") as the button reads; a decision source is named from the claim that stands ("Decision: <claim, shortened>"); a well-formed but impossible day says "2026-02-30 is not a day"; `add_source` refuses text that is only whitespace ("A source needs some text."); the health line counts "vault warnings" and its popover says what they are ("cite facts the vault has superseded, disputes, or no longer holds"). **Tests:** `test_vault*.py`: whitespace content -> 400; `dated="2026-02-30"` -> message contains "not a day"; after a resolve the decision source's name contains no `ctr-`; `distillation.unread_note` contains "Extract facts". Fail today. Seam: vault doors' wording x the ui-finesse renames.
+
+## F924 (D) -- an agent's vault report that restates an open contradiction is reviewed without it: the reports job sees only the reported entry, calls the other note "a different document not in the source", and refers it as a second question beside the contradiction
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8115, a real Haiku turn: run-01860c3b2a91; `scripts/drive/s1022_vt_drive.py agent`).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 1
+
+```
+vault: two open contradictions between "Export note A" (dated 2026-10-01) and "Export note B" (2026-10-15): file names, and export time
+alpha: vault_report on src-8c4af451d427 (Export note B): "Export note B ... disagrees with Export note A ... Please clarify which export note is current."
+vault-reports firing -> referred: "The report brings a claim about Export note A (a different document not in the source) and asks which note is current.
+                                  The source does not address which export note is authoritative ..."
+Vault -> Disagreements: 2 open cards; Vault -> Reports: 1 "Referred to you" card on the same question; resolving the contradiction leaves the report open (closed by hand)
+```
+
+The worker is given the one entry (`hub/hub/vault_reports.py`, the review prompt), not the open contradictions on that entry's facts, so it cannot answer "the vault already records this as contradiction ctr-1d805ef79ab2, note B presumed", and the operator answers one question twice. **Expected:** the review reads the reported entry's open contradictions; a report that restates one is answered by pointing at it and closes when that contradiction is resolved (or is shown on the contradiction card). Either way the operator decides once. **Test:** `test_vault_reports*.py`: a report on an entry whose fact is a side of an open contradiction -> the review prompt contains the contradiction id; resolving it closes the report. Fail today. Seam: vault reports x contradictions.

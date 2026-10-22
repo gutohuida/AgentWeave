@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T17:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-vault-sweep",
-    "next_action": "Run sweep-vault-sweep per .claude/loops/day-window.md: Knowledge vault x Manager jobs x CLI & lifecycle; start with the rebuilt Vault screens in Chromium (VaultLibrary + page drop, VaultReader, VaultReview cards, VaultAddDialog, VaultStorageDialog) and Manager under Project settings. Scratch Hub port 8110+, haiku (claude-haiku-4-5-20251001) only; disable every manager job when its row is done.",
+    "current": "sweep-agents-sweep",
+    "next_action": "Run sweep-agents-sweep per .claude/loops/day-window.md: Agents x Charters x Inbound queue & messages; start with a session sync that deletes an agent (its open conversations archived; rail and Activity follow session_synced without reload, F849/F850) and Charters in Project settings (ChartersSection/CharterForm), in Chromium. Scratch Hub port 8110+, haiku (claude-haiku-4-5-20251001) only; never leave a job enabled.",
     "queue": [
         {
             "id": "plan-review",
@@ -47,7 +47,7 @@
         },
         {
             "id": "sweep-vault-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Knowledge vault x Manager jobs x CLI & lifecycle",
             "detail": "First: the rebuilt Vault screens â€” VaultLibrary + page drop (usePageDrop), VaultReader, VaultReview cards, VaultAddDialog, VaultStorageDialog; Manager now under Project settings."
         },
