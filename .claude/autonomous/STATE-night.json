@@ -78,5 +78,6 @@
         "skill": ".claude/skills/night-briefing/SKILL.md"
     },
     "armed_at": "2026-10-21T22:55:04+01:00",
-    "driver_log": ".claude/autonomous/driver-night.log"
+    "driver_log": ".claude/autonomous/driver-night.log",
+    "briefing_url": "https://claude.ai/artifact/8gkZ9P2JC34MSKcrxxRT1Y"
 }
