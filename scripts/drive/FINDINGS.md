@@ -38710,7 +38710,7 @@ agentweave vault add docs/minutes.docx --no-distil   -> the same refusal
 
 ## F919 (B) -- `agentweave reset --profile <p> --yes` says "Deleted <dir>" and "Hub data destroyed" while the profile's database is still there, held open by a Hub that is still serving it
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row; throwaway profile `vt1022`, its Hub started from source by `e2e.py hub-up`, so with no PID file).
+**Status:** fixed 8641f27 2026-10-22 (night). `cmd_reset` now returns 1 and names what remains when `data_dir` survives the delete; test `test_reset_that_leaves_the_profile_behind_does_not_claim_it_destroyed_it` red before, green after. Drive: a throwaway profile `drv919` with `agentweave.db` held open -> exit 1, "Could not delete ...: still there: agentweave.db ... Stop it with 'agentweave --profile drv919 --port <port> stop'", db still on disk; after releasing the handle the same reset deleted the folder, exit 0. Originally: open 2026-10-22. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row; throwaway profile `vt1022`, its Hub started from source by `e2e.py hub-up`, so with no PID file).
 **Source:** drive
 **Theme:** CLI & lifecycle
 **Ready:** yes

@@ -8,18 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "9234463",
     "stop_at": "2026-10-23T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-22-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F919-impl",
-    "next_action": "Do queue item F919-impl: read its FINDINGS.md entry, write the failing test, fix, drive, close the finding, commit and push.",
+    "current": "F925-impl",
+    "next_action": "Do queue item F925-impl: read its FINDINGS.md entry, write the failing test, fix, drive, close the finding, commit and push.",
     "queue": [
         {
             "id": "F919-impl",
-            "status": "open",
+            "status": "done",
             "title": "F919: `agentweave reset` says Deleted/destroyed while the data survives",
-            "detail": "Tier 0. Read the F919 entry in scripts/drive/FINDINGS.md (grep '## F919 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed 8641f27."
         },
         {
             "id": "F925-impl",
