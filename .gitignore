@@ -83,6 +83,8 @@ hub/ui-concepts/
 *.gif
 *.bmp
 *.webp
+# ...except the documentation's own screenshots, which the site needs.
+!docs/assets/screenshots/*.webp
 
 # Hub runtime database (Docker volume data)
 hub/data/

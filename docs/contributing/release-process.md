@@ -45,7 +45,8 @@ gh release create v1.2.3 --title "AgentWeave v1.2.3" --notes-file <notes>
 
 Creating the release fires `publish.yml`, which builds and uploads **both** distributions to PyPI.
 Pushing the tag fires `hub-image.yml`, which builds and pushes the Docker image to
-`ghcr.io/gutohuida/agentweave-hub`, tagged with the version and with `latest`.
+`ghcr.io/gutohuida/agentweave-hub`, tagged with the version. `latest` is applied only by builds from
+the default branch, so a tag push alone does not move it.
 
 If only one PyPI job runs, the `if:` gates in `publish.yml` have drifted — both jobs must key off
 `refs/tags/v`.
@@ -96,7 +97,8 @@ supported path, and Docker is for remote or headless deployments.
 
 | Workflow | Fires on | Does |
 |---|---|---|
-| `ci.yml` | push to `master`, PRs into `master` | tests, lint, type check, build |
+| `ci.yml` | push to `master` or `autonomous/**`, PRs into `master` | CLI tests (Ubuntu, Windows, macOS × Python 3.11, 3.12), Hub tests, the Windows judge suite, UI tests, lint, type check, build |
 | `publish.yml` | a release being created on a `v*` tag | builds and uploads both distributions to PyPI |
 | `hub-image.yml` | push to `master` touching `hub/**`, or a `v*` tag | builds and pushes the GHCR image |
-| `docs.yml` | push to `master` | `mkdocs build --strict`, deploys to GitHub Pages |
+| `docs.yml` | changes to `docs/**` or `mkdocs.yml` (push or PR to `master`) | `mkdocs build --strict`; deploys to GitHub Pages on push only |
+| `upstream-drift.yml` | Mondays, 07:00 UTC | resolves the published dependency ranges without the dev constraints, to catch upstream breakage early |

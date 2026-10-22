@@ -516,7 +516,9 @@ POSTURES_DOC = REPO_ROOT / "docs" / "reference" / "permission-postures.md"
 _EXPECTED_VERDICTS = {
     "workspace": "Checked by the Hub",
     "manual": "Put to you",
-    "acceptEdits": "Not checked",
+    # F628 (2026-10-15) made `acceptEdits` an approver posture: an outside write becomes an
+    # operator card (`runner_commands.APPROVER_PERMISSION_MODES`), so it is no longer unchecked.
+    "acceptEdits": "Put to you",
     "bypassPermissions": "Not checked",
 }
 

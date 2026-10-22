@@ -1,45 +1,73 @@
-# Environment Variables Reference
+---
+description: Every environment variable the Hub, the CLI and agent runs read or set.
+---
 
-## Hub Variables
+# Environment variables
 
-Set these in the Hub's `.env` file:
+Most people never set any of these. `agentweave` writes what it needs into
+`~/.agentweave/hub/.env` on first launch.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AW_BOOTSTRAP_API_KEY` | auto-generated if empty | Instance operator credential for Hub authentication. Format: `aw_live_{32 hex chars}`. A pre-multi-project value is promoted unchanged onto the instance operator plane |
-| `AW_BOOTSTRAP_PROJECT_ID` | *(unset)* | Legacy bootstrap only. When explicitly present, startup creates one unbound project with this ID so a pre-multi-project installation can be bound on first open. A fresh install leaves it unset and starts with zero projects |
-| `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Display name for the legacy bootstrap project |
-| `AW_WORKSPACE_ROOT` | *(empty — native mode)* | Container-visible workspace root. When set (explicit Docker mode), project open/create/relocate accept only directories beneath this root; anything else is refused with a typed `project_workspace_not_mounted` diagnostic. The Hub never guesses host/container path mappings |
-| `AW_WORKSPACE_HOST_ROOT` | `./workspaces` | Docker Compose only: host directory mounted at `AW_WORKSPACE_ROOT` (`/workspaces`) inside the container. Point it at the host directory that holds your projects |
-| `AW_HOST` | `127.0.0.1` | Interface the Hub binds to when started via the `agentweave-hub` console script (native/host mode) — that script needs `DATABASE_URL` set; it does not choose a database and refuses to start without one. Docker always binds `0.0.0.0` inside the container regardless of this variable |
-| `AW_PORT` | `8000` | Port the Hub listens on |
-| `AW_CORS_ORIGINS` | *(empty)* | Comma-separated allowed origins for CORS. Leave empty in production if UI is served from same origin |
-| `DATABASE_URL` | none. Bare `agentweave` sets it to `~/.agentweave/hub/data/agentweave.db`; a direct `uvicorn hub.main:app` or the `agentweave-hub` console script refuses to start without it. | Database URL. SQLite default; PostgreSQL supported |
+## The Hub
 
-## CLI Variables
+Read from the environment, or from a `.env` in the Hub process's working directory.
 
-Set these in your shell for CLI behavior:
+| Variable | Default | Effect |
+|---|---|---|
+| `DATABASE_URL` | none | The database to open. **The Hub refuses to start without one** rather than guess. `agentweave` sets it for you (`~/.agentweave/hub/data/agentweave.db`, or the profile's own). An existing value overrides `--profile`. |
+| `AW_BOOTSTRAP_API_KEY` | generated | The instance's operator key (`aw_live_…`). Minted on first start if the database has none. |
+| `AW_TICKET_SECRET` | random per process | Signs the short-lived tickets used for the live event stream. |
+| `AW_TICKET_TTL` | `300` | Ticket lifetime, in seconds. |
+| `AW_MAX_BODY_SIZE` | `1048576` | Largest request body, in bytes. Vault file uploads are allowed 10 MiB. |
+| `AW_WORKSPACE_ROOT` | unset | When set, projects are accepted only beneath this path. Docker sets `/workspaces`. |
+| `AW_CORS_ORIGINS` | unset | Extra allowed origins. By default, same origin only. |
+| `AW_RUNTIME` | detected | `docker` or `native`, as reported by `/health`. |
+| `AW_TRACE_PUSH_INTERVAL` | `5.0` | Seconds between pushes to an OTLP trace collector (minimum 0.2). |
+| `HUB_URL` | the Hub's own address | The address handed to agent runs. Set it if runs must reach the Hub by another name. |
+| `CODEX_HOME` | Codex's default | Where the Hub reads Codex's model list. |
+| `COPILOT_HOME` | `~/.copilot` | Where the Hub reads the Copilot sign-in it copies into its own Copilot homes. |
+| `AW_HOST`, `AW_PORT` | `127.0.0.1`, `8000` | Used only by the `agentweave-hub` console script and the Docker image. With `agentweave`, use `--port`. |
 
-| Variable | Description |
-|----------|-------------|
-| `AW_LOG_LEVEL` | Developer tracing log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Default: `WARNING` |
-| `AW_LOG_FILE` | Optional file path for developer tracing logs |
+A Copilot runner using your own key names a variable here, such as `ANTHROPIC_API_KEY`. The Hub
+reads that variable at launch, stores only its name, and refuses names that point at the Hub's own
+credentials.
 
-## Proxy Agent Variables
+## Docker
 
-Set these in your shell before running proxy agents, or place them in a `.env` file at the project root:
+| Variable | Default | Effect |
+|---|---|---|
+| `AW_WORKSPACE_HOST_ROOT` | `./workspaces` | The host directory mounted at `/workspaces`. |
+| `AW_HUB_IMAGE` | `ghcr.io/gutohuida/agentweave-hub:latest` | The image to run. |
+| `AW_PORT` | `8000` | The host port. |
 
-| Variable | Provider |
-|----------|----------|
-| `MINIMAX_API_KEY` | MiniMax |
-| `ZHIPU_API_KEY` | Zhipu GLM |
-| `YOUR_CUSTOM_VAR` | Any custom `claude_proxy` provider |
+## The CLI
 
-AgentWeave automatically loads a `.env` file from the current working directory. Shell-exported variables always take precedence over `.env` values.
+| Variable | Default | Effect |
+|---|---|---|
+| `AW_LOG_LEVEL` | `WARNING` | CLI log level. |
+| `AW_LOG_FILE` | unset (stderr) | Write CLI logs to a file. |
+| `AW_KEY` | the local instance's key | Operator key for `agentweave vault add`. |
+| `DATABASE_URL` | per profile | Passed through to the Hub, and overrides `--profile`. |
 
-## Security Notes
+## UI development
 
-- Never commit `AW_BOOTSTRAP_API_KEY` to version control
-- API keys for proxy agents are resolved at runtime from environment variables or a `.env` file in the project root
-- Only the environment variable *name* is stored in AgentWeave config files
-- The Docker deployment never mounts the Docker socket; project isolation comes from the single configured workspace-root mount
+| Variable | Default | Effect |
+|---|---|---|
+| `AW_DEV_HUB` | `http://localhost:8000` | The Hub that `npm run dev` proxies to. |
+
+## Set for every agent run
+
+The Hub sets these in each run's environment. They are not for you to set.
+
+| Variable | Meaning |
+|---|---|
+| `HUB_URL` | Where the run reaches the Hub. |
+| `AW_RUN_TOKEN` | The run's own credential, valid only while the run is live. |
+| `AW_RUN_ID`, `AW_AGENT_IDENTITY` | Which run, and which agent. |
+| `AW_WORKSPACE_DIR` | The run's workspace. |
+| `AW_PERMISSION_POSTURE`, `AW_REACH_GRANTS` | Who answers permission requests, and what extra reach is granted. |
+| `AW_DECISION_TIMEOUT`, `AW_QUESTION_TIMEOUT` | How long to wait for your permission decision (120 s) and your answer (240 s), unless the agent's settings say otherwise. |
+| `AW_TURN_DEPTH` | How many agent-to-agent hops led to this turn. |
+
+The Hub strips its own secrets from every run: `DATABASE_URL`, `AW_BOOTSTRAP_API_KEY`,
+`AW_TICKET_SECRET`, `HUB_API_KEY` and `HUB_PROJECT_ID`. For Copilot runs it also strips GitHub
+token variables.
