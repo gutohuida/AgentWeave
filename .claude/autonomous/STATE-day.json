@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T17:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-10-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-loops-sweep",
-    "next_action": "Run sweep-loops-sweep per .claude/loops/day-window.md: Jobs & loops x Flows & review x Resilience; start with the Jobs tab's screens (JobsScreen/JobsView/JobDetails) in Chromium, an agent's archive_job permission card naming job and schedule (F861), F864 (a default agent that is also a judge not handed fresh work); F925 (job naming a deleted/archived agent) is filed. Scratch Hub port 8110+ (8130 is taken by another process), haiku (claude-haiku-4-5-20251001) only; never leave a job enabled.",
+    "current": "sweep-reach-sweep",
+    "next_action": "Run sweep-reach-sweep per .claude/loops/day-window.md: Permissions & sandbox x Capability plane x Agent environment; start with Project settings -> General's Reach group (ReachGrantsChips) in Chromium, then a manual-mode card (approve/deny/expire); F928 (a permission card shows in every open conversation of its agent) is filed. Scratch Hub port 8110+ (8130 is taken by another process), haiku (claude-haiku-4-5-20251001) only; never leave a job enabled.",
     "queue": [
         {
             "id": "plan-review",
@@ -59,7 +59,7 @@
         },
         {
             "id": "sweep-loops-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Jobs & loops x Flows & review x Resilience",
             "detail": "First: the Jobs tab's new screens (JobsScreen/JobsView/JobDetails); an agent's archive_job permission card names job and schedule (F861); F864 (a default agent that is also a judge not handed fresh work)."
         },

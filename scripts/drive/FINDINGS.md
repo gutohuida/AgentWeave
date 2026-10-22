@@ -38384,7 +38384,7 @@ Cause: `tool_result_event` (`hub/hub/runner_events.py:318-345`) writes `content 
 
 ## F861 (B) -- an agent's `archive_job` puts a card to the operator that does not say which job: "cla wants to use archive_job — no details given — the provider sent none"
 
-**Status:** fixed 2026-10-21 (Tier 0): the archive route's direction request now carries `{job_id, job_name, cron}` (`jobs.py`), and `PermissionRequestCard.describe` renders "name (cron)"; its last fallback is the neutral "no details given", no longer blaming a provider. Tests `test_the_archive_card_names_the_job_it_asks_about` (failed before) and `names the job an archive request is about`; 57 Hub tests and 34 card tests pass; UI bundle refreshed. Tested through the real route and the real component, not driven in a browser. Originally: open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, Chromium, `scripts/drive/s1021_rc_archive.py`, runs run-d64b7d0cdc12 and run-98d3f8072dca).
+**Status:** fixed 2026-10-21 (Tier 0): the archive route's direction request now carries `{job_id, job_name, cron}` (`jobs.py`), and `PermissionRequestCard.describe` renders "name (cron)"; its last fallback is the neutral "no details given", no longer blaming a provider. Tests `test_the_archive_card_names_the_job_it_asks_about` (failed before) and `names the job an archive request is about`; 57 Hub tests and 34 card tests pass; UI bundle refreshed. Tested through the real route and the real component, not driven in a browser. **Held live 2026-10-22** (`sweep-loops-sweep`, Chromium, :8117): the card read "alpha wants to use archive_job · archive-me (0 4 * * *)", Allow archived it; its placement is F928. Originally: open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, Chromium, `scripts/drive/s1021_rc_archive.py`, runs run-d64b7d0cdc12 and run-98d3f8072dca).
 **Source:** drive
 **Theme:** Capability plane
 **Ready:** yes
@@ -38426,7 +38426,7 @@ Side, same sentence: "Unbind before deleting" names no place to do it, and "back
 
 ## F864 (B) -- a flow whose own agent is also its named reviewer still hands that agent fresh work while another agent is free, so the task it builds can never be reviewed (F767's species, through the default-agent arm)
 
-**Status:** fixed 2026-10-21 (Tier 0): `scheduler._agents_withheld_from_fresh_work` is now the one home of F767's withholding rule (pool and default-agent arm both ask it); `decide_firing` skips its default-agent branch when that agent is a named judge and somebody else has a runner, so alpha (agent == reviewer) is kept for review and beta builds. Test `test_the_flows_own_agent_is_not_offered_fresh_work_when_it_is_also_the_reviewer` failed before (selected alpha), passes; 374 flow/loop/review/scheduler tests pass. Tested at `decide_firing`, not driven on a live Hub. Originally: open 2026-10-21. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8159, profile l1021, project `proj-4420966f352c`).
+**Status:** fixed 2026-10-21 (Tier 0): `scheduler._agents_withheld_from_fresh_work` is now the one home of F767's withholding rule (pool and default-agent arm both ask it); `decide_firing` skips its default-agent branch when that agent is a named judge and somebody else has a runner, so alpha (agent == reviewer) is kept for review and beta builds. Test `test_the_flows_own_agent_is_not_offered_fresh_work_when_it_is_also_the_reviewer` failed before (selected alpha), passes; 374 flow/loop/review/scheduler tests pass. Tested at `decide_firing`, not driven on a live Hub. **Held live 2026-10-22** (`sweep-loops-sweep`, :8117, flow agent = reviewer = alpha): the first press briefed beta only, the second staged alpha's review of beta's task and gave beta the other, both approved and merged, the loop ended `completed`. Originally: open 2026-10-21. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8159, profile l1021, project `proj-4420966f352c`).
 **Source:** drive
 **Theme:** Flows & review
 **Ready:** yes
@@ -38610,6 +38610,8 @@ The app's own forms refuse a blank answer (`AnswerForm.tsx:99`), so this is an A
 **Tier:** 0
 
 `OverviewView.tsx:207` renders `{formatAgo(need.at, now)} ago`; `formatAgo` (`hub/ui/src/lib/format.ts:84`) returns `now` under 45 s and a calendar day (`formatDay`) past 60 days, so a row reads "now ago" or "Oct 3 ago". **Expected:** "just now" / "3m ago" / "Oct 3" (e.g. `formatAgoLong`, or append " ago" only to a relative value). **Test:** the OverviewView test: a need created 10 s before `now` renders no "now ago". Seam: Overview.
+
+**Extended 2026-10-22** (day sweep `sweep-loops-sweep`, Chromium, `scripts/drive/s1022_lp_ui.py jobs2`): the Jobs tab has the same three: a flow fired seconds ago reads "Ran now ago" (`JobsView.tsx:285`), the Archived list "archived now ago" (`JobsView.tsx:425`), and its details' Recent runs "in_progress manual now ago" (`JobDetails.tsx:103`). One fix in `formatAgo`'s callers covers all four.
 
 
 ## F914 (C) -- the Tasks screen's Dependencies view keeps the agent filter and the "Find a task" search on its toolbar and ignores both
@@ -38863,3 +38865,57 @@ Project settings -> Charters lists Developer with "alpha" beside it (bound). Its
 **Tier:** 0
 
 beta's settings -> Charter open; Underwriter deleted elsewhere (`DELETE /charters/{id}` -> 204, another tab or an API caller). Picking Underwriter in "Charter for beta": `PATCH /agents/beta {"charter_id": ...}` -> 404 "Charter 'charter-…' not found"; the section shows only "Could not update charter binding." (`AgentSettingsControls.tsx` `CharterPicker`, which drops the Hub's `detail`), the select snaps back to Code Reviewer, and Underwriter is still in the list (the charters query is not refetched). The other refusal this route gives a picker, "Agent 'x' is archived and cannot hold a charter", would be swallowed the same way. Binding from the picker otherwise holds (Code Reviewer bound, read back). **Expected:** the picker shows the Hub's sentence (`readableApiError`, as `ChartersSection` does) and refetches the charters after a refusal. **Test:** CharterPicker test with the bind mutation rejecting `{detail: "Charter 'c' not found"}` -> that sentence is rendered; fails today. Seam: Agents (settings) x Charters.
+
+## F928 (B) -- a permission card is shown in whichever of the agent's conversations is open, not the one whose run asked: under a finished review's transcript it reads as the review asking to archive a job
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8117, profile lp1022, project `proj-042da656a1f4`, Chromium against the served bundle; `testbed/ui-judge/s1021-archive/110245/01_archive_card.png`).
+**Source:** drive
+**Theme:** Permissions
+**Ready:** yes
+**Tier:** 0
+
+Repro (`AW_E2E_STATE=<lp1022 state> py -3.11 scripts/drive/s1021_rc_archive.py <project> alpha 1:allow`): alpha has a flow review conversation, "alpha · review: Add truncate()" (conv-ef40d3cfe577, finished: "Review complete. APPROVED ... The task has been approved and merged."), which is what clicking alpha in the rail opens. A fresh alpha turn in a *new* conversation ("Call the AgentWeave archive_job ...", run-cde848c060ef) calls `archive_job` -> `perm-a4beb84251b3` pending. The card "alpha wants to use archive_job · archive-me (0 4 * * *) · Allow / Deny" renders at the foot of the **review** conversation, directly under the review's verdict, above a composer reading "Continuing alpha · review: Add truncate()". The header's F844 note does say "busy in Call the AgentWeave archive_job ...", but the card itself is placed as this conversation's interjection. The operator is invited to judge a job archive as the review's next step. Allow did reach the right run (archived, run completed), so the decision works. Only its placement is wrong. F861's half holds: the card names the job and its schedule.
+
+Cause: `openPermissionRequestsFor(requests, agent)` (`hub/ui/src/lib/pendingPermissions.ts`) filters by `agent` and status only. `PermissionRequestCard` (whose prop comment says "the card sits inside one conversation", `PermissionRequestCard.tsx:13-14`) and `AgentOutputPanel` (`:248`, `:266` the interjection tray, `:1203`) use it for every conversation of the agent. A request carries `run_id` but no conversation (`hub/ui/src/api/permissions.ts`). Questions were scoped to their own conversation by F804, with the busy-elsewhere note saying "waiting on you" (`AgentOutputPanel.tsx:416-421`). Permission requests were not. **Expected:** a card renders only in the conversation whose run asked (the Hub adds `conversation_id` from `Run.conversation_id`, or the panel maps `run_id` through the agent's runs). Any other conversation of the agent says, in the busy-elsewhere note, that the other conversation is waiting on the operator, with a link. **Test:** `hub/ui/src/__tests__/` AgentOutputPanel (or `pendingPermissions`): a pending request whose run belongs to conversation B, with the panel on conversation A of the same agent -> no `permission-requests` card in A. This fails today. Seam: Permissions (card) x Conversations x Runs.
+
+## F929 (C) -- the New job form says nothing when the Hub refuses the job: Create is pressed, the dialog stays open, and no sentence appears
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8117, profile lp1022, project `proj-042da656a1f4`, Chromium, `scripts/drive/s1022_lp_ui.py jobs` and `jobs2`; `testbed/ui-judge/s1022-lp/105956/06_past_stop_refused.png`, `.../105843/02_form_refused.png`).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: Jobs -> **New job**, name "past loop", agent alpha, a message, **Make this a loop**, purpose "Drain the queue", Stop at `2020-01-01 00:00` -> **Create Job**. `POST /jobs` -> 422 `"stop_at 2020-01-01T00:00:00+00:00 has already passed, so the loop would stop at once; choose a later time. Nothing was changed"`. The dialog stays open with every field as typed, no `role=alert`, and no error line: the form's text ends "... Require accepted evidence before merging ... Cancel Create Job". The console logs a 422. No job was created. The same holds for cron `0 4 13 * 5` -> 400 (both day fields): the press adds nothing to the pre-submit ambiguity line, so the operator cannot tell that the press was refused. Any other Hub refusal of a create would be equally silent (an agent archived meanwhile, a roster typo after an API rename).
+
+Cause: `JobsScreen.tsx:96` calls `createJob.mutate(job, { onSuccess: () => setShowForm(false) })` with no `onError`, `useCreateJob` (`api/jobs.ts:219`) has none either, and `JobForm`'s `error` state (`JobForm.tsx:39`) is local, with no prop for a server answer. This predates ui-finesse: the old `JobsPage.handleCreate` was the same. **Expected:** the Hub's sentence appears in the form's error line. That means `errorDetail` for a string `detail`, and the first `msg` of a 422 list without pydantic's "Value error, " prefix. The dialog stays open with the fields kept. **Test:** a JobsScreen test where the create mutation rejects with the 422 body above -> the dialog shows "has already passed". This fails today. Seam: Jobs & loops (form) x the jobs route's refusals.
+
+## F930 (D) -- a job's name may be blank: the route stores "  " on create and "" on rename, and the Jobs list, its menu and the archive confirm then name nothing ("Archive ?")
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8117, profile lp1022, project `proj-042da656a1f4`; `scripts/drive/s1022_lp_drive.py jobs`, Chromium `s1022_lp_ui.py jobs2`).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: `POST /projects/{p}/jobs {"name": "  ", "agent": "alpha", "message": "Reply OK.", "cron": "0 4 1 1 *", "enabled": false}` -> **201**, `"name": "  "`. `PATCH /jobs/{id} {"name": ""}` -> **200**, `"name": ""`. In Chromium the row has no title ("alpha·0 4 1 1 *Reply OK.Never run0 firedPaused Run now"), its menu button is labelled "More for " and its switch "Pause ", the archive confirm's title reads "Archive ?", and the Archived list shows rows that differ only by agent ("alpha · fired 0 times · archived 3m ago"). The New job form refuses a blank name ("Name is required", `JobForm.tsx:84`). The route, which is also `create_job`'s door for agents, does not. Charters refuse the same input (422, driven in `sweep-agents-sweep` today). **Expected:** `POST` and `PATCH /jobs` refuse a name that is empty after trimming, with a sentence ("a job needs a name"), and nothing is written. **Test:** `hub/tests/test_jobs*.py`: create with `"  "` -> 422 and no row; PATCH to `""` -> 422 and the name unchanged. Both fail today. Seam: Jobs & loops (route validation).
+
+## F931 (C) -- the Jobs tab's Archive confirm puts focus on the dialog's Close (X), not Cancel, and after Archive focus drops to the page
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8117, profile lp1022, project `proj-042da656a1f4`, Chromium, `scripts/drive/s1022_lp_ui.py jobs2`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro: Jobs -> a job's **More for ui probe** -> **Archive**. The confirm "Archive ui probe? It stops firing. Nothing is deleted ..." opens with `document.activeElement` = the header's `BUTTON aria-label="Close"`, not **Cancel**. Pressing **Archive** closes it, the row goes, and focus is `BODY` (measured for two jobs). The checklist's dialog rule is that a confirm takes focus on Cancel and that focus returns to something sensible after. Cause: `DialogContent` (`hub/ui/src/components/ui/dialog.tsx:14-45`) renders the Radix `Close` first and sets no initial focus, so Radix focuses the first focusable element. `JobsView.tsx:376-400` uses it as is. The older D5 dialogs mark their initial control with `data-dialog-initial-focus` (`useDialogFocus`). Other `DialogContent` users (`AgentSettingsSections.tsx`, `GeneralSettings.tsx`, `VaultAddDialog.tsx`, `VaultStorageDialog.tsx`) were not measured here. **Expected:** the archive confirm focuses Cancel (`onOpenAutoFocus` on `DialogContent`, or an `initialFocus` prop), and after Archive focus moves to the Jobs list or **New job**. **Test:** a JobsView test: open the archive confirm -> the active element is Cancel. This fails today. Seam: Keyboard & dialogs x Jobs & loops.
+
+## F932 (C) -- deleting a document whose flow has finished also deletes the flow's job, its loop and every firing record, and nothing says so: not the confirm, not the answer, not the event
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8117, profile lp1022, project `proj-042da656a1f4`; `scripts/drive/s1022_lp_drive.py`, then the delete by API).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+Repro: an approved change with `delivery: {mode: flow}`. Its flow (job-7d424efaf227, loop-e98571ee8723) built and reviewed both tasks, which were merged, and ended `completed` with 5 firing rows. `DELETE /projects/{p}/project/documents/spec/changes/ivory-kirin/spec.json` -> 200 `{"path": ..., "deleted": true, "tasks": [2 ids], "requirements": 2, "kept_work": [], "diagnostics": []}`. The `spec_document_deleted` event carries `{path, tasks}`. Afterwards `GET /jobs?include_archived=true` no longer lists the flow, `GET /jobs/{id}/history` and `GET /loops/{id}` are 404, and `job_runs` for it count 0. The Spec page's confirm (`useSpecPhaseControls.tsx:761-762`) says "Its file, its requirements and their evidence, and every task it put on the board go with it." It says nothing about the flow. Elsewhere the product promises that a job's history outlives it: the Jobs tab's archive confirm says "Nothing is deleted: its history stays, listed under Archived", and the skill and docs say jobs cannot be deleted, only archived. The cascade itself is deliberate (`hub/hub/deletion.py` docstring: "its stopped flows"; `:267-303`). What is missing is saying so. `DeletedDocument` (`deletion.py:135`) has no field for it. **Expected:** the confirm names the document's flow, if it has one ("and its flow <name>, with its N firings"), and the answer and the event list the job and loop ids deleted. The alternative is a design call for the operator: the flow's job is archived instead of deleted, so its history stays. **Test:** `hub/tests/test_deletion*.py`: delete a document whose stopped flow has firings -> the response names the job (`flows: [{job_id, loop_id, firings}]`). This fails today. Seam: Spec documents (delete) x Jobs & loops.
