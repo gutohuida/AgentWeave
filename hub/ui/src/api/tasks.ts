@@ -328,6 +328,8 @@ export type StoryEvent =
       cost_usd: number | null
       tokens: number | null
       premium_requests: number | null
+      /** Copilot's charge in nano-AIU; null when the run reported none. */
+      ai_nano_aiu: number | null
       conversation_id: string | null
       error: string | null
     }
@@ -403,6 +405,7 @@ export interface TaskStory {
     cost_usd: number | null
     tokens: number | null
     premium_requests: number | null
+    ai_nano_aiu: number | null
     evidence: { accepted: number; rejected: number; awaiting: number }
     merged: string[]
     overrides: number

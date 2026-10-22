@@ -10,6 +10,7 @@ import { TraceButton } from '@/components/traces/TraceDrawer'
 import { useTaskStory, type StoryEvent, type TaskStory as Story } from '@/api/tasks'
 import { hubDate } from '@/lib/hubTime'
 import { evidenceTone, statusTone } from '@/lib/storyTones'
+import { formatAiCreditAmount, formatAiCredits } from '@/components/accounting/accountingDisplay'
 
 /**
  * A task's whole story (slice task-story of the visibility roadmap): a summary that answers "is
@@ -37,6 +38,31 @@ function money(value: number | null | undefined): string {
   if (value == null) return '—'
   if (value > 0 && value < 0.01) return '<$0.01'
   return `$${value.toFixed(2)}`
+}
+
+/** A run row's cost: dollars where its runner priced the work, Copilot's AI credits where it
+ * charged them, both if it reported both; null when nothing was reported. Credits are never
+ * converted to dollars. */
+function spend(usd: number | null, nano: number | null): string | null {
+  const credits = formatAiCredits(nano)
+  if (usd == null) return credits
+  return credits ? `${money(usd)} · ${credits}` : money(usd)
+}
+
+/** The summary's Cost cell: the headline on the value line, which never wraps, and its unit and
+ * extras on the line under it, so `12.04` / `AI credits · 1 req` fits a narrow cell. */
+function costCell(summary: Story['summary']): { value: string; sub: string | null } {
+  const credits = formatAiCreditAmount(summary.ai_nano_aiu)
+  const sub: string[] = []
+  let value = money(summary.cost_usd)
+  if (summary.cost_usd != null) {
+    if (credits) sub.push(`+ ${credits} AI credits`)
+  } else if (credits) {
+    value = credits
+    sub.push('AI credits')
+  }
+  if (summary.premium_requests) sub.push(`${summary.premium_requests} req`)
+  return { value, sub: sub.length ? sub.join(' · ') : null }
 }
 
 function count(value: number | null | undefined): string {
@@ -79,6 +105,7 @@ function Summary({ story }: { story: Story }) {
   const { summary, task } = story
   const { accepted, rejected, awaiting } = summary.evidence
   const merged = summary.merged[summary.merged.length - 1]
+  const cost = costCell(summary)
   return (
     <div className="aw-story-summary" data-testid={`task-story-summary-${task.id}`}>
       <div>
@@ -92,9 +119,13 @@ function Summary({ story }: { story: Story }) {
       <div>
         <span className="aw-story-label">Cost</span>
         <span className="aw-story-value" title={count(summary.tokens) || undefined}>
-          {money(summary.cost_usd)}
-          {summary.premium_requests ? <small> · {summary.premium_requests} req</small> : null}
+          {cost.value}
         </span>
+        {cost.sub ? (
+          <span className="aw-story-sub" title={cost.sub}>
+            {cost.sub}
+          </span>
+        ) : null}
       </div>
       <div>
         <span className="aw-story-label">Runs</span>
@@ -271,7 +302,7 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
               {event.model ? <span className="aw-tl-meta"> · {event.model}</span> : null}
             </span>
           }
-          aside={event.cost_usd != null ? money(event.cost_usd) : undefined}
+          aside={spend(event.cost_usd, event.ai_nano_aiu) ?? undefined}
           meta={
             <>
               {parts.length ? `${parts.join(' · ')} · ` : ''}

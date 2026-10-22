@@ -191,14 +191,22 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
     total_usd_micros = 0
     total_tokens = 0
     premium = 0.0
+    total_nano = 0
+    priced_any = False
     for run in runs:
         rows = usage_by_run.get(run.id, [])
+        # A Copilot turn reports AI credits and no dollar estimate (`a-copilot-run-shows-its-credits`
+        # D1): its cost is unknown, never $0.00, and its credits are shown in their own unit.
+        priced = any(row.api_equivalent_usd_micros is not None for row in rows)
         usd = sum(row.api_equivalent_usd_micros or 0 for row in rows)
         tokens = sum(row.total_tokens or 0 for row in rows)
         requests = sum(row.premium_requests or 0 for row in rows)
+        nano = sum(row.ai_nano_aiu or 0 for row in rows)
         total_usd_micros += usd
         total_tokens += tokens
         premium += requests
+        total_nano += nano
+        priced_any = priced_any or priced
         duration = None
         if run.started_at and run.ended_at:
             duration = max(0, int((run.ended_at - run.started_at).total_seconds()))
@@ -213,9 +221,10 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
                 "duration_seconds": duration,
                 "model": next((row.model for row in rows if row.model), None),
                 "runner": next((row.runner for row in rows if row.runner), None),
-                "cost_usd": round(usd / 1_000_000, 4) if rows else None,
+                "cost_usd": round(usd / 1_000_000, 4) if priced else None,
                 "tokens": tokens if rows else None,
                 "premium_requests": requests or None,
+                "ai_nano_aiu": nano or None,
                 "conversation_id": run.conversation_id,
                 "error": run.error,
             }
@@ -352,9 +361,10 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
         "task": {"id": task.id, "title": task.title, "status": task.status},
         "summary": {
             "runs": len(runs),
-            "cost_usd": round(total_usd_micros / 1_000_000, 4) if usage_by_run else None,
+            "cost_usd": round(total_usd_micros / 1_000_000, 4) if priced_any else None,
             "tokens": total_tokens if usage_by_run else None,
             "premium_requests": premium or None,
+            "ai_nano_aiu": total_nano or None,
             "evidence": counts,
             "merged": merged,
             "overrides": sum(1 for row in transitions if row.override_reason),

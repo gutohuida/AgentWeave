@@ -156,6 +156,55 @@ async def test_a_run_carries_its_model_duration_and_cost(app, auth_headers, buil
 
 
 @pytest.mark.asyncio
+async def test_a_copilot_run_carries_its_credits_and_no_dollar_figure(
+    app, auth_headers, builder, tmp_path
+):
+    """Copilot reports AI credits, never a dollar estimate: its run and the summary carry the
+    credits, the run's cost is unknown rather than $0.00, and the Claude run's dollars stand."""
+    task, _evidence = await a_worked_task(app, auth_headers, builder, tmp_path)
+    start = datetime.now(timezone.utc) + timedelta(minutes=20)
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-story-cp",
+                project_id="proj-test",
+                agent="builder",
+                status="completed",
+                turn_depth=0,
+                task_id=task,
+                started_at=start,
+                ended_at=start + timedelta(minutes=2),
+            )
+        )
+        session.add(
+            TurnUsage(
+                id="tu-story-cp",
+                run_id="run-story-cp",
+                project_id="proj-test",
+                agent="builder",
+                status="measured",
+                runner="copilot",
+                model="gpt-5.4",
+                total_tokens=3000,
+                ai_nano_aiu=280_000_000,
+                premium_requests=2,
+            )
+        )
+        await session.commit()
+
+    body = await story(app, auth_headers, task)
+
+    runs = {e["id"]: e for e in body["events"] if e["kind"] == "run"}
+    assert runs["run-story-cp"]["ai_nano_aiu"] == 280_000_000
+    assert runs["run-story-cp"]["cost_usd"] is None
+    assert runs["run-story-b"]["ai_nano_aiu"] is None
+    assert runs["run-story-b"]["cost_usd"] == 1.84
+    assert body["summary"]["ai_nano_aiu"] == 280_000_000
+    assert body["summary"]["cost_usd"] == 1.84
+    assert body["summary"]["premium_requests"] == 2
+
+
+@pytest.mark.asyncio
 async def test_evidence_carries_its_proof_and_its_reviews(app, auth_headers, builder, tmp_path):
     task, evidence = await a_worked_task(app, auth_headers, builder, tmp_path)
 
