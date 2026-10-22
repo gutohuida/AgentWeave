@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T07:00:00+01:00",
-    "iteration": 14,
+    "iteration": 15,
     "log_file": ".claude/autonomous/2026-10-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "close-out-drive",
-    "next_action": "Do queue item close-out-drive: per .claude/loops/night-window.md 'Ending the window' write the final log entry, run usage_report --windows, and set next_action to null once the queue is drained. Keep `current` equal to the item id.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "F856-spec",
@@ -54,9 +54,9 @@
         },
         {
             "id": "close-out-drive",
-            "status": "open",
+            "status": "done",
             "title": "Close-out: final log entry, usage_report --windows, next_action null when queue is drained",
-            "detail": "Per night-window.md 'Ending the window'."
+            "detail": "Done iteration 15: final log entry written, usage_report --windows run."
         }
     ],
     "decisions_for_user": [],
