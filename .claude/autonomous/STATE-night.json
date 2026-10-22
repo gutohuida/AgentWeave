@@ -1,47 +1,117 @@
 {
-    "purpose":  "FIX. Operator, 2026-10-18: fix everything the day window found, at every tier (Tier 1/2 author their own short change on trial Hub :8010 and approve_anyway; Tier 2 writes its acceptance drive failing first). Red CI first, then what the operator added in APPROVALS.md, then today\u0027s day-log findings, then every other open finding, severity first. Test-first, drive each fix, set its Status line. Never merges.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-10-22-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "9234463",
-    "stop_at":  "2026-10-23T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-10-22-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. Only the day window\u0027s merge gate (day-window.md, \u0027The merge gate\u0027) may fast-forward master. This window never merges.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, \u0027Something new\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ],
-    "closeout":  {
-                     "briefing":  "claude-doc",
-                     "model":  "sonnet",
-                     "skill":  ".claude/skills/night-briefing/SKILL.md"
-                 },
-    "armed_at":  "2026-10-22T22:55:02+01:00",
-    "driver_log":  ".claude/autonomous/driver-night.log"
+    "purpose": "FIX. Operator, 2026-10-18: fix everything the day window found, at every tier (Tier 1/2 author their own short change on trial Hub :8010 and approve_anyway; Tier 2 writes its acceptance drive failing first). Red CI first, then what the operator added in APPROVALS.md, then today's day-log findings, then every other open finding, severity first. Test-first, drive each fix, set its Status line. Never merges.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-10-22-daily",
+    "parent_branch": "master",
+    "parent_sha": "9234463",
+    "stop_at": "2026-10-23T07:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-10-22-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "F919-impl",
+    "next_action": "Do queue item F919-impl: read its FINDINGS.md entry, write the failing test, fix, drive, close the finding, commit and push.",
+    "queue": [
+        {
+            "id": "F919-impl",
+            "status": "open",
+            "title": "F919: `agentweave reset` says Deleted/destroyed while the data survives",
+            "detail": "Tier 0. Read the F919 entry in scripts/drive/FINDINGS.md (grep '## F919 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+        },
+        {
+            "id": "F925-impl",
+            "status": "open",
+            "title": "F925: a job whose agent was deleted/archived can still be enabled and fire",
+            "detail": "Tier 0. Read the F925 entry in scripts/drive/FINDINGS.md (grep '## F925 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+        },
+        {
+            "id": "F933-impl",
+            "status": "open",
+            "title": "F933: Ask-me/Workspace-only default reaches an agent with no tool server",
+            "detail": "Tier 0. Read the F933 entry in scripts/drive/FINDINGS.md (grep '## F933 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+        },
+        {
+            "id": "F944-impl",
+            "status": "open",
+            "title": "F944: read_spec_document include=full never returns delivery",
+            "detail": "Tier 0. Read the F944 entry in scripts/drive/FINDINGS.md (grep '## F944 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+        },
+        {
+            "id": "F907-impl",
+            "status": "open",
+            "title": "F907: Activity digest leaves a stopped/failed turn reading 'working' forever",
+            "detail": "Tier 0. Read the F907 entry in scripts/drive/FINDINGS.md (grep '## F907 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+        },
+        {
+            "id": "F909-impl",
+            "status": "open",
+            "title": "F909: rail/Overview say 'waiting' for a conversation that is not",
+            "detail": "Tier 0. Read the F909 entry in scripts/drive/FINDINGS.md (grep '## F909 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+        },
+        {
+            "id": "F928-impl",
+            "status": "open",
+            "title": "F928: permission card shown in the wrong conversation of an agent",
+            "detail": "Tier 0. Read the F928 entry in scripts/drive/FINDINGS.md (grep '## F928 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+        },
+        {
+            "id": "F918-impl",
+            "status": "open",
+            "title": "F918: Vault Add drops non-PDF/image files as a text transcription",
+            "detail": "Tier 0. Read the F918 entry in scripts/drive/FINDINGS.md (grep '## F918 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+        },
+        {
+            "id": "F945-impl",
+            "status": "open",
+            "title": "F945: Spec header counts every non-verified requirement as in progress",
+            "detail": "Tier 0. Read the F945 entry in scripts/drive/FINDINGS.md (grep '## F945 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+        },
+        {
+            "id": "F946-impl",
+            "status": "open",
+            "title": "F946: Spec header says Vault agrees when the check is off",
+            "detail": "Tier 0. Read the F946 entry in scripts/drive/FINDINGS.md (grep '## F946 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+        },
+        {
+            "id": "F952-impl",
+            "status": "open",
+            "title": "F952: Overview spend line drops what the budget card said",
+            "detail": "Tier 0. Read the F952 entry in scripts/drive/FINDINGS.md (grep '## F952 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+        },
+        {
+            "id": "F953-impl",
+            "status": "open",
+            "title": "F953: Overview with spent budget says only 'paused'",
+            "detail": "Tier 0. Read the F953 entry in scripts/drive/FINDINGS.md (grep '## F953 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+        },
+        {
+            "id": "close-gate",
+            "status": "open",
+            "title": "Closing entry with usage_report; next_action null",
+            "detail": "Playbook 'Ending the window'. Include usage_report --windows --since 2026-10-22."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. Only the day window's merge gate (day-window.md, 'The merge gate') may fast-forward master. This window never merges.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, 'Something new'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ],
+    "closeout": {
+        "briefing": "claude-doc",
+        "model": "sonnet",
+        "skill": ".claude/skills/night-briefing/SKILL.md"
+    },
+    "armed_at": "2026-10-22T22:55:02+01:00",
+    "driver_log": ".claude/autonomous/driver-night.log"
 }
