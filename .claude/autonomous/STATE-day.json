@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T17:00:00+01:00",
-    "iteration": 13,
+    "iteration": 14,
     "log_file": ".claude/autonomous/2026-10-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-evidence-sweep",
-    "next_action": "Run sweep-evidence-sweep per .claude/loops/day-window.md: Requirements, evidence & coverage x Drift; start with F852 (an agent piece naming no commit at main's tip shows no work) and the Evidence view (EvidenceBrowser, RequirementStory) in Chromium against the served bundle. Scratch Hub port 8110+ (8130 is taken by another process), haiku (claude-haiku-4-5-20251001) only; never leave a job enabled.",
+    "current": "ledger-tidy",
+    "next_action": "Run ledger-tidy per .claude/loops/day-window.md: py -3.11 scripts/backlog_page.py; check every finding filed today (F907-F958) has **Ready:** and **Tier:** lines; triage the five findings with no Status line (F132 F253 F335 F378 F443) if cheap. Then D-7 (merge gate) is the window's last item.",
     "queue": [
         {
             "id": "plan-review",
@@ -89,7 +89,7 @@
         },
         {
             "id": "sweep-evidence-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Requirements, evidence & coverage x Drift",
             "detail": "Least recently swept (2026-10-21 iteration 9). F852 (an agent piece naming no commit at main's tip shows no work)."
         },
