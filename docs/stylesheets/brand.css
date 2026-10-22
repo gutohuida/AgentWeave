@@ -1,16 +1,366 @@
-/* AgentWeave identity: ink header carrying the madder loop, verdigris for links and accents.
-   Values match hub/ui/src/index.css (--ring) and the identity kit. */
-:root > * {
-  --md-primary-fg-color: #15171c;
-  --md-primary-fg-color--light: #26262b;
-  --md-primary-fg-color--dark: #0a0a0b;
-  --md-accent-fg-color: #1d6b6e;
-  --md-accent-fg-color--transparent: rgba(29, 107, 110, 0.1);
-  --md-typeset-a-color: #1d6b6e;
+/* AgentWeave identity for the docs site.
+   The values are the app's own tokens (hub/ui/src/index.css) and the identity kit (2026-10-22):
+   - ink header carrying the madder loop, in both schemes;
+   - verdigris is the single accent (links, focus, the active nav item), never a fill;
+   - madder is the brand thread, used by the logo and the red-thread diagram only;
+   - monochrome surfaces and buttons, as in the app. */
+
+:root {
+  --aw-ink: #15171c;
+  --aw-madder: #b03a26;
+  --aw-verdigris: #1d6b6e;
+  --aw-bg: #fafafa;
+  --aw-surface: #ffffff;
+  --aw-surface-2: #f4f4f5;
+  --aw-text: #18181b;
+  --aw-text-2: #5c5c66;
+  --aw-text-3: #85858f;
+  --aw-border: rgba(0, 0, 0, 0.09);
+  --aw-border-hi: rgba(0, 0, 0, 0.15);
+  --aw-primary: #18181b;
+  --aw-primary-fg: #fafafa;
+  --aw-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 32px -12px rgba(0, 0, 0, 0.18);
+  --aw-radius: 10px;
+  --aw-radius-xl: 14px;
 }
 
 [data-md-color-scheme="slate"] {
-  --md-accent-fg-color: #5fb3b3;
+  --aw-madder: #cc4630;
+  --aw-verdigris: #5fb3b3;
+  --aw-bg: #0a0a0b;
+  --aw-surface: #151518;
+  --aw-surface-2: #1d1d21;
+  --aw-text: #f5f5f6;
+  --aw-text-2: #8e8e98;
+  --aw-text-3: #6f6f79;
+  --aw-border: rgba(255, 255, 255, 0.07);
+  --aw-border-hi: rgba(255, 255, 255, 0.13);
+  --aw-primary: #fafafa;
+  --aw-primary-fg: #18181b;
+  --aw-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px -16px rgba(0, 0, 0, 0.7);
+}
+
+/* ---- Material colour mapping ------------------------------------------------------------- */
+
+:root > * {
+  --md-primary-fg-color: var(--aw-ink);
+  --md-primary-fg-color--light: #26262b;
+  --md-primary-fg-color--dark: #0a0a0b;
+  --md-primary-bg-color: #f5f5f6;
+  --md-accent-fg-color: var(--aw-verdigris);
+  --md-accent-fg-color--transparent: rgba(29, 107, 110, 0.1);
+  --md-typeset-a-color: var(--aw-verdigris);
+  --md-default-bg-color: var(--aw-bg);
+  --md-default-fg-color: var(--aw-text);
+  --md-default-fg-color--light: var(--aw-text-2);
+  --md-default-fg-color--lighter: var(--aw-text-3);
+  --md-default-fg-color--lightest: var(--aw-border-hi);
+  --md-code-bg-color: var(--aw-surface-2);
+  --md-footer-bg-color: var(--aw-ink);
+  --md-footer-bg-color--dark: #0a0a0b;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-hue: 240;
+  --md-default-bg-color: var(--aw-bg);
+  --md-default-fg-color: var(--aw-text);
+  --md-default-fg-color--light: var(--aw-text-2);
+  --md-default-fg-color--lighter: var(--aw-text-3);
+  --md-default-fg-color--lightest: var(--aw-border-hi);
+  --md-code-bg-color: var(--aw-surface);
+  --md-accent-fg-color: var(--aw-verdigris);
   --md-accent-fg-color--transparent: rgba(95, 179, 179, 0.1);
-  --md-typeset-a-color: #5fb3b3;
+  --md-typeset-a-color: var(--aw-verdigris);
+  --md-primary-fg-color: #101114;
+  --md-footer-bg-color: #101114;
+}
+
+/* The header and tabs stay ink in both schemes, separated from the page by a hairline. */
+.md-header,
+.md-tabs {
+  background-color: var(--md-primary-fg-color);
+}
+.md-tabs {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.md-header__button.md-logo img {
+  height: 1.5rem;
+}
+.md-header__topic:first-child {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ---- Type --------------------------------------------------------------------------------- */
+
+.md-typeset {
+  font-size: 0.79rem;
+  line-height: 1.7;
+}
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  color: var(--aw-text);
+  letter-spacing: -0.015em;
+}
+.md-typeset h1 {
+  font-weight: 650;
+  font-size: 1.9em;
+}
+.md-typeset h2 {
+  font-weight: 620;
+  margin-top: 2em;
+}
+.md-typeset h3 {
+  font-weight: 600;
+}
+.md-typeset code {
+  border-radius: 6px;
+}
+.md-typeset kbd {
+  font-family: var(--md-code-font-family);
+}
+
+/* Tables and admonitions read as app surfaces: hairline borders, rounded corners. */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--aw-border);
+  border-radius: var(--aw-radius);
+  overflow: hidden;
+  font-size: 0.72rem;
+  box-shadow: none;
+}
+.md-typeset table:not([class]) th {
+  background: var(--aw-surface-2);
+  font-weight: 600;
+}
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: var(--aw-radius);
+  border-width: 1px;
+  box-shadow: none;
+  font-size: 0.74rem;
+}
+
+/* Buttons are monochrome, like the app's primary actions. */
+.md-typeset .md-button {
+  border-radius: 8px;
+  font-weight: 600;
+  border: 1px solid var(--aw-border-hi);
+  color: var(--aw-text);
+  padding: 0.55em 1.3em;
+}
+.md-typeset .md-button--primary {
+  background: var(--aw-primary);
+  border-color: var(--aw-primary);
+  color: var(--aw-primary-fg);
+}
+.md-typeset .md-button:hover,
+.md-typeset .md-button:focus {
+  background: var(--aw-surface-2);
+  border-color: var(--aw-verdigris);
+  color: var(--aw-text);
+}
+.md-typeset .md-button--primary:hover,
+.md-typeset .md-button--primary:focus {
+  background: var(--aw-primary);
+  color: var(--aw-primary-fg);
+  box-shadow: 0 0 0 3px var(--md-accent-fg-color--transparent);
+}
+
+/* ---- Screenshots -------------------------------------------------------------------------- */
+
+.md-typeset .aw-shot {
+  margin: 1.4em 0 1.8em;
+}
+.md-typeset .aw-shot img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--aw-border-hi);
+  border-radius: var(--aw-radius-xl);
+  box-shadow: var(--aw-shadow);
+}
+.md-typeset .aw-shot figcaption,
+.md-typeset .aw-shot p:last-child:not(:first-child) {
+  margin: 0.7em 0 0;
+  font-size: 0.68rem;
+  color: var(--aw-text-2);
+  text-align: left;
+  max-width: none;
+}
+
+/* Material's light/dark image switch, for the variants each screenshot ships in. */
+[data-md-color-scheme="default"] img[src$="#only-dark"],
+[data-md-color-scheme="slate"] img[src$="#only-light"] {
+  display: none;
+}
+
+/* ---- Home page hero ----------------------------------------------------------------------- */
+
+.md-typeset .aw-hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1.6rem;
+  align-items: center;
+  margin: 0.6rem 0 1.6rem;
+}
+.md-typeset .aw-hero__mark {
+  width: 5.4rem;
+  height: 5.4rem;
+  border-radius: 22px;
+  background: var(--aw-ink);
+  display: grid;
+  place-items: center;
+  box-shadow: var(--aw-shadow);
+}
+.md-typeset .aw-hero__mark img {
+  width: 3.6rem;
+  height: 3.6rem;
+}
+.md-typeset .aw-hero h1 {
+  margin: 0 0 0.2em;
+  font-size: 2.3em;
+  line-height: 1.15;
+}
+.md-typeset .aw-hero__tagline {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--aw-text-2);
+}
+.md-typeset .aw-lede {
+  font-size: 0.9rem;
+  color: var(--aw-text);
+  max-width: 44rem;
+}
+.md-typeset .aw-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 1.2rem 0 0.4rem;
+}
+.md-typeset .aw-cta .md-button {
+  margin: 0;
+}
+@media screen and (max-width: 44.9375em) {
+  .md-typeset .aw-hero {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .md-typeset .aw-hero h1 {
+    font-size: 1.8em;
+  }
+}
+
+/* The page title is the hero on the home page. */
+.md-typeset .aw-home > h1:first-child {
+  display: none;
+}
+
+/* ---- Cards -------------------------------------------------------------------------------- */
+
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid > .card {
+  border: 1px solid var(--aw-border);
+  border-radius: var(--aw-radius-xl);
+  background: var(--aw-surface);
+  padding: 1rem 1.1rem;
+  transition: border-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid > .card:hover {
+  border-color: var(--aw-border-hi);
+  box-shadow: var(--aw-shadow);
+}
+.md-typeset .grid.cards > ul > li > hr {
+  margin: 0.6em 0;
+  border-color: var(--aw-border);
+}
+.md-typeset .grid.cards .twemoji,
+.md-typeset .grid.cards .lg {
+  color: var(--aw-verdigris);
+}
+
+/* ---- The red thread ----------------------------------------------------------------------- */
+/* An inline diagram: one madder thread running through the artifacts it connects. */
+
+.md-typeset .aw-thread {
+  margin: 1.6em 0 2em;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--aw-border);
+  border-radius: var(--aw-radius-xl);
+  background: var(--aw-surface);
+  overflow-x: auto;
+}
+.md-typeset .aw-thread svg {
+  display: block;
+  min-width: 40rem;
+  width: 100%;
+  height: auto;
+}
+.aw-thread .t-line {
+  stroke: var(--aw-madder);
+  stroke-width: 3;
+  fill: none;
+  stroke-linecap: round;
+}
+.aw-thread .t-node {
+  fill: var(--aw-surface);
+  stroke: var(--aw-border-hi);
+  stroke-width: 1;
+}
+.aw-thread .t-knot {
+  fill: var(--aw-madder);
+}
+.aw-thread .t-title {
+  fill: var(--aw-text);
+  font: 600 13px var(--md-text-font-family, sans-serif);
+}
+.aw-thread .t-sub {
+  fill: var(--aw-text-2);
+  font: 400 11px var(--md-text-font-family, sans-serif);
+}
+.aw-thread .t-who {
+  fill: var(--aw-verdigris);
+  font: 500 10.5px var(--md-code-font-family, monospace);
+}
+
+/* ---- Small things ------------------------------------------------------------------------- */
+
+.md-typeset .aw-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--aw-text-3);
+  margin-bottom: 0.2em;
+}
+.md-typeset .aw-pill {
+  display: inline-block;
+  padding: 0 0.55em;
+  border: 1px solid var(--aw-border-hi);
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--aw-text-2);
+  vertical-align: middle;
+}
+
+/* Note and info callouts take the accent instead of Material's default blue. */
+.md-typeset .admonition.note,
+.md-typeset details.note,
+.md-typeset .admonition.info,
+.md-typeset details.info {
+  border-color: var(--aw-verdigris);
+}
+.md-typeset .note > .admonition-title,
+.md-typeset .note > summary,
+.md-typeset .info > .admonition-title,
+.md-typeset .info > summary {
+  background-color: var(--md-accent-fg-color--transparent);
+}
+.md-typeset .note > .admonition-title::before,
+.md-typeset .note > summary::before,
+.md-typeset .info > .admonition-title::before,
+.md-typeset .info > summary::before {
+  background-color: var(--aw-verdigris);
 }

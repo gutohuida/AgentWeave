@@ -1,5 +1,5 @@
 site_name: AgentWeave
-site_description: Multi-agent AI collaboration framework — Claude, Kimi, Gemini, Codex, and more
+site_description: Run your AI factory in the open. A local app where AI coding agents build against specifications you approve, and every artifact traces back to who made it and why.
 site_author: gutohuida
 site_url: https://gutohuida.github.io/AgentWeave/
 repo_name: gutohuida/AgentWeave
@@ -15,7 +15,12 @@ theme:
   name: material
   logo: assets/agentweave-loop-on-dark.svg
   favicon: assets/agentweave-favicon.svg
-  # Brand colours (identity kit, 2026-10-22): ink header, verdigris accent; see stylesheets/brand.css.
+  # The app's own type: DM Sans for text, JetBrains Mono for code (hub/ui/src/index.css).
+  font:
+    text: DM Sans
+    code: JetBrains Mono
+  # Brand colours (identity kit, 2026-10-22): ink header, verdigris accent, madder for the loop
+  # only; see stylesheets/brand.css.
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -34,12 +39,16 @@ theme:
   features:
     - navigation.tabs
     - navigation.sections
-    - navigation.expand
+    - navigation.indexes
     - navigation.top
+    - navigation.footer
+    - navigation.instant
+    - toc.follow
     - search.suggest
     - search.highlight
     - content.code.copy
     - content.action.edit
+    - content.tabs.link
 
 extra_css:
   - stylesheets/brand.css
@@ -48,36 +57,61 @@ plugins:
   - search
 
 markdown_extensions:
+  - abbr
   - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.snippets:
+      base_path: [docs/snippets]
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
-  - tables
   - toc:
       permalink: true
 
 nav:
   - Home: index.md
-  - Getting Started:
+  - Get started:
     - getting-started/installation.md
     - getting-started/quickstart.md
+    - getting-started/concepts.md
   - Guides:
-    - guides/dashboard.md
+    - guides/the-app.md
+    - guides/agents.md
+    - guides/conversations.md
+    - guides/specifications.md
+    - guides/tasks-and-review.md
+    - guides/jobs-loops-flows.md
+    - guides/knowledge-vault.md
+    - guides/traceability.md
+    - guides/docker.md
   - Reference:
     - reference/cli-commands.md
-    - reference/mcp-tools.md
+    - reference/agent-tools.md
     - reference/permission-postures.md
     - reference/task-lifecycle.md
+    - reference/spec-documents.md
+    - reference/project-files.md
+    - reference/env-variables.md
     - reference/hub-api.md
     - reference/agent-stream-contract.md
-    - reference/env-variables.md
   - Architecture:
     - architecture/overview.md
-    - architecture/locking.md
   - Contributing:
     - contributing/development.md
     - contributing/release-process.md
@@ -95,6 +129,7 @@ nav:
 # docs/archive/legacy-multi-runtime/ in the repository if you need to know how the old shape worked.
 exclude_docs: |
   archive/legacy-multi-runtime/
+  snippets/
 
 extra:
   social:
@@ -103,4 +138,4 @@ extra:
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/agentweave-ai/
 
-copyright: Copyright &copy; 2025 gutohuida — MIT License
+copyright: Copyright &copy; 2025–2026 gutohuida — MIT License

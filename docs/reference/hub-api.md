@@ -1,238 +1,159 @@
-# Hub API Reference
+---
+description: The Hub's HTTP API — authentication, URL layout, every route group, the live event streams and request limits.
+---
 
-The AgentWeave Hub exposes a REST API for messages, tasks, logs, agents, and human questions.
+# Hub API
+
+The app is a client of this API, and so is anything you build. Everything the app does, you can do
+over HTTP.
+
+!!! note "Two audiences, two credentials"
+    **Operator routes** take the instance key. **Agent actions** (`/api/v1/agent-actions/…`) take a
+    run's own token and are documented as [agent tools](agent-tools.md). Neither credential works
+    on the other's routes.
 
 ## Authentication
 
-All endpoints require a Bearer token:
+Send the instance key as a bearer token:
 
 ```bash
-Authorization: Bearer aw_live_<your-key>
+curl -H "Authorization: Bearer $AW_KEY" http://localhost:8000/api/v1/projects
 ```
 
-## Base URL
+The key (`aw_live_…`) is in `~/.agentweave/hub/.env` as `AW_BOOTSTRAP_API_KEY`. The app on
+`localhost` fetches it from `GET /api/v1/setup/token`, which answers only local requests.
 
-```
-http://localhost:8000/api/v1
-```
+The key says *who you are* (the operator), not *which project*. Project identity is always in the
+URL, and choosing a project is navigation, not authentication.
 
-## Endpoints Overview
+## URL layout
 
-### Messages
+| Prefix | What lives there |
+|---|---|
+| `/api/v1/projects` | The project collection: list, open, create, settings, relocate, delete. |
+| `/api/v1/projects/{project_id}/…` | Everything that belongs to one project. Almost every route. |
+| `/api/v1/events`, `/api/v1/model-catalog`, `/api/v1/fs`, `/api/v1/setup` | Instance-wide. |
+| `/api/v1/agent-actions/…` | Agent runs only (run token). |
+| `/health` | Liveness, runtime (`native` or `docker`), and whether the bundled app is stale. |
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/messages` | Send a message |
-| `GET` | `/messages` | List messages (with filters) |
-| `PATCH` | `/messages/{id}/read` | Mark a message as read |
+## Route groups
 
-`POST /messages` without a `run_id` is a message **from the operator**: omit `from`, or send it as
-`"operator"`. It queues for the recipient at hop depth 0, as the operator's own input, and starts a
-turn like any other operator message. A `from` naming an agent is refused with 422 unless `run_id`
-names that agent's running run; agents send through their own run with the `send_message` tool.
+All paths below are relative to `/api/v1/projects/{project_id}` unless they start with `/api/v1`.
 
-`GET /messages` takes `sort` as `asc` (the default) or `desc`, and `conversation` as an agent pair,
-`<agent>:<agent>`. Any other value of either is refused with 422 rather than ignored.
+### Projects (`/api/v1/projects`)
+
+`GET /api/v1/projects` · `POST /api/v1/projects/open` (a path; registers or reopens) ·
+`POST /api/v1/projects/create` · `GET|DELETE /api/v1/projects/{id}` ·
+`GET|PUT /api/v1/projects/{id}/settings` · `GET /api/v1/projects/{id}/main-branch-suggestion` ·
+`POST /api/v1/projects/{id}/relocate`
+
+### Agents, runners and charters
+
+| Route | Purpose |
+|---|---|
+| `GET|POST /agents` | List agents, or create one (`name` plus `provider` and `model`, or a `runner_id`, and optionally `charter_id`). |
+| `PATCH /agents/{name}` · `POST /agents/{name}/archive|unarchive` | Configure, archive, restore. |
+| `GET /agents/launchability` · `GET /agents/agent-context?agent=` | Whether each agent can launch, and why not. Preview an agent's turn context. |
+| `GET|POST /runners` · `GET|PATCH|DELETE /runners/{id}` · `GET /runners/launchability[-by-provider]` | Runners. |
+| `GET|POST /charters` · `GET|PATCH|DELETE /charters/{id}` | Charters. |
+| `GET|PUT /project/instructions` | Project instructions. |
+| `GET /api/v1/model-catalog` | Models, effort levels and postures per provider. |
+
+### Conversations and runs
+
+| Route | Purpose |
+|---|---|
+| `POST /agent/trigger` | Send an agent a message. Body: `agent`, `message`, and optionally `conversation_id`, `overrides` (`model`, `effort`, posture), `task_id` (bind the run to a task), `review_task_id` (start a review turn), `spec_document`. |
+| `POST /agent/{agent}/stop` | Stop the agent's running turn. |
+| `GET /agent/{agent}/conversations` · `GET /conversations` | List conversations. |
+| `GET /agent/{agent}/chat/{conversation_id}` | A conversation's full timeline. |
+| `PATCH /agent/{agent}/conversations/{id}` · `POST …/archive|unarchive` | Rename, archive, restore. |
+| `GET /queue/{agent}` · `GET /queue/{agent}/status` | An agent's inbound queue, and *why* its input is waiting. |
+| `POST /queue/entries/{id}/release` · `DELETE /queue/entries/{id}` | Release held input, or discard it. |
+| `POST /conversations/{id}/checkpoint` · `POST /checkpoints/{id}/cutover` | Checkpoint a conversation, and cut over to its successor. |
+
+### Questions and permissions
+
+`GET|POST /questions` · `GET|PATCH /questions/{id}` (answer) · `POST /questions/{id}/decline` ·
+`GET /permission-requests` · `POST /permission-requests/{id}/decide|dismiss`
 
 ### Tasks
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/tasks` | Create a task |
-| `GET` | `/tasks` | List tasks |
-| `GET` | `/tasks/{id}` | Get task details |
-| `PATCH` | `/tasks/{id}` | Update task |
+| Route | Purpose |
+|---|---|
+| `GET|POST /tasks` · `GET|PATCH|DELETE /tasks/{id}` | Tasks. A status change in `PATCH` goes through the [lifecycle](task-lifecycle.md) rules. |
+| `GET /tasks/{id}/story` · `GET /tasks/{id}/transitions` | The task's whole story, and its transition history. |
+| `POST /tasks/{id}/land` | Review and approve a completed task in one step. |
+| `GET /tasks/{id}/integration-preview` · `GET /tasks/{id}/integrations` · `POST /tasks/{id}/integrations/retry` | What approval would merge, what it did merge, and retrying a skipped merge. |
+| `GET /tasks/{id}/checks` · `POST /tasks/{id}/checks/run` | Quality checks. |
+| `POST /tasks/{id}/dependencies` · `DELETE /tasks/{id}/dependencies/{depends_on}` | Dependencies. |
+| `GET /worktrees` · `GET /worktrees/conflicts` | Checkouts, and conflicts between them. |
 
-### Agents
+### Specifications and evidence (under `/project`)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/agents` | List all agents |
-| `GET` | `/agents/configured` | List configured agents for project |
-| `POST` | `/agents/{name}/heartbeat` | Post agent heartbeat |
-| `POST` | `/agents/{name}/output` | Post agent output log |
-| `GET` | `/agents/{name}/output` | Get agent output log |
-| `GET` | `/agents/{name}/timeline` | Get agent timeline events |
-| `PUT` | `/agents/roles/config` | Update roles configuration |
-| `GET` | `/agents/roles/config` | Get roles configuration |
-| `PATCH` | `/agents/{name}` | Update an agent's description, bindings, config and per-agent settings |
+| Route | Purpose |
+|---|---|
+| `GET /project/spec` · `GET /project/documents` · `POST /project/documents` | Read the corpus. Create a document. |
+| `POST /project/documents/propose?path=` | Propose. Returns `blocking` and `warnings`, plus `proposed: true` when it moved. |
+| `POST /project/documents/phase?path=&to=` | Approve or reopen. Body: `reason`, `approve_anyway`, `delivery_agent`, `draft_next_slice`. |
+| `POST /project/documents/{path}/rigor` · `GET …/rigor-history` | Rigor. |
+| `GET …/proposals` · `POST …/proposals/{id}/accept|reject|withdraw` | Agent proposals at contract or gate rigor. |
+| `GET …/amendments` · `POST …/amendments/review` | Tester amendments. |
+| `GET …/fold-draft` · `POST …/fold` | Fold a change into a capability. |
+| `GET /project/spec/coverage` · `GET /project/spec/requirements/{identifier}` | Coverage, and one requirement's story. |
+| `GET|POST /project/spec/evidence` · `POST /project/spec/evidence/{id}/decision|overturn` | Evidence. |
+| `POST /project/spec/drift/detect` · `GET /project/spec/drift` · `POST /project/spec/drift/{id}/resolve` | Drift. |
+| `POST /project/spec/reindex|adopt|convert` · `POST /project/spec/documents/arrange` | Corpus maintenance. |
 
-### Agent Chat and Trigger
+### Jobs, loops and the vault
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/agent/trigger` | Trigger an agent to process a message |
-| `GET` | `/agent/sessions/{agent}` | Get known sessions for an agent |
-| `GET` | `/agent/{agent}/chat` | Get agent chat history |
-| `GET` | `/agent/{agent}/chat/{session_id}` | Get a specific chat session |
+| Route | Purpose |
+|---|---|
+| `GET|POST /jobs` · `GET|PATCH /jobs/{id}` · `POST /jobs/{id}/run|archive` · `GET /jobs/{id}/history` | Jobs. A job with `purpose`, `stop_at` or `stop_when_queue_empties` is a loop. |
+| `GET /loops` · `GET /loops/{id}` · `POST /loops/{id}/control|archive` | Loops. |
+| `GET /vault/map` · `GET /vault/entries/{id}` | Read the vault. |
+| `POST /vault/sources` (text) · `POST /vault/files` (upload) · `POST /vault/paths` (local paths) | Add sources. |
+| `POST /vault/sources/{id}/distil` | Extract facts now. |
+| `GET /vault/contradictions` · `POST /vault/contradictions/{id}/resolve` · `GET /vault/reports` | Review. |
+| `GET /manager/jobs` · `PATCH /manager/jobs/{key}` · `GET /manager/activity` | Manager jobs. |
 
-`POST /agent/trigger` writes operator input to the target agent's durable inbound queue. If the
-agent is idle and launchable, the response has `status: "running"` and a `run_id`; otherwise it has
-`status: "queued"` and an inspectable `waiting_reason`. Input arriving during a run is queued for
-the following turn rather than rejected.
+### Accounting, traces and logs
 
-### Inbound Queue
+`GET /accounting` · `GET /accounting/conversations/{id}` · `PATCH /accounting/budget` ·
+`GET /ledger` · `GET|DELETE /traces` · `GET /traces/{id}` · `GET /traces/by-run/{run_id}` ·
+`GET /traces/export` · `GET|PUT /traces/settings` · `GET|POST /logs` · `GET /status`
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/queue/{agent}` | List queue entries; optionally filter with `?state=queued` |
-| `GET` | `/queue/{agent}/status` | Inspect waiting count, running state, and waiting reason |
-| `DELETE` | `/queue/entries/{id}` | Withdraw an entry that has not been delivered |
-| `GET` | `/queue/settings` | Inspect the effective project queue limits |
+## Live events
 
-The default `hop_budget` is **6** and the default `turn_delivery_cap` is **10**. They are set
-through `PUT /projects/{id}/settings` (each 1–1000); updating them requires no source change and
-immediately re-evaluates waiting queues. Entries beyond the delivery cap remain queued for
-following turns. Peer messages created by a Hub-owned run include
-that run's `run_id`; their hop depth is derived from the run rather than trusted from request data.
-
-### Logs
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/logs` | Push a structured log event |
-| `GET` | `/logs` | Query event logs |
-
-### Questions
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/questions` | Ask the human a question |
-| `GET` | `/questions` | List questions |
-| `GET` | `/questions/{id}` | Get question details |
-| `PATCH` | `/questions/{id}` | Update question (e.g., answer) |
-
-### Events
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/events/ticket` | Get a short-lived SSE auth ticket |
-| `GET` | `/events` | Live SSE stream (use ticket from above) |
-| `GET` | `/events/history` | Query historical events |
-
-### Session Sync
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/session/sync` | Sync session data to Hub |
-| `GET` | `/session/sync` | Get synced session data |
-
-### Jobs
-
-AI Jobs endpoints for scheduled recurring agent tasks.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/jobs` | List all jobs |
-| `POST` | `/jobs` | Create a new job |
-| `GET` | `/jobs/{id}` | Get job details and history |
-| `PATCH` | `/jobs/{id}` | Update job (enable/disable, modify settings) |
-| `DELETE` | `/jobs/{id}` | Delete a job |
-| `GET` | `/jobs/{id}/history` | Get job run history |
-| `POST` | `/jobs/{id}/run` | Manually trigger a job |
-
-**Job Object:**
-```json
-{
-  "id": "job-abc123",
-  "name": "Daily Report",
-  "agent": "claude",
-  "message": "Generate daily summary",
-  "cron": "0 9 * * 1-5",
-  "session_mode": "new",
-  "enabled": true,
-  "created_at": "2026-04-01T09:00:00Z",
-  "last_run": "2026-04-12T09:00:00Z",
-  "next_run": "2026-04-13T09:00:00Z",
-  "run_count": 10,
-  "history": [...]
-}
-```
-
-Jobs are created and managed in the app's Jobs page. A job carrying a purpose and an optional stop
-condition is a **loop** — the same record, wearing an intent — and its queue is the tasks that name
-it.
-
-### Status
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/status` | Session-wide summary and task counts |
-
-### Setup
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/setup/token` | Get the instance operator credential from a local or Docker-internal client |
-
-The Hub health check is available outside the API prefix at `GET /health`.
-
-Used by the native app bootstrap to obtain its local instance credential without displaying or
-copying it through an operator command. The credential selects no project; operator project
-resources carry explicit `/projects/{project_id}/...` identity.
-
-### Project Instructions
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/project/instructions` | Get project-wide instructions |
-| `PUT` | `/project/instructions` | Update project-wide instructions |
-
-## SSE Events
-
-The Hub exposes Server-Sent Events endpoints for real-time updates:
-
-### SSE Authentication
-
-SSE authentication uses short-lived signed tickets instead of passing API keys in the query string:
-
-```
-GET /api/v1/events/ticket   → returns { "ticket": "<short-lived-token>" }
-GET /api/v1/events?ticket=<token>
-```
-
-**Flow:**
-1. Call `GET /api/v1/events/ticket` with `Authorization: Bearer <api-key>` to obtain a ticket.
-2. Pass the ticket as a query parameter when opening the SSE stream: `GET /api/v1/events?ticket=<token>`.
-
-Non-SSE endpoints do **not** accept `?token=` query parameters — all REST calls must use the `Authorization` header.
-
-### Live Events Stream
-
-```
-GET /api/v1/events
-```
-
-Connect using the ticket flow above to receive live task, message, log, run, and queue events. Queue
-transitions use `queue_entry_queued`, `queue_entry_delivered`, `queue_entry_withdrawn`, and
-`queue_chain_suspended`.
-
-### Event History
-
-```
-GET /api/v1/events/history
-```
-
-Query historical events with optional filters.
-
-## Request Limits
-
-The Hub enforces the following limits on all incoming requests:
-
-| Limit | Value | Notes |
-|-------|-------|-------|
-| Request body size | 1 MB | HTTP 413 is returned for larger bodies |
-| Agent name / ID length | 128 chars | Enforced on create schemas |
-| Subject / title length | 256 chars | Enforced on message and task schemas |
-| Content length | 10,000 chars | Applies to message content and task descriptions |
-| `/agent/{agent}/chat` `limit` | 1–500 | Query parameter clamped to this range |
-
-## MCP Server
-
-The Hub MCP server lives in `hub/hub/mcp_server.py` and is normally run as a stdio process with `HUB_URL`, `HUB_API_KEY`, and `HUB_PROJECT_ID` in the environment:
+The app is driven by server-sent events. An `EventSource` cannot send headers, so you first trade
+your key for a short-lived ticket:
 
 ```bash
-python -m hub.mcp_server
+# Every project, each event stamped with its project_id:
+curl -H "Authorization: Bearer $AW_KEY" http://localhost:8000/api/v1/events/ticket
+# → {"token": "aw_optick_…", "expires_at": "…"}
+curl -N "http://localhost:8000/api/v1/events?token=aw_optick_…"
+
+# One project:
+curl -H "Authorization: Bearer $AW_KEY" http://localhost:8000/api/v1/projects/$P/events/ticket
+curl -N "http://localhost:8000/api/v1/projects/$P/events?token=aw_ticket_…"
 ```
 
-It can be mounted in FastAPI by an embedding application, but the default Hub app does not mount a `/api/v1/mcp` REST endpoint.
+Tickets live for `AW_TICKET_TTL` seconds (300 by default). `GET /events/history` returns recent
+events for a project.
+
+## Limits
+
+| Limit | Value |
+|---|---|
+| Request body | 1 MiB (`AW_MAX_BODY_SIZE`); vault file uploads 10 MiB |
+| Agent name | `^[a-zA-Z0-9_-]{1,32}$`; `user` and `operator` are reserved |
+| Message `content` | 10,000 characters |
+| Agent output event | 64 KiB payload; 8 KiB per tool input or output |
+
+## Errors
+
+Refusals are meant to be read. A `409` or `422` carries a `detail` that says what was refused and
+what to do instead. For example, an approval with gaps returns `409` with code
+`approval_warnings`, the list of gaps, and how to approve anyway. A body field sent as a query
+parameter is named back to you rather than silently ignored.

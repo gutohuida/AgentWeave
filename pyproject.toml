@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agentweave-ai"
 version = "1.1.0"
-description = "A local app for multi-agent, spec-driven development with Claude and Codex"
+description = "Run your AI factory in the open: a local app where AI coding agents build against specs you approve, and every artifact is traceable"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [

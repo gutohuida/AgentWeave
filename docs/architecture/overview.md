@@ -1,70 +1,118 @@
+---
+description: How AgentWeave is built — one Hub, its trust boundaries, the agent capability plane, project identity and execution.
+---
+
 # Architecture overview
 
-AgentWeave has one runtime: the Hub.
+AgentWeave has one runtime: the **Hub**, a FastAPI process with a SQLite database that owns
+execution, state and identity, and serves the React app.
 
-```text
-Operator dashboard ─┐
-                    ├─ Hub API + database ─ execution scheduler ─ runner processes
-Agent capability API┘          │
-                               ├─ conversations, messages, tasks, jobs
-                               ├─ logs, streams, traces, usage
-                               └─ specifications and project settings
+```mermaid
+flowchart LR
+    subgraph you[" "]
+      app["The app<br/>(React, served by the Hub)"]
+      cli["agentweave CLI<br/>start · doctor · status · stop · reset · vault add"]
+    end
+    subgraph hub["The Hub"]
+      api["Operator API<br/>instance key"]
+      plane["Agent capability plane<br/>run token"]
+      db[("SQLite")]
+      sched["Scheduler<br/>queues · jobs · loops · flows"]
+      exec["Execution<br/>runner adapters"]
+      mgr["Manager jobs<br/>titles · vault · checks"]
+    end
+    subgraph runs["Agent runs"]
+      claude["Claude Code"]
+      codex["Codex"]
+      copilot["Copilot CLI"]
+    end
+    repo[("Your repository<br/>worktrees · spec/ · merges")]
+    app --> api
+    cli --> api
+    api --- db
+    plane --- db
+    sched --> exec
+    exec --> claude & codex & copilot
+    claude & codex & copilot -->|MCP or aw-tool| plane
+    exec --> repo
+    mgr --- db
 ```
 
 ## Trust boundaries
 
-The local operator authenticates with one automatically discovered instance credential; project
-identity is explicit in operator API paths and does not come from authentication. Each running
-agent receives a short-lived run token bound to its project, agent identity, and active run. Two
-adapters — HTTP and MCP — expose the same governed action set; there is no third. Identity is never
-accepted from a request body or header, on either adapter.
+There are exactly two kinds of caller, and they never share a credential.
+
+- **The operator** authenticates with one instance key (`aw_live_…`), discovered automatically by
+  the local app. Project identity is explicit in every operator URL and never comes from the key.
+- **An agent run** gets its own short-lived token (`aw_run_…`, stored only as a digest), bound to
+  its project, its agent and that one run. It is valid only while the run is live.
+
+**Identity is never accepted from a request body or header.** That single rule is what makes every
+attribution in the product trustworthy: an agent cannot claim to be another agent, approve its own
+work, or decide its own evidence.
 
 ## The agent capability plane
 
-The plane is one HTTP contract with two front doors, and a run is told which one it has at turn
-start.
+One HTTP contract, `/api/v1/agent-actions`, with two ways in:
 
-- **HTTP** is the contract. Its operations live under `/api/v1/agent-actions`, the Hub's own
-  address reaches the spawned run as `HUB_URL`, and the run's credential reaches it as
-  `AW_RUN_TOKEN`, presented as `Authorization: Bearer`. Nothing else is needed: a run holding those
-  two environment variables can send messages, create and update tasks, ask the operator a
-  question, record evidence, and submit specification documents.
-- **MCP** is an adapter over that contract, injected into harnesses that accept it. Every tool it
-  serves is one HTTP operation; the tool's arguments are not always spelled the way the route
-  spells them, which is why the two renderings are generated from one description
-  (`hub/hub/api/v1/agents.py`) rather than written twice.
+- **MCP**, injected into CLIs that accept it, through a pinned copy of the tool server under
+  `~/.agentweave/hub/tool-server/<digest>/`;
+- **`aw-tool`**, the same program as a command on the run's `PATH`, for runs where MCP is not known
+  to work.
 
-A run whose harness has no MCP is therefore not a run without capability. It is told the HTTP form
-of the same operations — variables named, values never interpolated, because the notice is
-prepended to the durable turn prompt.
+Both are generated from one description of the [tools](../reference/agent-tools.md), so the two
+renderings cannot drift apart. A run is told which one it has at the start of its turn.
 
-## Project and filesystem boundary
+## Projects
 
-One Hub owns a collection of directory-backed projects. The database project ID is stable across
-renames and explicit relocation, while a canonical working-directory binding and non-secret
-`.agentweave/project.json` marker prevent aliases and copied directories from silently merging.
+One Hub owns many projects. A project's database id is durable. Its working directory is a unique
+binding recorded by `.agentweave/project.json`, so a renamed folder keeps its identity and a copied
+folder cannot silently merge with the original.
 
-Every runtime filesystem operation resolves through the selected project's workspace service;
-the Hub process directory is never project identity. Frontend server-state keys and URLs carry the
-project ID, and one operator SSE stream stamps each event with trusted project context. Docker
-registrations are additionally restricted to paths beneath one configured mounted workspace root.
+Every filesystem operation resolves through the project's workspace service. The Hub process's own
+working directory is never project identity. Frontend state keys and URLs carry the project id, and
+the operator's event stream stamps every event with its project. In Docker, projects are confined
+beneath one mounted workspace root.
 
 ## Execution
 
-The Hub validates launchability, creates a run, spawns the configured runner, streams structured
-events, accounts for usage, and persists the final outcome. Agent processes do not poll local files
-for work.
+For each turn the Hub:
 
-## Local application lifecycle
+1. takes the next entry from the agent's **inbound queue** (from you, a peer, a job, a loop, a
+   checkpoint, or an answer), within the hop budget and delivery cap;
+2. checks the agent can launch, and holds the turn if a provider's allowance is spent or the token
+   budget is reached;
+3. prepares the workspace (the agent's or the task's worktree) and renders the turn context
+   (project, task, team, instructions, tools, charter);
+4. spawns the runner through its **adapter**, one per CLI, which owns launch, transport, event
+   parsing, usage and posture;
+5. streams normalized events, records usage and the trace, and records how the turn ended;
+6. applies what the run did through the same governed services the operator uses: task
+   transitions, evidence, merges.
 
-Bare `agentweave` owns setup and launch. It registers or reopens its invocation directory in the
-one running instance and opens that project's overview. `doctor`, `status`, `stop`, and `reset` are
-the only CLI subcommands because operator collaboration belongs to the dashboard and agent
-collaboration belongs to the capability plane.
+Agent processes never poll for work and never touch the database. Everything they do goes through
+the capability plane.
+
+## Background work
+
+- **The scheduler** fires jobs, loops and flows, retries held queues, and runs checks.
+- **Manager jobs** are one-shot model calls the Hub makes for itself: conversation titles, vault
+  distillation and reports, the spec vault check. They never appear as agent runs, and their spend
+  is counted.
+- **Traces** of every run and every Hub operation are kept locally, and can be exported over OTLP.
+
+## The CLI
+
+`agentweave` sets up and launches the instance and registers the directory it was run from.
+`doctor`, `status`, `stop`, `reset` and `vault add` are the only subcommands. Operator collaboration
+belongs to the app, and agent collaboration belongs to the capability plane.
 
 ## Repository components
 
-- `src/agentweave/` — lifecycle CLI and agent-facing adapters
-- `hub/hub/` — FastAPI backend, scheduler, execution, persistence
-- `hub/ui/` — React dashboard
-- `openspec/` — authoritative product specifications
+| Path | What |
+|---|---|
+| `src/agentweave/` | The CLI (`agentweave-ai` on PyPI). Its own code imports only the standard library. |
+| `hub/hub/` | The Hub: API, scheduler, execution, runner adapters, persistence, migrations. |
+| `hub/ui/` | The React app, and its committed build in `hub/hub/static/ui/`. |
+| `spec/` | AgentWeave's own specification corpus, managed through AgentWeave. |
+| `docs/` | This site. |
