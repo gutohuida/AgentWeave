@@ -327,4 +327,37 @@ describe('summaryForEvent', () => {
       'copilot1 ended without moving task-1 (in_progress) — the turn ended on a refused call: a command — outside the workspace',
     )
   })
+  // F836: deleting a task that held work keeps its branch; the row used to print the event name.
+  it('names the branch, the commits and the task a deleted task left behind', () => {
+    expect(
+      summaryForEvent('task_checkout_kept', {
+        task_id: 'task-1',
+        title: 'K1: add shop/tax.py',
+        branch: 'agentweave/task/task-1',
+        unmerged_commits: 1,
+        uncommitted: false,
+      }),
+    ).toBe('Kept agentweave/task/task-1 (1 unmerged commit) from deleted task “K1: add shop/tax.py”')
+    expect(
+      summaryForEvent('task_checkout_kept', {
+        task_id: 'task-2',
+        branch: 'agentweave/task/task-2',
+        unmerged_commits: 3,
+        uncommitted: true,
+      }),
+    ).toBe('Kept agentweave/task/task-2 (3 unmerged commits, uncommitted edits) from deleted task task-2')
+  })
+
+  it('names the tasks a deleted task released', () => {
+    expect(
+      summaryForEvent('task_deleted', {
+        id: 'task-1',
+        title: 'P2: prerequisite',
+        released_dependents: [{ id: 'task-9', title: 'B: discounted label' }],
+      }),
+    ).toBe('Deleted “P2: prerequisite”; B: discounted label no longer waits on it')
+    expect(summaryForEvent('task_deleted', { id: 'task-1', title: 'P2', released_dependents: [] })).toBe(
+      'Deleted “P2”',
+    )
+  })
 })

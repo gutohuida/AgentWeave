@@ -76,6 +76,16 @@ describe('the project’s worktrees panel', () => {
     )
   })
 
+  // F836: deleting a task keeps a checkout that held work; "released when approved or rejected"
+  // cannot describe it any more.
+  it('says a task checkout whose task was deleted is kept, not released', () => {
+    renderPanel([TASK, { ...TASK, name: 'task-dd44ee55ff66', task_deleted: true }])
+    expect(screen.getByTestId('worktree-task-aa11bb22cc33')).not.toHaveTextContent(/task deleted/i)
+    expect(screen.getByTestId('worktree-task-dd44ee55ff66')).toHaveTextContent(
+      /task deleted .* work is kept/i,
+    )
+  })
+
   it('does not claim there is no activity while checkouts exist', () => {
     // The exact defect: the stub rendered this string unconditionally.
     renderPanel([TASK])

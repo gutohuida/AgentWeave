@@ -297,7 +297,7 @@ export function useSpecPhaseControls(
     try {
       const result = await deleteDocument.mutateAsync({ path })
       // F829: the page the operator lands on says what went; this panel is gone by then.
-      useSpecDeletionStore.getState().set({ path, title: document?.title ?? path, tasks: result.tasks?.length ?? 0 })
+      useSpecDeletionStore.getState().set({ path, title: document?.title ?? path, tasks: result.tasks?.length ?? 0, kept: result.kept_work ?? [] })
       setConfirmingDelete(false)
       onDeleted?.()
     } catch (error) {

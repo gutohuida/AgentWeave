@@ -228,6 +228,9 @@ function WorkspaceGroup({ title, note, workspaces }: { title: string; note?: str
               <code className="aw-path" title={workspace.path}>
                 {workspace.path}
               </code>
+              {workspace.task_deleted && (
+                <span className="aw-list-meta">Task deleted -- its work is kept on this branch.</span>
+              )}
             </span>
             <span className="aw-list-meta font-mono">{workspace.branch}</span>
           </li>

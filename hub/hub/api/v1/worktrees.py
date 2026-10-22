@@ -44,6 +44,9 @@ class WorkspaceInfo(BaseModel):
     name: str
     branch: str
     path: str
+    #: A task checkout whose task no longer exists: deleting a task keeps a checkout that held
+    #: work (F828), and nothing will release it when the task is approved or rejected (F836).
+    task_deleted: bool = False
 
 
 class TaskCheckoutInfo(BaseModel):
@@ -159,6 +162,15 @@ async def list_worktrees(
         return WorktreeListing(
             repository=False, unavailable_reason=_not_a_repository(repo_root), worktrees=[]
         )
+    checkouts = sorted(worktrees.list_workspace_branches(repo_root), key=lambda w: (w.kind, w.name))
+    task_ids = [w.name for w in checkouts if w.kind == "task"]
+    existing = set(
+        (
+            await session.execute(
+                select(Task.id).where(Task.project_id == project_id, Task.id.in_(task_ids))
+            )
+        ).scalars()
+    )
     return WorktreeListing(
         repository=True,
         worktrees=[
@@ -167,10 +179,9 @@ async def list_worktrees(
                 name=workspace.name,
                 branch=workspace.branch,
                 path=str(workspace.path),
+                task_deleted=workspace.kind == "task" and workspace.name not in existing,
             )
-            for workspace in sorted(
-                worktrees.list_workspace_branches(repo_root), key=lambda w: (w.kind, w.name)
-            )
+            for workspace in checkouts
         ],
     )
 

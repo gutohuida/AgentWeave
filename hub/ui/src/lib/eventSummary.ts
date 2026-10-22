@@ -1,3 +1,13 @@
+/** What a deleted task's kept checkout holds, as "(1 unmerged commit, uncommitted edits)" (F836,
+ *  F838). Empty when the Hub reported neither. */
+export function keptDetail(kept: { unmerged_commits?: unknown; uncommitted?: unknown }): string {
+  const parts: string[] = []
+  const commits = Number(kept.unmerged_commits ?? 0)
+  if (commits > 0) parts.push(`${commits} unmerged ${commits === 1 ? 'commit' : 'commits'}`)
+  if (kept.uncommitted) parts.push('uncommitted edits')
+  return parts.length ? ` (${parts.join(', ')})` : ''
+}
+
 export function summaryForEvent(type: string, data: Record<string, unknown>): string {
   switch (type) {
     // Hub-side events
@@ -12,6 +22,20 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     case 'stream_gap': return `The live connection fell behind and ${data.dropped ?? 'some'} events were not delivered. Views were refreshed; this feed may be missing lines until Activity is reopened.`
     case 'message_read': return `msg ${data.id} read`
     case 'task_created': return `"${data.title}" assigned to ${data.assignee ?? 'unassigned'}`
+    // F836: the task is gone, so its title rides the event; the branch is where the work survives.
+    case 'task_checkout_kept': {
+      if (data.error) return `Could not clean up the checkout of deleted task ${data.task_id}: ${String(data.error)}`
+      const from = data.title ? `“${data.title}”` : String(data.task_id)
+      return `Kept ${data.branch ?? 'its branch'}${keptDetail(data)} from deleted task ${from}`
+    }
+    case 'task_deleted': {
+      const released = Array.isArray(data.released_dependents)
+        ? (data.released_dependents as Array<{ id?: string; title?: string }>)
+        : []
+      const names = released.map((r) => r.title ?? r.id).join(', ')
+      const verb = released.length === 1 ? 'no longer waits' : 'no longer wait'
+      return `Deleted “${data.title ?? data.id}”${released.length ? `; ${names} ${verb} on it` : ''}`
+    }
     case 'task_updated': {
       const task = data.title ?? data.id ?? data.task_id
       return `${task ? `${task} → ` : ''}${data.status ?? 'updated'}`

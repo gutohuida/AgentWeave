@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { keptDetail } from '@/lib/eventSummary'
 import { useSpecDeletionStore } from '@/store/specDeletionStore'
 
 /** One sentence naming the document "Delete document" just removed and the tasks that went with
@@ -17,7 +18,17 @@ export function SpecDeletedNote() {
       data-testid="spec-deleted-note"
       className="aw-spec-deleted-note"
     >
-      <span>{said}</span>
+      <span>
+        {said}
+        {/* F838: a task's branch that held work is kept, and the operator has to be told where. */}
+        {(notice.kept ?? []).map((kept) => (
+          <span key={kept.task_id} className="block" data-testid="spec-deleted-kept">
+            {kept.error
+              ? `Could not clean up the checkout of ${kept.task_id}: ${kept.error}`
+              : `Kept ${kept.branch ?? 'its branch'}${keptDetail(kept)} from a deleted task.`}
+          </span>
+        ))}
+      </span>
       <Button variant="ghost" size="sm" data-testid="spec-deleted-note-dismiss" onClick={clear}>
         Dismiss
       </Button>

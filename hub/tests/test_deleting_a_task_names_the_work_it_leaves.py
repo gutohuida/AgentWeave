@@ -79,6 +79,8 @@ async def test_a_deleted_task_with_unmerged_commits_keeps_them_and_says_so(
     assert len(kept) == 1
     assert kept[0]["branch"] == worktrees.task_branch_name(task_id)
     assert kept[0]["unmerged_commits"] == 2
+    # F836: the task is gone, so the event carries the title the screen has to name it by.
+    assert kept[0]["title"] == "Built something"
 
 
 @pytest.mark.asyncio

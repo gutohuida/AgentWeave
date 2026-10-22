@@ -18,6 +18,9 @@ from hub import worktrees
 # patch, exactly like `test_launchability.py`'s direct imports of `probe_agent` et al.
 from hub.worktrees import resolve_agent_workspace
 
+# conftest stubs `worktrees.ensure_task_worktree`; the real one is held here from import time.
+_REAL_ENSURE_TASK_WORKTREE = worktrees.ensure_task_worktree
+
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
     result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
@@ -539,3 +542,31 @@ async def test_a_repository_with_no_checkouts_is_still_a_repository(
     await bind_project_workspace(repo)
     resp = await app.get("/api/v1/projects/proj-test/worktrees", headers=auth_headers)
     assert resp.json() == {"repository": True, "unavailable_reason": None, "worktrees": []}
+
+
+@pytest.mark.asyncio
+async def test_a_task_checkout_says_when_its_task_is_gone(
+    app, auth_headers, repo, bind_project_workspace
+):
+    """F836: deleting a task keeps a checkout that held work. The listing said nothing about its
+    task being gone, so the panel described a release ("when the task is approved or rejected")
+    that can no longer happen."""
+    await bind_project_workspace(repo)
+    live = await app.post(
+        "/api/v1/projects/proj-test/tasks", json={"title": "still here"}, headers=auth_headers
+    )
+    assert live.status_code == 201, live.text
+    live_id = live.json()["id"]
+    gone_id = "task-deadbeef0001"
+    _REAL_ENSURE_TASK_WORKTREE(repo, live_id, "main")
+    _REAL_ENSURE_TASK_WORKTREE(repo, gone_id, "main")
+
+    listing = await app.get("/api/v1/projects/proj-test/worktrees", headers=auth_headers)
+
+    assert listing.status_code == 200, listing.text
+    gone = {
+        item["name"]: item["task_deleted"]
+        for item in listing.json()["worktrees"]
+        if item["kind"] == "task"
+    }
+    assert gone == {live_id: False, gone_id: True}

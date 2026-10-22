@@ -2,6 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { ApiError, deleteJson, getJson, postJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
+import type { KeptWork } from '@/store/specDeletionStore'
 
 export interface SpecEntry {
   path: string
@@ -1349,7 +1350,7 @@ export function useDeleteSpecDocument() {
   const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
     mutationFn: ({ path }: { path: string }) =>
-      deleteJson<{ path: string; deleted: boolean; tasks: string[] }>(
+      deleteJson<{ path: string; deleted: boolean; tasks: string[]; kept_work?: KeptWork[] }>(
         `/api/v1/projects/${projectId}/project/documents/${path}`,
       ),
     onSuccess: (_result, { path }) => {

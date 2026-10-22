@@ -93,6 +93,8 @@ export interface WorkspaceInfo {
   name: string
   branch: string
   path: string
+  /** A task checkout whose task was deleted: it held work, so it was kept (F836). */
+  task_deleted?: boolean
 }
 
 /** `GET /worktrees`. `repository: false` is a project whose directory is not a git repository,

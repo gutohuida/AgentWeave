@@ -265,17 +265,35 @@ describe('folding a finished change', () => {
       path: CHANGE,
       title: 'Widgets glow',
       tasks: 2,
+      kept: [],
     })
   })
 
   it('says what was deleted, with its task count, until dismissed (F829)', async () => {
-    useSpecDeletionStore.getState().set({ path: CHANGE, title: 'Widgets glow', tasks: 2 })
+    useSpecDeletionStore.getState().set({ path: CHANGE, title: 'Widgets glow', tasks: 2, kept: [] })
     render(<SpecDeletedNote />)
     expect(screen.getByTestId('spec-deleted-note')).toHaveTextContent(
       /Deleted “Widgets glow” and its 2 tasks/,
     )
     await userEvent.click(screen.getByTestId('spec-deleted-note-dismiss'))
     expect(screen.queryByTestId('spec-deleted-note')).not.toBeInTheDocument()
+  })
+
+  // F838: the 200's kept_work (a deleted task's branch that held commits) reached no screen.
+  it('names the branch a deleted task left with unmerged work (F838)', () => {
+    useSpecDeletionStore.getState().set({
+      path: CHANGE,
+      title: 'Widgets glow',
+      tasks: 2,
+      kept: [
+        { task_id: 'task-1', branch: 'agentweave/task/task-1', unmerged_commits: 1, uncommitted: false },
+        { task_id: 'task-2', branch: 'agentweave/task/task-2', unmerged_commits: 0, uncommitted: true },
+      ],
+    })
+    render(<SpecDeletedNote />)
+    const note = screen.getByTestId('spec-deleted-note')
+    expect(note).toHaveTextContent('Kept agentweave/task/task-1 (1 unmerged commit) from a deleted task.')
+    expect(note).toHaveTextContent('Kept agentweave/task/task-2 (uncommitted edits) from a deleted task.')
   })
 
   it('shows the Hub’s refusal of a delete in the confirm', async () => {

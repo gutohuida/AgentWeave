@@ -647,8 +647,15 @@ def _merge_prerequisites(worktree: Path, task_id: str, prerequisites: Tuple[str,
         )
         if merged.returncode != 0:
             detail = (merged.stdout or merged.stderr).strip()[:2000]
+            # F835: only git's own word "CONFLICT" makes it a conflict; a hook or an index lock
+            # failed the same merge and "conflicts with its base" sent the operator to the wrong place.
+            reason = (
+                "conflicts with its base"
+                if "CONFLICT" in (merged.stdout or "") + (merged.stderr or "")
+                else "could not be merged into its base"
+            )
             raise IsolationUnavailableError(
-                f"the work {task_id} depends on conflicts with its base: merging prerequisite "
+                f"the work {task_id} depends on {reason}: merging prerequisite "
                 f"commit {sha[:12]} failed. {detail}"
             )
 

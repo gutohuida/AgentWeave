@@ -37885,7 +37885,7 @@ Asking again is right: the code was not put back and the requirement was not rew
 
 ## F835 (C) -- a dependent's turn refused because its prerequisite's merge could not be brought in is never tried again when the prerequisite lands: it sits `queued` behind a stale refusal until the operator presses Continue
 
-**Status:** open 2026-10-21. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8150, `scripts/drive/s1021_t_drive.py` + `s1021_t_ui.py`, real Haiku turns, Chromium).
+**Status:** fixed 2026-10-22 (Tier 0): `task_transition_service._integrate_task` re-drains the project's queue (`turn_scheduler.redrain_queued_agents`) after the commit of any session whose integration `merged` (an `after_commit` listener, so an approval that rolls back drains nothing); and the prerequisite-merge refusal says "could not be merged into its base" unless git printed CONFLICT (`worktrees._merge_prerequisites`). Tests `test_a_merge_that_lands_redrains_the_queue.py` (all three failed before; the third is the finding's own repro with a real pre-merge-commit hook, real retry route, only the runner process faked: the queued dependent is delivered with no other call). Not done: the refusal still names the prerequisite by sha, not by task title. Not driven in Chromium.
 **Source:** drive
 **Theme:** Dependencies
 **Ready:** yes
@@ -37907,7 +37907,7 @@ The prerequisite merge in `worktrees.py:648-652` raises `IsolationUnavailableErr
 
 ## F836 (C) -- when deleting a task keeps its work (unmerged commits), nothing on screen says so: the drawer just closes, Activity shows a bare `task_checkout_kept`, and Worktrees lists the checkout under the deleted task's id as one "released when the task is approved or rejected"
 
-**Status:** open 2026-10-21. Follow-up to F828's "Not done". Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8150, `scripts/drive/s1021_t_ui.py`, Chromium on the served bundle).
+**Status:** fixed 2026-10-22 (Tier 0): the `task_checkout_kept` event now carries the task's `title`; `eventSummary` reads "Kept <branch> (1 unmerged commit) from deleted task “<title>”" and `task_deleted` names the released tasks; `GET /worktrees` marks a task checkout whose task is gone (`task_deleted`) and the Worktrees panel says "Task deleted -- its work is kept on this branch." Tests: `eventSummary.test.ts` (2 cases), `worktreesPanel.test.tsx`, `test_a_task_checkout_says_when_its_task_is_gone`, title assertion in `test_deleting_a_task_names_the_work_it_leaves`. Not done: the drawer itself still closes silently after the 204 (no body, and `persist_event` does not broadcast, so there is nothing to toast; the Activity and Worktrees rows now say it); the delete-confirm text still promises everything "goes with it". Not driven in Chromium.
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes
@@ -37945,7 +37945,7 @@ event_logs task_created data: {"id": "task-bf20bddeb689", "title": "B: discounte
 
 ## F838 (C) -- deleting a document whose task kept work says only "Deleted “T” and its 2 tasks.": the 200's `kept_work` (branch, unmerged commit) never reaches the screen, and the confirm promises every task "goes with it"
 
-**Status:** open 2026-10-21. The document twin of F836 (task delete); F828's "Not done". Found by the day sweep `sweep-spec-sweep` (scratch Hub :8150, `scripts/drive/s1021_s_ui.py`, Chromium on the served bundle, after a real Haiku turn committed on the task's branch).
+**Status:** fixed 2026-10-22 (Tier 0): `useSpecDeletionStore` notices carry the 200's `kept_work`, and `SpecDeletedNote` adds "Kept <branch> (1 unmerged commit) from a deleted task." per entry (or the cleanup error). Test `names the branch a deleted task left with unmerged work (F838)` in `specFold.test.tsx` (failed before). Not done: the document-delete confirm still says every task "goes with it"; the document-delete `task_checkout_kept` events carry no task title. Not driven in Chromium.
 **Source:** drive
 **Theme:** Spec documents
 **Ready:** yes

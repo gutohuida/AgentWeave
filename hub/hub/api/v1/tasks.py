@@ -1506,7 +1506,10 @@ async def delete_task(
     except Exception as exc:  # noqa: BLE001 - the delete has committed; this is only reported
         kept = [{"task_id": task_id, "error": str(exc)}]
     for entry in kept:
-        await persist_event(session, project_id, "task_checkout_kept", entry, severity="warn")
+        # F836: the task is gone, so the event is the only place its title survives.
+        await persist_event(
+            session, project_id, "task_checkout_kept", {**entry, "title": title}, severity="warn"
+        )
     return None
 
 

@@ -17,13 +17,15 @@ reaches the row a different way.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import subprocess
 from dataclasses import dataclass
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from . import traces
 from .db.models import RequirementEvidence, Run, Task, TaskTransition
@@ -1238,8 +1240,54 @@ async def _integrate_task(session: AsyncSession, task: Task, actor: Actor) -> li
         await requirement_evidence.refresh_reachability(
             session, task.project_id, root, main_branch=project.main_branch
         )
+        # F835: a turn refused because this work was not on the main line yet sits `queued`, and
+        # nothing else re-tries it when the work arrives.
+        _redrain_after_commit(session, task.project_id)
 
     return results
+
+
+_REDRAIN_KEY = "integration_redrain_projects"
+#: Strong references to the tasks the `after_commit` listener starts, so none is collected early.
+_redrains_in_flight: set = set()
+
+
+def _redrain_after_commit(session: AsyncSession, project_id: str) -> None:
+    """Re-drain the project's queue once the session's root transaction commits, never if it
+    does not (an approval that rolls back did not put the work on the main line)."""
+    session.sync_session.info.setdefault(_REDRAIN_KEY, set()).add(project_id)
+
+
+@event.listens_for(Session, "after_commit")
+def _redrain_pending(session: Session) -> None:
+    if session.in_nested_transaction():
+        return
+    pending = session.info.pop(_REDRAIN_KEY, set())
+    if not pending:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return  # the next project open, run end or settings save drains it
+    for project_id in pending:
+        redrain = loop.create_task(_redrain(project_id))
+        _redrains_in_flight.add(redrain)
+        redrain.add_done_callback(_redrains_in_flight.discard)
+
+
+@event.listens_for(Session, "after_transaction_end")
+def _drop_pending_redrain(session: Session, transaction) -> None:
+    if transaction.parent is None:
+        session.info.pop(_REDRAIN_KEY, None)
+
+
+async def _redrain(project_id: str) -> None:
+    from . import turn_scheduler
+
+    try:
+        await turn_scheduler.redrain_queued_agents(project_id)
+    except Exception:  # noqa: BLE001 -- entries are durable; the next drain delivers them
+        logger.warning("could not re-drain %s after a merge", project_id, exc_info=True)
 
 
 async def history_for(session: AsyncSession, task_id: str) -> list[TaskTransition]:

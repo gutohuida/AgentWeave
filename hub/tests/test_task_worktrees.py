@@ -630,12 +630,15 @@ async def test_the_worktrees_endpoint_lists_task_workspaces_and_says_which_is_wh
         "name": TASK,
         "branch": worktrees.task_branch_name(TASK),
         "path": str(task_path.resolve()),
+        # No task row exists for this id (F836): its checkout reads as a deleted task's.
+        "task_deleted": True,
     }
     assert by_name["builder"] == {
         "kind": "agent",
         "name": "builder",
         "branch": worktrees.branch_name("builder"),
         "path": str(agent_path.resolve()),
+        "task_deleted": False,
     }
 
 
