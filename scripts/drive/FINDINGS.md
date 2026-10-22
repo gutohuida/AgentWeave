@@ -38820,7 +38820,7 @@ The worker is given the one entry (`hub/hub/vault_reports.py`, the review prompt
 
 ## F925 (B) -- a job whose agent a session sync deleted (or the operator archived) can still be enabled and fired; the press answers 500 and records the firing `failed`, but leaves a queued entry and an open conversation that the next agent of that name receives and runs
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8116, profile ag1022, real Haiku, `scripts/drive/s1022_ag_api.py` and `s1022_ag_lib.py` calls).
+**Status:** fixed 0f2771e 2026-10-23 (night). `scheduler.agent_unfirable_reason` is asked before a firing writes its run, entry and conversation (plain job) or enters a task (loop): a gone or archived agent records `failed` + `job_run_failed` and queues nothing; `PATCH enabled:true` runs job create's roster check (which no longer counts an archived agent the synced roster still lists); a press refused for this reason answers 409 with the sentence. Tests `hub/tests/test_a_job_for_a_vanished_agent_does_not_fire.py` (6, red before). Drive on scratch Hub :8122 (profile f925, torn down): enabled jobs for delta/gamma, sync removed delta, gamma archived -> press 409 each, one `failed` row each, no queue entry or conversation for either, re-enable 400. The optional design note (sync/archive answers naming the jobs left behind) is not done. Originally: open 2026-10-22. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8116, profile ag1022, real Haiku, `scripts/drive/s1022_ag_api.py` and `s1022_ag_lib.py` calls).
 **Source:** drive
 **Theme:** Agents
 **Ready:** yes
