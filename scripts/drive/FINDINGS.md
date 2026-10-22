@@ -37885,7 +37885,7 @@ Asking again is right: the code was not put back and the requirement was not rew
 
 ## F835 (C) -- a dependent's turn refused because its prerequisite's merge could not be brought in is never tried again when the prerequisite lands: it sits `queued` behind a stale refusal until the operator presses Continue
 
-**Status:** fixed 2026-10-22 (Tier 0): `task_transition_service._integrate_task` re-drains the project's queue (`turn_scheduler.redrain_queued_agents`) after the commit of any session whose integration `merged` (an `after_commit` listener, so an approval that rolls back drains nothing); and the prerequisite-merge refusal says "could not be merged into its base" unless git printed CONFLICT (`worktrees._merge_prerequisites`). Tests `test_a_merge_that_lands_redrains_the_queue.py` (all three failed before; the third is the finding's own repro with a real pre-merge-commit hook, real retry route, only the runner process faked: the queued dependent is delivered with no other call). Not done: the refusal still names the prerequisite by sha, not by task title. Not driven in Chromium.
+**Status:** fixed 2026-10-22 (Tier 0): `task_transition_service._integrate_task` re-drains the project's queue (`turn_scheduler.redrain_queued_agents`) after the commit of any session whose integration `merged` (an `after_commit` listener, so an approval that rolls back drains nothing); and the prerequisite-merge refusal says "could not be merged into its base" unless git printed CONFLICT (`worktrees._merge_prerequisites`). Tests `test_a_merge_that_lands_redrains_the_queue.py` (all three failed before; the third is the finding's own repro with a real pre-merge-commit hook, real retry route, only the runner process faked: the queued dependent is delivered with no other call). Not done: the refusal still names the prerequisite by sha, not by task title. Not driven in Chromium. Day 2026-10-22 (`sweep-tasks-sweep`, :8114, Chromium): CONFIRMED live -- a hook refused A's merge (retryable), beta's trigger on B queued with "could not be merged into its base", the hook removed, the board card's Retry merged A and B's queued turn started with no other call (completed, its commit on top of the integration).
 **Source:** drive
 **Theme:** Dependencies
 **Ready:** yes
@@ -37907,7 +37907,7 @@ The prerequisite merge in `worktrees.py:648-652` raises `IsolationUnavailableErr
 
 ## F836 (C) -- when deleting a task keeps its work (unmerged commits), nothing on screen says so: the drawer just closes, Activity shows a bare `task_checkout_kept`, and Worktrees lists the checkout under the deleted task's id as one "released when the task is approved or rejected"
 
-**Status:** fixed 2026-10-22 (Tier 0): the `task_checkout_kept` event now carries the task's `title`; `eventSummary` reads "Kept <branch> (1 unmerged commit) from deleted task “<title>”" and `task_deleted` names the released tasks; `GET /worktrees` marks a task checkout whose task is gone (`task_deleted`) and the Worktrees panel says "Task deleted -- its work is kept on this branch." Tests: `eventSummary.test.ts` (2 cases), `worktreesPanel.test.tsx`, `test_a_task_checkout_says_when_its_task_is_gone`, title assertion in `test_deleting_a_task_names_the_work_it_leaves`. Not done: the drawer itself still closes silently after the 204 (no body, and `persist_event` does not broadcast, so there is nothing to toast; the Activity and Worktrees rows now say it); the delete-confirm text still promises everything "goes with it". Not driven in Chromium.
+**Status:** fixed 2026-10-22 (Tier 0): the `task_checkout_kept` event now carries the task's `title`; `eventSummary` reads "Kept <branch> (1 unmerged commit) from deleted task “<title>”" and `task_deleted` names the released tasks; `GET /worktrees` marks a task checkout whose task is gone (`task_deleted`) and the Worktrees panel says "Task deleted -- its work is kept on this branch." Tests: `eventSummary.test.ts` (2 cases), `worktreesPanel.test.tsx`, `test_a_task_checkout_says_when_its_task_is_gone`, title assertion in `test_deleting_a_task_names_the_work_it_leaves`. Not done: the drawer itself still closes silently after the 204 (no body, and `persist_event` does not broadcast, so there is nothing to toast; the Activity and Worktrees rows now say it); the delete-confirm text still promises everything "goes with it". Not driven in Chromium. Day 2026-10-22 (Chromium): the Worktrees panel's "Task deleted -- its work is kept on this branch." and the Logs view's sentence held; the confirm, the silent close and the Activity tab's default (digest) view did not -- filed as F916.
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes
@@ -38199,7 +38199,7 @@ The ui-finesse mock's reader has a "Used by" tab (`hub/ui/src/components/vault/V
 
 ## F903 (C) -- a requirement awaiting review lost its own tone on the task card and in the drawer
 
-**Status:** fixed 2026-10-22 (night window, Tier 0). `useRequirementTallies` counts `evidence_awaiting_review` and the card's tally names it in its title ("1 awaiting review") and in `data-awaiting-review`, amber when nothing is rejected (`taskRequirementLinks.test.tsx`, failed before). The drawer's Serves list still carries no coverage tone. Original: open 2026-10-20. Found in the same port as F902.
+**Status:** fixed 2026-10-22 (night window, Tier 0). `useRequirementTallies` counts `evidence_awaiting_review` and the card's tally names it in its title ("1 awaiting review") and in `data-awaiting-review`, amber when nothing is rejected (`taskRequirementLinks.test.tsx`, failed before). The drawer's Serves list still carries no coverage tone. Original: open 2026-10-20. Found in the same port as F902. Day 2026-10-22 (Chromium): held on the card -- `0/1 FR`, `data-awaiting-review=true`, title "0 of 1 requirements verified, 1 awaiting review".
 **Source:** code
 **Theme:** Tasks
 **Ready:** yes
@@ -38219,7 +38219,7 @@ The old card's per-requirement chips gave a requirement awaiting review a pendin
 
 ## F905 (C) -- the compact task card offers Retry on every unmerged task, even one a retry can never clear
 
-**Status:** fixed 2026-10-22 (night window, Tier 0). `TaskIntegrationSummary.retryable` (computed from `task_integration.is_retryable`) rides every task payload; the card offers Retry only when it is true (`test_task_integration.py`, `taskCardCompact.test.tsx`, failed before). Driven on :8162 in Chromium: an approved task skipped with "nothing to merge" shows "Not merged", no Retry. The Overview's merge rows offer only Open task, so they needed no change. Original: open 2026-10-20. Found in the same port as F902.
+**Status:** fixed 2026-10-22 (night window, Tier 0). `TaskIntegrationSummary.retryable` (computed from `task_integration.is_retryable`) rides every task payload; the card offers Retry only when it is true (`test_task_integration.py`, `taskCardCompact.test.tsx`, failed before). Driven on :8162 in Chromium: an approved task skipped with "nothing to merge" shows "Not merged", no Retry. The Overview's merge rows offer only Open task, so they needed no change. Original: open 2026-10-20. Found in the same port as F902. Day 2026-10-22 (Chromium, :8114): held both ways -- a hook-failed merge shows "Merge failed" with Retry (and Retry merged it); a "nothing to merge" skip shows "Not merged", no Retry on the card, no Try again in the drawer.
 **Source:** code
 **Theme:** Tasks
 **Ready:** yes
@@ -38292,7 +38292,7 @@ coverage bar, Evidence (2) on FR-3: "total() printed 6 as an int — operator ·
 
 ## F855 (D) -- the document's health line counts stale, drifting, awaiting-review and changed-unreviewed requirements as "in progress"
 
-**Status:** open 2026-10-21. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8155, Chromium on the ui-finesse bundle: `scripts/drive/s1021_e_ui.py`, `testbed/probe_v1021.py`).
+**Status:** open 2026-10-21. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8155, Chromium on the ui-finesse bundle: `scripts/drive/s1021_e_ui.py`, `testbed/probe_v1021.py`). Also 2026-10-22 (:8114, Chromium): a `not_started` requirement is counted too -- coverage FR-1 verified, FR-2 in_progress, FR-3 not_started read "1/3 verified · 2 in progress".
 **Source:** drive
 **Theme:** Requirements & evidence
 **Ready:** yes
@@ -38602,3 +38602,76 @@ The app's own forms refuse a blank answer (`AnswerForm.tsx:99`), so this is an A
 **Tier:** 0
 
 `OverviewView.tsx:207` renders `{formatAgo(need.at, now)} ago`; `formatAgo` (`hub/ui/src/lib/format.ts:84`) returns `now` under 45 s and a calendar day (`formatDay`) past 60 days, so a row reads "now ago" or "Oct 3 ago". **Expected:** "just now" / "3m ago" / "Oct 3" (e.g. `formatAgoLong`, or append " ago" only to a relative value). **Test:** the OverviewView test: a need created 10 s before `now` renders no "now ago". Seam: Overview.
+
+
+## F914 (C) -- the Tasks screen's Dependencies view keeps the agent filter and the "Find a task" search on its toolbar and ignores both
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8114, profile tk1022, Chromium against the served bundle, `scripts/drive/s1022_tk_ui.py deps`).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+Nine tasks (three from an approved change document, six made by hand; two assigned to `beta`). On the Board, the `beta` chip leaves two cards (`t-label`, `S`), as it should. Switch to **Dependencies**: the same toolbar is still there, chips and search box live, and:
+
+```
+Dependencies view, chip "beta" active + "Find a task" = "Add"  -> 8 rows (every task), not the 1-2 that match
+Board view, chip "beta"                                        -> 2 cards
+```
+
+`BoardView.tsx:95` filters `visible` by `agentFilter` and `query`, but the Dependencies branch (`BoardView.tsx:155`) renders `children`, a `DependencyListView` that `TasksScreen.tsx:320` hands the unfiltered `tasks`. (The spec's requirement filter does apply there: `TasksScreen` applies it before both.) **Expected:** either the list honours the chip and the search (filter rows, keeping a matching row's chain context) or the toolbar hides them on that view; never controls that look active and do nothing. **Test:** a `BoardView`/`TasksScreen` vitest: `view="dependencies"`, chip `beta` selected -> only beta's rows (or no chips rendered). Fails today. Seam: Tasks (board toolbar) x Dependencies.
+
+## F915 (D) -- the Dependencies view says dependencies come only from spec documents, and that a hand-made task's are "set from its task story"; the only control is the drawer's Details view
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8114, Chromium, `scripts/drive/s1022_tk_ui.py deps` and `drawer H3`).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+```
+Dependencies view banner        : "Dependencies come from each spec document. To change one, edit the document that declares it."
+"Made by hand" group, 5 tasks   : "· no document declares these; set them from the task"  (title: "A hand-made task's dependencies are set from its task story.")
+drawer (H3), Story view         : no dependency control
+drawer (H3), Details view       : "Depends on  H2: after H1 ... Add vat() ... [Choose a task...] Add"   <- the picker (F571)
+POST /tasks/<H3>/dependencies {"depends_on": <t-tax, a document task>} -> 201 "added"; the list then shows "Add vat() ... unblocks H3"
+```
+
+The banner sits directly above a "Made by hand" group that no document declares, and the hint sends the operator to the Story view, where there is nothing to press. `DependencyListView.tsx:64` (banner) and `:78` (hint). Related: F827 (open) is the same wrong pointer in the rejected-prerequisite refusal. **Expected:** the banner says a document's tasks take their order from the document, and that any task's prerequisites can be added in its drawer under Details -> Depends on; the hint says "from the task's Details". **Test:** a `DependencyListView` vitest asserting the hand-made hint names Details, not the story. Seam: Dependencies x Tasks (drawer).
+
+## F916 (C) -- deleting a task whose branch holds unmerged work: the confirm promises everything "goes with it", the drawer closes in silence, and the Activity tab's default view reads only "task checkout kept"
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-tasks-sweep` re-driving F836 in Chromium (scratch Hub :8114, `scripts/drive/s1022_tk_ui.py delete t-label`). The residual F836 recorded as "not done", plus a part its fix cannot reach.
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+`t-label` worked by a real Haiku turn: commit `a11c5d6` on `agentweave/task/task-f5d5eb6aa258`, task `completed`, not merged. In Chromium:
+
+```
+drawer -> Details -> Delete -> confirm: "Delete this task? Its own prerequisites, links, transitions and evidence go with it. This cannot be undone."
+Delete task -> drawer closes; page text has no "kept", "branch" or "unmerged"
+Activity tab, default "Activity" view (the digest): "10:02 (warning) task checkout kept"  /  "10:02 task deleted"     (no branch, count or title)
+Activity tab, "Logs" view : "task_checkout_kept  Kept agentweave/task/task-f5d5eb6aa258 (1 unmerged commit) from deleted task "Add discounted_label()""   <- F836's sentence
+Project settings -> Worktrees: "Task deleted -- its work is kept on this branch."                                                                      <- held
+```
+
+F836's sentence lives in `eventSummary`, which only `EventRow` and `LogLine` use; the Activity view is `ActivityDigest`, whose default branch (`lib/activityDigest.ts:165`) prints the wire name (the general case is F908). So the one warning that work survived a delete is unreadable where the operator lands. **Expected:** (1) when the task's checkout holds unmerged commits, the confirm says the branch and its commits will be kept (the drawer can read it from `GET /worktrees`' row for the task's checkout); (2) the digest's default branch falls back to `eventSummary(e)` before the wire name, which gives this row and `task_deleted` ("Deleted "Add discounted_label()"") their sentences and narrows F908. **Tests:** `activityDigest.test.ts`: a `task_checkout_kept` event with `{branch, unmerged_commits: 1, title}` yields text containing the branch and the title; a drawer test: a task whose checkout row has unmerged commits gets a confirm naming the branch. Both fail today. Seam: Tasks (delete) x Worktrees x Activity digest.
+
+## F917 (D) -- `POST /tasks/{id}/integrations/retry` on a skip the Hub itself marks not retryable answers 200 and records another identical "Not merged" attempt
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-tasks-sweep` (scratch Hub :8114, `scripts/drive/s1022_tk_drive.py skip`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+```
+PATCH N pending -> ... -> approved (no run, no evidence)
+  latest_integration: {"outcome": "skipped", "reason": "no accepted evidence names a commit, so there is nothing to merge", "retryable": false}
+POST /tasks/<N>/integrations/retry -> 200, integrations: [tint-7c2e90f28e1a skipped retryable false, tint-4afd34796d04 skipped retryable false]  (same reason)
+drawer Story: "Not merged just now ... nothing to merge" twice
+```
+
+The card and the drawer correctly offer no Retry (F905), so only an API caller reaches this, but the route (`hub/hub/api/v1/tasks.py:1414`) ignores the `is_retryable` verdict it publishes (`task_integration.py:124`) and writes a row plus a `task_integration_retried` event for an attempt that, by that function's own docstring, cannot change anything. **Expected:** 409 when the latest attempt is not retryable, its detail the reason and what does re-attempt it ("accepting evidence re-attempts by itself", "saving the main branch re-attempts"), and no row written. **Test:** `test_task_integration.py`: retry after a `nothing to merge` skip -> 409, integration count unchanged. Fails today. Seam: Worktrees & integration (API).

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T17:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-tasks-sweep",
-    "next_action": "Run sweep-tasks-sweep per .claude/loops/day-window.md: Tasks x Dependencies x Worktrees & integration; start with the compact board (F902/F903 stalled + awaiting review, card vs drawer), DependencyListView, Retry only where retryable (F905), F835. Scratch Hub port 8110+, haiku (claude-haiku-4-5-20251001) only.",
+    "current": "sweep-vault-sweep",
+    "next_action": "Run sweep-vault-sweep per .claude/loops/day-window.md: Knowledge vault x Manager jobs x CLI & lifecycle; start with the rebuilt Vault screens in Chromium (VaultLibrary + page drop, VaultReader, VaultReview cards, VaultAddDialog, VaultStorageDialog) and Manager under Project settings. Scratch Hub port 8110+, haiku (claude-haiku-4-5-20251001) only; disable every manager job when its row is done.",
     "queue": [
         {
             "id": "plan-review",
@@ -41,7 +41,7 @@
         },
         {
             "id": "sweep-tasks-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Tasks x Dependencies x Worktrees & integration",
             "detail": "First: the compact board (BoardView/TaskCardCompact): 'stalled' beside a wait, requirements awaiting review (F902/F903), card agrees with drawer; the Dependencies list (DependencyListView); Retry only where retryable (F905); a merge that lands re-drains the queue (F835)."
         },
