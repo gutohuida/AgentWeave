@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T17:00:00+01:00",
-    "iteration": 15,
+    "iteration": 16,
     "log_file": ".claude/autonomous/2026-10-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-7",
-    "next_action": "Run D-7 (merge gate) per .claude/loops/day-window.md 'The merge gate'; closing entry with usage_report output; then set next_action null.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "plan-review",
@@ -101,7 +101,7 @@
         },
         {
             "id": "D-7",
-            "status": "open",
+            "status": "done",
             "title": "Merge gate",
             "detail": "Per day-window.md 'The merge gate'. Morning gate deferred: the tip 7ad44e8 (arm commit) had CI in_progress at compose; night tip d019e5f was success. No migrations in master..branch at compose, no HOLD MERGE. Last firing; closing entry with usage_report output; next_action null."
         }
