@@ -254,6 +254,17 @@ describe('the requirement tally on the card (F4)', () => {
     expect(tally()).toHaveAttribute('data-rejected', 'false')
   })
 
+  it('names a requirement awaiting review in the tally, apart from the unproven ones (F903)', () => {
+    setCoverage('spec/example.json', [
+      coverageEntry({ identifier: 'FR-1', state: 'evidence_awaiting_review' }),
+      coverageEntry({ identifier: 'FR-2', state: 'verified' }),
+    ])
+    renderCollapsed(makeTask({ requirement_ids: ['FR-1', 'FR-2'], requirement_links: links(['FR-1', 'FR-2']) }))
+
+    expect(tally()).toHaveAttribute('data-awaiting-review', 'true')
+    expect(tally()).toHaveAttribute('title', '1 of 2 requirements verified, 1 awaiting review')
+  })
+
   it('states the whole count by coverage state, however many requirements there are', () => {
     setCoverage('spec/example.json', [
       coverageEntry({ identifier: 'FR-1', state: 'verified' }),
@@ -266,7 +277,7 @@ describe('the requirement tally on the card (F4)', () => {
     renderCollapsed(makeTask({ requirement_ids: ids, requirement_links: links(ids) }))
 
     expect(tally()).toHaveTextContent('2/5 FR')
-    expect(tally()).toHaveAttribute('title', '2 of 5 requirements verified, 1 rejected')
+    expect(tally()).toHaveAttribute('title', '2 of 5 requirements verified, 1 rejected, 1 awaiting review')
   })
 
   it('marks the tally complete once every requirement is verified', () => {

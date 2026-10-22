@@ -23,6 +23,9 @@ export interface NeedItem {
   title: string
   detail?: string | null
   at: string
+  /** A question: `true` when an agent holds a call open for the answer, `false` when none does.
+   *  Absent for anything that is not a question. */
+  waiting?: boolean
   /** A question's offered answers, answerable right here. */
   options?: QuestionOption[]
   primary: { label: string; onClick: () => void }
@@ -197,6 +200,7 @@ export function OverviewView({
                       {need.agent ? (
                         <span className="aw-ov-agent" style={{ '--agent-accent': color!.accent } as React.CSSProperties}>
                           <span className="aw-agent-dot" /> {need.agent}
+                          {need.waiting === undefined ? '' : need.waiting ? ' is waiting' : ' is asking'}
                         </span>
                       ) : null}
                       <time dateTime={need.at} title={formatDateTime(need.at, now)}>

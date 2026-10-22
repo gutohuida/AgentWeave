@@ -37,6 +37,15 @@ describe('the status line', () => {
     expect(status?.text).toBe('Waiting on you · Which port?')
   })
 
+  it('keeps the stalled fact beside the wait when a task is both (F902)', () => {
+    const status = cardStatus(makeTask({ awaiting_answer_reason: 'Which port?', has_open_divergence: true }))
+    expect(status?.reason).toBe('waiting')
+    expect(status?.text).toBe('Waiting on you · Which port? · stalled')
+    expect(status?.detail).toMatch(/ended without changing its status/)
+    // Waiting alone does not claim a stall.
+    expect(cardStatus(makeTask({ awaiting_answer_reason: 'Which port?' }))?.text).toBe('Waiting on you · Which port?')
+  })
+
   it('says a task waits even when it parked without a reason', () => {
     expect(cardStatus(makeTask({ status: 'blocked' }))?.reason).toBe('waiting')
   })
@@ -72,7 +81,7 @@ describe('the status line', () => {
       <TaskCardCompact
         task={makeTask({
           status: 'approved',
-          latest_integration: { outcome: 'skipped', reason: 'the checkout has local changes', commit_sha: null, target_branch: 'main', created_at: '2026-08-10T10:00:00Z' },
+          latest_integration: { outcome: 'skipped', reason: 'the checkout has local changes', commit_sha: null, target_branch: 'main', created_at: '2026-08-10T10:00:00Z', retryable: true },
         })}
         onOpen={vi.fn()}
         onRetryIntegration={onRetry}
@@ -83,6 +92,22 @@ describe('the status line', () => {
     expect(line).toHaveAttribute('title', 'The checkout has local changes.')
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(onRetry).toHaveBeenCalledWith('task-1')
+  })
+
+  it('offers no Retry where a retry can never clear the skip (F905)', () => {
+    render(
+      <TaskCardCompact
+        task={makeTask({
+          status: 'approved',
+          latest_integration: { outcome: 'skipped', reason: 'no main branch is configured', commit_sha: null, target_branch: null, created_at: '2026-08-10T10:00:00Z', retryable: false },
+        })}
+        onOpen={vi.fn()}
+        onRetryIntegration={vi.fn()}
+      />,
+    )
+    // The fact is still stated; only the button that cannot help is withheld.
+    expect(screen.getByTestId('task-card-status-task-1')).toHaveAttribute('data-reason', 'not-merged')
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
   })
 
   it('puts the wait ahead of live work', () => {

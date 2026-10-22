@@ -92,6 +92,23 @@ describe('the wired Overview', () => {
     expect(answerMutate.mock.calls[0][0]).toEqual({ id: 'q-1', answer: 'Remove it', labels: ['Remove it'] })
   })
 
+  it('puts the question an agent is blocked on first, and claims a wait only for it (F904)', () => {
+    // The route returns oldest first, so the non-blocking record is the older row.
+    questions = [
+      question({ id: 'q-old', question: 'FYI which licence?', blocking: false, created_at: '2026-10-20T08:00:00Z' }),
+      question({ id: 'q-new', question: 'Keep the old parser behind a flag?', blocking: true }),
+      question({ id: 'q-gone', question: 'Dead ask?', blocking: true, asker_waiting: false, created_at: '2026-10-20T08:30:00Z' }),
+    ]
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    const titles = Array.from(document.querySelectorAll('.aw-ov-need-title')).map((el) => el.textContent)
+    expect(titles.indexOf('Keep the old parser behind a flag?')).toBeLessThan(titles.indexOf('FYI which licence?'))
+    expect(titles.indexOf('Keep the old parser behind a flag?')).toBeLessThan(titles.indexOf('Dead ask?'))
+    const who = (text: string) => (screen.getByText(text).closest('li') as HTMLElement).querySelector('.aw-ov-agent')
+    expect(who('Keep the old parser behind a flag?')).toHaveTextContent('builder is waiting')
+    expect(who('FYI which licence?')).toHaveTextContent('builder is asking')
+    expect(who('Dead ask?')).toHaveTextContent('builder is asking')
+  })
+
   it('does not offer inline options for a multi-select question', () => {
     questions = [question({ multi_select: true })]
     render(<OverviewScreen onNavigate={vi.fn()} />)

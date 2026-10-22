@@ -12,6 +12,8 @@ import '@/styles/board.css'
 export interface RequirementTally {
   verified: number
   rejected: number
+  /** Evidence is in and the operator has not yet judged it (coverage `evidence_awaiting_review`). */
+  awaitingReview?: number
   total: number
 }
 
@@ -99,7 +101,8 @@ export function TaskCardCompact({
               className="aw-task-card-reqs"
               data-complete={tally.verified === tally.total ? 'true' : 'false'}
               data-rejected={tally.rejected > 0 ? 'true' : 'false'}
-              title={`${tally.verified} of ${tally.total} requirements verified${tally.rejected ? `, ${tally.rejected} rejected` : ''}`}
+              data-awaiting-review={tally.awaitingReview ? 'true' : 'false'}
+              title={`${tally.verified} of ${tally.total} requirements verified${tally.rejected ? `, ${tally.rejected} rejected` : ''}${tally.awaitingReview ? `, ${tally.awaitingReview} awaiting review` : ''}`}
             >
               {tally.verified === tally.total ? <Icon name="check" size={11} /> : null}
               {tally.verified}/{tally.total} FR

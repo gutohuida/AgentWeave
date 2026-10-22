@@ -33,14 +33,16 @@ export function useRequirementTallies(
       const links = new Map((task.requirement_links ?? []).map((l) => [l.identifier, l]))
       let verified = 0
       let rejected = 0
+      let awaitingReview = 0
       for (const id of ids) {
         const link = links.get(id)
         const path = link ? pathById.get(link.document_id) : undefined
         const s = path ? state.get(`${path}#${id}`) : undefined
         if (s === 'verified') verified += 1
         if (s === 'rejected' || link?.has_rejected_evidence) rejected += 1
+        else if (s === 'evidence_awaiting_review') awaitingReview += 1
       }
-      out[task.id] = { verified, rejected, total: ids.length }
+      out[task.id] = { verified, rejected, awaitingReview, total: ids.length }
     }
     return out
     // `coverage` is a new array each render; its data is what matters.

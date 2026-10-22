@@ -104,6 +104,9 @@ export interface LatestIntegration {
   commit_sha: string | null
   target_branch: string | null
   created_at: string
+  /** Whether a retry could change the outcome; the Hub classifies it (`is_retryable`), so a card
+   *  never matches the reason's sentence. */
+  retryable: boolean
 }
 
 /** A prerequisite or dependent named on a `Task` — enough to draw an edge without fetching the

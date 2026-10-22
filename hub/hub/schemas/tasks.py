@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import Any, List, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 from ..route_words import task_route_word
 from .common import RequestModel
@@ -301,6 +301,16 @@ class TaskIntegrationSummary(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def retryable(self) -> bool:
+        """Whether a retry could change the answer (F905): the same classifier
+        `GET /tasks/{id}/integrations` applies per row, so a card that reads only the list does not
+        offer Retry on a skip a repeat can never clear."""
+        from .. import task_integration
+
+        return task_integration.is_retryable(self.outcome, self.reason)
 
 
 class TaskResponse(BaseModel):

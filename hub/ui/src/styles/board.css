@@ -94,6 +94,7 @@ input.aw-board-search-input { height: 28px; padding: 0 10px 0 28px; font-size: 1
 }
 .aw-task-card-reqs[data-complete="true"] { color: var(--green); }
 .aw-task-card-reqs[data-rejected="true"] { color: var(--red); }
+.aw-task-card-reqs[data-awaiting-review="true"][data-rejected="false"][data-complete="false"] { color: var(--amber); }
 .aw-task-card-assignee { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aw-task-card-unassigned { color: var(--text-3); }
 .aw-task-card-priority { display: inline-flex; color: var(--amber); }

@@ -38189,7 +38189,7 @@ The ui-finesse mock's reader has a "Used by" tab (`hub/ui/src/components/vault/V
 
 ## F902 (C) -- the compact task card shows one fact at a time: a task both waiting and stalled shows only "waiting"
 
-**Status:** open 2026-10-20. Found applying the ui-finesse mock (`ui/finesse-mocks`), porting the old `TaskCard` tests to `TaskCardCompact`.
+**Status:** fixed 2026-10-22 (night window, Tier 0). `cardStatus` keeps the stalled fact beside the wait: "Waiting on you · <why> · stalled", the title carrying the dropped-run sentence (`taskCardCompact.test.tsx`, failed before). Original: open 2026-10-20. Found applying the ui-finesse mock (`ui/finesse-mocks`), porting the old `TaskCard` tests to `TaskCardCompact`.
 **Source:** code
 **Theme:** Tasks
 **Ready:** yes
@@ -38199,7 +38199,7 @@ The ui-finesse mock's reader has a "Used by" tab (`hub/ui/src/components/vault/V
 
 ## F903 (C) -- a requirement awaiting review lost its own tone on the task card and in the drawer
 
-**Status:** open 2026-10-20. Found in the same port as F902.
+**Status:** fixed 2026-10-22 (night window, Tier 0). `useRequirementTallies` counts `evidence_awaiting_review` and the card's tally names it in its title ("1 awaiting review") and in `data-awaiting-review`, amber when nothing is rejected (`taskRequirementLinks.test.tsx`, failed before). The drawer's Serves list still carries no coverage tone. Original: open 2026-10-20. Found in the same port as F902.
 **Source:** code
 **Theme:** Tasks
 **Ready:** yes
@@ -38209,7 +38209,7 @@ The old card's per-requirement chips gave a requirement awaiting review a pendin
 
 ## F904 (C) -- the Overview's "Needs you" lost two question behaviours: blocking questions first, and no "waiting" claim for a non-blocking one
 
-**Status:** open 2026-10-20. Found in the same port as F902.
+**Status:** fixed 2026-10-22 (night window, Tier 0). `OverviewScreen` orders questions an agent is blocked on first (stable) and each question's meta says "is waiting" or "is asking" (`overviewScreen.test.tsx`, failed before); `QuestionInterruptCard.tsx` and its test deleted. Original: open 2026-10-20. Found in the same port as F902.
 **Source:** code
 **Theme:** Overview
 **Ready:** yes
@@ -38219,7 +38219,7 @@ The old card's per-requirement chips gave a requirement awaiting review a pendin
 
 ## F905 (C) -- the compact task card offers Retry on every unmerged task, even one a retry can never clear
 
-**Status:** open 2026-10-20. Found in the same port as F902.
+**Status:** fixed 2026-10-22 (night window, Tier 0). `TaskIntegrationSummary.retryable` (computed from `task_integration.is_retryable`) rides every task payload; the card offers Retry only when it is true (`test_task_integration.py`, `taskCardCompact.test.tsx`, failed before). Driven on :8162 in Chromium: an approved task skipped with "nothing to merge" shows "Not merged", no Retry. The Overview's merge rows offer only Open task, so they needed no change. Original: open 2026-10-20. Found in the same port as F902.
 **Source:** code
 **Theme:** Tasks
 **Ready:** yes

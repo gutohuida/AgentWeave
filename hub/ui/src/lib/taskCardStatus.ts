@@ -26,6 +26,8 @@ export interface CardStatus {
   retry?: boolean
 }
 
+const STALLED_DETAIL = 'A run worked on this and ended without changing its status. Nothing is running now.'
+
 /** The one thing worth saying about this card, if any. Order is urgency: something the operator
  *  must answer, then a failure, then a gate, then live work, then what the column already implies.
  *
@@ -37,6 +39,15 @@ export function cardStatus(task: Task, working?: boolean): CardStatus | null {
   const waiting = task.blocked_reason ?? task.awaiting_answer_reason
   if (waiting || task.status === 'blocked') {
     const why = waiting ?? 'an answer from you'
+    // A wait does not make an earlier dropped run less true (F902): say both.
+    if (task.has_open_divergence) {
+      return {
+        tone: 'waiting',
+        reason: 'waiting',
+        text: `Waiting on you · ${why} · stalled`,
+        detail: `${why}. ${STALLED_DETAIL}`,
+      }
+    }
     return { tone: 'waiting', reason: 'waiting', text: `Waiting on you · ${why}`, detail: why }
   }
   const proceeded = task.proceeded_without_answer_reason
@@ -50,7 +61,7 @@ export function cardStatus(task: Task, working?: boolean): CardStatus | null {
       reason: 'not-merged',
       text: integration.outcome === 'failed' ? 'Merge failed' : 'Not merged',
       detail: integration.reason ? sentence(integration.reason) : undefined,
-      retry: true,
+      retry: integration.retryable,
     }
   }
   if (task.has_open_divergence) {
@@ -59,7 +70,7 @@ export function cardStatus(task: Task, working?: boolean): CardStatus | null {
       tone: 'failed',
       reason: 'divergence',
       text: 'The run stopped without finishing it',
-      detail: 'A run worked on this and ended without changing its status. Nothing is running now.',
+      detail: STALLED_DETAIL,
     }
   }
   if (task.dependency_state === 'running_on_regressed') {

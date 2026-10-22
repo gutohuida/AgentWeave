@@ -281,6 +281,49 @@ async def test_the_approve_response_reports_a_skip_too(app, auth_headers, builde
 
 
 @pytest.mark.asyncio
+async def test_a_task_list_row_says_whether_its_unmerged_approval_can_be_retried(
+    app, auth_headers, builder, tmp_path
+):
+    """F905: the compact card offered Retry on every unmerged task because the list payload's
+    `latest_integration` carried no retryability. A skip a repeat cannot change ("no main branch")
+    must say `retryable: false` on the list, the single read and the transition response alike."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    # Deliberately no main_branch set: the skip is the unretryable NO_MAIN_BRANCH.
+    commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
+    await accept_evidence(app, auth_headers, builder)
+    git(tmp_path, "checkout", "-q", "main")
+
+    task = await linked_task(app, auth_headers)
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["latest_integration"]["retryable"] is False
+
+    fetched = await app.get(f"{TASKS}/{task}", headers=auth_headers)
+    assert fetched.json()["latest_integration"]["retryable"] is False
+
+    listed = await app.get(TASKS, headers=auth_headers)
+    row = next(t for t in listed.json()["tasks"] if t["id"] == task)
+    assert row["latest_integration"]["outcome"] == "skipped"
+    assert row["latest_integration"]["retryable"] is False
+
+
+def test_the_integration_summary_agrees_with_is_retryable_for_a_failure():
+    """The summary's flag is the route's own classifier, not a second copy: a failed merge is
+    retryable whatever git said."""
+    from datetime import datetime, timezone
+
+    from hub.schemas.tasks import TaskIntegrationSummary
+
+    failed = TaskIntegrationSummary(
+        outcome="failed", reason="CONFLICT (content)", created_at=datetime.now(timezone.utc)
+    )
+    merged = TaskIntegrationSummary(outcome="merged", created_at=datetime.now(timezone.utc))
+    assert failed.retryable is True
+    assert merged.retryable is False
+
+
+@pytest.mark.asyncio
 async def test_latest_integration_is_null_before_any_approval(app, auth_headers, builder, tmp_path):
     """A task that has never reached `approved` has never had an integration attempt made for it —
     null, not an empty skip, is the honest answer."""

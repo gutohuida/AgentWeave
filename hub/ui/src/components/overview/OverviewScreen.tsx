@@ -4,6 +4,7 @@ import { conversationLabel, useProjectConversations } from '@/api/agentChat'
 import { useAgents } from '@/api/agents'
 import { useProjectLedger } from '@/api/ledger'
 import { useAnswerQuestion, useQuestions } from '@/api/questions'
+import { isWaitedOn } from '@/lib/pendingQuestions'
 import { useTasks, type Task } from '@/api/tasks'
 import { BudgetExhaustionNotice } from '@/components/accounting/BudgetExhaustionNotice'
 import { QueryErrorNotice, type QueryFailure } from '@/components/common/QueryErrorNotice'
@@ -68,14 +69,19 @@ export function OverviewScreen({
   const colorOf = (name: string) => agents.find((a) => a.name === name)?.color_index
 
   const needs: NeedItem[] = [
+    // A question an agent is blocked on comes first (F904): the route is oldest first, and a
+    // non-blocking record would otherwise sit in front of every later ask someone waits on.
+    // `sort` is stable, so within each group the route's order stands.
     ...questions
       .filter((q) => !q.answered && !q.declined)
+      .sort((a, b) => Number(isWaitedOn(b)) - Number(isWaitedOn(a)))
       .map<NeedItem>((q) => ({
         id: `question-${q.id}`,
         kind: 'question',
         agent: q.from_agent || null,
         colorIndex: colorOf(q.from_agent),
         title: q.question,
+        waiting: isWaitedOn(q),
         detail: q.asker_waiting === false ? 'The turn that asked has ended; nobody is waiting on this answer any more.' : (q.header ?? null),
         at: q.created_at,
         // A multi-select or open-ended question is answered where it can be composed in full.

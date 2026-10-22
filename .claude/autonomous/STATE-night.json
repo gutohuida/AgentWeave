@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T07:00:00+01:00",
-    "iteration": 13,
+    "iteration": 14,
     "log_file": ".claude/autonomous/2026-10-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F902-impl",
-    "next_action": "Do queue item F902-impl (read F902-F905 in scripts/drive/FINDINGS.md, test-first, fix, drive, set Status). Keep `current` equal to the item id.",
+    "current": "close-out-drive",
+    "next_action": "Do queue item close-out-drive: per .claude/loops/night-window.md 'Ending the window' write the final log entry, run usage_report --windows, and set next_action to null once the queue is drained. Keep `current` equal to the item id.",
     "queue": [
         {
             "id": "F856-spec",
@@ -48,9 +48,9 @@
         },
         {
             "id": "F902-impl",
-            "status": "open",
+            "status": "done",
             "title": "F902+F903+F904+F905 (C,T0, UI): compact task card / Needs you regressions",
-            "detail": "Finding text and repro in scripts/drive/FINDINGS.md (grep '^#* F<n>'). Test-first at the seam the finding names, fix, drive, set Status line."
+            "detail": "Done iteration 14: F902 stalled beside wait, F903 awaiting-review tally, F904 blocking first + wording, F905 retryable on the payload; tests failed before; Chromium drive for F905 on :8162."
         },
         {
             "id": "close-out-drive",
