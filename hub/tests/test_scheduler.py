@@ -48,8 +48,11 @@ from hub.scheduler import (
 )
 from hub.task_transitions import TRANSITIONS
 
+from .test_loop_busy_guard import ensure_agent
+
 
 async def _make_job(db, *, suffix, agent, session_mode="new"):
+    await ensure_agent(db, agent)
     job = AIJob(
         id=f"job-sched-{suffix}",
         project_id="proj-test",

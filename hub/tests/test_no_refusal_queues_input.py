@@ -26,10 +26,13 @@ from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, InboundQueueEntry, Loop, Run, Task
 from hub.scheduler import JobScheduler
 
+from .test_loop_busy_guard import ensure_agent
+
 pytestmark = pytest.mark.asyncio
 
 
 async def _loop_job(db, *, suffix, agent, stop_when_queue_empties=False):
+    await ensure_agent(db, agent)
     job = AIJob(
         id=f"job-refuse-{suffix}",
         project_id="proj-test",

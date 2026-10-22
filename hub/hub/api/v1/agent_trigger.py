@@ -1049,6 +1049,10 @@ async def trigger_agent_directly(**kwargs: Any) -> TriggerAgentResponse:
         raise
 
 
+def _archived_to_trigger(agent: str) -> str:
+    return f"{agent} is archived and cannot be triggered. Unarchive it first."
+
+
 def _not_an_agent_to_trigger(agent: str) -> str:
     return (
         f"{agent} is not an agent in this project, so there is nothing to trigger. "
@@ -1126,7 +1130,7 @@ async def _trigger_agent_directly(
         # literal name-reuse scenario a unique index already blocks.
         raise TriggerAgentError(
             status.HTTP_409_CONFLICT,
-            f"{agent} is archived and cannot be triggered. Unarchive it first.",
+            _archived_to_trigger(agent),
             request_level=True,
         )
     runner_row = await session.get(Runner, agent_row.runner_id)
@@ -2173,7 +2177,7 @@ async def trigger_agent(
     if lifecycle == "archived":
         raise HTTPException(
             status_code=409,
-            detail=f"{body.agent} is archived and cannot be triggered. Unarchive it first.",
+            detail=_archived_to_trigger(body.agent),
         )
 
     try:

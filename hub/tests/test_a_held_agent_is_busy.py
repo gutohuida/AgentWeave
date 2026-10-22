@@ -49,7 +49,7 @@ from hub.scheduler import (
 from hub.utils import short_id
 
 from .test_flow_width import _decide, _flow, _pairs, _task
-from .test_loop_busy_guard import _make_loop_job
+from .test_loop_busy_guard import _make_loop_job, ensure_agent
 from .test_review_turn import _roster
 
 pytestmark = pytest.mark.asyncio
@@ -607,6 +607,7 @@ async def test_with_no_hold_and_nothing_running_the_stalled_reason_is_unchanged(
 
 async def _plain_job(job_id, agent):
     async with async_session_factory() as db:
+        await ensure_agent(db, agent)
         db.add(
             AIJob(
                 id=job_id,
