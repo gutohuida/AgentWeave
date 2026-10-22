@@ -38141,6 +38141,8 @@ Cause: conversations, runs and ledger rows are keyed by the agent's *name* strin
 
 **Expected:** a sync deletion archives the departing agent's open conversations (`lifecycle: archived`) in the same commit, so nothing open belongs to a name with no agent. Alternatively, refuse the deletion as F810 does for queued entries, naming the conversations. Either way, a later agent of the same name starts with no conversation and no provider session of the old one. **Test:** `hub/tests/test_session_sync.py`: an agent with one conversation holding a `provider_session_id`, synced away, then re-created by `POST /agents`. `GET /conversations` lists no open conversation for it, and a trigger naming the old `conversation_id` is refused, not resumed. Fails today. Seam: Agents (roster sync) x Conversations & composer.
 
+**Re-verified 2026-10-22** (day sweep `sweep-agents-sweep`, scratch Hub :8116, Chromium against the served bundle, `scripts/drive/s1022_ag_ui.py sync|after`): fix holds. With gamma's conversation open, `POST /session/sync` omitting gamma -> 200 `removed: ["gamma"]`; the conversation is `archived`, the page reads "gamma is not on this project's roster." with no composer; after `POST /agents {"name": "gamma"}` (201) the new gamma's rail group reads "No conversations yet". (A job naming the deleted agent is a different hole: F925.)
+
 ## F850 (D) -- a session sync that deletes an agent leaves it in the rail until a reload: `session_synced` never refreshes the projects summary the rail reads, and the Activity row is a bare `agent_removed`
 
 **Status:** fixed 2026-10-22 (Tier 0): the central SSE switch invalidates `['projects']` and the conversations list on `session_synced`, and `eventSummary` reads `agent_removed` as "lam was removed from the roster by a session sync"; tests in `useSSE.test.tsx` and `eventSummary.test.ts` failed before. Not driven in Chromium. Original report: Found by the day sweep `sweep-agents-sweep` (scratch Hub :8154, Chromium against the served bundle, `scripts/drive/s1021_a_ui.py removed` and an inline live probe).
@@ -38154,6 +38156,8 @@ With the dashboard open, `POST /agents {"name": "lam"}` (201) and then `POST /se
 Cause: the rail's agents are the projects summary (`Sidebar.tsx:433` `agents={project.agents}`). On `session_synced`, `useAgents` invalidates only `['project', projectId, 'agents']` (`hub/ui/src/api/agents.ts:218-223`). The archive mutation also invalidates `['projects']` (`agents.ts:273-275`), and the sync handler does not.
 
 **Expected:** `session_synced` also invalidates the `['projects']` summary (and the conversations list), so a deleted agent leaves the rail live. The Activity/Logs message for `agent_removed` reads "lam was removed from the roster by a session sync". **Test:** `hub/ui/src/__tests__/useSSE.test.tsx` (or an AgentTree test): dispatch `session_synced` with `removed: ["lam"]` and assert the `['projects']` query is invalidated; fails today. Seam: Agents (roster sync) x Logs, events & SSE.
+
+**Re-verified 2026-10-22** (day sweep `sweep-agents-sweep`, Chromium, `scripts/drive/s1022_ag_ui.py sync|views`): fix holds in the browser. The rail dropped gamma within 3 s of the sync, no reload; the Logs view reads "gamma was removed from the roster by a session sync". The Activity view (the digest) still reads "gamma agent removed": recorded on F908, whose fallback it is.
 
 ## F851 (C) -- `request_agent`'s required `task` is the new agent's whole first message, but neither the MCP tool nor the `aw-tool` listing says so; a real agent passed a task id
 
@@ -38530,6 +38534,8 @@ alpha agent created
 
 **Expected:** a sentence for `task_created` ("Task created", detail the title, no agent lead unless the event names an actor), `question_asked` ("alpha asked you", detail the question), `question_answered` ("You answered alpha", detail the question) -- neither event carries the question text (`question_asked` data is `{id, from_agent, blocking}`, `question_answered` is `{id, answer}` with `agent` null), so the digest looks it up by id the way it already looks up task titles (a `questionText` in `DigestContext`, from the questions query), `agent_created` ("alpha was added"); the default branch never leads with `e.agent` for an event whose actor it does not know. **Test:** in the `activityDigest.test.ts` F907 adds: a `task_created` event with `agent: 'alpha'` and `data: {id, title}` yields a row whose text is not "task created" and whose detail is the title; same for `question_asked` with its question. Seam: Logs, events & SSE x Tasks / Questions.
 
+**Extended 2026-10-22** (day sweep `sweep-agents-sweep`, Chromium, `scripts/drive/s1022_ag_ui.py views`): `agent_removed` falls to the same fallback: the digest reads "gamma agent removed" / "delta agent removed" while the Logs view, on the same tab, reads "gamma was removed from the roster by a session sync" (F850's `eventSummary` sentence, which `buildDigest` does not use). A failed job firing reads "delta job fired · Runs as delta" (F925).
+
 ## F909 (B) -- a conversation reads "waiting" on the rail and the Overview's agent card says "Waiting for your answer" for a question whose asking run has already ended, while Needs you, on the same screen, says nobody is waiting on it
 
 **Status:** open 2026-10-22. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8113, profile qs1022, `proj-7716d9f754a0`, Chromium against the served bundle, `scripts/drive/s1022_qs_drive.py timeout` then `scripts/drive/s1022_qs_ui.py needs`).
@@ -38807,3 +38813,53 @@ Vault -> Disagreements: 2 open cards; Vault -> Reports: 1 "Referred to you" card
 ```
 
 The worker is given the one entry (`hub/hub/vault_reports.py`, the review prompt), not the open contradictions on that entry's facts, so it cannot answer "the vault already records this as contradiction ctr-1d805ef79ab2, note B presumed", and the operator answers one question twice. **Expected:** the review reads the reported entry's open contradictions; a report that restates one is answered by pointing at it and closes when that contradiction is resolved (or is shown on the contradiction card). Either way the operator decides once. **Test:** `test_vault_reports*.py`: a report on an entry whose fact is a side of an open contradiction -> the review prompt contains the contradiction id; resolving it closes the report. Fail today. Seam: vault reports x contradictions.
+
+## F925 (B) -- a job whose agent a session sync deleted (or the operator archived) can still be enabled and fired; the press answers 500 and records the firing `failed`, but leaves a queued entry and an open conversation that the next agent of that name receives and runs
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8116, profile ag1022, real Haiku, `scripts/drive/s1022_ag_api.py` and `s1022_ag_lib.py` calls).
+**Source:** drive
+**Theme:** Agents
+**Ready:** yes
+**Tier:** 0
+
+```
+POST /agents {"name": "delta", "runner_id": <haiku>}                                   -> 201
+POST /jobs {"name": "delta job", "agent": "delta", "message": "Reply OK.", "cron": "0 4 * * *", "enabled": false} -> 201
+POST /session/sync {"data": {"agents": {"alpha": {}, "beta": {}, "gamma": {}}}}        -> 200 removed ["delta"]  (nothing about the job)
+POST /jobs {"name": "nobody job", "agent": "nobody", ...}                              -> 400 "agent 'nobody' is not one of this project's agents, so this job could only ever fail. On the roster: ..."
+PATCH /jobs/job-75ec4f38de20 {"enabled": true}                                          -> 200   (the same job, naming a name no agent has)
+POST /jobs/job-75ec4f38de20/run                                                         -> 500 "delta is not an agent in this project, so there is nothing to trigger. ..."
+  job_runs: run-dc2a825d751f status failed, error_summary the same sentence
+  event_logs: queue_entry_queued (entry-483406b43f74, agent delta, origin job) + job_fired (info); no job_run_failed
+  inbound_queue_entries: entry-483406b43f74 state queued, conversation conv-f830dd1b4827
+  conversations: conv-f830dd1b4827 agent delta, lifecycle open, title "delta job"
+POST /agents {"name": "delta", "runner_id": <haiku>}                                   -> 201 (a new agent); the entry stays queued, the conversation is in its rail
+POST /agent/trigger {"agent": "delta", "message": "Reply with the single word ZED..."}  -> 200 queued, waiting_reason "an older conversation's queued input is being delivered first (run run-058cab85b127)"
+  run-058cab85b127 completed in conv-f830dd1b4827 -- the dead firing's "Reply OK." ran on the new agent; job_runs still says failed
+```
+
+The archive door does the same: `POST /agents/gamma/archive` -> 200 while job `gamma nightly` names gamma (the answer does not mention it); enable -> 200; run -> 500 "gamma is archived and cannot be triggered. Unarchive it first.", firing `failed`, and entry-506bbdc81e1b is left `queued` under the archived agent with an open conversation "gamma nightly" -- the state `archive_agent` refuses to create ("nothing delivers to an archived agent", F180). After unarchive the entry is still queued and goes ahead of the next input, as delta's did. The Activity digest reads both firings as "job fired · Runs as …". Before the firing, `GET /queue/delta/status` (no agent named delta) answered 200 with `waiting_reason` "Runner CLI 'delta' was not found in PATH." -- a reason about a CLI for a name with no agent.
+
+Cause: `scheduler._fire_job_internal` queues the entry and opens the conversation before the trigger refuses an agent that is not on the roster (`agent_trigger._not_an_agent_to_trigger`, `agent_trigger.py:1052`) or archived, and that refusal is not one of the terminal ones that withdraw the entry; `jobs.py` `run_job` maps any `failed` row to 500 (`jobs.py:~1838`). Job create checks the roster; `PATCH /jobs/{id}` does not. Neither `sync_session` (`session_sync.py`) nor archive looks at jobs naming the agent. Same family as F596 (no runner) and F849 (a later agent of the name inherits). **Expected:** a firing whose agent is not an open agent of the project queues nothing and opens no conversation (or withdraws both in the same commit), records `failed` with its `job_run_failed` event, and the press answers 409 with the sentence, not 500; `PATCH /jobs/{id} {"enabled": true}` on a job naming such an agent is 400 with the create's sentence. Optional, design: the sync answer and archive answer name the jobs left naming the agent. **Test:** `hub/tests/test_jobs*.py`: a job naming an agent, the agent removed by sync (and, separately, archived), enable -> 400; run (forced) -> 409, no `InboundQueueEntry` and no open `Conversation` for that name afterwards; a later `POST /agents` of the name finds no queued entry. Fail today. Seam: Agents (sync/archive) x Jobs & loops x Inbound queue.
+
+## F926 (C) -- deleting a charter an agent holds asks the operator to confirm the loss of its text, then the Hub refuses; the refusal says "Unbind before deleting" without saying where, and focus drops to the page
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8116, Chromium against the served bundle, `scripts/drive/s1022_ag_ui.py charters`; `testbed/ui-judge/s1022-ag-charters/103927/ch-3-bound-delete.png`).
+**Source:** drive
+**Theme:** Charters
+**Ready:** yes
+**Tier:** 0
+
+Project settings -> Charters lists Developer with "alpha" beside it (bound). Its **Delete Developer** button opens `DeleteCharterDialog`: "Delete the charter "Developer"? Its 87 lines of authored text will be lost. AgentWeave keeps no copy -- there is no archive and no undo, so the only way back is to write it again." The operator confirms the irreversible loss; `DELETE /charters/{id}` -> 409 "Charter is bound to agent(s): alpha. Unbind before deleting."; the page shows "The charter was not deleted." with that sentence, and `document.activeElement` is `BODY` (the dialog closed, focus not returned to the Delete button). Nothing says that unbinding is done in alpha's settings -> Charter. The screen already knows the binding (`ChartersSection.tsx` passes `boundTo` to the row), so the confirm warns of a loss that cannot happen. Unbound delete holds: confirm names the line count, Cancel takes focus, Escape closes and focus returns to the Delete button, the row goes.
+
+**Expected:** for a bound charter the Delete control does not open the loss confirm: it says the charter is held by alpha and that it is released in alpha's settings -> Charter (a link), or the Hub's sentence names that place; focus returns to the opener after a refusal. **Test:** `hub/ui/src/__tests__/` (ChartersSection): a charter whose `boundTo` is `["alpha"]` -> pressing Delete shows no "will be lost" text and names alpha; fails today. Seam: Charters (settings) x Agents (binding).
+
+## F927 (D) -- the agent's Charter picker answers a refused binding with "Could not update charter binding." and keeps offering the charter it could not bind
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8116, Chromium, `scripts/drive/s1022_ag_ui.py agent`; `testbed/ui-judge/s1022-ag-agent/104053/agent-stale-charter.png`).
+**Source:** drive
+**Theme:** Charters
+**Ready:** yes
+**Tier:** 0
+
+beta's settings -> Charter open; Underwriter deleted elsewhere (`DELETE /charters/{id}` -> 204, another tab or an API caller). Picking Underwriter in "Charter for beta": `PATCH /agents/beta {"charter_id": ...}` -> 404 "Charter 'charter-…' not found"; the section shows only "Could not update charter binding." (`AgentSettingsControls.tsx` `CharterPicker`, which drops the Hub's `detail`), the select snaps back to Code Reviewer, and Underwriter is still in the list (the charters query is not refetched). The other refusal this route gives a picker, "Agent 'x' is archived and cannot hold a charter", would be swallowed the same way. Binding from the picker otherwise holds (Code Reviewer bound, read back). **Expected:** the picker shows the Hub's sentence (`readableApiError`, as `ChartersSection` does) and refetches the charters after a refusal. **Test:** CharterPicker test with the bind mutation rejecting `{detail: "Charter 'c' not found"}` -> that sentence is rendered; fails today. Seam: Agents (settings) x Charters.
