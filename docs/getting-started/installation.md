@@ -1,8 +1,20 @@
+---
+description: Install AgentWeave, start it, and check that your machine is ready.
+---
+
 # Installation
 
-AgentWeave is one application. Installing it and running it are one command each.
+AgentWeave is one Python package, and it runs as one local app.
 
-It requires **Python 3.11+**.
+## Requirements
+
+- **Python 3.11 or later.**
+- **At least one agent CLI**, installed and signed in: [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
+  [Codex](https://github.com/openai/codex) or [GitHub Copilot CLI](https://github.com/github/copilot-cli)
+  (version 1.0.81 or later). AgentWeave launches these CLIs and uses the sign-in they already
+  have. It does not ask for your provider keys.
+- **git**, for the per-task worktrees and the merge on approval. A project that is not a git
+  repository still works, but its agents share one directory and nothing is merged.
 
 ## Install
 
@@ -10,131 +22,86 @@ It requires **Python 3.11+**.
 pip install agentweave-ai
 ```
 
-That is the whole install. `agentweave-ai` brings the Hub — the local server and the web interface
-it serves — with it; you do not install a second package.
+`agentweave-ai` brings the Hub (the local server and the app it serves) with it. There is no second
+package to install and no configuration file to write.
 
-## Run
+To open the app in its own chromeless window instead of a browser tab, install the optional extra:
 
 ```bash
+pip install "agentweave-ai[app]"
+```
+
+## Start it
+
+Run it from the directory you want to work on:
+
+```bash
+cd ~/code/my-project
 agentweave
 ```
 
-This starts the Hub natively via uvicorn, scaffolds `~/.agentweave/hub/` (database, `.env`), runs
-migrations, opens the directory you ran it from as a project, and opens the app in its own window.
-No Docker required.
+On first launch AgentWeave:
 
-The app is at **http://localhost:8000**, and stays there if you would rather use a normal browser
-tab. `agentweave --port 8010` moves it.
+1. creates its state under `~/.agentweave/hub/` (a SQLite database and a generated `.env`);
+2. runs the database migrations;
+3. starts the Hub on `http://localhost:8000`;
+4. registers the current directory as a project, and opens that project's Overview.
 
-The other four commands exist for when it will not start, or when you want it to stop:
+Run `agentweave` again from another directory to add that project to the same running instance.
+Closing the window leaves the Hub running. Use `agentweave stop` to stop it.
+
+!!! tip "Another port, or a separate instance"
+    `agentweave --port 8010` moves the app to another port. `agentweave --profile NAME --port PORT`
+    runs a completely separate instance, with its own database under
+    `~/.agentweave/hub/profiles/NAME/`. This is useful for trying things out without touching your
+    real projects.
+
+## Check your machine
 
 ```bash
-agentweave doctor    # check environment readiness
-agentweave status    # is it running?
+agentweave doctor
+```
+
+`doctor` checks everything AgentWeave needs, and it starts nothing and writes nothing while it
+checks:
+
+- the Python version and the Hub installation;
+- which agent CLIs are on your `PATH`, and whether Copilot is signed in;
+- whether something is already running on the port;
+- that the database is reachable;
+- the state directory's permissions, and the symlink privilege on Windows;
+- whether the bundled app is current.
+
+Add `--json` for machine-readable output with stable check ids. Secret values are never printed.
+
+The other everyday commands:
+
+```bash
+agentweave status    # is it running, where, and which projects it holds
 agentweave stop      # stop it
-agentweave reset     # destroy local Hub state and start clean
-```
-
-### Development Install
-
-If you're contributing to AgentWeave:
-
-```bash
-git clone https://github.com/gutohuida/AgentWeave.git
-cd AgentWeave
-pip install -e ./hub
-pip install -e ".[dev]"
-```
-
-The Hub goes in first, from the checkout, so pip resolves `agentweave-ai`'s dependency on it
-locally instead of fetching a release from PyPI.
-
-### If you've been running the Hub directly
-
-Bare `agentweave` has always stored its database at `~/.agentweave/hub/data/agentweave.db`, and
-nothing about that changes here. This note is only for a development checkout run a different
-way — `uvicorn hub.main:app` directly, or the `agentweave-hub` console script — where older
-versions could resolve a different, directory-relative database per launch location.
-
-A direct launch like that must now name its database with `DATABASE_URL` — it refuses to start
-without one, and the message it prints names the absolute path it declined to open. Run bare
-`agentweave` if you want that shared default; it sets `DATABASE_URL` for you before importing
-anything. On upgrade nothing is migrated automatically: existing data stays exactly where it was,
-and nothing copies or moves it for you. If you want that data at the new shared location, copy the
-database file yourself — a one-line operation, not something the CLI does on your behalf.
-
-## Docker (Advanced)
-
-For a containerized instance instead — a remote or headless deployment:
-
-```bash
-agentweave --docker
-```
-
-This requires **Docker** and **Docker Compose**, downloads the configuration, starts the
-container, and fetches the API key.
-
-#### Mounted workspace root
-
-A containerized Hub can only see directories that are mounted into it. The Compose file maps
-one host directory — `AW_WORKSPACE_HOST_ROOT` (default `./workspaces`) — to the container
-workspace root `/workspaces`, and sets `AW_WORKSPACE_ROOT=/workspaces` so the Hub accepts
-project registrations only beneath that root.
-
-- Put (or move) every project you want to open somewhere beneath the host root, then register
-  it with its **container-visible** path, e.g. `/workspaces/my-project`.
-- A path that is not visible beneath the workspace root — for example a host-only path like
-  `/home/you/project` or `C:\Users\you\project` — is refused with a typed
-  `project_workspace_not_mounted` diagnostic that names the configured root.
-- The Hub never mounts the Docker socket and never guesses host/container path mappings.
-
-#### Manual Docker Setup
-
-If you prefer manual control:
-
-```bash
-# Download config files
-curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml
-curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example
-
-# Create your .env
-cp .env.example .env
-
-# Optional: set a custom API key (auto-generated if not set)
-# Edit .env and set AW_BOOTSTRAP_API_KEY
-
-# Point the workspace root at the directory holding your projects
-# Edit .env and set AW_WORKSPACE_HOST_ROOT=/path/to/your/projects
-
-# Start the Hub
-docker compose up -d
-```
-
-#### Build from Source
-
-```bash
-git clone https://github.com/gutohuida/AgentWeave.git
-cd AgentWeave/hub
-cp .env.example .env
-# Optional: edit .env to set AW_BOOTSTRAP_API_KEY
-
-docker compose -f docker-compose.yml -f docker-compose.build.yml up --build -d
-```
-
-The main compose file carries no `build:` section on purpose — the manual setup above downloads it
-into a directory with no source in it, and Compose builds instead of pulling when a service declares
-both. `docker-compose.build.yml` is the override that adds one for contributors.
-
-## Verify Installation
-
-```bash
+agentweave reset     # delete local Hub state and start clean (asks first)
 agentweave --version
-agentweave --help
-aw --help                    # `aw` is an alias for `agentweave`
-agentweave status            # is the Hub running?
-agentweave doctor            # runtimes, ports, database, permissions
 ```
 
-## Next Steps
+`aw` is a short alias for `agentweave`. The full list is in the [CLI reference](../reference/cli-commands.md).
 
-See the [Quick Start Guide](quickstart.md) to initialize your first project.
+## Upgrading
+
+```bash
+pip install -U agentweave-ai
+agentweave stop
+agentweave
+```
+
+The next start runs any new database migrations against your existing state. Your projects and
+their history stay where they are.
+
+## Docker
+
+To run the Hub in a container, for example on a shared or headless machine, see
+[Running in Docker](../guides/docker.md).
+
+## Next
+
+[Your first project](quickstart.md) walks through adding agents, writing a specification, and
+taking one task all the way to a merge.

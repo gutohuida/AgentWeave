@@ -1,8 +1,12 @@
+---
+description: How runner output becomes ordered stream events, and how context usage is measured per runner.
+---
+
 # Agent stream and context contracts
 
-AgentWeave normalizes runner output before it reaches a transport or the Hub. Claude, Codex,
-OpenCode, GitHub Copilot, and Kimi therefore expose the same stream-event contract and the same
-context-usage contract even though their native formats differ.
+The Hub normalizes every runner's output as it parses it. Claude Code, Codex and GitHub Copilot
+therefore expose the same stream-event contract and the same context-usage contract, even though
+their native formats differ.
 
 Stream events and context usage are deliberately separate:
 
@@ -95,62 +99,33 @@ Estimated percentages remain visible and explicitly labeled, but do not trigger 
 
 | Runner | Source and basis | Context calculation | Limit |
 |---|---|---|---|
-| Claude / Claude proxy | Latest assistant-message usage; `latest_request_input` | `input_tokens + cache_read_input_tokens + cache_creation_input_tokens` | Resolved model metadata, otherwise absent |
-| Codex | Session-bound rollout `token_count.info`; `provider_context` | `last_token_usage.total_tokens - reasoning_output_tokens` | `model_context_window` |
-| OpenCode | Latest usable `step_finish.part.tokens`; `provider_context` | `total - reasoning` (equivalent to input + cache read + cache write + output) | Active model `limit.input`, then effective context fallback |
-| GitHub Copilot | Latest relevant top-level child OTel `chat` span; `latest_request_input` | `gen_ai.usage.input_tokens` directly | Resolved model metadata, otherwise absent |
-| Kimi 0.29.x | Session-bound latest main-agent completed-step Wire usage; `provider_context` | `inputOther + inputCacheRead + inputCacheCreation + output` | `max_input_tokens`, then `max_context_tokens` |
+| Claude Code | Latest assistant-message usage; `latest_request_input` | `input_tokens + cache_read_input_tokens + cache_creation_input_tokens` | Resolved model metadata, otherwise absent |
+| Codex | App-server token usage; `provider_context` | The thread's reported context tokens | The model's reported context window |
+| GitHub Copilot | ACP session usage; `provider_context` | The session's reported context tokens | Resolved model metadata, otherwise absent |
 
-Codex `cached_input_tokens` is already a subset of input and is not added. Copilot cache-read and
-cache-creation fields are also breakdowns already included in `input_tokens`. OpenCode and Kimi
-cache classes are exclusive components and are included in the calculations shown above.
+Codex `cached_input_tokens` is already a subset of input and is not added. Codex runs over its
+app-server protocol by default. A runner flag `--no-app-server` opts back into `codex exec`.
 
-Codex stdout cumulative usage is only a guarded `estimated`/`cumulative_delta` fallback. Copilot
-stdout has no usage data, so AgentWeave creates a unique invocation-scoped OTel JSONL export with
-message-content capture explicitly disabled. Kimi's `llm.request.maxTokens` is a completion budget,
-not a context limit, and `usage.record` is accumulated accounting rather than context size.
+Copilot usage is recorded in Copilot's own units, **AI credits** and premium requests. These are
+never converted to money and never counted against the token budget.
 
 ## Compatibility
 
-Rolling upgrades retain readable `content` on every structured output. If an older Hub rejects
-the optional structured fields, the HTTP transport retries with the legacy text-only body.
-Existing `AgentOutput` rows with null structured fields use the UI's single legacy-prefix adapter.
+Every structured output keeps readable `content`. Existing `AgentOutput` rows with null structured
+fields render through the UI's single legacy adapter.
 
 Context readers accept the older aliases `tokens_used`, `tokens_limit`, `input_tokens`,
 `context_limit`, `max_context_tokens`, and ratio-form `context_usage`. Writers emit only canonical
 fields. Ambiguous zeroes and contradictory legacy dictionaries become unavailable or token-only
 instead of being presented as trusted measurements.
 
-## Fixture and smoke-test versions
+The following bookkeeping is intentionally omitted when it adds nothing a person would want to see:
+provider session initialization and lifecycle chatter, echoes of the user's message, empty start
+markers paired with a later completed item, and unknown events with no safe, user-relevant
+diagnostic.
 
-The adapter fixtures target:
+## Related
 
-| Runner | Evidence |
-|---|---|
-| Claude Code | 2.1.x fixtures; fresh/resume smoke-tested with 2.1.220 |
-| Codex CLI | Live 0.145.0 stdout and rollout shapes |
-| OpenCode | Live 1.18.5 stdout and model-catalog shapes |
-| GitHub Copilot CLI | Live 1.0.75 stdout and OTel captures |
-| Kimi Code | Live 0.29.1 stdout, Wire, and provider-catalog captures |
-
-The July 29, 2026 metadata-only smoke run confirmed fresh and resumed session continuity for all
-five installed CLIs. Copilot OTel exports contained usage attributes and no prompt, response,
-message, or content fields.
-
-The following bookkeeping is intentionally omitted when it does not add user-visible meaning:
-
-- provider session initialization and ordinary session lifecycle chatter;
-- user-message echoes;
-- empty start markers that are paired with a later completed item;
-- Copilot MCP/skills/tools setup notifications and usage checkpoints;
-- Kimi metadata wrappers and unknown roles;
-- unknown events that contain no safe, user-relevant diagnostic.
-
-Retained Kimi v1 parsing is regression compatibility only. This contract does not expand Kimi v1
-support.
-
-## Non-goals
-
-These contracts do not add process cancellation, message threading, cost reporting, automatic
-context reset/handoff decisions, or broader Kimi v1 protocol support. Context warnings remain
-advisory; the user or an existing workflow chooses whether to compact or start a new session.
+Stopping a turn, accounting and checkpoints are built on these contracts. See
+[Conversations](../guides/conversations.md) and [Traceability](../guides/traceability.md).
+Context warnings are advisory: you decide whether to checkpoint.

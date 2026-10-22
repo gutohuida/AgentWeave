@@ -1,97 +1,104 @@
-# Development Guide
+---
+description: Setting up a development checkout, running exactly what CI runs, and working on the Hub and the app.
+---
 
-This guide covers how to set up your development environment and contribute to AgentWeave.
+# Development
 
-## Repository Structure
+## Repository layout
 
-```
+```text
 AgentWeave/
-├── src/agentweave/     CLI package
-├── hub/                Hub server (FastAPI + React)
-├── docs/               Documentation
-├── tests/              CLI tests
-└── Makefile            Convenience commands
+├── src/agentweave/      the CLI (agentweave-ai)
+├── hub/hub/             the Hub: FastAPI, scheduler, execution, runner adapters, migrations
+├── hub/hub/static/ui/   the app's committed production build
+├── hub/ui/              the React app (Vite)
+├── hub/tests/  tests/   Hub tests, CLI tests
+├── spec/                AgentWeave's own specifications, managed through AgentWeave
+├── docs/  mkdocs.yml    this site
+├── scripts/             drive and maintenance scripts
+├── testbed/             throwaway projects for exercising the product (ignored by git)
+├── constraints-dev.txt  development pins, matching CI
+└── Makefile
 ```
 
-## CLI Development
+## Install
 
-### Install
+Install the Hub first, so that pip resolves `agentweave-ai`'s dependency on it from your checkout
+and does not fetch a release. Always install through `constraints-dev.txt`, which pins what CI
+resolves:
 
 ```bash
-pip install -e ".[dev]"
+pip install -c constraints-dev.txt -e ./hub
+pip install -c constraints-dev.txt -e ".[dev,mcp]"
 ```
 
-### Run Tests
+Exercise the product in `testbed/`, never at the repository root. Running `agentweave` at the root
+would register the repository itself as a project.
+
+## Run what CI runs
 
 ```bash
-pytest tests/ -v
-pytest tests/ -v --cov=agentweave --cov-report=term-missing
-```
-
-### Lint and Format
-
-```bash
-ruff check src/
-black src/
+ruff check src/ hub/ tests/
+ruff check scripts/ --select E9,F63,F7,F82,F401,F841
+black --check src/ hub/hub/ hub/tests/ tests/
 mypy src/
+pytest tests/ -q                     # CLI
+pytest hub/tests/ -q -n auto         # Hub
+cd hub/ui && npm run lint && npm run test
 ```
 
-Or use the Makefile:
+`make lint`, `make format-check`, `make test-hub` and `make test-all` wrap most of these.
 
-```bash
-make lint
-make format
-```
-
-## Hub Development
-
-### Install
-
-```bash
-pip install -e "hub/[dev]"
-```
-
-### Run Tests
-
-```bash
-cd hub
-pytest tests/ -v
-```
-
-### UI Hot-Reload
+## The app
 
 ```bash
 cd hub/ui
 npm install
-npm run dev
+npm run dev        # http://localhost:5173, proxying /api to AW_DEV_HUB (default http://localhost:8000)
 ```
 
-The dashboard will be at **http://localhost:5173** and proxies `/api` to the Hub at localhost:8000.
+The Hub serves the committed build in `hub/hub/static/ui/`, not the source. After changing the app:
 
-## Code Style
+```bash
+npm run build
+make ui            # refreshes hub/hub/static/ui and its build stamp
+```
 
-- **Line length**: 100 characters
-- **Formatter**: black
-- **Linter**: ruff
-- **Type hints**: required (enforced by mypy)
+Commit `hub/ui/src` and `hub/hub/static/ui` **together**. `make ui-check` fails if they disagree.
 
-## Naming Conventions
+## A Hub of your own
 
-- Modules: `snake_case.py`
-- Classes: `PascalCase`
-- Functions/Variables: `snake_case`
-- Constants: `UPPER_CASE`
+Run a development Hub from source with its own database, on its own port, so you never touch a
+real instance:
 
-## Adding a New Feature
+```bash
+cd hub
+DATABASE_URL="sqlite+aiosqlite:///$PWD/../testbed/dev.db" \
+  python -m uvicorn hub.main:app --port 8010
+```
 
-Agents are created in the app, not in configuration — the roster, its runners and its charters are
-Hub-owned records, so there is no file to add one to. The nearest thing to "extending AgentWeave"
-in code is adding a runner (`hub/hub/runner_commands.py`), an MCP tool (`hub/hub/mcp_server.py`) or
-a UI surface (`hub/ui/src/components/`); `CLAUDE.md` carries the recipe for each.
+A Hub started without `DATABASE_URL` refuses to start rather than guess which database to open.
 
-## Pull Request Checklist
+## Code style
 
-- [ ] Tests pass (`make test-all`)
-- [ ] Lint passes (`make lint`)
-- [ ] Type check passes (`mypy src/`)
-- [ ] Documentation updated if needed
+- Python 3.11+, line length 100, formatted by black, linted by ruff, typed (mypy on `src/`).
+- The CLI's own code imports only the standard library. Its one runtime dependency is
+  `agentweave-hub`.
+- A test for code that consumes an API response uses the ordering that route actually returns.
+
+## Where things go
+
+- **A runner CLI**: an adapter in `hub/hub/runner_adapters/`, plus the CLI name in `RUNNER_CLIS`.
+- **An agent tool**: `hub/hub/mcp_server.py` and its HTTP route in `hub/hub/api/v1/agent_actions.py`.
+  The tool's description is generated once for both MCP and `aw-tool`.
+- **A database change**: an Alembic migration in `hub/hub/migrations/`.
+- **An app surface**: `hub/ui/src/components/`.
+
+The repository's `.claude/rules/` carry the detailed checklists for each of these.
+
+## Pull request checklist
+
+- [ ] Everything under *Run what CI runs* passes
+- [ ] A test fails without the change and passes with it
+- [ ] The app's build is refreshed and committed, if the app changed
+- [ ] Documentation updated if behaviour changed
