@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T17:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-checkpoints-sweep",
-    "next_action": "Run sweep-checkpoints-sweep per .claude/loops/day-window.md: Checkpoints x Accounting & allowance; start with the Overview's spend line and BudgetExhaustionNotice (they replace the budget summary card) in Chromium against the served bundle. Scratch Hub port 8110+ (8130 is taken by another process), haiku (claude-haiku-4-5-20251001) only; never leave a job enabled.",
+    "current": "sweep-evidence-sweep",
+    "next_action": "Run sweep-evidence-sweep per .claude/loops/day-window.md: Requirements, evidence & coverage x Drift; start with F852 (an agent piece naming no commit at main's tip shows no work) and the Evidence view (EvidenceBrowser, RequirementStory) in Chromium against the served bundle. Scratch Hub port 8110+ (8130 is taken by another process), haiku (claude-haiku-4-5-20251001) only; never leave a job enabled.",
     "queue": [
         {
             "id": "plan-review",
@@ -83,7 +83,7 @@
         },
         {
             "id": "sweep-checkpoints-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Checkpoints x Accounting & allowance",
             "detail": "Least recently swept (2026-10-21 iteration 7). Overview's spend line + BudgetExhaustionNotice replace the budget summary card."
         },

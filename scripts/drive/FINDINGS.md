@@ -38089,7 +38089,7 @@ A fresh Haiku turn in C (`conv-0d3fea18114c`) asked `q-59bfc787766e` ("Which col
 
 ## F846 (C) -- a conversation cut over by a checkpoint opens from the rail with a live composer and no word of its successor; Send is refused "Unarchive it to continue it", the one door F816 now shuts
 
-**Status:** open 2026-10-21. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8153, profile c1021, Chromium against the served bundle, `scripts/drive/s1021_c_ui.py unarch|predsend|sheet`). The residue of F816's fix: the refusal moved to unarchive, but the routes and screens that point there were not changed.
+**Status:** open 2026-10-21. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8153, profile c1021, Chromium against the served bundle, `scripts/drive/s1021_c_ui.py unarch|predsend|sheet`). The residue of F816's fix: the refusal moved to unarchive, but the routes and screens that point there were not changed. Re-verified 2026-10-22 (sweep-checkpoints-sweep, :8122, Chromium): the predecessor `conv-966fe9cf91e0`, cut over to `conv-da01bb95cfa4` by Checkpoint now, opens with a live composer (`textarea` enabled) and no "archived" or "cut over" word on the page; the only pointer is the queue line "1 waiting in another conversation — waiting for Continue: conversation conv-da01bb95cfa4 was handed a checkpoint…".
 **Source:** drive
 **Theme:** Checkpoints
 **Ready:** yes
@@ -39127,3 +39127,61 @@ Repro: `hdr-main` was approved at 10:57:09 UTC (`updated_at 2026-10-22T10:57:09.
 **Tier:** 0
 
 (1) The file `spec/changes/untracked-one/spec.json` (a `change-spec` payload the Hub does not track yet) is listed under **Overview**, with no phase word. `SpecDocumentList.tsx:71` sends every kind outside `roadmap`/`change-spec`/`capability` to Overview, and an untracked node has no kind. It belongs under Changes, or in an "Untracked" group with its Adopt. (2) The list's `phaseWord` (`:161`) renders `exploring` as "draft", while the header's phase pill, the palette and every API say "Exploring". (3) The title row reads "hdr-main 115709 · Approved · Sketch rigor · Change", and at 900 px "Change  Place under…". The kind label (`SpecDocumentHeader.tsx:228`, `KIND_LABEL['change-spec'] = 'Change'`) is plain text beside two controls, so it reads as a verb ("change the rigor"). "Change spec" or "Change document" is unambiguous. **Test:** `SpecDocumentList.test.tsx`: an exploring row reads "exploring", and an untracked `spec/changes/` row is not in the Overview group. Seam: Spec documents (list/header labels).
+
+## F952 (B) -- the Overview's spend line drops everything the budget card used to say: a turn with no reported cost counts as $0.00 with no caveat, "API-equivalent" is gone, and the project's preferred unit (allowance, Copilot credits) is never shown
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-checkpoints-sweep` (Chromium against the served bundle, scratch Hub :8122, profile ck1022, project `proj-d2fc106b8594`; `scripts/drive/s1022_ck_ui.py overview`, screenshots `testbed/ui-judge/s1022-ck-overview/`).
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 0
+
+Repro: agent `cop` on a Copilot provider runner aimed at the zero-spend stub (`scripts/drive/s1018_A_copilot_stub.py`), one turn: `turn_usage` row `measured`, 30 tokens, `api_equivalent_usd_micros` NULL. Then alpha (Haiku 4.5) one turn, 265,791 tokens, $0.0725. `GET /accounting` reads `project.unpriced_turns: 1` and `preferred_display.kind: "allowance"` (a Claude subscription: "Rate-limit allowance"). Project settings -> Budgets says it: "Spent $0.07 — API-equivalent; 1 turns could not be priced" and "Rate-limit allowance available · resets …". The Overview's spend line says "**$0.07 so far · 265.8K tokens**", and its agent strip says "cop **$0.00**". With only the stub turn, `GET /ledger` read `total_usd: 0.0` for 30 tokens, so the line read "$0.00 so far" by construction.
+
+Seam: `OverviewScreen.tsx:177` feeds the line `ledger.spend.total_usd` alone. `project_ledger.py:128-170` counts a NULL cost as 0 and carries no unpriced count, no credits and no allowance. So the line cannot say what `accountingDisplayLabel(preferred_display)` (`accountingDisplay.ts:73`) says on Budgets. The budget summary card that showed it (F665's credits unit, F722's worker row, "excludes N turns with no reported cost") was removed by ui-finesse (a8ca6e2). The same goes for a Copilot-only project spending credits: the ledger has no credits field, so the line reads "$0.00 so far". That case is read from the code, not driven: the stub reports no credits. **Expected:** the line uses `/accounting`'s `preferred_display` (or the ledger grows the same fields). A partly priced figure says so ("$0.07 API-equivalent · 1 turn unpriced"). An agent with no priced turn reads "—" (as Budgets does), not "$0.00". **Test:** `OverviewScreen` with an accounting payload of `unpriced_turns: 1` renders the caveat, and with `preferred_display.kind: "credits"` renders the credits; `OverviewView`'s agent row renders "—" for a null cost.
+
+## F953 (B) -- with the token budget spent, the Overview says only "Autonomous turns are paused; operator messages can still run.": no limit, no way to raise it, and a held turn leaves "Nothing needs you · Nothing running"
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-checkpoints-sweep` (Chromium, :8122; `s1022_ck_ui.py overview -spent|-held`, screenshots `overview-spent.png`, `overview-held.png`).
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 0
+
+Repro: `PATCH /accounting/budget {"token_budget": 100000}` with 265,821 used (`exhausted: true`). Then fire job `ping-beta` (Run now), which leaves beta's entry `queued` with `waiting_reason: "token budget exhausted"`. The Overview shows an amber band, "Autonomous turns are paused; operator messages can still run.", with no control in it (`NOTICE controls: []`). Below it: "**Nothing needs you · Nothing running** · 0 tasks", and beta "Last active never". The word "budget" appears nowhere on the page. The operator cannot tell from the Overview why turns are paused, how far over the limit they are (265.8K of 100K), where to change it (Project settings -> Budgets), or that a turn is waiting on them.
+
+Seam: `BudgetExhaustionNotice.tsx` takes only `exhausted`. `OverviewScreen.tsx:183-190` renders it bare, and the Needs-you list has no kind for budget-held work. The band also nests a bordered box inside the tinted `aw-overview-notice` wrapper (a double border). **Expected:** the notice names the limit and the use ("Token limit reached: 265.8K of 100K"), counts what it holds ("1 turn waiting"), and links to Budgets. Held entries make "Nothing needs you" false: they belong in Needs you, or the summary line says "1 held by the budget". **Test:** `OverviewScreen` with `budget.exhausted` and a queue entry `waiting_reason: "token budget exhausted"` renders the figures, a link to `section=budgets`, and does not render "Nothing needs you".
+
+## F954 (B) -- Jobs -> Run now toasts "fired — beta starts a turn now." when the Hub answered that the firing waits (`waiting_reason: "token budget exhausted"`)
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-checkpoints-sweep` (Chromium, :8122; `s1022_ck_ui.py job -spent`, screenshot `testbed/ui-judge/s1022-ck-job/122114/job-run-spent.png`).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: with the project's token budget spent, job `ping-beta` (agent beta, enabled, far-future cron) on the Jobs tab, Run now. `POST /jobs/job-96e2bab0ca74/run` -> 200 `{"success": true, …, "waiting_reason": "token budget exhausted"}`. The toast reads "**ping-beta fired** — beta starts a turn now." No run started: beta's entry stayed `queued`, "token budget exhausted". It ran (`run-28451b831d1f`) only 1.5 min later, when the limit was raised from Budgets. The job row said "Ran now ago · 1 fired", with nothing about the wait. F596 made the route answer `waiting_reason` for exactly this (no runner, CLI missing, budget), and no screen reads it. The pre-ui-finesse Jobs panel did not read it either.
+
+Seam: `JobsScreen.tsx:81-85` ignores the response body. **Expected:** with `waiting_reason`, the toast says "ping-beta fired — waiting: token budget exhausted", in the composer's "Not started — <reason>" form (`AgentOutputPanel.tsx:1031`). **Test:** `JobsScreen` with a mocked run response carrying `waiting_reason` asserts the toast names it and does not say "starts a turn now".
+
+## F955 (B) -- Checkpoint now is two browser requests: a reload while it says "Writing checkpoint…" leaves a paid, ready checkpoint nothing will ever cut over, and the checkpoint that is finally handed over records "No files recorded as changed"
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-checkpoints-sweep` (Chromium, :8122; `s1022_ck_ui.py reload_mid`, `press_wait`, `sheet -stranded`).
+**Source:** drive
+**Theme:** Checkpoints
+**Ready:** yes
+**Tier:** 1
+
+Repro: alpha's `conv-966fe9cf91e0`, past its 8,000-token threshold, under `offered`. Press the header **Checkpoint** and reload the page 3 s later, while it shows "Writing checkpoint…" (a press takes about 30 s: generation and probe). The Hub finishes: `ckpt-f62ff5fd96d8` is `ready`, probe `passed`, trigger `operator`, and `cut_over_to_conversation_id` is NULL. The conversation stays `open`, and its warning is cleared. The reloaded page offers nothing for the checkpoint, only "Checkpoint" again. The Checkpoints sheet lists it ("ready · operator · Probe: passed") with no Cut over. The same happened to `ckpt-06d65548418e` when the page was closed mid-press. The only way forward is another press, which pays for a third checkpoint (`ckpt-d3f414e72653`, cut over to `conv-da01bb95cfa4`). The two stranded ones cost 31,712 tokens, about $0.069 in Haiku. **And the handover is wrong:** each operator checkpoint chains on the newest (`previous_checkpoint_id`), so the one handed over covers no run (`covers_from_run_id` NULL) and has `files_changed: []`. The successor reads "No files recorded as changed", though alpha changed `src/calc.py` (the first, stranded checkpoint recorded it).
+
+Seam: `checkpointOperationStore.ts:58-70` takes, then cuts over from the browser. `AgentOutputPanel.tsx:717-722` offers only `trigger === 'context_pressure'` checkpoints for cut over. F126 noted both points in passing in 2026-09 ("a reload between the 201 and the cutover"; "a checkpoint the operator generated on purpose is never offered one"), and nothing filed or decided them. **Expected:** an operator press survives a reload. Either the Hub does take-and-cut-over in one request, or the newest `ready` checkpoint with no successor and no later run is offered for Cut over whatever its trigger. A checkpoint's span and `files_changed` run from the last checkpoint that was handed over, not from one that never was. Two seams (UI offer, Hub chaining), so Tier 1. **Acceptance drive:** press, reload mid-write. The page offers Cut over for that checkpoint, and the successor's checkpoint lists `src/calc.py`.
+
+## F956 (D) -- five small accounting labels: "1 turns could not be priced", "100% used" at 266%, an empty bordered list under "Nothing has merged yet", "266k" beside "265.8K", and a limit field that refuses 1.25 without saying one decimal
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-checkpoints-sweep` (Chromium, :8122; `s1022_ck_ui.py overview|raise`).
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 0
+
+(1) Budgets: "API-equivalent; 1 turns could not be priced" (`BudgetsSettings.tsx:91`, no singular). (2) Budgets, Limit tile: "100K · **100% used**" with 265.8K used (`BudgetsSettings.tsx:107`, `Math.min(1, …)`). Over the limit should read "266% used" or "165.8K over". (3) Overview: under "Nothing has merged yet." an empty `<ul class="aw-ov-list">` draws a bordered sliver (`OverviewView.tsx:246-247`; the list renders when `finished` is empty). (4) The same 265,821 tokens read "265.8K" on Overview and Budgets but "266k tokens" on the Activity Ledger (`ProjectLedger.tsx:30`, its own formatter). (5) The After field (M tokens) refuses `1.25` with "Millions of tokens, like 40 or 12.5.", because the pattern (`/^\d+(\.\d)?$/`, `BudgetsSettings.tsx:217`) allows one decimal and the sentence does not say so. `0` and `abc` get the same sentence, which is fine. **Test:** `BudgetsSettings.test.tsx` for (1), (2), (5); `OverviewView.test.tsx` for (3).
