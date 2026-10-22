@@ -67,6 +67,7 @@ from ...output_recording import record_agent_output
 from ...reach import validated_grants
 from ...review_turn import ReviewContext, verdict_evidence_sentence
 from ...runner_adapters import get_adapter, resolve_access_axes
+from ...runner_commands import posture_needs_approver
 from ...runner_provider import has_provider, runner_probe_config
 from ...schemas.agents import (
     AgentHeartbeatCreate,
@@ -499,9 +500,13 @@ async def list_agents(
             )
             # Clearing the agent's default gives the project's when it has one (reach-1019), the
             # runner's own otherwise; the agent's own (and `yolo`, its older spelling) wins.
-            permission_mode_built_in = project_posture or _bound_adapter.posture_at_rest(
-                axes, yolo=False
+            # An inherited posture that needs an approver is not given to a run with none (F933).
+            inherited = (
+                None
+                if axes.approvals == "none" and posture_needs_approver(project_posture)
+                else project_posture
             )
+            permission_mode_built_in = inherited or _bound_adapter.posture_at_rest(axes, yolo=False)
             permission_mode_at_rest = (
                 _bound_adapter.posture_at_rest(axes, yolo=True)
                 if spawn_config.get("yolo")

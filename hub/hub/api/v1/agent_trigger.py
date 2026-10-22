@@ -137,7 +137,12 @@ from ...run_task_binding import (
 from ...runner_adapters import ADAPTERS, build_command, get_adapter, resolve_access_axes
 from ...runner_adapters.base import RpcCallbacks as TransportRpcCallbacks
 from ...runner_adapters.base import RpcTransport, RpcTurnRequest, RunnerAdapter, StreamTransport
-from ...runner_commands import OPERATOR_PERMISSION_MODES, OPERATOR_POSTURE, UnsupportedRunnerError
+from ...runner_commands import (
+    OPERATOR_PERMISSION_MODES,
+    OPERATOR_POSTURE,
+    UnsupportedRunnerError,
+    posture_needs_approver,
+)
 from ...runner_events import AccountingSample, OpenToolCalls, diagnostic_event, status_event
 from ...runner_provider import has_provider, provider_override_problem, runner_probe_config
 from ...scheduler import (
@@ -1199,14 +1204,33 @@ async def _trigger_agent_directly(
     # fallback. It has to be applied here rather than only in the composer, because a run
     # triggered by a peer message or a scheduled job has no composer to state one — and those are
     # exactly the runs where "what may this agent do unattended" is the question being asked.
-    if agent_row.default_permission_mode and PERMISSION_MODE_CONTROL not in control_overrides:
+    #
+    # A default that routes calls through an approver (`manual`, `workspace`) is not inherited by a
+    # run that has none -- `hub_client: "cli"` injects no tool server -- because it would reach
+    # Claude as `--permission-mode manual` with nobody to answer: every write refused, no card, no
+    # Activity line (F933). Such a run keeps the runner's own at-rest posture. Read from the same
+    # axes the run is given, which also decide `mcp_command` below.
+    hub_client = config.get("hub_client")
+    # Read before the sentinel strip further down — `resolve_access_axes` needs the runner's
+    # **raw** `Runner.flags` (design D4): axis 2 for a Codex app-server run depends on whether the
+    # opt-out sentinel is present, which the strip would already have removed.
+    runner_flags = list(runner_row.flags or [])
+    axes = resolve_access_axes(adapter, hub_client=hub_client, flags=runner_flags)
+
+    def _inheritable(posture: Optional[str]) -> bool:
+        return bool(posture) and not (axes.approvals == "none" and posture_needs_approver(posture))
+
+    if (
+        _inheritable(agent_row.default_permission_mode)
+        and PERMISSION_MODE_CONTROL not in control_overrides
+    ):
         control_overrides[PERMISSION_MODE_CONTROL] = agent_row.default_permission_mode
     # Then the project's, for every agent with none of its own (reach-1019, D1), and the reach
     # grants this agent's judge decides with: its own, replacing the project's whole, or theirs.
     project_row = await session.get(Project, project_id)
     if (
         project_row is not None
-        and project_row.default_permission_mode
+        and _inheritable(project_row.default_permission_mode)
         and PERMISSION_MODE_CONTROL not in control_overrides
     ):
         control_overrides[PERMISSION_MODE_CONTROL] = project_row.default_permission_mode
@@ -1584,12 +1608,8 @@ async def _trigger_agent_directly(
     # it never asserts a tool surface the Hub has no grounds to believe this harness will honour.
     # They are separate because the requirement forbids a truer description from silently widening
     # permission: the operator's `hub_client` moves both, an inference moves only the second.
-    hub_client = config.get("hub_client")
-    # Read before the sentinel strip further down — `resolve_access_axes` needs the runner's
-    # **raw** `Runner.flags` (design D4): axis 2 for a Codex app-server run depends on whether the
-    # opt-out sentinel is present, which the strip would already have removed.
-    runner_flags = list(runner_row.flags or [])
-    axes = resolve_access_axes(adapter, hub_client=hub_client, flags=runner_flags)
+    # `hub_client`, `runner_flags` and `axes` are resolved above, with the inherited posture that
+    # needs them (F933).
     # A transport whose harness starts its MCP servers before the first prompt (Copilot) tests
     # this run itself and is told after that test (`a-run-reaches-the-hub-without-mcp` D9); the
     # pre-spawn description below is then only the fallback it replaces.

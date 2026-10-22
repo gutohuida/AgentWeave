@@ -93,6 +93,14 @@ APPROVER_PERMISSION_MODES = (WORKSPACE_PERMISSION_MODE, "manual", "acceptEdits")
 #: The approver postures the operator answers, rather than the Hub's workspace judge.
 OPERATOR_PERMISSION_MODES = ("manual", "acceptEdits")
 
+
+def posture_needs_approver(posture: Optional[str]) -> bool:
+    """True for a posture that is only meaningful with an approver to answer it: `manual` and
+    `workspace`. `acceptEdits` is not one -- it lets Claude approve its own edits, and is the
+    runner's own at-rest posture for a run with no approver (`claude_posture_at_rest`)."""
+    return posture in (WORKSPACE_PERMISSION_MODE, "manual")
+
+
 # Value of the spawned run's `AW_PERMISSION_POSTURE`, telling the approval tool that the operator
 # answers rather than the Hub. Restated in `mcp_server.py` rather than imported from here: that
 # module is spawned standalone and imports only stdlib plus fastmcp (see its own docstring).
