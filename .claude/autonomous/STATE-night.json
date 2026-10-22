@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F841-impl",
-    "next_action": "Do queue item F841-impl (read F841, F842 in scripts/drive/FINDINGS.md, test-first, fix, drive, set Status). Keep `current` equal to the item id.",
+    "current": "F849-impl",
+    "next_action": "Do queue item F849-impl (read F849, F850 in scripts/drive/FINDINGS.md, test-first, fix, drive, set Status). Keep `current` equal to the item id.",
     "queue": [
         {
             "id": "F856-spec",
@@ -30,9 +30,9 @@
         },
         {
             "id": "F841-impl",
-            "status": "open",
+            "status": "done",
             "title": "F841+F842 (C,T0, UI): Look into it re-press and Reports list not re-reading",
-            "detail": "Finding text and repro in scripts/drive/FINDINGS.md (grep '^#* F<n>'). Test-first at the seam the finding names, fix, drive, set Status line."
+            "detail": "Done iteration 11: per-process review claim (409 on a second press), button disabled after 202, reports list watched after a review; tests failed before; drive on :8158 one firing."
         },
         {
             "id": "F849-impl",

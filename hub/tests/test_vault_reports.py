@@ -402,6 +402,52 @@ async def test_a_pending_report_is_looked_into_again_once_the_job_has_a_runner(
     assert again.status_code == 409 and len(fake.calls) == 1
 
 
+@pytest.mark.asyncio
+async def test_a_report_under_review_is_not_looked_into_a_second_time(
+    app, auth_headers, worker, tmp_path, monkeypatch
+) -> None:
+    """F841: nothing marked a report as under review, so a second "Look into it" press inside the
+    review's seconds spawned a second paid review whose outcome could not be stored."""
+    import asyncio
+
+    fake = worker(("answered", "It stands.", None, []))
+    release = asyncio.Event()
+    inner = fake.__call__
+
+    async def slow(**kwargs):
+        result = await inner(**kwargs)
+        await release.wait()
+        return result
+
+    monkeypatch.setattr(vault_reports, "run_worker", slow)
+    await _enable(app, auth_headers)
+    source = await _source(app, auth_headers)
+    fact = await _fact(app, auth_headers, tmp_path, source, "Limit is 300.")
+    report_id = vault.add_report(
+        tmp_path,
+        await _private_root(app, auth_headers),
+        entry_id=fact,
+        message="Check this.",
+        reporter={"agent": "helper"},
+    )["id"]
+    url = f"{BASE}/vault/reports/{report_id}/review"
+
+    first = asyncio.create_task(app.post(url, headers=auth_headers))
+    for _ in range(200):
+        if fake.calls:
+            break
+        await asyncio.sleep(0.01)
+    assert len(fake.calls) == 1
+    second = await asyncio.wait_for(app.post(url, headers=auth_headers), 5)
+    assert second.status_code == 409 and "already being looked into" in second.json()["detail"]
+    release.set()
+    assert (await first).status_code == 202
+    assert len(fake.calls) == 1 and [f["outcome"] for f in await _firings()] == ["answered"]
+    # The claim is released with the review: an answered report is refused for being answered.
+    again = await app.post(url, headers=auth_headers)
+    assert again.status_code == 409 and "not pending" in again.json()["detail"]
+
+
 # ---------------------------------------------------------------------------
 # outcomes
 # ---------------------------------------------------------------------------

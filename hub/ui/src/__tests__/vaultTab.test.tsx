@@ -625,6 +625,34 @@ describe('the Vault tab', () => {
     })
   })
 
+  it('re-reads the reports after a review is queued, and the button goes (F841, F842)', async () => {
+    const PENDING_RPT = { ...REFERRED_RPT, id: 'rpt-cccccccccccc', status: 'pending', answer: null }
+    const ANSWERED_RPT = { ...PENDING_RPT, status: 'answered', answer: 'The source settles it.' }
+    let reads = 0
+    let queued = false
+    vault = withReports([], (url, init) => {
+      if (url.endsWith('/vault/reports/rpt-cccccccccccc/review') && init?.method === 'POST') {
+        queued = true
+        return { status: 202, body: { report: 'rpt-cccccccccccc', queued: true } }
+      }
+      if (url.endsWith('/vault/reports')) {
+        reads += 1
+        // The review finishes after the press: later reads see the answer.
+        return { status: 200, body: { reports: [queued && reads > 2 ? ANSWERED_RPT : PENDING_RPT] } }
+      }
+      return undefined
+    })
+    render(<VaultScreen />, { wrapper })
+    await openReports()
+    const button = await screen.findByTestId('vault-report-rpt-cccccccccccc-review')
+    fireEvent.click(button)
+    expect(await screen.findByText(/Looking into it in the background/)).toBeInTheDocument()
+    // F841: the press has been taken; a second one would pay for a second review.
+    expect(button).toBeDisabled()
+    // F842: the list is watched like after an upload, so the answer appears without a reload.
+    expect(await screen.findByText('The source settles it.', undefined, { timeout: 5000 })).toBeInTheDocument()
+  }, 10000)
+
   it('reads a 404 from the reports route as no section', async () => {
     vault = withReports([], (url) => (url.endsWith('/vault/reports') ? { status: 404, body: { detail: 'Not Found' } } : undefined))
     render(<VaultScreen />, { wrapper })

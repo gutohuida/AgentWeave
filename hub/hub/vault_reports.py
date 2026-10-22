@@ -27,7 +27,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Set, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -119,8 +119,14 @@ def _entry_text(entry: Dict[str, Any]) -> str:
     return f"The source {entry['id']}, {entry.get('name')!r} (its text is the source below)."
 
 
+# Reports being looked into now (F841). `prepare` claims one and `review` lets it go, so a second
+# press, or a press beside the review a filing started, is refused instead of paid for twice.
+_under_review: Set[Tuple[str, str]] = set()
+
+
 async def prepare(project_id: str, report_id: str) -> Plan:
-    """Everything a review needs, read and closed before the spawn, or `CannotReviewError`."""
+    """Everything a review needs, read and closed before the spawn, or `CannotReviewError`.
+    A plan holds its report's claim until `review` has run it."""
     async with async_session_factory() as db:
         try:
             workspace = await project_workspace.resolve_project_workspace(db, project_id)
@@ -163,6 +169,9 @@ async def prepare(project_id: str, report_id: str) -> Plan:
         raise CannotReviewError(f"Report {report_id} names an entry that is gone.")
     # F741: a file held here and not read yet is not "not on this machine"; the model hears what
     # is actually in the way, as the entry route says it (F720), else the entry's general note.
+    if (project_id, report_id) in _under_review:
+        raise CannotReviewError(f"Report {report_id} is already being looked into.")
+    _under_review.add((project_id, report_id))
     word = vault.unread_word(source) if source is not None else None
     note = source.get("note") if word is not None and source is not None else None
     if word is not None and source_id is not None:
@@ -260,6 +269,13 @@ def _apply(plan: Plan, answer: ReportAnswer) -> Tuple[str, str]:
 
 async def review(plan: Plan, trigger: str = TRIGGER) -> str:
     """Spawn the model once on the planned report and record the firing. Answers the outcome."""
+    try:
+        return await _review(plan, trigger)
+    finally:
+        _under_review.discard((plan.project_id, plan.report["id"]))
+
+
+async def _review(plan: Plan, trigger: str) -> str:
     report = plan.report
     text = plan.source_text
     if text is not None:

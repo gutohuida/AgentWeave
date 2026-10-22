@@ -274,6 +274,8 @@ export function VaultScreen() {
       onReviewReport={async (id) => {
         try {
           await reviewReport.mutateAsync(id)
+          // The answer lands when the review finishes: keep re-reading, as after an upload (F842).
+          watch()
         } catch (error) {
           return { error: readableApiError(error, 'Could not look into this report.') }
         }

@@ -37998,7 +37998,7 @@ page after: "No specification yet -- Open a conversation and ask an agent to wri
 
 ## F841 (C) -- "Look into it" can be pressed again while the first review runs: each press spawns a paid review of the same report, and the second records a `failed` firing "the outcome could not be stored (Report ... is answered, not pending.)"
 
-**Status:** open 2026-10-21. A residue of F801's door. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8151, `scripts/drive/s1021_v_ui.py`, Chromium on the served bundle, real Haiku 4.5 reviews).
+**Status:** fixed 2026-10-22 (Tier 0): `vault_reports.prepare` claims the report in a per-process `_under_review` set and `review` releases it in a `finally`, so a second press (or a press beside a filing's own review) is refused 409 "Report R is already being looked into."; the card's button stays disabled once the Hub has queued the review. Tests: `test_a_report_under_review_is_not_looked_into_a_second_time` (failed before: second POST spawned a second review), `vaultTab` "re-reads the reports after a review is queued". Drive `scripts/drive/d1022_f841_review_twice.py` on scratch :8158, real Haiku: 202 + 409, one firing, no `failed`. Not covered: the claim is per process and per Hub run (a restart mid-review forgets it), and a press that reads `pending` just before another review settles can still pass.  [A residue of F801's door. Found by the day sweep `sweep-vault-sweep`.]
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes
@@ -38016,7 +38016,7 @@ same over the API: two concurrent POST .../vault/reports/rpt-dcaea150ac59/review
 
 ## F842 (C) -- after "Look into it", the Reports list never re-reads: the card promises "The answer appears here when it finishes" and stays `pending` until a reload
 
-**Status:** open 2026-10-21. A residue of F801's door. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8151, `scripts/drive/s1021_v_ui.py`, Chromium; screenshots `testbed/ui-judge/s1021-vault/100012/02_runner_after.png`, `.../100233/04_twice_after.png`).
+**Status:** fixed 2026-10-22 (Tier 0): `VaultScreen`'s `onReviewReport` calls `watch()` after the 202, so the reports list re-reads every 3 s like after an upload and the answer appears without a reload. Test: `vaultTab` "re-reads the reports after a review is queued" (the answer must render after the 202 with no remount; failed before at the button seam, the same test). Drive: `d1022_f841_review_twice.py` covers the Hub half; **not driven in Chromium**.  [A residue of F801's door. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8151, `scripts/drive/s1021_v_ui.py`, Chromium; screenshots `testbed/ui-judge/s1021-vault/100012/02_runner_after.png`, `.../100233/04_twice_after.png`).]
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes

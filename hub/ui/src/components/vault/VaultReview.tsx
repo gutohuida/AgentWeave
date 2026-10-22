@@ -208,7 +208,7 @@ function ReviewReportButton({
         variant="ghost"
         size="xs"
         data-testid={`vault-report-${report.id}-review`}
-        disabled={state === 'pending'}
+        disabled={state !== 'idle'}
         title="Ask the manager to look into this report now"
         onClick={async () => {
           setState('pending')
