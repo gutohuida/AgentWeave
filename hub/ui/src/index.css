@@ -71,8 +71,9 @@
     --accent:      rgba(255,255,255,0.055);
     --muted:       #232329;
     --muted-foreground: #8e8e98;
-    /* Accent hue, demoted to state only: focus ring, rail active marker, selection. */
-    --ring:        #7c8cff;
+    /* Accent hue, demoted to state only: focus ring, rail active marker, selection. Verdigris,
+       the identity kit's one app accent (2026-10-22; was indigo #7c8cff). */
+    --ring:        #5fb3b3;
     --rail-marker: var(--ring);
     --outline:     rgba(255,255,255,0.13);
     --outline-variant: rgba(255,255,255,0.07);
@@ -88,10 +89,14 @@
        by which theme the Hub happens to be in. Anthropic's published mark colour. */
     --provider-claude: #d97757;
 
+    /* Brand madder — the logo's thread (BrandLoop) and nothing else. It sits between --destructive
+       and --provider-claude, so on any other element it reads as an error or as Claude. */
+    --brand-madder: #cc4630;
+
     /* Agent identity palette — authored, not reused from the status colours
        above, which already carry meaning. Assigned by registration order. */
     --agent-1: #7c8cff;
-    --agent-2: #2fd4c8;
+    --agent-2: #e066c0; /* magenta, was teal #2fd4c8: no agent may look like the verdigris accent */
     --agent-3: #f7b955;
     --agent-4: #f4708f;
     --agent-5: #5ad07a;
@@ -145,18 +150,19 @@
     --accent:      rgba(0,0,0,0.045);
     --muted:       #efeff1;
     --muted-foreground: #5c5c66;
-    /* Accent hue, demoted to state only: focus ring, rail active marker, selection. */
-    --ring:        #5063d8;
+    /* Accent hue, demoted to state only: focus ring, rail active marker, selection (verdigris). */
+    --ring:        #1d6b6e;
     --rail-marker: var(--ring);
     --outline:     rgba(0,0,0,0.15);
     --outline-variant: rgba(0,0,0,0.09);
     --scrim:       rgba(0,0,0,0.4);
     --error-cont:  rgba(220,47,60,0.10);
     --on-error-cont: #dc2f3c;
+    --brand-madder: #b03a26;
 
     /* Darkened for contrast against a light ground plane */
     --agent-1: #4f5fd6;
-    --agent-2: #0f9c92;
+    --agent-2: #b8399a;
     --agent-3: #b8801d;
     --agent-4: #d1406a;
     --agent-5: #2a9c50;

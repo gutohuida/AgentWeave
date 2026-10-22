@@ -1,0 +1,16 @@
+/* AgentWeave identity: ink header carrying the madder loop, verdigris for links and accents.
+   Values match hub/ui/src/index.css (--ring) and the identity kit. */
+:root > * {
+  --md-primary-fg-color: #15171c;
+  --md-primary-fg-color--light: #26262b;
+  --md-primary-fg-color--dark: #0a0a0b;
+  --md-accent-fg-color: #1d6b6e;
+  --md-accent-fg-color--transparent: rgba(29, 107, 110, 0.1);
+  --md-typeset-a-color: #1d6b6e;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-accent-fg-color: #5fb3b3;
+  --md-accent-fg-color--transparent: rgba(95, 179, 179, 0.1);
+  --md-typeset-a-color: #5fb3b3;
+}

@@ -13,18 +13,21 @@ validation:
 
 theme:
   name: material
+  logo: assets/agentweave-loop-on-dark.svg
+  favicon: assets/agentweave-favicon.svg
+  # Brand colours (identity kit, 2026-10-22): ink header, verdigris accent; see stylesheets/brand.css.
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
@@ -37,6 +40,9 @@ theme:
     - search.highlight
     - content.code.copy
     - content.action.edit
+
+extra_css:
+  - stylesheets/brand.css
 
 plugins:
   - search
