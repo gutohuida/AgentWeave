@@ -301,6 +301,13 @@
   text-overflow: ellipsis;
 }
 .aw-story-value small { font-size: 11px; color: var(--text-3); font-weight: 400; }
+.aw-story-sub {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .aw-counts { display: flex; flex-wrap: wrap; gap: 4px 10px; font: 500 13px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
 .aw-counts span { white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; color: var(--tone); }
 .aw-counts span::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }

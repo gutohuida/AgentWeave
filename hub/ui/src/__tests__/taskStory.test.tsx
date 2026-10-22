@@ -18,6 +18,7 @@ const STORY: Story = {
     cost_usd: 2.81,
     tokens: 23000,
     premium_requests: null,
+    ai_nano_aiu: null,
     evidence: { accepted: 1, rejected: 1, awaiting: 0 },
     merged: ['c6aed11aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'],
     overrides: 1,
@@ -27,7 +28,7 @@ const STORY: Story = {
     {
       kind: 'run', id: 'run-1', at: '2026-10-16T14:05:00Z', agent: 'Builder', status: 'completed',
       ended_at: '2026-10-16T14:16:00Z', duration_seconds: 660, model: 'claude-sonnet-5-5',
-      runner: 'claude', cost_usd: 1.84, tokens: 12000, premium_requests: null,
+      runner: 'claude', cost_usd: 1.84, tokens: 12000, premium_requests: null, ai_nano_aiu: null,
       conversation_id: 'conv-1', error: null,
     },
     {
@@ -119,6 +120,49 @@ describe('the task story', () => {
     expect(summary.textContent).toContain('approved')
     expect(summary.textContent).toContain('$2.81')
     expect(summary.textContent).toContain('c6aed11a')
+  })
+
+  it('shows a Copilot run in AI credits, never as $0.00, beside the dollars of a Claude run', () => {
+    const run = STORY.events.find((e) => e.kind === 'run')!
+    storyOverride.current = {
+      ...STORY,
+      summary: { ...STORY.summary, cost_usd: 1.84, premium_requests: 2, ai_nano_aiu: 280_000_000 },
+      events: [
+        ...STORY.events,
+        {
+          ...run, id: 'run-cp', at: '2026-10-16T14:40:00Z', runner: 'copilot', model: 'gpt-5.4',
+          cost_usd: null, tokens: 3000, premium_requests: 2, ai_nano_aiu: 280_000_000,
+        },
+      ],
+    }
+    try {
+      render(<TaskStory taskId="task-1" />)
+      const summary = screen.getByTestId('task-story-summary-task-1')
+      expect(summary.textContent).toContain('$1.84')
+      expect(summary.textContent).toContain('+ 0.28 AI credits · 2 req')
+      const copilot = screen.getByTestId('story-event-run-cp')
+      expect(copilot.textContent).toContain('0.28 AI credits')
+      expect(copilot.textContent).not.toContain('$')
+      expect(screen.getByTestId('story-event-run-1').textContent).not.toContain('AI credits')
+    } finally {
+      storyOverride.current = null
+    }
+  })
+
+  it('shows a Copilot-only task in AI credits, not as an unknown cost', () => {
+    storyOverride.current = {
+      ...STORY,
+      summary: { ...STORY.summary, cost_usd: null, ai_nano_aiu: 1_500_000_000 },
+    }
+    try {
+      render(<TaskStory taskId="task-1" />)
+      const summary = screen.getByTestId('task-story-summary-task-1')
+      expect(summary.querySelector('.aw-story-value')?.textContent).toBe('1.50')
+      expect(summary.textContent).toContain('AI credits')
+      expect(summary.textContent).not.toContain('—')
+    } finally {
+      storyOverride.current = null
+    }
   })
 
   it('shows the run with its agent, model and cost', () => {

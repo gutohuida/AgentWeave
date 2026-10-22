@@ -6,12 +6,17 @@ import { hubDate } from '@/lib/hubTime'
  * currency amount. */
 export const NANO_AIU_PER_AI_CREDIT = 1_000_000_000
 
-/** `0.28 AI credits`, `<0.01 AI credits` below the display floor, null when nothing was reported. */
-export function formatAiCredits(nano: number | null | undefined): string | null {
+/** The amount alone, `0.28` or `<0.01`, for a place that prints the unit apart; null as below. */
+export function formatAiCreditAmount(nano: number | null | undefined): string | null {
   if (typeof nano !== 'number' || !Number.isFinite(nano) || nano <= 0) return null
   const credits = nano / NANO_AIU_PER_AI_CREDIT
-  if (credits < 0.01) return '<0.01 AI credits'
-  return `${credits.toFixed(2)} AI credits`
+  return credits < 0.01 ? '<0.01' : credits.toFixed(2)
+}
+
+/** `0.28 AI credits`, `<0.01 AI credits` below the display floor, null when nothing was reported. */
+export function formatAiCredits(nano: number | null | undefined): string | null {
+  const amount = formatAiCreditAmount(nano)
+  return amount == null ? null : `${amount} AI credits`
 }
 
 const RUNNER_NAMES: Record<string, string> = { copilot: 'Copilot', codex: 'Codex' }
