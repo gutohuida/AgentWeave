@@ -2536,3 +2536,19 @@ When `hub/hub/mcp_server.py` changes, its tool-server digest is new, and several
 - **`hub/ui/mock` does not render on this machine:** `mock/fixtures/*.json` is gitignored and absent here (Vite: "Failed to resolve import ./fixtures/agents.json"). To preview a token or CSS change, drive the trial Hub (:8010) with Playwright and inject the CSS at runtime, or run the worktree's Vite dev server with `AW_DEV_HUB=http://127.0.0.1:8010`. (2026-10-22)
 - **Removing a worktree whose `hub/ui/node_modules` is a junction:** run `cmd /c rmdir <worktree>\hub\ui\node_modules` (removes only the junction) BEFORE `git worktree remove`, so nothing can follow it into the main checkout's node_modules. (2026-10-22)
 - **`hubVisualLanguage.test.ts` refuses any raw hex in a component**, including an SVG mask's `#fff`/`#000`. Mask luminance is not colour: write `white`/`black`. (2026-10-22)
+
+- **A bash heredoc piped into `py -3.11 -` mangles non-ASCII.** Python decodes that stdin with the
+  console codepage, so an em dash in a literal became `â€”` and was stored that way in a vault
+  source name (no UI route deletes a vault source). Keep heredoc'd Python ASCII-only, or write the
+  script to a file and run it. (2026-10-22)
+- **Spec phase routes live under `/api/v1/projects/{id}/project/…`** (the spec router's prefix is
+  `/project`): `…/project/documents/propose?path=`, `…/project/documents/phase?path=&to=`. Without
+  the extra `/project` they answer 404 `Not Found`, which reads like a wrong id. Approving over gaps
+  needs `{"approve_anyway": true}` in the body, not the query. (2026-10-22)
+- **A throwaway Hub for screenshots or drives:** `cd hub && DATABASE_URL=sqlite+aiosqlite:///<abs
+  path>.db AW_BOOTSTRAP_API_KEY=aw_live_<32 hex> py -3.11 -m uvicorn hub.main:app --port 8012`
+  migrates a fresh database on start and serves the committed bundle; register a testbed folder
+  with `POST /api/v1/projects/open {"path": …}`. The app's theme is `html[data-mode]`, flipped by
+  the top-bar button whose title ends in "mode" (prefers-color-scheme is not read). (2026-10-22)
+- **A docs image under `docs/assets/screenshots/` needs `.webp`.** `.gitignore` ignores
+  png/jpg/webp everywhere and negates only `docs/assets/screenshots/*.webp`. (2026-10-22)
