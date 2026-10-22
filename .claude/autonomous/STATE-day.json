@@ -8,16 +8,16 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T17:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "plan-review",
-    "next_action": "Run plan-review per .claude/loops/day-window.md 'The pretask': e2e-loop SKILL.md Step 0 incl. plan-against-code inventory, update the checklist, commit SKILL.md alone, log PLAN line, then insert sweep-<area>-sweep items (every checklist row once, 2-3 rows each) before ledger-tidy. Drive nothing.",
+    "current": "night-recheck-drive",
+    "next_action": "Run night-recheck-drive per .claude/loops/day-window.md 'Re-driving last night's fixes': re-drive the 20 fixes named in its detail on a scratch Hub (port 8110+, haiku only), log CONFIRMED/REOPENED F<n>, reopen with evidence.",
     "queue": [
         {
             "id": "plan-review",
-            "status": "open",
+            "status": "done",
             "title": "Check the e2e checklist against the code; queue the full sweep",
             "detail": "No DIRECTION.md section dated today and no new REQUESTS rows, so the default queue. Insert sweep items before ledger-tidy. Order: rows with new/unreached paths, rows last night's commits touched (vault, session sync, task cards/Needs you, merge Retry), then least recently swept."
         },
@@ -26,6 +26,72 @@
             "status": "open",
             "title": "Re-drive last night's fixes live",
             "detail": "Fixed 2026-10-21 and touching route/run/UI: F824 residual (deleted task story refetch), F842 (vault review report watch), F849 (sync_session archives conversations), F850 (session_synced SSE), F902-F905 (stalled+wait line, awaiting-review tally, Needs you order, retryable on TaskIntegrationSummary), plus F835 F836 F838 F841 F844 F852 F856 F860 F861 F864 F865 F906 (read their Status lines in scripts/drive/FINDINGS.md). Log CONFIRMED/REOPENED F<n>; reopen by setting Status back to open with evidence. Scratch Hub port 8110+, haiku only."
+        },
+        {
+            "id": "sweep-traces-sweep",
+            "status": "open",
+            "title": "Sweep: Traces x Runs x Logs, events & SSE",
+            "detail": "First: the Activity tab's Activity view, the digest (ActivityDigest, lib/activityDigest.ts; unreached until 2026-10-22) — each sentence against its event, this project only; F844 (a conversation whose agent is busy in another conversation says so, not its own live turn)."
+        },
+        {
+            "id": "sweep-questions-sweep",
+            "status": "open",
+            "title": "Sweep: Questions x Conversations & composer",
+            "detail": "First: the Overview's Needs you list replacing the Questions takeover (blocked first, 'is waiting'/'is asking', F904); F860 (an expanded tool row shows the tool's output, a refusal's sentence readable); ConversationBar / ConversationComposerDock."
+        },
+        {
+            "id": "sweep-tasks-sweep",
+            "status": "open",
+            "title": "Sweep: Tasks x Dependencies x Worktrees & integration",
+            "detail": "First: the compact board (BoardView/TaskCardCompact): 'stalled' beside a wait, requirements awaiting review (F902/F903), card agrees with drawer; the Dependencies list (DependencyListView); Retry only where retryable (F905); a merge that lands re-drains the queue (F835)."
+        },
+        {
+            "id": "sweep-vault-sweep",
+            "status": "open",
+            "title": "Sweep: Knowledge vault x Manager jobs x CLI & lifecycle",
+            "detail": "First: the rebuilt Vault screens — VaultLibrary + page drop (usePageDrop), VaultReader, VaultReview cards, VaultAddDialog, VaultStorageDialog; Manager now under Project settings."
+        },
+        {
+            "id": "sweep-agents-sweep",
+            "status": "open",
+            "title": "Sweep: Agents x Charters x Inbound queue & messages",
+            "detail": "First: a session sync that deletes an agent archives its open conversations, rail and Activity follow session_synced without reload (F849/F850); Charters now in Project settings (ChartersSection/CharterForm)."
+        },
+        {
+            "id": "sweep-loops-sweep",
+            "status": "open",
+            "title": "Sweep: Jobs & loops x Flows & review x Resilience",
+            "detail": "First: the Jobs tab's new screens (JobsScreen/JobsView/JobDetails); an agent's archive_job permission card names job and schedule (F861); F864 (a default agent that is also a judge not handed fresh work)."
+        },
+        {
+            "id": "sweep-reach-sweep",
+            "status": "open",
+            "title": "Sweep: Permissions & sandbox x Capability plane x Agent environment",
+            "detail": "First: Reach group now at Project settings -> General with ReachGrantsChips (renamed from ReachGrantsEditor)."
+        },
+        {
+            "id": "sweep-projects-sweep",
+            "status": "open",
+            "title": "Sweep: Projects x Runners & models x Keyboard & dialogs",
+            "detail": "First: the Project settings screen (nine sections, the 'Environment' name gone; RunnersSection/RunnerForm), its keyboard and dialog layers."
+        },
+        {
+            "id": "sweep-spec-sweep",
+            "status": "open",
+            "title": "Sweep: Spec documents x Corpus & folding",
+            "detail": "Least recently swept (2026-10-21 iteration 4). Spec header rebuilt (SpecDocumentHeader, SpecDocumentList, SpecHealthLine, SpecPhaseParts)."
+        },
+        {
+            "id": "sweep-checkpoints-sweep",
+            "status": "open",
+            "title": "Sweep: Checkpoints x Accounting & allowance",
+            "detail": "Least recently swept (2026-10-21 iteration 7). Overview's spend line + BudgetExhaustionNotice replace the budget summary card."
+        },
+        {
+            "id": "sweep-evidence-sweep",
+            "status": "open",
+            "title": "Sweep: Requirements, evidence & coverage x Drift",
+            "detail": "Least recently swept (2026-10-21 iteration 9). F852 (an agent piece naming no commit at main's tip shows no work)."
         },
         {
             "id": "ledger-tidy",
