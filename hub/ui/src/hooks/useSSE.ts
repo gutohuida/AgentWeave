@@ -459,8 +459,16 @@ export function useSSE(onEvent?: SSEListener) {
           // task's story. The spec page's own listener (`useSpecEvents`) covers the spec queries.
           invalidateTaskStories(queryClient, pid)
           break
-        case 'task_updated':
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
+        case 'task_updated': {
+          // A delete broadcasts `{id, deleted: true}` as it commits, which can reach the page before
+          // the 204 does while the drawer still holds the task's story: refetching that key only
+          // collects 404s (F824). Everything else under `tasks` still refreshes.
+          const data = event.data as { id?: string; deleted?: boolean } | null
+          const goneId = data?.deleted === true ? data.id : undefined
+          queryClient.invalidateQueries({
+            queryKey: ['project', pid, 'tasks'],
+            ...(goneId ? { predicate: (q) => q.queryKey[3] !== goneId } : {}),
+          })
           // An approval merges into main and moves the ledger's lanes (slice project-ledger).
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'ledger'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
@@ -474,6 +482,7 @@ export function useSSE(onEvent?: SSEListener) {
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'worktrees'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'worktree-conflicts'] })
           break
+        }
         case 'queue_entry_abandoned': {
           // The Hub stopped trying to deliver something. The queue card is where that shows, and
           // the prefix covers both that agent's entries and its status without naming either.

@@ -336,6 +336,41 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'conversations'] })
   })
 
+  it('a deleted task is not asked for again while its drawer still holds the story (F824)', async () => {
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+    const { useTaskStory } = await import('@/api/tasks')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    const storyCalls: string[] = []
+    // The Hub broadcasts task_updated {id, deleted: true} the moment the delete commits, which can
+    // reach the page before the 204 does; the open drawer's story observer is still mounted then.
+    fetchSpy.mockImplementation(async (url: string) => {
+      if (String(url).includes('/story')) {
+        storyCalls.push(String(url))
+        return new Response('{"detail":"gone"}', { status: 404, headers: { 'Content-Type': 'application/json' } })
+      }
+      return makeSSEResponse([
+        'event: task_updated\ndata: {"project_id":"proj-1","id":"task-9","deleted":true}\n\n',
+      ])
+    })
+    useConfigStore.setState({ selectedProjectId: 'proj-1' })
+    client.setQueryData(['project', 'proj-1', 'tasks', 'task-9', 'story'], { events: [] })
+
+    function Probe() {
+      useSSE()
+      useTaskStory('task-9', true)
+      return null
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>
+    )
+    await waitFor(() => expect(fetchSpy.mock.calls.length).toBeGreaterThan(0))
+    // Let the event be read and the invalidation it causes run its course.
+    await new Promise((r) => setTimeout(r, 200))
+    expect(storyCalls.filter((u) => u.includes('task-9'))).toEqual([])
+  })
+
   it('refreshes permission decisions and the rail from the central switch (UI-1 review)', async () => {
     const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
