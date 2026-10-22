@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T17:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-10-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-traces-sweep",
-    "next_action": "Run sweep-traces-sweep per .claude/loops/day-window.md: Traces x Runs x Logs, events & SSE; start with the Activity digest and F844, scratch Hub port 8110+, haiku only.",
+    "current": "sweep-questions-sweep",
+    "next_action": "Run sweep-questions-sweep per .claude/loops/day-window.md: Questions x Conversations & composer; start with the Overview's Needs you list (F904) and F860's expanded tool row, scratch Hub port 8110+, haiku only.",
     "queue": [
         {
             "id": "plan-review",
@@ -29,7 +29,7 @@
         },
         {
             "id": "sweep-traces-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Traces x Runs x Logs, events & SSE",
             "detail": "First: the Activity tab's Activity view, the digest (ActivityDigest, lib/activityDigest.ts; unreached until 2026-10-22) \u00e2\u20ac\u201d each sentence against its event, this project only; F844 (a conversation whose agent is busy in another conversation says so, not its own live turn)."
         },

@@ -38483,3 +38483,47 @@ Expected: "Took over 1 unfinished task from "loop A on the document" (archived):
 Repro (`scripts/drive/s1021_l_loops.py adopt|stop`, while alpha and beta were both running F864's builder turns): `GET /loops/{A}` for the **archived** loop A -> `ending_state: "stopped"`, `archived_at` set, `stall_reason: "alpha is already running a turn"`. `PATCH /jobs/{B} {"stop_reason": ...}` -> loop B `ending_state: "stopped"`, and `GET /loops/{B}` -> `stall_reason: "alpha is already running a turn"`. Both went back to `null` once beta was free. The list route computes `decide_firing` and the busy guard for every loop in the batch, ended ones included (`hub/hub/api/v1/jobs.py:498-515`), and `LoopsIndexTab` renders `loop.stall_reason` with no check of `ending_state` (`hub/ui/src/components/spec/LoopsIndexTab.tsx:237-246`). The jobs card is not affected: it checks `finished` first (`hub/ui/src/components/jobs/JobsView.tsx:270-276`).
 
 Expected: an ended loop has no stall reason (its state is the ending, with its `stop_reason`), and the panel shows nothing amber for it. **Test:** in the loops route tests, a stopped loop whose agent has a running turn reads `stall_reason: null`. Seam: Jobs & loops (list route x the busy guard).
+
+## F907 (B) -- the Activity digest leaves a stopped or failed turn reading "alpha is working" forever, and puts its ending on a separate row by wire name ("alpha run stopped", "alpha run failed")
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8112, profile tr1022, `proj-9a2788c8d0d7`, Chromium against the served bundle, `scripts/drive/s1022_tr_drive.py turns|stop|fail` then `scripts/drive/s1022_tr_ui.py digest`).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes -- driven with real Haiku turns; both endings reproduced.
+**Tier:** 0
+
+Agent `alpha` (`claude-haiku-4-5-20251001`), conversation `conv-532cea81cbfb`. `run-2ecf43ed6f9b` ran a 120 s sleep and was stopped through `POST /projects/{p}/agent/alpha/stop` (200, run `stopped`, event `run_stopped` exit 2). `run-5a0d005db3b8` ran the same sleep and its `claude.exe` was killed (run `failed`, event `run_failed` exit 1, severity warn). The trace list agrees (`run_status` stopped / failed, `invoke_agent` span status unset / error). The Activity tab -> **Activity** view, read in Chromium:
+
+```
+[info] 09:26 | alpha run failed     (severity warn)      <- run_failed alone
+[info] 09:25 | alpha is working | Reply with the single word OK.   <- run-5a0d005db3b8: triggered, delivered, started
+[info] 09:25 | alpha run stopped                         <- run_stopped alone
+[info] 09:25 | alpha is working | Reply with the single word OK.   <- run-2ecf43ed6f9b
+Warnings filter: ['alpha run failed']   (the failed turn's own row is info)
+```
+
+Both turns ended minutes earlier; neither "is working" row has a duration, tokens or cost, and no row says the turn was stopped or failed. Cause: `buildDigest` (`hub/ui/src/lib/activityDigest.ts`) joins only `run_triggered` / `run_started` / `run_completed` / `queue_entry_delivered` into a turn (`runOf`), and computes `done` and `failed` from `run_completed` alone; the Hub ends a turn with one of `run_completed` / `run_failed` / `run_stopped` (`_RUN_LIFECYCLE_EVENTS`, `hub/hub/api/v1/agent_trigger.py:2745`), so the other two fall to the `default:` branch as their own rows. There is no test file for `activityDigest.ts`.
+
+**Expected:** `run_stopped` and `run_failed` join their run's row; the row reads "alpha was stopped" / "alpha stopped with an error" (severity warn/error, so Warnings shows it) with the duration from `run_started`; no separate wire-name row. **Test:** a new `hub/ui/src/__tests__/activityDigest.test.ts` fed the event order the Hub writes (`queue_entry_queued`, `run_triggered`, `queue_entry_delivered`, `run_started`, `context_warning`, `run_stopped`): one turn row, not "is working", no `run stopped` row; the same with `run_failed` (row severity error). Fails today. Seam: Runs x Logs, events & SSE.
+
+## F908 (C) -- the Activity digest falls back to the event's wire name for every event it has no sentence for, credits the event's `agent` field as its actor, and drops the subject: "alpha task created", "alpha agent created", "question answered"
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-traces-sweep` (same Hub and drive as F907; `scripts/drive/s1022_tr_ui.py digest|live`).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes
+**Tier:** 0
+
+The operator created a task through `POST /projects/{p}/tasks` (`{"title": "Digest probe task", "assignee": "alpha"}`, 201) and later answered alpha's `ask_user` through `PATCH /projects/{p}/questions/q-1f71e74a46aa` (200). The digest, in Chromium:
+
+```
+alpha worked | Reply with the single word OK. | 2m 17s ...
+question answered                       <- no who, no question
+alpha question asked                    <- no question text ("Which colour for the border?")
+alpha task created                      <- the operator created it; alpha is the assignee; no task title
+alpha agent created
+```
+
+`task_created` is persisted with `agent=alpha` (the assignee) and data `{"id", "title"}`; the digest's `default:` branch (`hub/ui/src/lib/activityDigest.ts`) renders `lead: e.agent` + `e.event_type.replace(/_/g, ' ')`, and its `taskId` only reads `d.task_id` or `task_updated`'s `d.id`, so the title it holds never reaches the row. The file's own header says the digest replaces "every event by its wire name"; these are the commonest events of a project's first hour (agent created, task created, question asked/answered).
+
+**Expected:** a sentence for `task_created` ("Task created", detail the title, no agent lead unless the event names an actor), `question_asked` ("alpha asked you", detail the question), `question_answered` ("You answered alpha", detail the question) -- neither event carries the question text (`question_asked` data is `{id, from_agent, blocking}`, `question_answered` is `{id, answer}` with `agent` null), so the digest looks it up by id the way it already looks up task titles (a `questionText` in `DigestContext`, from the questions query), `agent_created` ("alpha was added"); the default branch never leads with `e.agent` for an event whose actor it does not know. **Test:** in the `activityDigest.test.ts` F907 adds: a `task_created` event with `agent: 'alpha'` and `data: {id, title}` yields a row whose text is not "task created" and whose detail is the title; same for `question_asked` with its question. Seam: Logs, events & SSE x Tasks / Questions.
