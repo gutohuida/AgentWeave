@@ -38969,3 +38969,68 @@ Repro: on Project settings -> General -> Granted reach, choose Add -> A host…,
 **Tier:** 0
 
 Repro: a project with one vault source and agent beta with `hub_client: "cli"`. beta's context, line 29: "This project has a knowledge vault with 1 entry ...: `vault_map()` lists them and `vault_read(entry_id)` reads one." Its own tool list in the same file (lines 64-65) names them `aw-tool vault_map` and `aw-tool vault_read` with an arguments file. alpha (MCP) gets the same line, while its callable names are `mcp__agentweave__vault_map` / `mcp__agentweave__vault_read`. `render_turn_index` (`hub/hub/vault.py:1770`) takes no tool surface, unlike the tool list rendered beside it. **Expected:** the line names the tools the way the run's tool list does (prefix or `aw-tool`). **Test:** `render_turn_index(entries, <call-mode surface>)` contains `aw-tool vault_map`. This fails today. Seam: Agent environment x Knowledge vault.
+
+## F938 (B) -- the Overview's Collaboration block is gone: `CollaborationSummary` has rendered nowhere since the ui-finesse rewire, while its 14 tests stay green and `hub-workspace-shell` still says the Overview MUST show it
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-projects-sweep` (Chromium against the served bundle, scratch Hub :8119, profile pj1022, project `proj-52da8d2af5a9`; `scripts/drive/s1022_pj_ui.py general`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Repro: open any project's Overview. The `main` text is "Nothing needs you · Nothing running · 0 tasks · $0.00 so far · 0 tokens · Ledger · Needs you · Running now · Recently finished · Agents ...". It has no "Collaboration", no "Hop budget" and no "Approval merges into" (all three `in main` were False). `grep -rn "<CollaborationSummary" hub/ui/src --include=*.tsx` finds only `__tests__/collaborationSummary.test.tsx`. `git log -S CollaborationSummary` shows that a8ca6e2 (ui-finesse, "every screen") dropped it from the Overview. Only `HOP_HELD_REASON` is still imported from the file (`AgentPostureChips.tsx:7`). Two current requirements in `spec/capabilities/hub-workspace-shell/spec.json` have no screen left: "The Overview MUST show a Collaboration block, above Attention, with the current value of: agents may start flows, hop budget, token budget, the branch approval merges into, the number of checks, the per-turn delivery cap, and agent budget ... each row MUST link to the control that edits it", and `the-overview-switches-agent-flows-in-place`. This is F190's class: the component's tests render it in isolation, so they pass while the operator can never see it. The approved mock (`hub/ui/mock/screens/Overview.tsx`) has no Collaboration block either. If dropping it was the operator's intent, the fix is to retire the two requirements. Nothing records that decision, so the spec stands. **Expected:** `OverviewScreen` renders `<CollaborationSummary onNavigate={onNavigate} />` again, in the place the spec names. **Test:** an `OverviewScreen` render test (not a `CollaborationSummary` one) finds the "Collaboration" heading and the hop-budget row. This fails today. Seam: Projects x Overview (the UI rewire).
+
+## F939 (B) -- Project settings -> Quality can never show anything but "No quality governance configured", and it tells the operator to add a `quality:` section to `agentweave.yml`, a file nothing reads; a failed read shows the same empty state
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-projects-sweep` (Chromium, scratch Hub :8119; `scripts/drive/s1022_pj_ui.py faults quality worktrees`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Repro: open Project settings -> Quality. It reads "No quality governance configured. Add a quality: section to agentweave.yml to enable review gates, decision docs, and echo-chamber guard." `QualityHealthPanel.tsx:24-55` reads `quality` only from `GET /projects/{id}/session/sync`'s `data.quality`. Nothing the operator can reach writes that. `src/agentweave/config.py:7` says "DEAD (2026-09-20): the whole module. agentweave.yml is read and written by nothing live". `session.py:433-437` records that the CLI push path is gone and that `POST /session/sync` "keeps test callers". No settings field, route or CLI command sets `review_required`, `docs_threshold` or `echo_chamber_guard`. The only remaining reader is the turn context's "Quality Gates" block (`agents.py:2505`). So the advice is false, and the section is one of the nine on Project settings with no working control. A second problem: with `GET .../session/sync` answering 500 (Playwright `page.route`), the section renders the **same** "No quality governance configured" with no error and no Retry. This is F197's class, which the other seven sections already handle: Runners, Charters, Manager, Instructions, Budgets, Diagnostics and General each showed "... could not be read." with the Hub's reason and a Retry in the same drive. Worktrees, on a failed `GET /worktrees`, shows "Could not read this project's checkouts." (`OtherSettings.tsx:126`) with no reason and no Retry. **Expected (Tier 0):** the empty state stops naming `agentweave.yml` and says plainly that nothing configures quality gates yet. A failed read gets the named failure and Retry the other sections use, and so does Worktrees. Giving quality a real settings door, or removing the section, is a Tier 1 question for the operator, outside this fix. **Test:** `qualityHealthPanel.test.tsx` covers two cases. With a session-sync query in error, it expects "could not be read" and a Retry button. With empty data, it expects no `agentweave.yml` in the text. Both fail today. Seam: Projects x Quality (a configuration path deleted under a screen that still points at it).
+
+## F940 (C) -- deleting a runner is one click on a hover icon, with no confirmation and no undo, unlike a charter; a provider runner's base URL and key-variable name go with it
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-projects-sweep` (Chromium, scratch Hub :8119; `scripts/drive/s1022_pj_ui.py runners`).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 0
+
+Repro: Project settings -> Runners, then focus or hover the row `kb-haiku` (unused) and press its **Delete kb-haiku** icon. No dialog opens (`dialog` count 0). The toast says "kb-haiku deleted", and `GET /runners` no longer has it. The toast has no Undo, although `toast()` supports an action. `RunnersSection.tsx:81-88` calls `deleteRunner.mutate` straight from the row button (`RunnersSettings.tsx:92`). Charters, one section below, open `DeleteCharterDialog` first, because "a charter delete is a hard delete" (F186, `ChartersSection.tsx:12`). A runner delete is just as hard, and it carries the runner's model, flags, and for a Copilot provider runner the `base_url` and `api_key_var` the operator typed. The Edit icon sits beside Delete, 1 icon-width apart (`aw-list-actions`), so one mis-click loses the runner. A held runner is refused safely (409 "Runner is bound to agent(s): alpha. Unbind before deleting." shown under the heading: held). **Expected:** Delete asks first ("Delete the runner kb-haiku? Agents and jobs cannot use it afterwards."), with Cancel focused, as charters do. An Undo toast is an acceptable alternative. **Test:** `runnersUi.test.tsx`: clicking Delete on a row opens a dialog and sends no DELETE until it is confirmed. This fails today. Seam: Runners & models x Keyboard & dialogs.
+
+## F941 (D) -- after a confirmed action removes or disables the control that opened it, keyboard focus falls to `<body>`: a runner deleted, instructions cleared, a project deleted
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-projects-sweep` (Chromium, keyboard; `scripts/drive/s1022_pj_ui.py runners|instructions|dialogs`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro, with `document.activeElement` read after each step:
+- (a) Runners: focus **Delete kb-haiku** and press it. The row goes and focus is `BODY`.
+- (b) Instructions: empty the editor, press Save, and confirm **Clear instructions**. Stored content becomes `''` (correct) and focus is `BODY`. Save is now disabled because the draft is no longer dirty (`OtherSettings.tsx:52`).
+- (c) pj-two's General: **Delete project…**, type the name, and press **Delete project**. The app moves to the remaining project's Overview and focus is `BODY`.
+
+In all three, Cancel and Escape do return focus to the opener (held). Only the confirmed path loses it, because its opener is gone or disabled. For a keyboard user the next Tab starts again from the top of the page (rail, project switcher). **Expected:** focus lands on the nearest sensible control: (a) the next row's Edit button, or **New runner**; (b) the editor; (c) the new screen's main heading or first tab. **Test:** one per site in the existing dialog tests: after confirm, `document.activeElement` is not `document.body`. These fail today. Seam: Keyboard & dialogs.
+
+## F942 (C) -- a Copilot provider runner whose key variable starts with `AW_` is refused as "one of the Hub's own credentials", even for a name that is no credential at all; the refusal never says `AW_` names are reserved
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-projects-sweep` (Chromium, scratch Hub :8119, the runner dialog; `scripts/drive/s1022_pj_ui.py extra`).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 0
+
+Repro: New runner -> CLI copilot -> "Send runs to a model provider with your own API key" -> Key variable name `AW_DRIVE_NOT_SET_1022`, model Fable 5, then Save. The dialog's alert says "api_key_var names one of the Hub's own credentials (AW_DRIVE_NOT_SET_1022), and a runner with a model provider sends that variable's value to its base_url. Name a variable that holds the provider's API key." The variable is set nowhere and is no Hub credential. `runner_provider.py:158` refuses `api_key_var in _HUB_CREDENTIAL_NAMES or api_key_var.startswith("AW_")` with one sentence for both. An operator who reads it as "that name is taken" will try `AW_ANTHROPIC_KEY` and be refused again with no clue why. The same body over `POST /runners` gives the same 400. Held: a non-`AW_` name that is unset (`MY_DRIVE_UNSET_KEY`) is stored (201), and `GET /runners/launchability` names the fix: "... $MY_DRIVE_UNSET_KEY, is not set in the Hub's environment. Set it and restart the Hub." **Expected:** two sentences. A name in `_HUB_CREDENTIAL_NAMES` keeps today's wording. An `AW_` prefix says "Names starting AW_ are reserved for the Hub's own settings; use another name, such as ANTHROPIC_API_KEY." **Test:** `provider_config_problem({"type": "anthropic", "api_key_var": "AW_X"}, "copilot")` mentions "AW_" and "reserved". This fails today. Seam: Runners & models (refusal legibility).
+
+## F943 (D) -- a Project settings link with an unknown or retired `section` (or none) lands on Quality, not General: the default is still the first entry of the old section order
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-projects-sweep` (Chromium, scratch Hub :8119; `scripts/drive/s1022_pj_ui.py nav`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Repro: open `/?project=<p>&tab=environment&section=bogus`, and then `...&section=permissions` (a page that no longer exists). Both rewrite the URL to `section=quality` and open Quality. `lib/navigation.ts:67` sets `DEFAULT_ENVIRONMENT_SECTION = ENVIRONMENT_SECTIONS[0]`, and the array (`:39-49`) still starts with `'quality'`, the old rail order. `ProjectSettingsScreen`'s own order starts with General (`settings`), the page every in-app link names (the gear, the rail's project menu, the Overview links: `App.tsx:624`, `Sidebar.tsx:314`). So only a typed or stale link reaches the default. Old bookmarks and the stale "Environment › Settings" references (F934) are exactly those links, and they land on the one section that cannot be configured (F939). Held: all nine sections by click and by deep link, each with its own URL, `project-settings-<id>` testid and heading. Browser Back returns to the previous section. Enter on a nav item opens it. **Expected:** an unknown or missing section falls back to `settings` (General). **Test:** `urlNavigation.test.ts`: `parseDestination('?project=p&tab=environment&section=bogus')` has `environmentSection: 'settings'`. This fails today. Seam: Projects x Keyboard & dialogs (navigation).
