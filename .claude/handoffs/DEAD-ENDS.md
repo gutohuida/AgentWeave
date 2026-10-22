@@ -2528,3 +2528,11 @@ When `hub/hub/mcp_server.py` changes, its tool-server digest is new, and several
   --timeout=300 --timeout-method=thread` (CI's flags) took 11m44s. Under it,
   `test_project_checks_gate.py::test_asking_without_a_result_starts_a_run_and_answers_at_once`
   failed once and passed alone (21/21). (2026-10-21)
+
+## 2026-10-22 (interactive, brand identity)
+
+- **The Hub never served `/favicon.ico`.** `serve_spa` (`hub/hub/main.py`, the `/{full_path:path}` fallback) answers every path outside `/assets` and `/api` with `index.html`, so anything in `hub/ui/public/` that the page links at the root is HTML in the Hub. Put page-linked files through Vite (`<link href="./src/assets/...">` in `hub/ui/index.html`) so they land hashed under `/assets/`. (2026-10-22)
+- **`.gitignore` line 80 ignores `*.png` everywhere**, including a Vite-emitted PNG in `hub/hub/static/ui/assets/`: a PNG asset builds fine and is silently left out of the commit, so the committed bundle references a missing file. Use SVG, or `git add -f` it deliberately. (2026-10-22)
+- **`hub/ui/mock` does not render on this machine:** `mock/fixtures/*.json` is gitignored and absent here (Vite: "Failed to resolve import ./fixtures/agents.json"). To preview a token or CSS change, drive the trial Hub (:8010) with Playwright and inject the CSS at runtime, or run the worktree's Vite dev server with `AW_DEV_HUB=http://127.0.0.1:8010`. (2026-10-22)
+- **Removing a worktree whose `hub/ui/node_modules` is a junction:** run `cmd /c rmdir <worktree>\hub\ui\node_modules` (removes only the junction) BEFORE `git worktree remove`, so nothing can follow it into the main checkout's node_modules. (2026-10-22)
+- **`hubVisualLanguage.test.ts` refuses any raw hex in a component**, including an SVG mask's `#fff`/`#000`. Mask luminance is not colour: write `white`/`black`. (2026-10-22)
