@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T17:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-10-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-reach-sweep",
-    "next_action": "Run sweep-reach-sweep per .claude/loops/day-window.md: Permissions & sandbox x Capability plane x Agent environment; start with Project settings -> General's Reach group (ReachGrantsChips) in Chromium, then a manual-mode card (approve/deny/expire); F928 (a permission card shows in every open conversation of its agent) is filed. Scratch Hub port 8110+ (8130 is taken by another process), haiku (claude-haiku-4-5-20251001) only; never leave a job enabled.",
+    "current": "sweep-projects-sweep",
+    "next_action": "Run sweep-projects-sweep per .claude/loops/day-window.md: Projects x Runners & models x Keyboard & dialogs; start with the Project settings screen (nine sections, tab=environment&section=<name> in the URL; RunnersSection/RunnerForm) and its keyboard and dialog layers in Chromium. A MenuSelect option's description can contain another option's label: pick by exact label. Scratch Hub port 8110+ (8130 is taken by another process), haiku (claude-haiku-4-5-20251001) only; never leave a job enabled.",
     "queue": [
         {
             "id": "plan-review",
@@ -65,7 +65,7 @@
         },
         {
             "id": "sweep-reach-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Permissions & sandbox x Capability plane x Agent environment",
             "detail": "First: Reach group now at Project settings -> General with ReachGrantsChips (renamed from ReachGrantsEditor)."
         },
