@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T17:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "night-recheck-drive",
-    "next_action": "Run night-recheck-drive per .claude/loops/day-window.md 'Re-driving last night's fixes': re-drive the 20 fixes named in its detail on a scratch Hub (port 8110+, haiku only), log CONFIRMED/REOPENED F<n>, reopen with evidence.",
+    "current": "sweep-traces-sweep",
+    "next_action": "Run sweep-traces-sweep per .claude/loops/day-window.md: Traces x Runs x Logs, events & SSE; start with the Activity digest and F844, scratch Hub port 8110+, haiku only.",
     "queue": [
         {
             "id": "plan-review",
@@ -23,7 +23,7 @@
         },
         {
             "id": "night-recheck-drive",
-            "status": "open",
+            "status": "done",
             "title": "Re-drive last night's fixes live",
             "detail": "Fixed 2026-10-21 and touching route/run/UI: F824 residual (deleted task story refetch), F842 (vault review report watch), F849 (sync_session archives conversations), F850 (session_synced SSE), F902-F905 (stalled+wait line, awaiting-review tally, Needs you order, retryable on TaskIntegrationSummary), plus F835 F836 F838 F841 F844 F852 F856 F860 F861 F864 F865 F906 (read their Status lines in scripts/drive/FINDINGS.md). Log CONFIRMED/REOPENED F<n>; reopen by setting Status back to open with evidence. Scratch Hub port 8110+, haiku only."
         },
@@ -31,7 +31,7 @@
             "id": "sweep-traces-sweep",
             "status": "open",
             "title": "Sweep: Traces x Runs x Logs, events & SSE",
-            "detail": "First: the Activity tab's Activity view, the digest (ActivityDigest, lib/activityDigest.ts; unreached until 2026-10-22) — each sentence against its event, this project only; F844 (a conversation whose agent is busy in another conversation says so, not its own live turn)."
+            "detail": "First: the Activity tab's Activity view, the digest (ActivityDigest, lib/activityDigest.ts; unreached until 2026-10-22) \u00e2\u20ac\u201d each sentence against its event, this project only; F844 (a conversation whose agent is busy in another conversation says so, not its own live turn)."
         },
         {
             "id": "sweep-questions-sweep",
@@ -49,7 +49,7 @@
             "id": "sweep-vault-sweep",
             "status": "open",
             "title": "Sweep: Knowledge vault x Manager jobs x CLI & lifecycle",
-            "detail": "First: the rebuilt Vault screens — VaultLibrary + page drop (usePageDrop), VaultReader, VaultReview cards, VaultAddDialog, VaultStorageDialog; Manager now under Project settings."
+            "detail": "First: the rebuilt Vault screens \u00e2\u20ac\u201d VaultLibrary + page drop (usePageDrop), VaultReader, VaultReview cards, VaultAddDialog, VaultStorageDialog; Manager now under Project settings."
         },
         {
             "id": "sweep-agents-sweep",
