@@ -348,6 +348,12 @@ describe('summaryForEvent', () => {
     ).toBe('Kept agentweave/task/task-2 (3 unmerged commits, uncommitted edits) from deleted task task-2')
   })
 
+  it('says a session sync removed an agent from the roster (F850)', () => {
+    expect(summaryForEvent('agent_removed', { agent: 'lam', by: 'session_sync' })).toBe(
+      'lam was removed from the roster by a session sync',
+    )
+  })
+
   it('names the tasks a deleted task released', () => {
     expect(
       summaryForEvent('task_deleted', {

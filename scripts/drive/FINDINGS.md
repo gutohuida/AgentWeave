@@ -38127,7 +38127,7 @@ Cause: the warn path (`hub/hub/checkpoint_trigger.py:376-404`) broadcasts `check
 
 ## F849 (C) -- an agent a session sync deletes leaves its conversations open; the rail files them under "agent archived", and an agent later created with the same name inherits them and resumes the deleted agent's provider session
 
-**Status:** open 2026-10-21. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8154, profile a1021, three real Haiku turns, Chromium against the served bundle, `scripts/drive/s1021_a_api.py history turn|remove|recreate`, `s1021_a_ui.py removed`). F810's fix refuses the deletion only while an entry is `queued`; an agent with a finished history is still deleted, and this is what it leaves.
+**Status:** fixed 2026-10-22 (Tier 0): `sync_session` archives the departing agent's open conversations in the same commit as the delete, so a later agent of the name has none to resume (a trigger naming the old id is refused as archived); test `test_sync_that_deletes_an_agent_archives_its_open_conversations` failed before; drive `scripts/drive/d1022_f849_sync_deletes_agent.py` on scratch :8159, real Haiku, 7/7. Original report: Found by the day sweep `sweep-agents-sweep` (scratch Hub :8154, profile a1021, three real Haiku turns, Chromium against the served bundle, `scripts/drive/s1021_a_api.py history turn|remove|recreate`, `s1021_a_ui.py removed`). F810's fix refuses the deletion only while an entry is `queued`; an agent with a finished history is still deleted, and this is what it leaves.
 **Source:** drive
 **Theme:** Agents
 **Ready:** yes
@@ -38141,7 +38141,7 @@ Cause: conversations, runs and ledger rows are keyed by the agent's *name* strin
 
 ## F850 (D) -- a session sync that deletes an agent leaves it in the rail until a reload: `session_synced` never refreshes the projects summary the rail reads, and the Activity row is a bare `agent_removed`
 
-**Status:** open 2026-10-21. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8154, Chromium against the served bundle, `scripts/drive/s1021_a_ui.py removed` and an inline live probe).
+**Status:** fixed 2026-10-22 (Tier 0): the central SSE switch invalidates `['projects']` and the conversations list on `session_synced`, and `eventSummary` reads `agent_removed` as "lam was removed from the roster by a session sync"; tests in `useSSE.test.tsx` and `eventSummary.test.ts` failed before. Not driven in Chromium. Original report: Found by the day sweep `sweep-agents-sweep` (scratch Hub :8154, Chromium against the served bundle, `scripts/drive/s1021_a_ui.py removed` and an inline live probe).
 **Source:** drive
 **Theme:** Agents
 **Ready:** yes

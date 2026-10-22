@@ -620,6 +620,13 @@ export function useSSE(onEvent?: SSEListener) {
           // panel alone, and the Questions page's decision list (F231) is read with it unmounted.
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'permission-requests'] })
           break
+        case 'session_synced':
+          // A sync that deletes an agent drops it from the rail, which reads the projects summary;
+          // `useAgents` refreshes only the roster. The deleted agent's conversations are archived
+          // in the same commit (F849), so the conversation lists follow too.
+          queryClient.invalidateQueries({ queryKey: ['projects'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'conversations'] })
+          break
         case 'agent_archived':
         case 'agent_unarchived':
           // The rail reads its agents from `['projects']` (F193: an archived agent's conversations

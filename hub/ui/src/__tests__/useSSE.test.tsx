@@ -312,6 +312,30 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'worktree-conflicts'] })
   })
 
+  it('a session sync that removes an agent refreshes the rail and the conversations (F850)', async () => {
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+
+    fetchSpy.mockResolvedValue(makeSSEResponse([
+      'event: session_synced\ndata: {"project_id":"proj-1","agents":["alpha"],"removed":["lam"]}\n\n',
+    ]))
+
+    function Probe() {
+      useSSE()
+      return null
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>
+    )
+
+    // The rail's agents are the projects summary, not the agents key useAgents already refreshes.
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['projects'] }))
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'conversations'] })
+  })
+
   it('refreshes permission decisions and the rail from the central switch (UI-1 review)', async () => {
     const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })

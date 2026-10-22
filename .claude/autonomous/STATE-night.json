@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f94606a",
     "stop_at": "2026-10-22T07:00:00+01:00",
-    "iteration": 11,
+    "iteration": 12,
     "log_file": ".claude/autonomous/2026-10-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F849-impl",
-    "next_action": "Do queue item F849-impl (read F849, F850 in scripts/drive/FINDINGS.md, test-first, fix, drive, set Status). Keep `current` equal to the item id.",
+    "current": "F824-impl",
+    "next_action": "Do queue item F824-impl (read F824 residual in scripts/drive/FINDINGS.md, test-first, fix, drive, set Status). Keep `current` equal to the item id.",
     "queue": [
         {
             "id": "F856-spec",
@@ -36,9 +36,9 @@
         },
         {
             "id": "F849-impl",
-            "status": "open",
+            "status": "done",
             "title": "F849+F850 (C/D,T0): session sync deleting an agent leaves conversations and rail entry",
-            "detail": "Finding text and repro in scripts/drive/FINDINGS.md (grep '^#* F<n>'). Test-first at the seam the finding names, fix, drive, set Status line."
+            "detail": "Done iteration 12: sync archives departing agent conversations; session_synced refreshes rail; agent_removed summary; tests failed before; drive 7/7 on :8159."
         },
         {
             "id": "F824-impl",

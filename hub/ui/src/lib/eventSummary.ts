@@ -28,6 +28,9 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
       const from = data.title ? `“${data.title}”` : String(data.task_id)
       return `Kept ${data.branch ?? 'its branch'}${keptDetail(data)} from deleted task ${from}`
     }
+    // F850: the event is bare otherwise; a sync is the only thing that deletes an agent.
+    case 'agent_removed':
+      return `${data.agent ?? 'An agent'} was removed from the roster${data.by === 'session_sync' ? ' by a session sync' : ''}`
     case 'task_deleted': {
       const released = Array.isArray(data.released_dependents)
         ? (data.released_dependents as Array<{ id?: string; title?: string }>)

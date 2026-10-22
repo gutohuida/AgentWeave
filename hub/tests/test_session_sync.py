@@ -467,3 +467,47 @@ async def test_sync_that_deletes_nothing_says_so(app, auth_headers, add_agent):
     response = await app.post(SYNC, json={"data": {"agents": {"alpha": {}}}}, headers=auth_headers)
 
     assert response.json()["removed"] == []
+
+
+async def test_sync_that_deletes_an_agent_archives_its_open_conversations(
+    app, auth_headers, add_agent
+):
+    """F849: conversations are keyed by the agent's name and the sync frees the name. An open
+    conversation left behind was handed, with its provider session, to a later agent of that name.
+    """
+    from hub.conversations import get_open_conversation
+    from hub.db.models import Conversation
+
+    await add_agent("alpha")
+    await add_agent("gamma")
+    async with async_session_factory() as db:
+        for conversation_id, agent in (("conv-f849-g", "gamma"), ("conv-f849-a", "alpha")):
+            db.add(
+                Conversation(
+                    id=conversation_id,
+                    project_id="proj-test",
+                    agent=agent,
+                    provider_session_id=f"provider-{agent}",
+                    lifecycle="open",
+                )
+            )
+        await db.commit()
+
+    response = await app.post(SYNC, json={"data": {"agents": {"alpha": {}}}}, headers=auth_headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["removed"] == ["gamma"]
+
+    # A new agent of the same name starts with no open conversation to resume.
+    await add_agent("gamma")
+    async with async_session_factory() as db:
+        assert (
+            await get_open_conversation(
+                db, project_id="proj-test", agent="gamma", conversation_id="conv-f849-g"
+            )
+            is None
+        )
+        rows = {row.id: row for row in (await db.execute(select(Conversation))).scalars().all()}
+    assert rows["conv-f849-g"].lifecycle == "archived"
+    assert rows["conv-f849-g"].archived_at is not None
+    # The agent that stayed keeps its thread.
+    assert rows["conv-f849-a"].lifecycle == "open"

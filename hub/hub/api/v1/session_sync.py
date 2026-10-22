@@ -27,11 +27,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import project_workspace, route_words, worktrees
+from ... import conversations, project_workspace, route_words, worktrees
 from ...agent_colors import next_color_index
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Agent, ProjectSession
+from ...db.models import Agent, Conversation, ProjectSession
 from ...launchability import agent_config, agent_removal_refusal, isolation_change_refusal
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
@@ -180,6 +180,20 @@ async def sync_session(
 
     for agent_name in removed_agent_names:
         await session.delete(existing_agents[agent_name])
+    # F849: conversations, runs and the ledger are keyed by the agent's name, and deleting the row
+    # frees the name. An open conversation left behind belongs to no agent, and an agent created
+    # later under the same name would be handed it with its provider session. Archive them in the
+    # same commit; `agent_removal_refusal` above has already refused a live turn or queued entry.
+    if removed_agent_names:
+        departing = await session.execute(
+            select(Conversation).where(
+                Conversation.project_id == project_id,
+                Conversation.agent.in_(removed_agent_names),
+                Conversation.lifecycle == "open",
+            )
+        )
+        for conversation in departing.scalars().all():
+            conversations.archive(conversation)
 
     await session.commit()
 
