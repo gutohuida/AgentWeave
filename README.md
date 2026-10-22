@@ -4,6 +4,16 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![PyPI version](https://badge.fury.io/py/agentweave-ai.svg)](https://pypi.org/project/agentweave-ai/)
 
+<img src="https://raw.githubusercontent.com/gutohuida/AgentWeave/master/docs/assets/agentweave-loop.svg" alt="The AgentWeave loop" width="72">
+
+**Run your AI factory in the open.**
+
+**Nothing appears out of thin air.** AgentWeave started as a way to get agents from different
+companies working together, each doing what it does best. Then the problem showed: work appeared out
+of thin air, and no one could say who made it, or why. So AgentWeave grew into the place where you
+run your AI factory in the open: every artifact cared for, every step visible, every decision
+traceable.
+
 AgentWeave is a local application where several AI coding agents work on your projects together,
 against specifications you approve. It runs on your machine: one process owns execution, state and
 identity, and serves the interface you work in.

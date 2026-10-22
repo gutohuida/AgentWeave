@@ -258,6 +258,19 @@ describe('the rail empty state', () => {
   })
 })
 
+describe('the rail head carries the brand', () => {
+  it('leads with the loop, then the name, then the live dot', () => {
+    renderRail()
+    const loop = screen.getByTestId('rail-brand-loop')
+    const dot = screen.getByTestId('rail-live-dot')
+    const name = screen.getByText('AgentWeave', { selector: '.aw-wordmark-name' })
+    // The loop is decoration beside the name; the dot keeps its own accessible name.
+    expect(loop).toHaveAttribute('aria-hidden', 'true')
+    expect(loop.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(name.compareDocumentPosition(dot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
 describe('the live dot reports the Hub stream', () => {
   it('is bound to a real state and names it', () => {
     renderRail()

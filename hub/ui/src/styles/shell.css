@@ -89,6 +89,7 @@
 .aw-rail-head { display: flex; align-items: center; justify-content: space-between; height: 48px; flex: none; padding: 0 10px 0 14px; }
 .aw-rail[data-collapsed="true"] .aw-rail-head { justify-content: center; padding: 0; }
 .aw-wordmark { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 650; letter-spacing: -.01em; }
+.aw-brand-loop { flex: none; }
 .aw-wordmark-dot { width: 8px; height: 8px; border-radius: 3px; background: var(--green); box-shadow: 0 0 0 3px color-mix(in oklab, var(--green) 18%, transparent); }
 .aw-rail-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 2px 8px 12px; }
 
