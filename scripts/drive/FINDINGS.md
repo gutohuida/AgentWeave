@@ -37807,6 +37807,8 @@ proposed change written in one PUT -> Approve (Chromium) -> approval-warnings:
 
 The message is built once for agents and the operator alike (`hub/hub/spec_service.py:1874-1892`, F574/F730/F752). On the app's approval card it reads as an API recipe, although the phase bar has the controls. It also stops one step short: after "send it back" and the step move, the document is `exploring` again and has to be proposed again before Approve shows. **Expected:** the finding carries the steps as data (or a second operator-facing sentence) and the card names the controls: "Send back, choose the step on the journey bar, Propose, then Approve". The agent-facing text keeps the routes and adds the propose step. **Test:** `test_the_journey_steps_a_document_never_reached_are_a_gap_naming_them` extended: a proposed document's remedy names propose after the journey move; plus a UI test that the approval card renders no `POST /api/` text.
 
+**Extended 2026-10-22** (day sweep `sweep-spec-sweep`, Chromium, scratch Hub :8121): the recipe outlives the approval. An approved document approved over `steps_skipped` keeps an "Approved over these gaps:" block in its header (`useSpecPhaseControls.tsx:719-725`, `approval_warnings_overridden`). That block still says "send it back first, POST /api/v1/projects/proj-94e2f2f27779/project/documents/phase?path=…&to=exploring, then POST …/journey …". This is advice to un-approve a document the operator has already decided on, given as two raw HTTP calls. At 900 px wide the block, with the two other gaps, pushes the document's first line to y≈690 of 940 (`testbed/ui-judge/s1022-spec/120548/narrow_dark.png`). The header rebuild was meant to undo exactly that push (`SpecDocumentHeader`'s docstring: "pushed the document 380px down"). **Expected, in addition:** the overridden record shows each gap's code and its one-line message without the remedy, folded behind a count ("Approved over 3 gaps").
+
 ## F831 (D) -- the note answering a cannot-satisfy report runs the operator's reason into the next sentence with no full stop
 
 **Status:** open 2026-10-20. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8180, real Haiku reporter `builder`).
@@ -39034,3 +39036,94 @@ Repro: New runner -> CLI copilot -> "Send runs to a model provider with your own
 **Tier:** 0
 
 Repro: open `/?project=<p>&tab=environment&section=bogus`, and then `...&section=permissions` (a page that no longer exists). Both rewrite the URL to `section=quality` and open Quality. `lib/navigation.ts:67` sets `DEFAULT_ENVIRONMENT_SECTION = ENVIRONMENT_SECTIONS[0]`, and the array (`:39-49`) still starts with `'quality'`, the old rail order. `ProjectSettingsScreen`'s own order starts with General (`settings`), the page every in-app link names (the gear, the rail's project menu, the Overview links: `App.tsx:624`, `Sidebar.tsx:314`). So only a typed or stale link reaches the default. Old bookmarks and the stale "Environment › Settings" references (F934) are exactly those links, and they land on the one section that cannot be configured (F939). Held: all nine sections by click and by deep link, each with its own URL, `project-settings-<id>` testid and heading. Browser Back returns to the previous section. Enter on a nav item opens it. **Expected:** an unknown or missing section falls back to `settings` (General). **Test:** `urlNavigation.test.ts`: `parseDestination('?project=p&tab=environment&section=bogus')` has `environmentSection: 'settings'`. This fails today. Seam: Projects x Keyboard & dialogs (navigation).
+
+
+<!-- 2026-10-22 day sweep `sweep-spec-sweep` (Spec documents x Corpus & folding; scratch Hub :8121, profile sp1022, project proj-94e2f2f27779 `sp-main` under testbed/drive1022s, main branch `main`; three real Haiku 4.5 turns; drives scripts/drive/s1022_sp_{lib,drive,ui}.py, Chromium against the served bundle). Ranked by what each cost. -->
+
+## F944 (B) -- an agent's `read_spec_document include=full` never returns `delivery`, so a read, edit and resubmit silently erases the document's flow, agent, reviewer and schedule
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8121, two real Haiku 4.5 turns).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+Repro, two real turns by `builder` (claude-haiku-4-5). Turn 1 called `submit_spec_document` on `spec/changes/hdr-new2/spec.json` with `delivery {"mode": "flow", "agent": "builder", "reviewer": "builder", "stop_when_queue_empties": true, "cron": "*/7 * * * *"}` and one criterion with `checked_by: "agent"`. The file on disk then held the whole `delivery`. The same turn's `read_spec_document include=full` came back with no `delivery` key, and Haiku said so in its report ("the `delivery` field is absent from the read result"). Turn 2 was told to read `full`, fix one requirement statement, and submit back every field the read returned. Afterwards the file's `delivery` was `None`, the statement was changed, and `checked_by` survived. Seam: `hub/hub/api/v1/agent_actions.py:1784` `_READ_SECTIONS = ("design", "tasks", "algorithms", "evidence", "lifecycle")`. The `full` branch (`:1963`) adds only those. `spec_reading.OPTIONAL_SECTIONS` (`spec_reading.py:226`) also lists `slices` and `roadmap`, which the agent read leaves out too. `delivery` is in neither list, and the tool's `include` Literal (`mcp_server.py:5224`) offers no `delivery` section, so an agent has no way to read it. `submit_spec_document` replaces the payload, so the operator's flow decision is lost without a warning. The agent's docstring promises `full` "adds the design, declared tasks, algorithms and evidence sections", and the read gives no hint that anything is held back. **Expected:** `full` returns `delivery`, `slices` and `roadmap` (`_READ_SECTIONS` follows `OPTIONAL_SECTIONS` plus `delivery`), and `include` accepts `delivery`. **Test:** `hub/tests/` agent-plane read: a document whose payload has `delivery`, read with `include=full`, answers `delivery` equal to the stored one. This fails today. A second test: read `full`, submit the returned fields back, and `delivery` is unchanged. Seam: Spec documents (agent read x submit round trip).
+
+## F945 (B) -- the Spec header's requirements fact counts every requirement not verified or rejected as "in progress", including ones not started and ones with no task
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121; `scripts/drive/s1022_sp_ui.py header`).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+Repro: approved change `hdr-main`, where FR-1 is verified (accepted evidence, landed) and FR-2's task is `pending` and never worked. The header fact reads "1/2 verified · 1 in progress", and its own popover lists FR-2 as "Not started". On proposed `hdr-proposed`, the only requirement is `unserved` (popover "No task") and the fact reads "0/1 verified · 1 in progress". `SpecHealthLine.tsx:69`: `const working = coverage.length - verified - rejected` lumps `not_started`, `unserved`, `stale`, `drifting`, `evidence_awaiting_review` and `amendment_unreviewed` together as "in progress". So the one-line summary tells the operator someone is working a requirement nobody has touched, and a drifting or stale one does not warn there. The old `SpecCoverageBar` named each state. **Expected:** the summary names the states it has, for example "1/2 verified · 1 not started", or "0/1 verified · 1 with no task". `drifting`/`stale` take the warn tone. **Test:** `SpecHealthLine.test.tsx`: coverage `[verified, not_started]` renders no "in progress" and does render "not started". This fails today. Seam: Spec documents (header) x Requirements, evidence & coverage.
+
+## F946 (B) -- the Spec header says "Vault agrees" on a project whose spec-vault check is off and has never run, and pressing "Check against the vault again" answers only "The spec vault check job is disabled."
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121; `scripts/drive/s1022_sp_ui.py fact <path> spec-health-vault "Check against"`).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+Repro: a fresh project (`GET /manager/jobs`: all four jobs `enabled: false`, vault empty). Every document's header shows a quiet "Vault agrees" fact. Its popover says "No requirement contradicts what the vault knows." and offers "Check against the vault again". Pressing that gives the toast "Could not start the check — The spec vault check job is disabled." (`POST /vault/warnings/check` 409). The toast names no way out (Project settings → Manager → spec-vault-check, with a runner). The fact is built from `GET /vault/warnings` (`hub/hub/api/v1/vault.py:494`), which answers `[]` when no check ever ran. `SpecDocumentPanel.tsx:233` maps `[]` to "agrees". The component's own comment says the fact is "left out rather than shown as fine" when the Hub cannot answer. A check that cannot run is that case. So the operator reads a vault verdict that no check ever produced, on every document, and "again" implies one ran. **Expected:** `GET /vault/warnings` says whether a check has run and whether the job is on (for example `checked_at`, `job_enabled`). The fact reads "Vault not checked", or is left out, when no firing exists, and the 409's sentence names Project settings → Manager. **Test:** a panel test: warnings `[]` with no check recorded renders no "Vault agrees". A Hub test: the 409 detail names the Manager page. Both fail today. Seam: Spec documents (header) x Manager jobs x Knowledge vault.
+
+## F947 (C) -- the requirements popover says a merged requirement is "on master" on a project whose main branch is `main`
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+Repro: project `sp-main`, a git repo initialised with `-b main`; `GET /projects/{p}/settings` shows `main_branch: "main"`. A real Haiku turn worked FR-1, the operator accepted the evidence, and **Land** merged the work (`43e2e3c Integrate approved work db865390ffa9` on `main`; coverage `FR-1 verified integrated`). The header's requirements popover then reads "FR-1 Verified on master". There is no `master` branch in that repository. `SpecHealthLine.tsx:116` hard-codes the word: `r.integration === 'integrated' ? 'on master' : ...`, and `grep -rn "on master" hub/ui/src` finds no other place. The operator of a `main` (or `trunk`) project is told the work is on a branch that does not exist. **Expected:** "on main", "on the main line", or the project's `main_branch` passed in. **Test:** `SpecHealthLine.test.tsx`: an `integrated` row renders no "master" when the main branch passed is `main`. This fails today. Seam: Spec documents (header) x Worktrees & integration.
+
+## F948 (C) -- the Spec header's keyboard layers: Archive and Delete confirms do not take focus, Ctrl+Shift+K opens the command palette under the document search, and a refused Approve drops focus to `<body>`
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121; `scripts/drive/s1022_sp_focus.py`, `s1022_sp_keys.py`, `s1022_sp_actions.py`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Three repros on `spec/changes/hdr-explore/spec.json` and `hdr-proposed`.
+
+(1) More actions → Delete document… (or Archive). The dialog opens, but 200 ms and 1500 ms later `document.activeElement` is still `spec-more-actions` behind the modal (`closest('[role=dialog]')` is false). The keyboard rule says a confirm takes focus on Cancel. One Tab moves focus to Cancel. Escape then closes the dialog and focus falls to `<body>`, not to More actions. The items are `MenuItem onSelect={onDelete}` / `onArchive` (`SpecDocumentHeader.tsx:169-174`). Radix's DropdownMenu returns focus to its trigger after `onSelect`, and that wins over the dialog's own initial focus. On 2026-10-20 the same dialogs took focus when they opened from the phase bar (F829's drive, before a8ca6e2 moved them into the menu), so this is a regression of the move.
+
+(2) Ctrl+Shift+K, the shortcut the breadcrumb's tooltip advertises ("choose another document (Ctrl+Shift+K)"), opens two dialogs: `['Command palette', 'Search documents']`. The first Escape closes only the document search and leaves the palette open with focus in its input. It takes a second Escape. `CommandPalette.tsx:76-77` checks `ctrlKey` and `k` but not `!shiftKey`, so both handlers fire (`SpecPage.tsx:122`).
+
+(3) Pressing the primary **Approve** on a proposed document with gaps: the 409 renders "Not approved: the Hub found these gaps… Approve anyway", and focus is on `<body>`, although the Approve button is still on screen (`useSpecPhaseControls`; the button is disabled while busy, so it loses focus). The keyboard user has to Tab from the top of the page to reach "Approve anyway". This is the same class as F941.
+
+**Expected:** (1) the confirm takes focus on Cancel and gives it back to More actions. Open the dialog after the menu has closed, or use `onCloseAutoFocus={e => e.preventDefault()}` when an item opens a dialog. (2) the palette ignores Shift+K. (3) focus moves to Approve anyway, or stays on Approve. **Tests:** `specDocumentHeader.test.tsx`: Delete from the menu, then the active element is inside the dialog. `CommandPalette.test.tsx`: Ctrl+Shift+K does not open it. All fail today. Seam: Keyboard & dialogs x Spec documents.
+
+## F949 (C) -- every new document, and every phase move the Hub itself makes, lights a warn-toned "index issue" on every document's header until someone presses Rebuild, and the index details say "Choose it." / "Adopt it first." with no control or pointer to where that is done
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (API and Chromium, scratch Hub :8121).
+**Source:** drive
+**Theme:** Corpus & folding
+**Ready:** yes
+**Tier:** 1
+
+Repro, `GET /project/specs` diagnostics after each step on a project whose index had just been rebuilt with a home (`manifest.state: valid`): `POST /project/documents` (new `hdr-new2`) adds `unfiled_document`. Approving `hdr-proposed` through the app adds `intrinsic_metadata_conflict` ("the index records status 'proposed', but the document says 'approved'. Rebuilding the index takes the document's value."). The header of **every** document (not just the one concerned) shows an amber "1 index issue", then "2", then "3". Before any home is chosen, the second document created already lights "1 index issue" on all of them. Show details then reads "The index was not written: more than one document could be the corpus's home (…). Choose it." The detail panel (`SpecDocumentPanel.tsx`, `detail === 'index'`) has no Rebuild, home select or Adopt. Those live in the document search (breadcrumb → `SpecCorpusStrip`), and nothing points there. Held: the corpus strip in the search dialog does work. Rebuild asked "Which document is the corpus's home?", and "Rebuild with this home" wrote the index ("Index: home is Road · Indexed 5 documents"). Adopt is offered for the untracked file. F643 (fixed) noted the same churn: "Every newly created document shows as `unfiled_document` until someone presses Rebuild." Only its wording was fixed. **Expected:** the Hub keeps the index current on its own writes (create, phase move; rename already does since F730), so the header's index fact means a real divergence: a hand-edited file or an untracked document. The detail names its fix in place: a Rebuild/Adopt button, or "Open the document search (Ctrl+Shift+K) to choose the home". **Test:** a Hub test: create a second document and approve a first on a valid index, then `/specs` diagnostics is `[]`. This fails today. Tier 1, because it changes when `spec/index.json` is written. Seam: Corpus & folding x Spec documents (header).
+
+## F950 (D) -- the header's "Approved <date>" is the document's last update, not its approval: a rigor change moves it
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (API, scratch Hub :8121).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+Repro: `hdr-main` was approved at 10:57:09 UTC (`updated_at 2026-10-22T10:57:09.426707`). `POST /project/documents/spec/changes/hdr-main/spec.json/rigor {"rigor": "contract", "reason": "drive"}` moved `updated_at` to `11:05:32`. `SpecDocumentPanel.tsx:237` passes `record.updated_at` as `approvedAt`, so the next day the fact would read "Approved Oct 23" for a document approved on Oct 22. A proposal accepted or an amendment would move it the same way. `GET /project/spec?path=…` answers `approved_at: None`, so the app has no approval time to show. **Expected:** the Hub records the approval moment (the phase event or an `approved_at` column), and the fact reads it. **Test:** a panel test: `updated_at` differs from the approval event, and the fact shows the approval's day. Seam: Spec documents (header).
+
+## F951 (D) -- three small labels in the rebuilt Spec list and header: an untracked change is listed under "Overview", exploring reads "draft" in the list but "Exploring" in the header, and the kind word "Change" beside the rigor chip reads as an action
+
+**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121; screenshots under `testbed/ui-judge/s1022-spec/`).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+(1) The file `spec/changes/untracked-one/spec.json` (a `change-spec` payload the Hub does not track yet) is listed under **Overview**, with no phase word. `SpecDocumentList.tsx:71` sends every kind outside `roadmap`/`change-spec`/`capability` to Overview, and an untracked node has no kind. It belongs under Changes, or in an "Untracked" group with its Adopt. (2) The list's `phaseWord` (`:161`) renders `exploring` as "draft", while the header's phase pill, the palette and every API say "Exploring". (3) The title row reads "hdr-main 115709 · Approved · Sketch rigor · Change", and at 900 px "Change  Place under…". The kind label (`SpecDocumentHeader.tsx:228`, `KIND_LABEL['change-spec'] = 'Change'`) is plain text beside two controls, so it reads as a verb ("change the rigor"). "Change spec" or "Change document" is unambiguous. **Test:** `SpecDocumentList.test.tsx`: an exploring row reads "exploring", and an untracked `spec/changes/` row is not in the Overview group. Seam: Spec documents (list/header labels).
