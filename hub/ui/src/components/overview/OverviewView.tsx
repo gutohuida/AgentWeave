@@ -60,7 +60,8 @@ export interface AgentStripItem {
   state: 'running' | 'waiting' | 'stalled' | 'idle' | 'no-runner'
   /** One sentence: "Working on …", "Waiting for your answer", "Last active 1h ago". */
   doing: string
-  usd: number
+  /** Null when none of its turns was priced: a dash, never a $0.00 it did not spend. */
+  usd: number | null
   /** The status word for the row's accessible name ("Open claude, Stalled"). */
   statusLabel?: string
   /** Controls of the agent's own, beside the row and never inside its button (its posture). */
@@ -85,6 +86,7 @@ export function OverviewView({
   onAnswer,
   onOpenQuestions,
   taskTotal,
+  heldByBudget,
   onOpenTasks,
   notice,
   loading,
@@ -95,13 +97,24 @@ export function OverviewView({
   running: RunningItem[]
   finished: FinishedItem[]
   agents: AgentStripItem[]
-  spend: { usd: number; tokens: number; period: string }
+  spend: {
+    /** Null when no turn was priced: the credits stand in, or a dash. */
+    usd: number | null
+    tokens: number
+    period: string
+    /** The credits the project's turns reported (Copilot); the figure itself when usd is null. */
+    credits?: string | null
+    /** What the figure leaves out or is measured by ("1 turn unpriced", the allowance). */
+    notes?: string[]
+  }
   onOpenLedger: () => void
   onAnswer?: (need: NeedItem, option: QuestionOption) => void
   /** Answered questions and permission decisions, reachable with nothing open (F636). */
   onOpenQuestions?: () => void
   /** The ledger's own task total, never the length of a page of it (F202). */
   taskTotal?: number
+  /** Turns waiting only for the budget: they need the operator, so they are not "nothing" (F953). */
+  heldByBudget?: number
   onOpenTasks?: () => void
   /** A project-wide condition worth one line above everything (a paused budget). */
   notice?: React.ReactNode
@@ -128,9 +141,17 @@ export function OverviewView({
             <span className="aw-overview-status-need">
               {needs.length} {needs.length === 1 ? 'thing needs' : 'things need'} you
             </span>
-          ) : (
+          ) : heldByBudget ? null : (
             <span>Nothing needs you</span>
           )}
+          {heldByBudget ? (
+            <>
+              {needs.length ? <span aria-hidden="true">·</span> : null}
+              <span className="aw-overview-status-need">
+                {heldByBudget} {heldByBudget === 1 ? 'turn' : 'turns'} held by the budget
+              </span>
+            </>
+          ) : null}
           <span aria-hidden="true">·</span>
           <span>{running.length ? `${running.length} running` : 'Nothing running'}</span>
           {taskTotal != null ? (
@@ -143,9 +164,15 @@ export function OverviewView({
           ) : null}
         </p>
         <button data-slot="spend-line" type="button" className="aw-overview-spend" onClick={onOpenLedger} title={formatTokensExact(spend.tokens)}>
-          <span className="tabular">{formatMoney(spend.usd)}</span> {spend.period}
+          <span className="tabular">{spend.usd != null ? formatMoney(spend.usd) : (spend.credits ?? '—')}</span> {spend.period}
           <span aria-hidden="true">·</span>
           <span className="tabular">{formatTokens(spend.tokens)}</span>
+          {[spend.usd != null ? spend.credits : null, ...(spend.notes ?? [])].filter(Boolean).map((note) => (
+            <React.Fragment key={note}>
+              <span aria-hidden="true">·</span>
+              <span>{note}</span>
+            </React.Fragment>
+          ))}
           <span className="aw-overview-spend-link">
             Ledger <Icon name="arrow_forward" size={12} />
           </span>
@@ -303,7 +330,7 @@ export function OverviewView({
                       </span>
                     </span>
                     <span className="aw-ov-row-end tabular" title="Spent so far">
-                      {formatMoney(a.usd)}
+                      {a.usd != null ? formatMoney(a.usd) : '—'}
                     </span>
                   </button>
                   {a.extra ? <div className="aw-ov-agent-extra">{a.extra}</div> : null}

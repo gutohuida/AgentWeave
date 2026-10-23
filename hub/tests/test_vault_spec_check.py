@@ -359,6 +359,30 @@ async def test_the_warnings_route_answers_404_for_an_unknown_document_and_empty_
     assert await _warnings(app, auth_headers) == []
 
 
+@pytest.mark.asyncio
+async def test_the_warnings_route_says_whether_a_check_ever_ran(
+    app, auth_headers, run_headers  # noqa: F811
+) -> None:
+    """F946: `[]` was all the route said both for "checked, nothing contradicts" and for "never
+    checked", so the header read "Vault agrees" on a project whose check job is off."""
+    await _create(app, auth_headers)
+    await _saved(app, run_headers, _requirement("alpha", "It responds within 200ms"))
+    listed = await app.get(f"{PROJECT}/vault/warnings", params={"path": PATH}, headers=auth_headers)
+    assert listed.json() == {"warnings": [], "checked": False}, listed.text
+
+
+@pytest.mark.asyncio
+async def test_check_now_on_a_disabled_job_names_where_to_turn_it_on(
+    app, auth_headers, run_headers  # noqa: F811
+) -> None:
+    """F946: the 409 said only "The spec vault check job is disabled." -- no way out."""
+    await _create(app, auth_headers)
+    refused = await _check_now(app, auth_headers)
+    assert refused.status_code == 409, refused.text
+    assert "Project settings" in refused.json()["detail"], refused.text
+    assert "Manager" in refused.json()["detail"], refused.text
+
+
 # ---------------------------------------------------------------------------
 # job
 # ---------------------------------------------------------------------------

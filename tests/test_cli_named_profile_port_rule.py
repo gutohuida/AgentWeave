@@ -5,6 +5,8 @@ X's database. F732: `reset --profile X` ended "Run 'agentweave --profile X' to s
 command the CLI then refuses for want of `--port`.
 """
 
+import shutil
+
 import pytest
 
 from agentweave import cli, diagnostics
@@ -103,3 +105,25 @@ def test_reset_of_a_named_profile_stops_the_hub_it_finds_on_that_profiles_port(
     assert not (tmp_path / "hub-sweepdcli-8035.pid").exists()
     assert (tmp_path / "hub-sweepdcli-b-8036.pid").exists()
     assert (tmp_path / "hub.pid").exists()
+
+
+def test_reset_that_leaves_the_profile_behind_does_not_claim_it_destroyed_it(
+    hub_home, capsys, monkeypatch
+):
+    """F919: a file another process holds open (a Hub serving the profile with no PID file) survives
+    `rmtree(ignore_errors=True)`; reset printed "Deleted <dir>" and "Hub data destroyed" anyway."""
+    tmp_path, _ = hub_home
+    profile_dir = tmp_path / "profiles" / "held"
+    profile_dir.mkdir(parents=True)
+    (profile_dir / "agentweave.db").write_bytes(b"x")
+    monkeypatch.setattr(shutil, "rmtree", lambda *a, **k: None)
+
+    code = cli.main(["reset", "--profile", "held", "--yes"])
+
+    out = capsys.readouterr()
+    text = out.out + out.err
+    assert code == 1
+    assert "Hub data destroyed" not in text
+    assert f"Deleted {profile_dir}" not in text
+    assert "agentweave.db" in text and "still" in text
+    assert profile_dir.exists()

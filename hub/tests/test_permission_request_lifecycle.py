@@ -471,3 +471,17 @@ async def test_an_over_long_verdict_reason_is_refused(app):
         },
     )
     assert opened.status_code == 422, opened.text
+
+
+@pytest.mark.asyncio
+async def test_a_listed_request_names_the_conversation_whose_run_asked(app, auth_headers):
+    """F928: the card is placed by this field, so the list must carry it. Without it the panel
+    can only filter by agent and shows an archive prompt under another conversation's verdict."""
+    headers = await _waiting_run()
+    request_id = await _open_request(app, headers)
+
+    listed = await app.get(
+        "/api/v1/projects/proj-test/permission-requests?include_expired=true", headers=auth_headers
+    )
+    row = next(r for r in listed.json() if r["id"] == request_id)
+    assert row["conversation_id"] == CONVERSATION_ID

@@ -452,10 +452,16 @@ async def conversation_attention(
     # say "waiting on the operator" — outranking `running`, deliberately — about a run that is
     # running and waiting for nothing. That is F14's own defect, inverted, on the conversation rail.
     waiting_queries = (
+        # `created_by_run_id` naming a run that is no longer `running` is inert too: nobody is
+        # awake to receive the answer, exactly as `asker_waiting` reads it (F909). The wait's
+        # expiry is swept later, so `wait_ended_at` alone keeps "waiting" up for minutes after the
+        # turn ended. An unrecorded asker stays presumed waiting.
         select(Question.conversation_id).where(
             Question.conversation_id.in_(ids),
             Question.answered.is_(False),
             Question.wait_ended_at.is_(None),
+            Question.created_by_run_id.not_in(select(Run.id).where(Run.status != "running"))
+            | Question.created_by_run_id.is_(None),
         ),
         select(PermissionRequest.conversation_id).where(
             PermissionRequest.conversation_id.in_(ids), PermissionRequest.status == "pending"

@@ -26,7 +26,7 @@ import {
   type SpecDiagnostic,
   type SpecListResponse,
 } from '@/api/spec'
-import { useCheckVaultWarnings, useVaultWarnings } from '@/api/vault'
+import { useCheckVaultWarnings, useVaultChecked, useVaultWarnings } from '@/api/vault'
 import { useDocumentTasks } from '@/api/tasks'
 import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
@@ -217,6 +217,7 @@ export function SpecDocumentPanel({
   const { data: coverage } = useSpecCoverage(path)
   const { data: drift, isError: driftError } = useSpecDrift(path)
   const { data: vault } = useVaultWarnings(path)
+  const { data: vaultChecked } = useVaultChecked(path)
   const { data: documents } = useSpecDocuments()
   const record = documents?.documents.find((entry) => entry.path === path)
   const { data: documentTasks } = useDocumentTasks(record?.id ?? null)
@@ -231,6 +232,7 @@ export function SpecDocumentPanel({
       coverageDiagnostics={coverage?.diagnostics.length ?? 0}
       driftCount={driftError || !drift ? null : drift.drift.length}
       vaultWarnings={vault === undefined ? null : vault.length}
+      vaultChecked={vaultChecked}
       indexIssues={indexIssues}
       tasks={(documentTasks ?? []).map((task) => ({ id: task.id, title: task.title, status: task.status }))}
       history={approvalHistory(specDoc?.approval_outcome)}

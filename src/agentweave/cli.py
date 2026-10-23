@@ -1626,6 +1626,18 @@ def cmd_reset(args: argparse.Namespace) -> int:
     # Delete data directory
     if data_dir.exists():
         _shutil.rmtree(data_dir, ignore_errors=True)
+        if data_dir.exists():
+            # F919: on Windows a file another process holds open cannot be removed, and
+            # `ignore_errors` hides that -- so a Hub serving this profile without a PID file left
+            # the database behind a "destroyed" message.
+            left = sorted(p.name for p in data_dir.iterdir())
+            print_error(
+                f"Could not delete {data_dir}: still there: {', '.join(left) or '(empty folder)'}. "
+                "A process still holds it open -- a Hub serving this profile? Stop it with "
+                f"'{_hub_start_hint(profile, getattr(args, 'port', None))} stop'"
+                " and run reset again."
+            )
+            return 1
         print_info(f"Deleted {data_dir}")
 
     if destroy_all:

@@ -12,6 +12,9 @@ interface PermissionRequestCardProps {
   requests: PermissionRequest[]
   /** Only requests from this agent are shown; the card sits inside one conversation. */
   agent: string
+  /** The conversation on screen (F928); only its own requests show. Left out, every conversation
+   *  of the agent's requests do. */
+  conversationId?: string | null
 }
 
 /** What the agent is asking to do, in the operator's terms rather than the tool's.
@@ -72,10 +75,10 @@ function requestKind(request: PermissionRequest): { label: string; impact: 'neut
   return { label: 'Tool request', impact: 'neutral' }
 }
 
-export function PermissionRequestCard({ requests, agent }: PermissionRequestCardProps) {
+export function PermissionRequestCard({ requests, agent, conversationId }: PermissionRequestCardProps) {
   const decide = useDecidePermissionRequest()
   const dismiss = useDismissPermissionRequest()
-  const open = openPermissionRequestsFor(requests, agent)
+  const open = openPermissionRequestsFor(requests, agent, conversationId)
   if (open.length === 0) return null
 
   return (

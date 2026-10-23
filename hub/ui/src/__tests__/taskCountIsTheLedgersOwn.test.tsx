@@ -46,6 +46,7 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
   return { ...actual, useProjectConversations: () => ({ data: { conversations: [] } }) }
 })
 vi.mock('@/api/ledger', () => ({ useProjectLedger: () => ({ data: undefined }) }))
+vi.mock('@/api/queue', () => ({ useQueueStatuses: () => [] }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: undefined }) }))
 // Not this test's subject; it reads hooks the mocks above do not provide.
 vi.mock('@/components/overview/AgentPostureChips', () => ({ AgentPostureChips: () => null }))

@@ -38494,7 +38494,7 @@ Expected: an ended loop has no stall reason (its state is the ending, with its `
 
 ## F907 (B) -- the Activity digest leaves a stopped or failed turn reading "alpha is working" forever, and puts its ending on a separate row by wire name ("alpha run stopped", "alpha run failed")
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8112, profile tr1022, `proj-9a2788c8d0d7`, Chromium against the served bundle, `scripts/drive/s1022_tr_drive.py turns|stop|fail` then `scripts/drive/s1022_tr_ui.py digest`).
+**Status:** fixed (this commit) 2026-10-23. `buildDigest` now joins `run_failed` and `run_stopped` to their run (`runOf`), ends the turn on any of the three (`done`), and reads "was stopped" (warn) / "stopped with an error" (error). Test first `hub/ui/src/__tests__/activityDigest.test.ts` (2 of 3 failed). Drive: scratch Hub :8125 (profile f907, cleaned), real Haiku turns, one stopped through the stop route and one with claude.exe killed; Chromium `scripts/drive/f907_ui.py` -> "alpha was stopped" (warn), "alpha stopped with an error" (error), both under the Warnings filter, no wire-name rows.
 **Source:** drive
 **Theme:** Logs, events & SSE
 **Ready:** yes -- driven with real Haiku turns; both endings reproduced.
@@ -38540,7 +38540,7 @@ alpha agent created
 
 ## F909 (B) -- a conversation reads "waiting" on the rail and the Overview's agent card says "Waiting for your answer" for a question whose asking run has already ended, while Needs you, on the same screen, says nobody is waiting on it
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8113, profile qs1022, `proj-7716d9f754a0`, Chromium against the served bundle, `scripts/drive/s1022_qs_drive.py timeout` then `scripts/drive/s1022_qs_ui.py needs`).
+**Status:** fixed 4060a64 (2026-10-23). `conversation_attention`'s question arm (`hub/hub/conversations.py`) now skips a question whose `created_by_run_id` names a run that is no longer `running`, the same rule as `asker_waiting`; an unrecorded asker stays presumed waiting. Test: `hub/tests/test_conversation_attention.py` (3 parametrised cases completed/failed/stopped failed before; two neighbouring tests used a completed asker incidentally and now use a live one). Drive: scratch Hub :8126 (profile f909, torn down), real Haiku turn asking with a 10 s timeout then ending: question `answered` false, `wait_ended_at` NULL, run `completed`, `asker_waiting` false, and both `/conversations` and `/agent/beta/conversations` read `attention` "idle" (UI reads this field; no bundle change). Found 2026-10-22. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8113, profile qs1022, `proj-7716d9f754a0`, Chromium against the served bundle, `scripts/drive/s1022_qs_drive.py timeout` then `scripts/drive/s1022_qs_ui.py needs`).
 **Source:** drive
 **Theme:** Questions
 **Ready:** yes -- reproduced with one real Haiku turn.
@@ -38690,7 +38690,7 @@ The card and the drawer correctly offer no Retry (F905), so only an API caller r
 
 ## F918 (B) -- the Vault's Add dialog and page drop store any file that is not a PDF or an image as a text "transcript": a Word document goes in as zip bytes, is committed under `knowledge/`, shown to every agent's map, and distilled for money
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-vault-sweep` in Chromium on the served bundle (scratch Hub :8115, `scripts/drive/s1022_vt_ui.py add`).
+**Status:** fixed f99977b 2026-10-23 (night). `vault.add_source` refuses text holding a NUL (400, "This looks like a binary file..."), and `VaultScreen.add` refuses, per file, an extension outside the text list (`vaultFileRefusal` in `api/vault.ts`, mirroring `vault_intake.TEXT_EXTENSIONS`) with the path door's sentence, keeping the file in the dialog. Drive: scratch Hub :8128, Chromium (`scripts/drive/f918_ui.py`): minutes.docx + notes.txt chosen together -> dialog stays with "minutes.docx: A .docx file is not a vault source; the vault takes ...", notes.txt added, map holds no binary entry; curl POST /vault/sources with a NUL -> 400. Found 2026-10-22. Found by the day sweep `sweep-vault-sweep` in Chromium on the served bundle (scratch Hub :8115, `scripts/drive/s1022_vt_ui.py add`).
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes
@@ -38710,7 +38710,7 @@ agentweave vault add docs/minutes.docx --no-distil   -> the same refusal
 
 ## F919 (B) -- `agentweave reset --profile <p> --yes` says "Deleted <dir>" and "Hub data destroyed" while the profile's database is still there, held open by a Hub that is still serving it
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row; throwaway profile `vt1022`, its Hub started from source by `e2e.py hub-up`, so with no PID file).
+**Status:** fixed 8641f27 2026-10-22 (night). `cmd_reset` now returns 1 and names what remains when `data_dir` survives the delete; test `test_reset_that_leaves_the_profile_behind_does_not_claim_it_destroyed_it` red before, green after. Drive: a throwaway profile `drv919` with `agentweave.db` held open -> exit 1, "Could not delete ...: still there: agentweave.db ... Stop it with 'agentweave --profile drv919 --port <port> stop'", db still on disk; after releasing the handle the same reset deleted the folder, exit 0. Originally: open 2026-10-22. Found by the day sweep `sweep-vault-sweep` (CLI & lifecycle row; throwaway profile `vt1022`, its Hub started from source by `e2e.py hub-up`, so with no PID file).
 **Source:** drive
 **Theme:** CLI & lifecycle
 **Ready:** yes
@@ -38820,7 +38820,7 @@ The worker is given the one entry (`hub/hub/vault_reports.py`, the review prompt
 
 ## F925 (B) -- a job whose agent a session sync deleted (or the operator archived) can still be enabled and fired; the press answers 500 and records the firing `failed`, but leaves a queued entry and an open conversation that the next agent of that name receives and runs
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8116, profile ag1022, real Haiku, `scripts/drive/s1022_ag_api.py` and `s1022_ag_lib.py` calls).
+**Status:** fixed 0f2771e 2026-10-23 (night). `scheduler.agent_unfirable_reason` is asked before a firing writes its run, entry and conversation (plain job) or enters a task (loop): a gone or archived agent records `failed` + `job_run_failed` and queues nothing; `PATCH enabled:true` runs job create's roster check (which no longer counts an archived agent the synced roster still lists); a press refused for this reason answers 409 with the sentence. Tests `hub/tests/test_a_job_for_a_vanished_agent_does_not_fire.py` (6, red before). Drive on scratch Hub :8122 (profile f925, torn down): enabled jobs for delta/gamma, sync removed delta, gamma archived -> press 409 each, one `failed` row each, no queue entry or conversation for either, re-enable 400. The optional design note (sync/archive answers naming the jobs left behind) is not done. Originally: open 2026-10-22. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8116, profile ag1022, real Haiku, `scripts/drive/s1022_ag_api.py` and `s1022_ag_lib.py` calls).
 **Source:** drive
 **Theme:** Agents
 **Ready:** yes
@@ -38870,7 +38870,7 @@ beta's settings -> Charter open; Underwriter deleted elsewhere (`DELETE /charter
 
 ## F928 (B) -- a permission card is shown in whichever of the agent's conversations is open, not the one whose run asked: under a finished review's transcript it reads as the review asking to archive a job
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8117, profile lp1022, project `proj-042da656a1f4`, Chromium against the served bundle; `testbed/ui-judge/s1021-archive/110245/01_archive_card.png`).
+**Status:** fixed e63686b 2026-10-23 (night). Drive: scratch Hub :8127 (profile f928), real Haiku turns, Chromium `scripts/drive/f928_ui.py`: with the panel on an earlier conversation only that conversation's own expired card showed and the bar said "waiting on your answer in <asking conversation>"; opening the asking conversation showed the live archive_job card, Allow -> request allowed, run completed. Superseded text: open 2026-10-22. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8117, profile lp1022, project `proj-042da656a1f4`, Chromium against the served bundle; `testbed/ui-judge/s1021-archive/110245/01_archive_card.png`).
 **Source:** drive
 **Theme:** Permissions
 **Ready:** yes
@@ -38924,7 +38924,7 @@ Repro: an approved change with `delivery: {mode: flow}`. Its flow (job-7d424efaf
 
 ## F933 (B) -- a project or agent default of "Ask me" or "Workspace only" reaches an agent with no tool server as `manual` with nobody to answer: every write is refused, no card, no Activity line, and the roster says "manual"
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8118, profile rc1022, project `proj-9c9bf6db138b`; `scripts/drive/s1022_rc_drive.py posture` and `cli`).
+**Status:** fixed 89ce56a 2026-10-23 (night). `agent_trigger` resolves the run's access axes before it applies an inherited default, and an agent or project default that needs an approver (`runner_commands.posture_needs_approver`: `manual`, `workspace`) is skipped when the run has none (`axes.approvals == "none"`), so the runner's own at-rest posture (acceptEdits) applies; the roster's `permission_mode_built_in`/`_at_rest` (`agents.py`) applies the same rule. An operator's explicit per-run choice is untouched (the related composer question is left open). Test: `hub/tests/test_an_inherited_posture_that_needs_an_approver_is_not_given_to_a_run_with_none.py` (4 of 5 failed before). Drive: scratch Hub :8123 (profile f933, torn down), beta on a Haiku runner with `hub_client: cli`, project default Ask me: roster `acceptEdits`; a real turn (`run-225b7e4554c7`) wrote hello.txt with the Write tool, completed, 0 permission requests.
 **Source:** drive
 **Theme:** Permissions & sandbox
 **Ready:** yes
@@ -39042,7 +39042,7 @@ Repro: open `/?project=<p>&tab=environment&section=bogus`, and then `...&section
 
 ## F944 (B) -- an agent's `read_spec_document include=full` never returns `delivery`, so a read, edit and resubmit silently erases the document's flow, agent, reviewer and schedule
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8121, two real Haiku 4.5 turns).
+**Status:** fixed 24aa973 (2026-10-23). Drive: scratch Hub :8124, two real Haiku 4.5 turns -- turn 1 submitted a `delivery` and its `read_spec_document include=full` returned it (cron `*/7 * * * *`); turn 2 read full, changed a statement, resubmitted every returned field, and the file's `delivery` and `checked_by` survived. Found 2026-10-22. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8121, two real Haiku 4.5 turns).
 **Source:** drive
 **Theme:** Spec documents
 **Ready:** yes
@@ -39052,7 +39052,7 @@ Repro, two real turns by `builder` (claude-haiku-4-5). Turn 1 called `submit_spe
 
 ## F945 (B) -- the Spec header's requirements fact counts every requirement not verified or rejected as "in progress", including ones not started and ones with no task
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121; `scripts/drive/s1022_sp_ui.py header`).
+**Status:** fixed cb80cae 2026-10-23 (night iteration 10). Test `specHealthLine.test.tsx` (names each state; failed before). Drive: scratch Hub :8129, Chromium `scripts/drive/f945_ui.py`: approved change with untouched requirements reads "0/2 verified · 2 not started", proposed change with no task reads "0/2 verified · 2 with no task". Was: open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121; `scripts/drive/s1022_sp_ui.py header`).
 **Source:** drive
 **Theme:** Spec documents
 **Ready:** yes
@@ -39062,7 +39062,7 @@ Repro: approved change `hdr-main`, where FR-1 is verified (accepted evidence, la
 
 ## F946 (B) -- the Spec header says "Vault agrees" on a project whose spec-vault check is off and has never run, and pressing "Check against the vault again" answers only "The spec vault check job is disabled."
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121; `scripts/drive/s1022_sp_ui.py fact <path> spec-health-vault "Check against"`).
+**Status:** fixed ca0e398 2026-10-23 (Tier 0). `GET /vault/warnings` now carries `checked` (whether the job ever fired on the document); the header reads "Vault not checked" with no tone when there are no warnings and no firing, and its action reads "Check against the vault"; the 409 sentences name Project settings → Manager. Drive: scratch Hub :8131, Chromium `scripts/drive/f946_ui.py`: "Vault not checked", press -> toast "The spec vault check job is disabled. Turn it on under Project settings → Manager." Found 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121; `scripts/drive/s1022_sp_ui.py fact <path> spec-health-vault "Check against"`).
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes
@@ -39130,7 +39130,7 @@ Repro: `hdr-main` was approved at 10:57:09 UTC (`updated_at 2026-10-22T10:57:09.
 
 ## F952 (B) -- the Overview's spend line drops everything the budget card used to say: a turn with no reported cost counts as $0.00 with no caveat, "API-equivalent" is gone, and the project's preferred unit (allowance, Copilot credits) is never shown
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-checkpoints-sweep` (Chromium against the served bundle, scratch Hub :8122, profile ck1022, project `proj-d2fc106b8594`; `scripts/drive/s1022_ck_ui.py overview`, screenshots `testbed/ui-judge/s1022-ck-overview/`).
+**Status:** fixed 26ecda6 2026-10-23 (Tier 0). The spend line takes its figure from `/accounting` when loaded: "$0.07 API-equivalent so far", a "N turn(s) unpriced" note, the project's AI credits (the figure itself when nothing was priced, else a dash), and the allowance label when the preferred display is one; the agent strip reads "—" for an agent with no priced turn. Drive: scratch Hub :8132, two seeded `turn_usage` rows (scratch profile `f952`; alpha priced, cop credits only), Chromium `scripts/drive/f952_ui.py`: "$0.07 API-equivalent so far · 265.8K tokens · 0.28 AI credits · 1 turn unpriced"; alpha $0.07, cop —. Not driven: the allowance note in the browser (unit test only). Found 2026-10-22. Found by the day sweep `sweep-checkpoints-sweep` (Chromium against the served bundle, scratch Hub :8122, profile ck1022, project `proj-d2fc106b8594`; `scripts/drive/s1022_ck_ui.py overview`, screenshots `testbed/ui-judge/s1022-ck-overview/`).
 **Source:** drive
 **Theme:** Accounting & allowance
 **Ready:** yes
@@ -39142,7 +39142,7 @@ Seam: `OverviewScreen.tsx:177` feeds the line `ledger.spend.total_usd` alone. `p
 
 ## F953 (B) -- with the token budget spent, the Overview says only "Autonomous turns are paused; operator messages can still run.": no limit, no way to raise it, and a held turn leaves "Nothing needs you · Nothing running"
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-checkpoints-sweep` (Chromium, :8122; `s1022_ck_ui.py overview -spent|-held`, screenshots `overview-spent.png`, `overview-held.png`).
+**Status:** fixed 9509788 (Tier 0, 2026-10-23). Drive: scratch Hub :8133, `scripts/drive/f953_seed.py` + `f953_ui.py` (Chromium): budget 100K, 298.2K used, a job fired with Run now left one turn queued `token budget exhausted`; the Overview band read "Token limit reached: 298.2K of 100K tokens. ... 1 turn waiting. Change it in Budgets", the summary "1 turn held by the budget · Nothing running", the link opened Project settings -> Budgets, one border, no console errors. Not done: the Needs-you section itself still reads "No questions, approvals or failed merges are waiting" beside a held turn (the summary line and band carry it). Found by the day sweep `sweep-checkpoints-sweep` (Chromium, :8122; `s1022_ck_ui.py overview -spent|-held`, screenshots `overview-spent.png`, `overview-held.png`).
 **Source:** drive
 **Theme:** Accounting & allowance
 **Ready:** yes

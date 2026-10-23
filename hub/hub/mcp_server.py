@@ -5230,6 +5230,7 @@ def read_spec_document(
         "algorithms",
         "evidence",
         "lifecycle",
+        "delivery",
         "summary",
         "problem",
         "scope",
@@ -5248,8 +5249,9 @@ def read_spec_document(
         path: The document's path, as given in your turn context, or its id (`spdoc-…`).
         include: `requirements` (the default) returns the problem, scope and the requirements.
             `outline` returns each requirement's identifier, key, modal, statement and state only.
-            `full` adds the design, declared tasks, algorithms and evidence sections where they
-            fit. A section's name (`design`, `problem`, …) reads that one section on its own.
+            `full` adds the design, declared tasks, algorithms, evidence and delivery (the flow,
+            agent, reviewer and schedule) sections where they fit; read `delivery` before you submit
+            a document back, because a submit without it removes it. A section's name (`design`, `problem`, …) reads that one section on its own.
         identifiers: Comma-separated requirement identifiers (`FR-3,FR-7`) to read only those.
             A requirement with no identifier is named by its key.
 

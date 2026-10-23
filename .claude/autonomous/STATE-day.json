@@ -4,106 +4,46 @@
     "runner": "claude",
     "model": "opus",
     "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-21-daily",
+    "branch": "autonomous/2026-10-22-daily",
     "parent_branch": "master",
-    "parent_sha": "f94606a",
-    "stop_at": "2026-10-22T17:00:00+01:00",
-    "iteration": 16,
-    "log_file": ".claude/autonomous/2026-10-22-day-log.md",
+    "parent_sha": "7c63120",
+    "stop_at": "2026-10-23T17:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-10-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
+    "current": "plan-review",
+    "next_action": "Do the 'plan-review' item per .claude/loops/day-window.md 'The pretask': run e2e skill Step 0 incl. plan-against-code inventory, edit the checklist in .claude/skills/e2e-loop/SKILL.md, commit it alone, log the PLAN: line, and insert sweep-<area>-sweep items (every checklist row exactly once) before night-recheck-drive.",
     "queue": [
         {
             "id": "plan-review",
-            "status": "done",
-            "title": "Check the e2e checklist against the code; queue the full sweep",
-            "detail": "No DIRECTION.md section dated today and no new REQUESTS rows, so the default queue. Insert sweep items before ledger-tidy. Order: rows with new/unreached paths, rows last night's commits touched (vault, session sync, task cards/Needs you, merge Retry), then least recently swept."
+            "status": "open",
+            "title": "Check the e2e checklist against the code; queue a full sweep",
+            "detail": "Playbook 'The pretask'. Drives nothing. Inserts sweep items before night-recheck-drive. Nothing new in DIRECTION.md for today (newest section 2026-09-07)."
         },
         {
             "id": "night-recheck-drive",
-            "status": "done",
+            "status": "open",
             "title": "Re-drive last night's fixes live",
-            "detail": "Fixed 2026-10-21 and touching route/run/UI: F824 residual (deleted task story refetch), F842 (vault review report watch), F849 (sync_session archives conversations), F850 (session_synced SSE), F902-F905 (stalled+wait line, awaiting-review tally, Needs you order, retryable on TaskIntegrationSummary), plus F835 F836 F838 F841 F844 F852 F856 F860 F861 F864 F865 F906 (read their Status lines in scripts/drive/FINDINGS.md). Log CONFIRMED/REOPENED F<n>; reopen by setting Status back to open with evidence. Scratch Hub port 8110+, haiku only."
-        },
-        {
-            "id": "sweep-traces-sweep",
-            "status": "done",
-            "title": "Sweep: Traces x Runs x Logs, events & SSE",
-            "detail": "First: the Activity tab's Activity view, the digest (ActivityDigest, lib/activityDigest.ts; unreached until 2026-10-22) â€” each sentence against its event, this project only; F844 (a conversation whose agent is busy in another conversation says so, not its own live turn)."
-        },
-        {
-            "id": "sweep-questions-sweep",
-            "status": "done",
-            "title": "Sweep: Questions x Conversations & composer",
-            "detail": "First: the Overview's Needs you list replacing the Questions takeover (blocked first, 'is waiting'/'is asking', F904); F860 (an expanded tool row shows the tool's output, a refusal's sentence readable); ConversationBar / ConversationComposerDock."
-        },
-        {
-            "id": "sweep-tasks-sweep",
-            "status": "done",
-            "title": "Sweep: Tasks x Dependencies x Worktrees & integration",
-            "detail": "First: the compact board (BoardView/TaskCardCompact): 'stalled' beside a wait, requirements awaiting review (F902/F903), card agrees with drawer; the Dependencies list (DependencyListView); Retry only where retryable (F905); a merge that lands re-drains the queue (F835)."
-        },
-        {
-            "id": "sweep-vault-sweep",
-            "status": "done",
-            "title": "Sweep: Knowledge vault x Manager jobs x CLI & lifecycle",
-            "detail": "First: the rebuilt Vault screens â€” VaultLibrary + page drop (usePageDrop), VaultReader, VaultReview cards, VaultAddDialog, VaultStorageDialog; Manager now under Project settings."
-        },
-        {
-            "id": "sweep-agents-sweep",
-            "status": "done",
-            "title": "Sweep: Agents x Charters x Inbound queue & messages",
-            "detail": "First: a session sync that deletes an agent archives its open conversations, rail and Activity follow session_synced without reload (F849/F850); Charters now in Project settings (ChartersSection/CharterForm)."
-        },
-        {
-            "id": "sweep-loops-sweep",
-            "status": "done",
-            "title": "Sweep: Jobs & loops x Flows & review x Resilience",
-            "detail": "First: the Jobs tab's new screens (JobsScreen/JobsView/JobDetails); an agent's archive_job permission card names job and schedule (F861); F864 (a default agent that is also a judge not handed fresh work)."
-        },
-        {
-            "id": "sweep-reach-sweep",
-            "status": "done",
-            "title": "Sweep: Permissions & sandbox x Capability plane x Agent environment",
-            "detail": "First: Reach group now at Project settings -> General with ReachGrantsChips (renamed from ReachGrantsEditor)."
-        },
-        {
-            "id": "sweep-projects-sweep",
-            "status": "done",
-            "title": "Sweep: Projects x Runners & models x Keyboard & dialogs",
-            "detail": "First: the Project settings screen (nine sections, the 'Environment' name gone; RunnersSection/RunnerForm), its keyboard and dialog layers."
-        },
-        {
-            "id": "sweep-spec-sweep",
-            "status": "done",
-            "title": "Sweep: Spec documents x Corpus & folding",
-            "detail": "Least recently swept (2026-10-21 iteration 4). Spec header rebuilt (SpecDocumentHeader, SpecDocumentList, SpecHealthLine, SpecPhaseParts)."
-        },
-        {
-            "id": "sweep-checkpoints-sweep",
-            "status": "done",
-            "title": "Sweep: Checkpoints x Accounting & allowance",
-            "detail": "Least recently swept (2026-10-21 iteration 7). Overview's spend line + BudgetExhaustionNotice replace the budget summary card."
-        },
-        {
-            "id": "sweep-evidence-sweep",
-            "status": "done",
-            "title": "Sweep: Requirements, evidence & coverage x Drift",
-            "detail": "Least recently swept (2026-10-21 iteration 9). F852 (an agent piece naming no commit at main's tip shows no work)."
+            "model": "sonnet",
+            "effort": "medium",
+            "detail": "Fixed 2026-10-22 night, UI/route/run/gate: F907 (activity digest stopped/failed turn), F909 (waiting rail vs Needs you), F918 (vault Add non-PDF/image file), F919 (reset with live Hub), F925 (job on deleted agent), F928 (permission card in wrong conversation), F933 (no-tool-server manual mode), F944 (read_spec_document delivery), F945 (requirements in-progress count), F946 (Vault agrees when check off), F952 (Overview spend line), F953 (budget-spent Overview). Log CONFIRMED/REOPENED each."
         },
         {
             "id": "ledger-tidy",
-            "status": "done",
-            "title": "Regenerate backlog page; check today's findings have Ready and Tier",
-            "detail": "py -3.11 scripts/backlog_page.py; every finding filed today needs **Ready:** and **Tier:** lines. Also 5 findings lack a Status line: F132 F253 F335 F378 F443 (triage if cheap)."
+            "status": "open",
+            "title": "Regenerate backlog page; check Ready/Tier on today's findings",
+            "model": "sonnet",
+            "effort": "medium",
+            "detail": "py -3.11 scripts/backlog_page.py, then verify every F filed today has **Ready:** and **Tier:** lines."
         },
         {
             "id": "D-7",
-            "status": "done",
+            "status": "open",
             "title": "Merge gate",
-            "detail": "Per day-window.md 'The merge gate'. Morning gate deferred: the tip 7ad44e8 (arm commit) had CI in_progress at compose; night tip d019e5f was success. No migrations in master..branch at compose, no HOLD MERGE. Last firing; closing entry with usage_report output; next_action null."
+            "model": "sonnet",
+            "effort": "medium",
+            "detail": "NOTE at compose: master is 4 commits ahead of the branch (docs rework, DEAD-ENDS), so condition 1 fails; git fetch . refuses non-FF. Log it, do not rebase. Branch adds no migration at compose time."
         }
     ],
     "decisions_for_user": [],

@@ -1776,12 +1776,13 @@ READ_INCLUDE_VALUES = (
     "algorithms",
     "evidence",
     "lifecycle",
+    "delivery",
     "summary",
     "problem",
     "scope",
     "open_questions",
 )
-_READ_SECTIONS = ("design", "tasks", "algorithms", "evidence", "lifecycle")
+_READ_SECTIONS = ("design", "tasks", "algorithms", "evidence", "lifecycle", "delivery")
 _READ_PREAMBLE = ("summary", "problem", "scope", "open_questions")
 _DOCUMENT_ID_RE = re.compile(r"spdoc-[0-9a-f]+")
 _OUTLINE_KEYS = ("identifier", "key", "modal", "statement", "state")

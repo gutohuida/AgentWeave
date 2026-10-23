@@ -3,9 +3,11 @@ import { useAccounting } from '@/api/accounting'
 import { conversationLabel, useProjectConversations } from '@/api/agentChat'
 import { useAgents } from '@/api/agents'
 import { useProjectLedger } from '@/api/ledger'
+import { useQueueStatuses } from '@/api/queue'
 import { useAnswerQuestion, useQuestions } from '@/api/questions'
 import { isWaitedOn } from '@/lib/pendingQuestions'
 import { useTasks, type Task } from '@/api/tasks'
+import { accountingDisplayLabel, formatAiCredits } from '@/components/accounting/accountingDisplay'
 import { BudgetExhaustionNotice } from '@/components/accounting/BudgetExhaustionNotice'
 import { QueryErrorNotice, type QueryFailure } from '@/components/common/QueryErrorNotice'
 import { getStatusConfig } from '@/lib/agentStatusConfig'
@@ -55,6 +57,11 @@ export function OverviewScreen({
     ['the ledger', ledgerError],
     ['the budget', accountingError],
   ]
+  // Turns the budget is holding: the queue's own reason, per agent, never inferred from the total.
+  const queueStatuses = useQueueStatuses(agents.map((a) => a.name))
+  const heldByBudget = accounting?.budget.exhausted
+    ? queueStatuses.reduce((n, s) => n + (/budget/i.test(s.waiting_reason ?? '') ? s.waiting_count : 0), 0)
+    : 0
   const answer = useAnswerQuestion()
   const now = new Date()
 
@@ -130,7 +137,13 @@ export function OverviewScreen({
       onOpen: () => openTask(m.task_id),
     }))
 
-  const usdByAgent = new Map((ledger?.spend.by_agent ?? []).map((a) => [a.agent, a.usd]))
+  // The ledger counts a turn with no reported cost as $0; the accounting snapshot knows which
+  // were unpriced, so it answers per agent when it has loaded (F952).
+  const usdByAgent = new Map<string, number | null>(
+    accounting?.agents
+      ? accounting.agents.map((a) => [a.agent, a.api_equivalent_usd_micros != null ? a.api_equivalent_usd_micros / 1_000_000 : null])
+      : (ledger?.spend.by_agent ?? []).map((a) => [a.agent, a.usd]),
+  )
   const strip: AgentStripItem[] = agents.map((a) => {
     const mine = conversations.filter((c) => c.agent === a.name).sort((x, y) => y.updated_at.localeCompare(x.updated_at))
     const live = mine.find((c) => c.attention === 'running')
@@ -161,11 +174,27 @@ export function OverviewScreen({
               : state === 'no-runner'
                 ? 'No runner yet, so it cannot start a turn'
                 : `Last active ${a.last_seen ? formatAgoLong(a.last_seen, now) : 'never'}`,
-      usd: usdByAgent.get(a.name) ?? 0,
+      usd: usdByAgent.get(a.name) ?? (accounting?.agents ? null : 0),
       extra: <AgentPostureChips agent={a} onNavigate={onNavigate} />,
       onOpen: () => onNavigate(`agent:${a.name}`),
     }
   })
+
+  // The same facts the Budgets page states: what the dollar figure leaves out, the credits a
+  // Copilot project spends, and the allowance a subscription is measured by (F952).
+  const project = accounting?.project
+  const unpriced = project?.unpriced_turns ?? 0
+  const display = accounting?.preferred_display
+  const spend = {
+    usd: project ? (project.api_equivalent_usd_micros != null ? project.api_equivalent_usd_micros / 1_000_000 : null) : (ledger?.spend.total_usd ?? 0),
+    tokens: ledger?.spend.total_tokens ?? 0,
+    period: project && project.api_equivalent_usd_micros != null ? 'API-equivalent so far' : 'so far',
+    credits: formatAiCredits(project?.ai_nano_aiu ?? null),
+    notes: [
+      unpriced > 0 && project?.api_equivalent_usd_micros != null ? `${unpriced} ${unpriced === 1 ? 'turn' : 'turns'} unpriced` : null,
+      display?.kind === 'allowance' ? accountingDisplayLabel(display) : null,
+    ].filter((note): note is string => !!note),
+  }
 
   return (
     <OverviewView
@@ -174,8 +203,9 @@ export function OverviewScreen({
       running={running}
       finished={finished}
       agents={strip}
-      spend={{ usd: ledger?.spend.total_usd ?? 0, tokens: ledger?.spend.total_tokens ?? 0, period: 'so far' }}
+      spend={spend}
       taskTotal={taskPage?.total}
+      heldByBudget={heldByBudget}
       onOpenTasks={() => onNavigate('tasks')}
       onOpenLedger={() => onNavigate('activity')}
       onOpenQuestions={() => onNavigate('questions')}
@@ -185,7 +215,16 @@ export function OverviewScreen({
           <>
             {/* A failed query would otherwise read as fact here: no questions, nobody working, $0. */}
             <QueryErrorNotice failures={failures} />
-            {accounting?.budget.exhausted ? <BudgetExhaustionNotice exhausted /> : null}
+            {accounting?.budget.exhausted ? (
+              <BudgetExhaustionNotice
+                exhausted
+                embedded
+                limitTokens={accounting.budget.limit_tokens}
+                usedTokens={accounting.budget.used_tokens}
+                heldCount={heldByBudget}
+                onOpenBudgets={() => onNavigate('budgets')}
+              />
+            ) : null}
           </>
         ) : null
       }

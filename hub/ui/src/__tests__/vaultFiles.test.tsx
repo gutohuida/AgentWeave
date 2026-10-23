@@ -278,4 +278,14 @@ describe('the Vault tab, image and PDF sources', () => {
     // The refused file stays in the dialog, to try again or remove.
     expect(screen.getByText('Big.pdf')).toBeInTheDocument()
   })
+
+  it("refuses a file the vault does not take, with the by-path door's sentence, and sends nothing (F918)", async () => {
+    render(<VaultScreen />, { wrapper })
+    await screen.findByTestId('vault-entry-src-pdfpdfpdfpdf')
+    chooseFiles([new File(['PK'], 'minutes.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })])
+    fireEvent.click(await screen.findByTestId('vault-upload-submit'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('A .docx file is not a vault source; the vault takes .md')
+    expect(calls.filter((call) => call.method === 'POST')).toHaveLength(0)
+    expect(screen.getByText('minutes.docx')).toBeInTheDocument()
+  })
 })

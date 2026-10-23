@@ -264,9 +264,14 @@ async def prepare(project_id: str, path: str) -> Plan:
         runner = await db.get(Runner, job.runner_id) if job is not None and job.runner_id else None
         model = (job.model if job is not None else None) or (runner.model if runner else None)
     if job is None or not job.enabled:
-        raise CannotCheckError("The spec vault check job is disabled.")
+        raise CannotCheckError(
+            "The spec vault check job is disabled. Turn it on under Project settings → Manager."
+        )
     if runner is None or runner.project_id != project_id:
-        raise CannotCheckError("The spec vault check job has no runner.", no_runner=True)
+        raise CannotCheckError(
+            "The spec vault check job has no runner. Choose one under Project settings → Manager.",
+            no_runner=True,
+        )
     private = Path(settings["effective_private_location"])
 
     def read() -> tuple:

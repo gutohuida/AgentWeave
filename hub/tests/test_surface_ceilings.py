@@ -33,7 +33,7 @@ DRIVE = REPO_ROOT / "scripts" / "drive"
 
 # Measured 2026-09-10. Lower these when the count drops; never raise one.
 CLIENTLESS_ROUTE_CEILING = 19  # 21 -> 19 2026-10-22: F906, the route table is now read (it read 0 under Starlette 1.x); 22 -> 21 2026-10-10: F568 retired GET /agents/context (the POST /context-usage one had a CLI client)
-UNHANDLED_SITE_CEILING = 76  # 92 -> 76 2026-10-20: ui-finesse applied; the old pages' sites left with their files, and the new screens read their errors (QueryErrorNotice, the settings sections' Retry, job run history); 95 -> 92 2026-10-12: the dead Messages UI subtree is deleted (F260), its three DEAD sites with it; 97 -> 95 2026-10-11: Settings reads its query's error (F197); 100 -> 97 2026-09-23: Logs reads both its errors (F252, F256); so does the resolved-questions list
+UNHANDLED_SITE_CEILING = 75  # 76 -> 75 2026-10-23: the vault warnings sites read their errors; 92 -> 76 2026-10-20: ui-finesse applied; the old pages' sites left with their files, and the new screens read their errors (QueryErrorNotice, the settings sections' Retry, job run history); 95 -> 92 2026-10-12: the dead Messages UI subtree is deleted (F260), its three DEAD sites with it; 97 -> 95 2026-10-11: Settings reads its query's error (F197); 100 -> 97 2026-09-23: Logs reads both its errors (F252, F256); so does the resolved-questions list
 # Re-measured 2026-09-22, the one exception to "never raise". The 52 of 2026-09-10 was counted
 # through a table keyed by line number, and by then 5 of its MISREPORT rows already named lines
 # with no call site. Those 5 surfaces had dropped out of the count while still misreporting, and 3
