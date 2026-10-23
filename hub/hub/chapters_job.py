@@ -204,7 +204,7 @@ def git_digest(repo: Optional[Path], before: Optional[datetime]) -> str:
         [
             "for-each-ref",
             "--sort=creatordate",
-            "--format=%(refname:short)%x1f%(creatordate:iso-strict)",
+            "--format=%(refname:short)%1f%(creatordate:iso-strict)",
             "refs/tags",
         ],
     ):
@@ -230,7 +230,7 @@ def git_digest(repo: Optional[Path], before: Optional[datetime]) -> str:
     if not buckets:
         return "(no commits before the Hub's first record)"
 
-    per = max(3, min(25, DIGEST_CHARS // (len(buckets) * 120)))
+    per = max(3, min(200, DIGEST_CHARS // (len(buckets) * 120)))
     out: List[str] = []
     for name, date, commits in buckets:
         head = (

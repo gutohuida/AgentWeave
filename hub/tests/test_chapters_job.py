@@ -318,3 +318,40 @@ async def test_the_next_firing_is_given_every_version_with_who_asked_and_why(
     ):
         assert expected in plan.prompt, expected
     assert fake.calls[0]["kind"] == "chapters"
+
+
+def test_git_digest_groups_commits_under_each_release_tag(tmp_path):
+    """The digest names every release tag (for-each-ref must emit a real unit separator), with the
+    commits it shipped, and a tagless tail under the unreleased heading."""
+    import subprocess
+
+    def git(*args, when):
+        env = {
+            "GIT_AUTHOR_DATE": when,
+            "GIT_COMMITTER_DATE": when,
+            "GIT_AUTHOR_NAME": "Ana",
+            "GIT_AUTHOR_EMAIL": "a@x.io",
+            "GIT_COMMITTER_NAME": "Ana",
+            "GIT_COMMITTER_EMAIL": "a@x.io",
+        }
+        import os
+
+        subprocess.run(
+            ["git", "-C", str(tmp_path), *args],
+            check=True,
+            capture_output=True,
+            env={**os.environ, **env},
+        )
+
+    git("init", "-q", when="2026-01-01T10:00:00Z")
+    for n, (day, tag) in enumerate([("01", "v1"), ("05", "v2"), ("09", None)]):
+        when = f"2026-01-{day}T10:00:00Z"
+        git("commit", "--allow-empty", "-q", "-m", f"change {n}", when=when)
+        if tag:
+            git("tag", "-a", tag, "-m", tag, when=when)
+
+    digest = chapters_job.git_digest(tmp_path, datetime(2026, 2, 1, tzinfo=timezone.utc))
+    assert "v1 (2026-01-01): 1 commits" in digest
+    assert "v2 (2026-01-05): 1 commits" in digest
+    assert f"{chapters.UNRELEASED}: 1 commits" in digest
+    assert "Ana: change 1" in digest
