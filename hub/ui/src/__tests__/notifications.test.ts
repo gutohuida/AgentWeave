@@ -21,6 +21,13 @@ const RUN_FAILED = { agent: 'Tester', run_id: 'run-2', error: 'Run failed (exit 
 const LOOP_STOPPED = { job_id: 'job-1', loop_id: 'loop-1', reason: 'budget reached', project_id: P1 } // scheduler.py
 const LOOP_DRAINED = { job_id: 'job-1', loop_id: 'loop-1', reason: 'loop queue is empty', project_id: P1 }
 const CHAIN = { entry_id: 'qe-1', agent: 'Reviewer', hop_depth: 9, hop_budget: 8, project_id: P1 } // messages.py
+// agent_trigger._broadcast_run_lifecycle: `initiator` is the run's own (turn_scheduler: "operator"
+// when an operator's message controls the turn, "autonomous" for a flow's, a job's or a peer's).
+const REPLIED = {
+  agent: 'Architect', run_id: 'run-3', conversation_id: 'conv-1', session_id: 's', exit_code: 0,
+  initiator: 'operator', project_id: P1,
+}
+const AUTONOMOUS_DONE = { ...REPLIED, run_id: 'run-4', initiator: 'autonomous' }
 
 describe('classify: which Hub events call the operator', () => {
   it('asks for a question and a permission', () => {
@@ -42,8 +49,17 @@ describe('classify: which Hub events call the operator', () => {
     expect(classify('loop_stopped', LOOP_DRAINED)).toMatchObject({ kind: 'done' })
   })
 
+  it('is a reply when a run the operator started in a conversation completes', () => {
+    expect(classify('run_completed', REPLIED)).toMatchObject({
+      kind: 'reply', projectId: P1, conversationId: 'conv-1', agent: 'Architect',
+    })
+    expect(classify('run_completed', REPLIED)?.text).toContain('Architect')
+  })
+
   it('ignores everyday traffic and events with no project', () => {
     expect(classify('run_completed', { agent: 'Developer', run_id: 'r', project_id: P1 })).toBeNull()
+    expect(classify('run_completed', AUTONOMOUS_DONE)).toBeNull()
+    expect(classify('run_completed', { ...REPLIED, conversation_id: null })).toBeNull()
     expect(classify('task_updated', { id: 't', status: 'completed', project_id: P1 })).toBeNull()
     expect(classify('question_answered', { id: 'q-1', project_id: P1 })).toBeNull()
     expect(classify('question_asked', { id: 'q-1', from_agent: 'Developer', blocking: false })).toBeNull()
@@ -147,6 +163,55 @@ describe('the notifier: front, behind, bursts', () => {
   })
 })
 
+describe('a reply', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    document.title = 'AgentWeave'
+  })
+
+  it('sounds the bright pair and opens its conversation; an ask in the same burst wins the sound', () => {
+    const h = harness()
+    h.notifier.notify(classify('run_completed', REPLIED)!)
+    vi.advanceTimersByTime(GATHER_MS)
+    expect(h.played.map((p) => p.kind)).toEqual(['reply'])
+    const [toast] = [...h.toasts.values()] as Array<{ title: string; conversation?: unknown }>
+    expect(toast.title).toContain('Architect')
+    expect(toast.conversation).toEqual({ agent: 'Architect', conversationId: 'conv-1' })
+
+    vi.advanceTimersByTime(BURST_MS)
+    h.notifier.notify(classify('run_completed', { ...REPLIED, run_id: 'run-5' })!)
+    h.notifier.notify(classify('question_asked', QUESTION)!)
+    vi.advanceTimersByTime(GATHER_MS)
+    expect(h.played.map((p) => p.kind)).toEqual(['reply', 'ask'])
+  })
+
+  it('is silent while the operator is in front, looking at that conversation; behind, it calls', async () => {
+    const h = harness({ viewing: (n) => n.conversationId === 'conv-1' })
+    h.notifier.notify(classify('run_completed', REPLIED)!)
+    await vi.advanceTimersByTimeAsync(GATHER_MS)
+    expect(h.played).toHaveLength(0)
+    expect(h.toasts.size).toBe(0)
+
+    h.notifier.notify(classify('run_completed', { ...REPLIED, conversation_id: 'conv-2' })!)
+    await vi.advanceTimersByTimeAsync(BURST_MS)
+    expect(h.played.map((p) => p.kind)).toEqual(['reply'])
+
+    h.setFocused(false)
+    h.notifier.notify(classify('run_completed', { ...REPLIED, run_id: 'run-6' })!)
+    await vi.advanceTimersByTimeAsync(GATHER_MS)
+    expect(h.played).toHaveLength(2)
+    expect(document.title).toBe('(1) AgentWeave')
+  })
+
+  it('can be turned off', () => {
+    const h = harness({}, { ...DEFAULT_NOTIFY_PREFS, kinds: { ...DEFAULT_NOTIFY_PREFS.kinds, reply: false } })
+    h.notifier.notify(classify('run_completed', REPLIED)!)
+    vi.advanceTimersByTime(GATHER_MS)
+    expect(h.played).toHaveLength(0)
+    expect(h.toasts.size).toBe(0)
+  })
+})
+
 describe('the native window answers whether it is in front', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -170,12 +235,17 @@ describe('the native window answers whether it is in front', () => {
 describe('preferences', () => {
   beforeEach(() => localStorage.clear())
 
-  it('default to sound on, ask and fail on, done off, and survive a reload', () => {
+  it('default to sound on, ask, fail and reply on, done off, and survive a reload', () => {
     expect(loadNotifyPrefs()).toEqual(DEFAULT_NOTIFY_PREFS)
     expect(DEFAULT_NOTIFY_PREFS.sound).toBe(true)
-    expect(DEFAULT_NOTIFY_PREFS.kinds).toEqual({ ask: true, fail: true, done: false })
-    saveNotifyPrefs({ ...DEFAULT_NOTIFY_PREFS, volume: 0.3, kinds: { ask: true, fail: false, done: true } })
-    expect(loadNotifyPrefs()).toMatchObject({ volume: 0.3, kinds: { ask: true, fail: false, done: true } })
+    expect(DEFAULT_NOTIFY_PREFS.kinds).toEqual({ ask: true, fail: true, done: false, reply: true })
+    saveNotifyPrefs({ ...DEFAULT_NOTIFY_PREFS, volume: 0.3, kinds: { ask: true, fail: false, done: true, reply: false } })
+    expect(loadNotifyPrefs()).toMatchObject({ volume: 0.3, kinds: { ask: true, fail: false, done: true, reply: false } })
+  })
+
+  it('saved before reply existed, reply reads as its default', () => {
+    localStorage.setItem('agentweave-notify', JSON.stringify({ sound: true, volume: 0.5, kinds: { ask: true, fail: true, done: false } }))
+    expect(loadNotifyPrefs().kinds.reply).toBe(true)
   })
 })
 

@@ -10,6 +10,7 @@ import { playSound } from '@/lib/sound/player'
 const KINDS: Array<{ kind: NotifyKind; label: string; description: string }> = [
   { kind: 'ask', label: 'An agent needs you', description: 'A question, or a permission to decide.' },
   { kind: 'fail', label: 'Work stalled or failed', description: 'A stall, a failed run, a suspended message chain, a loop stopped short.' },
+  { kind: 'reply', label: 'An agent replied to you', description: 'A turn you started in a conversation finished. Silent while you are watching that conversation.' },
   { kind: 'done', label: 'Work finished', description: 'A loop that worked through its whole queue.' },
 ]
 
