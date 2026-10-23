@@ -856,11 +856,14 @@ def page(
         point = _cursor_tuple(before or after or "")
         if point is None:
             return None
+        # A chaptered surface is ordered by position (chapters, then ungrouped knots) and need not
+        # be sorted by start, so a cursor names its place by key; bisecting is the fallback.
+        index = next((i for i, k in enumerate(ordered) if k.key == point[1]), None)
         if before is not None:
-            hi = bisect.bisect_left(sort_keys, point)
+            hi = index if index is not None else bisect.bisect_left(sort_keys, point)
             lo = max(0, hi - limit)
         else:
-            lo = bisect.bisect_right(sort_keys, point)
+            lo = index + 1 if index is not None else bisect.bisect_right(sort_keys, point)
             hi = min(total, lo + limit)
     else:
         lo, hi = max(0, total - limit), total

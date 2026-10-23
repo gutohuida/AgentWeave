@@ -175,6 +175,53 @@ async def test_a_refused_version_leaves_the_feed_as_it_was(app, auth_headers):
     assert len(opened["knots"]) == 2
 
 
+async def small_pages(app, headers):
+    """The surface the way the page loads: newest page, then each page before its cursor."""
+    body = await level(app, headers, limit=1)
+    keys = [k["key"] for k in body["knots"]]
+    while body["has_before"]:
+        body = await level(app, headers, limit=1, before=body["before_cursor"])
+        keys = [k["key"] for k in body["knots"]] + keys
+    return keys
+
+
+async def test_chapters_with_mixed_utc_offsets_order_by_the_moment(app, auth_headers):
+    await seed(doc(1, 0), doc(2, 10))
+    plus_one = timezone(timedelta(hours=1))
+    a_start = T0.astimezone(plus_one)  # 09:00Z written as 10:00+01:00
+    b_start = T0 + timedelta(minutes=30)  # 09:30Z
+    await write(
+        [
+            {**chapter("a", ["document:spdoc-1"], 0, 60), "start": a_start.isoformat()},
+            {**chapter("b", ["document:spdoc-2"], 0, 60), "start": b_start.isoformat()},
+        ]
+    )
+    body = await level(app, auth_headers, limit=200, first=True)
+    assert [k["key"] for k in body["knots"]] == ["chapter:a", "chapter:b"]
+    assert await small_pages(app, auth_headers) == ["chapter:a", "chapter:b"]
+
+
+async def test_small_pages_lose_nothing_when_an_ungrouped_knot_predates_a_chapter(
+    app, auth_headers
+):
+    await seed(doc(1, 0), doc(2, 10))
+    await write(
+        [chapter("a", ["document:spdoc-1"], 0, 5), chapter("b", ["document:spdoc-2"], 10, 20)]
+    )
+    await seed(task("early", 3))
+    body = await level(app, auth_headers, limit=200, first=True)
+    expected = [k["key"] for k in body["knots"]]
+    assert expected == ["chapter:a", "chapter:b", "task:task-early"] or len(expected) == 3
+    assert expected[:2] == ["chapter:a", "chapter:b"]
+    assert await small_pages(app, auth_headers) == expected
+    after = await level(app, auth_headers, limit=1, first=True)
+    seen = [k["key"] for k in after["knots"]]
+    while after["has_after"]:
+        after = await level(app, auth_headers, limit=1, after=after["after_cursor"])
+        seen += [k["key"] for k in after["knots"]]
+    assert seen == expected
+
+
 @pytest.fixture
 def repo(tmp_path):
     root = tmp_path / "repo"

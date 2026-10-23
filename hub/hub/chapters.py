@@ -19,6 +19,7 @@ import re
 import subprocess
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -167,7 +168,9 @@ def version_record(row: ChapterVersion) -> Dict[str, Any]:
 
 def ordered(chapters: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Chapters by start; chapters whose spans overlap sit side by side in the order they began."""
-    return sorted(chapters, key=lambda c: (c["start"], c["id"]))
+    # By the moment, not the string: starts written with different UTC offsets must still order.
+    far = datetime.max.replace(tzinfo=timezone.utc)
+    return sorted(chapters, key=lambda c: (_parse(c["start"]) or far, c["id"]))
 
 
 async def save(
