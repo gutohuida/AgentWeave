@@ -7,6 +7,10 @@ export interface PermissionRequest {
   id: string
   agent: string
   run_id: string | null
+  /** F928: the conversation whose run asked, so the card sits in that one. Null for a request
+   *  raised outside a conversation, and absent from a Hub older than the field (both mean: show it
+   *  wherever the agent is open). */
+  conversation_id?: string | null
   tool_name: string
   tool_use_id: string
   tool_input: Record<string, unknown>
