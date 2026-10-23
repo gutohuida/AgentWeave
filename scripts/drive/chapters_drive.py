@@ -75,6 +75,24 @@ def firings(pid):
     return out
 
 
+def first_hub_record(pid):
+    """The earliest record the Hub holds for the project, across every source a knot can come from."""
+    queries = (
+        "select min(created_at) from tasks where project_id=?",
+        "select min(created_at) from spec_documents where project_id=?",
+        "select min(timestamp) from event_logs where project_id=?",
+    )
+    found = []
+    for q in queries:
+        try:
+            v = rows(q, (pid,))[0][0]
+        except sqlite3.Error:
+            continue
+        if v:
+            found.append(str(v).replace(" ", "T"))
+    return min(found)
+
+
 def wait_for(pred, secs, what):
     end = time.time() + secs
     while time.time() < end:
@@ -137,9 +155,30 @@ def approved_document(pid, title, agent="builder"):
     api("PUT", f"{S}/documents/{path}/content", {"document": payload})
     api("POST", f"{S}/documents/close-exploration?path={path}")
     api("POST", f"{S}/documents/propose?path={path}")
-    c, res = api("POST", f"{S}/documents/phase?path={path}&to=approved", {"reason": "drive"})
-    check(f"{title}: approved", c == 200, c)
-    return path, (res or {}).get("tasks_created", [None])[0]
+    # The fixture has no how_to_check and skips journey steps, so approval lists gaps (409
+    # approval_warnings) unless the drive approves over them, as the operator may.
+    c, res = api("POST", f"{S}/documents/phase?path={path}&to=approved",
+                 {"reason": "drive", "approve_anyway": True})
+    created = (res or {}).get("tasks_created") or []
+    ok = check(f"{title}: approved with a task created", c == 200 and bool(created), (c, created))
+    if not ok:
+        show("approve", c, res)
+        sys.exit(1)  # nothing after this means anything if the approval did not happen
+    return path, created[0]
+
+
+def approve_task(pid, task):
+    """Walk a task through the moves the map allows, then land it: pending to approved."""
+    A = f"/projects/{pid}"
+    for to in ("in_progress", "completed"):
+        c, res = api("PATCH", f"{A}/tasks/{task}", {"assignee": "builder", "status": to})
+        if c != 200:
+            show(f"task -> {to}", c, res)
+            return False
+    c, res = api("POST", f"{A}/tasks/{task}/land", {})
+    if c != 200:
+        show("land", c, res)
+    return c == 200 and (res or {}).get("status") == "approved"
 
 
 def fired(pid, before, what, secs=240):
@@ -155,6 +194,15 @@ def fired(pid, before, what, secs=240):
 pid, rid = scratch_project("chapters-controls")
 A = f"/projects/{pid}"
 api("POST", f"{A}/agents", {"name": "builder", "runner_id": rid})
+
+if os.environ.get("AW_FIXTURES_ONLY"):
+    # Proves every non-chapters step works on this Hub: approve, walk the task, archive.
+    fpath, ftask = approved_document(pid, f"fixture {TAG}")
+    check("fixture: the task reaches approved", approve_task(pid, ftask))
+    c, res = api("POST", f"/projects/{pid}/project/documents/phase?path={fpath}&to=archived",
+                 {"reason": "drive", "no_capability_change": True})
+    check("fixture: the document archives", c == 200, (c, res))
+    sys.exit(1 if failures else 0)
 
 c, jobs = api("GET", f"{A}/manager/jobs")
 listed = [j["key"] for j in (jobs or {}).get("jobs", [])]
@@ -192,8 +240,7 @@ n = len(firings(pid))
 path, task = approved_document(pid, f"fires {TAG}")
 fired(pid, n, "a document approved: one firing")
 n = len(firings(pid))
-c, _ = api("PATCH", f"{A}/tasks/{task}", {"assignee": "builder", "status": "approved"})
-check("the document's last task approved", c == 200, c)
+check("the document's last task approved", approve_task(pid, task))
 fired(pid, n, "a document's last task approved: one firing")
 n = len(firings(pid))
 c, res = api("POST", f"/projects/{pid}/project/documents/phase?path={path}&to=archived",
@@ -261,7 +308,7 @@ if PROJECT and not failures:
     api("POST", f"{C}/manager/jobs/{JOB}/run")
     fired(PROJECT, before, "ac-git: the press records one firing", secs=1800)
     chs = (api("GET", f"{C}/chapters")[1] or {}).get("chapters", [])
-    first_knot = rows("select min(created_at) from tasks where project_id=?", (PROJECT,))[0][0]
+    first_knot = first_hub_record(PROJECT)
     early = [c for c in chs if c.get("commits")]
     check("ac-git: chapters from git exist", bool(early), len(chs))
     check("ac-git: they are dated before the first Hub record",
