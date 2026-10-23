@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9234463",
     "stop_at": "2026-10-23T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-22-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F907-impl",
-    "next_action": "Do queue item F907-impl: read its FINDINGS.md entry, write the failing test, fix, drive, close the finding, commit and push.",
+    "current": "F909-impl",
+    "next_action": "Do queue item F909-impl: read its FINDINGS.md entry, write the failing test, fix, drive, close the finding, commit and push.",
     "queue": [
         {
             "id": "F919-impl",
@@ -41,9 +41,9 @@
         },
         {
             "id": "F907-impl",
-            "status": "open",
+            "status": "done",
             "title": "F907: Activity digest leaves a stopped/failed turn reading 'working' forever",
-            "detail": "Tier 0. Read the F907 entry in scripts/drive/FINDINGS.md (grep '## F907 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed (see iteration 6 log entry)."
         },
         {
             "id": "F909-impl",

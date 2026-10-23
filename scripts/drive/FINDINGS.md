@@ -38494,7 +38494,7 @@ Expected: an ended loop has no stall reason (its state is the ending, with its `
 
 ## F907 (B) -- the Activity digest leaves a stopped or failed turn reading "alpha is working" forever, and puts its ending on a separate row by wire name ("alpha run stopped", "alpha run failed")
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-traces-sweep` (scratch Hub :8112, profile tr1022, `proj-9a2788c8d0d7`, Chromium against the served bundle, `scripts/drive/s1022_tr_drive.py turns|stop|fail` then `scripts/drive/s1022_tr_ui.py digest`).
+**Status:** fixed (this commit) 2026-10-23. `buildDigest` now joins `run_failed` and `run_stopped` to their run (`runOf`), ends the turn on any of the three (`done`), and reads "was stopped" (warn) / "stopped with an error" (error). Test first `hub/ui/src/__tests__/activityDigest.test.ts` (2 of 3 failed). Drive: scratch Hub :8125 (profile f907, cleaned), real Haiku turns, one stopped through the stop route and one with claude.exe killed; Chromium `scripts/drive/f907_ui.py` -> "alpha was stopped" (warn), "alpha stopped with an error" (error), both under the Warnings filter, no wire-name rows.
 **Source:** drive
 **Theme:** Logs, events & SSE
 **Ready:** yes -- driven with real Haiku turns; both endings reproduced.

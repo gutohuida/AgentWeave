@@ -80,7 +80,7 @@ export function buildDigest(events: EventLogEntry[], ctx: DigestContext = {}): D
     if (e.event_type === 'queue_entry_delivered' && runId && entryId) entryToRun.set(entryId, runId)
   }
   const runOf = (e: EventLogEntry): string | null => {
-    if (['run_triggered', 'run_started', 'run_completed', 'queue_entry_delivered'].includes(e.event_type)) return str(e.data?.run_id)
+    if (['run_triggered', 'run_started', 'run_completed', 'run_failed', 'run_stopped', 'queue_entry_delivered'].includes(e.event_type)) return str(e.data?.run_id)
     if (e.event_type === 'queue_entry_queued') return entryToRun.get(str(e.data?.entry_id) ?? '') ?? null
     return null
   }
@@ -168,13 +168,15 @@ export function buildDigest(events: EventLogEntry[], ctx: DigestContext = {}): D
 
   for (const [runId, evs] of runs) {
     const started = evs.find((e) => e.event_type === 'run_started')
-    const done = evs.find((e) => e.event_type === 'run_completed')
+    // The Hub ends a turn with exactly one of these (`_RUN_LIFECYCLE_EVENTS`, agent_trigger.py).
+    const done = evs.find((e) => ['run_completed', 'run_failed', 'run_stopped'].includes(e.event_type))
+    const stopped = done?.event_type === 'run_stopped'
     const first = evs[0]!
     const agent = first.agent ?? str(first.data?.agent)
     const conversationId = evs.map((e) => str(e.data?.conversation_id)).find(Boolean) ?? null
     const usage = usageByRun.get(runId)
     const exit = done?.data?.exit_code
-    const failed = typeof exit === 'number' && exit !== 0
+    const failed = done?.event_type === 'run_failed' || (!stopped && typeof exit === 'number' && exit !== 0)
     const seconds = started && done ? (Date.parse(done.timestamp) - Date.parse(started.timestamp)) / 1000 : null
     rows.push({
       id: runId,
@@ -182,12 +184,12 @@ export function buildDigest(events: EventLogEntry[], ctx: DigestContext = {}): D
       at: (done ?? started ?? first).timestamp,
       agent,
       lead: agent,
-      text: done ? (failed ? 'stopped with an error' : 'worked') : started ? 'is working' : 'was queued',
+      text: done ? (failed ? 'stopped with an error' : stopped ? 'was stopped' : 'worked') : started ? 'is working' : 'was queued',
       detail: conversationId ? ctx.conversationTitle?.(conversationId) ?? null : null,
       durationSeconds: seconds,
       tokens: usage?.total_tokens ?? null,
       usd: usage?.api_equivalent_usd_micros != null ? usage.api_equivalent_usd_micros / 1e6 : null,
-      severity: failed ? 'error' : 'info',
+      severity: failed ? 'error' : stopped ? 'warn' : 'info',
       events: evs,
       conversationId,
     })
