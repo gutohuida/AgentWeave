@@ -72,6 +72,7 @@ async def test_each_job_says_whether_it_can_run_without_a_runner(app, auth_heade
         manager.DISTILLATION: True,
         manager.REPORTS: True,
         manager.SPEC_VAULT_CHECK: True,
+        manager.CHAPTERS: True,
         manager.MENDER: True,
     }
 

@@ -420,6 +420,21 @@ async def transition(
 
     previous = document.phase
     document.phase = to_phase
+    if to_phase in (APPROVED, ARCHIVED):
+        # A major event of the project's story: the chapters job fires once this commits, if it is
+        # on with automatic firing (`chapters_job.fire_after_commit`).
+        from . import chapters_job
+
+        chapters_job.fire_after_commit(
+            session,
+            document.project_id,
+            (
+                chapters_job.DOCUMENT_APPROVED
+                if to_phase == APPROVED
+                else chapters_job.DOCUMENT_ARCHIVED
+            ),
+            {"document": document.path},
+        )
     if to_phase == EXPLORING:
         # Reopening genuinely reopens: the next proposal needs the operator to
         # say again that exploration is done.
