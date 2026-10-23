@@ -38540,7 +38540,7 @@ alpha agent created
 
 ## F909 (B) -- a conversation reads "waiting" on the rail and the Overview's agent card says "Waiting for your answer" for a question whose asking run has already ended, while Needs you, on the same screen, says nobody is waiting on it
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8113, profile qs1022, `proj-7716d9f754a0`, Chromium against the served bundle, `scripts/drive/s1022_qs_drive.py timeout` then `scripts/drive/s1022_qs_ui.py needs`).
+**Status:** fixed 4060a64 (2026-10-23). `conversation_attention`'s question arm (`hub/hub/conversations.py`) now skips a question whose `created_by_run_id` names a run that is no longer `running`, the same rule as `asker_waiting`; an unrecorded asker stays presumed waiting. Test: `hub/tests/test_conversation_attention.py` (3 parametrised cases completed/failed/stopped failed before; two neighbouring tests used a completed asker incidentally and now use a live one). Drive: scratch Hub :8126 (profile f909, torn down), real Haiku turn asking with a 10 s timeout then ending: question `answered` false, `wait_ended_at` NULL, run `completed`, `asker_waiting` false, and both `/conversations` and `/agent/beta/conversations` read `attention` "idle" (UI reads this field; no bundle change). Found 2026-10-22. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8113, profile qs1022, `proj-7716d9f754a0`, Chromium against the served bundle, `scripts/drive/s1022_qs_drive.py timeout` then `scripts/drive/s1022_qs_ui.py needs`).
 **Source:** drive
 **Theme:** Questions
 **Ready:** yes -- reproduced with one real Haiku turn.
