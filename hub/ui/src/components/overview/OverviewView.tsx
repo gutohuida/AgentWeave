@@ -60,7 +60,8 @@ export interface AgentStripItem {
   state: 'running' | 'waiting' | 'stalled' | 'idle' | 'no-runner'
   /** One sentence: "Working on …", "Waiting for your answer", "Last active 1h ago". */
   doing: string
-  usd: number
+  /** Null when none of its turns was priced: a dash, never a $0.00 it did not spend. */
+  usd: number | null
   /** The status word for the row's accessible name ("Open claude, Stalled"). */
   statusLabel?: string
   /** Controls of the agent's own, beside the row and never inside its button (its posture). */
@@ -95,7 +96,16 @@ export function OverviewView({
   running: RunningItem[]
   finished: FinishedItem[]
   agents: AgentStripItem[]
-  spend: { usd: number; tokens: number; period: string }
+  spend: {
+    /** Null when no turn was priced: the credits stand in, or a dash. */
+    usd: number | null
+    tokens: number
+    period: string
+    /** The credits the project's turns reported (Copilot); the figure itself when usd is null. */
+    credits?: string | null
+    /** What the figure leaves out or is measured by ("1 turn unpriced", the allowance). */
+    notes?: string[]
+  }
   onOpenLedger: () => void
   onAnswer?: (need: NeedItem, option: QuestionOption) => void
   /** Answered questions and permission decisions, reachable with nothing open (F636). */
@@ -143,9 +153,15 @@ export function OverviewView({
           ) : null}
         </p>
         <button data-slot="spend-line" type="button" className="aw-overview-spend" onClick={onOpenLedger} title={formatTokensExact(spend.tokens)}>
-          <span className="tabular">{formatMoney(spend.usd)}</span> {spend.period}
+          <span className="tabular">{spend.usd != null ? formatMoney(spend.usd) : (spend.credits ?? '—')}</span> {spend.period}
           <span aria-hidden="true">·</span>
           <span className="tabular">{formatTokens(spend.tokens)}</span>
+          {[spend.usd != null ? spend.credits : null, ...(spend.notes ?? [])].filter(Boolean).map((note) => (
+            <React.Fragment key={note}>
+              <span aria-hidden="true">·</span>
+              <span>{note}</span>
+            </React.Fragment>
+          ))}
           <span className="aw-overview-spend-link">
             Ledger <Icon name="arrow_forward" size={12} />
           </span>
@@ -303,7 +319,7 @@ export function OverviewView({
                       </span>
                     </span>
                     <span className="aw-ov-row-end tabular" title="Spent so far">
-                      {formatMoney(a.usd)}
+                      {a.usd != null ? formatMoney(a.usd) : '—'}
                     </span>
                   </button>
                   {a.extra ? <div className="aw-ov-agent-extra">{a.extra}</div> : null}
