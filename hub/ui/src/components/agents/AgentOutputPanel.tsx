@@ -263,7 +263,12 @@ export function AgentOutputPanel({
    *  unbounded card squeezed the transcript to nothing and could push the composer itself off the
    *  bottom of the panel. A question is not in the tray: it docks inside the composer's surface,
    *  capped (`DOCKED_MAX_HEIGHT`), because the box below it is where the answer is written. */
-  const hasInterjection = openPermissionRequestsFor(permissionRequests, agent.name).length > 0
+  const hasInterjection =
+    openPermissionRequestsFor(
+      permissionRequests,
+      agent.name,
+      startingFresh ? null : (conversationId ?? null),
+    ).length > 0
   const trayRef = useRef<HTMLDivElement>(null)
   /** The panel, its header and its composer area: the room the conversation has is what the panel
    *  leaves after the other two, read from natural sizes so it does not depend on where the tray
@@ -415,14 +420,23 @@ export function AgentOutputPanel({
     busyElsewhere && runningConversationId
       ? {
           title: busyConversation ? conversationLabel(busyConversation) : runningConversationId,
-          waitingOnYou: openQuestions.some(
-            (q) =>
-              q.from_agent === agent.name
-              && q.conversation_id === runningConversationId
-              && isWaitedOn(q)
-              && !q.answered
-              && !q.declined,
-          ),
+          waitingOnYou:
+            openQuestions.some(
+              (q) =>
+                q.from_agent === agent.name
+                && q.conversation_id === runningConversationId
+                && isWaitedOn(q)
+                && !q.answered
+                && !q.declined,
+            )
+            // F928: a permission card sits in the conversation whose run asked, so from here the
+            // note is where the operator learns it is waiting on them.
+            || permissionRequests.some(
+              (r) =>
+                r.agent === agent.name
+                && r.conversation_id === runningConversationId
+                && r.status === 'pending',
+            ),
           onOpen: onSelectConversation ? () => onSelectConversation(runningConversationId) : undefined,
         }
       : null
@@ -1200,7 +1214,13 @@ export function AgentOutputPanel({
 
   // Rendered in exactly one of two places — floating over the conversation, or inline in the
   // composer's column — as `trayPlacement` decides.
-  const interjections = <PermissionRequestCard requests={permissionRequests} agent={agent.name} />
+  const interjections = (
+    <PermissionRequestCard
+      requests={permissionRequests}
+      agent={agent.name}
+      conversationId={startingFresh ? null : (conversationId ?? null)}
+    />
+  )
 
   const checkpointReason = handoffReason(
     handoffUnavailable,

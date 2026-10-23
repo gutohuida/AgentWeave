@@ -29,6 +29,7 @@ export function SpecHealthLine({
   driftCount,
   lastDriftScan,
   vaultWarnings,
+  vaultChecked = true,
   indexIssues,
   tasks,
   history,
@@ -49,6 +50,10 @@ export function SpecHealthLine({
   lastDriftScan?: string | null
   /** Null when the project has no vault (or the route is absent); the fact is then left out. */
   vaultWarnings: number | null
+  /** Whether the spec-vault-check job ever ran on this document. With no warnings and no check,
+   *  "agrees" would be a verdict nobody produced (F946). Defaults to true: a host that cannot say
+   *  keeps the old reading. */
+  vaultChecked?: boolean
   /** Spec index (manifest) problems. */
   indexIssues: number
   tasks: HealthTask[]
@@ -66,7 +71,10 @@ export function SpecHealthLine({
   const count = (state: string) => coverage.filter((r) => r.state === state).length
   const verified = count('verified')
   const rejected = count('rejected')
-  const working = coverage.length - verified - rejected
+  // Every other state is named as it is: a requirement nobody has touched is not "in progress",
+  // and a drifting or stale one is a warning, not progress (F945).
+  const open = OPEN_STATES.map((s) => ({ ...s, n: count(s.state) })).filter((s) => s.n > 0)
+  const needsLook = open.some((s) => s.warn)
   const decided = tasks.filter((t) => t.status === 'approved' || t.status === 'rejected').length
   const notMerged = coverage.filter((r) => r.state === 'verified' && r.integration === 'not_integrated')
 
@@ -87,7 +95,7 @@ export function SpecHealthLine({
         <Fact
           fact="requirements"
           active={activeDetail === 'requirements'}
-          tone={notMerged.length || coverageDiagnostics ? 'warn' : undefined}
+          tone={notMerged.length || coverageDiagnostics || needsLook ? 'warn' : undefined}
           label={
             <>
               <span className="aw-health-bar" aria-hidden="true">
@@ -96,7 +104,12 @@ export function SpecHealthLine({
               </span>
               <strong>{verified}</strong>/{coverage.length} verified
               {rejected ? <span className="aw-health-bad"> · {rejected} rejected</span> : null}
-              {working ? <span> · {working} in progress</span> : null}
+              {open.map((s) => (
+                <span key={s.state} className={s.warn ? 'aw-health-warn' : undefined}>
+                  {' · '}
+                  {s.n} {s.label}
+                </span>
+              ))}
               {notMerged.length ? <span> · {notMerged.length} not merged</span> : null}
               {coverageDiagnostics ? <span> · {coverageDiagnostics} broken</span> : null}
             </>
@@ -154,16 +167,26 @@ export function SpecHealthLine({
           fact="vault"
           active={activeDetail === 'vault'}
           tone={vaultWarnings ? 'warn' : undefined}
-          label={vaultWarnings ? `${vaultWarnings} vault ${vaultWarnings === 1 ? 'conflict' : 'conflicts'}` : 'Vault agrees'}
+          label={
+            vaultWarnings
+              ? `${vaultWarnings} vault ${vaultWarnings === 1 ? 'conflict' : 'conflicts'}`
+              : vaultChecked
+                ? 'Vault agrees'
+                : 'Vault not checked'
+          }
           title="Vault"
           width={300}
         >
           <p className="aw-health-note">
-            {vaultWarnings ? 'Some requirements contradict facts in the vault.' : 'No requirement contradicts what the vault knows.'}
+            {vaultWarnings
+              ? 'Some requirements contradict facts in the vault.'
+              : vaultChecked
+                ? 'No requirement contradicts what the vault knows.'
+                : 'This document has not been checked against the vault yet. The check runs when the spec vault check job is on (Project settings → Manager).'}
           </p>
           <DropdownMenu.Item className="aw-menu-item" onSelect={onCheckVault}>
             <Icon name="refresh" size={14} className="aw-menu-item-icon" />
-            Check against the vault again
+            {vaultWarnings || vaultChecked ? 'Check against the vault again' : 'Check against the vault'}
           </DropdownMenu.Item>
           {details('vault')}
         </Fact>
@@ -223,6 +246,17 @@ export function SpecHealthLine({
     </div>
   )
 }
+
+/** The unfinished states, as the header's count names them (the popover lists each by name). */
+const OPEN_STATES: { state: string; label: string; warn?: boolean }[] = [
+  { state: 'drifting', label: 'drifting', warn: true },
+  { state: 'stale', label: 'stale', warn: true },
+  { state: 'amendment_unreviewed', label: 'changed, unreviewed', warn: true },
+  { state: 'evidence_awaiting_review', label: 'awaiting review' },
+  { state: 'in_progress', label: 'in progress' },
+  { state: 'not_started', label: 'not started' },
+  { state: 'unserved', label: 'with no task' },
+]
 
 const STATE_LABEL: Record<string, string> = {
   verified: 'Verified',

@@ -3,6 +3,7 @@ import { StatePill } from '@/components/common/StatePill'
 import { DiffView } from '@/components/common/DiffView'
 import type { StoryReview } from '@/api/tasks'
 import { useEvidenceDiff, type EvidencePiece } from '@/api/spec'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /**
  * What it takes to judge a piece of evidence (slices task-story and evidence-browser): its reviews,
@@ -85,10 +86,7 @@ export function EvidenceProof({ piece, open }: { piece: EvidencePiece; open: boo
       </div>
       {piece.footprint?.commit_sha ? (
         diff.isLoading ? (
-          <div className="grid gap-2" aria-label="Loading the diff">
-            <div className="aw-skeleton" style={{ width: '60%' }} />
-            <div className="aw-skeleton" style={{ width: '85%' }} />
-          </div>
+          <LoadingThread label="Loading the diff" size="inline" />
         ) : diff.isError ? (
           <p className="aw-tl-meta">The diff of this work could not be read.</p>
         ) : diff.data && diff.data.files.length > 0 ? (

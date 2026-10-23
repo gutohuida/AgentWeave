@@ -17,6 +17,7 @@ function parseHash(): MockRoute {
   if (kind === 'settings') return { kind: 'settings', section: (a as never) || 'general' }
   if (kind === 'agent-settings' && a) return { kind: 'agent-settings', agent: a, section: (b as never) || 'execution' }
   if (kind === 'gallery') return { kind: 'gallery' }
+  if (kind === 'thread') return { kind: 'thread' }
   return { kind: 'tab', tab: 'overview' }
 }
 
@@ -32,6 +33,8 @@ function toHash(route: MockRoute): string {
       return `agent-settings/${route.agent}/${route.section}`
     case 'gallery':
       return 'gallery'
+    case 'thread':
+      return 'thread'
   }
 }
 

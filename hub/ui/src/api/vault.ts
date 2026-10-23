@@ -99,6 +99,22 @@ const FILE_EXTENSIONS: Record<string, string> = {
   gif: 'image/gif',
   webp: 'image/webp',
 }
+/** The plain-text extensions the vault takes; the Hub's `vault_intake.TEXT_EXTENSIONS`, so the drop
+ *  door refuses what the by-path door refuses. */
+const TEXT_EXTENSIONS = [
+  'md', 'markdown', 'txt', 'text', 'rst', 'vtt', 'srt', 'csv', 'tsv', 'json', 'yaml', 'yml', 'xml', 'html', 'htm', 'log',
+]
+const ACCEPTED = [...TEXT_EXTENSIONS, ...Object.keys(FILE_EXTENSIONS)].map((e) => `.${e}`).join(', ')
+
+/** Why the vault will not take a file that is neither PDF/image nor plain text; null when it will. */
+export function vaultFileRefusal(file: Pick<File, 'name' | 'type'>): string | null {
+  if (vaultFileMediaType(file)) return null
+  const dot = file.name.lastIndexOf('.')
+  const extension = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : ''
+  if (TEXT_EXTENSIONS.includes(extension)) return null
+  return `A ${extension ? `.${extension}` : 'no extension'} file is not a vault source; the vault takes ${ACCEPTED}.`
+}
+
 export const VAULT_FILE_ACCEPT = '.pdf,.png,.jpg,.jpeg,.gif,.webp'
 
 /** The accepted media type of a file the operator chose, from its type or, failing that, its
@@ -405,15 +421,27 @@ export interface VaultWarning {
 /** A document's warnings from the vault. A 404 is a Hub that predates them, or a document it does
  *  not know, which the panel reads as no warnings. */
 export function useVaultWarnings(path: string) {
+  return useVaultWarningsBody(path, (body) => body.warnings)
+}
+
+/** Whether the spec-vault-check job ever ran on the document (F946): an empty warnings list means
+ *  "nothing contradicts" only when it did. A Hub older than the field answers true, as it did. */
+export function useVaultChecked(path: string) {
+  return useVaultWarningsBody(path, (body) => body.checked !== false)
+}
+
+interface VaultWarningsBody {
+  warnings: VaultWarning[]
+  checked?: boolean
+}
+
+function useVaultWarningsBody<T>(path: string, select: (body: VaultWarningsBody) => T) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  return useQuery<VaultWarning[]>({
+  return useQuery<VaultWarningsBody, Error, T>({
     queryKey: ['project', projectId, 'vault', 'warnings', path],
-    queryFn: async () =>
-      (
-        await getJson<{ warnings: VaultWarning[] }>(
-          `/api/v1/projects/${projectId}/vault/warnings?path=${encodeURIComponent(path)}`,
-        )
-      ).warnings,
+    queryFn: () =>
+      getJson<VaultWarningsBody>(`/api/v1/projects/${projectId}/vault/warnings?path=${encodeURIComponent(path)}`),
+    select,
     enabled: isConfigured && !!projectId && !!path,
     retry: (count, error) => !isNoVault(error) && count < 2,
   })

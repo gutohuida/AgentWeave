@@ -60,6 +60,25 @@ describe('the health line', () => {
     expect(fact).toHaveAttribute('data-tone', 'warn')
   })
 
+  it('names each unfinished state instead of calling it all in progress (F945)', () => {
+    renderLine({ coverage: [entry('FR-1', 'verified', 'integrated'), entry('FR-2', 'not_started')] })
+    const fact = screen.getByTestId('spec-health-requirements')
+    expect(fact).toHaveTextContent('1/2 verified · 1 not started')
+    expect(fact).not.toHaveTextContent('in progress')
+
+    cleanup()
+    renderLine({ coverage: [entry('FR-1', 'unserved')] })
+    expect(screen.getByTestId('spec-health-requirements')).toHaveTextContent('0/1 verified · 1 with no task')
+    expect(screen.getByTestId('spec-health-requirements')).not.toHaveTextContent('in progress')
+
+    cleanup()
+    renderLine({ coverage: [entry('FR-1', 'in_progress'), entry('FR-2', 'drifting')] })
+    const mixed = screen.getByTestId('spec-health-requirements')
+    expect(mixed).toHaveTextContent('1 drifting')
+    expect(mixed).toHaveTextContent('1 in progress')
+    expect(mixed).toHaveAttribute('data-tone', 'warn')
+  })
+
   it('leaves out what the Hub could not answer', () => {
     renderLine({ coverage: [], driftCount: null, vaultWarnings: null, tasks: [] })
     expect(screen.queryByTestId('spec-health-requirements')).toBeNull()
@@ -74,6 +93,25 @@ describe('the health line', () => {
     expect(screen.getByTestId('spec-health-vault')).toHaveAttribute('data-tone', 'warn')
     expect(screen.getByTestId('spec-health-drift')).toHaveTextContent('No drift')
     expect(screen.getByTestId('spec-health-drift')).not.toHaveAttribute('data-tone')
+  })
+
+  it('does not say the vault agrees when no check ever ran (F946)', () => {
+    renderLine({ vaultWarnings: 0, vaultChecked: false })
+    const fact = screen.getByTestId('spec-health-vault')
+    expect(fact).toHaveTextContent('Vault not checked')
+    expect(fact).not.toHaveTextContent('agrees')
+    expect(fact).not.toHaveAttribute('data-tone')
+    openMenu(fact)
+    expect(screen.getByText(/has not been checked against the vault/)).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Check against the vault' })).toBeInTheDocument()
+
+    cleanup()
+    renderLine({ vaultWarnings: 0, vaultChecked: true })
+    expect(screen.getByTestId('spec-health-vault')).toHaveTextContent('Vault agrees')
+
+    cleanup()
+    renderLine({ vaultWarnings: 1, vaultChecked: false })
+    expect(screen.getByTestId('spec-health-vault')).toHaveTextContent('1 vault conflict')
   })
 
   it('opens a fact, and asks for its details', () => {

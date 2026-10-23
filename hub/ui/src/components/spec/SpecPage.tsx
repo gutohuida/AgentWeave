@@ -15,6 +15,7 @@ import { SpecDefectsReport } from './SpecDefectsReport'
 import { buildInventory, resolveSelection, type SpecInventory } from './specNavigation'
 import type { LoopSummary } from '@/api/loops'
 import '@/styles/spec-header.css'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 interface SpecPageProps {
   /** The document open, from the destination — so this screen is linkable and survives a reload
@@ -188,11 +189,7 @@ export function SpecPage({
   } else {
     main = (
       <div className="aw-spec-main">
-        <div className="spec-loading-card flex flex-col gap-3 aw-delayed" aria-label="Loading specification">
-          <div className="skeleton h-6 w-2/3" />
-          <div className="skeleton h-3 w-full" />
-          <div className="skeleton h-3 w-5/6" />
-        </div>
+        <LoadingThread label="Loading specification" minHeight={240} />
       </div>
     )
   }

@@ -424,7 +424,10 @@ CONVERSATION_LIFECYCLES = ("open", "archived")
 # (finding F67). It has to be its own value: a response to an `escalate` or `restaffed` outcome
 # goes to a *different* agent than the one that diverged, and a conversation belongs to one agent,
 # so the diverged run'''s thread cannot be reused.
-CONVERSATION_ORIGINS = ("operator", "peer", "handoff", "spec", "job", "divergence")
+#
+# `mender` is the Hub opening a thread for the mender on a stall it recorded
+# (`a-stalled-project-wakes-a-doctor-that-unblocks-it`): nobody asked for it, as with `divergence`.
+CONVERSATION_ORIGINS = ("operator", "peer", "handoff", "spec", "job", "divergence", "mender")
 
 # The stored length of a title, and so the ceiling a rename is rejected above.
 CONVERSATION_TITLE_MAX_LENGTH = 120
@@ -535,7 +538,7 @@ class Conversation(Base):
         # a signal that reports something other than what it names is the defect the capability
         # exists to remove, and nobody asked for this thread.
         CheckConstraint(
-            "origin IN ('operator', 'peer', 'handoff', 'spec', 'job', 'divergence')",
+            "origin IN ('operator', 'peer', 'handoff', 'spec', 'job', 'divergence', 'mender')",
             name="ck_conversations_origin",
         ),
         Index("ix_conversations_project_agent_updated", "project_id", "agent", "updated_at"),
@@ -688,7 +691,8 @@ class InboundQueueEntry(Base):
         # that recorded the evidence was still running, is open now. Its own value for the same
         # reason: no operator asked for it and no agent sent it.
         CheckConstraint(
-            "origin_type IN ('operator', 'agent', 'job', 'checkpoint', 'divergence', 'evidence')",
+            "origin_type IN ('operator', 'agent', 'job', 'checkpoint', 'divergence', 'evidence', "
+            "'mender')",
             name="ck_inbound_queue_origin_type",
         ),
         CheckConstraint(
@@ -701,7 +705,8 @@ class InboundQueueEntry(Base):
             "(origin_type = 'job' AND origin_agent IS NULL) OR "
             "(origin_type = 'checkpoint' AND origin_agent IS NULL) OR "
             "(origin_type = 'divergence' AND origin_agent IS NULL) OR "
-            "(origin_type = 'evidence' AND origin_agent IS NULL)",
+            "(origin_type = 'evidence' AND origin_agent IS NULL) OR "
+            "(origin_type = 'mender' AND origin_agent IS NULL)",
             name="ck_inbound_queue_origin_agent",
         ),
         Index(
@@ -1144,6 +1149,76 @@ class ManagerJob(Base):
     )
 
     __table_args__ = (PrimaryKeyConstraint("project_id", "job", name="pk_manager_jobs"),)
+
+
+# Why a project's work stopped moving (`a-stalled-project-wakes-a-doctor-that-unblocks-it`). Each is
+# decided where the Hub already decides it; `no_progress` is the sweep's catch-all.
+STALL_CAUSES = (
+    "loop_stalled",
+    "delivery_refused",
+    "integration_skipped",
+    "integration_failed",
+    "review_unstaffed",
+    "dead_run",
+    "stuck_task",
+    "no_progress",
+)
+# `open` while nobody has ended it; the mender ends it `fixed` or `gave_up`; `resolved` when the
+# cause went away on its own (the work merged, the loop moved) before the mender ended it.
+STALL_OUTCOMES = ("open", "fixed", "gave_up", "resolved")
+
+
+class Stall(Base):
+    """One time a project's work stopped moving, by cause (migration 0141).
+
+    `key` names the cause and its subject (`integration_skipped:task-x`), so the same stall seen
+    again on every five-minute firing is one row whose `seen_count` grows, and wakes the mender
+    once. A new row for a key is possible only once the previous one has ended.
+    """
+
+    __tablename__ = "stalls"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    key: Mapped[str] = mapped_column(String(255), nullable=False)
+    cause: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    seen_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    # The mender's thread for this stall; null while the mender is off or could not be woken.
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # How many mender turns this stall has had, against `stalls.MENDER_TURN_CAP`.
+    mender_turns: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    outcome: Mapped[str] = mapped_column(
+        String(16), default="open", server_default="open", nullable=False
+    )
+    outcome_detail: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "cause IN ('loop_stalled', 'delivery_refused', 'integration_skipped', "
+            "'integration_failed', 'review_unstaffed', 'dead_run', 'stuck_task', 'no_progress')",
+            name="ck_stalls_cause",
+        ),
+        CheckConstraint(
+            "outcome IN ('open', 'fixed', 'gave_up', 'resolved')", name="ck_stalls_outcome"
+        ),
+        Index("ix_stalls_project_seen", "project_id", "last_seen_at"),
+        # One open stall per cause and subject; an ended one leaves the key free.
+        Index(
+            "ix_stalls_open_key",
+            "project_id",
+            "key",
+            unique=True,
+            sqlite_where=text("ended_at IS NULL"),
+        ),
+    )
 
 
 class VaultFetch(Base):

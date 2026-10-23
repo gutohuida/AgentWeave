@@ -54,3 +54,19 @@ seeded component reads a new one.
    `.aw-delayed` for any loader, and stops under `prefers-reduced-motion`.
 8. **States the data lacks** (an empty vault, an open question) may be simulated in the screen file, marked
    `// mock state`. Never edit fixture JSON by hand; add fixtures by dumping a replica route.
+
+## The Thread page (pull-the-thread, task `mock`)
+
+Its components live in `src/components/thread/` (`Thread`, `Knot`, `Fold`, `Scrubber`), its styles in
+`src/styles/thread.css`, its API shapes in `src/api/thread.ts`. The fixture is the trial Hub's feed for
+this repository's project, recorded with the Hub's own code over a copy of its database:
+
+```
+py -3.11 mock/record_thread.py            # writes mock/thread-fixture.json (tracked, ~230 KB)
+npx vite --config vite.mock.config.ts     # http://localhost:5199/mock-thread.html?mode=light
+py -3.11 mock/drive_thread.py mock/thread-shots   # checks + screenshots (the last run is committed in mock/thread-shots/)
+```
+
+`mock-thread.html` renders the page on its own, so it needs none of the replica fixtures; the same
+screen is also `#thread` in the full mock. Its checks mirror the task's criteria (present, recursive,
+face, access) and write the light/dark/drawing/unspooling/greyscale screenshots for the operator.

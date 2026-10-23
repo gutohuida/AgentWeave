@@ -67,6 +67,7 @@ from ...output_recording import record_agent_output
 from ...reach import validated_grants
 from ...review_turn import ReviewContext, verdict_evidence_sentence
 from ...runner_adapters import get_adapter, resolve_access_axes
+from ...runner_commands import posture_needs_approver
 from ...runner_provider import has_provider, runner_probe_config
 from ...schemas.agents import (
     AgentHeartbeatCreate,
@@ -499,9 +500,13 @@ async def list_agents(
             )
             # Clearing the agent's default gives the project's when it has one (reach-1019), the
             # runner's own otherwise; the agent's own (and `yolo`, its older spelling) wins.
-            permission_mode_built_in = project_posture or _bound_adapter.posture_at_rest(
-                axes, yolo=False
+            # An inherited posture that needs an approver is not given to a run with none (F933).
+            inherited = (
+                None
+                if axes.approvals == "none" and posture_needs_approver(project_posture)
+                else project_posture
             )
+            permission_mode_built_in = inherited or _bound_adapter.posture_at_rest(axes, yolo=False)
             permission_mode_at_rest = (
                 _bound_adapter.posture_at_rest(axes, yolo=True)
                 if spawn_config.get("yolo")
@@ -1659,6 +1664,66 @@ def _operations() -> List[_Operation]:
                 "Refused if `work_needs_evidence` is given: a flow's requirements are its evidence "
                 "chain, so accepted evidence always decides what approving one of its tasks "
                 f"merges. {_SCHEDULED_WORK_SETTING}"
+            ),
+        ),
+        # The mender's tools (`hub/hub/stalls.py`). Described to every agent, because they are
+        # served to every run; each says it answers only the Hub's mender, so nobody else tries.
+        _Operation(
+            tool="mend_stalls",
+            args="",
+            method="GET",
+            path="/mender/stalls",
+            fields=(),
+            required=(),
+            text="the mender only (others are refused): the project's open stalls, newest first.",
+        ),
+        _Operation(
+            tool="mend_task_branch",
+            args="task_id, commit=None",
+            method="POST",
+            path="/mender/tasks/{task_id}/branch",
+            fields=("commit",),
+            required=(),
+            text=(
+                "the mender only: land an approved task's stuck work with no review. `commit` is "
+                "your resolution of its conflict and must contain the work its merge names; the "
+                "project's checks run on it first. Without `commit`, retry the merge."
+            ),
+        ),
+        _Operation(
+            tool="mend_withdraw_input",
+            args="entry_id",
+            method="POST",
+            path="/mender/queue/{entry_id}/withdraw",
+            fields=(),
+            required=(),
+            text=(
+                "the mender only: withdraw input waiting in another agent's queue whose delivery "
+                "was refused, so the next firing briefs that agent again."
+            ),
+        ),
+        _Operation(
+            tool="mend_reset_task",
+            args="task_id, status, assignee=None",
+            method="POST",
+            path="/mender/tasks/{task_id}/reset",
+            fields=("status", "assignee"),
+            required=("status",),
+            text=(
+                "the mender only: hand a stuck task back, `status` `assigned` (to `assignee`) or "
+                "`pending`, along the edges any run may take."
+            ),
+        ),
+        _Operation(
+            tool="mend_end_stall",
+            args="stall_id, outcome, summary",
+            method="POST",
+            path="/mender/stalls/{stall_id}/end",
+            fields=("outcome", "summary"),
+            required=("outcome", "summary"),
+            text=(
+                "the mender only: end your stall, `outcome` `fixed` or `gave_up`, with a two or "
+                "three sentence summary for the operator."
             ),
         ),
     ]

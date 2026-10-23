@@ -14,7 +14,7 @@ from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
-from . import dependency_gate, requirement_evidence, requirement_links, traces
+from . import dependency_gate, requirement_evidence, requirement_links, stalls, traces
 from .checkpoint_generation import format_notes, render_checkpoint
 from .checkpoints import (
     checkpoint_by_task_author,
@@ -2862,6 +2862,34 @@ async def _stage_and_release_loop_edit(
     return payload
 
 
+async def agent_unfirable_reason(
+    session: AsyncSession, project_id: str, agent: str
+) -> Optional[str]:
+    """Why a firing for *agent* could only be refused at the trigger, or `None` when it can go.
+
+    A name with no `Agent` row (a session sync deleted it) and an archived agent are the two cases
+    `_trigger_agent_directly` turns away. Asked before a firing writes its entry and conversation
+    (F925): the refusal used to come after both, leaving a queued entry that the next agent of the
+    name received and ran. `run_job` asks it again to answer a failed press with 409.
+    """
+    from .api.v1.agent_trigger import _archived_to_trigger, _not_an_agent_to_trigger
+
+    row = (
+        await session.execute(
+            select(Agent.lifecycle).where(Agent.project_id == project_id, Agent.name == agent)
+        )
+    ).first()
+    if row is None:
+        return _not_an_agent_to_trigger(agent)
+    if row[0] == "archived":
+        return _archived_to_trigger(agent)
+    return None
+
+
+class _AgentNotFirableError(Exception):
+    """The firing's agent is gone or archived; the message is the sentence for the `failed` row."""
+
+
 async def _agent_archived(session: AsyncSession, project_id: str, name: str) -> bool:
     """Whether an `Agent` row with this name reads archived: the one state the PATCH check refuses
     positively, and so the one a staged agent is dropped for at application. A name with no row is
@@ -3744,6 +3772,12 @@ class JobScheduler:
                     logger.debug(f"Job {job.id} fire refused: {busy_reason}")
                     return False
 
+            if loop is None:
+                # F925: before the run, entry and conversation exist, so the refusal leaves none.
+                unfirable = await agent_unfirable_reason(session, job.project_id, job.agent)
+                if unfirable:
+                    raise _AgentNotFirableError(unfirable)
+
             # Create run record
             run_id = f"run-{short_id()}"
             run = JobRun(
@@ -3920,6 +3954,16 @@ class JobScheduler:
                     await _emit_review_unstaffed(
                         session, job, loop, unstaffed_task_id, unstaffed_reason
                     )
+                    # A turn or review nobody can take is a stall (`stalls.py`); the same one on
+                    # every tick is one stall, counted.
+                    stalls.report(
+                        job.project_id,
+                        cause=stalls.classify_unstaffed(unstaffed_reason),
+                        subject=unstaffed_task_id,
+                        text=unstaffed_reason,
+                        task_id=unstaffed_task_id,
+                        loop_id=loop.id,
+                    )
                 for deferred_task_id, deferred_reason in decision.deferred:
                     # Design D6. Logged, never surfaced -- a flow with more ready work than agents
                     # defers on every tick by design, and an event for that would bury
@@ -3984,6 +4028,16 @@ class JobScheduler:
                         run.status = "skipped"
                         run.error_summary = stall_reason
                         await session.commit()
+                        if not decision.unstaffed:
+                            # Nothing claimable for a reason no task names (the unstaffed ones
+                            # were reported above, each under its task).
+                            stalls.report(
+                                job.project_id,
+                                cause="loop_stalled",
+                                subject=loop.id,
+                                text=stall_reason,
+                                loop_id=loop.id,
+                            )
                         if pending_edit_payload is not None:
                             await _emit_loop_edit_applied(session, pending_edit_payload)
                             pending_edit_payload = None
@@ -4004,6 +4058,15 @@ class JobScheduler:
                         )
                         logger.info(f"Job {job.id} fire skipped: {stall_reason}")
                         return False
+                # F925: the agent this firing is for, asked before it enters a task or queues
+                # anything. The row built above is dropped, so a loop that fails this way every
+                # tick counts into one `failed` row (the crash path) instead of writing one each.
+                unfirable = await agent_unfirable_reason(
+                    session, job.project_id, selection.agent if selection is not None else job.agent
+                )
+                if unfirable:
+                    await _discard_unused_run(session, run)
+                    raise _AgentNotFirableError(unfirable)
                 if claimed_task is not None and not selection.is_review:
                     # Entering the task is `enter_selected_task`'s single statement, shared with
                     # `_stage_selection` (finding F45): `pending -> assigned` for ordinary work and

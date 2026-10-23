@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9234463",
     "stop_at": "2026-10-23T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 14,
     "log_file": ".claude/autonomous/2026-10-22-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F925-impl",
-    "next_action": "Do queue item F925-impl: read its FINDINGS.md entry, write the failing test, fix, drive, close the finding, commit and push.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "F919-impl",
@@ -23,73 +23,73 @@
         },
         {
             "id": "F925-impl",
-            "status": "open",
+            "status": "done",
             "title": "F925: a job whose agent was deleted/archived can still be enabled and fire",
-            "detail": "Tier 0. Read the F925 entry in scripts/drive/FINDINGS.md (grep '## F925 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed 0f2771e."
         },
         {
             "id": "F933-impl",
-            "status": "open",
+            "status": "done",
             "title": "F933: Ask-me/Workspace-only default reaches an agent with no tool server",
-            "detail": "Tier 0. Read the F933 entry in scripts/drive/FINDINGS.md (grep '## F933 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed 89ce56a."
         },
         {
             "id": "F944-impl",
-            "status": "open",
+            "status": "done",
             "title": "F944: read_spec_document include=full never returns delivery",
-            "detail": "Tier 0. Read the F944 entry in scripts/drive/FINDINGS.md (grep '## F944 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed 24aa973."
         },
         {
             "id": "F907-impl",
-            "status": "open",
+            "status": "done",
             "title": "F907: Activity digest leaves a stopped/failed turn reading 'working' forever",
-            "detail": "Tier 0. Read the F907 entry in scripts/drive/FINDINGS.md (grep '## F907 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed (see iteration 6 log entry)."
         },
         {
             "id": "F909-impl",
-            "status": "open",
+            "status": "done",
             "title": "F909: rail/Overview say 'waiting' for a conversation that is not",
-            "detail": "Tier 0. Read the F909 entry in scripts/drive/FINDINGS.md (grep '## F909 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed 4060a64."
         },
         {
             "id": "F928-impl",
-            "status": "open",
+            "status": "done",
             "title": "F928: permission card shown in the wrong conversation of an agent",
-            "detail": "Tier 0. Read the F928 entry in scripts/drive/FINDINGS.md (grep '## F928 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed e63686b."
         },
         {
             "id": "F918-impl",
-            "status": "open",
+            "status": "done",
             "title": "F918: Vault Add drops non-PDF/image files as a text transcription",
-            "detail": "Tier 0. Read the F918 entry in scripts/drive/FINDINGS.md (grep '## F918 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed f99977b."
         },
         {
             "id": "F945-impl",
-            "status": "open",
+            "status": "done",
             "title": "F945: Spec header counts every non-verified requirement as in progress",
-            "detail": "Tier 0. Read the F945 entry in scripts/drive/FINDINGS.md (grep '## F945 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed cb80cae."
         },
         {
             "id": "F946-impl",
-            "status": "open",
+            "status": "done",
             "title": "F946: Spec header says Vault agrees when the check is off",
-            "detail": "Tier 0. Read the F946 entry in scripts/drive/FINDINGS.md (grep '## F946 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed ca0e398."
         },
         {
             "id": "F952-impl",
-            "status": "open",
+            "status": "done",
             "title": "F952: Overview spend line drops what the budget card said",
-            "detail": "Tier 0. Read the F952 entry in scripts/drive/FINDINGS.md (grep '## F952 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed 26ecda6."
         },
         {
             "id": "F953-impl",
-            "status": "open",
+            "status": "done",
             "title": "F953: Overview with spent budget says only 'paused'",
-            "detail": "Tier 0. Read the F953 entry in scripts/drive/FINDINGS.md (grep '## F953 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed 9509788."
         },
         {
             "id": "close-gate",
-            "status": "open",
+            "status": "done",
             "title": "Closing entry with usage_report; next_action null",
             "detail": "Playbook 'Ending the window'. Include usage_report --windows --since 2026-10-22."
         }
@@ -113,5 +113,6 @@
         "skill": ".claude/skills/night-briefing/SKILL.md"
     },
     "armed_at": "2026-10-22T22:55:02+01:00",
-    "driver_log": ".claude/autonomous/driver-night.log"
+    "driver_log": ".claude/autonomous/driver-night.log",
+    "briefing_url": "https://claude.ai/artifact/F7JeBuTn9VrQYJLwfn9gSF"
 }

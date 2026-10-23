@@ -966,6 +966,10 @@ def add_source(
     )
     if not content:
         raise VaultError("A source needs some text.")
+    if "\x00" in content:
+        raise VaultError(
+            "This looks like a binary file, not text; the vault takes text, PDFs and images."
+        )
     data = content.encode("utf-8")
     if len(data) > MAX_CONTENT_BYTES:
         raise VaultError(

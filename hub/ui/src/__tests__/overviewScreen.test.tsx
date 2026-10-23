@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { Question } from '@/api/questions'
+import type { Stall } from '@/api/stalls'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 
@@ -10,6 +11,9 @@ import { useTaskFilterStore } from '@/store/taskFilterStore'
 let questions: Question[] = []
 let questionsError: Error | null = null
 let ledgerError: Error | null = null
+let accountingData: Record<string, unknown> = { budget: { exhausted: false } }
+let queueStatuses: Array<Record<string, unknown>> = []
+let openStalls: Stall[] = []
 const answerMutate = vi.fn()
 
 vi.mock('@/api/agents', () => ({
@@ -56,7 +60,10 @@ vi.mock('@/api/ledger', () => ({
     },
   }),
 }))
-vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: { budget: { exhausted: false } } }) }))
+vi.mock('@/api/queue', () => ({ useQueueStatuses: () => queueStatuses }))
+const endStallMutate = vi.fn()
+vi.mock('@/api/stalls', () => ({ useOpenStalls: () => ({ data: openStalls }), useEndStall: () => ({ mutate: endStallMutate }) }))
+vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: accountingData }) }))
 vi.mock('@/components/overview/AgentPostureChips', () => ({ AgentPostureChips: () => null }))
 
 function question(overrides: Partial<Question> = {}): Question {
@@ -80,6 +87,9 @@ beforeEach(() => {
   questions = []
   questionsError = null
   ledgerError = null
+  accountingData = { budget: { exhausted: false } }
+  queueStatuses = []
+  openStalls = []
   answerMutate.mockClear()
 })
 
@@ -139,6 +149,60 @@ describe('the wired Overview', () => {
   })
 })
 
+function stall(overrides: Partial<Stall> = {}): Stall {
+  return {
+    id: 'stall-1',
+    key: 'delivery_refused:task-4',
+    cause: 'delivery_refused',
+    reason: 'Developer holds task-4, and delivering its turn to them was refused. No firing will retry it',
+    task_id: 'task-4',
+    loop_id: 'loop-1',
+    first_seen_at: '2026-10-23T00:35:00Z',
+    last_seen_at: '2026-10-23T00:40:00Z',
+    seen_count: 2,
+    conversation_id: null,
+    mender_turns: 0,
+    outcome: 'open',
+    outcome_detail: '',
+    ended_at: null,
+    ...overrides,
+  }
+}
+
+describe('a stalled project under Needs you', () => {
+  it('lists a stall nobody is mending, and opens its task', () => {
+    openStalls = [stall()]
+    const onNavigate = vi.fn()
+    render(<OverviewScreen onNavigate={onNavigate} />)
+    const row = screen.getByText('An agent’s turn was refused').closest('li') as HTMLElement
+    expect(row).toHaveTextContent('No firing will retry it.')
+    fireEvent.click(within(row).getByRole('button', { name: 'Open task' }))
+    expect(useTaskFilterStore.getState().pendingOpenTaskId).toBe('task-4')
+    fireEvent.click(within(row).getByRole('button', { name: 'Dismiss' }))
+    expect(endStallMutate).toHaveBeenCalledWith('stall-1')
+  })
+
+  it('says the mender is on a stall it holds, and opens its thread', () => {
+    openStalls = [stall({ conversation_id: 'conv-m' })]
+    const onOpenConversation = vi.fn()
+    render(<OverviewScreen onNavigate={vi.fn()} onOpenConversation={onOpenConversation} />)
+    const row = screen.getByText('An agent’s turn was refused').closest('li') as HTMLElement
+    expect(row).toHaveTextContent('The mender is on it.')
+    fireEvent.click(within(row).getByRole('button', { name: 'Open the mender’s thread' }))
+    expect(onOpenConversation).toHaveBeenCalledWith('mender', 'conv-m')
+  })
+
+  it('folds a merge stall into the merge row rather than listing it twice', () => {
+    openStalls = [stall({ id: 'stall-2', key: 'integration_failed:task-9', cause: 'integration_failed', task_id: 'task-9', conversation_id: 'conv-m' })]
+    const onOpenConversation = vi.fn()
+    render(<OverviewScreen onNavigate={vi.fn()} onOpenConversation={onOpenConversation} />)
+    expect(screen.queryByText('Approved work failed to merge')).toBeNull()
+    const row = screen.getByText('“Rename the parser” was approved but not merged').closest('li') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: 'The mender is on it' }))
+    expect(onOpenConversation).toHaveBeenCalledWith('mender', 'conv-m')
+  })
+})
+
 describe('a query the Hub did not answer', () => {
   it('names the parts it could not read rather than showing their defaults as fact', () => {
     questionsError = new Error('500')
@@ -152,5 +216,87 @@ describe('a query the Hub did not answer', () => {
   it('says nothing while every query has answered', () => {
     render(<OverviewScreen onNavigate={vi.fn()} />)
     expect(screen.queryByTestId('query-error-notice')).toBeNull()
+  })
+
+  describe('the spend line says what the Budgets page says (F952)', () => {
+    const usage = (over: Record<string, unknown> = {}) => ({
+      input_tokens: 1, output_tokens: 1, total_tokens: 120000, measured_turns: 4, unavailable_turns: 0,
+      api_equivalent_usd_micros: 3_500_000, unpriced_turns: 0, ...over,
+    })
+
+    it('says how many turns could not be priced', () => {
+      accountingData = {
+        budget: { exhausted: false },
+        project: usage({ unpriced_turns: 1 }),
+        agents: [{ agent: 'builder', ...usage({ unpriced_turns: 1 }) }],
+        preferred_display: { kind: 'api_equivalent', label: 'API-equivalent estimate', usd_micros: 3_500_000, unpriced_turns: 1 },
+      }
+      render(<OverviewScreen onNavigate={vi.fn()} />)
+      const line = screen.getByRole('button', { name: /so far/ })
+      expect(line).toHaveTextContent('$3.50 API-equivalent')
+      expect(line).toHaveTextContent('1 turn unpriced')
+    })
+
+    it('shows the credits the project reported, not "$0.00", when only credits were reported', () => {
+      accountingData = {
+        budget: { exhausted: false },
+        project: usage({ api_equivalent_usd_micros: null, unpriced_turns: 2, ai_nano_aiu: 280_000_000 }),
+        agents: [{ agent: 'builder', ...usage({ api_equivalent_usd_micros: null, unpriced_turns: 2, ai_nano_aiu: 280_000_000 }) }],
+        preferred_display: { kind: 'credits', label: 'AI credits', runner: 'copilot', ai_nano_aiu: 280_000_000, premium_requests: null },
+      }
+      render(<OverviewScreen onNavigate={vi.fn()} />)
+      const line = screen.getByRole('button', { name: /so far/ })
+      expect(line).toHaveTextContent('0.28 AI credits')
+      expect(line).not.toHaveTextContent('$0.00')
+    })
+
+    it('names the allowance a subscription project is measured by', () => {
+      accountingData = {
+        budget: { exhausted: false },
+        project: usage(),
+        agents: [{ agent: 'builder', ...usage() }],
+        preferred_display: { kind: 'allowance', label: 'Rate-limit allowance', allowance: { status: 'allowed', rateLimitType: 'seven_day' }, runner: 'claude' },
+      }
+      render(<OverviewScreen onNavigate={vi.fn()} />)
+      expect(screen.getByRole('button', { name: /so far/ })).toHaveTextContent('Weekly allowance available')
+    })
+
+    it('reads an agent with no priced turn as a dash, not $0.00', () => {
+      accountingData = {
+        budget: { exhausted: false },
+        project: usage(),
+        agents: [{ agent: 'builder', ...usage({ api_equivalent_usd_micros: null, unpriced_turns: 1 }) }],
+        preferred_display: { kind: 'api_equivalent', label: 'API-equivalent estimate', usd_micros: 3_500_000, unpriced_turns: 1 },
+      }
+      render(<OverviewScreen onNavigate={vi.fn()} />)
+      const row = screen.getByRole('button', { name: /Open builder/ })
+      expect(row).toHaveTextContent('—')
+      expect(row).not.toHaveTextContent('$')
+    })
+  })
+
+  it('names the limit, the use and what is held when the token budget is spent, and links to Budgets (F953)', () => {
+    accountingData = { budget: { exhausted: true, limit_tokens: 100_000, used_tokens: 265_821, remaining_tokens: 0 } }
+    queueStatuses = [
+      { agent: 'builder', waiting_count: 1, running: false, waiting_reason: 'token budget exhausted' },
+      { agent: 'other', waiting_count: 2, running: false, waiting_reason: 'agent is busy' },
+    ]
+    const onNavigate = vi.fn()
+    render(<OverviewScreen onNavigate={onNavigate} />)
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Token limit reached: 265.8K of 100K')
+    expect(alert).toHaveTextContent('1 turn waiting')
+    fireEvent.click(within(alert).getByRole('button', { name: /Budgets/ }))
+    expect(onNavigate).toHaveBeenCalledWith('budgets')
+    // A turn held for the budget is something the operator must act on: the summary says so.
+    expect(screen.getByText('1 turn held by the budget')).toBeInTheDocument()
+  })
+
+  it('does not count a turn held for another reason as held by the budget (F953)', () => {
+    accountingData = { budget: { exhausted: true, limit_tokens: 100_000, used_tokens: 120_000, remaining_tokens: 0 } }
+    queueStatuses = [{ agent: 'builder', waiting_count: 3, running: false, waiting_reason: 'agent is busy' }]
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    expect(screen.getByRole('alert')).not.toHaveTextContent('waiting')
+    expect(screen.queryByText(/held by the budget/)).toBeNull()
   })
 })

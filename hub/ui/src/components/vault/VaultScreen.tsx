@@ -19,6 +19,7 @@ import {
   useVaultReports,
   useVaultSettings,
   vaultFileMediaType,
+  vaultFileRefusal,
   type VaultContradiction,
   type VaultEntry,
   type VaultEntryPage,
@@ -32,6 +33,7 @@ import { VaultLibrary } from './VaultLibrary'
 import type { VaultFact } from './VaultReader'
 import { hasTrackedFile } from './vaultKinds'
 import '@/styles/vault.css'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /**
  * The Vault tab: the library (`VaultLibrary`) fed from the Hub
@@ -132,7 +134,7 @@ export function VaultScreen() {
   if (!map.data) {
     return (
       <div className="vault-state">
-        <div aria-label="Loading the vault" className="skeleton aw-delayed h-[160px] w-full max-w-[720px]" />
+        <LoadingThread label="Loading the vault" />
       </div>
     )
   }
@@ -188,6 +190,11 @@ export function VaultScreen() {
       // The folder path stays in the name, so the library can group by it.
       const name = path.replace(/\.[^./]+$/, '')
       const mediaType = vaultFileMediaType(one)
+      const unsupported = vaultFileRefusal(one)
+      if (unsupported) {
+        refused.push({ file: one, reason: unsupported })
+        continue
+      }
       const type = (input.typeChosen ? input.type : mediaType ? 'document' : 'transcript') as VaultType
       const fields = { name, type, visibility: input.visibility, ...(input.dated ? { dated: input.dated } : {}) }
       try {

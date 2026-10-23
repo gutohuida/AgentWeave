@@ -537,3 +537,20 @@ def test_one_entry_is_named_in_the_singular() -> None:
     lines = vault.render_turn_index([{"id": "src-0123456789ab"}])
     assert "with 1 entry (" in lines[1]
     assert vault.render_turn_index([]) == []
+
+
+# ---------------------------------------------------------------------------
+# F918: a source with a NUL is binary, not text
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_source_holding_a_nul_character_is_refused_as_binary(
+    app, auth_headers, tmp_path
+) -> None:
+    """A Word document read as text ("PK\x03\x04\x00...") must not be committed as a transcript."""
+    body = {"name": "minutes", "type": "transcript", "content": "PK\u0003\u0004\u0014\u0000\u0000"}
+    refused = await app.post(f"{BASE}/vault/sources", json=body, headers=auth_headers)
+    assert refused.status_code == 400, refused.text
+    assert "binary" in refused.json()["detail"]
+    assert _files(tmp_path / "knowledge") == []

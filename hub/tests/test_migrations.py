@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0140"
+HEAD_REVISION = "0141"
 
 
 # ---------------------------------------------------------------------------
@@ -5837,3 +5837,57 @@ def test_migration_vault_readers_creates_the_table_and_its_downgrade_drops_only_
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert conn.execute("SELECT count FROM vault_fetches").fetchone() == (4,)
     assert tables == (before - {"vault_readers"}) | {"alembic_version"}
+
+
+# ---------------------------------------------------------------------------------------------
+# 0141 -- stalls, and the mender's origin (`a-stalled-project-wakes-a-doctor-that-unblocks-it`).
+# A new table, and `mender` added to the queue's and the conversations' origin constraints; the
+# downgrade takes both back and drops the table.
+# ---------------------------------------------------------------------------------------------
+
+
+def _table_sql(conn, table: str) -> str:
+    return conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone()[0]
+
+
+def test_migration_stalls_adds_the_table_and_the_mender_origin_and_downgrades_cleanly(
+    tmp_path,
+) -> None:
+    db_file = tmp_path / "stalls.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _upgrade_to(db_url, "head")
+    _downgrade_to(db_url, "0140")
+
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "stalls" not in tables
+        assert "mender" not in _table_sql(conn, "inbound_queue_entries")
+        assert "mender" not in _table_sql(conn, "conversations")
+
+    _upgrade_to(db_url, "0141")
+
+    with sqlite3.connect(db_file) as conn:
+        info = {r[1] for r in conn.execute("PRAGMA table_info(stalls)")}
+        assert {"key", "cause", "reason", "task_id", "loop_id", "seen_count", "outcome"} <= info
+        assert "'mender'" in _table_sql(conn, "inbound_queue_entries")
+        assert "(origin_type = 'mender' AND origin_agent IS NULL)" in _table_sql(
+            conn, "inbound_queue_entries"
+        )
+        assert "'mender'" in _table_sql(conn, "conversations")
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p', 'p', '2026-01-01T00:00:00Z')"
+        )
+        row = (
+            "INSERT INTO stalls (id, project_id, key, cause, first_seen_at, last_seen_at) "
+            "VALUES (?, 'p', 'integration_skipped:t', 'integration_skipped', "
+            "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+        )
+        conn.execute(row, ("stall-1",))
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(row, ("stall-2",))  # one open stall per key
+        conn.execute("UPDATE stalls SET ended_at = '2026-01-01T01:00:00Z'")
+        conn.execute(row, ("stall-2",))  # an ended one leaves the key free
+        conn.commit()

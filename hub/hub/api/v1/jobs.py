@@ -263,7 +263,8 @@ async def _check_agent_exists(session: AsyncSession, project_id: str, agent: str
     known = {row.name for row in rows if row.lifecycle != "archived"}
 
     session_data = await _get_session_data(project_id, session)
-    known.update((session_data or {}).get("agents", {}).keys())
+    # An archived agent stays on the synced roster; it must not count as present again here.
+    known.update(set((session_data or {}).get("agents", {}).keys()) - archived)
 
     if agent in known:
         return
@@ -1153,6 +1154,11 @@ async def update_job(
     # new loop rather than "give this one work", because D12 closes an ended loop's queue to
     # every caller, the operator included (see `_authorize_loop_task_creation` in tasks.py) —
     # there is no way to feed this one.
+    # F925: create checks the roster and so must the switch-on; an agent a sync removed or the
+    # operator archived leaves its jobs behind, and enabling one only schedules refused firings.
+    if body.enabled is True and not job.enabled and body.agent is None:
+        await _check_agent_exists(session, project_id, job.agent)
+
     if body.enabled is True and not job.enabled:
         ended_result = await session.execute(select(Loop).where(Loop.job_id == job_id))
         ended_loop = ended_result.scalar_one_or_none()
@@ -1839,6 +1845,13 @@ async def run_job(
                     detail=latest_run.error_summary or "Job was skipped.",
                 )
             if answered_by_row and latest_run.status == "failed":
+                from ...scheduler import agent_unfirable_reason
+
+                # F925: a firing refused for its agent being gone or archived is the operator's to
+                # fix, not the Hub's failure; the row's own sentence is the answer.
+                unfirable = await agent_unfirable_reason(session, project_id, job.agent)
+                if unfirable and latest_run.error_summary == unfirable:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=unfirable)
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=latest_run.error_summary or "Failed to fire job",

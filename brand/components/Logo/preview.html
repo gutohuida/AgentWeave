@@ -1,0 +1,39 @@
+<!-- @dsCard group="Brand" height=420 subtitle="The loop, its lockups and its two drawings" -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&display=swap">
+<style>
+  body { margin: 0; background: var(--bg, #0a0a0b); color: var(--text, #f5f5f6); font-family: var(--font-sans, "DM Sans", system-ui, sans-serif); }
+  .root { display: grid; gap: 20px; padding: 20px; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch; }
+  .card { background: var(--surface, #151518); border: 1px solid var(--border, rgba(255,255,255,.07)); border-radius: var(--radius-lg, 10px); padding: 20px 22px; display: flex; align-items: center; gap: 12px; }
+  .name { font-weight: 650; letter-spacing: -0.03em; color: var(--text, #f5f5f6); }
+  .tag { color: var(--text-2, #8e8e98); font-size: 14px; }
+  .stack { display: grid; gap: 2px; }
+  .lbl { font-size: 11px; color: var(--text-2, #8e8e98); }
+  .ladder { display: flex; gap: 14px; align-items: flex-end; }
+  .ladder figure { margin: 0; display: grid; gap: 6px; justify-items: center; }
+  .space { position: relative; padding: 18px; outline: 1px dashed var(--ring, #5fb3b3); outline-offset: 0; }
+  .space::after { content: "¼ width clear"; position: absolute; right: 4px; bottom: -18px; font-size: 10.5px; color: var(--ring, #5fb3b3); }
+</style>
+<div class="root" id="root"></div>
+<script>
+  const D = {
+    master: { w: 5.5, gap: 9.5, a: 'M9 15 L21 50 L34 21 C38.6 12.5 37.6 6 32 6', b: 'M32 6 C26.4 6 25.4 12.5 30 21 L43 50 L55 15' },
+    small: { w: 8, gap: 16, a: 'M7 18 L19 54 L33.5 25 C40 14 39.5 6 32 6', b: 'M32 6 C24.5 6 24 14 30.5 25 L45 54 L57 18' },
+  };
+  let n = 0;
+  function mark(px, kind) {
+    const d = D[kind || (px <= 32 ? 'small' : 'master')], id = 'cut' + (n++);
+    return `<svg width="${px}" height="${px}" viewBox="0 0 64 64" role="img" aria-label="AgentWeave"><defs><mask id="${id}" maskUnits="userSpaceOnUse" x="-8" y="-8" width="80" height="80"><rect x="-8" y="-8" width="80" height="80" fill="#fff"/><path d="${d.b}" fill="none" stroke="#000" stroke-width="${d.gap}" stroke-linejoin="round"/></mask></defs><g fill="none" style="stroke:var(--madder, #cc4630)" stroke-width="${d.w}" stroke-linejoin="round" stroke-linecap="round"><path d="${d.a}" mask="url(#${id})"/><path d="${d.b}"/></g></svg>`;
+  }
+  document.getElementById('root').innerHTML = `
+    <div class="row">
+      <div class="card">${mark(44)}<span class="name" style="font-size:30px">AgentWeave</span></div>
+      <div class="card">${mark(56)}<div class="stack"><span class="name" style="font-size:30px">AgentWeave</span><span class="tag">Run your AI factory in the open.</span></div></div>
+      <div class="card">${mark(16, 'small')}<span class="name" style="font-size:13.5px;letter-spacing:-0.01em">AgentWeave</span><span style="width:8px;height:8px;border-radius:3px;background:var(--green, #3ecf8e)"></span><span class="lbl">sidebar head</span></div>
+    </div>
+    <div class="row">
+      <div class="card"><div class="ladder">${[16, 20, 24, 32].map(px => `<figure>${mark(px, 'small')}<span class="lbl">${px} small</span></figure>`).join('')}</div></div>
+      <div class="card"><div class="ladder">${[48, 64, 96].map(px => `<figure>${mark(px, 'master')}<span class="lbl">${px} master</span></figure>`).join('')}</div></div>
+      <div class="card"><div class="space">${mark(64)}</div></div>
+    </div>`;
+</script>

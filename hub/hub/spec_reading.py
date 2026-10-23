@@ -223,7 +223,16 @@ READ_BUDGET_CHARS = 25_000
 PREAMBLE_FIELDS = ("summary", "problem", "scope", "open_questions")
 
 #: Added only where they fit whole, otherwise named in `omitted_sections`.
-OPTIONAL_SECTIONS = ("design", "tasks", "algorithms", "evidence", "lifecycle", "slices", "roadmap")
+OPTIONAL_SECTIONS = (
+    "design",
+    "tasks",
+    "algorithms",
+    "evidence",
+    "lifecycle",
+    "delivery",
+    "slices",
+    "roadmap",
+)
 
 
 def _size(value: Any) -> int:

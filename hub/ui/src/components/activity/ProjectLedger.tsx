@@ -5,6 +5,7 @@ import { useProjectLedger, type ProjectLedger as Ledger } from '@/api/ledger'
 import { hubDate } from '@/lib/hubTime'
 import { ApiError } from '@/api/client'
 import { ActivityLog } from './ActivityLog'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /**
  * The project's ledger (slice project-ledger): what merged into main, what was spent and on what,
@@ -200,10 +201,8 @@ export function ProjectLedger({ onOpenTask }: { onOpenTask: (taskId: string) => 
 
   if (isLoading) {
     return (
-      <div className="aw-evidence-page" aria-label="Loading the ledger">
-        {[70, 90, 55].map((width, index) => (
-          <div key={index} className="aw-skeleton" style={{ width: `${width}%`, height: 14 }} />
-        ))}
+      <div className="aw-evidence-page">
+        <LoadingThread label="Loading the ledger" />
       </div>
     )
   }

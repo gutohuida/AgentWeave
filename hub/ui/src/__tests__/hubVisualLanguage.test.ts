@@ -51,7 +51,7 @@ describe('Hub UI mock alignment contracts', () => {
     expect(cssSource).toContain('@media (prefers-reduced-motion: reduce)')
   })
 
-  it('ships the considered elevation, field, chip, card, and skeleton foundations', () => {
+  it('ships the considered elevation, field, chip, card, and loading-thread foundations', () => {
     for (const primitive of [
       '.elevation-ground',
       '.elevation-resting',
@@ -60,11 +60,11 @@ describe('Hub UI mock alignment contracts', () => {
       '.control-field',
       '.aw-chip',
       '.interactive-card',
-      '.skeleton',
+      '.aw-loading-thread',
     ]) {
       expect(cssSource).toContain(primitive)
     }
-    expect(cssSource).toContain('animation: skeleton-shimmer 1.8s var(--ease) infinite')
+    expect(cssSource).toContain('@keyframes aw-weave-a')
   })
 
   it('uses named SVG icons instead of literal or corrupted project glyphs', () => {

@@ -21,13 +21,25 @@ import pytest
 from sqlalchemy import func, select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, InboundQueueEntry, JobRun, Loop, Run, Task
+from hub.db.models import Agent, AIJob, InboundQueueEntry, JobRun, Loop, Run, Task
 from hub.scheduler import JobScheduler
+from hub.utils import short_id
 
 pytestmark = pytest.mark.asyncio
 
 
+async def ensure_agent(db, name):
+    """An `Agent` row for *name*: since F925 a firing for an agent the project lacks is refused
+    before it queues anything, so a test that fires a job gives the job's agent a row."""
+    if not await db.scalar(
+        select(Agent.id).where(Agent.project_id == "proj-test", Agent.name == name)
+    ):
+        db.add(Agent(id=f"agent-{short_id()}", project_id="proj-test", name=name, config={}))
+        await db.commit()
+
+
 async def _make_loop_job(db, *, suffix, agent="busy-agent"):
+    await ensure_agent(db, agent)
     job = AIJob(
         id=f"job-busy-{suffix}",
         project_id="proj-test",

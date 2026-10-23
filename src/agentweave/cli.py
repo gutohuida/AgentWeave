@@ -14,7 +14,7 @@ import subprocess
 import sys
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import __version__
 from .utils import load_dotenv, now_iso, print_error, print_info, print_success, print_warning
@@ -463,6 +463,24 @@ def _docker_available() -> bool:
         return True
     # Fallback to docker-compose
     return bool(shutil.which("docker-compose"))
+
+
+def _hub_port_accepts(port: int, timeout: float = 0.3) -> bool:
+    """Is anything listening on 127.0.0.1:`port`? Answers at once either way.
+
+    On Windows a refused connection is retried before it fails: 2 s for 127.0.0.1, 4 s for
+    `localhost` (both addresses), measured 2026-10-23. Asking `/health` of a port nobody holds
+    therefore cost every cold start 4 s, and held the splash back by as much
+    (agentweave-opens-on-the-thread). The Hub binds 127.0.0.1, and a live one accepts in
+    milliseconds, so a short connect is a safe first question.
+    """
+    import socket
+
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=timeout):
+            return True
+    except OSError:
+        return False
 
 
 def _hub_health_check(port: int = 8000, timeout: int = 120) -> bool:
@@ -1125,6 +1143,22 @@ def _enable_default_context_menus(window: Any) -> None:
         window.events.before_show += _subscribe
 
 
+def _app_window_storage() -> Dict[str, Any]:
+    """Where the app window keeps its storage, as `webview.start` keyword arguments.
+
+    pywebview starts in private mode by default and throws the window's storage away when it
+    closes, so the operator's theme and every other saved preference were gone on the next launch
+    (operator, 2026-10-23). A folder under the Hub's directory keeps them. If it cannot be made,
+    the window still opens, privately, as before.
+    """
+    folder = HUB_DIR / "app-window"
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return {}
+    return {"private_mode": False, "storage_path": str(folder)}
+
+
 def _open_app_window_native(url: str) -> bool:
     """Open `url` in a native OS window via pywebview.
 
@@ -1146,7 +1180,7 @@ def _open_app_window_native(url: str) -> bool:
         _enable_default_context_menus(window)
         marker = _app_window_register(url, window)
         try:
-            webview.start(icon=_app_icon_path())
+            webview.start(icon=_app_icon_path(), **_app_window_storage())
         finally:
             if marker is not None:
                 with contextlib.suppress(OSError):
@@ -1155,6 +1189,169 @@ def _open_app_window_native(url: str) -> bool:
     except Exception as exc:
         print_error(f"Native app window unavailable ({exc}); falling back to browser.")
         return False
+
+
+# agentweave-opens-on-the-thread: the window opens at once on the splash and shows it at least this
+# long before switching to the app -- the operator's "buffer time to show the thread animation".
+_SPLASH_MIN_COLD = 2.0
+_SPLASH_MIN_WARM = 1.2
+# How long a failed start stays on screen, said in words, before the window closes.
+_SPLASH_FAIL_SECONDS = 2.5
+# The ink of the app's dark ground, so nothing flashes white between the splash and the app.
+_SPLASH_BACKGROUND = "#0A0A0B"
+
+
+def _asset_path(name: str) -> Optional[Path]:
+    """A packaged asset under agentweave/assets, or None if this install lacks it."""
+    try:
+        from importlib import resources
+
+        asset = resources.files("agentweave").joinpath("assets", name)
+        if asset.is_file():
+            return Path(str(asset))
+    except Exception:
+        pass
+    return None
+
+
+def _splash_html(warm: bool) -> Optional[str]:
+    path = _asset_path("splash.html")
+    if path is None:
+        return None
+    try:
+        return path.read_text(encoding="utf-8").replace("__AW_WARM__", "true" if warm else "false")
+    except OSError:
+        return None
+
+
+def _play_sound(path: str) -> None:
+    """Play a WAV without waiting for it, with whatever the platform has; silent when it has none.
+
+    The window's browser engine refuses sound before the user has clicked, so the opening sound is
+    the CLI's to play. Windows has `winsound` in the stdlib; elsewhere a player found on PATH.
+    """
+    try:
+        if sys.platform == "win32":
+            import winsound
+
+            winsound.PlaySound(
+                path, winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT
+            )
+            return
+        import shutil
+        import subprocess as _sp
+
+        for player in ("afplay", "paplay", "aplay"):
+            exe = shutil.which(player)
+            if exe:
+                _sp.Popen([exe, path], stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+                return
+    except Exception:
+        pass
+
+
+def _play_opening_sound(short: bool) -> None:
+    """The plucked-thread phrase that plays with the splash; AGENTWEAVE_SOUND=0 turns it off."""
+    if os.environ.get("AGENTWEAVE_SOUND", "").strip().lower() in ("0", "false", "off", "no"):
+        return
+    path = _asset_path("opening-short.wav" if short else "opening.wav")
+    if path is not None:
+        _play_sound(str(path))
+
+
+def _open_app_with_splash(
+    start: Callable[[], Tuple[Optional[str], Optional[str]]], warm: bool
+) -> Optional[int]:
+    """Open the app window on the splash at once, run `start` behind it, then show the app.
+
+    `start` does whatever has to happen before the app can load -- on a cold open, migrations,
+    spawning the Hub and waiting for it -- and returns `(launch_url, None)`, or `(None, reason)`
+    when it failed. It runs on pywebview's worker thread (`webview.start(func=...)`), so the
+    window's thread is free to animate while the operator waits.
+
+    Returns None when no native window can be opened (pywebview missing or unusable, or the
+    splash asset absent) *before* anything was started, so the caller keeps its old order.
+    Otherwise 0, or 1 when `start` failed: the failure is said on the splash, then the window
+    closes.
+    """
+    try:
+        import webview  # type: ignore[import]
+    except ImportError:
+        return None
+    html = _splash_html(warm)
+    if html is None:
+        return None
+
+    import json as _json
+    import threading
+    import time as _time
+
+    _set_windows_app_user_model_id()
+    try:
+        window = webview.create_window(
+            "AgentWeave", html=html, text_select=True, background_color=_SPLASH_BACKGROUND
+        )
+    except Exception as exc:
+        print_error(f"Native app window unavailable ({exc}); falling back to browser.")
+        return None
+    if window is None:
+        return None
+    _enable_default_context_menus(window)
+
+    loaded = threading.Event()
+
+    def _on_loaded(*_args: Any) -> None:
+        loaded.set()
+
+    with contextlib.suppress(AttributeError, TypeError):
+        window.events.loaded += _on_loaded
+
+    state: Dict[str, Any] = {"code": 0, "started": False, "url": None, "marker": None}
+
+    def _work() -> None:
+        state["started"] = True
+        loaded.wait(timeout=10)
+        shown_at = _time.monotonic()
+        _play_opening_sound(short=warm)
+        try:
+            url, failure = start()
+        except Exception as exc:  # a start-up that raised is a failed start, said on the splash
+            url, failure = None, str(exc)
+        if not url:
+            state["code"] = 1
+            text = failure or "AgentWeave could not start."
+            with contextlib.suppress(Exception):
+                window.evaluate_js(f"awSplashFail({_json.dumps(text)})")
+            _time.sleep(_SPLASH_FAIL_SECONDS)
+            with contextlib.suppress(Exception):
+                window.destroy()
+            return
+        state["url"] = url
+        minimum = _SPLASH_MIN_WARM if warm else _SPLASH_MIN_COLD
+        remaining = minimum - (_time.monotonic() - shown_at)
+        if remaining > 0:
+            _time.sleep(remaining)
+        # Leave when the thread is next fully drawn: the page answers how long that is, fade included.
+        delay = 0.0
+        with contextlib.suppress(Exception):
+            delay = float(window.evaluate_js("awSplashLeave()") or 0) / 1000
+        _time.sleep(max(0.0, min(delay, 3.0)))
+        state["marker"] = _app_window_register(url, window)
+        window.load_url(url)
+
+    try:
+        webview.start(func=_work, icon=_app_icon_path(), **_app_window_storage())
+    except Exception as exc:
+        print_error(f"Native app window unavailable ({exc}); falling back to browser.")
+        if not state["started"]:
+            return None
+        if state["url"]:
+            _open_app_window(state["url"])
+    finally:
+        if state["marker"] is not None:
+            with contextlib.suppress(OSError):
+                state["marker"].unlink()
+    return int(state["code"])
 
 
 # How often an open app window checks whether `agentweave stop` has asked it to close (F724).
@@ -1242,17 +1439,25 @@ def _hub_native_start(
         print_info("Install it with: pip install agentweave-hub")
         return 1
 
-    # 2. Check if Hub is already running
+    # 2. Check if Hub is already running (asking /health only of a port someone holds)
     health_url = _hub_health_url(port)
     try:
+        if not _hub_port_accepts(port):
+            raise ConnectionRefusedError(port)
         with _req.urlopen(health_url, timeout=2) as resp:
             if resp.status == 200:
                 print_info(f"Hub is already running at {_hub_url(port)}")
-                url = _hub_resolve_launch_url(port, cwd)
                 if app:
                     print_info("Opening Hub in app mode...")
-                    if not _open_app_window_native(url):
-                        _open_app_window(url)
+                    # A warm open: the short splash, while the project is registered behind it.
+                    code = _open_app_with_splash(
+                        lambda: (_hub_resolve_launch_url(port, cwd), None), warm=True
+                    )
+                    if code is not None:
+                        return code
+                url = _hub_resolve_launch_url(port, cwd)
+                if app and not _open_app_window_native(url):
+                    _open_app_window(url)
                 return 0
     except Exception:
         pass
@@ -1280,48 +1485,60 @@ def _hub_native_start(
     os.environ["DATABASE_URL"] = db_url
 
     try:
-        # 5. Now safe to import hub (settings reads DATABASE_URL from env)
-        try:
-            import hub.main as _hub_main  # type: ignore[import]
-        except ImportError:
-            print_error("agentweave-hub is not installed.")
-            print_info("Install it with: pip install agentweave-hub")
-            return 1
+        # 5-7. Import the Hub, scaffold .env and run migrations; shared by the detached and
+        # foreground starts. Importing hub.main takes seconds, so it happens in here, behind the
+        # splash (agentweave-opens-on-the-thread) -- still after DATABASE_URL is set above, which
+        # hub.config.settings reads at import time.
+        def _prepare() -> Optional[Tuple[Dict[str, str], Optional[str], bool]]:
+            # 5. Now safe to import hub (settings reads DATABASE_URL from env)
+            try:
+                import hub.main as _hub_main  # type: ignore[import]
+            except ImportError:
+                print_error("agentweave-hub is not installed.")
+                print_info("Install it with: pip install agentweave-hub")
+                return None
 
-        hub_pkg_dir = Path(_hub_main.__file__).parent
+            hub_pkg_dir = Path(_hub_main.__file__).parent
 
-        # 6. Scaffold .env (creates it with the same db_url if first run)
-        env_path, api_key, is_first_run = _hub_native_scaffold(data_dir)
+            # 6. Scaffold .env (creates it with the same db_url if first run)
+            env_path, api_key, is_first_run = _hub_native_scaffold(data_dir)
 
-        # Deliberately NOT gated on `is_first_run` -- see _maybe_create_desktop_shortcut.
-        # `is_first_run` is still returned and used below for the API-key notice, which
-        # genuinely is a first-run-only concern.
-        if _maybe_create_desktop_shortcut(force=desktop_shortcut):
-            print_info("Desktop shortcut created (AgentWeave.lnk)")
-        elif desktop_shortcut:
-            print_info("Desktop shortcut already present, or could not be created")
+            # Deliberately NOT gated on `is_first_run` -- see _maybe_create_desktop_shortcut.
+            # `is_first_run` is still returned and used below for the API-key notice, which
+            # genuinely is a first-run-only concern.
+            if _maybe_create_desktop_shortcut(force=desktop_shortcut):
+                print_info("Desktop shortcut created (AgentWeave.lnk)")
+            elif desktop_shortcut:
+                print_info("Desktop shortcut already present, or could not be created")
 
-        # 7. Run migrations
-        print_info("Running database migrations...")
-        if not _hub_run_migrations(hub_pkg_dir):
-            return 1
+            # 7. Run migrations
+            print_info("Running database migrations...")
+            if not _hub_run_migrations(hub_pkg_dir):
+                return None
 
-        env = os.environ.copy()
-        env["AW_PORT"] = str(port)
-        _hub_load_env_into(env, env_path)
+            env = os.environ.copy()
+            env["AW_PORT"] = str(port)
+            _hub_load_env_into(env, env_path)
+            return env, api_key, is_first_run
 
-        cmd = [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "hub.main:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-        ]
+        # Everything a detached start does before the app can load. agentweave-opens-on-the-thread
+        # runs it behind the splash, on the window's worker thread; it prints exactly what it did.
+        def _bring_up() -> Tuple[Optional[str], Optional[str]]:
+            prepared = _prepare()
+            if prepared is None:
+                return None, "The Hub could not be prepared (see the messages above)."
+            env, api_key, is_first_run = prepared
+            cmd = [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "hub.main:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+            ]
 
-        if detach:
             if sys.platform == "win32":
                 # A console with no window, not no console at all. `DETACHED_PROCESS` left the
                 # Hub console-less, and pywinpty then allocated one on every agent turn — which
@@ -1360,19 +1577,31 @@ def _hub_native_start(
                 _hub_kill_pid(proc.pid)
                 with contextlib.suppress(OSError):
                     _hub_pid_file(port, profile).unlink()
-                return 1
+                return None, "Hub failed to start within 60 seconds."
 
             print_success(f"Hub ready at {_hub_url(port)}")
             if is_first_run and api_key:
                 print_info(f"API key: {api_key}")
                 print_info(f"(Saved to {HUB_DIR / '.env'})")
-            url = _hub_resolve_launch_url(port, cwd)
+            return _hub_resolve_launch_url(port, cwd), None
+
+        if detach:
             if app:
                 print_info("Opening Hub in app mode...")
-                if not _open_app_window_native(url):
-                    _open_app_window(url)
+                code = _open_app_with_splash(_bring_up, warm=False)
+                if code is not None:
+                    return code
+            launch_url, _failure = _bring_up()
+            if launch_url is None:
+                return 1
+            if app and not _open_app_window_native(launch_url):
+                _open_app_window(launch_url)
         else:
             # Foreground mode — block until Ctrl+C
+            prepared = _prepare()
+            if prepared is None:
+                return 1
+            _env, api_key, is_first_run = prepared
             if is_first_run and api_key:
                 print_info(f"API key: {api_key}  (saved to {HUB_DIR / '.env'})")
             print_info(f"Starting Hub (native, foreground) on port {port} — press Ctrl+C to stop")

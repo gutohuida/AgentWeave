@@ -33,6 +33,10 @@ class PermissionRequestResponse(BaseModel):
     id: str
     agent: str
     run_id: str | None
+    # F928: the conversation whose run asked, so the panel puts the card in that one and not in
+    # whichever conversation of the agent happens to be open. Null for a request raised outside a
+    # conversation.
+    conversation_id: str | None = None
     tool_name: str
     tool_use_id: str
     tool_input: dict

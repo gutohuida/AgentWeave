@@ -3,9 +3,12 @@ import { useAccounting } from '@/api/accounting'
 import { conversationLabel, useProjectConversations } from '@/api/agentChat'
 import { useAgents } from '@/api/agents'
 import { useProjectLedger } from '@/api/ledger'
+import { useQueueStatuses } from '@/api/queue'
 import { useAnswerQuestion, useQuestions } from '@/api/questions'
+import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
 import { isWaitedOn } from '@/lib/pendingQuestions'
 import { useTasks, type Task } from '@/api/tasks'
+import { accountingDisplayLabel, formatAiCredits } from '@/components/accounting/accountingDisplay'
 import { BudgetExhaustionNotice } from '@/components/accounting/BudgetExhaustionNotice'
 import { QueryErrorNotice, type QueryFailure } from '@/components/common/QueryErrorNotice'
 import { getStatusConfig } from '@/lib/agentStatusConfig'
@@ -15,6 +18,20 @@ import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { AgentPostureChips } from './AgentPostureChips'
 import { OverviewView, type AgentStripItem, type FinishedItem, type NeedItem, type RunningItem } from './OverviewView'
+
+/** The Hub's own agent for stalled work (`hub/hub/stalls.py`, `MENDER`). */
+const MENDER = 'mender'
+
+const STALL_TITLE: Record<Stall['cause'], string> = {
+  loop_stalled: 'A loop has nothing it can start',
+  delivery_refused: 'An agent’s turn was refused',
+  integration_skipped: 'Approved work did not merge',
+  integration_failed: 'Approved work failed to merge',
+  review_unstaffed: 'Nobody can review a task',
+  dead_run: 'A run stopped answering',
+  stuck_task: 'A task is stuck in progress',
+  no_progress: 'A loop has stopped moving',
+}
 
 /** `latest_integration` rides on the task list response but is not on the `Task` type yet. */
 type TaskWithIntegration = Task & {
@@ -43,6 +60,8 @@ export function OverviewScreen({
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { data: agents = [], isLoading: agentsLoading, error: agentsError } = useAgents()
   const { data: questions = [], error: questionsError } = useQuestions(false)
+  const { data: openStalls = [], error: stallsError } = useOpenStalls()
+  const endStall = useEndStall()
   const { data: taskPage, error: tasksError } = useTasks()
   const { data: conversationPage, error: conversationsError } = useProjectConversations(projectId || null)
   const { data: ledger, error: ledgerError } = useProjectLedger()
@@ -50,11 +69,17 @@ export function OverviewScreen({
   const failures: QueryFailure[] = [
     ['the agents', agentsError],
     ['the questions', questionsError],
+    ['the stalls', stallsError],
     ['the tasks', tasksError],
     ['the conversations', conversationsError],
     ['the ledger', ledgerError],
     ['the budget', accountingError],
   ]
+  // Turns the budget is holding: the queue's own reason, per agent, never inferred from the total.
+  const queueStatuses = useQueueStatuses(agents.map((a) => a.name))
+  const heldByBudget = accounting?.budget.exhausted
+    ? queueStatuses.reduce((n, s) => n + (/budget/i.test(s.waiting_reason ?? '') ? s.waiting_count : 0), 0)
+    : 0
   const answer = useAnswerQuestion()
   const now = new Date()
 
@@ -92,14 +117,37 @@ export function OverviewScreen({
       })),
     ...tasks
       .filter((t) => t.status === 'approved' && t.latest_integration && t.latest_integration.outcome !== 'merged')
-      .map<NeedItem>((t) => ({
-        id: `merge-${t.id}`,
-        kind: 'merge',
-        agent: null,
-        title: `“${t.title}” was approved but not merged`,
-        detail: t.latest_integration!.reason ? sentence(t.latest_integration!.reason) : null,
-        at: t.latest_integration!.created_at,
-        primary: { label: 'Open task', onClick: () => openTask(t.id) },
+      .map<NeedItem>((t) => {
+        const mending = openStalls.find((st) => st.task_id === t.id && st.conversation_id)
+        return {
+          id: `merge-${t.id}`,
+          kind: 'merge',
+          agent: null,
+          title: `“${t.title}” was approved but not merged`,
+          detail: t.latest_integration!.reason ? sentence(t.latest_integration!.reason) : null,
+          at: t.latest_integration!.created_at,
+          primary: { label: 'Open task', onClick: () => openTask(t.id) },
+          secondary: mending ? { label: 'The mender is on it', onClick: () => openConversation(MENDER, mending.conversation_id!) } : undefined,
+        }
+      }),
+    // Every other stall (`hub/hub/stalls.py`); a merge stall is the merge row above.
+    ...openStalls
+      .filter((st) => !(st.cause.startsWith('integration_') && tasks.some((t) => t.id === st.task_id)))
+      .map<NeedItem>((st) => ({
+        id: `stall-${st.id}`,
+        kind: 'stall',
+        agent: st.conversation_id ? MENDER : null,
+        colorIndex: st.conversation_id ? colorOf(MENDER) : null,
+        title: STALL_TITLE[st.cause],
+        detail: sentence(st.reason) + (st.conversation_id ? ' The mender is on it.' : ''),
+        at: st.last_seen_at,
+        primary: st.conversation_id
+          ? { label: 'Open the mender’s thread', onClick: () => openConversation(MENDER, st.conversation_id!) }
+          : st.task_id
+            ? { label: 'Open task', onClick: () => openTask(st.task_id!) }
+            : { label: 'Open tasks', onClick: () => onNavigate('tasks') },
+        // Ended by hand: what the operator says when they have dealt with it themselves.
+        secondary: { label: 'Dismiss', onClick: () => endStall.mutate(st.id) },
       })),
   ]
 
@@ -130,7 +178,13 @@ export function OverviewScreen({
       onOpen: () => openTask(m.task_id),
     }))
 
-  const usdByAgent = new Map((ledger?.spend.by_agent ?? []).map((a) => [a.agent, a.usd]))
+  // The ledger counts a turn with no reported cost as $0; the accounting snapshot knows which
+  // were unpriced, so it answers per agent when it has loaded (F952).
+  const usdByAgent = new Map<string, number | null>(
+    accounting?.agents
+      ? accounting.agents.map((a) => [a.agent, a.api_equivalent_usd_micros != null ? a.api_equivalent_usd_micros / 1_000_000 : null])
+      : (ledger?.spend.by_agent ?? []).map((a) => [a.agent, a.usd]),
+  )
   const strip: AgentStripItem[] = agents.map((a) => {
     const mine = conversations.filter((c) => c.agent === a.name).sort((x, y) => y.updated_at.localeCompare(x.updated_at))
     const live = mine.find((c) => c.attention === 'running')
@@ -161,11 +215,27 @@ export function OverviewScreen({
               : state === 'no-runner'
                 ? 'No runner yet, so it cannot start a turn'
                 : `Last active ${a.last_seen ? formatAgoLong(a.last_seen, now) : 'never'}`,
-      usd: usdByAgent.get(a.name) ?? 0,
+      usd: usdByAgent.get(a.name) ?? (accounting?.agents ? null : 0),
       extra: <AgentPostureChips agent={a} onNavigate={onNavigate} />,
       onOpen: () => onNavigate(`agent:${a.name}`),
     }
   })
+
+  // The same facts the Budgets page states: what the dollar figure leaves out, the credits a
+  // Copilot project spends, and the allowance a subscription is measured by (F952).
+  const project = accounting?.project
+  const unpriced = project?.unpriced_turns ?? 0
+  const display = accounting?.preferred_display
+  const spend = {
+    usd: project ? (project.api_equivalent_usd_micros != null ? project.api_equivalent_usd_micros / 1_000_000 : null) : (ledger?.spend.total_usd ?? 0),
+    tokens: ledger?.spend.total_tokens ?? 0,
+    period: project && project.api_equivalent_usd_micros != null ? 'API-equivalent so far' : 'so far',
+    credits: formatAiCredits(project?.ai_nano_aiu ?? null),
+    notes: [
+      unpriced > 0 && project?.api_equivalent_usd_micros != null ? `${unpriced} ${unpriced === 1 ? 'turn' : 'turns'} unpriced` : null,
+      display?.kind === 'allowance' ? accountingDisplayLabel(display) : null,
+    ].filter((note): note is string => !!note),
+  }
 
   return (
     <OverviewView
@@ -174,8 +244,9 @@ export function OverviewScreen({
       running={running}
       finished={finished}
       agents={strip}
-      spend={{ usd: ledger?.spend.total_usd ?? 0, tokens: ledger?.spend.total_tokens ?? 0, period: 'so far' }}
+      spend={spend}
       taskTotal={taskPage?.total}
+      heldByBudget={heldByBudget}
       onOpenTasks={() => onNavigate('tasks')}
       onOpenLedger={() => onNavigate('activity')}
       onOpenQuestions={() => onNavigate('questions')}
@@ -185,7 +256,16 @@ export function OverviewScreen({
           <>
             {/* A failed query would otherwise read as fact here: no questions, nobody working, $0. */}
             <QueryErrorNotice failures={failures} />
-            {accounting?.budget.exhausted ? <BudgetExhaustionNotice exhausted /> : null}
+            {accounting?.budget.exhausted ? (
+              <BudgetExhaustionNotice
+                exhausted
+                embedded
+                limitTokens={accounting.budget.limit_tokens}
+                usedTokens={accounting.budget.used_tokens}
+                heldCount={heldByBudget}
+                onOpenBudgets={() => onNavigate('budgets')}
+              />
+            ) : null}
           </>
         ) : null
       }

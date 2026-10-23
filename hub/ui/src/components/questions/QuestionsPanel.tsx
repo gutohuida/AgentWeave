@@ -9,6 +9,7 @@ import { usePermissionDecisions } from '@/api/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Badge } from '@/components/common/Badge'
 import { hubDate } from '@/lib/hubTime'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /** Share of the asker's window that must have gone before the timestamp turns amber.
  *
@@ -138,15 +139,8 @@ export function QuestionsPanel() {
 
   if (isLoading) {
     return (
-      <div ref={pageRef} className="questions-page space-y-3 p-5" aria-label="Loading questions">
-        {[0, 1].map((item) => (
-          <div key={item} className="question-row p-4" aria-hidden="true">
-            <div className="trust-state-skeleton w-24" />
-            <div className="trust-state-skeleton mt-3 w-full" />
-            <div className="trust-state-skeleton mt-2 w-3/4" />
-            <div className="trust-state-skeleton mt-4 h-14 w-full" />
-          </div>
-        ))}
+      <div ref={pageRef} className="questions-page p-5">
+        <LoadingThread label="Loading questions" />
       </div>
     )
   }

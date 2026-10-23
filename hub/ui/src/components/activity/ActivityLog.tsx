@@ -7,6 +7,7 @@ import { getJson } from '@/api/client'
 import { useConfigStore } from '@/store/configStore'
 import { useAgents } from '@/api/agents'
 import { tint } from '@/lib/colorTint'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 interface SSEEvent {
   type: string
@@ -218,14 +219,7 @@ export function ActivityLog() {
         style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
       >
         {loadingHistory ? (
-          <div className="space-y-3" aria-label="Loading activity">
-            {[0, 1, 2, 3, 4].map((row) => (
-              <div key={row} className="flex items-center gap-3" aria-hidden="true">
-                <div className="skeleton h-9 w-9 rounded-full" />
-                <div className="skeleton h-8 flex-1" />
-              </div>
-            ))}
-          </div>
+          <LoadingThread label="Loading activity" />
         ) : visibleEvents.length === 0 && folded.length === 0 ? (
           <EmptyState icon="monitoring" title="Waiting for events…" description="SSE events will stream here in real time." />
         ) : (

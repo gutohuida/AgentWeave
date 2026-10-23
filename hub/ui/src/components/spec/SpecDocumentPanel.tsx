@@ -26,7 +26,7 @@ import {
   type SpecDiagnostic,
   type SpecListResponse,
 } from '@/api/spec'
-import { useCheckVaultWarnings, useVaultWarnings } from '@/api/vault'
+import { useCheckVaultWarnings, useVaultChecked, useVaultWarnings } from '@/api/vault'
 import { useDocumentTasks } from '@/api/tasks'
 import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
@@ -35,6 +35,7 @@ import type { SpecInventory } from './specNavigation'
 import type { TocAnchor } from './specBridge'
 import type { LoopSummary } from '@/api/loops'
 import '@/styles/spec-header.css'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 const REJECTION_TEXT: Record<string, string> = {
   external: 'That link points outside the specification and was not opened.',
@@ -217,6 +218,7 @@ export function SpecDocumentPanel({
   const { data: coverage } = useSpecCoverage(path)
   const { data: drift, isError: driftError } = useSpecDrift(path)
   const { data: vault } = useVaultWarnings(path)
+  const { data: vaultChecked } = useVaultChecked(path)
   const { data: documents } = useSpecDocuments()
   const record = documents?.documents.find((entry) => entry.path === path)
   const { data: documentTasks } = useDocumentTasks(record?.id ?? null)
@@ -231,6 +233,7 @@ export function SpecDocumentPanel({
       coverageDiagnostics={coverage?.diagnostics.length ?? 0}
       driftCount={driftError || !drift ? null : drift.drift.length}
       vaultWarnings={vault === undefined ? null : vault.length}
+      vaultChecked={vaultChecked}
       indexIssues={indexIssues}
       tasks={(documentTasks ?? []).map((task) => ({ id: task.id, title: task.title, status: task.status }))}
       history={approvalHistory(specDoc?.approval_outcome)}
@@ -398,12 +401,7 @@ export function SpecDocumentPanel({
       <div className="aw-spec-reading">
         <div className="aw-spec-body">
           {listLoading ? (
-            <div className="spec-loading-card flex flex-col gap-3 aw-delayed" aria-label="Loading specification">
-              <div className="skeleton h-6 w-2/3" />
-              <div className="skeleton h-3 w-full" />
-              <div className="skeleton h-3 w-5/6" />
-              <div className="skeleton mt-3 h-24 w-full" />
-            </div>
+            <LoadingThread label="Loading specification" minHeight={240} />
           ) : specDoc ? (
             <SpecFrame
               ref={frameRef}
@@ -418,11 +416,7 @@ export function SpecDocumentPanel({
               onRejected={handleRejected}
             />
           ) : (
-            <div className="spec-loading-card flex flex-col gap-3 aw-delayed" aria-label="Loading specification document">
-              <div className="skeleton h-6 w-2/3" />
-              <div className="skeleton h-3 w-full" />
-              <div className="skeleton h-3 w-4/5" />
-            </div>
+            <LoadingThread label="Loading specification document" minHeight={240} />
           )}
         </div>
 

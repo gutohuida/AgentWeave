@@ -26,6 +26,11 @@ DEFAULT_HOP_BUDGET = 6
 DEFAULT_TURN_DELIVERY_CAP = 10
 
 
+#: Who placed an entry, as `ck_inbound_queue_origin_type` allows. `mender` is the Hub briefing the
+#: mender on a stall it recorded (`stalls.py`).
+ORIGIN_TYPES = ("operator", "agent", "job", "checkpoint", "divergence", "evidence", "mender")
+
+
 def new_entry(
     *,
     project_id: str,
@@ -46,10 +51,10 @@ def new_entry(
     job_id: Optional[str] = None,
     awaits_continue: bool = False,
 ) -> InboundQueueEntry:
-    if origin_type not in ("operator", "agent", "job", "checkpoint", "divergence", "evidence"):
+    if origin_type not in ORIGIN_TYPES:
         raise ValueError(
             "origin_type must be 'operator', 'agent', 'job', 'checkpoint', 'divergence', "
-            "or 'evidence'"
+            "'evidence' or 'mender'"
         )
     if (origin_type == "agent") != bool(origin_agent):
         raise ValueError("agent origins require origin_agent; operator origins forbid it")
@@ -240,6 +245,8 @@ def format_turn_prompt(entries: Iterable[InboundQueueEntry]) -> str:
             origin = "Divergence"
         elif entry.origin_type == "evidence":
             origin = "AgentWeave"
+        elif entry.origin_type == "mender":
+            origin = "AgentWeave (a stall)"
         else:
             origin = f'Agent "{entry.origin_agent}"'
         # Per entry rather than in the preamble, because `delivery_attempts` is per entry: one turn

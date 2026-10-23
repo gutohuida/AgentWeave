@@ -15,6 +15,7 @@ import { useConfigStore } from '@/store/configStore'
 import { ActivityDigest } from './ActivityDigest'
 import { ProjectLedger } from './ProjectLedger'
 import '@/styles/activity.css'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 export type ActivityView = 'ledger' | 'activity' | 'logs'
 
@@ -94,10 +95,8 @@ function LiveDigest({ onOpenConversation }: { onOpenConversation?: (agent: strin
 
   if (logs.isLoading) {
     return (
-      <div className="aw-activity-col aw-delayed" aria-label="Loading activity">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="skeleton mb-3 h-8 w-full" aria-hidden="true" />
-        ))}
+      <div className="aw-activity-col">
+        <LoadingThread label="Loading activity" />
       </div>
     )
   }

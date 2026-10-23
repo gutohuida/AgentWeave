@@ -455,6 +455,67 @@ def update_task(
     return _hub_request("PATCH", f"/tasks/{task_id}", body)
 
 
+# The mender's tools (`a-stalled-project-wakes-a-doctor-that-unblocks-it`). Served to every run,
+# answered only for the Hub's own `mender` agent: any other caller gets 403.
+
+
+@_tool()
+def mend_stalls() -> Dict[str, Any]:
+    """The mender only: the project's open stalls, newest first."""
+    return _hub_request("GET", "/mender/stalls")
+
+
+@_tool()
+def mend_task_branch(task_id: str, commit: str = "") -> Dict[str, Any]:
+    """The mender only: land an approved task's work, with no review.
+
+    Args:
+        task_id: The approved task whose merge is stuck.
+        commit: Your resolution, committed in your own workspace: a branch cut from the task's
+            work (its `agentweave/task/<task_id>` branch, or the commit its merge names) with the
+            main branch merged in and the conflict resolved. It must contain that work. The Hub
+            runs the project's checks on it and merges it. Omit it to only retry the merge, once
+            its obstacle is gone.
+    """
+    return _hub_request("POST", f"/mender/tasks/{task_id}/branch", {"commit": commit or None})
+
+
+@_tool()
+def mend_withdraw_input(entry_id: str) -> Dict[str, Any]:
+    """The mender only: withdraw input waiting in another agent's queue (a delivery that was
+    refused), so the next firing briefs that agent again."""
+    return _hub_request("POST", f"/mender/queue/{entry_id}/withdraw", {})
+
+
+@_tool()
+def mend_reset_task(task_id: str, status: str, assignee: str = "") -> Dict[str, Any]:
+    """The mender only: hand a stuck task back.
+
+    Args:
+        task_id: The task.
+        status: "assigned" (to `assignee`) or "pending" (back to the queue).
+        assignee: The open agent to give it to, with status "assigned".
+    """
+    return _hub_request(
+        "POST", f"/mender/tasks/{task_id}/reset", {"status": status, "assignee": assignee or None}
+    )
+
+
+@_tool()
+def mend_end_stall(stall_id: str, outcome: str, summary: str) -> Dict[str, Any]:
+    """The mender only: end your stall.
+
+    Args:
+        stall_id: The stall your brief names.
+        outcome: "fixed" once the agents can move again, or "gave_up".
+        summary: Two or three plain sentences for the operator: what was wrong, what you did, and
+            anything they still need to do.
+    """
+    return _hub_request(
+        "POST", f"/mender/stalls/{stall_id}/end", {"outcome": outcome, "summary": summary}
+    )
+
+
 @_tool()
 def ask_user(
     questions: List[Dict[str, Any]],
@@ -5230,6 +5291,7 @@ def read_spec_document(
         "algorithms",
         "evidence",
         "lifecycle",
+        "delivery",
         "summary",
         "problem",
         "scope",
@@ -5248,8 +5310,9 @@ def read_spec_document(
         path: The document's path, as given in your turn context, or its id (`spdoc-…`).
         include: `requirements` (the default) returns the problem, scope and the requirements.
             `outline` returns each requirement's identifier, key, modal, statement and state only.
-            `full` adds the design, declared tasks, algorithms and evidence sections where they
-            fit. A section's name (`design`, `problem`, …) reads that one section on its own.
+            `full` adds the design, declared tasks, algorithms, evidence and delivery (the flow,
+            agent, reviewer and schedule) sections where they fit; read `delivery` before you submit
+            a document back, because a submit without it removes it. A section's name (`design`, `problem`, …) reads that one section on its own.
         identifiers: Comma-separated requirement identifiers (`FR-3,FR-7`) to read only those.
             A requirement with no identifier is named by its key.
 

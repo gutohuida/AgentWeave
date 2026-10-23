@@ -6,10 +6,12 @@ with the Hub -- and a `ManagerJob` row holds only what the operator chose for it
 on or off, which runner, which model (`the-hubs-background-jobs-are-configured-on-a-manager-page`
 D6). A job with no row is disabled with nothing chosen.
 
-**The manager is a Hub function, not an agent.** A firing records no `Run` row and holds no agent
-name, for the reason `conversation_titles.py` states: `turn_scheduler` gates an agent's queue on a
-running `Run` under its name. Each spawn is recorded instead as one `manager_job_fired` event (D4),
-and only spawns are recorded -- a job that exits before spawning anything records nothing (D5).
+**The manager is a Hub function, not an agent** -- with one exception, the mender, whose entry
+here holds only the runner and model of the `mender` agent `stalls.py` makes and briefs. A firing
+records no `Run` row and holds no agent name, for the reason `conversation_titles.py` states:
+`turn_scheduler` gates an agent's queue on a running `Run` under its name. Each spawn is recorded
+instead as one `manager_job_fired` event (D4), and only spawns are recorded -- a job that exits
+before spawning anything records nothing (D5).
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ TITLES = "conversation-titles"
 DISTILLATION = "vault-distillation"
 REPORTS = "vault-reports"
 SPEC_VAULT_CHECK = "spec-vault-check"
+MENDER = "mender"
 
 
 @dataclass(frozen=True)
@@ -90,6 +93,20 @@ JOBS = (
             "only the facts a requirement cites are checked."
         ),
         trigger="document_proposed",
+    ),
+    # The one entry that is an agent, not a one-shot spawn (`stalls.py`): its runner and model
+    # become the `mender` agent's, and a stall briefs it through the ordinary queue.
+    JobSpec(
+        key=MENDER,
+        title="Mender",
+        description=(
+            "When the project's work stalls -- a merge skipped or failed, a loop with nothing it "
+            "can start, a refused turn, a dead run, or no progress for 30 minutes -- the mender "
+            "reads the cause and unblocks the agents on its own: it resolves conflicts and lands "
+            "the work without review. It asks you under Needs you before anything hardcore, such "
+            "as touching changes it did not make. Needs a runner. Off: stalls are only recorded."
+        ),
+        trigger="stall_recorded",
     ),
 )
 

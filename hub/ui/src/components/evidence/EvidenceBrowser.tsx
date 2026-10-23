@@ -13,6 +13,7 @@ import { useTasks } from '@/api/tasks'
 import { evidenceTone, statusTone } from '@/lib/storyTones'
 import { hubDate } from '@/lib/hubTime'
 import { RequirementLink } from '@/components/spec/RequirementLink'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /**
  * Every piece of evidence in the project, in one place (slice evidence-browser).
@@ -333,11 +334,7 @@ export function EvidenceBrowser({
         <p className="aw-tl-meta">Task names could not be read, so tasks are shown by id.</p>
       ) : null}
       {isLoading ? (
-        <div className="grid gap-3" aria-label="Loading evidence">
-          {[80, 65, 72, 50].map((width, index) => (
-            <div key={index} className="aw-skeleton" style={{ width: `${width}%`, height: 14 }} />
-          ))}
-        </div>
+        <LoadingThread label="Loading evidence" />
       ) : isError ? (
         <p className="aw-callout tone-red">The Hub did not answer for this project’s evidence. Try again in a moment.</p>
       ) : groups.length === 0 ? (

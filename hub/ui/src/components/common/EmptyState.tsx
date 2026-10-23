@@ -6,7 +6,7 @@ import { Icon } from './Icon'
  * apart: "nothing exists here yet" is a claim about the data, and it is simply false when a filter
  * is applied. This component used to make that claim unconditionally — a filtered board with
  * matching tasks hidden still read "No tasks yet" — which is the defect the `filtered` variant
- * exists to fix. Loading is deliberately *not* a variant here: a shape-matched `.skeleton` belongs
+ * exists to fix. Loading is deliberately *not* a variant here: the brand's `LoadingThread` belongs
  * in its place, not a dressed empty state (IDENTITY.md, "Loading states").
  */
 interface EmptyStateProps {

@@ -9,6 +9,7 @@ import { SpanDetail } from '@/components/traces/SpanDetail'
 import { TraceWaterfall } from '@/components/traces/TraceWaterfall'
 import { buildWaterfall, formatDuration, traceExtent } from '@/components/traces/traceModel'
 import { hubDate } from '@/lib/hubTime'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /** "Now", re-read every second while the trace is still being written, so open spans grow. */
 function useNow(live: boolean): number {
@@ -57,9 +58,7 @@ export function TraceView({
 
   if (isLoading) {
     return (
-      <div aria-label="Loading trace" className="space-y-2 p-4">
-        {[0, 1, 2, 3, 4, 5].map((row) => <div key={row} className="skeleton h-5 w-full" />)}
-      </div>
+      <LoadingThread label="Loading trace" />
     )
   }
   if (error) {

@@ -85,6 +85,7 @@
 .aw-health-label { display: inline-flex; align-items: center; white-space: pre; }
 .aw-health-label .aw-health-bar { margin-right: 8px; }
 .aw-health-bad { color: var(--red); }
+.aw-health-warn { color: var(--amber); }
 .aw-health-bar {
   display: inline-flex; width: 44px; height: 5px; overflow: hidden; border-radius: 999px;
   background: color-mix(in oklab, var(--blue) 30%, var(--surface-3));

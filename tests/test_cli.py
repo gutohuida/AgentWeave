@@ -1,6 +1,7 @@
 """Tests for CLI helpers."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -329,6 +330,24 @@ class TestAppModeNativeWindow:
         assert Path(icon_path).name == "icon.ico"
         assert Path(icon_path).is_file()
 
+    def test_the_plain_window_also_remembers_what_the_operator_chose(self, monkeypatch, tmp_path):
+        """The window without the splash keeps its storage too (private_mode=False), so a theme or
+        any other saved preference survives a relaunch."""
+        import sys
+        import types
+
+        from agentweave.cli import _open_app_window_native
+
+        started = {}
+        fake_webview = types.SimpleNamespace(
+            create_window=lambda title, url, **kwargs: None,
+            start=lambda **kwargs: started.update(kwargs),
+        )
+        monkeypatch.setitem(sys.modules, "webview", fake_webview)
+        assert _open_app_window_native("http://127.0.0.1:8010/") is True
+        assert started.get("private_mode") is False
+        assert Path(started["storage_path"]) == tmp_path / "app-window"
+
     def test_webview_start_exception_falls_back(self, monkeypatch, capsys):
         """4.3 — a broken backend (e.g. no WebView2/WebKitGTK/Qt) must not crash the
         invocation. It's caught, a message naming what happened is printed, and the
@@ -512,6 +531,9 @@ class TestAppModeNativeWindow:
         monkeypatch.setattr(resources_mod, "files", lambda pkg: _FakeTraversable())
         assert cli._app_icon_path() is None
 
+    @patch(
+        "agentweave.cli._hub_port_accepts", new=lambda port, timeout=0.3: True
+    )  # a running Hub accepts
     def test_hub_native_start_already_running_prefers_native_window(self, monkeypatch):
         """Exercises a real call site (task 3.3's first of four): `_hub_native_start`'s
         already-running branch tries `_open_app_window_native` before `_open_app_window`,
@@ -543,6 +565,9 @@ class TestAppModeNativeWindow:
         assert result == 0
         assert calls == [("native", cli._hub_url(8000))]
 
+    @patch(
+        "agentweave.cli._hub_port_accepts", new=lambda port, timeout=0.3: True
+    )  # a running Hub accepts
     def test_hub_native_start_already_running_falls_back_when_native_unavailable(self, monkeypatch):
         """4.1's byte-identical claim, exercised at the real call site rather than just the
         helper in isolation: when `_open_app_window_native` reports it couldn't run (e.g.

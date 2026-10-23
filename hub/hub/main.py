@@ -605,7 +605,15 @@ async def lifespan(app: FastAPI):
     from .traces import run_span_writer
 
     span_writer = asyncio.create_task(run_span_writer())
+    # Dead runs, stuck tasks and loops that stopped moving, which nothing else decides
+    # (`a-stalled-project-wakes-a-doctor-that-unblocks-it`).
+    from .stalls import sweep_forever
+
+    stall_sweep = asyncio.create_task(sweep_forever())
     yield
+    stall_sweep.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await stall_sweep
     trace_pusher.cancel()
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await trace_pusher

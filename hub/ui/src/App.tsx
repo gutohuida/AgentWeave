@@ -6,6 +6,7 @@ import { AgentCreateDialog } from '@/components/agents/AgentCreateDialog'
 import { NewConversationSurface } from '@/components/agents/NewConversationSurface'
 import { JobsScreen } from '@/components/jobs/JobsScreen'
 import { ActivityScreen } from '@/components/activity/ActivityScreen'
+import { ThreadScreen } from '@/components/thread/ThreadScreen'
 import { ProjectSettingsScreen } from '@/components/settings/ProjectSettingsScreen'
 import { VaultScreen } from '@/components/vault/VaultScreen'
 import { PaneResizer } from '@/components/layout/PaneResizer'
@@ -44,8 +45,10 @@ import {
   projectDestination,
   evidenceDestination,
   resolveConversationSelection,
+  threadDestination,
   withDocument,
 } from '@/lib/navigation'
+import { linkTarget } from '@/lib/threadKnots'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { ArchivedAgentNotice } from '@/components/agents/ArchivedAgentNotice'
 import { useProjectConversations } from '@/api/agentChat'
@@ -53,19 +56,17 @@ import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { usePanelTabsStore, loopTabId } from '@/store/panelTabsStore'
 import { CheckpointStatusBanner } from '@/components/checkpoints/CheckpointStatusBanner'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 export function HubConnectionState({ state, onRetry }: { state: 'pending' | 'unreachable'; onRetry?: () => void }) {
   const pending = state === 'pending'
   return (
-    <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }} role={pending ? 'status' : undefined} aria-label={pending ? 'Connecting to the Hub' : undefined}>
+    <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }}>
       <div className="trust-state" role={pending ? undefined : 'alert'}>
         <span className={`trust-state-icon${pending ? '' : ' is-error'}`}><Icon name={pending ? 'sync' : 'error_outline'} size={22} /></span>
         <h1 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{pending ? 'Connecting to the Hub' : "Can't reach the Hub"}</h1>
         {pending ? (
-          <div className="mx-auto mt-4 max-w-52 space-y-2" aria-hidden="true">
-            <div className="trust-state-skeleton w-full" />
-            <div className="trust-state-skeleton mx-auto w-2/3" />
-          </div>
+          <LoadingThread label="Connecting to the Hub" minHeight={96} className="mt-2" />
         ) : (
           <>
             <p className="mx-auto mt-2 text-xs" style={{ maxWidth: 320, color: 'var(--text-3)' }}>
@@ -284,7 +285,7 @@ export default function App() {
       navigateTo(projectDestination(currentProjectId))
       return
     }
-    if (value === 'tasks' || value === 'spec' || value === 'jobs' || value === 'activity') {
+    if (value === 'thread' || value === 'tasks' || value === 'spec' || value === 'jobs' || value === 'activity') {
       navigateTo(projectDestination(currentProjectId, value))
       return
     }
@@ -427,6 +428,27 @@ export default function App() {
         : <OverviewScreen onNavigate={navigate} onOpenConversation={openConversation}
             onAddAgent={() => setAgentCreateProjectId(destination.projectId)}
           />
+    } else if (destination.tab === 'thread') {
+      projectContent = (
+        <ThreadScreen
+          key={destination.projectId}
+          projectId={destination.projectId}
+          knot={destination.knot ?? null}
+          // Replace: which knot the reader last touched is where they are, not a place to go Back to.
+          onAddress={(key) => navigateTo(threadDestination(destination.projectId, key), { replace: true })}
+          onOpenLink={(link) => {
+            const target = linkTarget(link)
+            if (!target) return
+            const pid = destination.projectId
+            if (target.to === 'spec') navigateTo(projectDestination(pid, 'spec', target.path))
+            else if (target.to === 'task') openTask(target.id)
+            else if (target.to === 'conversation') {
+              navigateTo(agentDestination(pid, target.agent, target.conversation, openDocument))
+            } else if (target.to === 'evidence') navigateTo(evidenceDestination(pid, target.focus))
+            else navigateTo(projectDestination(pid, target.tab))
+          }}
+        />
+      )
     } else if (destination.tab === 'tasks') {
       // A task's requirement chip, clicked: land on that requirement in its document, scrolled
       // into view — the other direction of F4's cross-tab navigation.

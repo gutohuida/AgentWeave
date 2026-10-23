@@ -1,0 +1,231 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a fake webview module and a start-up that takes 1.5 s",
+      "how_to_check": "py -3.11 -m pytest tests/test_splash.py (written first; fails on master 9a14b8c)",
+      "key": "order-and-timing",
+      "requirement": "window-first",
+      "then": "the window is created with the splash HTML before the start-up callable runs, the start-up runs on another thread, load_url gets the launch URL no earlier than 2.0 s after the splash loaded, and the sound player is called once with opening.wav",
+      "when": "the native path opens the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same fake, Hub already running",
+      "how_to_check": "tests/test_splash.py",
+      "key": "warm-short",
+      "requirement": "minimum-time",
+      "then": "load_url comes no earlier than 1.2 s and the short sound plays; with AGENTWEAVE_SOUND=0 no sound plays",
+      "when": "the app opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a start-up that fails",
+      "how_to_check": "tests/test_splash.py",
+      "key": "failure",
+      "requirement": "failure-said",
+      "then": "the splash is told the failure text, the window is destroyed, and the command returns 1",
+      "when": "the native path runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "splash.html in Chromium",
+      "how_to_check": "py -3.11 scripts/drive/d1023_splash.py (written first)",
+      "key": "splash-page",
+      "requirement": "shuttle-pass",
+      "then": "the thread's dash changes between frames during the intro, the glint is visible at 0.6 s, the name is visible by 2 s, awSplashLeave returns a delay under 2 s after which the thread is fully drawn; under reduced motion it is fully drawn at once",
+      "when": "it loads, then awSplashLeave() is called during the wait loop"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch profile on port 8161 (never :8000)",
+      "how_to_check": "scripts/drive/d1023_splash.py --real",
+      "key": "real-launch",
+      "requirement": "window-first",
+      "then": "a screen capture at about 1 s shows the splash in the AgentWeave window and one after the Hub is ready shows the app",
+      "when": "`py -3.11 -m agentweave --profile splash1 --port 8161` launches"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator's next launch",
+      "how_to_check": "operator, by eye and ear",
+      "key": "feels-right",
+      "requirement": "opening-sound",
+      "then": "the sound and the thread feel like one moment and the wait does not feel long",
+      "when": "AgentWeave opens"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "6a7f1039ca485c398b238f75724369678b84d5a30e5127985cabbd2a11099362",
+      "FR-2": "4da5f3002b117bb47d10b9f523d4d351d7b98794583dc7bbdcbdb151f22eced9",
+      "FR-3": "065c3e01a4d4d04f8cb96f35715a8d1ab814a1db1484021d9d345fdde9f00cfa",
+      "FR-4": "e63c0d3d7ea534cce59a2a378b7871d4fbf74ee91bacad8d9df786a8e5286674",
+      "FR-5": "888aeb634b08dac216f5838a68613451140284a16478327e896137e7a02bac6e"
+    },
+    "high_water": 5,
+    "requirements": {
+      "failure-said": "FR-5",
+      "minimum-time": "FR-3",
+      "opening-sound": "FR-4",
+      "shuttle-pass": "FR-2",
+      "window-first": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1, with a hazard named: this is the operator's launch path; a broken change means AgentWeave does not open. Rollback: revert the commit; the change is CLI-only plus a packaged page and two WAVs.\nD1. `_open_app_window_native(url_or_start, warm)` takes either a URL or a start-up callable returning (url | None, failure text). It creates the window with html=splash, background ink, and passes the work to webview.start(func=...), which pywebview runs on its own thread.\nD2. The worker waits for the page's `loaded` event, starts the sound, runs the start-up, waits out the minimum, asks the page `awSplashLeave()` (ms until the thread is next fully drawn plus the fade), sleeps that, then `load_url`.\nD3. The detached cold path moves its body into `_prepare` (hub import, scaffold, migrations; shared with the foreground start) and `_bring_up` (spawn, health, resolve URL), which returns the URL or a failure, unchanged in what it prints; the native window calls it from the worker. Without pywebview, the old order stays.\nD4. Sound is the struck glass (operator's pick in sound round 2): brand/sound/agentweave-sound.js is the one synth; scripts/render_opening_sound.py renders its `open` and `openShort` offline in headless Chromium to the two WAVs, and opening-sound.json pins the synth's hash (a stale render fails tests/test_splash.py). Revised 2026-10-23: the first WAVs came from a separate Python Karplus-Strong copy that drifted out of tune. Played with winsound.SND_ASYNC (stdlib) or afplay/paplay in a subprocess; failures are silent.\nD5. The 'already running?' probe asks /health only of a port that accepts a 0.3 s connect (`_hub_port_accepts`): a refused connect on Windows took 4 s for localhost and held the window back.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "Today `agentweave` starts the Hub and shows nothing until it answers /health (up to 60 s, cli.py:1353); only then is the window created (cli.py:1145). The operator asked: 'When we run agentweave I want before opening also to give it a buffer time to show the thread animation before opening' and 'A sound plays with the animation of the thread when opening agentweave.'",
+  "requirements": [
+    {
+      "key": "window-first",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The buffer is the time the operator already waits; showing it is the point.",
+      "statement": "When `agentweave` opens the native app window, it MUST create the window showing the splash before it runs migrations or waits for the Hub, and MUST run that start-up work off the window's thread."
+    },
+    {
+      "key": "shuttle-pass",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator's pick in the thread lab (https://claude.ai/artifact/GniK2BGBQJzh2ouG3boTpN).",
+      "statement": "The splash MUST draw the loop with the shuttle pass (the madder thread drawing the W from its left end with a light glint at its head), then show the name and the tagline 'Run your AI factory in the open.'; while the Hub has not answered after the intro it MUST keep the thread weaving through, and it MUST stand still, fully drawn, under reduced motion."
+    },
+    {
+      "key": "minimum-time",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator: 'give it a buffer time to show the thread animation before opening'; warm open short version chosen 2026-10-23.",
+      "statement": "The window MUST switch to the app only when the launch URL is known and the splash has shown for at least 2.0 s on a cold start or 1.2 s when the Hub was already running, and only at a moment the thread is fully drawn."
+    },
+    {
+      "key": "opening-sound",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator: 'A sound plays with the animation of the thread when opening agentweave.' The window's browser engine blocks sound before a click, so the CLI plays it.",
+      "statement": "The CLI MUST play the opening sound when the splash page has loaded, the full phrase on a cold start and the short one on a warm start, without blocking the window, and MUST play nothing when AGENTWEAVE_SOUND is 0 or no player exists."
+    },
+    {
+      "key": "failure-said",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today a failed start prints and returns 1; the window must not hang on a splash.",
+      "statement": "If the Hub fails to start, the splash MUST say so in words naming the terminal for details, then the window MUST close and the command MUST return 1."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A packaged splash page (agentweave/assets/splash.html): self-contained, no network, the shuttle-pass intro, then the weave-through loop while waiting, still under reduced motion",
+      "The native app window created first on the splash, with the Hub's start-up (migrations, spawn, health, launch URL) run off the UI thread, then the window navigated to the app",
+      "A minimum splash time: 2.0 s on a cold start, 1.2 s when the Hub is already running (a short intro)",
+      "An opening sound packaged as WAV (agentweave/assets/opening.wav, opening-short.wav), rendered from the brand synth (brand/sound/agentweave-sound.js, the struck glass) by scripts/render_opening_sound.py; played by the CLI with the stdlib (winsound on Windows; afplay/paplay where present) when the splash page has loaded",
+      "An opt-out: AGENTWEAVE_SOUND=0 silences it",
+      "A start-up failure shown on the splash in words, then the window closes and the CLI returns 1 as today"
+    ],
+    "non_goals": [
+      "Notification sounds inside the app (the next change)",
+      "The browser fallback window (_open_app_window) and the foreground --no-detach path keep today's behaviour",
+      "A sound setting in the app UI (the env var is the opt-out until the notification change adds preferences)"
+    ]
+  },
+  "summary": "Launching AgentWeave opens its window at once on a splash: the madder thread draws the W with a bright glint running ahead of it (the 'shuttle pass', operator's pick in the thread lab), the name and tagline appear, and a plucked-thread phrase plays in time with it. The window switches to the app when the Hub is ready and the splash has shown for its minimum (about 2 s cold, 1.2 s when the Hub was already running); a slow Hub keeps the thread weaving until it answers.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "tests/test_splash.py (fake webview) and scripts/drive/d1023_splash.py (splash page in Chromium; --real launch with screen captures)",
+      "files": [
+        "tests/test_splash.py",
+        "scripts/drive/d1023_splash.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "window-first",
+        "minimum-time",
+        "failure-said",
+        "shuttle-pass"
+      ],
+      "reviewer": null,
+      "title": "Acceptance tests and drive, failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "src/agentweave/assets/splash.html",
+      "files": [
+        "src/agentweave/assets/splash.html"
+      ],
+      "from": null,
+      "key": "page",
+      "requirements": [
+        "shuttle-pass"
+      ],
+      "reviewer": null,
+      "title": "The splash page"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "brand/sound/agentweave-sound.js, scripts/render_opening_sound.py, the two WAVs and their manifest; the stdlib player",
+      "files": [
+        "brand/sound/agentweave-sound.js",
+        "scripts/render_opening_sound.py",
+        "src/agentweave/assets/opening.wav",
+        "src/agentweave/assets/opening-short.wav",
+        "src/agentweave/assets/opening-sound.json"
+      ],
+      "from": null,
+      "key": "sound",
+      "requirements": [
+        "opening-sound"
+      ],
+      "reviewer": null,
+      "title": "The opening sound"
+    },
+    {
+      "depends_on": [
+        "page",
+        "sound"
+      ],
+      "description": "_open_app_window_native with a start-up callable; _hub_spawn_detached; the warm path",
+      "files": [
+        "src/agentweave/cli.py"
+      ],
+      "from": null,
+      "key": "launch",
+      "requirements": [
+        "window-first",
+        "minimum-time",
+        "opening-sound",
+        "failure-said"
+      ],
+      "reviewer": null,
+      "title": "Window first in the CLI"
+    }
+  ],
+  "title": "AgentWeave opens on the thread"
+}

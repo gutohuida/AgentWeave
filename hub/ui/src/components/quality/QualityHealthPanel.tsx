@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
 import { SettingsSection } from '@/components/environment/SettingsSection'
 import { hubDate } from '@/lib/hubTime'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 function SettingBadge({ label, value }: { label: string; value: string }) {
   return (
@@ -33,10 +34,7 @@ export function QualityHealthPanel() {
   if (syncLoading) {
     return (
       <SettingsSection title="Quality" description={description}>
-        <div aria-label="Loading quality settings" className="space-y-3 py-4">
-          <div className="skeleton h-20 w-full" />
-          <div className="skeleton h-28 w-full" />
-        </div>
+        <LoadingThread label="Loading quality settings" minHeight={240} />
       </SettingsSection>
     )
   }

@@ -3,6 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { Badge } from '@/components/common/Badge'
 import type { LoopSummary } from '@/api/loops'
 import { endingBucket } from './loopCounts'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 interface LoopsIndexTabProps {
   loops: LoopSummary[]
@@ -110,9 +111,9 @@ function StatusBadge({ loop }: { loop: LoopSummary }) {
  * **Brought to `design/mocks/S3/considered.html` on 2026-08-24**, the variant the operator
  * approved. What changed and why each was a divergence rather than a preference:
  *
- * - The loading state was three 64px solid blocks. Finding 7's whole point is that a skeleton
- *   "previews the shape of what's coming" — so it is now four rows of a 14px icon square and a
- *   10px line, the shape of a real row, plus the toolbar's own skeleton.
+ * - The loading state was three 64px solid blocks, then (Finding 7) a row-shaped skeleton; it is
+ *   now the brand's loading thread, like every other loading placeholder
+ *   (the-thread-is-how-agentweave-shows-it-is-loading).
  * - The switch sat before its label; the mock reads "Show archived" then the control. The
  *   `.panel-switch` CSS needs the input as its immediate previous sibling, so the input moves
  *   with the switch and the text leads.
@@ -159,19 +160,7 @@ export function LoopsIndexTab({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-1.5" data-testid="loops-index-results">
         {isLoading ? (
-          // Finding 7: shaped like the rows that will arrive, not like a block. Four, matching the
-          // mock — enough to read as a list rather than as one thing still loading.
-          <div aria-label="Loading loops">
-            <div className="flex items-center gap-2 px-2.5 py-1.5">
-              <span className="skeleton" style={{ height: 12, width: '60%' }} />
-            </div>
-            {['60%', '45%', '70%', '60%'].map((width, i) => (
-              <div key={i} className="flex items-center gap-2 px-2.5 py-1.5">
-                <span className="skeleton" style={{ width: 14, height: 14, flex: 'none' }} />
-                <span className="skeleton" style={{ height: 10, flex: 1, maxWidth: width }} />
-              </div>
-            ))}
-          </div>
+          <LoadingThread label="Loading loops" />
         ) : loops.length === 0 ? (
           <p style={{ padding: 10, fontSize: 12, color: 'var(--text-3)' }}>
             {includeArchived

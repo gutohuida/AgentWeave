@@ -6,6 +6,7 @@ import {
   useAllowedTransitions,
   useRetryIntegration,
   useStartWorkOnTask,
+  useTask,
   useTasks,
   useUpdateTask,
   type Task,
@@ -22,6 +23,7 @@ import { BOARD_COLUMNS, BoardView, type BoardMoves, type TasksView } from './Boa
 import type { ColumnDropState } from './BoardColumn'
 import { DependencyListView } from './DependencyListView'
 import { TaskDetailDrawer } from './TaskDetailDrawer'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 const FOLDS_KEY = 'aw.boardFolds'
 const MOVE_INSTRUCTIONS_ID = 'task-board-move-instructions'
@@ -259,15 +261,7 @@ export function TasksScreen({
   let body: React.ReactNode
   if (isLoading) {
     body = (
-      <div className="aw-board-loading aw-delayed" aria-label="Loading tasks">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i}>
-            <div className="skeleton h-3 w-20" />
-            <div className="skeleton h-16 w-full" />
-            <div className="skeleton h-16 w-full" />
-          </div>
-        ))}
-      </div>
+      <LoadingThread label="Loading tasks" minHeight={240} />
     )
   } else if (isError) {
     body = (
@@ -287,7 +281,11 @@ export function TasksScreen({
     )
   }
 
-  const openTask = allTasks.find((task) => task.id === openTaskId) ?? null
+  // A task opened from elsewhere (a Thread knot) may be archived-completed and so absent from the
+  // board's page; read it by id rather than landing on the board with nothing open.
+  const pageTask = allTasks.find((task) => task.id === openTaskId) ?? null
+  const { data: fetchedTask } = useTask(openTaskId && !pageTask && !isLoading ? openTaskId : null)
+  const openTask = pageTask ?? (fetchedTask?.id === openTaskId ? fetchedTask : null)
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="tasks-screen">

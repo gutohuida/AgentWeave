@@ -1,0 +1,10 @@
+{
+  "source": "brand/sound/agentweave-sound.js",
+  "source_sha256": "932d6e169c12dc452dcfd4b3a61d72269100103823902ea5829c8639135fcb1d",
+  "key": "D",
+  "sample_rate": 44100,
+  "files": {
+    "opening.wav": "adb885dff6b753e5abfb4ad0ad7b9ba7240add6b17b23ffc3233b83f184624b5",
+    "opening-short.wav": "22fcf68c993b8eb4a6928383eaa3791d2d2a529875c3bc10e6373c940be196f6"
+  }
+}

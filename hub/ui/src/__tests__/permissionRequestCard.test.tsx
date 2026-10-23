@@ -39,6 +39,16 @@ beforeEach(() => {
 
 describe('permission request card', () => {
 
+  it('renders only in the conversation whose run asked (F928)', () => {
+    const asked = request({ conversation_id: 'conv-asking' })
+    const { rerender } = render(
+      <PermissionRequestCard requests={[asked]} agent="haiku-1" conversationId="conv-review" />,
+    )
+    expect(screen.queryByTestId('permission-requests')).toBeNull()
+    rerender(<PermissionRequestCard requests={[asked]} agent="haiku-1" conversationId="conv-asking" />)
+    expect(screen.getByTestId('permission-requests')).toBeInTheDocument()
+  })
+
   it('names the agent, the tool, and what it wants to touch', () => {
     render(<PermissionRequestCard requests={[request()]} agent="haiku-1" />)
     expect(screen.getByText(/haiku-1 wants to use Write/)).toBeInTheDocument()

@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /** Settings layout. The old `.settings-row` was a flex row with `space-between`, so each label
  *  column took whatever width its own text and control left over: no two rows lined up, and a
@@ -182,14 +183,8 @@ export function SettingsNotice({
   )
 }
 
-/** Rows of skeleton while a section's data is on its way (behind `.aw-delayed`, so a fast answer
- *  shows no flash). */
+/** The loading thread while a section's data is on its way, holding roughly the height of `rows`
+ *  setting rows (behind `.aw-delayed`, so a fast answer shows no flash). */
 export function SettingsLoading({ label, rows = 4 }: { label: string; rows?: number }) {
-  return (
-    <div className="aw-settings-loading aw-delayed" aria-label={label} role="status">
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="skeleton aw-settings-loading-row" />
-      ))}
-    </div>
-  )
+  return <LoadingThread label={label} minHeight={rows * 62} />
 }

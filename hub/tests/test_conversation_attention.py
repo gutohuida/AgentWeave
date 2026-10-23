@@ -96,6 +96,37 @@ async def test_an_unanswered_question_reads_as_waiting(app, auth_headers) -> Non
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("ended_status", ["completed", "failed", "stopped"])
+async def test_a_question_whose_asking_run_has_ended_is_not_waiting(
+    app, auth_headers, ended_status
+) -> None:
+    """F909: the rail read "waiting" for a question nobody is awake to receive an answer to.
+
+    `asker_waiting` (`_with_asker_state`) already treats a question as inert once its asking run is
+    no longer `running`; the attention question arm checked only `wait_ended_at`, which stays NULL
+    from the run's end until the expiry sweep, so the rail and Needs you disagreed.
+    """
+    await _sync_agents(app, auth_headers, "offline")
+    conversation_id = await _conversation(app, auth_headers)
+    run_id = await _run_for(conversation_id, status=ended_status)
+
+    async with async_session_factory() as session:
+        session.add(
+            Question(
+                id=f"q-{short_id()}",
+                project_id="proj-test",
+                from_agent="offline",
+                question="Ship the release on Friday?",
+                created_by_run_id=run_id,
+                conversation_id=conversation_id,
+            )
+        )
+        await session.commit()
+
+    assert (await _attention(app, auth_headers))[conversation_id] == "idle"
+
+
+@pytest.mark.asyncio
 async def test_a_pending_permission_request_reads_as_waiting(app, auth_headers) -> None:
     await _sync_agents(app, auth_headers, "offline")
     conversation_id = await _conversation(app, auth_headers)
@@ -123,7 +154,7 @@ async def test_a_pending_permission_request_reads_as_waiting(app, auth_headers) 
 async def test_answering_clears_the_waiting_state(app, auth_headers) -> None:
     await _sync_agents(app, auth_headers, "offline")
     conversation_id = await _conversation(app, auth_headers)
-    run_id = await _run_for(conversation_id, status="completed")
+    run_id = await _run_for(conversation_id)
     question_id = f"q-{short_id()}"
 
     async with async_session_factory() as session:
@@ -148,7 +179,8 @@ async def test_answering_clears_the_waiting_state(app, auth_headers) -> None:
     )
     assert answered.status_code == 200, answered.text
 
-    assert (await _attention(app, auth_headers))[conversation_id] == "idle"
+    # The asking run is still live, so once nothing is waiting the conversation reads `running`.
+    assert (await _attention(app, auth_headers))[conversation_id] == "running"
 
 
 @pytest.mark.asyncio
@@ -159,7 +191,7 @@ async def test_a_question_in_one_conversation_does_not_mark_another(app, auth_he
     blocked = await _conversation(app, auth_headers, message="Blocked thread")
     quiet = await _conversation(app, auth_headers, message="Quiet thread")
     assert blocked != quiet
-    run_id = await _run_for(blocked, status="completed")
+    run_id = await _run_for(blocked)
 
     async with async_session_factory() as session:
         session.add(
