@@ -8,6 +8,7 @@ export type MockRoute =
   | { kind: 'settings'; section: SettingsSection }
   | { kind: 'agent-settings'; agent: string; section: AgentSettingsSection }
   | { kind: 'gallery' }
+  | { kind: 'thread' }
 
 /** Project settings, one place under one name. Replaces Environment / Configuration / Settings. */
 export type SettingsSection = 'general' | 'agents-defaults' | 'manager' | 'runners' | 'charters' | 'instructions' | 'budgets' | 'worktrees' | 'diagnostics'
