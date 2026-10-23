@@ -1284,12 +1284,6 @@
   .composer-form[data-submitting="true"] .composer-textarea {
     cursor: progress;
   }
-  .composer-send-spinner {
-    animation: composer-send-spin 850ms linear infinite;
-  }
-  @keyframes composer-send-spin {
-    to { transform: rotate(360deg); }
-  }
 
   /* The compact header reading opens into detail instead of making every number compete at
      rest. Hover and keyboard focus share the same disclosure; the native title remains a
@@ -1898,7 +1892,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .composer-send-spinner,
     .timeline-empty-icon::after,
     .new-conversation-icon::after,
     .conversation-interject,

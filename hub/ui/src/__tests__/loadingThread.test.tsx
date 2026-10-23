@@ -26,9 +26,16 @@ describe('LoadingThread replaces every loading placeholder', () => {
       const hits: string[] = []
       if (/className=\{?["'`][^"'`]*\bskeleton\b/.test(text)) hits.push('skeleton')
       if (/\banimate-spin\b/.test(text)) hits.push('animate-spin')
+      // A hand-rolled spinner class escapes the Tailwind check (the send button's did, until 2026-10-23).
+      if (/['"`][\w-]*\bspinner\b/.test(text)) hits.push('spinner class')
       return hits.length ? [`${relative(COMPONENTS, file)}: ${hits.join(', ')}`] : []
     })
     expect(offenders).toEqual([])
+  })
+
+  it('keeps no rotating keyframes in the stylesheet', () => {
+    const css = readFileSync(join('src', 'index.css'), 'utf8')
+    expect(css.match(/@keyframes [\w-]+\s*\{[^}]*rotate\(360deg\)/g) ?? []).toEqual([])
   })
 
   it('is a named status holding the thread, held back for fast loads', () => {
