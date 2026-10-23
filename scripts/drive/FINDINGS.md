@@ -38820,7 +38820,7 @@ The worker is given the one entry (`hub/hub/vault_reports.py`, the review prompt
 
 ## F925 (B) -- a job whose agent a session sync deleted (or the operator archived) can still be enabled and fired; the press answers 500 and records the firing `failed`, but leaves a queued entry and an open conversation that the next agent of that name receives and runs
 
-**Status:** fixed 0f2771e 2026-10-23 (night). `scheduler.agent_unfirable_reason` is asked before a firing writes its run, entry and conversation (plain job) or enters a task (loop): a gone or archived agent records `failed` + `job_run_failed` and queues nothing; `PATCH enabled:true` runs job create's roster check (which no longer counts an archived agent the synced roster still lists); a press refused for this reason answers 409 with the sentence. Tests `hub/tests/test_a_job_for_a_vanished_agent_does_not_fire.py` (6, red before). Drive on scratch Hub :8122 (profile f925, torn down): enabled jobs for delta/gamma, sync removed delta, gamma archived -> press 409 each, one `failed` row each, no queue entry or conversation for either, re-enable 400. The optional design note (sync/archive answers naming the jobs left behind) is not done. Originally: open 2026-10-22. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8116, profile ag1022, real Haiku, `scripts/drive/s1022_ag_api.py` and `s1022_ag_lib.py` calls).
+**Status:** fixed 0f2771e 2026-10-23 (night) for plain jobs, re-driven 2026-10-23 day (`sweep-loops-sweep`, API + Jobs screen, held); a *loop* job on a gone or archived agent still answers 500 and writes no row: filed as F970. `scheduler.agent_unfirable_reason` is asked before a firing writes its run, entry and conversation (plain job) or enters a task (loop): a gone or archived agent records `failed` + `job_run_failed` and queues nothing; `PATCH enabled:true` runs job create's roster check (which no longer counts an archived agent the synced roster still lists); a press refused for this reason answers 409 with the sentence. Tests `hub/tests/test_a_job_for_a_vanished_agent_does_not_fire.py` (6, red before). Drive on scratch Hub :8122 (profile f925, torn down): enabled jobs for delta/gamma, sync removed delta, gamma archived -> press 409 each, one `failed` row each, no queue entry or conversation for either, re-enable 400. The optional design note (sync/archive answers naming the jobs left behind) is not done. Originally: open 2026-10-22. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8116, profile ag1022, real Haiku, `scripts/drive/s1022_ag_api.py` and `s1022_ag_lib.py` calls).
 **Source:** drive
 **Theme:** Agents
 **Ready:** yes
@@ -39329,3 +39329,169 @@ Repro: `task-a2cf84a08020` is `completed` by builder, with awaiting evidence for
 **Tier:** 0
 
 Repro, on `spec/changes/ev-main/spec.json` (five requirements, one with no task): (1) The header fact reads "2/5 verified · 1 rejected · 1 not started · **1 with no task** · 1 not merged", and its popover reads FR-5 "**No task**". Show details opens the coverage panel under the header, which reads "**1 no work linked**" and "FR-5 — **No work linked**". The same state gets three names on one screen. The same split exists for `amendment_unreviewed`: "**changed, unreviewed**" in the header (`SpecHealthLine.tsx:254`) and "**Amendment not reviewed**" in the panel (`SpecCoverageBar.tsx:20`); that state was not reached on screen in this drive. (2) After a scan raised three drift candidates, the header fact reads "0/5 verified · 3 drifting · …" with the warn tone (F945 holds). Its Show details panel then explains each drifting row as "The implementation changed after this was verified. Say which one was wrong — **answer it under Drifting, below.**" (`SpecCoverageBar.tsx:16`). Nothing named Drifting is below. The answers live in the **drift** fact's own detail, and the page shows one detail at a time (`SpecDocumentPanel.tsx:149`, `detail` is a single key), so opening the requirements detail is exactly what hides them. Screenshot `testbed/ui-judge/s1023-evidence/113810/b1_coverage.png`. **Expected:** one word per state across the header, its popover and the panel (the coverage panel's `STATES` labels and `SpecHealthLine`'s `OPEN_STATES`/`STATE_LABEL` from one table), and a drifting row's sentence that names where to answer it, e.g. "answer it from the drift fact above ('N drifted')", or, better, a link that opens that detail. **Test:** `hub/ui/src/__tests__/specHealthLine.test.tsx` — render the header and the coverage bar for an `unserved` row and assert that the same label is used; and that a `drifting` row's `why` does not say "below". Both fail today. Seam: Requirements, evidence & coverage (header) x Drift (strip).
+
+## F970 (B) -- a *loop* job whose agent a session sync deleted (or the operator archived) answers Run now with 500 "Failed to fire job", and every firing emits a `job_run_failed` event naming a job_run_id that has no row
+
+**Status:** open 2026-10-23. F925's fix (0f2771e) holds for plain jobs only. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8111, profile `la1023`, project `proj-655cbdd8ca29`; `scripts/drive/s1023_la_f925.py`, `s1023_la_loops.py`).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: two enabled loop jobs (`initial_tasks` with one task, far-future cron), `gone1 loop` for agent gone1 and `arch1 loop` for arch1. `POST /session/sync {"data":{"agents":{"alpha":{},"arch1":{}}}}` → gone1 removed; `POST /agents/arch1/archive` → 200. `POST /jobs/job-2cc35804fe0a/run` → **500 `{"detail":"Failed to fire job"}`**, the same on a second press and for arch1's loop. `GET /jobs/{id}/history` → `[]`; `job_runs` has no row for either loop, but `event_logs` has `job_run_failed` events naming `run-008137496f71`, `run-9f475933ba06`, … that do not exist. On cron `* * * * *` a new event with a new id was written at 11:00, 11:01 and 11:02, still with no row; the plain job beside it counted into one row (`tick_count` 5). Queue and conversations stayed clean. The 500 sentence reaches the Jobs screen and an agent's `run_job` alike ("(500): Failed to fire job", run-17fa via MCP). Plain jobs on the same agents: enable → 400 with the create's sentence, Run now → 409 with the trigger's sentence, one `failed` row + `job_run_failed`, nothing queued (F925 holds there).
+
+Cause: in the loop branch the SELECT inside `agent_unfirable_reason` (`hub/hub/scheduler.py:4041-4049`) autoflushes the `JobRun` built above it; `_discard_unused_run` (`scheduler.py:1116`) then `session.delete(run)`s it. The `except` at `scheduler.py:4274` (`run if "run" in locals() and run in session`) still finds the deleted object, stamps it `failed`, persists the event naming it, and the commit deletes the row. `run_job` sees no new row, `_loop_flow_busy_refusal` / `_loop_in_flight_decision` return None, and it answers 500 at `hub/hub/api/v1/jobs.py:1908`. **Expected:** as for a plain job: one `failed` row whose id the event names, cron ticks counting into it, and the press answering 409 with "gone1 is not an agent in this project…" / "arch1 is archived…". Optional (F925's design note, still not done): the sync and archive answers name the jobs left naming the agent; the Jobs rows still read "Active · Next: Jan 1 2027". **Test:** `hub/tests/test_a_job_for_a_vanished_agent_does_not_fire.py` fires plain jobs only: add a job with `initial_tasks` → press 409 with the sentence, `JobRun` count 1 with the event's `job_run_id`, a second tick increments `tick_count`. Seam: Agents (sync/archive) x Jobs & loops (loop firing).
+
+## F971 (C) -- Run on a loop whose agent has no runner answers, on the second press, "Every task on this loop's queue is already being worked … nothing is wrong" while nothing is worked
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8111; `scripts/drive/s1023_la_loops.py`).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: `PATCH /agents/norun {"runner_id": null}`; a loop job for norun. First `POST /jobs/job-1f2782f2a3bc/run` → 200 with `waiting_reason` "No runner is bound…" (the entry stays queued with that reason). Second press → **409 "Every task on this loop's queue is already being worked. Nothing was started, and nothing is wrong — the next firing picks up whatever finishes."** Nothing will finish: no runner. Cause: `_held_in_flight_reasons` (`hub/hub/api/v1/jobs.py:1685`) names the provider hold and the spent token budget (F441) but not the agent-wide environment refusals (no runner bound, runner CLI missing). **Expected:** 409 naming the hold, e.g. "norun has no runner bound, so its queued turn cannot start. Bind one in the Hub UI." **Test:** beside `hub/tests/test_run_names_a_spent_token_budget.py`: a runnerless loop agent, two presses; the second's detail names the runner and does not contain "nothing is wrong". Seam: Jobs & loops x Runners.
+
+## F972 (C) -- a firing queued behind another waiting entry for the same agent answers 200 with no `waiting_reason`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8111).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: runnerless agent norun with two jobs. `POST /jobs/{norun plain}/run` → 200 with `waiting_reason` "No runner is bound…". Then `POST /jobs/{norun loop}/run` → 200 `{"success":true,"job_run_id":"run-9aa91e126e3e",…}` with **no** `waiting_reason`; `inbound_queue_entries` row `entry-f08bfc095cda` is `queued` with `waiting_reason` NULL, while `GET /queue/norun/status` says "No runner is bound…". Cause: `hub/hub/api/v1/jobs.py:1949-1963` reads only this firing's own entry's `waiting_reason`, and the queue stamps the reason on the head entry only. **Expected:** the press carries the agent's waiting reason whenever its entry is queued behind a hold (read the queue status, not the entry). **Test:** `hub/tests/test_a_job_for_an_agent_with_no_runner_waits.py`: two jobs for the same runnerless agent; the second press has `waiting_reason`. Seam: Jobs & loops x Inbound queue.
+
+## F973 (C) -- an ended or archived loop still accepts definition edits and control changes, and its tab then says the edit "applies at the next firing" of a loop that never fires again
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8111; Chromium against the served bundle, `scripts/drive/s1023_la_ui.py`).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: loop B stopped with a reason (`ending_state: stopped`). `PATCH /jobs/job-cb4be9d8fac9 {"purpose":"edit an ended loop"}` → 200, writes `loop_edit_staged`, `pending_purpose` set. `POST /loops/loop-7871385dea5f/control {"control":"creator"}` on archived loop A → 200, `control: creator`, `loop_control_changed` written; the same on ended loop B. The neighbours refuse correctly: `stop_reason` → 409 `loop_already_ended`, `enabled` → 409 `loop_ended`, archive → 400. Loop B's tab (Chromium) reads "Stopped early: operator: not needed after all … Edit staged — it applies at the next firing … Until then the loop runs on the definition below marked 'In force now'". Spec `agent-loops` ac99 says an ended loop's settings are read-only. Cause: the staging branch of `update_job` (`hub/hub/api/v1/jobs.py` ~1297-1320) never checks `loop.ending_state`; `set_loop_control` (`hub/hub/api/v1/loops.py:203-237`) checks neither `archived_at` nor `ending_state`. **Expected:** 409 saying the loop has ended and to create a new loop (as `loop_ended` already does); nothing staged, no event. **Test:** `hub/tests/test_jobs*.py` / the loops tests: a stopped loop, then a PATCH of `purpose` and a POST to `control` → each 409, no `pending_*` set, no event. Seam: Jobs & loops (Settings, Delegate) x loop ending.
+
+## F974 (C) -- after a press, the Loop tab and the Jobs screen take 4-5 s to show what the Hub applied in 0.3 s; one Delegate press fires about 59 GETs
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8111; Chromium, `scripts/drive/s1023_la_ui.py storm|latency loop-c4e818c86b61`).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 1
+
+Repro (Chromium, request log): idle 10 s → no loop GETs. Press "Let norun decide" → 39 × `GET /loops/{id}` + 20 × `GET /loops` in about 5 s, then quiet; the POST's 200 arrived at 0.32 s but the controller text changed only at 4.8 s (4.2 s on a second try). On flow C a Delegate press took ~13 s to show, and Stop's ending was still not on screen 3 s later. Jobs screen: Pause fires 14 × `GET /jobs` within 0.13 s and its toast appears at 3.5 s; Run now's 200 at 0.29 s, toast at 4.1 s. Cause (partial): the mutation's `onSettled` (`hub/ui/src/api/loops.ts:66-68`) and the SSE `loop_*` case (`hub/ui/src/hooks/useSSE.ts:605-612`) each invalidate twice; that does not account for ~59 requests, and the rest was not found, hence Tier 1. **Expected:** a few refetches, and the tab or toast updates when the response lands. **Test:** a vitest under `hub/ui/src/__tests__` with mocked fetch: press "Let X decide" → at most 3 loop GETs and the controller text updates once the POST resolves. Seam: Jobs & loops UI x SSE invalidation.
+
+## F975 (D) -- the one-loop-per-document refusal names only ids and gives no way out
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8111).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: `POST /jobs` with `spec_document_id` claimed by a live loop → 409 `"document 'spdoc-ba5dc3e6cd7b' is already claimed by loop 'loop-7871385dea5f'"`. No document path or title, no job name, and nothing saying that stopping or archiving that loop frees the document (driven: loop B adopted A's pending task once A was archived, `loop_tasks_adopted`). **Expected:** the sentence names the document's path or title and the claiming job, and says "stop or archive it first, and the new loop adopts its unfinished tasks." **Test:** `hub/tests/test_jobs.py` beside the existing claimed-document test: the 409 detail contains the job name and "archive". Seam: Jobs & loops x Spec documents.
+
+## F976 (B) -- a tester's own `change_criterion` amendment makes the builder's evidence stale, so the tester's approval is refused, and every remedy offered to the tester and the operator is one the Hub then refuses
+
+**Status:** open 2026-10-23. Extends F758 (the gate's remedy for a stale piece is refused) at the seam where it fires on every tester criterion fix. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8112, profile `lb1023`, project `proj-ea9d9171917e`, real Haiku 4.5; `scripts/drive/s1023_lb_flow.py`, `s1023_lb_hold.py`).
+**Source:** drive
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 1
+
+Repro: flow document `delivery {"mode":"flow","agent":"alpha","tester":"tester"}`; task `t-slug`; criterion `c-slug` deliberately wrong (`slugify('  Hello,  World! ') == 'hello--world'`). beta's rework records `ev-83ff5ed0fcae` at `9877b026`. Review turn `run-573d56ff11e9` is briefed "**Your verdict decides this task's evidence** (`ev-83ff5ed0fcae` for `FR-2` at `9877b026baa9`). Approving accepts it and merges the work". The tester runs the `how_to_check`, gets `'hello-world'`, and calls `amend_spec_document op=change_criterion` (`amd-a3ad1918556b`) → revision `sprev-f470d3396bfc` (`reworded`, actor tester); FR-2's digest changes. Then `update_task approved` → 409 `gate_unsatisfied` three times ("This task's work has been recorded and nobody has judged it: FR-2 at 9877b026baa9 … accept the evidence, or grant an agent the capability to accept it — both are the operator's"); `record_evidence` → 409 ("a reviewer judges the evidence the task's author recorded"); `decide_evidence` → 403; `ask_user` `q-b0951e26759f` times out. The operator is told (divergence `div-67fb88d5aa14`) the review "ended without recording a verdict … naming a different reviewer, reviewing it yourself, or asking this one again is the way forward", and the loop's stall reason says "Ask tester again, review it yourself, or send it back". Following it: `PATCH /tasks/task-a1499b2857e6 {"status":"approved"}` → the same 409 ("accept the evidence"); `POST /project/spec/evidence/ev-83ff5ed0fcae/decision {"decision":"accepted"}` → 409 `evidence_stale`. Only send-back → builder re-records (`run-93aa17ce491b`) → a fresh tester review (`run-12f4e4dd6d53`) landed it: two extra paid turns. On screen the drawer story ends "tester's turn ended with the task still under review · surfaced" with no reason (`run_divergences` has no reason column); the piece reads plain "awaiting", not stale.
+
+Cause: `requirement_evidence.decide_with_verdict` skips a stale piece when accepting (`hub/hub/requirement_evidence.py` ~1415-1418, the F751 fix); `requirement_gate._operator_only_remedy` (`hub/hub/requirement_gate.py:1286-1289`) treats the task's own pieces as never the operator's hold, so `approval_held_for_operator` returns None and the divergence says "ended without recording a verdict" instead of the gate's sentence; `review_turn.verdict_evidence_sentence` (`hub/hub/review_turn.py:339`) promises "Approving accepts it" whether or not the piece is stale. **Expected:** once a review run's own amendment makes the reviewed piece stale, its approve refusal (and the amendment's tool answer) names the piece as stale and gives `revision_needed` as the remedy so the author re-records; the divergence and stall reason carry the gate's sentence; the drawer marks the piece stale. **Acceptance drive:** this repro, where the tester's approve is answered with the stale sentence and `revision_needed` lands without the operator. **Test:** `hub/tests/test_the_reviewers_verdict_decides_the_tasks_evidence.py`: a review run amends the criterion, then approves → refusal naming staleness with `revision_needed` as the remedy; `run_diverged` reason carries the gate's sentence. Seam: Flows & review (tester turn) x Requirements, evidence & coverage (stale).
+
+## F977 (D) -- a drained flow reads "Active · Waiting for its next firing · Next: Jan 1 2027" after its last approval; the stop is recorded only when something next fires it
+
+**Status:** open 2026-10-23. Extends F655 (the same display fix, for `stop_when_queue_empties`). Found by the day sweep `sweep-loops-sweep` (scratch Hub :8112; Chromium).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: the flow's last approval landed 11:07:04. `GET /loops/loop-8142093fc880` then still had `stop_reason: null, ending_state: null, queue {"approved": 2}`; the Jobs card read "2 of 2 tasks approved · Waiting for its next firing · Next: Jan 1 2027 · Active". Run now at 11:08:22 → 409 "loop queue is empty" and `loop_stopped` recorded. Cause: the fallback text at `hub/ui/src/components/jobs/JobsView.tsx:276`. **Expected:** "Finished: every task approved" (or "Stops at its next firing") once a `stop_when_queue_empties` loop's queue is all approved/rejected. **Test:** a JobsView test with a loop whose queue is all approved and `stop_when_queue_empties` set → it does not read "Waiting for its next firing". Seam: Jobs & loops x Flows.
+
+## F978 (D) -- two labels in the review machinery: an operator's send-back reaches the author as "The reviewer sent it back", and a withdrawn review's reason carries the raw status `revision_needed`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8112).
+**Source:** drive
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+Repro: the operator's `PATCH /tasks/{id} {"status":"revision_needed","notes":…}` (`ttr-5d9bcf579404`, `actor_kind` operator) → beta's rework briefing reads "## Why it came back / The reviewer sent it back with these notes: > Operator: …". Cause: `hub/hub/scheduler.py:3172` `by or 'The reviewer'`, where `actor_agent` is None for the operator. Withdrawn review: "Withdrawn: task task-a1499b2857e6 was revision_needed, so there is no longer a review of it to start." reaches the conversation and the story verbatim (`hub/hub/run_task_binding.py:865`). **Expected:** "The operator sent it back…"; "was sent back for revision" (words, not the enum). **Test:** the revision-briefing test for an operator transition; a test that the withdrawal reason does not contain `revision_needed`. Seam: Flows & review x Tasks.
+
+## F979 (B) -- when a project's own `.git` is unreadable and its folder sits inside another repository, the Hub uses the enclosing repository: it creates the agent's worktree and branch there and commits to it
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113, profile `lc1023`, projects `proj-486861916a9d`, `proj-e35fc30d0076`; `scripts/drive/s1023_lc_fault.py`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 1
+
+Repro: an outer repo `~/Documents/lc1023outer` (branch `main`, holding `OUTER.md`) containing a project repo `inner/`. Open `inner` as a project, create agent gamma (Haiku), write `garbage` into `inner/.git/HEAD`. `GET /worktrees` → 200 `{"repository": true, "unavailable_reason": null}`. `POST /agent/trigger` gamma → 200, `run-8ca5ab556815` completed with `workspace_dir=inner\.agentweave\worktrees\gamma`. Effect: `git -C lc1023outer worktree list` shows `inner/.agentweave/worktrees/gamma [agentweave/gamma]`; the agent's checkout holds `OUTER.md` (the wrong code), and the outer repo's branch has `e3dd480 AgentWeave "Auto-snapshot: gamma's turn"` adding `.agentweave/context/gamma.md`. Moving `inner/.git` aside entirely does the same, and `/worktrees` lists the outer repo's worktree as this project's. After HEAD is restored the next trigger is held with a legible reason ("refusing existing path … not the registered git worktree … `rm -r …`"), but following it, or deleting the project (204), leaves the outer repo's worktree registration, branch and commit behind. A project under `testbed/` inside this repository is exposed the same way (the subagent's first try resolved the AgentWeave repo; nothing was written there, checked with `git status` and the branch list).
+
+Cause: `is_git_repo` (`hub/hub/worktrees.py:126-145`) runs `git rev-parse --is-inside-work-tree` with `cwd=project`, which answers true inside any enclosing repository; callers include `hub/hub/api/v1/agent_trigger.py:1290`, `hub/hub/api/v1/worktrees.py:161` and the same probe in `hub/hub/task_integration.py:170` (`repository_fault`). Workspace-isolation D2 notes git "answers about the enclosing repository", but only for checkouts. **Expected:** a project root counts as a repository only when `git rev-parse --show-toplevel` resolves to that root; otherwise it reads "not a git repository" with git's own error, a writing agent fails closed, and nothing is ever written to another repository. **Acceptance drive:** this repro → trigger held or refused naming the project's `.git`, outer repo unchanged (`worktree list`, branches). **Test:** `hub/tests/test_worktrees.py`: tmp outer repo, inner dir with garbage `.git/HEAD` → `is_git_repo(inner)` False and agent-worktree provisioning refuses. Seam: Projects x Worktrees x Resilience.
+
+## F980 (C) -- `PUT /project/documents/{path}/content` answers a bare 500 when the document's file cannot be written
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113; `scripts/drive/s1023_lc_fault.py`).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+Repro: `attrib +R spec/changes/cobalt-selkie/spec.json`, then a content PUT with a valid payload → **500 "Internal Server Error"**; the Hub log shows `PermissionError: [Errno 13] … spec.json`. A directory in place of the file → the same 500. The `spec_documents` row (digest, `updated_at`) is unchanged: no partial state. Cause: `write_document` (`hub/hub/spec_documents.py:317-323`) lets the OSError escape via `_apply_and_write` (`hub/hub/spec_service.py:325`); the route (`hub/hub/api/v1/spec.py:829`) catches only `SaveRefusedError`. The agent amend path goes through the same `save_document` (not driven). **Expected:** 409 naming the file and the OS reason ("spec.json is read-only or locked; close what holds it and save again"). **Test:** route test for the content PUT with `Path.write_text` monkeypatched to raise `PermissionError` → 409. Seam: Spec documents x Resilience.
+
+## F981 (C) -- `POST /vault/sources` answers a bare 500 when the tracked vault root `knowledge/` cannot be written (F717's fix covered only the private location)
+
+**Status:** open 2026-10-23. Extends F717. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+Repro: make `knowledge` a file in the project root; `POST /vault/sources {"name":"Fault note","type":"note","content":"…"}` → **500**; log `FileExistsError: [WinError 183] … lcproj\knowledge`. In the same state map, settings, contradictions and reports answer 200. Cause: `Storage.write` (`hub/hub/vault.py:150`) `mkdir`s, reached from `vault.py:936`/`:978`; `hub/hub/api/v1/vault.py:183` catches only `VaultError`. **Expected:** 409 naming `knowledge/` and why it cannot be written. **Test:** `hub/tests/test_vault*.py`: a tracked add with `knowledge` as a file → 409. Seam: Knowledge vault x Resilience.
+
+## F982 (C) -- the first Claude turn after an interrupted or stopped turn in the same session records no cost, though the CLI reported it
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113; kill/restart and Stop drives, `scripts/drive/s1023_lc_kill.py`).
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 1
+
+Repro: an interrupted (Hub killed) or stopped turn leaves a `turn_usage` row `status=unavailable, session_totals=null`. The next measured turn in that session has `session_totals` but `api_equivalent_usd_micros = NULL`: `run-d01f4744bd6a` (session `f5ece8dc`, 74,901 tokens, totals 10,425 µ$), `run-d391a64a639c` (`e708aaff`, 118,661, 17,704 µ$), `run-4d578d7ce374` (`f483dd06`, 73,357, 43,891 µ$). The turn after is priced (`run-86708a79d7a3` 5,863 µ$). `GET /accounting` for the project: `api_equivalent_usd_micros: 5863, unpriced_turns: 7` (~$0.006) against ~$0.078 the CLI reported. Cause: `hub/hub/usage_accounting.py:168-172`: "earlier rows but none with recorded totals → no cost" (meant for legacy pre-0132 rows) also fires when the only earlier rows are `unavailable` rows from a process that died. It decides where the cut turn's spend is counted, hence Tier 1. **Expected:** when every earlier row in the session is `unavailable`, use a zero baseline so the session's reported spend is counted. **Test:** `hub/tests/test_a_claude_turn_records_its_own_cost.py`: an `unavailable` row with null totals followed by a measured row with totals → priced. Seam: Runs (interrupt/stop) x Accounting.
+
+## F983 (C) -- a corrupt `.agentweave/project.json` in a registered folder cannot be fixed from the app: open answers 409, and the remedy it offers answers 409 too
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113; API only, not browsed).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Repro: write `{not json` into the project's marker. `POST /projects/open {"path": <dir>}` → 409 `project_identity_conflict` "project marker is unreadable or invalid"; the same with `"register_copy_as_new": true` → the identical 409. Meanwhile `GET /projects` reports `directory_state: "available"`, and settings, agents and documents answer 200. Cause: `hub/hub/project_lifecycle.py:85-86` sends a registered path to `_require_marker` before reading `register_copy_as_new`; `_read_marker` (`:535`) raises without naming the file or a fix. By code reading only (unverified), a *missing* marker hits the same wall (`:548-549`). **Expected:** for a path this database has registered, rewrite the marker from the registered id, or refuse naming `.agentweave/project.json` and how to repair it. **Test:** `hub/tests/test_project_lifecycle*.py`: a registered project with a corrupt marker, opened again → marker rewritten or a refusal naming the file. Seam: Projects x Resilience.
+
+## F984 (D) -- propose, phase and rigor on a document whose file is invalid JSON say it "has not been written by the Hub", which is false
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+Repro: truncate a change's `spec.json`. `POST …/propose` and `POST …/phase?to=proposed` → 422 `no_payload` "this document carries no payload to check; it has not been written by the Hub"; `POST …/rigor {"rigor":"contract"}` → 409 "the document carries no payload; it was not written by the Hub". `GET /project/spec` correctly answers 422 "holds no readable spec payload", and a content PUT with a valid payload repairs the file (200). Cause: `hub/hub/spec_service.py:1824-1828` and `hub/hub/spec_rigor.py:148-149` do not use `spec_documents.payload_problem` (`:238`, F702). **Expected:** `payload_problem`'s wording, naming the fix (save the document's content again). **Test:** the propose route on a truncated file → detail does not contain "not been written". Seam: Spec documents x Resilience.
+
+## F985 (D) -- `POST /tasks/{id}/checks/run` answers 202 `{"run_id": null, "running": false}` with checks configured and starts nothing, without saying why
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+Repro: `PUT /settings` with checks `[{"name":"status","command":"git status --short","timeout_seconds":10}]`; on an `in_progress` task with no commit, `POST /tasks/{id}/checks/run` → 202 `run_id: null, running: false`; `GET …/checks` stays `{"configured": true, "runs": []}`. Cause: `hub/hub/project_checks.py:428-457` returns `None` for six different reasons and `hub/hub/api/v1/tasks.py:1410-1411` passes none on. **Expected:** a `reason` field ("no commit to check yet", …), shown where the press is. **Test:** `test_project_checks_run.py`: a task with no targets → the answer carries a reason. Seam: Tasks (checks) x Worktrees.

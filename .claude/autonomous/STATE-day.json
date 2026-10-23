@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "7c63120",
     "stop_at": "2026-10-23T17:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-10-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-loops-sweep",
-    "next_action": "Run sweep-loops-sweep per .claude/loops/day-window.md: Sweep: Jobs & loops x Flows & review x Resilience. First: F925 a job on a deleted/archived agent queues nothing, cannot be enabled, Run now 409 naming why (API and Jobs screen); then least-driven: a parallel or multi-agent flow, a verdict withdrawing waiting reviews, an idle holder's release, a new loop adopting an archived loop's leftovers, Hub killed with a run in flight, route failure injection. Scratch Hub port 8110+ (not 8114, 8115, 8130), haiku runner only, never leave a job enabled. Tally turn_usage BEFORE e2e.py clean (clean deletes the rows).",
+    "current": "sweep-questions-sweep",
+    "next_action": "Run sweep-questions-sweep per .claude/loops/day-window.md: Sweep: Questions x Conversations & composer. First: F909 a question whose asking run ended no longer reads 'waiting' on the rail or in Needs you (Chromium); then least-driven: an agent-written @ reaching a runner escaped, live thinking staying open, number keys on the ask card, an answer after timeout, the side panel's six tab kinds, F860 tool output in an expanded row. Scratch Hub port 8110+ (not 8114, 8115, 8130), haiku runner only, never leave a job enabled. Tally turn_usage BEFORE e2e.py clean. Up to three foreground subagents on their own ports; they report, you file. Write files with the Write tool: the Bash tool rejects long heredocs containing apostrophes.",
     "queue": [
         {
             "id": "plan-review",
@@ -61,7 +61,7 @@
         },
         {
             "id": "sweep-loops-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Jobs & loops x Flows & review x Resilience",
             "detail": "First: F925 a job on a deleted/archived agent queues nothing, cannot be enabled, Run now 409 naming why (API and Jobs screen)."
         },
