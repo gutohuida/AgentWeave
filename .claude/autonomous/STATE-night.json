@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9234463",
     "stop_at": "2026-10-23T07:00:00+01:00",
-    "iteration": 13,
+    "iteration": 14,
     "log_file": ".claude/autonomous/2026-10-22-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "close-gate",
-    "next_action": "Do queue item close-gate: write the closing entry per the playbook 'Ending the window' (include usage_report --windows --since 2026-10-22), then set next_action to null.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "F919-impl",
@@ -89,7 +89,7 @@
         },
         {
             "id": "close-gate",
-            "status": "open",
+            "status": "done",
             "title": "Closing entry with usage_report; next_action null",
             "detail": "Playbook 'Ending the window'. Include usage_report --windows --since 2026-10-22."
         }
