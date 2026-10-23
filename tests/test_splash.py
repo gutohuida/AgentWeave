@@ -46,6 +46,9 @@ class _Window:
     def destroy(self):
         self.log.append(("destroy", None, time.monotonic()))
 
+    def set_title(self, title):
+        self.log.append(("set_title", title, time.monotonic()))
+
 
 def _fake_webview(log):
     windows: list[_Window] = []
@@ -206,3 +209,116 @@ def test_the_window_remembers_what_the_operator_chose(fake, tmp_path):
     kwargs = _first(fake.log, "start")[1]
     assert kwargs.get("private_mode") is False
     assert Path(kwargs["storage_path"]) == tmp_path / "app-window"
+
+
+# agentweave-calls-you-with-its-own-sound (trial spdoc-3e64f37b5229): the native window's bridge,
+# the opening sound following the app's sound switch, and sound before the operator's first click.
+
+_URL = "http://127.0.0.1:8161/"
+
+
+def test_the_app_sound_switch_silences_the_opening(fake, tmp_path):
+    from agentweave import cli
+
+    (tmp_path / "app-window").mkdir()
+    (tmp_path / "app-window" / "sound.json").write_text('{"sound": false}', encoding="utf-8")
+    assert cli._open_app_with_splash(lambda: (_URL, None), warm=True) == 0
+    assert fake.played == []
+
+
+def test_the_opening_plays_when_the_switch_is_on_or_unset(fake, tmp_path):
+    from agentweave import cli
+
+    assert cli._open_app_with_splash(lambda: (_URL, None), warm=True) == 0
+    (tmp_path / "app-window" / "sound.json").write_text('{"sound": true}', encoding="utf-8")
+    assert cli._open_app_with_splash(lambda: (_URL, None), warm=True) == 0
+    assert fake.played == ["opening-short.wav", "opening-short.wav"]
+
+
+def test_agentweave_sound_0_wins_over_the_switch(fake, tmp_path, monkeypatch):
+    from agentweave import cli
+
+    (tmp_path / "app-window").mkdir()
+    (tmp_path / "app-window" / "sound.json").write_text('{"sound": true}', encoding="utf-8")
+    monkeypatch.setenv("AGENTWEAVE_SOUND", "0")
+    assert cli._open_app_with_splash(lambda: (_URL, None), warm=True) == 0
+    assert fake.played == []
+
+
+def test_the_bridge_sets_the_title_flashes_and_keeps_the_sound_switch(fake, tmp_path, monkeypatch):
+    from agentweave import cli
+
+    flashed: list = []
+    monkeypatch.setattr(cli, "_flash_taskbar", lambda on: flashed.append(on))
+    assert cli._open_app_with_splash(lambda: (_URL, None), warm=True) == 0
+    api = fake.module.windows[0].kwargs["js_api"]
+    api.attention(2)
+    api.attention(0)
+    titles = [entry[1] for entry in fake.log if entry[0] == "set_title"]
+    assert titles == ["(2) AgentWeave", "AgentWeave"]
+    assert flashed == [True, False]
+
+    api.sound(False)
+    assert '"sound": false' in (tmp_path / "app-window" / "sound.json").read_text(encoding="utf-8")
+    fake.played.clear()
+    assert cli._open_app_with_splash(lambda: (_URL, None), warm=True) == 0
+    assert fake.played == []
+
+
+def test_the_plain_app_window_carries_the_bridge_too(fake):
+    from agentweave import cli
+
+    assert cli._open_app_window_native(_URL) is True
+    assert hasattr(fake.module.windows[0].kwargs.get("js_api"), "attention")
+
+
+def test_a_sound_can_play_before_the_operators_first_click(fake, monkeypatch):
+    """Spike 2026-10-23: a page's AudioContext in pywebview's WebView2 starts suspended until the
+    operator clicks, so an app opened and left behind would never sound its call; this flag makes
+    it start running. pywebview's own argument is repeated in case the variable replaces it."""
+    import os
+
+    from agentweave import cli
+
+    monkeypatch.setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--operator-own-flag")
+    assert cli._open_app_with_splash(lambda: (_URL, None), warm=True) == 0
+    args = os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"].split()
+    assert "--autoplay-policy=no-user-gesture-required" in args
+    assert "--operator-own-flag" in args
+    assert "--disable-features=ElasticOverscroll" in args
+
+
+def test_the_bridge_answers_whether_the_window_is_in_front(fake, monkeypatch):
+    """WebView2 keeps document.hasFocus() true while the window is minimised (drive, 2026-10-23),
+    so the page asks the bridge, which reads the OS foreground window."""
+    from agentweave import cli
+
+    assert cli._open_app_with_splash(lambda: (_URL, None), warm=True) == 0
+    api = fake.module.windows[0].kwargs["js_api"]
+    monkeypatch.setattr(cli, "_foreground_is_ours", lambda: False)
+    assert api.foreground() is False
+    monkeypatch.setattr(cli, "_foreground_is_ours", lambda: True)
+    assert api.foreground() is True
+
+
+def test_the_window_coming_to_the_front_tells_the_page(fake, monkeypatch):
+    from agentweave import cli
+
+    monkeypatch.setattr(cli, "_flash_taskbar", lambda on: None)
+    monkeypatch.setattr(cli, "_FOREGROUND_POLL_SECONDS", 0.01)
+    front = {"now": False}
+    monkeypatch.setattr(cli, "_foreground_is_ours", lambda: front["now"])
+    assert cli._open_app_with_splash(lambda: (_URL, None), warm=True) == 0
+    api = fake.module.windows[0].kwargs["js_api"]
+    api.attention(1)
+    time.sleep(0.05)
+    told = [entry for entry in fake.log if entry[0] == "evaluate_js" and "aw-app-focus" in entry[1]]
+    assert told == []
+    front["now"] = True
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline and not told:
+        time.sleep(0.02)
+        told = [
+            entry for entry in fake.log if entry[0] == "evaluate_js" and "aw-app-focus" in entry[1]
+        ]
+    assert len(told) == 1

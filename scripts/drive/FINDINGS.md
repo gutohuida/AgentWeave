@@ -40425,3 +40425,23 @@ Cause (verified): `hub/ui/src/components/layout/PaneResizer.tsx:139-160` sets `f
 **Test:** `hub/ui/src/__tests__/PaneResizer.test.tsx`: after focus, the line's computed background is `var(--ring)`. In jsdom, assert that the inline style no longer pins `background`. It fails today. Seam: Keyboard & dialogs (focus visibility).
 
 ---
+
+## F1038 (B) -- removing a task worktree that holds a `node_modules` junction empties the main checkout's `node_modules`: `git worktree remove --force` follows the junction
+
+**Status:** open 2026-10-23. Found while building `agentweave-calls-you-with-its-own-sound` interactively: `hub/ui/node_modules` was emptied twice in 20 minutes (20:36 and 20:51) while the `:8000` Hub ran this repo's flow tasks.
+**Source:** drive
+**Theme:** Worktrees
+**Ready:** yes
+**Tier:** 0
+
+An agent in `.agentweave/tasks/task-919d0e3104b5` linked `hub/ui/node_modules` to the main checkout's (`mklink /J`, 20:25, the recipe DEAD-ENDS gives for running vitest in a worktree). When the Hub removed that task's worktree, the main checkout's `hub/ui/node_modules` was left empty (mtime 20:51:33); the same happened at 20:36, consistent with `task-64b4438d6b98`. Repro without the Hub, git 2.49.0.windows.1: `git worktree add ../wt`; `mklink /J ..\wt\node_modules ..\target` (target holds a file); `git worktree remove --force ../wt` deletes the file in `target`. Every Hub removal path is `_run_git(repo_root, "worktree", "remove", "--force", path)` (`hub/hub/worktrees.py:988`, `:1193`, `:1513`, `:1567`, `:1627`), and the fallback `shutil.rmtree(path, ignore_errors=True)` at `:1195` also follows a junction on Python 3.11. Nothing unlinks junctions first, which DEAD-ENDS (2026-10-22) already says to do by hand. A junction can point anywhere (a shared `.venv`, a vault), so the loss is not limited to regenerable dependencies. **Fix:** before each removal, walk the worktree without following links, and remove every reparse point (`os.path.isjunction` is 3.12+; on 3.11 use `os.lstat(p).st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT`) with `os.rmdir` / `os.unlink`, then remove the worktree. **Test:** a hub test makes a real junction in a task worktree to a `tmp_path` directory holding a file, runs each removal path, and asserts the file survives; red before.
+
+## F1039 (C) -- the operator stream opened twice when its last subscriber unmounted mid-connect, so every event reached every listener twice
+
+**Status:** fixed 2026-10-23 (Tier 0, interactive, with `agentweave-calls-you-with-its-own-sound`). Found by that change's drive: one question asked behind the window counted as "(2) AgentWeave".
+**Source:** drive
+**Theme:** Live updates
+**Ready:** yes
+**Tier:** 0
+
+`connect()` (`hub/ui/src/hooks/useSSE.ts`) guarded a second attempt with `connectingUrl`, but `cancelReconnect()` (run when the last subscriber unmounts) cleared it while the first `fetch` was still in flight and had nothing to cancel yet. StrictMode's mount, unmount, mount does exactly that, so a remount started a second fetch; when both resolved, both readers stayed open (the page showed two `/api/v1/events` requests). Every listener got each event twice, which was harmless for cache invalidation and visible once something counted. **Fix:** a connect generation, bumped by each attempt and by `cancelReconnect`; an attempt whose fetch resolves stale cancels its own body and returns without scheduling a reconnect. **Test:** `hub/ui/src/__tests__/useSSE-one-stream.test.tsx` renders a subscriber under `<StrictMode>` with a fetch that answers after the remount: 2 deliveries before, 1 after, one stream left open. **Drive:** `scripts/drive/d1023_notifications.py` asserts '(1) AgentWeave' (it read '(2)' before).
