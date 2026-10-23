@@ -8,6 +8,7 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 
+from hub.api.v1 import thread as thread_routes
 from hub.db.engine import async_session_factory
 from hub.db.models import (
     AIJob,
@@ -22,6 +23,7 @@ from hub.db.models import (
     Run,
     SpecDocument,
     SpecDocumentEvent,
+    SpecDocumentMerge,
     SpecRequirement,
     Task,
     TaskIntegration,
@@ -196,9 +198,21 @@ async def test_the_surface_folds_what_no_document_holds(app, auth_headers):
     assert group["title"].startswith("4 items")
 
 
-async def test_every_seeded_item_is_reached_exactly_once(app, auth_headers):
+async def test_every_seeded_item_is_reached_exactly_once(app, auth_headers, monkeypatch):
+    async def one_vault_addition(session, project_id):
+        return [
+            {
+                "id": "vault-entry-1",
+                "name": "Kickoff meeting",
+                "created_at": at(18).isoformat(),
+                "added_by": "operator",
+            }
+        ]
+
+    monkeypatch.setattr(thread_routes, "vault_additions", one_vault_addition)
     await save(
         doc(1, 0),
+        doc("cap", 17, "A capability"),
         task("a", 1, "spdoc-1"),
         task("loose", 2),
         conversation(1, 3),
@@ -264,6 +278,15 @@ async def test_every_seeded_item_is_reached_exactly_once(app, auth_headers):
         ),
         JobRun(id="jr-1", job_id="job-1", project_id="proj-test", fired_at=at(16)),
         Loop(id="loop-1", project_id="proj-test", job_id="job-1", spec_document_id="spdoc-1"),
+        SpecDocumentMerge(
+            id="sdm-1",
+            project_id="proj-test",
+            capability_document_id="spdoc-cap",
+            change_document_id="spdoc-1",
+            actor_kind="operator",
+            actor="user",
+            created_at=at(17),
+        ),
     )
 
     knots = await walk(app, auth_headers)
@@ -286,6 +309,9 @@ async def test_every_seeded_item_is_reached_exactly_once(app, auth_headers):
         "message:msg-1",
         "message:msg-2",
         "firing:jr-1",
+        "spec_documents:spdoc-cap",
+        "document-merge:sdm-1",
+        "vault:vault-entry-1",
     }
     assert sorted(names) == sorted(expected), "each item once, none invented, none missing"
     assert all(k["records"] for k in knots), "every knot names a stored record"
@@ -374,6 +400,42 @@ async def test_six_runs_then_a_merge_fold_the_runs_only(app, auth_headers):
     assert [k["kind"] for k in opened] == ["run"] * 6
     found = await app.get(THREAD + "/knot", params={"key": opened[2]["key"]}, headers=auth_headers)
     assert found.json()["ancestors"] == ["task:task-a", kids[0]["key"]]
+
+
+async def test_a_routine_fold_inside_a_surface_group_opens(app, auth_headers):
+    # Firings of a job no loop document claims sit on the surface; five in a row form a surface
+    # group whose own level folds them again. That inner fold must open to all five.
+    await save(
+        doc(1, 0),
+        AIJob(
+            id="job-1",
+            project_id="proj-test",
+            name="Nightly",
+            agent="builder",
+            message="go",
+            cron="* * * * *",
+        ),
+        *[
+            JobRun(id=f"jr-{i}", job_id="job-1", project_id="proj-test", fired_at=at(10 + i))
+            for i in range(5)
+        ],
+    )
+    knots = await walk(app, auth_headers)
+    names = [r for k in knots if k["kind"] != "fold" for r in k["records"]]
+    assert sorted(names) == sorted(
+        ["spec_documents:spdoc-1"] + [f"firing:jr-{i}" for i in range(5)]
+    )
+    surface = (await level(app, auth_headers))["knots"]
+    group = next(k for k in surface if k["fold_of"] == "group")
+    [inner] = (await level(app, auth_headers, group["key"]))["knots"]
+    assert (inner["fold_of"], inner["title"], inner["child_count"]) == ("firing", "5 firings", 5)
+    one = (await level(app, auth_headers, inner["key"]))["knots"][3]
+    found = await app.get(THREAD + "/knot", params={"key": one["key"]}, headers=auth_headers)
+    assert found.status_code == 200
+    assert found.json()["ancestors"] == [group["key"], inner["key"]]
+    own = await app.get(THREAD + "/knot", params={"key": inner["key"]}, headers=auth_headers)
+    assert own.json()["ancestors"] == [group["key"]]
+    assert own.json()["knot"]["child_count"] == 5
 
 
 async def test_an_unknown_knot_and_a_bad_cursor_are_refused(app, auth_headers):

@@ -242,7 +242,7 @@ class Thread:
             return self.knots[key]
         if not key.startswith("fold:") or "|" not in key:
             return None
-        parent_key = key[len("fold:") :].split("|", 1)[0]
+        parent_key = fold_parent(key)
         parent = None if parent_key == SURFACE else self.find(parent_key)
         if parent_key != SURFACE and parent is None:
             return None
@@ -264,16 +264,20 @@ class Thread:
 
     def _parent_of(self, knot: Knot) -> Optional[str]:
         if knot.kind == "fold":
-            head = knot.key[len("fold:") :].split("|", 1)[0]
+            head = fold_parent(knot.key)
             return None if head == SURFACE else head
         if knot.parent is None:
-            # A surface knot: beneath a surface group when one holds it.
+            # A surface knot: beneath a surface group when one holds it, and beneath a routine
+            # fold inside that group when one holds it there.
             for sibling in group_surface(self.top):
                 if (
                     sibling.kind == "fold"
                     and sibling.fold_of == "group"
                     and any(m.key == knot.key for m in sibling.members)
                 ):
+                    for inner in fold_routine(sibling.members, sibling.key):
+                        if inner.kind == "fold" and any(m.key == knot.key for m in inner.members):
+                            return inner.key
                     return sibling.key
             return None
         # A knot inside a routine fold is reached through the fold.
@@ -281,6 +285,13 @@ class Thread:
             if sibling.kind == "fold" and any(m.key == knot.key for m in sibling.members):
                 return sibling.key
         return knot.parent
+
+
+def fold_parent(key: str) -> str:
+    """The parent a fold's key names. A fold's key is `fold:{parent}|{first member}`; the parent
+    may itself be a fold (a routine fold inside a surface group) and so hold a `|`, but a member
+    never does (folds hold only unfolded knots), so the parent is everything before the last `|`."""
+    return key[len("fold:") :].rsplit("|", 1)[0]
 
 
 def _fold_node(parent_key: str, members: Sequence[Knot], fold_of: str, title: str) -> Knot:
