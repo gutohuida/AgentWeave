@@ -2788,6 +2788,13 @@ async def _broadcast_run_lifecycle(
     assert event_type in _RUN_LIFECYCLE_EVENTS
     # Scrubbed of the run's registered secrets (slice 5 D7): a failure's `error` and `stderr_tail` can
     # quote a provider key the runtime echoed.
+    # Who started the turn, from the run itself (operator, 2026-10-23): "operator" when the
+    # operator's message controlled it, "autonomous" for a flow's, a job's or a peer's
+    # (turn_scheduler). The app sounds "an agent replied to you" on an operator's finished turn and
+    # stays silent on everyday traffic; nothing else in the payload tells the two apart.
+    if "initiator" not in fields:
+        run_row = await db.get(Run, run_id)
+        fields["initiator"] = run_row.initiator if run_row is not None else None
     payload = run_secrets.scrub(run_id, {"agent": agent, "run_id": run_id, **fields})
     # L9-1's rule — "a broadcast payload is a display surface" — applied here rather than at each
     # caller, which is how the pty path came to miss it: `_transport_failure_fields` and

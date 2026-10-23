@@ -19,12 +19,12 @@ retired, deliberately: the Hub-owned spec flow shipped 2026-08-12/13 and has bee
 | Author specification documents under `spec/` | Work product: track and commit them. |
 | Use the Hub-owned spec flow (documents, requirements, tasks, evidence, coverage) | Via the app and its MCP tools. |
 | Throwaway experiments in `testbed/` | See `testbed/README.md`. |
+| Building this repo's work with AgentWeave agents — flows, tasks, delegation, reviews | Operator, 2026-10-23: dogfooding, and increasingly so. A change document's `delivery` may be a flow. Agents work in their own worktrees and branches; merging to `master` stays the operator's. |
 
 | Still prohibited | Why |
 |---|---|
-| Pointing the Hub **you are editing** at this repo | A Hub code change restarts the process orchestrating the work and kills runs in flight. |
+| Pointing the Hub **you are editing** at this repo | A Hub code change restarts the process orchestrating the work and kills runs in flight. Agents' edits sit on their branches; merging Hub code into the checkout a Hub runs from takes effect at that Hub's next restart. |
 | Invoking the legacy `aw-*` collab skills | Product source in `src/agentweave/templates/skills/` — a feature you implement, not a workflow you run. |
-| Delegating this repo's work through AgentWeave messaging | Do the work directly, or use Claude Code subagents. |
 | Editing `openspec/specs/` | Frozen 2026-10-07: `spec/` is the source of truth (operator's call). |
 
 ## The Hubs on this machine

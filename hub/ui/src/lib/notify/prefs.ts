@@ -15,7 +15,7 @@ export const NOTIFY_PREFS_KEY = 'agentweave-notify'
 export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = {
   sound: true,
   volume: 0.8,
-  kinds: { ask: true, fail: true, done: false },
+  kinds: { ask: true, fail: true, done: false, reply: true },
 }
 
 export function loadNotifyPrefs(): NotifyPrefs {

@@ -211,11 +211,21 @@ export default function App() {
   }, [destination])
 
   useSSE()
-  // A notification's Open goes to the project's overview, where its questions and stalls are.
-  useNotifications((projectId) => {
-    useConfigStore.getState().setSelectedProject(projectId)
-    navigateTo(projectDestination(projectId, 'overview'))
-  })
+  // A notification's Open goes to the project's overview, where its questions and stalls are; a
+  // reply's goes to its conversation. A reply in the conversation on screen calls nobody.
+  const viewingConversation = useRef<string | null>(null)
+  viewingConversation.current = destination.kind === 'conversation' ? resolvedConversationId ?? null : null
+  useNotifications(
+    (projectId, conversation) => {
+      useConfigStore.getState().setSelectedProject(projectId)
+      navigateTo(
+        conversation
+          ? agentDestination(projectId, conversation.agent, conversation.conversationId)
+          : projectDestination(projectId, 'overview'),
+      )
+    },
+    (conversationId) => conversationId === viewingConversation.current,
+  )
 
   if (bootstrapState === 'pending') {
     return <HubConnectionState state="pending" />

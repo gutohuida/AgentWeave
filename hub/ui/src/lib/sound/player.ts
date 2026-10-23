@@ -41,7 +41,8 @@ export function playSound(kind: NotifyKind | 'ready', gain: number): void {
   if (!e) return
   if (e.ctx.state === 'suspended') e.ctx.resume().catch(() => {})
   e.synth.master.gain.setValueAtTime(Math.max(0, Math.min(1, gain)), e.ctx.currentTime)
-  e.synth.play(kind)
+  // A reply has no sound of its own in the brand set; it takes the bright pair.
+  e.synth.play(kind === 'reply' ? 'ready' : kind)
 }
 
 export function unlockSoundOnFirstGesture(): () => void {

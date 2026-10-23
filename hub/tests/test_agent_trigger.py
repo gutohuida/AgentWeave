@@ -1890,6 +1890,8 @@ async def test_successful_run_broadcasts_started_and_completed_lifecycle_events(
     assert len(completed) == 1
     assert completed[0]["exit_code"] == 0
     assert completed[0]["session_id"] == "sess-lc-1"
+    # The operator's own turn says so: the app sounds "an agent replied to you" on it.
+    assert completed[0]["initiator"] == "operator"
     assert not [d for t, d in events if t == "run_failed"]
 
     from hub.db.engine import async_session_factory
@@ -3958,3 +3960,38 @@ async def test_a_met_or_already_started_task_is_not_refused(
             await _await_background_run()
 
     assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.asyncio
+async def test_run_lifecycle_events_carry_the_runs_initiator(app, auth_headers):
+    """A finished turn says who started it, read from the run itself (operator, 2026-10-23).
+
+    The app's notifier sounds "an agent replied to you" only for a turn the operator started; a
+    flow's, a job's or a peer's turn (`initiator="autonomous"`, turn_scheduler) is everyday traffic.
+    The payload is the only place the app can learn which one it was.
+    """
+    from hub.api.v1.agent_trigger import _broadcast_run_lifecycle
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    project_id = (await app.get("/api/v1/projects/proj-test/status", headers=auth_headers)).json()[
+        "project_id"
+    ]
+    async with async_session_factory() as db:
+        db.add(Run(id="run-by-operator", project_id=project_id, agent="a", initiator="operator"))
+        db.add(Run(id="run-by-a-flow", project_id=project_id, agent="a", initiator="autonomous"))
+        await db.commit()
+
+    queue = sse_manager.subscribe(project_id)
+    async with async_session_factory() as db:
+        for run_id in ("run-by-operator", "run-by-a-flow", "run-not-recorded"):
+            await _broadcast_run_lifecycle(
+                db, project_id, "run_completed", agent="a", run_id=run_id, conversation_id="c-1"
+            )
+        await db.commit()
+
+    completed = {d["run_id"]: d for t, d in _drain(queue) if t == "run_completed"}
+    assert completed["run-by-operator"]["initiator"] == "operator"
+    assert completed["run-by-a-flow"]["initiator"] == "autonomous"
+    # No row, no claim: an unknown run is not said to be the operator's.
+    assert completed["run-not-recorded"]["initiator"] is None

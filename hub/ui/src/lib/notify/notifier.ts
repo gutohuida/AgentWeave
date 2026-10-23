@@ -10,13 +10,15 @@ export const BURST_MS = 4000
 const GAIN_FRONT = 0.35
 const GAIN_BEHIND = 0.7
 
-const URGENCY: Record<NotifyKind, number> = { done: 0, ask: 1, fail: 2 }
+const URGENCY: Record<NotifyKind, number> = { done: 0, reply: 1, ask: 2, fail: 3 }
 
 export interface NotifierToast {
   title: string
   description?: string
   /** The project the toast's action opens: the latest event's. */
   projectId: string
+  /** A reply's conversation, which the toast's action opens instead of the project. */
+  conversation?: { agent: string; conversationId: string }
 }
 
 export interface NotifierDeps {
@@ -30,6 +32,9 @@ export interface NotifierDeps {
   attention: (count: number) => void
   prefs: () => NotifyPrefs
   projectName: (projectId: string) => string
+  /** Whether the app is showing this notice's conversation. A reply the operator is watching
+   *  arrive, with the window in front, calls nobody. */
+  viewing?: (notice: Notice) => boolean
 }
 
 interface Burst {
@@ -51,7 +56,8 @@ function describe(notices: Notice[], name: (id: string) => string): Omit<Notifie
   const projects = [...new Set(notices.map((n) => n.projectId))]
   const needsYou = notices.some((n) => n.kind === 'ask')
   const failed = notices.some((n) => n.kind === 'fail')
-  const what = needsYou && !failed ? 'need you' : failed && !needsYou ? 'stalled or failed' : 'happened'
+  const replies = notices.every((n) => n.kind === 'reply')
+  const what = replies ? 'replied' : needsYou && !failed ? 'need you' : failed && !needsYou ? 'stalled or failed' : 'happened'
   const title = `${notices.length} things ${what}`
   const description = projects.length === 1
     ? `in ${name(projects[0])}`
@@ -83,15 +89,33 @@ export function createNotifier(deps: NotifierDeps) {
     whenFocus((front) => deps.play(kind, prefs.volume * (front ? GAIN_FRONT : GAIN_BEHIND)))
   }
 
+  function toastFor(notices: Notice[], latest: Notice): NotifierToast {
+    const t: NotifierToast = { ...describe(notices, deps.projectName), projectId: latest.projectId }
+    if (latest.kind === 'reply' && latest.agent && latest.conversationId) {
+      t.conversation = { agent: latest.agent, conversationId: latest.conversationId }
+    }
+    return t
+  }
+
   function notify(notice: Notice) {
     if (!deps.prefs().kinds[notice.kind]) return
+    if (notice.kind === 'reply' && deps.viewing?.(notice)) {
+      whenFocus((front) => {
+        if (!front) deliver(notice)
+      })
+      return
+    }
+    deliver(notice)
+  }
+
+  function deliver(notice: Notice) {
     const now = Date.now()
     if (burst && now - burst.startedAt < BURST_MS) {
       burst.notices.push(notice)
-      deps.toast({ ...describe(burst.notices, deps.projectName), projectId: notice.projectId }, burst.toastId)
+      deps.toast(toastFor(burst.notices, notice), burst.toastId)
     } else {
       const b: Burst = { notices: [notice], toastId: 0, startedAt: now }
-      b.toastId = deps.toast({ ...describe(b.notices, deps.projectName), projectId: notice.projectId })
+      b.toastId = deps.toast(toastFor(b.notices, notice))
       burst = b
       setTimeout(() => soundBurst(b), GATHER_MS)
     }
