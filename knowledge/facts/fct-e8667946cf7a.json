@@ -1,0 +1,23 @@
+{
+  "id": "fct-e8667946cf7a",
+  "kind": "fact",
+  "claim": "Verdigris is used only for state (focus, active marker, selection) and never as a fill.",
+  "citations": [
+    {
+      "source": "src-9d97fc00ae01",
+      "quote": "State only — focus, active\n  marker, selection — never a fill.",
+      "line_start": 50,
+      "line_end": 51
+    }
+  ],
+  "sources": [
+    "src-9d97fc00ae01"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-22T23:22:09.411595Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

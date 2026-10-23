@@ -29,6 +29,18 @@
     }
   ],
   "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "03e5d14464543d7c214342dec0e220e8f18a470978b8504e51c7b9f436e661e6",
+      "FR-2": "3d68cb0cacd5dd48d91f30d771dfd818fe5325d6292d45aa1d384a52c2a99497"
+    },
+    "high_water": 2,
+    "requirements": {
+      "counts-are-untouched": "FR-2",
+      "readers-are-named": "FR-1"
+    },
+    "retired": {}
+  },
   "delivery": {
     "agent": null,
     "cron": "*/5 * * * *",
@@ -52,7 +64,7 @@
     "phase": "proposed",
     "rigor": "sketch",
     "size": null,
-    "step": "delivery"
+    "step": null
   },
   "kind": "change-spec",
   "lifecycle": "one-off",
@@ -94,7 +106,10 @@
       "description": "VaultReader model + migration 0140, vault_access._bump/readers_for/annotate/shape, routes in api/v1/vault.py and agent_actions.read_vault_entry, UI type VaultEntry.readers.",
       "from": null,
       "key": "t1",
-      "requirements": ["readers-are-named", "counts-are-untouched"],
+      "requirements": [
+        "readers-are-named",
+        "counts-are-untouched"
+      ],
       "reviewer": null,
       "title": "Record and list the agents that read a vault entry"
     }

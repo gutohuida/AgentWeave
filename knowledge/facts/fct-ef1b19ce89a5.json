@@ -1,0 +1,23 @@
+{
+  "id": "fct-ef1b19ce89a5",
+  "kind": "fact",
+  "claim": "The UI typeface is DM Sans Variable and the monospace typeface is JetBrains Mono.",
+  "citations": [
+    {
+      "source": "src-9d97fc00ae01",
+      "quote": "UI type: DM Sans Variable; mono: JetBrains Mono.",
+      "line_start": 60,
+      "line_end": 60
+    }
+  ],
+  "sources": [
+    "src-9d97fc00ae01"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-22T23:22:09.502984Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

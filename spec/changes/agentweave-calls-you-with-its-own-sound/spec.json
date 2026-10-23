@@ -1,0 +1,308 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "SSE events in the shapes the Hub broadcasts (questions.py question_asked {id, from_agent, blocking}; agent_trigger.py permission_requested {id, agent, tool_name, run_id}; stalls.view(); run_failed {agent, run_id, ...}; scheduler.py loop_stopped {job_id, loop_id, reason}; messages.py queue_chain_suspended), each stamped with project_id",
+      "how_to_check": "npx vitest run src/__tests__/notifications.test.ts (written first)",
+      "key": "classifies-real-payloads",
+      "requirement": "ask-and-fail-sound",
+      "then": "ask for the first two, fail for stall/run_failed/queue_chain_suspended/loop_stopped with any reason, done for loop_stopped with reason 'loop queue is empty', nothing for run_completed or task_updated",
+      "when": "the notifier receives each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the notifier with a fake sound player and a fake native bridge",
+      "how_to_check": "npx vitest run src/__tests__/notifications.test.ts",
+      "key": "front-and-behind",
+      "requirement": "behind",
+      "then": "first: one toast and a sound at the quiet gain; then: sound at the normal gain, document.title '(2) AgentWeave', bridge.attention(2); after focus: title 'AgentWeave', bridge.attention(0)",
+      "when": "an ask arrives with focus, then two arrive without focus, then focus returns"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the notifier on fake timers",
+      "how_to_check": "npx vitest run src/__tests__/notifications.test.ts",
+      "key": "burst",
+      "requirement": "one-per-burst",
+      "then": "the first two give one sound (fail) and one toast naming both projects; the third gives a second sound",
+      "when": "an ask and a fail from two projects arrive 1 s apart, then another ask 5 s later"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the repository",
+      "how_to_check": "npx vitest run src/__tests__/notifications.test.ts",
+      "key": "same-synth",
+      "requirement": "one-synth",
+      "then": "hub/ui/src/lib/sound/agentweave-sound.js and brand/sound/agentweave-sound.js have the same bytes",
+      "when": "the synth identity test runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Vite against the trial Hub :8010, the app open on a project other than the drive's scratch project, AudioContext oscillators counted by an init script",
+      "how_to_check": "py -3.11 scripts/drive/d1023_notifications.py (written first; fails on master d660693)",
+      "key": "it-fires-live",
+      "requirement": "every-project",
+      "then": "a toast naming the scratch project appears and oscillators start; with focus lost, the title reads '(1) AgentWeave'; muting in Settings then asking again starts no oscillator",
+      "when": "the drive asks a real question through the trial Hub's questions route in the scratch project, first with the page focused, then with focus reported lost"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the real app launched by the CLI on a scratch profile, minimised without ever being clicked",
+      "how_to_check": "py -3.11 scripts/drive/d1023_notifications.py --real",
+      "key": "native-window",
+      "requirement": "sounds-before-a-click",
+      "then": "the native window's title becomes '(1) AgentWeave' (read with EnumWindows by PID) and the page's AudioContext reports running",
+      "when": "a question is asked in its Hub"
+    },
+    {
+      "checked_by": "agent",
+      "given": "~/.agentweave/hub/app-window/sound.json saying sound is off, or AGENTWEAVE_SOUND=0",
+      "how_to_check": "py -3.11 -m pytest tests/test_splash.py",
+      "key": "opening-follows",
+      "requirement": "operator-controls",
+      "then": "it does not play; with neither, it plays",
+      "when": "the CLI is about to play the opening sound"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator's app after the bundle lands and the CLI is reinstalled",
+      "how_to_check": "operator, by ear and eye",
+      "key": "sounds-right",
+      "requirement": "in-front",
+      "then": "the toast reads clearly, the in-front sound is quiet, the behind sound carries across the room, and the taskbar button flashes",
+      "when": "an agent asks them something with the window in front, and again with it behind"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1b81a0547b33596d37e41fbd3d9127ce054acdb3e3f07254c4aef559b815e31e",
+      "FR-2": "ceaf2a1178a72b5b676edf6e22fefe4a7b2e4207d823ecdf717d24346cbc5995",
+      "FR-3": "a96aa8ca98bf66398ded48265d0e1ddd20ca001b5c1b266b462a084cb16913d9",
+      "FR-4": "6e9544a3101e0c4fd9f5d9e408226355f7463e1a5960c3c1f4f2c4acf77dd08f",
+      "FR-5": "f0c512d08545340344b99616b3c28bd6e93708600a11263f7acba2b99ac912b1",
+      "FR-6": "4de475cb8b6bed984b6535301c0d6985abfeac25dec70d4df8223d2240420d2e",
+      "FR-7": "13c8de8ae6f7795b8c29608e6d1e99dd636e983886da61ef97209d2382838a1a",
+      "FR-8": "ff6a919b892d922365ddc6d528ea8b58d2aeaef8ab1ca03834fc58125d9e3e50"
+    },
+    "high_water": 8,
+    "requirements": {
+      "ask-and-fail-sound": "FR-1",
+      "behind": "FR-3",
+      "every-project": "FR-5",
+      "in-front": "FR-2",
+      "one-per-burst": "FR-4",
+      "one-synth": "FR-8",
+      "operator-controls": "FR-6",
+      "sounds-before-a-click": "FR-7"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1: UI plus the CLI's native window; no Hub code, no migration. The bundle reaches :8000 on reload; the native bridge needs the CLI to relaunch the app.\nD1. hub/ui/src/lib/notify/: a pure classify(type, data) -> {kind, text} | null, and a Notifier (state: unseen count, burst window, prefs) driven by an injected clock, sound player and bridge, so the tests drive it without a DOM audio stack. useNotifications() mounts it once in App.tsx through useSSE(listener).\nD2. Sound: lib/sound/agentweave-sound.js is the brand file copied verbatim (UMD: it sets globalThis.AgentWeaveSound when there is no module); one AudioContext, created lazily, resumed on the first pointerdown/keydown for the browser case. Gains: master gain = volume x 0.35 in front, volume x 0.7 behind.\nD3. Focus is document.hasFocus() at the moment of the event, with window focus/blur listeners to clear the count; visibilityState alone stays 'visible' for a window that is merely covered.\nD4. Native bridge: cli._AppWindowApi passed as js_api to both create_window calls. attention(n) -> window.set_title + FlashWindowEx(FLASHW_TRAY|FLASHW_TIMERNOFG) on the visible top-level window owned by this PID (found with EnumWindows, never by title alone); sound(enabled) writes app-window/sound.json. The UI calls window.pywebview?.api when present and only sets document.title otherwise. Spike 2026-10-23: js_api survives load_url; set_title and FlashWindowEx work.\nD5. Autoplay: the CLI sets WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS to '--autoplay-policy=no-user-gesture-required' (appended to any existing value, and repeating pywebview's own --disable-features=ElasticOverscroll in case the variable replaces its arguments) before webview.start. Spike: suspended without it, running with it.\nD6. Preferences: localStorage 'agentweave-notify' {sound, volume, kinds:{ask,fail,done}}; defaults sound on, volume 0.8, ask and fail on, done off. Settings > General gains a 'Sound and notifications' group; a change to the switch calls bridge.sound(enabled).\nD7. Toasts reuse lib/toast (Radix): a burst updates its open toast in place rather than stacking, through a new toast store update(id, input).",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "The operator decided the notification design in the thread lab on 2026-10-23 (toast and a quiet sound in front; all projects notify) and the sound set exists (brand/sound/agentweave-sound.js: ask, done, fail), but nothing in the app plays a sound or calls attention. A question an agent asks while the window is behind waits silently until the operator happens to look; the opening sound is the only sound AgentWeave makes.",
+  "requirements": [
+    {
+      "key": "ask-and-fail-sound",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Thread lab, 2026-10-23: sounds by default for 'needs you' and 'stalled or failed'; 'done' is off by default.",
+      "statement": "The app MUST play the brand's ask sound when an agent asks the operator a question or requests a permission, and the fail sound when a stall is recorded, a run fails, a message chain is suspended or a loop stops for any reason but a drained queue; a loop that drained its queue is done, which is silent unless the operator turns it on."
+    },
+    {
+      "key": "in-front",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator's pick: 'Toast and quiet sound'.",
+      "statement": "The app MUST show a toast naming the event's project and what happened, with an action that opens that project, and play the sound at a quiet level, when its window has focus."
+    },
+    {
+      "key": "behind",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Identity record §7: window in the background gets the sound, a count in the title and a flashing taskbar button.",
+      "statement": "The app MUST, when its window does not have focus, play the sound at the normal level, prefix the title with the count of unseen notifications as '(n) AgentWeave', and in the native app window flash the taskbar button; the count and the flash MUST clear when the window regains focus."
+    },
+    {
+      "key": "one-per-burst",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "'One sound at most every few seconds; a burst is one sound and one grouped toast.'",
+      "statement": "The app MUST play at most one notification sound per 4 seconds, and MUST group the events arriving within that window into one toast, the more urgent kind (fail over ask over done) choosing the sound."
+    },
+    {
+      "key": "every-project",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Thread lab answer: 'All projects (Recommended)'.",
+      "statement": "The app MUST notify for events from every project on the Hub, not only the selected one, and label each with its project's name."
+    },
+    {
+      "key": "operator-controls",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "brand/sound/README.md: 'the operator can turn sound off'; the handoff asked that AGENTWEAVE_SOUND and the app setting agree.",
+      "statement": "The operator MUST be able to turn notification sound off, set its volume and choose which kinds sound, in Settings, and the choice MUST survive a relaunch; turning sound off MUST also silence the opening sound of the native app, and AGENTWEAVE_SOUND=0 MUST still silence the opening whatever the setting says."
+    },
+    {
+      "key": "sounds-before-a-click",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Spike 2026-10-23: a page's AudioContext in pywebview's WebView2 starts suspended, so an operator who opens the app and walks away would never hear the call this change exists for; --autoplay-policy=no-user-gesture-required makes it running.",
+      "statement": "The native app window MUST let a notification sound play before the operator has interacted with the page; in a plain browser tab the sound MUST become available on the operator's first click or key press."
+    },
+    {
+      "key": "one-synth",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The first shipped opening came from a second synth that drifted out of tune; the brand keeps one source.",
+      "statement": "The app MUST play its notification sounds from a copy of brand/sound/agentweave-sound.js that is byte-identical to it, and a test MUST fail when the two differ."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A notifier in hub/ui that listens to the one instance-wide SSE stream and classifies events: ask = question_asked, permission_requested; fail = stall_recorded, run_failed, queue_chain_suspended, loop_stopped for any reason but a drained queue; done = loop_stopped because its queue drained",
+      "Window in front (document.hasFocus()): a toast naming the project and what happened, with an action that opens that project, and the sound at a quiet level",
+      "Window behind: the sound at the normal level, '(n) AgentWeave' in the title, and in the native app window a flashing taskbar button; both clear when the window regains focus",
+      "At most one sound per 4 s; events arriving inside that window join one grouped toast ('3 things in <project>' or '3 things across 2 projects')",
+      "Operator preferences in localStorage (persistent since f577b6b): sound on/off, volume, per-kind toggles (ask on, fail on, done off), in Settings > General",
+      "The native window: a js_api bridge (attention(count) sets the native title and FlashWindowEx; sound(enabled) writes ~/.agentweave/hub/app-window/sound.json, which the CLI reads before the opening sound), and the WebView2 autoplay policy that lets a sound play before the operator has clicked",
+      "The UI plays the brand synth itself: hub/ui/src/lib/sound/agentweave-sound.js is a byte-identical copy of brand/sound/agentweave-sound.js, held so by a test"
+    ],
+    "non_goals": [],
+    "out_of_scope": [
+      "Operating-system toast notifications (Windows Action Center) and the Notification API: the operator picked an in-app toast; a spike decides later whether the OS toast is worth it",
+      "Review and merge needs (a task awaiting the operator's approval): no single event says so today; filed to the backlog",
+      "The Docker app path (no native window) beyond the browser behaviour",
+      "macOS and Linux taskbar attention"
+    ]
+  },
+  "summary": "When an agent needs the operator (a question, a permission) or work stalls or fails, in any project on the Hub, the app says so with the brand's struck-glass sound: a toast and a quiet sound when its window is in front; the sound, a count in the title and a flashing taskbar button when it is behind. One sound per burst, done is off by default, and the operator can mute, set the volume and pick which kinds sound.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "notifications.test.ts (classifier on the Hub's real payload shapes, front/behind, burst, synth identity), tests/test_splash.py opening-follows cases, scripts/drive/d1023_notifications.py (Vite + trial Hub, and --real)",
+      "files": [
+        "hub/ui/src/__tests__/notifications.test.ts",
+        "tests/test_splash.py",
+        "scripts/drive/d1023_notifications.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "ask-and-fail-sound",
+        "behind",
+        "one-per-burst",
+        "one-synth",
+        "every-project",
+        "sounds-before-a-click",
+        "operator-controls"
+      ],
+      "reviewer": null,
+      "title": "Acceptance tests and drive, failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "lib/notify/{classify,notifier,prefs}.ts, lib/sound/{agentweave-sound.js,player.ts}, hooks/useNotifications.ts, toast update(), mounted in App.tsx",
+      "files": [
+        "hub/ui/src/lib/notify/",
+        "hub/ui/src/lib/sound/",
+        "hub/ui/src/hooks/useNotifications.ts",
+        "hub/ui/src/lib/toast.ts",
+        "hub/ui/src/App.tsx"
+      ],
+      "from": null,
+      "key": "notifier",
+      "requirements": [
+        "ask-and-fail-sound",
+        "in-front",
+        "behind",
+        "one-per-burst",
+        "every-project",
+        "one-synth"
+      ],
+      "reviewer": null,
+      "title": "Notifier, sound player and the hook"
+    },
+    {
+      "depends_on": [
+        "notifier"
+      ],
+      "description": "Settings > General: sound switch, volume, per-kind toggles, a 'play' preview",
+      "files": [
+        "hub/ui/src/components/settings/"
+      ],
+      "from": null,
+      "key": "settings",
+      "requirements": [
+        "operator-controls"
+      ],
+      "reviewer": null,
+      "title": "Sound and notifications settings"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "cli._AppWindowApi (attention, sound), js_api on both windows, the autoplay argument, the opening sound reading app-window/sound.json",
+      "files": [
+        "src/agentweave/cli.py",
+        "tests/test_splash.py"
+      ],
+      "from": null,
+      "key": "native",
+      "requirements": [
+        "behind",
+        "sounds-before-a-click",
+        "operator-controls"
+      ],
+      "reviewer": null,
+      "title": "Native window bridge and autoplay"
+    },
+    {
+      "depends_on": [
+        "notifier",
+        "settings",
+        "native"
+      ],
+      "description": "make ui bundle, run the drive (both modes), METRICS row, brand identity record §7 'shipped'",
+      "files": [
+        "hub/hub/static/ui/",
+        "spec-queue/METRICS.md",
+        "brand/identity-record.md"
+      ],
+      "from": null,
+      "key": "ship",
+      "requirements": [
+        "every-project",
+        "in-front"
+      ],
+      "reviewer": null,
+      "title": "Bundle, drive, ledger"
+    }
+  ],
+  "title": "AgentWeave calls you with its own sound"
+}

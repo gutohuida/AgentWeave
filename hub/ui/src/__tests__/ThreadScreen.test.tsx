@@ -72,6 +72,26 @@ describe('ThreadScreen', () => {
     expect(around).toHaveLength(3)
   })
 
+  it('opens the addressed knot itself when it holds knots, keeping focus on its head', async () => {
+    const heldRun = { ...run, child_count: 1, descendant_count: 1 }
+    const step = knot('run:r1/step', 'run', 'Read the spec', '2026-09-03T09:05:00+00:00')
+    getJson.mockImplementation(async (path: string) => {
+      const url = new URL(path, 'http://hub')
+      if (url.pathname.endsWith('/thread/knot')) return { knot: heldRun, ancestors: ['document:d1', 'task:t1'] }
+      const under = url.searchParams.get('under')
+      if (under === 'document:d1') return page([tsk])
+      if (under === 'task:t1') return page([heldRun])
+      if (under === 'run:r1') return page([step])
+      return page([doc])
+    })
+    const { container } = mount({ knot: 'run:r1' })
+    await screen.findByText('Read the spec')
+    for (const key of ['document:d1', 'task:t1', 'run:r1']) {
+      expect(container.querySelector(`[data-knot-key="${key}"]`)?.getAttribute('data-open')).toBe('true')
+    }
+    await waitFor(() => expect(document.activeElement?.closest('[data-knot-key]')?.getAttribute('data-knot-key')).toBe('run:r1'))
+  })
+
   it('jump to the beginning asks for the first page', async () => {
     getJson.mockImplementation(async (path: string) =>
       path.includes('first=true') ? page([doc]) : page([tsk], { has_before: true }),

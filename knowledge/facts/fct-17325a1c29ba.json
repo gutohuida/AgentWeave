@@ -1,0 +1,23 @@
+{
+  "id": "fct-17325a1c29ba",
+  "kind": "fact",
+  "claim": "The product's red thread runs requirement → task → run → evidence → review → merge, and every step must name who took it.",
+  "citations": [
+    {
+      "source": "src-9d97fc00ae01",
+      "quote": "one\nthread runs requirement → task → run → evidence → review → merge, and every step names who took it.",
+      "line_start": 30,
+      "line_end": 31
+    }
+  ],
+  "sources": [
+    "src-9d97fc00ae01"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-22T23:22:09.242393Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}
