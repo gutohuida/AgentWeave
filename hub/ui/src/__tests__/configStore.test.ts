@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useConfigStore } from '@/store/configStore'
 
 const SESSION_KEY = 'agentweave-session'
@@ -79,5 +79,26 @@ describe('S4 — configStore: apiKey lives in sessionStorage, prefs in localStor
     expect(state.apiKey).toBe('')
     expect(state.selectedProjectId).toBeNull()
     expect(state.isConfigured).toBe(false)
+  })
+})
+
+// The operator, 2026-10-23: "I want the dark theme to be the default". The store reads saved prefs
+// once, at module load, so each case loads a fresh copy of the module.
+describe('the theme a fresh window opens in', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    sessionStorage.clear()
+    vi.resetModules()
+  })
+
+  it('is dark when nothing is saved', async () => {
+    const { useConfigStore: fresh } = await import('@/store/configStore')
+    expect(fresh.getState().mode).toBe('dark')
+  })
+
+  it('is the saved choice when there is one', async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ mode: 'light' }))
+    const { useConfigStore: fresh } = await import('@/store/configStore')
+    expect(fresh.getState().mode).toBe('light')
   })
 })

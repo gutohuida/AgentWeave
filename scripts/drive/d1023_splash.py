@@ -154,7 +154,10 @@ def window_open(pid: int) -> bool:
 
 
 def capture_window(pid: int, path: pathlib.Path) -> bool:
-    """Capture the top-level window owned by `pid` (never by title: the operator's app shares it)."""
+    """Capture the top-level window owned by `pid` (never by title: the operator's app shares it).
+
+    PrintWindow with PW_RENDERFULLCONTENT reads the window's own pixels, even when another window
+    covers it. Copying the screen instead captured whatever sat on top (2026-10-23)."""
     script = rf"""
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
@@ -165,7 +168,7 @@ public class W {{
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r);
-  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
   public struct R {{ public int L, T, Ri, B; }}
 }}
 '@
@@ -174,10 +177,11 @@ $found = [IntPtr]::Zero
   if ($p -eq {pid} -and [W]::IsWindowVisible($h)) {{ $r = New-Object W+R; [void][W]::GetWindowRect($h, [ref]$r)
     if (($r.Ri - $r.L) -gt 300) {{ $script:found = $h; return $false }} }}; return $true }}, [IntPtr]::Zero) | Out-Null
 if ($found -eq [IntPtr]::Zero) {{ exit 3 }}
-[void][W]::SetForegroundWindow($found); Start-Sleep -Milliseconds 120
 $r = New-Object W+R; [void][W]::GetWindowRect($found, [ref]$r)
 $bmp = New-Object System.Drawing.Bitmap ($r.Ri - $r.L), ($r.B - $r.T)
-$g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($r.L, $r.T, 0, 0, $bmp.Size)
+$g = [System.Drawing.Graphics]::FromImage($bmp); $dc = $g.GetHdc()
+$ok = [W]::PrintWindow($found, $dc, 2); $g.ReleaseHdc($dc)
+if (-not $ok) {{ exit 4 }}
 $bmp.Save('{path}'); exit 0
 """
     done = subprocess.run(
