@@ -95,6 +95,25 @@ describe('the health line', () => {
     expect(screen.getByTestId('spec-health-drift')).not.toHaveAttribute('data-tone')
   })
 
+  it('does not say the vault agrees when no check ever ran (F946)', () => {
+    renderLine({ vaultWarnings: 0, vaultChecked: false })
+    const fact = screen.getByTestId('spec-health-vault')
+    expect(fact).toHaveTextContent('Vault not checked')
+    expect(fact).not.toHaveTextContent('agrees')
+    expect(fact).not.toHaveAttribute('data-tone')
+    openMenu(fact)
+    expect(screen.getByText(/has not been checked against the vault/)).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Check against the vault' })).toBeInTheDocument()
+
+    cleanup()
+    renderLine({ vaultWarnings: 0, vaultChecked: true })
+    expect(screen.getByTestId('spec-health-vault')).toHaveTextContent('Vault agrees')
+
+    cleanup()
+    renderLine({ vaultWarnings: 1, vaultChecked: false })
+    expect(screen.getByTestId('spec-health-vault')).toHaveTextContent('1 vault conflict')
+  })
+
   it('opens a fact, and asks for its details', () => {
     const { onShowDetail, onOpenRequirement } = renderLine()
     openMenu(screen.getByTestId('spec-health-requirements'))

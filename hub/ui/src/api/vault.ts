@@ -421,15 +421,27 @@ export interface VaultWarning {
 /** A document's warnings from the vault. A 404 is a Hub that predates them, or a document it does
  *  not know, which the panel reads as no warnings. */
 export function useVaultWarnings(path: string) {
+  return useVaultWarningsBody(path, (body) => body.warnings)
+}
+
+/** Whether the spec-vault-check job ever ran on the document (F946): an empty warnings list means
+ *  "nothing contradicts" only when it did. A Hub older than the field answers true, as it did. */
+export function useVaultChecked(path: string) {
+  return useVaultWarningsBody(path, (body) => body.checked !== false)
+}
+
+interface VaultWarningsBody {
+  warnings: VaultWarning[]
+  checked?: boolean
+}
+
+function useVaultWarningsBody<T>(path: string, select: (body: VaultWarningsBody) => T) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  return useQuery<VaultWarning[]>({
+  return useQuery<VaultWarningsBody, Error, T>({
     queryKey: ['project', projectId, 'vault', 'warnings', path],
-    queryFn: async () =>
-      (
-        await getJson<{ warnings: VaultWarning[] }>(
-          `/api/v1/projects/${projectId}/vault/warnings?path=${encodeURIComponent(path)}`,
-        )
-      ).warnings,
+    queryFn: () =>
+      getJson<VaultWarningsBody>(`/api/v1/projects/${projectId}/vault/warnings?path=${encodeURIComponent(path)}`),
+    select,
     enabled: isConfigured && !!projectId && !!path,
     retry: (count, error) => !isNoVault(error) && count < 2,
   })

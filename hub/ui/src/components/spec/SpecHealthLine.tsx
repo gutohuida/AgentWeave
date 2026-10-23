@@ -29,6 +29,7 @@ export function SpecHealthLine({
   driftCount,
   lastDriftScan,
   vaultWarnings,
+  vaultChecked = true,
   indexIssues,
   tasks,
   history,
@@ -49,6 +50,10 @@ export function SpecHealthLine({
   lastDriftScan?: string | null
   /** Null when the project has no vault (or the route is absent); the fact is then left out. */
   vaultWarnings: number | null
+  /** Whether the spec-vault-check job ever ran on this document. With no warnings and no check,
+   *  "agrees" would be a verdict nobody produced (F946). Defaults to true: a host that cannot say
+   *  keeps the old reading. */
+  vaultChecked?: boolean
   /** Spec index (manifest) problems. */
   indexIssues: number
   tasks: HealthTask[]
@@ -162,16 +167,26 @@ export function SpecHealthLine({
           fact="vault"
           active={activeDetail === 'vault'}
           tone={vaultWarnings ? 'warn' : undefined}
-          label={vaultWarnings ? `${vaultWarnings} vault ${vaultWarnings === 1 ? 'conflict' : 'conflicts'}` : 'Vault agrees'}
+          label={
+            vaultWarnings
+              ? `${vaultWarnings} vault ${vaultWarnings === 1 ? 'conflict' : 'conflicts'}`
+              : vaultChecked
+                ? 'Vault agrees'
+                : 'Vault not checked'
+          }
           title="Vault"
           width={300}
         >
           <p className="aw-health-note">
-            {vaultWarnings ? 'Some requirements contradict facts in the vault.' : 'No requirement contradicts what the vault knows.'}
+            {vaultWarnings
+              ? 'Some requirements contradict facts in the vault.'
+              : vaultChecked
+                ? 'No requirement contradicts what the vault knows.'
+                : 'This document has not been checked against the vault yet. The check runs when the spec vault check job is on (Project settings → Manager).'}
           </p>
           <DropdownMenu.Item className="aw-menu-item" onSelect={onCheckVault}>
             <Icon name="refresh" size={14} className="aw-menu-item-icon" />
-            Check against the vault again
+            {vaultWarnings || vaultChecked ? 'Check against the vault again' : 'Check against the vault'}
           </DropdownMenu.Item>
           {details('vault')}
         </Fact>
