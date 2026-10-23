@@ -1,40 +1,62 @@
 {
-    "purpose":  "DRIVE. Operator, 2026-10-18: drive AgentWeave end to end and file everything wrong with it, as ready findings (repro, severity, seam, tier) for the night to fix. Open with plan-review (the e2e checklist checked against the code: unreached, new, gone), then anything today\u0027s DIRECTION.md adds, then re-drive last night\u0027s fixes, then a full sweep: every e2e checklist row once, two or three rows per sweep item (operator, 2026-10-19), with no sweep started after 16:15. Close with the merge gate. No product code unless DIRECTION.md asks. Playbook: .claude/loops/day-window.md",
-    "playbook":  ".claude/loops/day-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-10-22-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "7c63120",
-    "stop_at":  "2026-10-23T17:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-10-23-day-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window\u0027s merge-gate item (.claude/loops/day-window.md, \u0027The merge gate\u0027), which may fast-forward master to this branch with \u0027git fetch . \u003cbranch\u003e:master\u0027 and \u0027git push origin master\u0027 when all four gate conditions hold and the branch adds no migration -- operator, 2026-10-11 and 2026-10-18. Never a merge commit, never a conflict resolved.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, \u0027Something new\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "DRIVE. Operator, 2026-10-18: drive AgentWeave end to end and file everything wrong with it, as ready findings (repro, severity, seam, tier) for the night to fix. Open with plan-review (the e2e checklist checked against the code: unreached, new, gone), then anything today's DIRECTION.md adds, then re-drive last night's fixes, then a full sweep: every e2e checklist row once, two or three rows per sweep item (operator, 2026-10-19), with no sweep started after 16:15. Close with the merge gate. No product code unless DIRECTION.md asks. Playbook: .claude/loops/day-window.md",
+    "playbook": ".claude/loops/day-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-10-22-daily",
+    "parent_branch": "master",
+    "parent_sha": "7c63120",
+    "stop_at": "2026-10-23T17:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-10-23-day-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "plan-review",
+    "next_action": "Do the 'plan-review' item per .claude/loops/day-window.md 'The pretask': run e2e skill Step 0 incl. plan-against-code inventory, edit the checklist in .claude/skills/e2e-loop/SKILL.md, commit it alone, log the PLAN: line, and insert sweep-<area>-sweep items (every checklist row exactly once) before night-recheck-drive.",
+    "queue": [
+        {
+            "id": "plan-review",
+            "status": "open",
+            "title": "Check the e2e checklist against the code; queue a full sweep",
+            "detail": "Playbook 'The pretask'. Drives nothing. Inserts sweep items before night-recheck-drive. Nothing new in DIRECTION.md for today (newest section 2026-09-07)."
+        },
+        {
+            "id": "night-recheck-drive",
+            "status": "open",
+            "title": "Re-drive last night's fixes live",
+            "model": "sonnet",
+            "effort": "medium",
+            "detail": "Fixed 2026-10-22 night, UI/route/run/gate: F907 (activity digest stopped/failed turn), F909 (waiting rail vs Needs you), F918 (vault Add non-PDF/image file), F919 (reset with live Hub), F925 (job on deleted agent), F928 (permission card in wrong conversation), F933 (no-tool-server manual mode), F944 (read_spec_document delivery), F945 (requirements in-progress count), F946 (Vault agrees when check off), F952 (Overview spend line), F953 (budget-spent Overview). Log CONFIRMED/REOPENED each."
+        },
+        {
+            "id": "ledger-tidy",
+            "status": "open",
+            "title": "Regenerate backlog page; check Ready/Tier on today's findings",
+            "model": "sonnet",
+            "effort": "medium",
+            "detail": "py -3.11 scripts/backlog_page.py, then verify every F filed today has **Ready:** and **Tier:** lines."
+        },
+        {
+            "id": "D-7",
+            "status": "open",
+            "title": "Merge gate",
+            "model": "sonnet",
+            "effort": "medium",
+            "detail": "NOTE at compose: master is 4 commits ahead of the branch (docs rework, DEAD-ENDS), so condition 1 fails; git fetch . refuses non-FF. Log it, do not rebase. Branch adds no migration at compose time."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master. The one exception is this window's merge-gate item (.claude/loops/day-window.md, 'The merge gate'), which may fast-forward master to this branch with 'git fetch . <branch>:master' and 'git push origin master' when all four gate conditions hold and the branch adds no migration -- operator, 2026-10-11 and 2026-10-18. Never a merge commit, never a conflict resolved.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, Iteration 1 step 2, 'Something new'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
 }
