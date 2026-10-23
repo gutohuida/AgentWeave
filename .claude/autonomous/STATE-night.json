@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9234463",
     "stop_at": "2026-10-23T07:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-22-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F953-impl",
-    "next_action": "Do queue item F953-impl: read its FINDINGS.md entry, write the failing test, fix, drive, close the finding, commit and push.",
+    "current": "close-gate",
+    "next_action": "Do queue item close-gate: write the closing entry per the playbook 'Ending the window' (include usage_report --windows --since 2026-10-22), then set next_action to null.",
     "queue": [
         {
             "id": "F919-impl",
@@ -83,9 +83,9 @@
         },
         {
             "id": "F953-impl",
-            "status": "open",
+            "status": "done",
             "title": "F953: Overview with spent budget says only 'paused'",
-            "detail": "Tier 0. Read the F953 entry in scripts/drive/FINDINGS.md (grep '## F953 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed 9509788."
         },
         {
             "id": "close-gate",

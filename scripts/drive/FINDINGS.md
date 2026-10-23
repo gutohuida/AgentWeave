@@ -39142,7 +39142,7 @@ Seam: `OverviewScreen.tsx:177` feeds the line `ledger.spend.total_usd` alone. `p
 
 ## F953 (B) -- with the token budget spent, the Overview says only "Autonomous turns are paused; operator messages can still run.": no limit, no way to raise it, and a held turn leaves "Nothing needs you · Nothing running"
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-checkpoints-sweep` (Chromium, :8122; `s1022_ck_ui.py overview -spent|-held`, screenshots `overview-spent.png`, `overview-held.png`).
+**Status:** fixed 9509788 (Tier 0, 2026-10-23). Drive: scratch Hub :8133, `scripts/drive/f953_seed.py` + `f953_ui.py` (Chromium): budget 100K, 298.2K used, a job fired with Run now left one turn queued `token budget exhausted`; the Overview band read "Token limit reached: 298.2K of 100K tokens. ... 1 turn waiting. Change it in Budgets", the summary "1 turn held by the budget · Nothing running", the link opened Project settings -> Budgets, one border, no console errors. Not done: the Needs-you section itself still reads "No questions, approvals or failed merges are waiting" beside a held turn (the summary line and band carry it). Found by the day sweep `sweep-checkpoints-sweep` (Chromium, :8122; `s1022_ck_ui.py overview -spent|-held`, screenshots `overview-spent.png`, `overview-held.png`).
 **Source:** drive
 **Theme:** Accounting & allowance
 **Ready:** yes
