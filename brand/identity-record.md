@@ -174,6 +174,8 @@ As of 2026-10-23:
   "Multi-agent AI collaboration framework…"; the tagline was offered as the replacement and not
   yet answered.
 - No Apple touch icon in the app (the PNG exists here in `logos/`).
-- Being built (2026-10-23): the loading thread in the app (change
-  `the-thread-is-how-agentweave-shows-it-is-loading`). Next: the splash with the opening sound, then
-  sounded notifications, then a test of real Windows notifications.
+- Built 2026-10-23: the loading thread in the app (`the-thread-is-how-agentweave-shows-it-is-loading`)
+  and the opening splash with its sound (`agentweave-opens-on-the-thread`: the window opens at once
+  on `src/agentweave/assets/splash.html`, the CLI plays `opening.wav` / `opening-short.wav`, made by
+  `scripts/make_opening_sound.py`; `AGENTWEAVE_SOUND=0` silences it). Next: sounded notifications,
+  then a test of real Windows notifications.
