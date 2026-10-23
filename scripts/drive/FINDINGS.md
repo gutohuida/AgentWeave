@@ -38870,7 +38870,7 @@ beta's settings -> Charter open; Underwriter deleted elsewhere (`DELETE /charter
 
 ## F928 (B) -- a permission card is shown in whichever of the agent's conversations is open, not the one whose run asked: under a finished review's transcript it reads as the review asking to archive a job
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8117, profile lp1022, project `proj-042da656a1f4`, Chromium against the served bundle; `testbed/ui-judge/s1021-archive/110245/01_archive_card.png`).
+**Status:** fixed e63686b 2026-10-23 (night). Drive: scratch Hub :8127 (profile f928), real Haiku turns, Chromium `scripts/drive/f928_ui.py`: with the panel on an earlier conversation only that conversation's own expired card showed and the bar said "waiting on your answer in <asking conversation>"; opening the asking conversation showed the live archive_job card, Allow -> request allowed, run completed. Superseded text: open 2026-10-22. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8117, profile lp1022, project `proj-042da656a1f4`, Chromium against the served bundle; `testbed/ui-judge/s1021-archive/110245/01_archive_card.png`).
 **Source:** drive
 **Theme:** Permissions
 **Ready:** yes
