@@ -37809,7 +37809,7 @@ The message is built once for agents and the operator alike (`hub/hub/spec_servi
 
 **Extended 2026-10-22** (day sweep `sweep-spec-sweep`, Chromium, scratch Hub :8121): the recipe outlives the approval. An approved document approved over `steps_skipped` keeps an "Approved over these gaps:" block in its header (`useSpecPhaseControls.tsx:719-725`, `approval_warnings_overridden`). That block still says "send it back first, POST /api/v1/projects/proj-94e2f2f27779/project/documents/phase?path=…&to=exploring, then POST …/journey …". This is advice to un-approve a document the operator has already decided on, given as two raw HTTP calls. At 900 px wide the block, with the two other gaps, pushes the document's first line to y≈690 of 940 (`testbed/ui-judge/s1022-spec/120548/narrow_dark.png`). The header rebuild was meant to undo exactly that push (`SpecDocumentHeader`'s docstring: "pushed the document 380px down"). **Expected, in addition:** the overridden record shows each gap's code and its one-line message without the remedy, folded behind a count ("Approved over 3 gaps").
 
-**Re-seen 2026-10-22** (docs-rework drive, demo Hub :8012, Haiku planner): the Approve anyway dialog showed the same `POST /api/v1/projects/…/project/documents/journey?path=…` recipe to the operator, for a document an agent wrote whole (F960). Nothing new beyond F830's own text.
+**Re-seen 2026-10-22** (docs-rework drive, demo Hub :8012, Haiku planner): the Approve anyway dialog showed the same `POST /api/v1/projects/…/project/documents/journey?path=…` recipe to the operator, for a document an agent wrote whole (F1034). Nothing new beyond F830's own text.
 
 ## F831 (D) -- the note answering a cannot-satisfy report runs the operator's reason into the next sentence with no full stop
 
@@ -39208,7 +39208,7 @@ Repro: master's HEAD is `8d3c6ce` "sort names (made for FR-1)". builder, on t-to
 
 Repro: FR-2's accepted piece `ev-fb9afe324ba9` watches `todo/items.py` and is merged to master (`reachable_from_main` 1). A watched commit, then `POST /spec/drift/detect` -> 200 `{"raised": ["drift-dadfd49e8675"]}`: scanning works. Move the project's `.git` aside, and `POST /spec/drift/detect` -> **200 `{"raised": [], "rebuilt": 0}`**. On the Spec page, the drift strip's **Scan for drift** reads "Scanned the project: 0 new — 0 on this document". (The diff route, by contrast, says "commit a864355a45e6 is not in this repository".) `requirement_evidence.detect_drift` skips a footprint silently when `main_ref` is None (`:1956`) or `tree_entries` cannot read the ref (`:1966-1971`). So an unreadable repository, a renamed main branch, or a footprint's line of work whose branch was deleted (a task delete discards its branch, F828) each produce a scan that reports nothing and looks clean (only the unreadable repository was driven; the other two are read from the code). Accepted evidence then goes unwatched with no word. **Expected:** the detect response lists what it could not scan (`unscanned: [{evidence_id, identifier, reason}]`, or one `reason` when the repository is unreadable), and the strip says it ("Scanned the project: 0 new — 1 piece could not be checked: …"). **Test:** `test_drift_*`: detect with a footprint whose branch was deleted answers it under `unscanned` with a reason (fails today: `raised: []` and nothing else).
 
-## F959 (B) -- Settings → General's "Default permissions" option says "Claude and Codex: Workspace only. Copilot: Ask me.", but Codex runs at Edit files and Copilot at Workspace only
+## F1033 (B) -- Settings → General's "Default permissions" option says "Claude and Codex: Workspace only. Copilot: Ask me.", but Codex runs at Edit files and Copilot at Workspace only
 
 **Status:** open 2026-10-22. Found while writing the permission-postures docs page (docs rework, `df23b58`), by comparing the UI label with the runner adapters.
 **Source:** code
@@ -39218,7 +39218,7 @@ Repro: FR-2's accepted piece `ev-fb9afe324ba9` watches `todo/items.py` and is me
 
 The unset option of the Default permissions select is labelled `'Claude and Codex: Workspace only. Copilot: Ask me.'` (`hub/ui/src/components/settings/GeneralSettings.tsx:206`). What a run actually gets with no posture is each adapter's `posture_at_rest`: Claude → `workspace` (`runner_commands.claude_posture_at_rest`), Codex → `acceptEdits`, i.e. Edit files (`hub/hub/runner_adapters/codex.py:279-282`), Copilot → `workspace` (`hub/hub/runner_adapters/copilot.py:289-294`, `copilot_acp.posture_for(None)` returns `workspace`, measured). Two of the three claims are wrong, and the Codex one understates what an agent may do. **Expected:** the label is derived from the adapters (or the permission-modes route returns each runner's at-rest posture) rather than hand-written. **Test:** a UI test that the unset option's text names each runner's at-rest posture as the modes route reports it (fails today on Codex and Copilot).
 
-## F960 (C) -- a Haiku planner writes a whole change document in one turn, never asks the operator or calls `advance_spec_step`, so the document stays at `intake` and approval always warns `steps_skipped`
+## F1034 (C) -- a Haiku planner writes a whole change document in one turn, never asks the operator or calls `advance_spec_step`, so the document stays at `intake` and approval always warns `steps_skipped`
 
 **Status:** open 2026-10-22. Found by the docs-rework drive (throwaway Hub :8012, demo project "Northwind Invoicing", planner on claude-haiku-4-5), spec `invoice-csv-totals-row-and-half-up-tax-rounding`.
 **Source:** drive
@@ -39228,7 +39228,7 @@ The unset option of the Default permissions select is labelled `'Claude and Code
 
 Asked in a conversation to plan a change, the planner filled every section (4 requirements, 6 acceptance criteria, tasks, delivery) in one turn and proposed it. It never called `ask_user` at a step boundary nor `advance_spec_step` (`hub/hub/mcp_server.py:5207`), although the journey's instructions say to (`hub/hub/spec_journey.py:427`, `:550`). The document was left at step `intake`, so approval answered `steps_skipped` (the F830 recipe) and the operator had to use Approve anyway. It also created the document's two tasks itself with `create_task` instead of letting approval or the document's tasks section produce them. F574 is the operator-written variant (fixed by naming the journey call); this is the agent-written one, where the step protocol is simply not followed. **Open question for the fix (why Ready: no):** whether an agent writing later steps' content should move the step itself (the content-based option F574 declined), or the planner's instructions should make the step calls unmissable. **Test:** an e2e drive where a Haiku planner plans a small change and the document reaches its last journey step, or approval does not warn `steps_skipped` (fails today).
 
-## F961 (C) -- `hub/.env.example` tells the reader the CLI fetches the key "via `agentweave hub start` or `agentweave activate`", two commands that no longer exist
+## F1035 (C) -- `hub/.env.example` tells the reader the CLI fetches the key "via `agentweave hub start` or `agentweave activate`", two commands that no longer exist
 
 **Status:** open 2026-10-22. Found while rewriting the docs (env-variables reference).
 **Source:** code
@@ -39238,7 +39238,7 @@ Asked in a conversation to plan a change, the planner filled every section (4 re
 
 `hub/.env.example:17`. The CLI's subcommands are `doctor`, `status`, `stop`, `reset`, `vault` (`src/agentweave/cli.py:1834-1909`); the Hub is started by bare `agentweave` (`cmd_hub_start`, `cli.py:1403`). There is no `activate`. **Expected:** the comment names bare `agentweave` (or drops the sentence: the key is auto-generated and the app needs no copy of it). **Test:** extend the docs/command consistency check, if one covers example files, to `hub/.env.example`; otherwise a text edit with no test.
 
-## F962 (D) -- the agent's own rule files are stale: `.claude/rules/cli.md` says five `cmd_*` and "ALL task modifications use `with lock`", `.claude/reference/architecture.md` says two runners are wired
+## F1036 (D) -- the agent's own rule files are stale: `.claude/rules/cli.md` says five `cmd_*` and "ALL task modifications use `with lock`", `.claude/reference/architecture.md` says two runners are wired
 
 **Status:** open 2026-10-22. Found while writing the contributing and architecture docs.
 **Source:** code
@@ -39252,7 +39252,7 @@ Asked in a conversation to plan a change, the planner filled every section (4 re
 
 These load into every session that edits the CLI, so they mislead the agent working on this repo, not the product's users. **Expected:** the three statements match the code. **Test:** none; a text edit.
 
-## F963 (D) -- `CHANGELOG.md` has no entry since `[1.1.0] - 2026-08-19` and no `[Unreleased]` section, over 3900 commits later
+## F1037 (D) -- `CHANGELOG.md` has no entry since `[1.1.0] - 2026-08-19` and no `[Unreleased]` section, over 3900 commits later
 
 **Status:** open 2026-10-22. Found while rewriting the docs.
 **Source:** code
