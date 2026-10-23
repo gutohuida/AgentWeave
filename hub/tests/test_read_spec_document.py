@@ -180,6 +180,61 @@ async def test_include_full_adds_the_rest(app, auth_headers, builder):
     assert [task["key"] for task in full["tasks"]] == ["build"]
 
 
+DELIVERY = {
+    "mode": "flow",
+    "agent": "builder",
+    "reviewer": "builder",
+    "stop_when_queue_empties": True,
+    "cron": "*/7 * * * *",
+}
+
+
+@pytest.mark.asyncio
+async def test_include_full_returns_the_delivery_the_document_holds(app, auth_headers, builder):
+    """F944: `delivery` was in no read section, so an agent could not see the flow, agent,
+    reviewer and schedule it was about to overwrite when it submitted the document back."""
+    await make_document(app, auth_headers, builder, delivery=DELIVERY)
+
+    full = (await app.get(READ, params={"path": PATH, "include": "full"}, headers=builder)).json()
+    assert full["delivery"] == {**DELIVERY, "stop_at": None}
+
+    alone = (
+        await app.get(READ, params={"path": PATH, "include": "delivery"}, headers=builder)
+    ).json()
+    assert alone["delivery"] == full["delivery"]
+
+
+@pytest.mark.asyncio
+async def test_a_full_read_submitted_back_keeps_the_delivery(app, auth_headers, builder):
+    """F944: read, edit one statement, resubmit what the read returned -- the flow survives."""
+    await make_document(app, auth_headers, builder, delivery=DELIVERY)
+
+    full = (await app.get(READ, params={"path": PATH, "include": "full"}, headers=builder)).json()
+    held = full["delivery"]
+    assert held is not None and held["cron"] == DELIVERY["cron"]
+    document = {
+        "schema_version": SCHEMA_VERSION,
+        "kind": "change-spec",
+        "title": full["title"],
+        "summary": full["summary"],
+        "requirements": [
+            (
+                {**row, "statement": "It lists what is due today, soonest first"}
+                if row["key"] == "alpha"
+                else row
+            )
+            for row in full["requirements"]
+        ],
+        "acceptance_criteria": CRITERIA,
+        "delivery": full.get("delivery"),
+    }
+    saved = await app.post(SUBMIT, json={"path": PATH, "document": document}, headers=builder)
+    assert saved.status_code == 200, saved.text
+
+    again = (await app.get(READ, params={"path": PATH, "include": "full"}, headers=builder)).json()
+    assert again["delivery"] == held
+
+
 @pytest.mark.asyncio
 async def test_a_document_with_no_payload_says_so(app, auth_headers, builder, tmp_path):
     """ "Unknown" is not "empty" — a reader told there are no requirements would draw the wrong
