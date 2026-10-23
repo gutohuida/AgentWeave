@@ -39679,6 +39679,8 @@ Cause (verified): `project_checks._git` calls `traces.run` without `ok_codes` (`
 
 **Expected:** `--is-ancestor` passes `ok_codes=(0, 1)`; `_remove_checkout` unlocks/removes only a checkout that exists or is registered (or records those exits as answers). **Test:** beside `hub/tests/test_a_merge_head_probe_is_not_a_failed_command.py`: a check run whose checks all pass, on a fresh task, leaves no `aw.command` span with `status == "error"`. Fails today. Seam: Traces x Worktrees & integration (project checks).
 
+**Widened 2026-10-23** (day sweep `sweep-tasks-sweep`, Worktrees row, :8160, `scripts/drive/s1023_wt_drive.py`): each of four passing check runs had 12 `aw.command` spans, 4 `error` (`merge-base --is-ancestor` exit 1, `worktree unlock` 128 twice, `worktree remove` 128). Every `task_integration` trace, successful merges included, also carries a red `git merge-base --is-ancestor <commit> master` exit 1 (`requirement_evidence.is_reachable_from`, `hub/hub/requirement_evidence.py:1103`, called from `task_integration.integrate`), and a branchless task's integration a red `git rev-parse --verify refs/heads/agentweave/task/<id>` exit 128 (`task_branch_tip`, `hub/hub/task_integration.py:430`). The fix should cover these probes too.
+
 ## F998 (C) -- a secret in a project check's command is stored and served verbatim in the `project_settings_updated` event, while the same event's copy on the trace reads `<redacted>`
 
 **Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; scratch Hub :8120, profile tc1023).
@@ -39776,3 +39778,256 @@ Cause (verified): `_summary` (`hub/hub/traces.py:1629-1649`) carries no warning 
 Cause (verified): `otlp_headers: Optional[Dict[str, str]]` (`hub/hub/api/v1/traces.py:113-115`) is checked by the schema; the runner schema deliberately types `provider_config` as `Any` for exactly this reason (`hub/hub/schemas/runners.py:19-22`).
 
 **Expected:** `otlp_headers` typed loosely and checked in the route, with a sentence naming the header and never its value. **Test:** the PUT above -> 422 and the body does not contain "quokka-header-value". Fails today. Seam: Traces settings x request validation.
+
+## F1005 (B) -- Retry merges whatever the task's branch now points at: a commit pushed after approval lands on main with no check run, no review and no override, past a check that would have refused it
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Worktrees row; scratch Hub :8160, profile wt1023, proj-1fff2af61236, `scripts/drive/s1023_wt_drive.py bypass`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 1
+
+A hand-made task (no loop, no requirement link) merges its own branch tip (F622's `review_alone_gates` route). T1 was worked by a Haiku turn, its checks passed on `fd2dc80`, it was Landed, and `fd2dc80` merged. Then:
+
+```
+PUT /settings  checks: tests + nobad = py -3.11 -c "import os, sys; sys.exit(4 if os.path.exists('bad.txt') else 0)"
+operator commits bad.txt on agentweave/task/<T1>          -> b3b2f87
+GET  /tasks/<T1>/integration-preview -> "approval will merge one commit into master; it merges cleanly as of now"
+POST /tasks/<T1>/integrations/retry  -> 200  [merged fd2dc80, merged b3b2f87]
+git show master:bad.txt              -> "this file fails the nobad check"
+GET  /tasks/<T1>/checks              -> one run, passed, target_shas [fd2dc80]   (b3b2f87 never checked)
+task_transitions for T1              -> no new row, override_reason null
+```
+
+The same door, on the path the gate itself prescribes: T2's merge failed on a conflict, the operator resolved it on T2's branch (`f45b763`, "Resolve the conflict on the branch"), pressed **Try again** in the drawer, and `f45b763` merged; T2's checks list still holds only the run on `8dcf6c7`. Contrast Land on T4, whose `nohowdy` check failed: 409 `gate_unsatisfied` naming the check, a blank `override_checks_reason` refused, and only a stated reason landed it (recorded on the transition).
+
+Cause (verified): `retry_integration` (`hub/hub/task_transition_service.py:1068-1091`) goes straight to `integrate_task`, which resolves targets afresh with `merge_targets` (`:1193`); for a branch-tip task that is `task_branch_tip` (`hub/hub/task_integration.py:552`), i.e. whatever the branch holds now, not what approval judged. Neither `evaluate_approval` (checks, conflict) nor `project_checks.request_run` is asked, and the route (`hub/hub/api/v1/tasks.py:1414`) accepts it on an already-merged task whose newest row is `retryable: false`.
+
+**Expected:** a retry merges only what approval judged; where the branch has moved past it, the retry runs the approval gate on the new tip (checks, conflict) and refuses with the gate's sentence, or asks for the same override reason Land does. **Acceptance drive:** this repro -> retry refused naming `nobad`, `master` unchanged. **Test:** `hub/tests/test_task_integration_retry.py`: an approved, merged branch-tip task, a commit added to its branch that fails a configured check, `POST /integrations/retry` -> master does not contain the commit and the answer names the check. Fails today. Seam: Worktrees & integration (retry) x project checks x approval gate.
+
+## F1006 (C) -- after Try again lands a re-resolved branch, the drawer still reads "Merge failed -- CONFLICT ..." above the merge and keeps offering Try again, while the card says nothing is wrong
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Worktrees row; scratch Hub :8160, profile wt1023, proj-1fff2af61236, `scripts/drive/s1023_wt_ui.py tryagain T2` / `drawer T2`, Chromium, served bundle fresh).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+T2's rows, in the route's order: skipped `8dcf6c74` (dirty checkout), failed `8dcf6c74` (CONFLICT), failed `8dcf6c74`, then merged `f45b7632` (the branch after the operator merged master into it), `rode_along_commits: [8dcf6c74]`. A fresh page, drawer of T2:
+
+```
+Merge failed -- Auto-merging greet.py CONFLICT (content): Merge conflict in greet.py Automatic merge failed; fix conflicts and then commit the result. (tried 01:34 PM)
+Merged f45b7632 into master
+1 earlier commit on the same branch also landed with this merge, not just the reviewed one.
+Try again                                   <- task-integration-retry-<T2>: 1
+board card T2: no status line, no Retry     <- latest_integration merged
+```
+
+The "earlier commit ... not just the reviewed one" is `8dcf6c74`, which is the commit that was reviewed; the one nobody reviewed is `f45b7632` (F1005). The rode-along wording itself, for a task's own earlier commits, is F1009.
+
+Cause (verified): `newestPerTarget` keys rows by `commit_sha@target_branch` (`hub/ui/src/components/tasks/TaskIntegrationNote.tsx:16-37`); a merge suppresses only rows with its own key or a null commit, so a failure on the branch's earlier tip survives a merge of its later tip, and `canRetry` (`:71`) is true while any surviving row is retryable. F769 fixed the same-commit and null-commit cases only.
+
+**Expected:** once a row for the task's branch (`source_branch`) has merged, earlier unmerged rows from that branch are not shown and Try again is not offered; the drawer agrees with the card. **Test:** `hub/ui/src/__tests__/taskIntegrationRetry.test.tsx`, rows in the route's order above -> no "Merge failed" text and no `task-integration-retry-<id>`. Fails today. Seam: Worktrees & integration x Tasks (drawer vs card).
+
+## F1007 (C) -- a merge that fails on a conflict is recorded with git's "fix conflicts and then commit the result" after the Hub has already aborted it; the remedy that works ("resolve the conflict on the branch") never reaches the drawer
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Worktrees row; scratch Hub :8160, profile wt1023, proj-1fff2af61236, `scripts/drive/s1023_wt_drive.py retry`, `s1023_wt_ui.py tryagain T2`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+T2 approved over a dirty checkout (skipped, retryable), then T1 merged the same line of `greet.py`. `GET /tasks/<T2>/integration-preview` already said `conflicts: [{"paths": ["greet.py"]}]`. `POST /tasks/<T2>/integrations/retry` -> 200, a `failed` row whose whole reason is `Auto-merging greet.py\nCONFLICT (content): Merge conflict in greet.py\nAutomatic merge failed; fix conflicts and then commit the result.`; `git status` in the project is clean afterwards (nothing to fix or commit there). The drawer shows exactly that sentence beside Try again; pressed again in Chromium it records a third identical row. The gate's sentence for the same state, seen when approving T3 from the drawer, is legible: "This task's work does not merge cleanly into master: greet.py. Resolve the conflict on the branch, then approve ...". The pre-approval note above Approve reads only "The Hub: approval will be refused: greet.py in commit 62412ed99266 conflict with master" with no remedy either.
+
+Cause (verified): `integrate` runs `git merge --no-ff` on the operator's checkout without asking `would_conflict` first, then `merge --abort` and stores git's stderr as the reason (`hub/hub/task_integration.py:713-731`); the gate's wording lives only in `requirement_gate._tip_merge_detail` (`hub/hub/requirement_gate.py:317-330`).
+
+**Expected:** integration asks `would_conflict` before merging (the plumbing the gate and preview already use) and records a reason naming the paths and the gate's remedy ("resolve it on agentweave/task/<id>, then Try again"); the operator's checkout never enters a merge that is known to conflict. **Test:** `hub/tests/test_task_integration.py`: `integrate()` on a target that conflicts with main -> outcome failed, reason names `greet.py` and does not contain "commit the result". Fails today. Seam: Worktrees & integration (retry) x legibility.
+
+## F1008 (D) -- a hand-made task with no branch is told "no accepted evidence names a commit" on approve, retry and preview, the evidence sentence F622 retired for tasks evidence does not govern
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Worktrees row; scratch Hub :8160, profile wt1023, proj-1fff2af61236, `scripts/drive/s1023_wt_drive.py skip`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+Task N: made by hand, no loop (`loop_id` null), no requirement link, no run, in a project with zero `requirement_evidence` rows. `PATCH` it to `approved` -> `latest_integration: skipped, "no accepted evidence names a commit, so there is nothing to merge"`; `GET /tasks/<N>/integration-preview` -> the same reason. Its siblings T1-T4 (same shape, but with a branch) merge their branch tip, so evidence never governed N either; the honest sentence is `NO_TASK_BRANCH` ("this task has no branch of its own"). With the project's `.git` moved aside, the preview of the approved branch-tip task T4 also answered the evidence sentence.
+
+Cause (verified): `_integrate_task` picks the empty reason on `evidence_governs` alone (`hub/hub/task_transition_service.py:1204`), and so does the preview (`hub/hub/api/v1/tasks.py:1192-1195`); `merge_targets` (`hub/hub/task_integration.py:550`) also asks `review_alone_gates`, which F622 added and these two never learned.
+
+**Expected:** both ask the same question `merge_targets` does, so a review-alone task with no branch reads `NO_TASK_BRANCH`. **Test:** `hub/tests/test_task_integration.py`: a loopless, linkless task with no branch, approved -> reason == `NO_TASK_BRANCH`, and the preview's `reason` the same. Fails today. Seam: Worktrees & integration x Tasks. Same preview sentence, other case: F1010 (awaiting evidence).
+
+## F1009 (C) -- after a send-back, merging a task's own branch shows an amber warning that "1 earlier commit on the same branch also landed with this merge, not just the reviewed one": the task's own first-round commit reads as unreviewed work riding along
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Tasks row; scratch Hub :8162, profile tk1023, proj-d51843e66b2a, `scripts/drive/s1023_tk_drive.py workw/revise/workw2/approve`, `scripts/drive/s1023_tk_ui.py drawer W`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+Task W (`task-0ac0709e7e50`), per-task checkout `agentweave/task/task-0ac0709e7e50`. Real Haiku turns:
+
+```
+run-356cfd288e13 (alpha): commit ad95ad6 "add mul", W -> completed
+PATCH /tasks/W {"status":"revision_needed","notes":"Add a test for mul() ..."}  -> 200
+run-73f28d2e43bc (alpha): commit 0b165fb "add test_mul" on the same branch, W -> completed
+POST /tasks/W/land {} -> 200 approved, merged 0b165fb
+GET /tasks/W/integrations -> {"commit_sha":"0b165fb...","rode_along_commits":["ad95ad63efe0..."], ...}
+Chromium, drawer (Story and Details): "Merged 0b165fb0 into master  [amber warning] 1 earlier commit on the same branch also landed with this merge, not just the reviewed one."
+```
+
+Both commits are W's own work, made by W's own runs on W's own branch, and W has no evidence: the operator reviewed the task, not one commit. The warning was F58's (one per-agent branch carrying other tasks' work). Since per-task checkouts (2026-08-27) the branch is the task's own, so the amber warning fires on every task that took more than one commit (every send-back cycle) and tells the operator unreviewed work reached master when none did.
+
+Cause (verified): `commits_riding_along` is `git rev-list <main>..<commit_sha>` minus the tip (`hub/hub/task_integration.py:598-611`), computed for every merge (`:706`, stored `:736`/`:758`). Recording the task's own groundwork is deliberate (`hub/tests/test_task_integration.py:340-380`, `test_later_commits_on_the_branch_are_not_merged`: "an earlier commit on the same task's own branch is groundwork ... it has to land with it ... the record still says which commit was reviewed"), and `test_another_tasks_commits_do_not_ride_along` (`:383-423`) shows another task's work no longer can. The defect is the presentation: the drawer renders any non-empty list as a warning, worded as unreviewed work (`hub/ui/src/components/tasks/TaskIntegrationNote.tsx:130-144`), without telling this task's own commits from anything else.
+
+**Expected:** this task's own earlier commits read neutrally ("with 1 earlier commit of this task: ad95ad6 add mul"), and the amber warning is reserved for commits that did not come from this task's runs (a prerequisite merged in, foreign work), naming whose they are. **Test:** in `hub/ui/src/__tests__/taskIntegrationRetry.test.tsx` (the file that already asserts the rode-along line): a merged integration whose `rode_along_commits` are the task's own renders no `warning` icon and no "not just the reviewed one". Fails today. Seam: Tasks (send-back) x Worktrees & integration.
+
+## F1010 (C) -- the drawer says "Approving will not merge anything: no accepted evidence names a commit, so there is nothing to merge" beside a task whose evidence names commit f13fe58 and awaits review; Land is then refused saying the opposite
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Tasks row; scratch Hub :8162, profile tk1023, proj-d51843e66b2a, `scripts/drive/s1023_tk_drive.py spec/workr`, `scripts/drive/s1023_tk_ui.py land R`).
+**Source:** drive
+**Theme:** Requirements, evidence & coverage
+**Ready:** yes
+**Tier:** 0
+
+Task R (`task-8cd706681ed0`, `t-div` of an approved change document, serves FR-1). Real Haiku turn `run-4358a089b744`: commit `f13fe58` on `agentweave/task/task-8cd706681ed0`, `record_evidence` -> `ev-865460461102` (`review_state: awaiting`, locator "calc/ops.py (commit f13fe58)"), task `completed`.
+
+```
+GET /tasks/R/integration-preview -> 200 {"targets": [], "will_attempt_merge": false,
+    "reason": "no accepted evidence names a commit, so there is nothing to merge"}
+POST /tasks/R/land {} -> 409 gate_unsatisfied, unaccepted[0].kind "awaiting_evidence", unlanded commits ["f13fe588..."],
+    message "This task's work has been recorded and nobody has judged it: FR-1 at f13fe5883a44. Approving now would record that the work is good and merge none of it ... accept the evidence ..."
+Chromium, drawer Details, both on screen at once:
+    (info) "Approving will not merge anything: no accepted evidence names a commit, so there is nothing to merge."
+    (refusal, after Land it) "This task's work has been recorded and nobody has judged it: FR-1 at f13fe5883a44 ..."
+```
+
+Before pressing Land, the operator is told there is nothing to merge and that approving is harmless; there is a recorded commit waiting on their decision, and approving is refused. The preview's sentence is true only of *accepted* evidence and is read as a statement about the work.
+
+Cause (verified): the preview's empty answer is `NOTHING_TO_MERGE` whenever evidence governs and no *accepted* target exists (`hub/hub/api/v1/tasks.py:1192-1194`, `:1280-1283`; sentence `hub/hub/task_integration.py:69`); it never asks about awaiting evidence, which the gate does (`unaccepted` / `unlanded` in the 409). The drawer prints it verbatim (`hub/ui/src/components/tasks/TaskDetailDrawer.tsx:87`).
+
+**Expected:** where evidence awaits review, the preview says so in the gate's terms ("FR-1's evidence at f13fe58 awaits your review: accept it and approving merges it; approving now is refused"), and links to the Evidence view; "nothing to merge" only where no evidence names a commit at all. **Test:** in the integration-preview tests: a task with one awaiting evidence piece naming a commit -> the preview's `reason` does not contain "nothing to merge" and names the piece. Fails today. Seam: Tasks (drawer) x Requirements, evidence & coverage (gate). Same sentence, other case: F1008 (a task with no branch).
+
+## F1011 (C) -- an agent's illegal-move refusal names moves the same route then refuses that agent: "available: assigned, blocked, completed" (blocked is always 403 for an agent) and "available: under_review" (403 for the task's author)
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Tasks row; scratch Hub :8162, profile tk1023, proj-d51843e66b2a, `scripts/drive/s1023_tk_drive.py probe`: a real Haiku turn `run-ff6278552103` running `tools/agent_probe.py` with its own run credential against `/agent-actions/tasks/*`).
+**Source:** drive
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+beta's own task `Bown` (`task-0d47510b8fa7`, in_progress, assignee beta), in order:
+
+```
+PATCH /agent-actions/tasks/Bown {"status":"approved"}     -> 409 "Cannot move a task from 'in_progress' to 'approved'. From 'in_progress' the available transitions are: assigned, blocked, completed."
+PATCH /agent-actions/tasks/Bown {"status":"blocked"}      -> 403 "A task is recorded as waiting on a person because AgentWeave saw the run end with an unanswered blocking question, not because an agent said so. Use ask_user ..."
+PATCH /agent-actions/tasks/Bown {"status":"completed"}    -> 200
+PATCH /agent-actions/tasks/Bown {"status":"approved"}     -> 409 "Cannot move a task from 'completed' to 'approved'. From 'completed' the available transitions are: under_review."
+PATCH /agent-actions/tasks/Bown {"status":"under_review"} -> 403 "Cannot move task ... to 'under_review' with 'beta' as its holder: it is the agent recorded as completing this task ... the operator can move it on."
+```
+
+Each refusal on its own is right; the first of each pair sends the agent to a move that is always refused to it, so an agent following the refusal's advice spends a call on a second refusal (Haiku "wanders" exactly this way). From `completed` the author has no move at all, and the map's sentence says it has one.
+
+Cause (verified): `refusal_detail` lists `allowed_targets(from_status, actor_kind)` (`hub/hub/task_transitions.py:385-403`), the map for the actor *kind*. `blocked` is in the run's map (`:115`, `_BOTH`, because the runtime takes that edge on the run's behalf) and refused to the agent by `update_task_for_actor` (`hub/hub/api/v1/tasks.py:1703-1716`); `completed -> under_review` is `_BOTH` (`task_transitions.py:138`) and refused to the author by `_guard_reviewer_is_not_the_author` (`hub/hub/task_transition_service.py:452`).
+
+**Expected:** an agent's map refusal lists only moves that agent can make on this task (no `blocked`; no `under_review` for the task's author), and where none remain says so ("nothing more is yours to do on this task; the operator or a reviewer moves it on"). **Test:** `hub/tests/test_task_transitions_api.py`: a run-actor PATCH `in_progress -> approved` -> detail does not contain "blocked"; the completing run's `completed -> approved` -> detail does not offer `under_review`. Both fail today. Seam: Tasks (agent plane) x Capability plane.
+
+## F1012 (D) -- the task story records the operator's send-back and block with no reason: "You moved it to sent back" and "You moved it to waiting on you" carry neither the revision notes nor the blocked reason
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Tasks row; scratch Hub :8162, profile tk1023, proj-d51843e66b2a, `scripts/drive/s1023_tk_drive.py revise/stall/story`, `scripts/drive/s1023_tk_ui.py drawer W|S`).
+**Source:** drive
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 2
+
+```
+PATCH /tasks/W {"status":"revision_needed","notes":"Add a test for mul() in tests/test_ops.py asserting mul(2, 3) == 6."} -> 200
+PATCH /tasks/S {"status":"blocked","blocked_reason":"Which currency should OK use?"} -> 200
+GET /tasks/W/story -> {"kind":"transition","from":"completed","to":"revision_needed","actor":"operator","override_reason":null, ...}   (no notes)
+Chromium story W: "You moved it to sent back from completed · 3m ago"     story S: "You moved it to waiting on you from in progress · just now"
+DB task_transitions columns: ... origin, job_id, policy_digest, override_reason, created_at   (no reason/notes column)
+```
+
+The why of the two operator moves that most need one lives only in the task's single `notes` / `blocked_reason` fields, which the next write overwrites (`update_task`'s own docstring: "Overwrites the task's existing notes"). After a second round the story cannot say why the task was sent back the first time. The card shows the block's reason today only because it is still blocked.
+
+Cause (verified): `task_transitions` stores no reason except `override_reason` (`hub/hub/db/models.py:844`); the story builds transition events from those rows only (`hub/hub/task_story.py:171-189`). Tier 2 because the natural fix adds a column (a migration); reading the reason back from the `task_updated` event of the same moment avoids it.
+
+**Expected:** a send-back, rejection or block records its reason with the transition, and the story shows it under the move ("You sent it back: Add a test for mul() ..."). **Test:** a story test: `revision_needed` with notes, then the author completes with new notes -> the story's revision_needed event still carries the first notes. Fails today. Seam: Tasks (story) x Flows & review.
+
+## F1013 (C) -- the same-file warning compares declared paths as raw strings: `./lib.py`, `pkg//lib.py`, `pkg/../pkg/lib.py`, `.` and a case variant all overlap `lib.py`-style paths with no warning, and `../outside.py` is accepted as repo-relative
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Dependencies row; scratch Hub :8161, profile dp1023, proj-f68af439d5d3, `scripts/drive/s1023_dp_overlap_paths.py` and `s1023_dp_planner.py`).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+One exploring change document, two tasks with no `depends_on`, rewritten per case through `PUT /projects/{p}/project/documents/{path}/content`; the warning codes each save answered with:
+
+```
+['lib.py']      vs ['lib.py']              -> ['unordered_file_overlap']
+['pkg/lib.py']  vs ['pkg\\lib.py']         -> ['unordered_file_overlap']
+['pkg']         vs ['pkg/lib.py']          -> ['unordered_file_overlap']
+['lib.py']      vs ['./lib.py']            -> []
+['Lib.py']      vs ['lib.py']              -> []     (one file on this Windows checkout)
+['pkg/lib.py']  vs ['pkg/../pkg/lib.py']   -> []
+['pkg/lib.py']  vs ['pkg//lib.py']         -> []
+['.']           vs ['lib.py']              -> []     ("a directory covers what is beneath it")
+['../outside.py']                          -> 200, stored; absolute and empty paths are refused 422
+```
+
+The `./lib.py` case went end to end in `s1023_dp_planner.py`: `t1` files `["lib.py"]`, `t2` files `["./lib.py"]`, no order. Save, propose and the approval 409 carried no `unordered_file_overlap`; Approve anyway created both tasks with no prerequisite, so they would be built in parallel. Every other warning the drive saw was correct.
+
+Cause (verified): `_normalise_path` (`hub/hub/spec_completeness.py:418-419`) only swaps backslashes and strips leading/trailing `/`; `paths_overlap` (`:422-429`) then compares strings exactly or by `prefix + "/"`. A `./` or `..` segment, a doubled slash, `.` and case are never folded. The payload validator (`hub/hub/spec_payload.py:564-576`) refuses empty and absolute paths but not one that climbs out with `..`.
+
+**Expected:** declared paths are normalised before comparison (`posixpath.normpath`, `.` as the repo root that covers every path, case-folded where the checkout's filesystem is case-insensitive), so every spelling of one path draws the warning; a path that normalises outside the repo (`../x`) is refused like an absolute one, naming the task and the path. **Test:** beside `hub/tests/test_spec_task_files.py`: `paths_overlap("lib.py", "./lib.py")`, `("pkg/lib.py", "pkg//lib.py")`, `(".", "lib.py")` each return the shared path, and a payload with `files: ["../x.py"]` is `payload_invalid`. Fail today. Seam: Dependencies x Spec documents (the planner's same-file warning).
+
+## F1014 (C) -- a document's tasks with no `files` are named only to the agent that saves it: propose, the approval 409 and the approval report never mention them, so the operator approves tasks the Hub cannot order
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Dependencies row; scratch Hub :8161, profile dp1023, proj-f68af439d5d3, `scripts/drive/s1023_dp_planner.py`, Chromium `s1023_dp_ui.py`).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+Document `spec/changes/amber-roc` with four tasks, `t3` and `t4` declaring no `files`:
+
+```
+PUT .../documents/{path}/content  -> 200 warnings: [undeclared_task_files "tasks 't3', 't4' declare no `files`, so the Hub cannot tell whether they edit the same path; ..."]
+POST .../documents/propose        -> 200 warnings: criterion_without_check x4, no_acceptance_drive, steps_skipped   (no undeclared_task_files)
+POST .../documents/phase?to=approved -> 409 approval_warnings: the same three codes                  (no undeclared_task_files)
+approve anyway                     -> 4 tasks created; the Spec page's "Approved over these gaps" lists the same three
+```
+
+The app never calls `PUT .../content` (no `/content` caller in `hub/ui/src`), so the only reader of that warning is the agent whose save it answered; the operator who decides at propose and approve is never told. F694 fixed exactly this for `unordered_file_overlap` ("the save result's advisory alone never reached the operator, so proposal and approval say it too") and left its sibling behind.
+
+Cause (verified): `phase_findings` (`hub/hub/spec_service.py:1959-1965`) adds `spec_completeness.overlap_warnings(payload)` but not `undeclared_files_warnings`, which only the save result carries (`spec_service.py:420-421`).
+
+**Expected:** propose and approval report `undeclared_task_files` too -- as a note (`NOTE_CODES`, `spec_service.py:1798`) if it must not make every file-less multi-task document need Approve anyway, but on the operator's screen either way. **Test:** beside `hub/tests/test_approval_warnings_routes.py`: propose a two-task document whose tasks declare no `files`; the propose answer and the approval 409 (or its notes) carry `undeclared_task_files`. Fails today. Seam: Dependencies x Spec documents (approval).
+
+## F1015 (C) -- the approval gap list shows one same-file pair however many there are: "unordered_file_overlap ×2 -- tasks 't1' and 't2' both declare 'lib.py' ... (tasks, tasks)"; the second pair is never named
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Dependencies row; scratch Hub :8161, profile dp1023, proj-f68af439d5d3, Chromium against the served bundle, `scripts/drive/s1023_dp_ui.py overlap`, shot `testbed/ui-judge/s1023-dp/134147/overlap_approve.png`).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+Document "Two same-file pairs": `t1`/`t2` both declare `lib.py`, `t3`/`t4` both declare `util.py`, no `depends_on`. Propose answers both warnings correctly:
+
+```
+"tasks 't1' and 't2' both declare 'lib.py' and neither depends_on the other, ...; chain them with depends_on"
+"tasks 't3' and 't4' both declare 'util.py' and neither depends_on the other, ...; chain them with depends_on"
+```
+
+Press **Approve** on the Spec page; the gap list (`approval-warning-unordered_file_overlap`) reads, in full:
+
+```
+unordered_file_overlap ×2 — tasks 't1' and 't2' both declare 'lib.py' and neither depends_on the other, so they would be built in parallel; chain them with depends_on (tasks, tasks)
+```
+
+The operator cannot learn from the screen that `t3` and `t4` collide on `util.py`; the "places" add nothing, because every overlap finding's `where` is `"tasks"`. The same rendering is used for "Approved over these gaps" afterwards.
+
+Cause (verified): `GapLines` (`hub/ui/src/components/spec/SpecPhaseParts.tsx:20-48`) groups gaps by code and prints only `group[0].message` plus up to three `where`s; `overlap_warnings` gives every pair `where="tasks"` (`hub/hub/spec_completeness.py:466-474`). Grouping suits a code whose places differ (`criterion_without_check` × 4 lists `acceptance_criteria[0..]`) and loses everything for a code whose difference is in the message.
+
+**Expected:** each pair is named on screen -- either `GapLines` lists every distinct message when the places do not distinguish them, or `overlap_warnings` sets `where` to the pair (`tasks[0], tasks[1]` / the keys) so the place list names them. **Test:** `hub/ui/src/__tests__/specApprovalWarnings.test.tsx`: two `unordered_file_overlap` gaps with different messages and `where: "tasks"` render both task pairs. Fails today. Seam: Dependencies x Spec documents (approval report on screen).
