@@ -537,6 +537,19 @@ export function useTasks(options?: { excludeArchivedCompleted?: boolean; loopId?
   })
 }
 
+/** One task by id, whatever its status or its document's archival: the drawer's fallback for a
+ *  task opened from elsewhere (a Thread knot, the palette) that the board's page does not hold,
+ *  because the board loads with `excludeArchivedCompleted`. Keyed under `tasks`, so the same
+ *  invalidations that refresh the board refresh it. */
+export function useTask(taskId: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<Task>({
+    queryKey: ['project', projectId, 'tasks', taskId],
+    queryFn: () => getJson<Task>(`/api/v1/projects/${projectId}/tasks/${encodeURIComponent(taskId ?? '')}`),
+    enabled: isConfigured && !!projectId && !!taskId,
+  })
+}
+
 /** Every task one specification document declared, regardless of status or the document's own
  *  phase — an explicit scope never hides anything. Its own hook rather than `useTasks({
  *  specDocumentId })`: the two exist for different callers (one small link fetching one document's
