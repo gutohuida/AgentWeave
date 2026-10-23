@@ -136,6 +136,20 @@ def _actor(name: Optional[str]) -> Optional[str]:
     return "Operator" if name in _OPERATOR else name
 
 
+def _recorded_actor(kind: Optional[str], name: Optional[str]) -> Optional[str]:
+    """Who a spec record names, from its `actor_kind` as well as its `actor`.
+
+    The Hub records its own actions as `actor_kind="system"` under an internal job name
+    ("reindex", "backfill"), which means nothing to a reader: it is AgentWeave acting (operator,
+    2026-10-23). An operator's record may store no name at all.
+    """
+    if kind == "system":
+        return SYSTEM_ACTOR
+    if kind == "operator":
+        return "operator"
+    return name
+
+
 @dataclass
 class Knot:
     key: str
@@ -550,6 +564,7 @@ async def build(
         SpecDocumentEvent.id,
         SpecDocumentEvent.document_id,
         SpecDocumentEvent.kind,
+        SpecDocumentEvent.actor_kind,
         SpecDocumentEvent.actor,
         SpecDocumentEvent.detail,
         SpecDocumentEvent.created_at,
@@ -571,12 +586,13 @@ async def build(
             title,
             row.created_at,
             parent=doc_parent(row.document_id),
-            actors=[row.actor],
+            actors=[_recorded_actor(row.actor_kind, row.actor)],
         )
 
     for row in await rows(
         SpecDocumentMerge.id,
         SpecDocumentMerge.change_document_id,
+        SpecDocumentMerge.actor_kind,
         SpecDocumentMerge.actor,
         SpecDocumentMerge.created_at,
         where=SpecDocumentMerge.project_id == project_id,
@@ -587,7 +603,7 @@ async def build(
             "Change merged into its capability",
             row.created_at,
             parent=doc_parent(row.change_document_id),
-            actors=[row.actor],
+            actors=[_recorded_actor(row.actor_kind, row.actor)],
         )
 
     for row in await rows(
@@ -617,6 +633,7 @@ async def build(
         RequirementEvidence.requirement_id,
         RequirementEvidence.task_id,
         RequirementEvidence.run_id,
+        RequirementEvidence.actor_kind,
         RequirementEvidence.actor,
         RequirementEvidence.produced_at,
         where=RequirementEvidence.project_id == project_id,
@@ -634,7 +651,7 @@ async def build(
             f"Evidence for {identifier}" if identifier else "Evidence recorded",
             row.produced_at,
             parent=parent,
-            actors=[row.actor],
+            actors=[_recorded_actor(row.actor_kind, row.actor)],
             link={"object": "evidence", "id": row.id, "requirement": identifier},
         )
 
@@ -642,6 +659,7 @@ async def build(
         EvidenceReview.id,
         EvidenceReview.evidence_id,
         EvidenceReview.decision,
+        EvidenceReview.actor_kind,
         EvidenceReview.actor,
         EvidenceReview.created_at,
         where=EvidenceReview.project_id == project_id,
@@ -652,13 +670,14 @@ async def build(
             f"Evidence {human(row.decision)}",
             row.created_at,
             parent=first(evidence_task.get(row.evidence_id), evidence_parent.get(row.evidence_id)),
-            actors=[row.actor],
+            actors=[_recorded_actor(row.actor_kind, row.actor)],
         )
 
     for row in await rows(
         TaskIntegration.id,
         TaskIntegration.task_id,
         TaskIntegration.outcome,
+        TaskIntegration.actor_kind,
         TaskIntegration.actor,
         TaskIntegration.created_at,
         where=TaskIntegration.project_id == project_id,
@@ -674,7 +693,7 @@ async def build(
             title,
             row.created_at,
             parent=task_parent(row.task_id),
-            actors=[row.actor],
+            actors=[_recorded_actor(row.actor_kind, row.actor)],
         )
 
     for row in await rows(
