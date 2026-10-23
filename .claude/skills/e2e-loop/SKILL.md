@@ -37,8 +37,11 @@ covered because a route returned 200 — see Step 5.
 - **Never point a Hub whose code you are editing at this repository.** Test projects go under
   `~/Documents/`. `.agentweave/` and `spec/` at the repo root are the migration's work product,
   not test output — never delete them as cleanup.
-- **Cheap models only**: Haiku, `claude-haiku-4-5-20251001` or its alias `haiku` (aliases are
-  accepted choices since 2026-09-28; only an undeclared name is a 400). **Codex is undrivable on
+- **Cheap models only**: Haiku, `claude-haiku-4-5-20251001` (aliases are accepted choices since
+  2026-09-28; only an undeclared name is a 400 — but measured 2026-10-23, the alias `haiku` now
+  runs `claude-haiku-5-5`, so bind the full id). **Never press the native folder dialog
+  (`POST /fs/native-dialog/open`) unattended**: it pops a real Tk window on the operator's desktop
+  (2026-10-23, a person answered it). **Codex is undrivable on
   this machine** — every Codex-only path is *not reached*; say so. Copilot runs over ACP; a stub
   provider (`testbed/drive1005-*/stub_provider.py`) drives Copilot runners and whole flows at zero
   spend when a path needs no real judgement.

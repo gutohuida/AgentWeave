@@ -36530,7 +36530,7 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F729 (D) -- after a project delete the app refetches the deleted project
 
-**Status:** fixed 7a55bb1 2026-10-18 (Tier 0): the delete no longer writes the selected project itself (which raced App's destination->store effect back to the deleted id); navigation resolves the fallback once, and no query for the deleted project runs.
+**Status:** fixed 7a55bb1 2026-10-18 (Tier 0): the delete no longer writes the selected project itself (which raced App's destination->store effect back to the deleted id); navigation resolves the fallback once, and no query for the deleted project runs. Recurred 2026-10-23 (day `sweep-projects-sweep`): filed as F1021.
 
 **Found:** open 2026-10-18. Sweep groups A and D. Ten-odd queries for the deleted project return 404 in the console before the app navigates away. Seam: Projects (UI).
 
@@ -38912,6 +38912,8 @@ Repro: `POST /projects/{p}/jobs {"name": "  ", "agent": "alpha", "message": "Rep
 
 Repro: Jobs -> a job's **More for ui probe** -> **Archive**. The confirm "Archive ui probe? It stops firing. Nothing is deleted ..." opens with `document.activeElement` = the header's `BUTTON aria-label="Close"`, not **Cancel**. Pressing **Archive** closes it, the row goes, and focus is `BODY` (measured for two jobs). The checklist's dialog rule is that a confirm takes focus on Cancel and that focus returns to something sensible after. Cause: `DialogContent` (`hub/ui/src/components/ui/dialog.tsx:14-45`) renders the Radix `Close` first and sets no initial focus, so Radix focuses the first focusable element. `JobsView.tsx:376-400` uses it as is. The older D5 dialogs mark their initial control with `data-dialog-initial-focus` (`useDialogFocus`). Other `DialogContent` users (`AgentSettingsSections.tsx`, `GeneralSettings.tsx`, `VaultAddDialog.tsx`, `VaultStorageDialog.tsx`) were not measured here. **Expected:** the archive confirm focuses Cancel (`onOpenAutoFocus` on `DialogContent`, or an `initialFocus` prop), and after Archive focus moves to the Jobs list or **New job**. **Test:** a JobsView test: open the archive confirm -> the active element is Cancel. This fails today. Seam: Keyboard & dialogs x Jobs & loops.
 
+**Widened 2026-10-23** (day sweep `sweep-projects-sweep`, Keyboard & dialogs row, :8118, profile kb1023): **F931 still reproduces (initial focus), widened:** the agent's **Archive…** confirm (`AgentSettingsSections.tsx:143-166`, settings → Identity) opens with focus on the header's Close (X), not **Keep alpha** (`s1023_kb_dialogs.py archive-agent`). Escape then returns focus to Archive… (held, it has a `DialogTrigger`). The Vault Add and Vault storage dialogs also open on the X. They are forms, so this matters less there. F931's "after Archive focus drops to the page" half has the same cause as F1029 (no `DialogTrigger`).
+
 ## F932 (C) -- deleting a document whose flow has finished also deletes the flow's job, its loop and every firing record, and nothing says so: not the confirm, not the answer, not the event
 
 **Status:** open 2026-10-22. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8117, profile lp1022, project `proj-042da656a1f4`; `scripts/drive/s1022_lp_drive.py`, then the delete by API).
@@ -39017,6 +39019,8 @@ Repro, with `document.activeElement` read after each step:
 
 In all three, Cancel and Escape do return focus to the opener (held). Only the confirmed path loses it, because its opener is gone or disabled. For a keyboard user the next Tab starts again from the top of the page (rail, project switcher). **Expected:** focus lands on the nearest sensible control: (a) the next row's Edit button, or **New runner**; (b) the editor; (c) the new screen's main heading or first tab. **Test:** one per site in the existing dialog tests: after confirm, `document.activeElement` is not `document.body`. These fail today. Seam: Keyboard & dialogs.
 
+**Widened 2026-10-23** (day sweep `sweep-projects-sweep`, Keyboard & dialogs row, :8118, profile kb1023): **F941 (b) still reproduces, and also on a plain Save:** Project instructions → empty the editor → Save → **Clear instructions** sends one PUT, and focus is `BODY`. A non-empty **Save** (Enter on it) does the same: focus is `BODY`, because Save disables once the draft is clean (`s1023_kb_instructions.py`). The clear-confirm itself held: focus on Cancel, Tab trapped, Escape back on Save with the draft kept.
+
 ## F942 (C) -- a Copilot provider runner whose key variable starts with `AW_` is refused as "one of the Hub's own credentials", even for a name that is no credential at all; the refusal never says `AW_` names are reserved
 
 **Status:** open 2026-10-22. Found by the day sweep `sweep-projects-sweep` (Chromium, scratch Hub :8119, the runner dialog; `scripts/drive/s1022_pj_ui.py extra`).
@@ -39097,6 +39101,10 @@ Three repros on `spec/changes/hdr-explore/spec.json` and `hdr-proposed`.
 (3) Pressing the primary **Approve** on a proposed document with gaps: the 409 renders "Not approved: the Hub found these gaps… Approve anyway", and focus is on `<body>`, although the Approve button is still on screen (`useSpecPhaseControls`; the button is disabled while busy, so it loses focus). The keyboard user has to Tab from the top of the page to reach "Approve anyway". This is the same class as F941.
 
 **Expected:** (1) the confirm takes focus on Cancel and gives it back to More actions. Open the dialog after the menu has closed, or use `onCloseAutoFocus={e => e.preventDefault()}` when an item opens a dialog. (2) the palette ignores Shift+K. (3) focus moves to Approve anyway, or stays on Approve. **Tests:** `specDocumentHeader.test.tsx`: Delete from the menu, then the active element is inside the dialog. `CommandPalette.test.tsx`: Ctrl+Shift+K does not open it. All fail today. Seam: Keyboard & dialogs x Spec documents.
+
+**Widened 2026-10-23** (day sweep `sweep-projects-sweep`, Keyboard & dialogs row, :8118, profile kb1023): **F948 (1) still reproduces, and is wider than the Spec header's Archive/Delete.** Measured again 2026-10-23 (`scripts/drive/s1023_kb_spec.py`, `s1023_kb_conv.py sheets`; shots `testbed/ui-judge/s1023-kb/spec_menu_*.png`, `conv_checkpoints_sheet.png`). Every dialog opened from a Radix menu item behaves the same way. At +200 ms and +1500 ms, focus is still on the menu trigger behind the scrim. Escape closes the dialog and focus is `BODY`. Instances: Spec header **More actions → Start a flow…** (`useSpecPhaseControls.tsx:461`), **Archive…**, **Delete document…** (`SpecDocumentHeader.tsx:169-174`), **Retire capability…** on a capability (`useSpecPhaseControls.tsx:475-479`), and the conversation bar's **More conversation actions → Checkpoints** (`ConversationBar.tsx:197` → `CheckpointsPanel.tsx:104`). The same dialogs opened from a plain button hold. **Fold into capability…** (primary button) opens on Cancel and returns focus to the button. One shared fix in the `MenuItem`-opens-a-dialog path covers all five.
+
+**Widened 2026-10-23** (day sweep `sweep-projects-sweep`, Keyboard & dialogs row, :8118, profile kb1023): **F948 (2) still reproduces in a second place:** in a conversation, Ctrl+Shift+K (`ConversationView.tsx:142-150`) opens `['Command palette', 'Search documents']`, and it takes two Escapes (`s1023_kb_conv.py shiftk`). The cause is the same: `CommandPalette.tsx:76-77` does not check `!shiftKey`.
 
 ## F949 (C) -- every new document, and every phase move the Hub itself makes, lights a warn-toned "index issue" on every document's header until someone presses Rebuild, and the index details say "Choose it." / "Adopt it first." with no control or pointer to where that is done
 
@@ -40031,3 +40039,333 @@ The operator cannot learn from the screen that `t3` and `t4` collide on `util.py
 Cause (verified): `GapLines` (`hub/ui/src/components/spec/SpecPhaseParts.tsx:20-48`) groups gaps by code and prints only `group[0].message` plus up to three `where`s; `overlap_warnings` gives every pair `where="tasks"` (`hub/hub/spec_completeness.py:466-474`). Grouping suits a code whose places differ (`criterion_without_check` × 4 lists `acceptance_criteria[0..]`) and loses everything for a code whose difference is in the message.
 
 **Expected:** each pair is named on screen -- either `GapLines` lists every distinct message when the places do not distinguish them, or `overlap_warnings` sets `where` to the pair (`tasks[0], tasks[1]` / the keys) so the place list names them. **Test:** `hub/ui/src/__tests__/specApprovalWarnings.test.tsx`: two `unordered_file_overlap` gaps with different messages and `where: "tasks"` render both task pairs. Fails today. Seam: Dependencies x Spec documents (approval report on screen).
+
+## F1016 (B) -- an operator's "nothing merges" (Main branch cleared) is silently undone the next time the folder is opened: the Hub re-adopts `master`, records no settings change, and drains the approved work that was waiting
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, inline probe after `scripts/drive/s1023_pj_api.py branch`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Settings -> Integration -> Main branch says "Approving a task merges its work here. Empty: nothing merges." Emptying the field sends `main_branch: null` (`hub/ui/src/components/settings/GeneralSettings.tsx:230`, `v || null`) and toasts "Approved work no longer merges". Through the API, on a git project whose branch is `master`:
+
+```
+PUT  /projects/proj-19b3a5f0a902/settings {"main_branch": null}   -> 200, main_branch null
+GET  /projects/proj-19b3a5f0a902/settings                         -> main_branch null
+POST /projects/open {"path": "C:\\Users\\huida\\Documents\\aw-pj1023-a"} -> 200   (re-adding the folder; the CLI's start does the same open)
+GET  /projects/proj-19b3a5f0a902/settings                         -> main_branch 'master'
+GET  /projects/proj-19b3a5f0a902/events/history                   -> the clear ("was 'master', now None") is recorded; the change back to 'master' is not
+```
+
+Cause (verified by reading): `open_project` always calls `_adopt_detected_main_branch` (`hub/hub/api/v1/projects.py:374`), which writes the detected branch into any falsy `main_branch` (`:408`, `:425`) and then runs `_integrate_what_was_waiting_for_a_branch` (`:427`). Its docstring says a project "that has chosen a branch has made a statement" -- but `null` is both "never chosen" and the operator's explicit "nothing merges", so the statement is overwritten. Not driven: the drain itself (no approved-and-skipped task existed); by `:427` each approved task that skipped "for want of a main branch" while merging was off would then merge into `master` with nobody asking.
+
+**Expected:** an explicit "nothing merges" survives a reopen -- either the empty choice is stored distinctly from "never chosen" (e.g. `""` or a flag, which `_adopt_detected_main_branch` leaves alone), or the adoption runs only on first registration; any change the Hub makes to settings on its own is recorded as a settings event. **Test:** `hub/tests/test_project_*` beside the F4 adoption test: open a repository project, `PUT main_branch null`, `POST /projects/open` again -> `main_branch` is still null (fails today). Seam: Projects (open) x Integration (merge target).
+
+## F1017 (C) -- a second Browse while the native folder dialog is open says only "The folder dialog could not be opened.": the Hub's 409 "A folder dialog is already open" never reaches the screen, and nothing says where the open one is
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, Chromium against the served bundle, `scripts/drive/s1023_pj_native.py`, shots `testbed/ui-judge/s1023-pj/135501/10_native_pending.png`, `11_native_second_tab.png`, `12_native_reopened.png`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Add project -> Browse... (native dialog available). Tab 1's button reads "Waiting..." (disabled) while the Hub's Tk dialog is up on the Hub's desktop. Then:
+
+- Tab 2, Add project -> Browse... -> `POST /fs/native-dialog/open` 409 `{"detail": "A folder dialog is already open"}`; the modal shows **"The folder dialog could not be opened."**
+- Tab 2, Escape, reopen Add project: Browse... is enabled again; pressing it -> the same 409 and the same sentence.
+- The same happens in one tab: close the modal while the dialog waits, reopen, press Browse.
+
+The operator is told the dialog failed when one is in fact open (possibly behind the browser window) and waiting for them for up to 120 s; nothing says to look for it or that the button frees when it closes.
+
+Cause (verified): `openNativeFolderDialog`'s `onError` (`hub/ui/src/components/projects/ProjectManagerModal.tsx:69`) replaces every error with a fixed sentence instead of `readableApiError(error, ...)`; the Hub's reason is raised at `hub/hub/native_dialog.py:142` and passed through as the 409 detail (`hub/hub/api/v1/native_dialog.py`).
+
+**Expected:** a 409 reads like "A folder dialog is already open on this computer -- finish or cancel it there (it may be behind this window); it closes by itself after 2 minutes." Other errors keep the Hub's reason. **Test:** `hub/ui/src/__tests__/projectManagerDirectoryPicker.test.tsx`: the open mutation rejects with a 409 carrying that detail -> the status text contains "already open" (fails today). Seam: Projects (Add-project dialog) x the Hub's native dialog.
+
+## F1018 (C) -- deleting a project while a run is active is refused with "project cannot be deleted while a run is active": no run, no agent, no way out named, and the dialog shows exactly that line
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-c29934c5b878, `scripts/drive/s1023_pj_busy_delete.py`, one Haiku turn, shot `testbed/ui-judge/s1023-pj/140344/55_delete_during_run.png`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Agent `beta` (claude, Haiku) runs a turn holding a 100 s shell sleep (`run-7b777daa282e`, `running`). Then:
+
+```
+DELETE /projects/proj-c29934c5b878?remove_private=true
+  -> 409 {"detail": {"code": "project_has_active_run", "message": "project cannot be deleted while a run is active"}}
+Settings -> Delete project... -> type the name -> Delete project
+  -> role=alert in the dialog: "project cannot be deleted while a run is active"
+```
+
+The refusal is correct; it does not say which agent is running, that stopping it (the agent's Stop) is the way through, or that the delete can then be retried. Relocate has the same sentence shape ("project cannot be relocated while a run is active", `hub/hub/project_lifecycle.py:397`).
+
+Cause (verified): `ProjectLifecycleService.delete` raises the bare message (`hub/hub/project_lifecycle.py:245-249`) after counting `Run.status == 'running'` without keeping which.
+
+**Expected:** "aw-pj1023-b can't be deleted while beta is running (run run-7b777daa282e). Stop beta, then delete again." (each running agent named), and the same for relocate. **Test:** `hub/tests/test_project_lifecycle*.py` / the delete-route test: with one `running` run, the 409 message names the agent and the stop remedy (fails today). Seam: Projects (delete) x Runs.
+
+## F1019 (C) -- the Instructions editor saves over instructions written since it loaded: a stale tab silently replaces a newer save, with no conflict check
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, Chromium against the served bundle, `scripts/drive/s1023_pj_ui.py instr`, shot `testbed/ui-judge/s1023-pj/140258/40_instr_stale_save.png`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 1
+
+```
+PUT /project/instructions {"content": "v1: use tabs."}
+open Settings -> Instructions               editor shows 'v1: use tabs.'
+PUT /project/instructions {"content": "v2: written elsewhere, keep this."}   (another tab / window)
+in the open editor: type 'v1: use tabs.\nv1b: added here.' -> Save (no refusal, no notice)
+GET /project/instructions -> 'v1: use tabs.\nv1b: added here.'      (v2 is gone; no notice)
+```
+
+The operator's own pywebview window and a browser tab are an ordinary pair. Instructions ride every agent turn and the clear dialog itself warns "AgentWeave keeps no copy -- there is no history and no undo", so a silently lost write is unrecoverable.
+
+Cause (verified): the query never re-reads on its own (`refetchOnWindowFocus: false`, `hub/ui/src/main.tsx:17`; no SSE event for instructions), and `put_instructions` (`hub/hub/api/v1/instructions.py:53-61`) overwrites with no version or `If-Match`. When the query *does* refetch with a different value (an SSE reconnect invalidates everything), `useEffect(() => setDraft(content), [content])` (`hub/ui/src/components/settings/OtherSettings.tsx:32`) replaces an unsaved draft instead.
+
+**Expected:** the PUT carries the version (or content hash) the editor read, and a mismatch answers 409 "these instructions changed since you opened them" with the current text, which the editor shows beside the draft; a refetch never overwrites a dirty draft. **Test:** `hub/tests/test_instructions.py`: PUT with a stale version -> 409, content unchanged (fails today, no version exists); a UI test that a changed `content` prop leaves a dirty draft alone. Seam: Projects (instructions) x multiple windows.
+
+## F1020 (D) -- naming a main branch on a project that is not a git repository is refused as "This project has no branch named 'main' ... it has to exist first"
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-cda38bae12bd, `scripts/drive/s1023_pj_api.py branch`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+A folder with no `.git` (`C:\Users\huida\Documents\aw-pj1023 sp ção`), opened as a project: `GET /main-branch-suggestion` -> `{"suggestion": null, "chosen": null, "is_repository": false}`. `PUT /settings {"main_branch": "main"}` -> 400 "This project has no branch named 'main'. Approval merges into it, so it has to exist first." There is no branch to create: the folder is not a repository, which the suggestion route knows. The app disables the field for a non-repository ("This folder is not a git repository, so there is nothing to merge into."), so only an API or agent caller meets this. Cause (verified): `update_project_settings` checks only `task_integration.branch_exists` (`hub/hub/api/v1/projects.py:685-691`). **Expected:** "This folder is not a git repository, so there is no branch to merge into; run `git init` and commit first." **Test:** beside the existing no-such-branch settings test in `hub/tests/`: a non-repository project's PUT names the missing repository (fails today). Seam: Projects (settings) x Integration.
+
+## F1021 (D) -- F729 is back: deleting a project fires six GETs of the deleted project (all 404), and the app lands on another project's Overview with no word of the delete; a link to a deleted project does the same silently
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-81f4e76f8e92 and proj-c29934c5b878, Chromium against the served bundle, `scripts/drive/s1023_pj_ui.py delete` / `dead`, shots `testbed/ui-judge/s1023-pj/140401/51_after_delete.png`, `140509/60_dead_settings.png`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Settings -> Delete project... -> type the name -> Enter. `DELETE` 204, the private vault folder is gone (fix-D1 holds), and then:
+
+```
+404 GET /api/v1/projects/proj-81f4e76f8e92/agents
+404 GET /api/v1/projects/proj-81f4e76f8e92/tasks?limit=1000
+404 GET /api/v1/projects/proj-81f4e76f8e92/questions?answered=false
+404 GET /api/v1/projects/proj-81f4e76f8e92/ledger
+404 GET /api/v1/projects/proj-81f4e76f8e92/conversations?lifecycle=open
+404 GET /api/v1/projects/proj-81f4e76f8e92/accounting
+```
+
+(eight on the first delete, proj-c29934c5b878). The page then shows the other project's Overview: no toast, no "Deleted aw-pj1023-b" line. F729 (fixed 7a55bb1, 2026-10-18) promised "no query for the deleted project runs"; the ui-finesse shell rewrite (a8ca6e2) came after. Opening `/?project=<deleted id>&tab=environment&section=settings` (or `section=instructions`) lands on another project's Overview with ~12 more 404s and nothing saying the requested project does not exist -- so a failed settings read (F197's alert) cannot be provoked through a deleted id; navigation hides it.
+
+**Expected:** no request for the deleted id after the 204 (the Overview queries included); after a delete, a one-line "Deleted <name>. Its folder was left as it was." where the app lands; a link to an unknown project says so before falling back. **Test:** `hub/ui/src/__tests__/` beside the F729 test: deliver the `project_deleted` event the route broadcasts and mount the Overview the delete navigates through -> no fetch of the deleted id (the F729 test used neither). Seam: Projects (delete) x Overview / navigation.
+
+## F1022 (D) -- small Projects items from the 2026-10-23 sweep: `/favicon.ico` is index.html, identical compact-rail tiles, a typed UNC path ignored by the in-Hub browser, junctions listed as folders
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, `scripts/drive/s1023_pj_brand.py`, `s1023_pj_ui.py picker`, `s1023_pj_api.py fs`; shots `testbed/ui-judge/s1023-pj/135317/04_compact_light.png`, `140158/20_picker_3.png`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+1. **`GET /favicon.ico` answers 200 `text/html` (the SPA's index.html, 1059 bytes)**, while the brand commit (e23cbc6) rewrote `hub/hub/static/ui/favicon.ico` (2,941 bytes), which nothing can serve: only `/assets` is mounted and `serve_spa` (`hub/hub/main.py:744`) answers every other path. The page's own `<link rel=icon>` (`/assets/favicon-DzfNCeau.svg`, 200 `image/svg+xml`, the loop on `#15171C`) is fine, so browsers show the right icon; a client that asks for `/favicon.ico` (a bookmark/shortcut, a non-SVG consumer) gets HTML labelled 200. Either serve `favicon.ico` from the bundle root or drop the dead file.
+2. **Compact rail tiles are the first two letters of the name** (`hub/ui/src/components/layout/Sidebar.tsx:433`): `aw-pj1023-a` and `aw-pj1023-b` both read **AW**, told apart only by hovering (`title`). Projects sharing a prefix (`agentweave-*`, `aw-*`) are indistinguishable at a glance; agent tiles (`:453`) have the same scheme.
+3. **A typed UNC path is ignored by the in-Hub browser.** Typing `\\localhost\c$\Users\huida\Documents` and opening "Browse within the Hub instead" lists `C:\` (`$Recycle.Bin`, `c`, ...), though `GET /fs/list` lists the UNC path correctly (200, its entries): `startPath` accepts only `X:\` or `/` (`hub/ui/src/components/projects/ProjectManagerModal.tsx:159`). Same for a bare `C:` (listed from `C:\`, while `/fs/list?path=C:` is 400 "path must be absolute" without saying `C:\` would do).
+4. **Junctions are listed and followed.** `GET /fs/list?path=C:\Users` lists `Default User` (a junction); `GET /fs/list?path=C:/Users/Default User` answers `path: C:\Users\Default`. `fs_browse.py`'s docstring promises "a symlinked directory is excluded rather than traversed"; `entry.is_dir(follow_symlinks=False)` (`hub/hub/fs_browse.py:109`) is true for a Windows junction on Python 3.11 and `Path.resolve` follows it (F799's class, for the picker). Harmless in native mode; it is the containment claim `AW_WORKSPACE_ROOT` relies on.
+
+**Expected / Tests:** (1) a `hub/tests/` test that `GET /favicon.ico` is not `text/html`; (2) a Sidebar test with two `aw-*` projects whose compact tiles differ; (3) `projectManagerDirectoryPicker.test.tsx`: a typed `\\server\share\dir` starts the picker there; (4) `hub/tests/test_fs_browse*.py`: a junction (`mklink /J`) is excluded like a symlink. Seam: Projects (brand, rail, folder browser).
+
+## F1023 (C) -- rebinding an agent to a runner of another CLI resumes the conversation's old provider session on the new CLI: Copilot starts over with a notice, Claude fails the turn twice ("No conversation found with session ID") before the queue drops the session and silently starts a fresh one
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_rebind.py`, Chromium `scripts/drive/s1023_rm_ui2.py`, shot `testbed/ui-judge/s1023-rm/140238/13_conversation_after_cli_rebind.png`).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 1
+
+Agent `a-run` on Claude runner `ch` (model `haiku`) had two Claude turns in `conv-f45e1b5b2180` (Claude session `62f1c78b-...`). Then the agent was rebound with the Execution screen's own door and given one more turn in that conversation, then rebound back:
+
+```
+PATCH /projects/{p}/agents/a-run {"runner_id": <copilot runner, model auto>}  -> 200
+POST  /projects/{p}/agent/trigger {"agent":"a-run","message":"Reply with exactly the single word OK.","conversation_id":"conv-f45e1b5b2180"}
+  run-ac31c018701e (copilot) completed; on screen: "Copilot had no saved session 62f1c78b-519b-4c54-93a3-79caab462564; a new one was started."
+  conversations.provider_session_id -> b36d6aef-... (Copilot's)
+PATCH /projects/{p}/agents/a-run {"runner_id": <ch, claude>}  -> 200
+POST  /projects/{p}/agent/trigger (same conversation, one message)
+  run-48eb218457b6 failed exit 1: "No conversation found with session ID: b36d6aef-4b63-4d07-8e6c-ab63539cc2c7" (printed twice), "Turn failed"
+  run-e6eee0b7e373 failed exit 1: the same, twice, "Turn failed"            (queue_entry_queued -> redelivered, initiator "operator")
+  run-d079343e0501 completed, session_mode "new", session 822b2667-...        (no notice that the context was dropped)
+```
+
+The operator sent one message and sees two failed turns with four copies of a Claude error naming an id Claude never issued, then an answer from a session that has lost the whole conversation, with nothing saying so. Copilot's leg recovers only because Copilot alone has the "no saved session" rescue (`copilot_acp.py:2700-2716`, `agent_trigger.py:4385-4398`).
+
+Cause (verified): the agent PATCH changes `runner_id` and leaves every conversation's `provider_session_id` alone (`hub/hub/api/v1/agents.py:3158-3165`); the launch resumes `conversation.provider_session_id` whatever CLI wrote it (`hub/hub/api/v1/agent_trigger.py:1280-1281`); for Claude only the queue's generic give-up clears it, after `RESUME_RETRY_LIMIT = 2` failed deliveries (`hub/hub/inbound_queue.py:365`, `:463`).
+
+**Expected:** a provider session is resumed only by the CLI that created it. A turn whose conversation's session belongs to another CLI starts a new session at once and says so in the conversation ("a-run now runs on Copilot; this conversation's earlier turns were on Claude and are not carried into its session"), rather than failing twice. Recording the session's CLI beside `provider_session_id` (or clearing it when the agent is rebound to another CLI) are both candidate shapes; the notice is the point. **Test:** beside `hub/tests/test_runner_binding_redrain.py`: a conversation with a Claude `provider_session_id`, the agent rebound to a Copilot (or Codex) runner and back; the next launch's command carries no `--resume <foreign id>` and the conversation gets the notice. Fails today. Seam: Runners & models (rebind) x Runs (session resume) x Inbound queue (retry).
+
+## F1024 (C) -- a conversation's per-run model survives the agent's rebind to another CLI and is handed to it as is: Copilot was launched with `--model haiku`, ran `claude-sonnet-5` on a premium request, and the Hub recorded the run as model `haiku`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_turn.py` then `scripts/drive/s1023_rm_rebind.py`).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 0
+
+```
+POST /projects/{p}/agent/trigger {"agent":"a-run", ..., "conversation_id":"conv-f45e1b5b2180", "overrides":{"model":"haiku"}}   (a-run on Claude runner ch)
+  conversations.runtime_overrides = {"model": "haiku"}   -- stored as written, correct for Claude
+PATCH /projects/{p}/agents/a-run {"runner_id": <copilot runner, model "auto">}  -> 200, no word about the conversation's model
+POST /projects/{p}/agent/trigger {"agent":"a-run","message":"Reply with exactly the single word OK.","conversation_id":"conv-f45e1b5b2180"}  (no overrides)
+  event run_started: {"runner": "copilot", "model": "haiku"}
+  conversation: "Copilot ran claude-sonnet-5 instead of the requested haiku; this plan allows: [claude-sonnet-5, ..., claude-haiku-4.5, ...]"
+  turn_usage: runner copilot, model claude-sonnet-5, premium_requests 1.0
+```
+
+`haiku` is a Claude alias the `copilot` catalog does not declare (`POST /runners {"cli":"copilot","model":"sonnet"}` is 400 naming Copilot's ids). The operator chose the cheapest model; the turn ran on the plan's default instead, and the Hub's own record says `haiku`. The same stored value is what `inherit_runtime_overrides` copies into a job's or a peer message's new conversation (`hub/hub/conversations.py:66-110`; the job door was driven and inherits `{"model": "haiku"}` as written, `s1023_rm_jobdoor2.py`).
+
+Cause (verified): "Overrides were already validated against the catalog when the operator set them ... so they are trusted here rather than re-validated per turn" (`hub/hub/api/v1/agent_trigger.py:1189-1200`): for a runner without a provider, `model = conversation_overrides.get("model") or config.get("model")`. They were validated against the CLI bound *then*. The provider branch just above already declines a stored model that no longer fits (`:1194-1198`, design D7); a plain CLI change has no such branch, and the rebind (`hub/hub/api/v1/agents.py:3158-3165`) does not look at conversations.
+
+**Expected:** at launch, a stored per-run model the bound runner's CLI does not declare is not applied (kept, as D7 keeps it, so rebinding back restores it); the turn runs on the runner's model and the conversation says so once ("this conversation's model haiku is not one Copilot offers; running on the runner's model"). The composer's model pill reads what will run. **Test:** in `hub/tests/test_agent_trigger_overrides.py`: a conversation with `runtime_overrides {"model": "haiku"}`, the agent rebound to a Copilot runner, trigger -> the spawned command carries no `--model haiku`. Fails today. Seam: Runners & models (rebind) x Conversations (per-run model) x Jobs (inherited overrides).
+
+## F1025 (C) -- the Manager screen's model menu lists no aliases, so a job's model stored as `sonnet` (accepted by the API and stored as written) reads "sonnet -- Not in the model catalog"
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_holders.py`, Chromium against the served bundle `scripts/drive/s1023_rm_ui2.py`, shots `testbed/ui-judge/s1023-rm/140238/11_manager_runner_menu.png`, `12_manager_model_menu.png`).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 0
+
+```
+PATCH /projects/{p}/manager/jobs/vault-distillation {"runner_id": <claude runner ch>, "model": "sonnet"}  -> 200 {"model": "sonnet"}
+manager_jobs row: model 'sonnet'
+```
+
+Project settings -> Manager -> Vault distillation -> Model: the closed menu reads `sonnet`; opened, it lists the eight Claude ids and, last, `sonnet` with the detail **"Not in the model catalog"**. `sonnet` is a declared Claude alias (`GET /model-catalog`: `claude-sonnet-5-5` aliases `["sonnet"]`); the same API answers an undeclared model with 400, so the label tells the operator the Hub holds something it would have refused. Nor can an alias be chosen on this screen, though the Add-agent dialog ("Latest: sonnet -- latest (now Sonnet 5.5)") and the checkpoint model menu both offer them.
+
+Cause (verified): `ManagerSettings.tsx:130` calls `catalogModelOptions(..., { stored: job.model, aliases: false })`; with aliases off, `settingsOptions.tsx:111` appends any stored value not in the list as "Not in the model catalog". `GeneralSection.tsx:136` (checkpoint model) leaves aliases on.
+
+**Expected:** the Manager model menu offers the aliases as the other menus do ("sonnet, the latest -- Now Sonnet 5.5"), so a stored alias reads as that choice; "Not in the model catalog" is kept for a value the catalog really lacks. **Test:** `hub/ui/src/__tests__/managerSection.test.tsx`: a job with `runner_id` of a Claude runner and `model: "sonnet"` renders no "Not in the model catalog". Fails today. Seam: Runners & models (catalog aliases) x Manager jobs (screen).
+
+## F1026 (D) -- unarchiving an agent whose runner was deleted while it was archived answers "An agent with no charter still runs" while it has no runner and cannot run
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_edges.py`, also `s1023_rm_holders.py` with agent `a-cop`).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 0
+
+```
+POST /projects/{p}/runners {"name":"arch2","cli":"claude","model":"haiku"}       -> 201
+POST /projects/{p}/agents {"name":"a-arch2","runner_id":<arch2>}                  -> 201
+POST /projects/{p}/agents/a-arch2/archive                                         -> 200
+DELETE /projects/{p}/runners/<arch2>                                              -> 204   (a-arch2.runner_id -> NULL)
+POST /projects/{p}/agents/a-arch2/unarchive -> 200
+  "message": "No charter is bound. Archiving releases an agent's charter and unarchiving does not restore it. An agent with no charter still runs — bind one only if this agent should have one."
+GET /projects/{p}/agents/launchability -> a-arch2: runnable false, "No runner is bound to this agent. Bind one in the Hub UI before it can run."
+```
+
+The answer names the one release it knows about (the charter) and asserts the agent runs, while the release that matters, the runner the delete unbound (`hub/hub/api/v1/runners.py:291-303`, F532's fix), goes unmentioned. A message then sent to it is held ("Input queued for a-cop", `waiting_reason` "No runner is bound ..."). The app's Unarchive (`ArchivedAgentNotice.tsx`) does not show the message, so the reader is an API or tool caller; the agent's Execution screen does say "This agent cannot run".
+
+Cause (verified): the sentence is a constant (`hub/hub/api/v1/agents.py:3449-3456`) and does not read `agent_row.runner_id`.
+
+**Expected:** with no runner bound, the answer says so first ("a-arch2 has no runner: the runner it had was deleted while it was archived. Bind one in its settings before it can run."), and the charter sentence no longer claims it runs. **Test:** beside `hub/tests/test_a_runner_a_setting_names_cannot_be_deleted.py`: archive an agent, delete its runner, unarchive -> the message names the missing runner and does not contain "still runs". Fails today. Seam: Runners & models (delete) x Agents (unarchive).
+
+## F1027 (C) -- one Escape on the Add-agent dialog's open Provider list closes the whole dialog and throws away the typed name; the list takes no arrow keys
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_layers.py popover`, shot `testbed/ui-judge/s1023-kb/layers_add_agent_provider_open.png`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro, keyboard only, with `document.activeElement` read after each key: focus the rail's **Add agent to aw-kb1023** and press Enter. The Create agent dialog opens with focus in the name field (held). Type `kbtwo`, Tab to **Provider** ("Select a provider"), and press Enter. The listbox opens (`[role=listbox]` count 1). Focus stays on the Provider button. ArrowDown twice: nothing moves, and focus is still on the button. Tab reaches the options ("Claude Code", then "Codex CLI"). Now press Escape once, with focus on the button or on an option. **Both** the listbox and the dialog close (`dialogs` = `[]`), focus returns to Add agent, and the typed name is gone.
+
+Cause (verified): `ProviderPicker` (`hub/ui/src/components/agents/AgentCreateDialog.tsx:26-115`) is a hand-built `role="listbox"` with only a click toggle and an outside-mousedown close. It has no key handling, so it never claims Escape. The dialog's `useDialogFocus` Escape branch (`hub/ui/src/hooks/useDialogFocus.ts:41-58`) stands down only when `event.defaultPrevented` (line 53), so it closes the dialog. This is the arbitration F310 introduced. The listbox also has no ArrowUp/ArrowDown/Enter handling.
+
+**Expected:** with the list open, Escape closes only the list (`preventDefault()`, as `DirectoryPicker` does) and focus returns to Provider. A second Escape closes the dialog. Arrow keys move between options, and Enter picks one. Alternatively, use the Radix `Select` the Vault dialogs already use. Those Kind/Storage selects inside their Radix dialogs held: one Escape closed one layer.
+
+**Test:** `hub/ui/src/__tests__/agentCreateDialogFocusRestore.test.tsx` (or a sibling): open the dialog, open Provider, fire Escape; the dialog is still open and the listbox is gone. It fails today. Seam: Keyboard & dialogs x Agents (create).
+
+## F1028 (C) -- Ctrl+K over an open dialog or the task drawer: the palette opens on top, but the first Tab moves focus into the dialog behind it, and typing goes into a field the operator cannot see
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_palette_over.py`, shots `testbed/ui-judge/s1023-kb/palette_over_add_agent.png`, `palette_over_task_drawer.png`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro 1: focus **Add agent**, press Enter, and the Create agent dialog has focus. Press Ctrl+K. The palette opens over the dialog with focus in its input (`dialogs` = `['Create agent', 'Command palette']`). Press Tab once. Focus is now the Create agent **name field** (placeholder `codex-reviewer`), and the palette is still drawn on top of it (shot). Type `zz`, and it lands in that hidden name field. The `input` whose value holds `zz` is the agent name, not the palette. One Escape then closes the palette (held), and the dialog shows `zz` in its name.
+
+Repro 2: the same with the task drawer open (Enter on a board card). After Ctrl+K, Tab puts focus on the drawer's Close button behind the palette.
+
+Cause (verified): `CommandPalette` (`hub/ui/src/components/palette/CommandPalette.tsx:74-87`) opens whatever is open beneath it. It is a cmdk/Radix dialog and is not in `useDialogFocus`'s `openDialogs` stack. The older dialog therefore still believes it is the newest. Its Tab branch sees focus "outside" its panel (`useDialogFocus.ts:73`) and pulls it to its own first control. This is F307's fix firing against a layer it does not know about.
+
+**Expected:** either the palette does not open while a modal is open, or `useDialogFocus` stands down when focus is inside another modal layer, so Tab stays in the palette. Registering the palette in the same stack would also work.
+
+**Test:** `hub/ui/src/__tests__/useDialogFocus.test.tsx`: mount a `useDialogFocus` panel and a second `role="dialog"` with focus in it. Fire Tab: focus stays in the second dialog. It fails today. Seam: Keyboard & dialogs (palette x every `useDialogFocus` dialog).
+
+## F1029 (C) -- the Vault's Add and Vault storage dialogs drop keyboard focus to `<body>` on every close: Escape, Cancel and the X alike
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_dialogs.py vault`, shots `testbed/ui-judge/s1023-kb/dlg_vault-add_open.png`, `dlg_vault-storage_open.png`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro, on a project with one vault entry: focus **Add** (`vault-upload-open`) and press Enter. The dialog "Add to the vault" opens with focus on the header's **Close** (X). Press Escape, and focus is `BODY`. Reopen, Tab to **Cancel**, and press Enter: focus is `BODY`. Do the same with **Vault storage** (the toolbar's icon button) and the result is the same, `BODY` both ways. A keyboard user's next Tab starts again from the rail. Tab was trapped in both dialogs (held), and the Kind/Storage selects inside them close one layer at a time (held).
+
+Cause (verified): both are controlled Radix dialogs with no `DialogTrigger`: `VaultAddDialog.tsx:131` and `VaultStorageDialog.tsx:39`, opened from buttons at `VaultLibrary.tsx:221` and `:312`. On close, Radix's modal content prevents its default focus restore and focuses `context.triggerRef.current` (`hub/ui/node_modules/@radix-ui/react-dialog/dist/index.mjs:146-148`). With no Trigger that ref is null, so nothing is focused. The shared `DialogContent` (`hub/ui/src/components/ui/dialog.tsx:14-45`) offers no way to say where focus goes back to. `JobsView.tsx:376` has the same shape: it is F931's "after Archive focus drops to the page" half. The Radix dialogs that do use a `DialogTrigger` held: the agent's Archive confirm and Add check both returned focus to their opener.
+
+**Expected:** focus returns to **Add** / **Vault storage** after any close. Either wrap each opener in `DialogTrigger`, or give `DialogContent` a `returnFocusTo` ref used in `onCloseAutoFocus`.
+
+**Test:** `hub/ui/src/__tests__/vaultTab.test.tsx`: open Add with the keyboard, press Escape, and `document.activeElement` is the Add button. It fails today. Seam: Keyboard & dialogs x Knowledge vault.
+
+## F1030 (C) -- in the task drawer, Escape on the inline "Delete this task?" confirm closes the whole drawer, not just the confirm
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle at 1440 and 760 px, `scripts/drive/s1023_kb_tasks.py`, shot `testbed/ui-judge/s1023-kb/task_delete_confirm_1440.png`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro: on the board, focus a card (`task-open-<id>`) and press Enter. The drawer opens with focus on Close. Tab to **Details** and press Enter. Tab to **Delete** (`task-delete-<id>`) and press Enter. The inline confirm appears and focus lands on its **Cancel** (held). Press Escape once. The confirm **and** the drawer both go (`dialogs` = `[]`), and focus is back on the board card. The operator who meant "no, don't delete" has lost the ticket as well. The result is the same at 760 px.
+
+Cause (verified): the confirm (`hub/ui/src/components/tasks/TaskDetailDrawer.tsx:703-745`) has no Escape handling. The drawer's `useDialogFocus(open, panelRef, onClose)` (`:375`) therefore takes the key and closes the drawer. The blocking-reason panel in the same drawer claims Escape with `preventDefault()` (`:775-781`, F310's fix), and the delete confirm was left out. The comment at `:701-702` chose an inline confirm precisely so that "a nested dialog would [not] take both with it".
+
+**Expected:** Escape on the confirm cancels it (like its Cancel button) and focus returns to **Delete**. A second Escape closes the drawer.
+
+**Test:** `hub/ui/src/__tests__/taskDetailDrawer.test.tsx`: open the confirm, fire Escape, and the drawer is still mounted with the confirm gone. It fails today. Seam: Keyboard & dialogs x Tasks (delete).
+
+## F1031 (C) -- a task can be renamed only with a mouse: the drawer's title is a click-only heading, and after Enter or Escape in the title field focus falls to `<body>`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_tasks.py`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro: open a task's drawer with Enter and Tab through it (30 presses, cycling). The title `task-drawer-title-<id>` is never a stop: it is an `H2` with `tabIndex -1` and no role. Enter on any reachable control does not open the rename. Clicking the title opens the input (`task-drawer-title-input-<id>`). Typing and Enter save once (exactly one `PATCH /tasks/<id>`, held), but focus is then `BODY`. Clicking again, typing and pressing Escape cancels and keeps the drawer open (held: one layer), but focus is again `BODY`. The checklist's Tasks row says "rename in the drawer (Enter saves, Esc cancels)". A keyboard user cannot reach the rename at all.
+
+Cause (verified): `TaskDetailDrawer.tsx:491-502` is `<h2 ... title="Click to rename" onClick=...>` with no `tabIndex`, `role` or key handler. When the input unmounts, nothing receives focus, because the heading cannot take it. A scan of `hub/ui/src/components` for `onClick` on a non-interactive element without `role`/`tabIndex`/`onKeyDown` finds only this one, apart from scrim backdrops.
+
+**Expected:** the title is a button (or `role="button" tabIndex={0}` with Enter/F2) labelled "Rename", and after save or cancel focus returns to it.
+
+**Test:** `hub/ui/src/__tests__/taskDetailDrawer.test.tsx`: the title is reachable with `userEvent.tab()`, Enter opens the input, and after Enter the active element is the title control, not `document.body`. It fails today. Seam: Keyboard & dialogs x Tasks (rename).
+
+## F1032 (C) -- the pane resizers are tab stops with no visible focus: the line meant to light up on focus is pinned to its resting colour by an inline style
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_tabwalk.py`, `s1023_kb_rings.py`, shots `testbed/ui-judge/s1023-kb/ring_light_pane-resizer.png`, `ring_dark_pane-resizer.png`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro: from a fresh load, Tab through the shell. Stop 12 is `DIV role=separator aria-label="Resize navigation"` (`pane-resizer`). Every other rail and top-bar stop draws a ring: the teal `--ring` box-shadow, or the browser's outline on Search, Add project and the agent menu. This one draws nothing. Its outline is `solid 2px rgba(0,0,0,0)`, its box-shadow is `none`, and the 1px line inside reads `rgba(0, 0, 0, 0.06)` both unfocused and focused (light mode, `--ring` = `#1d6b6e`). The control works: ArrowRight moves the rail from 248 to 256. The operator cannot see that they are on it, so arrow keys pressed there appear to do nothing until the rail moves.
+
+Cause (verified): `hub/ui/src/components/layout/PaneResizer.tsx:139-160` sets `focus-visible:outline-none` on the separator. It relies on the inner span's `group-focus-visible:bg-[var(--ring)]`, but the same span has `style={{ background: 'var(--border-region)' }}`, and the inline style beats the class in both hover and focus. Every `PaneResizer` has this, including **Resize conversation** (`ConversationView.tsx:581-588`). The hover colour is dead for the same reason.
+
+**Expected:** a focused resizer shows the `--ring` line (move the resting colour into a class, or set the colour from state), and it reads in both modes.
+
+**Test:** `hub/ui/src/__tests__/PaneResizer.test.tsx`: after focus, the line's computed background is `var(--ring)`. In jsdom, assert that the inline style no longer pins `background`. It fails today. Seam: Keyboard & dialogs (focus visibility).
+
+---

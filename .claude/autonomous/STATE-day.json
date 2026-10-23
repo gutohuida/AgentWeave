@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "7c63120",
     "stop_at": "2026-10-23T17:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-projects-sweep",
-    "next_action": "Run sweep-projects-sweep per .claude/loops/day-window.md (time guard first: no sweep started after 16:15): Sweep: Projects x Runners & models x Keyboard & dialogs. First: the brand mark (BrandLoop, favicon; e23cbc6) in light/dark and a narrow rail; then the native folder dialog and the Delete-project dialog in a browser (least-driven), the in-app folder browser (/fs/roots, /fs/list), relocate onto a claimed path, runner delete 409 naming holders (F589/F595), alias models, keyboard-only Ctrl+K / Escape layers / focus return. Scratch Hub port 8110+ (not 8114, 8115, 8130), haiku runner only, never leave a job enabled. Tally turn_usage BEFORE e2e.py clean. Up to three foreground subagents on their own ports, each with its own AW_E2E_STATE; they write drafts to scripts/drive/_draft_*.md, you number and file them (next free F1016). Run `py -3.11 -m ruff check scripts/ --select E9,F63,F7,F82,F401,F841` before committing. Write files with the Write tool: the Bash tool rejects long heredocs containing apostrophes.",
+    "current": "sweep-agents-sweep",
+    "next_action": "Run sweep-agents-sweep per .claude/loops/day-window.md (time guard first: no sweep started after 16:15): Sweep: Agents x Charters x Inbound queue & messages. Least-driven first: an abandoned entry's 'Last attempt failed', binding a runner later drains a held message (F96); then reserved/route-word/case-variant names (F811), unknown-field PATCH, archive/unarchive, request_agent and agent_budget, POST /session/sync keeping agents (F774/F849/F850), charters create/edit/bind/delete, hop-budget hold + delivery_note, Withdraw/Continue. Scratch Hub port 8116-8118 (not 8000, 8010, 8114, 8115, 8130), bind claude-haiku-4-5-20251001 by full id (the alias `haiku` now runs haiku-5-5), never leave a job enabled, NEVER press the native folder dialog. Tally turn_usage BEFORE e2e.py clean. Up to three foreground subagents on their own ports, each with its own AW_E2E_STATE; they write drafts to scripts/drive/_draft_*.md, you number and file them (next free F1033). Run `py -3.11 -m ruff check scripts/ --select E9,F63,F7,F82,F401,F841` before committing. Write files with the Write tool: the Bash tool rejects long heredocs containing apostrophes.",
     "queue": [
         {
             "id": "plan-review",
@@ -85,7 +85,7 @@
         },
         {
             "id": "sweep-projects-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Projects x Runners & models x Keyboard & dialogs",
             "detail": "First: the brand mark (BrandLoop, favicon; e23cbc6) in light/dark and a narrow rail; then the native folder dialog and Delete-project dialog in a browser (least-driven)."
         },
