@@ -559,3 +559,53 @@ async def test_vault_entries_and_document_merges_are_in_the_walk_and_knots_name_
     visit(None)
     assert "document-merge:spmg-1" in reached and "vault:vlt-1" in reached
     assert len(reached) == len(set(reached))
+
+
+async def test_a_system_action_is_done_by_agentweave_not_its_internal_name(app, auth_headers):
+    """A spec event the Hub itself recorded names "AgentWeave", never its internal job name.
+
+    The Hub stores its own actions with `actor_kind="system"` and a job name ("reindex",
+    "backfill"). QA's review of task-6f1c338db709 saw "reindex" as the actor on 309 knots of the
+    trial project; the operator asked for it to read as AgentWeave (2026-10-23).
+    """
+    from hub import project_thread
+
+    await save(
+        doc(1, 0),
+        SpecDocumentEvent(
+            id="spev-reindex",
+            document_id="spdoc-1",
+            project_id="proj-test",
+            kind="phase",
+            actor_kind="system",
+            actor="reindex",
+            origin="lifecycle",
+            detail={"from": "exploring", "to": "proposed"},
+            created_at=at(1),
+        ),
+        SpecDocumentEvent(
+            id="spev-agent",
+            document_id="spdoc-1",
+            project_id="proj-test",
+            kind="phase",
+            actor_kind="agent",
+            actor="Architect",
+            origin="lifecycle",
+            detail={"from": "proposed", "to": "approved"},
+            created_at=at(2),
+        ),
+    )
+    async with async_session_factory() as session:
+        thread = await project_thread.build(session, "proj-test", [])
+    by_record = {}
+
+    def visit(key):
+        for knot in thread.level(key) or []:
+            for record in knot.records:
+                by_record[record] = knot.actors
+            visit(knot.key)
+
+    visit(None)
+    assert by_record["document-event:spev-reindex"] == [project_thread.SYSTEM_ACTOR]
+    assert by_record["document-event:spev-agent"] == ["Architect"]
+    assert all("reindex" not in actors for actors in by_record.values())
