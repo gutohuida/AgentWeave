@@ -131,6 +131,7 @@ def _listed(spec: JobSpec, row: Optional[ManagerJob]) -> Dict[str, Any]:
         "enabled": bool(row.enabled) if row is not None else False,
         "runner_id": row.runner_id if row is not None else None,
         "model": row.model if row is not None else None,
+        "automatic": bool(row.automatic) if row is not None else True,
     }
 
 
@@ -150,16 +151,16 @@ async def list_jobs(db: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
 
 
 async def set_job(db: AsyncSession, project_id: str, key: str, **fields: Any) -> ManagerJob:
-    """Store any of `enabled`, `runner_id` and `model` on the job's row, creating it if needed.
+    """Store any of `enabled`, `automatic`, `runner_id` and `model` on the job's row, creating it if needed.
 
     Does not commit and does not validate the runner: the caller owns both, as the settings route
     and the manager route each do.
     """
     row = await get_job_row(db, project_id, key)
     if row is None:
-        row = ManagerJob(project_id=project_id, job=key, enabled=False)
+        row = ManagerJob(project_id=project_id, job=key, enabled=False, automatic=True)
         db.add(row)
-    for name in ("enabled", "runner_id", "model"):
+    for name in ("enabled", "automatic", "runner_id", "model"):
         if name in fields:
             setattr(row, name, fields[name])
     return row
