@@ -1,0 +1,33 @@
+<!-- @dsCard height=300 -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&display=swap">
+<style>
+  html, body { margin: 0; }
+  body { background: var(--bg, #0a0a0b); }
+  .cover { position: relative; width: 960px; height: 300px; overflow: hidden; background: var(--bg, #0a0a0b); }
+  .cover svg { position: absolute; inset: 0; }
+  .madder { fill: var(--madder, #cc4630); }
+  .ink { fill: var(--text, #f5f5f6); }
+  .verdigris { fill: var(--verdigris, #5fb3b3); }
+  .tint { fill: var(--surface-3, #26262b); }
+  .loop { fill: none; stroke: var(--bg, #0a0a0b); stroke-width: 16px; }
+  .text { position: absolute; left: 40px; bottom: 36px; max-width: 420px; display: grid; gap: 10px; }
+  .name { margin: 0; font-family: var(--font-sans, "DM Sans", system-ui, sans-serif); font-weight: 650; font-size: 72px; line-height: .92; letter-spacing: -0.035em; color: var(--text, #f5f5f6); }
+  .tagline { margin: 0; font-family: var(--font-sans, "DM Sans", system-ui, sans-serif); font-size: 14px; color: var(--text-2, #8e8e98); }
+</style>
+<div class="cover">
+  <svg width="960" height="300" viewBox="0 0 960 300" aria-hidden="true">
+    <!-- blocks: madder 200x300 slab (bleeds top and bottom); text 200x176 and verdigris 200x124 stacked right; surface-3 80x104 relief at the slab's foot -->
+    <!-- arrangement: one tall madder slab with satellites, flush modular grid from x=480, square corners where blocks meet the edges -->
+    <!-- pattern: the literal motif, the loop: one bg-coloured ring (r 70, stroke 16) centred on the corner where the blocks meet; it runs over madder and verdigris and passes under the text block, a weave of one thread -->
+    <!-- steps: ring stroke 16, radius 70; blocks on a 200 module; corners square (blocks meet edges and each other) -->
+    <rect class="tint" x="480" y="196" width="80" height="104"/>
+    <rect class="madder" x="560" y="0" width="200" height="300"/>
+    <rect class="verdigris" x="760" y="176" width="200" height="124"/>
+    <circle class="loop" cx="760" cy="176" r="70"/>
+    <rect class="ink" x="760" y="0" width="200" height="176"/>
+  </svg>
+  <div class="text">
+    <p class="name">AgentWeave</p>
+    <p class="tagline">Run your AI factory in the open.</p>
+  </div>
+</div>

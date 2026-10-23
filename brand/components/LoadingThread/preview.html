@@ -1,0 +1,29 @@
+<!-- @dsCard group="Motion" height=200 subtitle="The loop draws itself while work loads" -->
+<style>
+  body { margin: 0; background: var(--bg, #0a0a0b); color: var(--text-2, #8e8e98); font: 12px system-ui, sans-serif; }
+  .root { display: flex; flex-wrap: wrap; gap: 40px; align-items: center; padding: 28px; }
+  figure { margin: 0; display: grid; gap: 10px; justify-items: center; }
+  .thread path { fill: none; stroke: var(--madder, #cc4630); stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; animation: aw-draw 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+  .thread path.b { animation-name: aw-draw-b; }
+  @keyframes aw-draw { 0% { stroke-dashoffset: 1; opacity: 1 } 45% { stroke-dashoffset: 0 } 85% { stroke-dashoffset: 0; opacity: 1 } 100% { stroke-dashoffset: 0; opacity: 0 } }
+  @keyframes aw-draw-b { 0%, 30% { stroke-dashoffset: 1; opacity: 1 } 75% { stroke-dashoffset: 0 } 85% { stroke-dashoffset: 0; opacity: 1 } 100% { stroke-dashoffset: 0; opacity: 0 } }
+  @media (prefers-reduced-motion: reduce) { .thread path { animation: none; stroke-dashoffset: 0; } }
+</style>
+<div class="root">
+  <figure>
+    <svg class="thread" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Loading">
+      <defs><mask id="lt-cut" maskUnits="userSpaceOnUse" x="-8" y="-8" width="80" height="80"><rect x="-8" y="-8" width="80" height="80" fill="#fff"/><path d="M32 6 C26.4 6 25.4 12.5 30 21 L43 50 L55 15" fill="none" stroke="#000" stroke-width="9.5" stroke-linejoin="round"/></mask></defs>
+      <path pathLength="1" stroke-width="5.5" d="M9 15 L21 50 L34 21 C38.6 12.5 37.6 6 32 6" mask="url(#lt-cut)"/>
+      <path class="b" pathLength="1" stroke-width="5.5" d="M32 6 C26.4 6 25.4 12.5 30 21 L43 50 L55 15"/>
+    </svg>
+    <span>64 · in a panel</span>
+  </figure>
+  <figure>
+    <svg class="thread" width="24" height="24" viewBox="0 0 64 64" role="img" aria-label="Loading">
+      <defs><mask id="lt-cut-s" maskUnits="userSpaceOnUse" x="-8" y="-8" width="80" height="80"><rect x="-8" y="-8" width="80" height="80" fill="#fff"/><path d="M32 6 C24.5 6 24 14 30.5 25 L45 54 L57 18" fill="none" stroke="#000" stroke-width="16" stroke-linejoin="round"/></mask></defs>
+      <path pathLength="1" stroke-width="8" d="M7 18 L19 54 L33.5 25 C40 14 39.5 6 32 6" mask="url(#lt-cut-s)"/>
+      <path class="b" pathLength="1" stroke-width="8" d="M32 6 C24.5 6 24 14 30.5 25 L45 54 L57 18"/>
+    </svg>
+    <span>24 · inline</span>
+  </figure>
+</div>

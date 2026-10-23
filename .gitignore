@@ -206,3 +206,6 @@ hub/ui/dist-mock/
 # The mock's recorded data and screenshots come from the operator's own project: kept local, never pushed.
 hub/ui/mock/fixtures/*.json
 hub/ui/mock/before/
+
+# The brand kit keeps its rasters (the rest of the repo ignores *.png).
+!brand/**/*.png
