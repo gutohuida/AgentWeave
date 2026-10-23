@@ -52,7 +52,7 @@
     "phase": "archived",
     "rigor": "sketch",
     "size": null,
-    "step": "intake"
+    "step": null
   },
   "kind": "change-spec",
   "lifecycle": "Folds into the knowledge-vault capability, replacing its map-in-turn requirement (FR-6).",

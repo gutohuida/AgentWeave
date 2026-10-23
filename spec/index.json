@@ -6,7 +6,7 @@
       "path": "spec/agentweave.json",
       "title": "AgentWeave",
       "kind": "system-map",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 10
     },
@@ -283,14 +283,6 @@
       "order": 210
     },
     {
-      "path": "spec/capabilities/opencode-config/spec.json",
-      "title": "Opencode config",
-      "kind": "capability",
-      "status": "archived",
-      "parent": null,
-      "order": 220
-    },
-    {
       "path": "spec/capabilities/operator-agent-creation/spec.json",
       "title": "Operator agent creation",
       "kind": "capability",
@@ -337,14 +329,6 @@
       "status": "current",
       "parent": "spec/areas/agents-and-execution.json",
       "order": 740
-    },
-    {
-      "path": "spec/capabilities/quiet-hours/spec.json",
-      "title": "Quiet hours",
-      "kind": "capability",
-      "status": "archived",
-      "parent": null,
-      "order": 350
     },
     {
       "path": "spec/capabilities/requirement-traceability/spec.json",
@@ -443,14 +427,6 @@
       "order": 310
     },
     {
-      "path": "spec/capabilities/trace-timeline/spec.json",
-      "title": "Trace timeline",
-      "kind": "capability",
-      "status": "archived",
-      "parent": null,
-      "order": 320
-    },
-    {
       "path": "spec/capabilities/turn-outcome-visibility/spec.json",
       "title": "Turn outcome visibility",
       "kind": "capability",
@@ -475,12 +451,28 @@
       "order": 530
     },
     {
+      "path": "spec/changes/a-call-mode-turn-starts-with-an-empty-calls-directory/spec.json",
+      "title": "A call-mode turn starts with an empty calls directory",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1020
+    },
+    {
       "path": "spec/changes/a-capability-can-be-retired/spec.json",
       "title": "A capability can be retired",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 660
+    },
+    {
+      "path": "spec/changes/a-change-can-name-its-roadmap-slice-after-the-fact/spec.json",
+      "title": "A change document can name its roadmap slice after the fact",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1030
     },
     {
       "path": "spec/changes/a-change-is-reconciled-with-its-code-before-it-is-folded/spec.json",
@@ -491,6 +483,22 @@
       "order": 780
     },
     {
+      "path": "spec/changes/a-changed-runner-configuration-holds-the-turn/spec.json",
+      "title": "A changed runner configuration holds the next turn",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1040
+    },
+    {
+      "path": "spec/changes/a-check-that-fails-on-main-too-is-not-the-tasks/spec.json",
+      "title": "A check that fails on main too is not the task's",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1050
+    },
+    {
       "path": "spec/changes/a-codex-app-server-spec-turn-keeps-no-write-tools/spec.json",
       "title": "A Codex app-server specification turn keeps no write tools",
       "kind": "change-spec",
@@ -499,12 +507,28 @@
       "order": 590
     },
     {
+      "path": "spec/changes/a-conflicting-prerequisite-is-the-authors-to-merge/spec.json",
+      "title": "A conflicting prerequisite is the author's to merge",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1060
+    },
+    {
       "path": "spec/changes/a-decided-task-withdraws-its-waiting-reviews/spec.json",
       "title": "A decided task withdraws its waiting reviews",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 600
+    },
+    {
+      "path": "spec/changes/a-deleted-project-stays-deleted/spec.json",
+      "title": "A deleted project stays deleted",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1070
     },
     {
       "path": "spec/changes/a-document-names-its-default-reviewer/spec.json",
@@ -529,6 +553,46 @@
       "status": "archived",
       "parent": null,
       "order": 670
+    },
+    {
+      "path": "spec/changes/a-fold-carries-algorithms-and-criterion-rewrites/spec.json",
+      "title": "A fold carries algorithms and criterion rewrites",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1080
+    },
+    {
+      "path": "spec/changes/a-folded-requirement-keeps-its-verification/spec.json",
+      "title": "A folded requirement keeps the verification it earned",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1090
+    },
+    {
+      "path": "spec/changes/a-github-token-in-prose-is-redacted/spec.json",
+      "title": "A GitHub token in prose is redacted",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1100
+    },
+    {
+      "path": "spec/changes/a-held-successor-waits-for-continue/spec.json",
+      "title": "A held successor waits for Continue",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1110
+    },
+    {
+      "path": "spec/changes/a-hub-agent-runs-with-the-projects-settings/spec.json",
+      "title": "A Hub agent runs with the project's settings, not the operator's",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1120
     },
     {
       "path": "spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server/spec.json",
@@ -571,12 +635,44 @@
       "order": 640
     },
     {
+      "path": "spec/changes/a-redistilled-fact-keeps-its-id/spec.json",
+      "title": "A re-distilled fact keeps its id",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1130
+    },
+    {
+      "path": "spec/changes/a-refused-copilot-call-does-not-end-the-turn/spec.json",
+      "title": "A refused Copilot call does not end the turn",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1140
+    },
+    {
+      "path": "spec/changes/a-report-with-news-reaches-the-operator/spec.json",
+      "title": "A report with news reaches the operator",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1150
+    },
+    {
       "path": "spec/changes/a-requirement-is-checked-against-what-the-vault-recorded/spec.json",
       "title": "A requirement is checked against what the vault recorded",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 990
+    },
+    {
+      "path": "spec/changes/a-requoted-fact-keeps-its-id/spec.json",
+      "title": "A re-distilled fact keeps its id however the model re-quotes its lines",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1160
     },
     {
       "path": "spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/spec.json",
@@ -587,12 +683,52 @@
       "order": 540
     },
     {
+      "path": "spec/changes/a-roadmap-shows-which-of-its-slices-are-done/spec.json",
+      "title": "A roadmap shows which of its slices are done, and a slice document is asked to name its slice",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1170
+    },
+    {
+      "path": "spec/changes/a-roadmaps-open-question-can-wait-for-its-slice/spec.json",
+      "title": "A roadmap's open question can wait for the slice that answers it",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1180
+    },
+    {
       "path": "spec/changes/a-run-claims-only-its-agents-or-nobodys-work/spec.json",
       "title": "A run claims only work that is its agent's or nobody's",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 650
+    },
+    {
+      "path": "spec/changes/a-run-is-a-trace-you-can-export/spec.json",
+      "title": "A run is a trace you can view, export and clear",
+      "kind": "change-spec",
+      "status": "proposed",
+      "parent": null,
+      "order": 1190
+    },
+    {
+      "path": "spec/changes/a-runner-s-flags-cannot-override-the-posture/spec.json",
+      "title": "A runner's flags cannot override its model or the posture",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1200
+    },
+    {
+      "path": "spec/changes/a-secret-in-reply-text-is-redacted/spec.json",
+      "title": "A secret in an agent's reply text is redacted",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1210
     },
     {
       "path": "spec/changes/a-spec-document-is-stored-as-its-payload/spec.json",
@@ -619,12 +755,44 @@
       "order": 770
     },
     {
+      "path": "spec/changes/a-stalled-project-wakes-a-doctor-that-unblocks-it/spec.json",
+      "title": "A stalled project wakes the mender, who unblocks it",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 1220
+    },
+    {
+      "path": "spec/changes/a-stopped-turns-call-is-estimated/spec.json",
+      "title": "A stopped turn's interrupted call is estimated, never counted",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1230
+    },
+    {
+      "path": "spec/changes/a-substituted-copilot-model-is-reported/spec.json",
+      "title": "A substituted Copilot model is reported",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1240
+    },
+    {
       "path": "spec/changes/a-tasks-prerequisites-can-be-declared-at-creation-and-in-its-drawer/spec.json",
       "title": "A task's prerequisites can be declared when it is created and from its drawer",
       "kind": "change-spec",
       "status": "approved",
       "parent": null,
       "order": 910
+    },
+    {
+      "path": "spec/changes/a-tasks-whole-story-is-in-its-drawer/spec.json",
+      "title": "A task's whole story is in its drawer",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1250
     },
     {
       "path": "spec/changes/a-tester-drives-the-built-product-and-keeps-the-spec-true/spec.json",
@@ -643,6 +811,14 @@
       "order": 860
     },
     {
+      "path": "spec/changes/a-workers-answer-is-kept/spec.json",
+      "title": "A worker's answer is kept",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1260
+    },
+    {
       "path": "spec/changes/a-working-agent-tells-the-manager-an-entry-is-wrong/spec.json",
       "title": "A working agent can tell the manager a vault entry is wrong",
       "kind": "change-spec",
@@ -651,12 +827,60 @@
       "order": 920
     },
     {
+      "path": "spec/changes/agents-add-files-to-the-vault-by-path/spec.json",
+      "title": "Agents add files to the vault by path, in bulk",
+      "kind": "change-spec",
+      "status": "proposed",
+      "parent": null,
+      "order": 1270
+    },
+    {
+      "path": "spec/changes/agentweave-calls-you-with-its-own-sound/spec.json",
+      "title": "AgentWeave calls you with its own sound",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1280
+    },
+    {
+      "path": "spec/changes/agentweave-opens-on-the-thread/spec.json",
+      "title": "AgentWeave opens on the thread",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1290
+    },
+    {
+      "path": "spec/changes/already-built-work-is-approved-without-approve-anyway/spec.json",
+      "title": "Already-built work is approved without Approve anyway",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1300
+    },
+    {
+      "path": "spec/changes/an-agent-checkout-catches-up-with-main/spec.json",
+      "title": "An agent's own checkout is brought up to main before its turn",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1310
+    },
+    {
       "path": "spec/changes/an-exploring-turn-asks-its-questions-in-its-reply/spec.json",
       "title": "An exploring turn asks its questions in its reply",
       "kind": "change-spec",
       "status": "approved",
       "parent": null,
       "order": 930
+    },
+    {
+      "path": "spec/changes/an-operator-sets-how-far-an-agent-reaches/spec.json",
+      "title": "An operator sets how far an agent reaches",
+      "kind": "change-spec",
+      "status": "proposed",
+      "parent": null,
+      "order": 1320
     },
     {
       "path": "spec/changes/approve-lists-what-is-missing-and-can-approve-anyway/spec.json",
@@ -675,12 +899,76 @@
       "order": 940
     },
     {
+      "path": "spec/changes/copilot-spend-is-counted-in-its-own-units/spec.json",
+      "title": "Copilot spend is counted in its own units",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1330
+    },
+    {
+      "path": "spec/changes/edit-files-asks-the-operator-for-everything-else/spec.json",
+      "title": "Edit files asks the operator for everything else",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1340
+    },
+    {
+      "path": "spec/changes/editable-flow-stages/spec.json",
+      "title": "A flow's stages are editable: drop the test stage, or add one",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 1350
+    },
+    {
       "path": "spec/changes/every-agent-turn-names-the-vault-in-one-line/spec.json",
       "title": "Every agent turn names the vault in one line, not an index of its entries",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 870
+    },
+    {
+      "path": "spec/changes/every-piece-of-evidence-in-one-place/spec.json",
+      "title": "Every piece of evidence in one place",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1360
+    },
+    {
+      "path": "spec/changes/everything-the-hub-does-is-in-a-trace/spec.json",
+      "title": "Everything the Hub does is in a trace",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1370
+    },
+    {
+      "path": "spec/changes/evidence-carries-what-it-takes-to-judge-it/spec.json",
+      "title": "Evidence carries what it takes to judge it",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1380
+    },
+    {
+      "path": "spec/changes/evidence-goes-agentic-and-the-project-becomes-visible-roadmap/spec.json",
+      "title": "Evidence goes agentic, and the project becomes visible",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 1390
+    },
+    {
+      "path": "spec/changes/how-a-requirement-changed-and-what-proved-it/spec.json",
+      "title": "How a requirement changed and what proved it",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1400
     },
     {
       "path": "spec/changes/images-and-pdfs-are-vault-sources-too/spec.json",
@@ -699,12 +987,60 @@
       "order": 950
     },
     {
+      "path": "spec/changes/maroon-dragon/spec.json",
+      "title": "A Claude turn records its own cost, not its session's running total",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1410
+    },
+    {
+      "path": "spec/changes/only-the-operator-overturns-evidence/spec.json",
+      "title": "A decided piece of evidence is overturned only by the operator, with a reason",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1420
+    },
+    {
+      "path": "spec/changes/opal-phoenix/spec.json",
+      "title": "A subagent's call reaches the operator as the subagent's",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1430
+    },
+    {
+      "path": "spec/changes/partial-evidence-does-not-verify/spec.json",
+      "title": "Partial evidence does not verify",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1440
+    },
+    {
+      "path": "spec/changes/pull-the-thread-project-history-page/spec.json",
+      "title": "Pull the thread: a project's whole history",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1450
+    },
+    {
       "path": "spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks/spec.json",
       "title": "Re-approving an amended document refreshes its open tasks",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 680
+    },
+    {
+      "path": "spec/changes/red-thread-project-history-roadmap/spec.json",
+      "title": "The red thread: a project's history you can pull",
+      "kind": "roadmap",
+      "status": "exploring",
+      "parent": null,
+      "order": 1460
     },
     {
       "path": "spec/changes/same-file-tasks-build-in-order-the-shim-planner-is-told/spec.json",
@@ -739,6 +1075,14 @@
       "order": 960
     },
     {
+      "path": "spec/changes/stop-closes-the-tool-card-it-interrupted/spec.json",
+      "title": "Stop closes the tool card it interrupted",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1470
+    },
+    {
       "path": "spec/changes/submission-warns-when-a-multi-task-planner-declares-no-files/spec.json",
       "title": "Submission warns when a multi-task planner declares no files",
       "kind": "change-spec",
@@ -747,12 +1091,36 @@
       "order": 580
     },
     {
+      "path": "spec/changes/sweep-1018-corrections/spec.json",
+      "title": "Sweep 2026-10-18 corrections",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1480
+    },
+    {
+      "path": "spec/changes/the-activity-tab-becomes-the-projects-ledger/spec.json",
+      "title": "The Activity tab becomes the project's ledger",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1490
+    },
+    {
       "path": "spec/changes/the-agent-budget-caps-concurrent-runs/spec.json",
       "title": "The agent budget caps how many runs a project has at once",
       "kind": "change-spec",
       "status": "approved",
       "parent": null,
       "order": 970
+    },
+    {
+      "path": "spec/changes/the-copilot-catalog-tracks-the-cli/spec.json",
+      "title": "The Copilot catalog tracks the CLI",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1500
     },
     {
       "path": "spec/changes/the-hubs-background-jobs-are-configured-on-a-manager-page/spec.json",
@@ -779,12 +1147,36 @@
       "order": 880
     },
     {
+      "path": "spec/changes/the-model-catalog-tracks-the-newest-clis/spec.json",
+      "title": "The model catalog tracks the newest CLIs",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1510
+    },
+    {
+      "path": "spec/changes/the-operator-answers-a-cannot-satisfy-report/spec.json",
+      "title": "The operator answers a cannot-satisfy report, and the answer does something",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1520
+    },
+    {
       "path": "spec/changes/the-operator-can-delete-a-document-a-task-or-an-archived-agent/spec.json",
       "title": "The operator can delete a document or a task, and a runner only archived agents hold",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 690
+    },
+    {
+      "path": "spec/changes/the-operators-own-edit-applies-at-any-rigor/spec.json",
+      "title": "The operator's own edit applies at any rigor",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1530
     },
     {
       "path": "spec/changes/the-project-header-and-tabs-keep-a-faint-rule/spec.json",
@@ -795,6 +1187,22 @@
       "order": 980
     },
     {
+      "path": "spec/changes/the-rest-of-what-the-hub-records-becomes-reachable/spec.json",
+      "title": "The rest of what the Hub records becomes reachable",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1540
+    },
+    {
+      "path": "spec/changes/the-reviewers-verdict-decides-the-tasks-evidence/spec.json",
+      "title": "The reviewer's verdict decides the task's evidence",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1550
+    },
+    {
       "path": "spec/changes/the-settings-that-gate-collaboration-are-on-the-project-page/spec.json",
       "title": "The settings that gate collaboration are on the project page",
       "kind": "change-spec",
@@ -803,12 +1211,76 @@
       "order": 750
     },
     {
+      "path": "spec/changes/the-shell-judges-text-rules-are-specified/spec.json",
+      "title": "The shell judge's text rules are specified",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1560
+    },
+    {
+      "path": "spec/changes/the-thread-is-how-agentweave-shows-it-is-loading/spec.json",
+      "title": "The thread is how AgentWeave shows it is loading",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1570
+    },
+    {
+      "path": "spec/changes/the-thread-reads-as-chapters-the-manager-writes/spec.json",
+      "title": "The thread reads as chapters the manager writes",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 1580
+    },
+    {
+      "path": "spec/changes/the-turn-clock-counts-work-not-waiting/spec.json",
+      "title": "The turn clock counts work, not waiting",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1590
+    },
+    {
       "path": "spec/changes/the-vault-map-is-shaped-by-what-agents-ask-for/spec.json",
       "title": "The vault map is shaped by what agents ask for",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 1010
+    },
+    {
+      "path": "spec/changes/the-vault-names-who-read-an-entry/spec.json",
+      "title": "The vault names who read an entry",
+      "kind": "change-spec",
+      "status": "proposed",
+      "parent": null,
+      "order": 1600
+    },
+    {
+      "path": "spec/changes/the-workspace-judge-reads-paths-not-patterns/spec.json",
+      "title": "The Workspace judge reads paths, not patterns or provider drives",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1610
+    },
+    {
+      "path": "spec/changes/work-from-a-mid-turn-claim-reaches-the-task/spec.json",
+      "title": "Work from a turn that claimed its task mid-turn reaches the task",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1620
+    },
+    {
+      "path": "spec/changes/worker-spend-counts-against-the-budget/spec.json",
+      "title": "Worker spend counts against the budget",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1630
     }
   ]
 }

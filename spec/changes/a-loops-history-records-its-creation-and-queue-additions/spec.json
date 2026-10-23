@@ -136,8 +136,8 @@
   "hub": {
     "phase": "approved",
     "rigor": "sketch",
-    "size": "small",
-    "step": "intake"
+    "size": null,
+    "step": null
   },
   "kind": "change-spec",
   "lifecycle": "",

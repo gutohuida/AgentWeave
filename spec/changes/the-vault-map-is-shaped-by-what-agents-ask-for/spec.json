@@ -111,7 +111,7 @@
     "phase": "archived",
     "rigor": "sketch",
     "size": null,
-    "step": "intake"
+    "step": null
   },
   "kind": "change-spec",
   "lifecycle": "When closed, this change folds into the knowledge-vault capability, and the roadmap's access-tuning slice, its last, is then done.",

@@ -56,8 +56,8 @@
   "hub": {
     "phase": "archived",
     "rigor": "sketch",
-    "size": "small",
-    "step": "intake"
+    "size": null,
+    "step": null
   },
   "kind": "change-spec",
   "lifecycle": "",

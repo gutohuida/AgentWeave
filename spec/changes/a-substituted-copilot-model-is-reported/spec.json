@@ -88,7 +88,7 @@
     "phase": "archived",
     "rigor": "sketch",
     "size": null,
-    "step": "delivery"
+    "step": null
   },
   "kind": "change-spec",
   "lifecycle": "one-off",

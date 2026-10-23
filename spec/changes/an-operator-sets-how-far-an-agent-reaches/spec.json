@@ -65,7 +65,7 @@
     "phase": "proposed",
     "rigor": "sketch",
     "size": null,
-    "step": "intake"
+    "step": null
   },
   "kind": "change-spec",
   "lifecycle": "one-off",

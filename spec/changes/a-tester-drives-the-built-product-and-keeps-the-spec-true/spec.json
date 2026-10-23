@@ -157,8 +157,8 @@
   "hub": {
     "phase": "archived",
     "rigor": "sketch",
-    "size": "large",
-    "step": "delivery"
+    "size": null,
+    "step": null
   },
   "kind": "change-spec",
   "lifecycle": "",

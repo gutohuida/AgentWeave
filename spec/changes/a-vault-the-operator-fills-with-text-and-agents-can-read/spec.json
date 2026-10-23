@@ -155,7 +155,7 @@
     "phase": "archived",
     "rigor": "sketch",
     "size": null,
-    "step": "intake"
+    "step": null
   },
   "kind": "change-spec",
   "lifecycle": "When closed, this change folds into a new knowledge-vault capability, and the roadmap's vault-text-sources slice is then done.",

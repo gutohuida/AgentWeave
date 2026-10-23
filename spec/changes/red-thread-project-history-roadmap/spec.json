@@ -7,7 +7,7 @@
     "requirements": {},
     "retired": {}
   },
-  "design": "Decided with the operator 2026-10-23: one vertical thread for the whole project, for anyone; knots are recursive (a knot opens into its own thread of finer knots); a new Thread tab beside Overview; the page opens at the present with a jump to the beginning; work outside any specification is on the thread too; the thread is drawn in madder. Built in order: a thread derived from records the Hub already links, then manager-authored chapters and summaries, then whatever gaps the first two reveal.",
+  "design": "Decided with the operator 2026-10-23: one vertical thread for the whole project, for anyone; knots are recursive (a knot opens into its own thread of finer knots); a new Thread tab beside Overview; the page opens at the present with a jump to the beginning; work outside any specification is on the thread too; the thread is drawn in madder. Built in order: a thread derived from records the Hub already links, then manager-authored chapters and summaries, then whatever gaps the first two reveal.\n\nChanged 2026-10-23 (operator): the manager-chapters done-condition no longer says that disabling the job returns the structural surface. Chapters, once created, stay shown; the job's switch only decides whether new ones are written. Only the description of the outcome changed; nothing had been built against it.",
   "evidence": {
     "checked": [],
     "limits": []
@@ -27,8 +27,8 @@
       "slice": "history-gaps"
     },
     {
-      "question": "When does the manager re-write chapters (on each merge, on a schedule, on request), and what may it cost per firing?",
-      "resolved": false,
+      "question": "When does the manager re-write chapters (on each merge, on a schedule, on request), and what may it cost per firing? Answered in the manager-chapters document: on major events and a button, rewrites only when asked, no cap, cost shown.",
+      "resolved": true,
       "slice": "manager-chapters"
     }
   ],
@@ -58,7 +58,7 @@
       "builds_after": [
         "thread-from-records"
       ],
-      "done": "With the new manager job enabled, the Thread surface shows manager-written chapters whose every cited record exists, and disabling the job returns the surface to the structural chapters of the first slice.",
+      "done": "With the chapters job enabled, the Thread surface shows manager-written chapters whose every cited record exists, reaching back before the Hub's first record through git; disabling the job stops new chapters being written while those already written stay shown.",
       "intent": "The surface reads as a story: the Hub's manager groups changes and other work into titled chapters with plain-language summaries that cite only real records.",
       "key": "manager-chapters",
       "title": "Chapters the manager writes"

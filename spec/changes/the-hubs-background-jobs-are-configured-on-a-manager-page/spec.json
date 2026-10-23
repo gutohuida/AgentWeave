@@ -145,7 +145,7 @@
     "phase": "archived",
     "rigor": "sketch",
     "size": null,
-    "step": "intake"
+    "step": null
   },
   "kind": "change-spec",
   "lifecycle": "Folds into the conversation and Hub-settings capabilities when closed; the roadmap's manager-framework slice is then done.",
