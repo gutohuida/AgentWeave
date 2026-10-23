@@ -513,7 +513,9 @@ class TestAppModeNativeWindow:
         monkeypatch.setattr(resources_mod, "files", lambda pkg: _FakeTraversable())
         assert cli._app_icon_path() is None
 
-    @patch("agentweave.cli._hub_port_accepts", new=lambda port, timeout=0.3: True)  # a running Hub accepts
+    @patch(
+        "agentweave.cli._hub_port_accepts", new=lambda port, timeout=0.3: True
+    )  # a running Hub accepts
     def test_hub_native_start_already_running_prefers_native_window(self, monkeypatch):
         """Exercises a real call site (task 3.3's first of four): `_hub_native_start`'s
         already-running branch tries `_open_app_window_native` before `_open_app_window`,
@@ -545,7 +547,9 @@ class TestAppModeNativeWindow:
         assert result == 0
         assert calls == [("native", cli._hub_url(8000))]
 
-    @patch("agentweave.cli._hub_port_accepts", new=lambda port, timeout=0.3: True)  # a running Hub accepts
+    @patch(
+        "agentweave.cli._hub_port_accepts", new=lambda port, timeout=0.3: True
+    )  # a running Hub accepts
     def test_hub_native_start_already_running_falls_back_when_native_unavailable(self, monkeypatch):
         """4.1's byte-identical claim, exercised at the real call site rather than just the
         helper in isolation: when `_open_app_window_native` reports it couldn't run (e.g.
