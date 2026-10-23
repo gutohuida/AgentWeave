@@ -1159,6 +1159,171 @@ def _app_window_storage() -> Dict[str, Any]:
     return {"private_mode": False, "storage_path": str(folder)}
 
 
+#: The flag that lets the app window's page play sound before the operator has clicked it. Without
+#: it a page's AudioContext in WebView2 starts suspended (spike, 2026-10-23), so an app opened and
+#: left behind would never sound the call it exists to make (change
+#: `agentweave-calls-you-with-its-own-sound`).
+_AUTOPLAY_ARG = "--autoplay-policy=no-user-gesture-required"
+#: pywebview's own WebView2 argument, repeated in case the variable replaces the ones it sets.
+_PYWEBVIEW_BROWSER_ARGS = ("--disable-features=ElasticOverscroll",)
+
+
+def _allow_sound_before_a_click() -> None:
+    """Add the autoplay flag to WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS, keeping what is there."""
+    var = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"
+    args = os.environ.get(var, "").split()
+    for arg in (*_PYWEBVIEW_BROWSER_ARGS, _AUTOPLAY_ARG):
+        if arg not in args:
+            args.append(arg)
+    os.environ[var] = " ".join(args)
+
+
+def _app_sound_setting() -> Path:
+    """The app's sound switch, written by the window's bridge and read before the opening sound."""
+    return HUB_DIR / "app-window" / "sound.json"
+
+
+def _app_sound_on() -> bool:
+    try:
+        data = json.loads(_app_sound_setting().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    return not (isinstance(data, dict) and data.get("sound") is False)
+
+
+def _flash_taskbar(on: bool) -> None:
+    """Flash this process's app window's taskbar button until it comes to the front, or stop.
+
+    The window is found by owning PID (EnumWindows), never by title: the operator's own app window
+    is also titled AgentWeave. Windows only; elsewhere the title count is the whole signal.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        import ctypes.wintypes as wt
+
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        pid = os.getpid()
+        found: List[Any] = []
+
+        @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)  # type: ignore[attr-defined]
+        def _each(hwnd: Any, _param: Any) -> bool:
+            owner = wt.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+            if owner.value == pid and user32.IsWindowVisible(hwnd):
+                found.append(hwnd)
+            return True
+
+        user32.EnumWindows(_each, 0)
+
+        class _FlashInfo(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", wt.UINT),
+                ("hwnd", wt.HWND),
+                ("dwFlags", wt.DWORD),
+                ("uCount", wt.UINT),
+                ("dwTimeout", wt.DWORD),
+            ]
+
+        # FLASHW_TRAY | FLASHW_TIMERNOFG: the button flashes until the window is in front.
+        flags = 0x2 | 0xC if on else 0x0
+        for hwnd in found:
+            info = _FlashInfo(ctypes.sizeof(_FlashInfo), hwnd, flags, 0, 0)
+            user32.FlashWindowEx(ctypes.byref(info))
+    except Exception:  # attention is a courtesy; it must never break the window
+        logging.getLogger(__name__).debug("taskbar flash failed", exc_info=True)
+
+
+#: How often the bridge checks whether the window came back to the front while it calls for the
+#: operator.
+_FOREGROUND_POLL_SECONDS = 0.5
+
+
+def _foreground_is_ours() -> bool:
+    """Is the operator's foreground window one of this process's (the app window)?
+
+    WebView2 keeps the page's `document.hasFocus()` true while the window is minimised or covered
+    (drive, 2026-10-23), so this is how the page learns it is behind. Off Windows it answers yes,
+    and the page falls back to nothing being counted.
+    """
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+        import ctypes.wintypes as wt
+
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return False
+        owner = wt.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        return bool(owner.value == os.getpid())
+    except Exception:
+        return True
+
+
+class _AppWindowApi:
+    """The app window's bridge, exposed to the page as `window.pywebview.api` (pywebview js_api).
+
+    The page calls `attention(n)` with the count of notifications that arrived behind the window,
+    and `sound(enabled)` when the operator flips the sound switch. Names starting with `_` are not
+    exposed to the page.
+    """
+
+    def __init__(self) -> None:
+        self._window: Any = None
+        self._watching = False
+
+    def foreground(self) -> bool:
+        return _foreground_is_ours()
+
+    def attention(self, count: Any) -> bool:
+        try:
+            n = max(0, int(count))
+        except (TypeError, ValueError):
+            n = 0
+        if self._window is not None:
+            with contextlib.suppress(Exception):
+                self._window.set_title(f"({n}) AgentWeave" if n else "AgentWeave")
+        _flash_taskbar(n > 0)
+        if n > 0:
+            self._watch_for_the_front()
+        return True
+
+    def _watch_for_the_front(self) -> None:
+        """Tell the page once the window is in front again, so it clears its count: the page's own
+        focus events do not fire for a WebView2 window brought back from behind."""
+        if self._watching or self._window is None:
+            return
+        self._watching = True
+
+        def _watch() -> None:
+            import time as _time
+
+            try:
+                while not _foreground_is_ours():
+                    _time.sleep(_FOREGROUND_POLL_SECONDS)
+                with contextlib.suppress(Exception):
+                    self._window.evaluate_js("window.dispatchEvent(new Event('aw-app-focus'))")
+            finally:
+                self._watching = False
+
+        import threading
+
+        threading.Thread(target=_watch, name="app-window-front", daemon=True).start()
+
+    def sound(self, enabled: Any) -> bool:
+        path = _app_sound_setting()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"sound": bool(enabled)}), encoding="utf-8")
+        except OSError:
+            return False
+        return True
+
+
 def _open_app_window_native(url: str) -> bool:
     """Open `url` in a native OS window via pywebview.
 
@@ -1176,10 +1341,13 @@ def _open_app_window_native(url: str) -> bool:
         # `text_select=True`: pywebview's default injects `body { user-select: none }` into every
         # page, so nothing in the app could be selected or copied — an agent's answer included
         # (F344). The app is a document as much as a control surface; it selects like a browser.
-        window = webview.create_window("AgentWeave", url, text_select=True)
+        bridge = _AppWindowApi()
+        window = webview.create_window("AgentWeave", url, text_select=True, js_api=bridge)
+        bridge._window = window
         _enable_default_context_menus(window)
         marker = _app_window_register(url, window)
         try:
+            _allow_sound_before_a_click()
             webview.start(icon=_app_icon_path(), **_app_window_storage())
         finally:
             if marker is not None:
@@ -1251,8 +1419,14 @@ def _play_sound(path: str) -> None:
 
 
 def _play_opening_sound(short: bool) -> None:
-    """The plucked-thread phrase that plays with the splash; AGENTWEAVE_SOUND=0 turns it off."""
+    """The struck-glass phrase that plays with the splash.
+
+    AGENTWEAVE_SOUND=0 turns it off, and so does the app's own sound switch (Settings > General),
+    which the window's bridge keeps in `app-window/sound.json`.
+    """
     if os.environ.get("AGENTWEAVE_SOUND", "").strip().lower() in ("0", "false", "off", "no"):
+        return
+    if not _app_sound_on():
         return
     path = _asset_path("opening-short.wav" if short else "opening.wav")
     if path is not None:
@@ -1287,15 +1461,21 @@ def _open_app_with_splash(
     import time as _time
 
     _set_windows_app_user_model_id()
+    bridge = _AppWindowApi()
     try:
         window = webview.create_window(
-            "AgentWeave", html=html, text_select=True, background_color=_SPLASH_BACKGROUND
+            "AgentWeave",
+            html=html,
+            text_select=True,
+            background_color=_SPLASH_BACKGROUND,
+            js_api=bridge,
         )
     except Exception as exc:
         print_error(f"Native app window unavailable ({exc}); falling back to browser.")
         return None
     if window is None:
         return None
+    bridge._window = window
     _enable_default_context_menus(window)
 
     loaded = threading.Event()
@@ -1340,6 +1520,7 @@ def _open_app_with_splash(
         window.load_url(url)
 
     try:
+        _allow_sound_before_a_click()
         webview.start(func=_work, icon=_app_icon_path(), **_app_window_storage())
     except Exception as exc:
         print_error(f"Native app window unavailable ({exc}); falling back to browser.")

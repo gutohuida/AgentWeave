@@ -180,5 +180,13 @@ As of 2026-10-23:
 - Built 2026-10-23: the loading thread in the app (`the-thread-is-how-agentweave-shows-it-is-loading`)
   and the opening splash with its sound (`agentweave-opens-on-the-thread`: the window opens at once
   on `src/agentweave/assets/splash.html`, the CLI plays `opening.wav` / `opening-short.wav`, rendered from
-  `brand/sound/agentweave-sound.js` by `scripts/render_opening_sound.py`; `AGENTWEAVE_SOUND=0` silences it). Next: sounded notifications,
-  then a test of real Windows notifications.
+  `brand/sound/agentweave-sound.js` by `scripts/render_opening_sound.py`; `AGENTWEAVE_SOUND=0` silences it).
+- Built 2026-10-23: sounded notifications (`agentweave-calls-you-with-its-own-sound`). The app plays
+  `hub/ui/src/lib/sound/agentweave-sound.js`, a byte-identical copy of the brand synth (a test holds
+  them equal). `ask` sounds for questions and permissions; `fail` for stalls, failed runs, suspended
+  chains and loops stopped short; `done` (a loop that drained its queue) is off by default. In front
+  there is a toast and the sound at 0.35 x volume; behind, the sound at 0.7 x volume, "(n) AgentWeave"
+  in the title and a flashing taskbar button. A burst is one sound and one toast (1.2 s to gather,
+  4 s per burst). The switches live in Settings > General > Sound and notifications; the sound switch
+  also silences the opening. Next: a test of real Windows (Action Center) notifications, and a
+  sound for review and merge needs (no single event says so yet).

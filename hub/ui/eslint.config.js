@@ -5,7 +5,8 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import globals from 'globals'
 
 export default [
-  { ignores: ['dist', 'dist-mock'] },
+  // lib/sound/agentweave-sound.js is brand/sound's file byte for byte (notifications.test.ts), not app code.
+  { ignores: ['dist', 'dist-mock', 'src/lib/sound/agentweave-sound.js'] },
   js.configs.recommended,
   ...tsPlugin.configs['flat/recommended'],
   {

@@ -33,6 +33,7 @@ import { TasksScreen } from '@/components/tasks/TasksScreen'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/common/Icon'
 import { useSSE } from '@/hooks/useSSE'
+import { useNotifications } from '@/hooks/useNotifications'
 import { useWorkspaceNavigation } from '@/hooks/useWorkspaceNavigation'
 import {
   PROJECT_TABS,
@@ -210,6 +211,11 @@ export default function App() {
   }, [destination])
 
   useSSE()
+  // A notification's Open goes to the project's overview, where its questions and stalls are.
+  useNotifications((projectId) => {
+    useConfigStore.getState().setSelectedProject(projectId)
+    navigateTo(projectDestination(projectId, 'overview'))
+  })
 
   if (bootstrapState === 'pending') {
     return <HubConnectionState state="pending" />
