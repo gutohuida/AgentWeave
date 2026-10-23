@@ -1,6 +1,7 @@
 import { isSafeMentionValue } from '@/lib/fileMentions'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
+import { LoadingThread } from '@/components/common/LoadingThread'
 import { Button } from '@/components/ui/button'
 import { clearComposerDraft, getComposerDraft, setComposerDraft } from '@/lib/composerDrafts'
 import {
@@ -387,7 +388,7 @@ export function Composer({
             disabled={(!text.trim() && !canSubmitEmpty) || submitting || !!disabledReason}
             data-state={submitting ? 'busy' : text.trim() || canSubmitEmpty ? 'ready' : 'idle'}
           >
-            <Icon name={submitting ? 'refresh' : 'send'} size={18} className={submitting ? 'composer-send-spinner' : undefined} />
+            {submitting ? <LoadingThread label="Sending" size="control" /> : <Icon name="send" size={18} />}
           </Button>
         </div>
       </div>
