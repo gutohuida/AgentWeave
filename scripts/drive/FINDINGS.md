@@ -39130,7 +39130,7 @@ Repro: `hdr-main` was approved at 10:57:09 UTC (`updated_at 2026-10-22T10:57:09.
 
 ## F952 (B) -- the Overview's spend line drops everything the budget card used to say: a turn with no reported cost counts as $0.00 with no caveat, "API-equivalent" is gone, and the project's preferred unit (allowance, Copilot credits) is never shown
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-checkpoints-sweep` (Chromium against the served bundle, scratch Hub :8122, profile ck1022, project `proj-d2fc106b8594`; `scripts/drive/s1022_ck_ui.py overview`, screenshots `testbed/ui-judge/s1022-ck-overview/`).
+**Status:** fixed 26ecda6 2026-10-23 (Tier 0). The spend line takes its figure from `/accounting` when loaded: "$0.07 API-equivalent so far", a "N turn(s) unpriced" note, the project's AI credits (the figure itself when nothing was priced, else a dash), and the allowance label when the preferred display is one; the agent strip reads "—" for an agent with no priced turn. Drive: scratch Hub :8132, two seeded `turn_usage` rows (scratch profile `f952`; alpha priced, cop credits only), Chromium `scripts/drive/f952_ui.py`: "$0.07 API-equivalent so far · 265.8K tokens · 0.28 AI credits · 1 turn unpriced"; alpha $0.07, cop —. Not driven: the allowance note in the browser (unit test only). Found 2026-10-22. Found by the day sweep `sweep-checkpoints-sweep` (Chromium against the served bundle, scratch Hub :8122, profile ck1022, project `proj-d2fc106b8594`; `scripts/drive/s1022_ck_ui.py overview`, screenshots `testbed/ui-judge/s1022-ck-overview/`).
 **Source:** drive
 **Theme:** Accounting & allowance
 **Ready:** yes
