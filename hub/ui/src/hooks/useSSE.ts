@@ -90,6 +90,9 @@ const listeners = new Set<SSEListener>()
  * one-shot reconciliation poll after the stream was down (M21). */
 const reconnectListeners = new Set<() => void>()
 let activeStream: { cancel: () => void } | null = null
+/** Bumped by every connect attempt and by cancelReconnect: an attempt whose fetch resolves after a
+ *  newer attempt or a cancel closes its own stream instead of opening a second one (F1039). */
+let connectGeneration = 0
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let connectedUrl = ''
 let connectedKey = ''
@@ -163,6 +166,7 @@ function fireReconnect(): void {
 }
 
 export function cancelReconnect(): void {
+  connectGeneration += 1
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
     reconnectTimer = null
@@ -259,6 +263,7 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
     activeStream = null
   }
   setConnectionState(hasEverConnected ? 'reconnecting' : 'connecting')
+  const generation = ++connectGeneration
 
   const url = `${hubUrl}/api/v1/events`
   let response: Response
@@ -267,11 +272,18 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
       headers: { Authorization: `Bearer ${apiKey}` },
     })
   } catch {
+    if (generation !== connectGeneration) return
     if (connectingUrl === hubUrl && connectingKey === apiKey) {
       connectingUrl = ''
       connectingKey = ''
     }
     scheduleReconnect(hubUrl, apiKey)
+    return
+  }
+  // F1039: the subscriber unmounted (StrictMode's mount, unmount, mount) or a newer attempt began
+  // while this fetch was in flight; that attempt owns the stream now.
+  if (generation !== connectGeneration) {
+    await response.body?.cancel().catch(() => {})
     return
   }
   if (!response.ok || !response.body) {
