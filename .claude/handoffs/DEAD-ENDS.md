@@ -2552,3 +2552,14 @@ When `hub/hub/mcp_server.py` changes, its tool-server digest is new, and several
   the top-bar button whose title ends in "mode" (prefers-color-scheme is not read). (2026-10-22)
 - **A docs image under `docs/assets/screenshots/` needs `.webp`.** `.gitignore` ignores
   png/jpg/webp everywhere and negates only `docs/assets/screenshots/*.webp`. (2026-10-22)
+
+## 2026-10-23 (interactive, mender build)
+
+- **`git worktree add` into the session scratchpad fails "Filename too long"** (openspec archive paths exceed MAX_PATH under `AppData\Local\Temp\claude\...`). Put worktrees at `.claude/worktrees/<short>`; the `docs` one works.
+- **A task outside any loop is evidence-governed: approval merges its accepted evidence commit, not its branch tip** (`task_integration.evidence_governs`, rule 1). Only a documentless loop's task with no requirement link merges `agentweave/task/<id>`'s tip. A drive that commits on the task branch of a plain task gets `NOTHING_TO_MERGE`, not the skip it meant to provoke.
+- **`GET /tasks/{id}/integrations` is oldest first.** `[-1]` is the newest; `[0]` read the approval-time row and looked like a wrong outcome.
+- **Haiku 4.5's catalog id is `claude-haiku-4-5-20251001`**; `claude-haiku-4-5` is refused by `POST /agents` / the Manager PATCH.
+- **`e2e.py hub-up`'s log (`%TEMP%\agentweave-hub-<port>.log`) appends across runs**: grep the *last* `Started server` block, or the first match names an earlier run's checkout.
+- **Running the full Hub suite while a drive or `npm run build` runs** fails `test_copilot_acp_refusal_continuation::test_the_continuation_uses_the_remaining_deadline` and `test_mcp_announce::test_wait_returns_soon_after_the_announce_arrives_during_it` (timing); both pass alone. The trial Hub `:8010` also stopped answering (curl HTTP 000) under that load and recovered after.
+- **A Python `write_text` edit on Windows leaves CRLF in the working copy**; git warns "CRLF will be replaced by LF" and commits LF (checked: `git show HEAD:<file> | grep -c $'\r'` = 0). Harmless, but the warnings are noise, not churn.
+- **A new Overview hook must be mocked in `overviewPage.test.tsx` and `taskCountIsTheLedgersOwn.test.tsx`** too (they mock every hook; an unmocked `useQuery` throws "No QueryClient set").
