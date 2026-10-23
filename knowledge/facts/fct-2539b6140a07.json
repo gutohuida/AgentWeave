@@ -1,0 +1,23 @@
+{
+  "id": "fct-2539b6140a07",
+  "kind": "fact",
+  "claim": "The master logo drawing is used at 48 px and above, and a heavier small drawing is used at 16–32 px.",
+  "citations": [
+    {
+      "source": "src-9d97fc00ae01",
+      "quote": "Master drawing for ≥48 px; a heavier small drawing for 16–32 px.",
+      "line_start": 40,
+      "line_end": 40
+    }
+  ],
+  "sources": [
+    "src-9d97fc00ae01"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-22T23:22:09.305688Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

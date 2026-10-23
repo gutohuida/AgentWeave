@@ -1,0 +1,23 @@
+{
+  "id": "fct-f2343c5b21b4",
+  "kind": "fact",
+  "claim": "Surfaces are monochrome: dark background #0A0A0B with surface #151518, and light background #FAFAFA with surface #FFFFFF.",
+  "citations": [
+    {
+      "source": "src-9d97fc00ae01",
+      "quote": "Surfaces are monochrome: dark background #0A0A0B, surface #151518; light background #FAFAFA,\n  surface #FFFFFF.",
+      "line_start": 53,
+      "line_end": 54
+    }
+  ],
+  "sources": [
+    "src-9d97fc00ae01"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-22T23:22:09.457694Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

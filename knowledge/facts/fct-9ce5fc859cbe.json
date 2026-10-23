@@ -1,0 +1,23 @@
+{
+  "id": "fct-9ce5fc859cbe",
+  "kind": "fact",
+  "claim": "Verdigris is the single UI accent colour: #1D6B6E in light mode and #5FB3B3 in dark mode.",
+  "citations": [
+    {
+      "source": "src-9d97fc00ae01",
+      "quote": "**Verdigris** (the single UI accent): #1D6B6E light / #5FB3B3 dark.",
+      "line_start": 50,
+      "line_end": 50
+    }
+  ],
+  "sources": [
+    "src-9d97fc00ae01"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-22T23:22:09.397930Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}
