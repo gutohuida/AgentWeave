@@ -490,7 +490,13 @@ async def build(
                 row.started_at,
                 row.ended_at,
                 actors=[row.agent],
-                link={"object": "run", "id": row.id, "agent": row.agent},
+                link={
+                    "object": "run",
+                    "id": row.id,
+                    "agent": row.agent,
+                    # The transcript is the conversation the run belongs to.
+                    **({"conversation": row.conversation_id} if row.conversation_id else {}),
+                },
                 record=f"runs:{row.id}",
             )
         )
@@ -801,13 +807,21 @@ def page(
     before: Optional[str] = None,
     after: Optional[str] = None,
     first: bool = False,
+    around: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """One page of a level, oldest first. No cursor: the newest page; `first`: the oldest page;
-    `before`/`after`: the page just beyond that cursor in that direction. None for a bad cursor."""
+    `before`/`after`: the page just beyond that cursor in that direction; `around`: the page with
+    that knot (by key) in its middle. None for a bad cursor or a knot this level does not hold."""
     ordered = list(knots)
     sort_keys = [k.sort_key for k in ordered]
     total = len(ordered)
-    if first:
+    if around is not None:
+        index = next((i for i, k in enumerate(ordered) if k.key == around), None)
+        if index is None:
+            return None
+        lo = min(max(0, index - limit // 2), max(0, total - limit))
+        hi = min(total, lo + limit)
+    elif first:
         lo, hi = 0, min(limit, total)
     elif before is not None or after is not None:
         point = _cursor_tuple(before or after or "")

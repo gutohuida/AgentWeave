@@ -6,6 +6,7 @@ import { AgentCreateDialog } from '@/components/agents/AgentCreateDialog'
 import { NewConversationSurface } from '@/components/agents/NewConversationSurface'
 import { JobsScreen } from '@/components/jobs/JobsScreen'
 import { ActivityScreen } from '@/components/activity/ActivityScreen'
+import { ThreadScreen } from '@/components/thread/ThreadScreen'
 import { ProjectSettingsScreen } from '@/components/settings/ProjectSettingsScreen'
 import { VaultScreen } from '@/components/vault/VaultScreen'
 import { PaneResizer } from '@/components/layout/PaneResizer'
@@ -44,8 +45,10 @@ import {
   projectDestination,
   evidenceDestination,
   resolveConversationSelection,
+  threadDestination,
   withDocument,
 } from '@/lib/navigation'
+import { linkTarget } from '@/lib/threadKnots'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { ArchivedAgentNotice } from '@/components/agents/ArchivedAgentNotice'
 import { useProjectConversations } from '@/api/agentChat'
@@ -282,7 +285,7 @@ export default function App() {
       navigateTo(projectDestination(currentProjectId))
       return
     }
-    if (value === 'tasks' || value === 'spec' || value === 'jobs' || value === 'activity') {
+    if (value === 'thread' || value === 'tasks' || value === 'spec' || value === 'jobs' || value === 'activity') {
       navigateTo(projectDestination(currentProjectId, value))
       return
     }
@@ -425,6 +428,27 @@ export default function App() {
         : <OverviewScreen onNavigate={navigate} onOpenConversation={openConversation}
             onAddAgent={() => setAgentCreateProjectId(destination.projectId)}
           />
+    } else if (destination.tab === 'thread') {
+      projectContent = (
+        <ThreadScreen
+          key={destination.projectId}
+          projectId={destination.projectId}
+          knot={destination.knot ?? null}
+          // Replace: which knot the reader last touched is where they are, not a place to go Back to.
+          onAddress={(key) => navigateTo(threadDestination(destination.projectId, key), { replace: true })}
+          onOpenLink={(link) => {
+            const target = linkTarget(link)
+            if (!target) return
+            const pid = destination.projectId
+            if (target.to === 'spec') navigateTo(projectDestination(pid, 'spec', target.path))
+            else if (target.to === 'task') openTask(target.id)
+            else if (target.to === 'conversation') {
+              navigateTo(agentDestination(pid, target.agent, target.conversation, openDocument))
+            } else if (target.to === 'evidence') navigateTo(evidenceDestination(pid, target.focus))
+            else navigateTo(projectDestination(pid, target.tab))
+          }}
+        />
+      )
     } else if (destination.tab === 'tasks') {
       // A task's requirement chip, clicked: land on that requirement in its document, scrolled
       // into view — the other direction of F4's cross-tab navigation.

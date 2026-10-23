@@ -23,12 +23,13 @@ export interface RailProject {
  *  is still how that is done. This is the other thing: a place to go when the specification is what
  *  you are working on rather than what you are working *beside* — the document and its navigation,
  *  no conversation (operator, 2026-08-10: "just to focus on spec"). */
-export const PROJECT_TABS = ['overview', 'tasks', 'spec', 'vault', 'jobs', 'activity'] as const
+export const PROJECT_TABS = ['overview', 'thread', 'tasks', 'spec', 'vault', 'jobs', 'activity'] as const
 export type ProjectTab = (typeof PROJECT_TABS)[number]
 
 /** What each project tab is called on screen (the top bar). */
 export const TAB_LABELS: Record<ProjectTab, string> = {
   overview: 'Overview',
+  thread: 'Thread',
   tasks: 'Tasks',
   spec: 'Spec',
   vault: 'Vault',
@@ -118,6 +119,8 @@ export type WorkspaceDestination =
       // document and `focus` its `FR-n`, the pair the requirement's detail route resolves.
       view?: 'evidence' | 'requirement' | null
       focus?: string | null
+      // The Thread tab's address (FR-10): the knot to bring into view with its ancestors open.
+      knot?: string | null
     }
   | { kind: 'project'; projectId: string; tab: 'environment'; environmentSection: EnvironmentSection }
   // `agent` is null only on the new-conversation surface reached from the recency view, where
@@ -161,6 +164,19 @@ export function projectDestination(
   return anchor
     ? { kind: 'project', projectId, tab, document: parsed, anchor }
     : { kind: 'project', projectId, tab, document: parsed }
+}
+
+/** The Thread tab, optionally at one knot's address. A knot address is opaque to the app: the Hub
+ *  gave it out and resolves it, so only its length and control characters are checked here. */
+export function threadDestination(
+  projectId: string,
+  knot: string | null = null,
+): Extract<WorkspaceDestination, { kind: 'project' }> {
+  // eslint-disable-next-line no-control-regex -- deliberately matches control characters
+  const cleaned = knot && knot.length <= 300 && !/[\x00-\x1f\x7f]/.test(knot) ? knot : null
+  return cleaned
+    ? { kind: 'project', projectId, tab: 'thread', knot: cleaned }
+    : { kind: 'project', projectId, tab: 'thread' }
 }
 
 /** The Spec tab's evidence view, optionally focused on a task id or a requirement identifier. */
@@ -368,6 +384,10 @@ export function serializeDestination(destination: WorkspaceDestination): string 
   if (destination.tab === 'environment') {
     params.set('section', destination.environmentSection ?? DEFAULT_ENVIRONMENT_SECTION)
   }
+  if (destination.tab === 'thread' && destination.knot) {
+    params.set('knot', destination.knot)
+    return `?${params.toString()}`
+  }
   if (destination.tab === 'spec' && destination.view === 'evidence') {
     params.set('view', 'evidence')
     if (destination.focus) params.set('focus', destination.focus)
@@ -446,6 +466,7 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   const tab: ProjectTab = (PROJECT_TABS as readonly string[]).includes(rawTab ?? '')
     ? (rawTab as ProjectTab)
     : DEFAULT_TAB
+  if (tab === 'thread') return threadDestination(projectId, params.get('knot'))
   if (tab === 'spec' && params.get('view') === 'evidence') {
     return evidenceDestination(projectId, params.get('focus'))
   }
