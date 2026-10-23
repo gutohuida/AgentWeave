@@ -84,6 +84,8 @@ WORDS = {
     "fold": "Folded",
 }
 
+#: Who a knot names when the stored record names nobody (the Hub acted on its own).
+SYSTEM_ACTOR = "AgentWeave"
 _OPERATOR = {"user", "operator"}
 _ID_LIKE = re.compile(
     r"\b(?:tsk|task|run|spdoc|fct|spev|spreq|conv|perm|msg|tin|ev|jr|job|loop)-[A-Za-z0-9]{6,}\b"
@@ -216,10 +218,23 @@ class Thread:
                 knot.start = min([knot.start] + [c.start for c in knot.children])
                 knot.end = max([knot.end] + [c.end for c in knot.children])
                 knot.children.sort(key=lambda c: c.sort_key)
+                for child in knot.children:
+                    for name in child.actors:
+                        if name not in knot.actors:
+                            knot.actors.append(name)
             knot.descendants = sum(c.descendants + 1 for c in knot.children)
+
+        def fill(knot: Knot) -> None:
+            # A record that names nobody was written by the Hub itself.
+            if not knot.actors:
+                knot.actors.append(SYSTEM_ACTOR)
+            for child in knot.children:
+                fill(child)
 
         for knot in self.top:
             walk(knot)
+        for knot in self.top:
+            fill(knot)
         self.top.sort(key=lambda k: k.sort_key)
 
     # -- levels ---------------------------------------------------------------------------
@@ -406,10 +421,9 @@ async def build(
         Conversation.created_at,
         where=Conversation.project_id == project_id,
     )
-    job_names = {
-        row.id: row.name
-        for row in await rows(AIJob.id, AIJob.name, where=AIJob.project_id == project_id)
-    }
+    job_rows = await rows(AIJob.id, AIJob.name, AIJob.agent, where=AIJob.project_id == project_id)
+    job_names = {row.id: row.name for row in job_rows}
+    job_agents = {row.id: row.agent for row in job_rows}
     loop_docs = {
         row.job_id: row.spec_document_id
         for row in await rows(
@@ -746,6 +760,7 @@ async def build(
             f"{name} fired ({human(row.status)})",
             row.fired_at,
             parent=doc_parent(loop_docs.get(row.job_id)),
+            actors=[job_agents.get(row.job_id)],
             link={"object": "job-firing", "id": row.id, "job_id": row.job_id},
         )
 

@@ -315,6 +315,11 @@ async def test_every_seeded_item_is_reached_exactly_once(app, auth_headers, monk
     }
     assert sorted(names) == sorted(expected), "each item once, none invented, none missing"
     assert all(k["records"] for k in knots), "every knot names a stored record"
+    assert all(k["actors"] for k in knots), [k["key"] for k in knots if not k["actors"]]
+    by_record = {k["records"][0]: k for k in knots if k["kind"] != "fold"}
+    assert "builder" in by_record["firing:jr-1"]["actors"], "a firing names its job's agent"
+    assert "Operator" in by_record["spec_documents:spdoc-1"]["actors"], "a document names its events"
+    assert by_record["integration:tin-1"]["actors"], "a merge with no stored actor still names one"
 
 
 async def test_opening_a_document_then_task_then_run(app, auth_headers):
