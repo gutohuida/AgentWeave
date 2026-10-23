@@ -38690,7 +38690,7 @@ The card and the drawer correctly offer no Retry (F905), so only an API caller r
 
 ## F918 (B) -- the Vault's Add dialog and page drop store any file that is not a PDF or an image as a text "transcript": a Word document goes in as zip bytes, is committed under `knowledge/`, shown to every agent's map, and distilled for money
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-vault-sweep` in Chromium on the served bundle (scratch Hub :8115, `scripts/drive/s1022_vt_ui.py add`).
+**Status:** fixed f99977b 2026-10-23 (night). `vault.add_source` refuses text holding a NUL (400, "This looks like a binary file..."), and `VaultScreen.add` refuses, per file, an extension outside the text list (`vaultFileRefusal` in `api/vault.ts`, mirroring `vault_intake.TEXT_EXTENSIONS`) with the path door's sentence, keeping the file in the dialog. Drive: scratch Hub :8128, Chromium (`scripts/drive/f918_ui.py`): minutes.docx + notes.txt chosen together -> dialog stays with "minutes.docx: A .docx file is not a vault source; the vault takes ...", notes.txt added, map holds no binary entry; curl POST /vault/sources with a NUL -> 400. Found 2026-10-22. Found by the day sweep `sweep-vault-sweep` in Chromium on the served bundle (scratch Hub :8115, `scripts/drive/s1022_vt_ui.py add`).
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes
