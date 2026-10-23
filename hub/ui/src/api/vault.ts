@@ -99,6 +99,22 @@ const FILE_EXTENSIONS: Record<string, string> = {
   gif: 'image/gif',
   webp: 'image/webp',
 }
+/** The plain-text extensions the vault takes; the Hub's `vault_intake.TEXT_EXTENSIONS`, so the drop
+ *  door refuses what the by-path door refuses. */
+const TEXT_EXTENSIONS = [
+  'md', 'markdown', 'txt', 'text', 'rst', 'vtt', 'srt', 'csv', 'tsv', 'json', 'yaml', 'yml', 'xml', 'html', 'htm', 'log',
+]
+const ACCEPTED = [...TEXT_EXTENSIONS, ...Object.keys(FILE_EXTENSIONS)].map((e) => `.${e}`).join(', ')
+
+/** Why the vault will not take a file that is neither PDF/image nor plain text; null when it will. */
+export function vaultFileRefusal(file: Pick<File, 'name' | 'type'>): string | null {
+  if (vaultFileMediaType(file)) return null
+  const dot = file.name.lastIndexOf('.')
+  const extension = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : ''
+  if (TEXT_EXTENSIONS.includes(extension)) return null
+  return `A ${extension ? `.${extension}` : 'no extension'} file is not a vault source; the vault takes ${ACCEPTED}.`
+}
+
 export const VAULT_FILE_ACCEPT = '.pdf,.png,.jpg,.jpeg,.gif,.webp'
 
 /** The accepted media type of a file the operator chose, from its type or, failing that, its

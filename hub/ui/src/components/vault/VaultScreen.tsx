@@ -19,6 +19,7 @@ import {
   useVaultReports,
   useVaultSettings,
   vaultFileMediaType,
+  vaultFileRefusal,
   type VaultContradiction,
   type VaultEntry,
   type VaultEntryPage,
@@ -188,6 +189,11 @@ export function VaultScreen() {
       // The folder path stays in the name, so the library can group by it.
       const name = path.replace(/\.[^./]+$/, '')
       const mediaType = vaultFileMediaType(one)
+      const unsupported = vaultFileRefusal(one)
+      if (unsupported) {
+        refused.push({ file: one, reason: unsupported })
+        continue
+      }
       const type = (input.typeChosen ? input.type : mediaType ? 'document' : 'transcript') as VaultType
       const fields = { name, type, visibility: input.visibility, ...(input.dated ? { dated: input.dated } : {}) }
       try {
