@@ -39522,6 +39522,8 @@ Cause (verified): `deliver_batch_if_complete` (`hub/hub/api/v1/questions.py:164`
 
 Cause (verified): `stop_agent_run` calls `pty.terminate(force=True)` (`hub/hub/api/v1/agent_trigger.py:2587-2591`); Claude runs are `spawn_kind = "pty"` (`hub/hub/runner_adapters/claude.py:64`), so this is `PtySession.terminate` -> `self._proc.terminate(force)` (`hub/hub/pty_runner.py:345-346`), the direct child only, as `terminate_process_tree`'s docstring says (`pty_runner.py:228-231`). Hub shutdown uses `terminate_process_tree` (`agent_trigger.py:2636`); Stop does not. The older "Stop kills the process" result (~l.15645) measured children not blocked in a tool call.
 
+**Widened 2026-10-23 (`sweep-traces-sweep`, Runs row, :8118, `scripts/drive/s1023_rn_stop_tree.py`):** the cause is general, not ask_user-specific. A run blocked in a plain shell call (`py -3.11 -c ... range(300)`): tree claude.exe 16780 -> cmd.exe 16348 -> powershell.exe 22628 -> py.exe 22256 -> python.exe 23760 (+ tool server, conhosts). `POST /agent/alpha/stop` -> 200, run `stopped` in 4.1 s; 8 s later powershell 22628, py 22256, python 23760 and conhost 26816 still alive, and renaming `.agentweave/worktrees/alpha` failed `[WinError 32]`. Reproduced twice. The failure-path kill (F359, `agent_trigger.py:3857-3860`) is also `pty.terminate(force=True)`; the fix should cover it too.
+
 **Expected:** Stop takes the run's whole tree (`terminate_process_tree(pty.pid)` for a PtySession). **Test:** in the stop tests (`hub/tests/`): stopping an active PtySession-backed run calls `terminate_process_tree` with its pid (monkeypatched). Fails today. Seam: Runs (Stop) x Questions.
 
 ## F988 (C) -- an archived conversation opened by its URL reads "New conversation" in its header, with no archived notice, "Continuing this conversation" and a live composer
@@ -39565,3 +39567,212 @@ Commit `.claude/skills/greet/{SKILL.md,reference.md,run.py}`, type `$` in the co
 Cause (verified): `hub/ui/src/lib/composerTriggerSources.ts:8-13` maps every path under `.claude/skills/` and collapses only `*/SKILL.md`; the skill branch (`:41-47`) never filters to `*/SKILL.md` (or a top-level `.md`).
 
 **Expected:** only `greet`. **Test:** a `resolveTriggerResults` unit case with those three paths -> `[greet]`. Fails today. Seam: Composer `$skill` x workspace listing.
+
+## F991 (D) -- an operator start naming an unknown `task_id` is refused with the agent-delegation sentence ("A delegation may only name a task in the project the delegating run belongs to")
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Runs row; scratch Hub :8118, profile rn1023, `proj-71764bd56b63`, `scripts/drive/s1023_rn_busy.py` and direct `e2e.py api`).
+**Source:** drive
+**Theme:** Runs
+**Ready:** yes
+**Tier:** 0
+
+`POST /projects/{p}/agent/trigger {"agent":"alpha","message":"reply ack","task_id":"task-000000000000"}` -> 404 `"Task 'task-000000000000' does not exist in this project. A delegation may only name a task in the project the delegating run belongs to."` The operator is not a delegating run. The same probe with `review_task_id` already answers in the operator's words ("There is no task 'task-000000000000' in this project to review."): F731(5), 13f76d8, fixed only that branch.
+
+Cause (verified): `trigger_agent` calls `resolve_task_for_project(session, body.task_id, project_id)` (`hub/hub/api/v1/agent_trigger.py:2298`), whose only sentence is the delegation one (`hub/hub/run_task_binding.py:143-146`). The `review_task_id` branch below it (`agent_trigger.py:2340-2346`) got its own operator sentence; the `task_id` branch did not.
+
+**Expected:** e.g. "There is no task 'task-...' in this project. Check the id, or omit task_id to start alpha unbound." **Test:** beside `hub/tests/test_a_start_names_its_agents_own_task.py` (F731(5)'s test): an operator trigger with an unknown `task_id` -> 404 whose detail does not contain "delegation". Fails today. Seam: Runs (trigger) x Tasks (binding).
+
+## F992 (D) -- Stop is keyed by agent, not by run, so a Stop arriving after its run ended stops the next turn the queue just started, in another conversation, and consumes that queued message
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Runs row; scratch Hub :8118, profile rn1023, `scripts/drive/s1023_rn_busy.py`).
+**Source:** drive
+**Theme:** Runs
+**Ready:** yes
+**Tier:** 0
+
+alpha ran a 200 s sleep in `conv-d66b1d033c30` (`run-589082213417`). An operator message to alpha's other conversation `conv-d8cde5a74273` was queued ("agent is already running", `entry-9d1492e68dd1`). `POST /agent/alpha/stop` -> 200 for run-589082213417; it ended 11:58:43.70 and the queue started `run-e3613547662e` in conv-d8cde5a74273 at 11:58:44.22. A further `POST /agent/alpha/stop` ~3 s later -> 200 `"Stop signal sent to alpha (run run-e3613547662e)."`; that turn went `stopped` at 11:58:47.8 without replying, and the queued message is `delivered` into it (consumed). The caller cannot say which run it means. The UI mostly avoids it (`handleStop` holds `isStopping` until `run_stopped`; since F844 the other conversation's bar has no Stop), but a second tab, a stale bar or an API client hits it. Related to F15 (stop stops one run, the queue starts another) and the openspec leftover `an-agent-can-be-paused-and-keeps-its-input`, which are about pausing, not a Stop landing on the wrong turn.
+
+Cause (verified): `stop_agent_run` (`hub/hub/api/v1/agent_trigger.py:2554-2610`) takes no run or conversation id and selects the newest `running` run for the agent (`:2568-2574`); the UI posts with no body (`hub/ui/src/components/agents/AgentOutputPanel.tsx:981`).
+
+**Expected:** Stop accepts an optional `run_id` (the UI sends the run its bar shows) and answers 409 "run X already ended; <agent> is now running Y in <conversation>" when that run is no longer the running one. **Test:** in the stop tests (`hub/tests/test_agent_trigger.py`): run A finished, run B running for the same agent, `POST /agent/{a}/stop {"run_id": A}` -> 409 and B not terminated. Fails today (body ignored, B stopped). Seam: Runs (Stop) x Inbound queue drain x Conversations.
+
+## F993 (C) -- the "events were not delivered" notice has no screen: `ActivityLog`, the only component that renders `stream_gap`, mounts only when `GET /ledger` answers 404
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Logs row; scratch Hub :8119, profile ev1023, `proj-c01bff86cc78`, Chromium on the served bundle, `scripts/drive/s1023_ev_sse_gap.py`).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes
+**Tier:** 0
+
+Wire: `s1023_ev_sse_gap.py wire 400 60` (a raw socket on `/api/v1/events` that reads the headers then stops reading, while 400 x 60 KB `POST /projects/{p}/logs` go in) read 264 `log_event` frames and one `event: stream_gap data: {"dropped":136,"severity":"warn"}` (264 + 136 = 400): the Hub half works, first time reached. Browser: three attempts with the app on Activity never showed "fell behind" (main thread blocked 25 s under 400 x 60 KB and 300 x 200 KB; CDP throttling at 200 KB/s for 200 s). Even if a gap arrived, no mounted view renders it.
+
+Cause (verified): the sentence lives in `hub/ui/src/lib/eventSummary.ts:22` and is rendered only by `ActivityLog` (`hub/ui/src/components/activity/ActivityLog.tsx:140-148`), whose only mount is `ProjectLedger`'s 404 branch (`ProjectLedger.tsx:186-198`, "This Hub predates the ledger"). `ActivityScreen.tsx:60-63` renders `ProjectLedger`, `LiveDigest` (`buildDigest` over `/logs`, which never carries a gap) or `LogsView`; none handles `stream_gap`. `useSSE.ts:349-360` dispatches it and runs the catch-up, so the data heals silently. The current spec still requires the notice: `spec/capabilities/agent-stream-events` ac67, "Activity shows that events were not delivered whichever project is selected".
+
+**Expected:** on a Hub with the ledger, a gap is said on screen (digest or Activity tab header), whichever project is selected. **Test:** `hub/ui/src/__tests__/` beside the ActivityScreen/digest tests: dispatch a `stream_gap` `{dropped: 136}` with the Activity tab on the Activity (or Ledger) view and a ledger answering 200; "events were not delivered" is rendered. Fails today. Seam: SSE stream x Activity tab (ledger rebuild).
+
+## F994 (C) -- a query bound written with a non-UTC offset is compared as its wall-clock time: `DELETE /traces?until=<an hour ago, +02:00>` deleted traces from the last minute, and `GET /logs?since=<11:00Z as +02:00>` answers 0 of 32
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` twice, independently (Traces row, scratch Hub :8120, profile tc1023, `scripts/drive/s1023_tc_probes.py`; Logs row, :8119, profile ev1023, `scripts/drive/s1023_ev_sse_probe.py`).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+Traces (four traces, all started 12:17 UTC or later): `GET /traces/export?since=2026-10-23T12:00:00+00:00` -> 158 spans, `...T12:00:00Z` -> 158, `...T14:00:00+02:00` (same instant) -> **0**, `...T09:00:00-03:00` -> 268 (all). `DELETE /traces?until=2026-10-23T13:17:48+02:00` (11:17:48 UTC, before every trace) -> `{"deleted_spans": 4, "deleted_traces": 4}`, counts 4 -> 0. The list cursor too: `before=2026-10-23T14:07:50.327755+02:00|b75e3daf0001c60b` (the same instant as the route's own `+00:00` cursor) returns 61 traces instead of 30.
+
+Logs (32 events, 11:52:18Z..12:05:07Z): `GET /projects/{p}/logs?limit=500&since=2026-10-23T11:00:00Z` -> 32; `since=2026-10-23T13:00:00%2B02:00` (11:00Z) -> **0**; `since=2026-10-23T06:00:00-05:00` -> 32 (right only because 06:00 wall clock is also earlier). The route's own refusal for a bad `since` tells callers how to send an offset ("a + must be sent as %2B"); F255's check compared only `+00:00` with `Z`.
+
+Cause (verified): `traces.parse_bound` returns the aware datetime with its offset kept (`hub/hub/traces.py:1801-1804`), `list_traces` the same for `before` (`:1676`), and `list_logs` passes `datetime.fromisoformat(since)` straight into the filter (`hub/hub/api/v1/logs.py:86,95`). `UTCDateTime` (`hub/hub/db/models.py:30-51`) has `process_result_value` only, no `process_bind_param`, and SQLite's `DATETIME` bind drops tzinfo (`'2026-10-23T13:00:00+02:00'` binds as `'2026-10-23 13:00:00.000000'`), so an aware non-UTC value is compared against naive-UTC storage as its wall time. Any route binding a caller's aware datetime against a `UTCDateTime` column shares it.
+
+**Expected:** `UTCDateTime.process_bind_param` converts an aware value to UTC (`astimezone(timezone.utc)`) for every column, or at least `parse_bound`, the trace cursor and `list_logs` do. **Test:** `hub/tests/`: a trace started 12:30 UTC — `export?since=...T14:00:00+02:00` includes it and `DELETE ?until=...T13:00:00+02:00` deletes nothing; events after 11:52Z — `logs?since=...T13:00:00%2B02:00` returns them all (beside `test_the_logs_page_is_the_newest_and_pages_back` in `hub/tests/test_a_request_means_what_it_says.py`). All fail today. Seam: Traces (export/clear) and Logs x the database's datetime binding.
+
+## F995 (B) -- the run-text redaction joins a Claude turn's separate thinking and text blocks as one string: a value split across two replies is not redacted when the model thinks between them, and the ordinary word opening the next block after an `aw_live_`-shaped token is replaced by `<redacted>`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Logs row; scratch Hub :8119, profile ev1023, `scripts/drive/s1023_ev_sse_secret.py`).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes
+**Tier:** 2 -- secrets (CLAUDE.md's table). Hazard: the redaction floor itself; no migration, rows already stored keep what they hold.
+
+A Haiku turn (`run-f44cb8dee387`) was asked to say `Channel prefix aw_live_`, run `echo one`, say `Q7xP2mK4R9sT is the channel. Notes are in C:\Users\...\README.md`, run `echo two`, say `Second channel aw_live_N4bV6`, run `echo three`, say `Finished cleanly.` (whole fake keys were refused by Haiku). `agent_outputs`:
+
+```
+ 2 text      "Channel prefix aw_live_"
+ 5 thinking  "<redacted>, echo one completed. Now I need to say the text for step 3."
+ 6 text      "Q7xP2mK4R9sT is the channel. Notes are in C:\Users\huida\Documents\aw-ev1023\README.md"
+ 9 thinking  "Good, echo two completed. Now step 5: say the text."
+10 text      "Second channel <redacted>"
+13 thinking  "<redacted> the tool calls are done. Now the final step: say \"Finished cleanly.\""
+```
+
+Seq 2 + seq 6 read `aw_live_` + `Q7xP2mK4R9sT` verbatim, the F488/F602 split guarantee broken; ordinary words opening seq 5 ("Good") and seq 13 were redacted instead. Paths were correctly kept.
+
+Cause (verified): `scrub_stream` (`hub/hub/run_secrets.py:137-195`) carries one tail per run across both `STREAM_KINDS` (`:37`, text and thinking), strips whitespace at the boundary (`:153`, `:168`) and joins, so the dangling half of a text block is consumed by the next *thinking* block and joined with its first word, which is redacted; the next text block starts from a tail no longer ending in `aw_live_` (`:188`). Claude almost always thinks after a tool result, so for Claude text the split guarantee rarely holds. The boundary join was designed for Copilot's mid-token deltas, where a boundary is not a word break; Claude's blocks are whole blocks.
+
+**Expected:** a tail per stream kind, so a value split between two text blocks is redacted with thinking between them; a word opening a new Claude block is not pulled into a token that ended the previous block. **Test:** `hub/tests/test_run_secrets_stream.py`: for one registered run, text `"Channel prefix aw_live_"`, thinking `"Good, done."`, text `"Q7xP2mK4R9sT is it"` -> the thinking comes back unchanged and the second text starts with `<redacted>`. Both fail today. Seam: Runs (Claude executor) x redaction (F488/F602).
+
+## F996 (D) -- after a killed turn, the Hub's automatic re-delivery reads in the Activity digest as a second operator turn with the same message, and its `run_triggered` says `initiator: "operator"`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Logs row; :8119, profile ev1023, `scripts/drive/s1023_ev_sse_f907.py kill`, `scripts/drive/f907_ui.py`).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes
+**Tier:** 0
+
+`run-b90d366a5373`'s claude.exe was killed (run `failed`, `run_failed` warn). 0.3 s later the Hub re-queued `entry-e6e328365c30` (`queue_entry_queued` carrying the failed `run_id`) and delivered it in `run-676f4f39e098` (`run_triggered` `session_mode: resume`, `initiator: "operator"`; `delivery_attempts` 1). Haiku's thinking: "The previous attempt was interrupted. I'll run it again" — it re-ran the 120 s sleep. The digest shows two rows, "alpha stopped with an error | Run this exact shell command..." and "alpha was stopped | Run this exact shell command...", and nothing says the second was the Hub retrying, not the operator sending again.
+
+Cause (verified): `queue_entry_delivered` and `run_triggered` carry no attempt number and the re-delivery is stamped `initiator: "operator"`; `buildDigest` maps an entry to its last delivery only (`hub/ui/src/lib/activityDigest.ts:76-80`), so it cannot tell attempt 2 from a new send.
+
+**Expected:** a re-delivery's events carry the attempt (e.g. `delivery_attempt: 2`) and the digest row says "retried after ...". **Test:** an `activityDigest.test.ts` case in the Hub's order — `run_failed`, `queue_entry_queued`, `run_triggered`, `queue_entry_delivered` (attempt 2), `run_started` — the second row names the retry. Fails today. Seam: Inbound queue (re-delivery) x Activity digest.
+
+## F997 (C) -- every check run's trace shows routine git answers as red error spans: `merge-base --is-ancestor` exit 1 and `worktree unlock`/`remove` exit 128 on a checkout that is not there
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; scratch Hub :8120, profile tc1023, `POST /tasks/{id}/checks/run`, check run chk-d23dfb3a61f7).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+The `check_run` work trace has 20 `aw.command` children, 9 of them `error`. Only 2 are real (the `fails` check, exit 3, on the merged work and on main). The other 7 are routine: `git merge-base --is-ancestor <target> <main>` "exit code 1" (not an ancestor, an answer); `git worktree unlock .agentweave/checks/<task>` exit 128 four times; `git worktree remove --force --force` exit 128 twice with no checkout to remove. All draw red in the waterfall ("An error is red whatever the operation: it is the one thing to find").
+
+Cause (verified): `project_checks._git` calls `traces.run` without `ok_codes` (`hub/hub/project_checks.py:84-101`); the ancestor probe is at `:121`, and `_remove_checkout` unlocks and removes unconditionally (`:155-169`). F791 fixed only the two `MERGE_HEAD` probes in `worktrees.py`; `worktrees.py:480` and `:703` use the same `--is-ancestor` with `check=False` and no `ok_codes` (not seen in this drive).
+
+**Expected:** `--is-ancestor` passes `ok_codes=(0, 1)`; `_remove_checkout` unlocks/removes only a checkout that exists or is registered (or records those exits as answers). **Test:** beside `hub/tests/test_a_merge_head_probe_is_not_a_failed_command.py`: a check run whose checks all pass, on a fresh task, leaves no `aw.command` span with `status == "error"`. Fails today. Seam: Traces x Worktrees & integration (project checks).
+
+## F998 (C) -- a secret in a project check's command is stored and served verbatim in the `project_settings_updated` event, while the same event's copy on the trace reads `<redacted>`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; scratch Hub :8120, profile tc1023).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes
+**Tier:** 2 -- secrets (CLAUDE.md's table); the diff is one redaction call, no migration (rows already stored keep their value).
+
+`PUT /projects/{p}/settings` with `checks: [{"name":"prints-key","command":"py -3.11 -c \"print('token sk-ant-api03-TRACEfake0123456789abcdefghijKLMNOPqrstuv')\""}]`. The `event_logs` row evt-32da84378834 (`project_settings_updated`) holds the key verbatim, twice (`changed.checks.now`, `settings.checks`), and `GET /events/history` returns it unchanged. No `trace_spans` row holds it: the event recorded on the PUT's request span, and the check's `aw.command` span (`print('token <redacted>')`), are both redacted. Related (noted by the Logs drive, not separately filed): `POST /logs` also stores an `aw_live_` value verbatim — the same unredacted `persist_event`.
+
+Cause (verified): `persist_event` stores `data` as given (`hub/hub/utils.py:71-78`) and `sse_manager.broadcast` sends it unchanged (`hub/hub/api/v1/projects.py:725-732`); only the trace copy goes through `redact` (`traces._event_record`, `hub/hub/traces.py:1137`).
+
+**Expected:** the event history and the trace agree: `persist_event` stores `data` through the same `redact_text_secrets` floor the trace uses. **Test:** `hub/tests/`: a settings PUT whose check command carries an `sk-ant-` key leaves `/events/history` without the key. Fails today. Seam: Traces (event copy) x Logs, events & SSE.
+
+## F999 (D) -- Clear leaves its own `DELETE /traces` request trace behind: the screen reads "0 traces" while the Hub holds 1, and the next clear promises "0 traces, 0 spans" then reports "Cleared 1 trace (1 span)"
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; scratch Hub :8120, Chromium on the served bundle, `scripts/drive/s1023_tc_ui.py section`).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+Settings -> General -> Traces -> "Clear traces..." -> confirm: status "Cleared 67 traces (268 spans)", Recorded "0 traces · 0 spans"; `GET /traces/settings` straight after -> `trace_count 1, span_count 1`. Clear again: the dialog reads "... deleted — 0 traces, 0 spans", then the status line reads "Cleared 1 trace (1 span)".
+
+Cause (verified): every non-GET request is kept as a trace (`hub/hub/trace_requests.py:33-38`), so the DELETE writes its own span after the delete committed; `useClearTraces` invalidates on success (`hub/ui/src/api/traces.ts:213-215`) and refetches before the span writer flushes.
+
+**Expected:** "clear everything" leaves nothing: `DELETE /traces` is not kept as a request trace (or its span is dropped by its own clear), so Recorded, the confirm's count and the result agree. **Test:** a route test: `DELETE /traces`, flush the span writer, `trace_count == 0`. Fails today. Seam: Traces (clear) x request tracing.
+
+## F1000 (D) -- the task story reads "0 tokens" for a run whose usage was never reported
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; scratch Hub :8120, task-013fd5cbc415, stopped run run-c33ff06dad08).
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 0
+
+The run was stopped mid-tool-call; its `turn_usage` row is `status unavailable` with every token column null, and its trace root says `aw.usage.status: unavailable`. `GET /tasks/{id}/story` returns `"tokens": 0, "cost_usd": null`; the drawer's story reads "12s · 0 tokens · stopped · ... · trace". `/ledger` `spend.by_agent` likewise reports `breaker` (3 runs, all unavailable) as `usd 0.0, tokens 0`. Same family as F961 (the Ledger's $0.00 for unpriced turns).
+
+Cause (verified): `hub/hub/task_story.py:202,225` gives `"tokens": tokens if rows else None`; an unavailable row still counts as a row, so its null tokens sum to 0. Cost is right through `priced` (`:199`).
+
+**Expected:** `tokens` is null when no row reported `total_tokens`, so the story shows no token count, as it shows no cost. **Test:** a task-story test: one `turn_usage` row, status `unavailable`, `total_tokens` null -> `tokens is None`. Fails today. Seam: TaskStory x Accounting.
+
+## F1001 (D) -- a Claude run that fails at CLI startup is traced as a 3.3 s model call whose assistant output is the CLI's error, and the root says only "run failed"
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; :8120, runner `broken` with flags `["--definitely-not-a-flag"]`; run-58adc321402d, run-231feacb21d8, run-91f6d81bd183).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+All three attempts exited 1 with `runs.error` null. Each trace: root `error`, `status_message: "run failed"`, plus a `chat claude-haiku-4-5-20251001` span of 3.3-3.6 s whose `gen_ai.output.messages` is `[{"role":"assistant","parts":[{"type":"text","content":"error: unknown option '--definitely-not-a-flag'"}]}]`. No model was called. The drawer's red line reads "run failed"; the cause appears only as the "model call" output.
+
+Cause (verified): `parse_claude_line` turns any non-JSON stdout line into a `text` event (`hub/hub/runner_parsing.py:290-297`), traced as the chat segment's output; `finish_run` falls back to "run failed" when `run.error` is empty (`hub/hub/traces.py:738-740`).
+
+**Expected:** the root's message names the failure, e.g. "run failed (exit 1): error: unknown option '--definitely-not-a-flag'" (exit code and last output when `run.error` is empty). **Test:** a `finish_run` test: failed run, `error` None, exit 1, one text output -> `status_message` contains "exit 1" and that text. Fails today. Seam: Traces x Runs (runner output parsing).
+
+## F1002 (D) -- a retried delivery's trace starts at the input's first arrival: attempt 3 reads "22.1 s" with an 18.6 s delivery bar, for a turn that "Worked for 4s"
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; :8120, Chromium, `scripts/drive/s1023_tc_ui.py fail`, entry-09a99679e9c3).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+The three attempts' `aw.deliver` spans all start at 12:07:50.449 (the entry's arrival) and end at 12:08:00.948, 12:08:05.124, 12:08:09.008 (`aw.queue.delivery_attempt` 1, 2, 3). Run 3 lasted 12:08:09.002-12:08:12.567, but its drawer header reads "error breaker ... · 22.1 s · 7 spans" with an 18.6 s delivery row; the conversation says "Worked for 4s". Each attempt's trace covers all the earlier attempts' time.
+
+Cause (verified): `record_deliveries` starts at `min(entry.arrived_at, at)` (`hub/hub/traces.py:562`) — the docstring's "from its arrival to this delivery" — for every attempt.
+
+**Expected:** an attempt after the first starts its `aw.deliver` at its own re-queue (the previous attempt's end / `queue_entry_queued`), so the attempts' traces do not overlap. **Test:** `record_deliveries` for an entry on its third attempt starts after attempt 2's end. Fails today. Seam: Traces x Inbound queue (retries).
+
+## F1003 (D) -- a trace carrying a Hub warning looks like every other trace in the list and the drawer header; the warning appears only in the root span's Events
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; :8120, Chromium, Settings -> General -> Traces -> Work). First time a Hub warning on a project trace was reached (held a file open in a task checkout's `.agentweave/calls/` while a turn started).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+Two of ten `inbound_queue` Work traces carry a WARNING `log` event (`could not remove ...calls\held.json ...: [WinError 32]`); it renders in the drawer's span detail and is exported as an OTLP log record. But all ten list rows read the same ("inbound_queue · work · 431 ms · 12 · Open") and the drawer header reads "ended ...": the warning is visible only after selecting the root span, under Events.
+
+Cause (verified): `_summary` (`hub/hub/traces.py:1629-1649`) carries no warning fact, so `TracesSection`'s row (`hub/ui/src/components/environment/TracesSection.tsx:105-130`) and `TraceView`'s header have nothing to show.
+
+**Expected:** the summary carries the trace's warning count, and the list row and the drawer header show it ("1 warning"). **Test:** `GET /traces` for a work trace with one `log` event -> summary warning count 1. Fails today. Seam: Traces (hub-warnings-are-on-their-trace) x Settings list.
+
+## F1004 (D) -- a mistyped `otlp_headers` body is refused with the header's value echoed in `detail[].input`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; scratch Hub :8120, `scripts/drive/s1023_tc_probes.py`).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 2 -- secrets (CLAUDE.md's table); a response echo only, nothing persisted.
+
+`PUT /traces/settings {"otlp_headers":{"Authorization":["Bearer quokka-header-value-7781"]}}` -> 422 with `"input": ["Bearer quokka-header-value-7781"]`; `{"otlp_headers":"Authorization=Bearer quokka-header-value-7781"}` -> 422 with the whole string as `input`. The value is in neither `trace_spans` nor `event_logs`. The section promises "Values are stored and never shown again".
+
+Cause (verified): `otlp_headers: Optional[Dict[str, str]]` (`hub/hub/api/v1/traces.py:113-115`) is checked by the schema; the runner schema deliberately types `provider_config` as `Any` for exactly this reason (`hub/hub/schemas/runners.py:19-22`).
+
+**Expected:** `otlp_headers` typed loosely and checked in the route, with a sentence naming the header and never its value. **Test:** the PUT above -> 422 and the body does not contain "quokka-header-value". Fails today. Seam: Traces settings x request validation.

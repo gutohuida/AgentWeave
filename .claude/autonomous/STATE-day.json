@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "7c63120",
     "stop_at": "2026-10-23T17:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-traces-sweep",
-    "next_action": "Run sweep-traces-sweep per .claude/loops/day-window.md: Sweep: Traces x Runs x Logs, events & SSE. First: F907 the Activity digest ends a turn on run_stopped / run_failed (stop one, kill one), in Chromium; then F251 (reopened 10-23: useSSE drops 15 broadcast kinds) as seen from Logs/Activity, F987 (Stop leaves a blocked tool-call tree) on a plain long shell call, and the trace drawer for a run. Scratch Hub port 8110+ (not 8114, 8115, 8130), haiku runner only, never leave a job enabled. Tally turn_usage BEFORE e2e.py clean. Up to three foreground subagents on their own ports; they report, you file. Run `py -3.11 -m ruff check scripts/ --select E9,F63,F7,F82,F401,F841` before committing (CI lints drive scripts). Write files with the Write tool: the Bash tool rejects long heredocs containing apostrophes.",
+    "current": "sweep-tasks-sweep",
+    "next_action": "Run sweep-tasks-sweep per .claude/loops/day-window.md: Sweep: Tasks x Dependencies x Worktrees & integration. Least-driven first: integration Retry (task drawer Try again, `retryable`, F905/F823), the planner's same-file warning (`files`), then one representative path per row (task story vs task_history, compact board card vs drawer, delete a prerequisite F825/F828, B's next turn merges A's commit, two writers one file, project checks, Land it, isolation flip 409). Re-check F997 (check-run git error spans) while on project checks. Scratch Hub port 8110+ (not 8114, 8115, 8130), haiku runner only, never leave a job enabled. Tally turn_usage BEFORE e2e.py clean. Up to three foreground subagents on their own ports; they report, you file. Run `py -3.11 -m ruff check scripts/ --select E9,F63,F7,F82,F401,F841` before committing (CI lints drive scripts). Write files with the Write tool: the Bash tool rejects long heredocs containing apostrophes.",
     "queue": [
         {
             "id": "plan-review",
@@ -73,7 +73,7 @@
         },
         {
             "id": "sweep-traces-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Traces x Runs x Logs, events & SSE",
             "detail": "First: F907 the Activity digest ends a turn on run_stopped / run_failed (stop one, kill one)."
         },

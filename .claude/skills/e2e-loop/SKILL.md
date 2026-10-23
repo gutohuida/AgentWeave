@@ -339,7 +339,8 @@ phased drive script is the better tool; it has no Hub lifecycle and no :8000 gua
   :8000 database.
 - **Holding a turn open:** Claude Code blocks a standalone `sleep` / `Start-Sleep` in an agent turn,
   so a "kill the Hub mid-run" drive kills nothing. Have the agent run
-  `py -3.11 -c "import time\nfor i in range(120): time.sleep(1)"` under `--perm workspace`, and
+  `py -3.11 -c "import time; [time.sleep(1) for i in range(120)]"` under `--perm workspace` (a
+  literal `\n` inside `-c` is a SyntaxError under PowerShell), and
   confirm the run is `running` with its tool call recorded before killing.
 - **A live turn cannot carry literal escape text** — shell-judge escapes need a wire-level probe.
 - **`/events` is SSE and never returns** — history is `/events/history`. Never pipe a drive script
