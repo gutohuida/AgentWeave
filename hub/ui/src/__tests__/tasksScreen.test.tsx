@@ -24,6 +24,24 @@ vi.mock('@/api/spec', () => ({
   useSpecCoverageMany: (paths: string[]) => paths.map(() => ({ data: undefined })),
 }))
 
+// What `useTask` was asked for, and what the Hub answers by id: an approved task whose document is
+// archived, which the board's page (`excludeArchivedCompleted`) never holds.
+const taskReads: (string | null)[] = []
+const BY_ID: Record<string, Task> = {
+  'task-archived': {
+    id: 'task-archived',
+    project_id: 'p',
+    title: 'Shipped long ago',
+    status: 'approved',
+    priority: 'medium',
+    created_at: '2026-08-01T10:00:00Z',
+    updated: '2026-08-02T10:00:00Z',
+    divergence_policy: 'surface',
+    has_open_divergence: false,
+    spec_document_id: 'doc-archived',
+  },
+}
+
 let updateImpl: (args: unknown, opts: { onError?: (e: unknown) => void }) => void = () => undefined
 const startWork = vi.fn()
 
@@ -37,6 +55,10 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     useUpdateTask: () => ({ mutate: (a: unknown, o: { onError?: (e: unknown) => void }) => updateImpl(a, o), isPending: false }),
     useStartWorkOnTask: () => ({ mutate: startWork }),
     useRetryIntegration: () => ({ mutate: vi.fn() }),
+    useTask: (id: string | null) => {
+      taskReads.push(id)
+      return { data: id ? BY_ID[id] : undefined }
+    },
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),
   }
 })
@@ -121,6 +143,22 @@ describe('the tasks screen', () => {
     renderScreen()
     expect(screen.getByTestId('drawer')).toHaveTextContent('Lay the pipe')
     expect(useTaskFilterStore.getState().pendingOpenTaskId).toBeNull()
+  })
+
+  it('opens an archived approved task the board page does not hold, read by id (FR-7)', () => {
+    taskReads.length = 0
+    useTaskFilterStore.getState().setPendingOpenTaskId('task-archived')
+    renderScreen()
+    expect(screen.getByTestId('drawer')).toHaveTextContent('Shipped long ago')
+    expect(taskReads).toContain('task-archived')
+  })
+
+  it('does not read a task by id when the board page already holds it', () => {
+    taskReads.length = 0
+    useTaskFilterStore.getState().setPendingOpenTaskId('task-1')
+    renderScreen()
+    expect(screen.getByTestId('drawer')).toHaveTextContent('Lay the pipe')
+    expect(taskReads.every((id) => id === null)).toBe(true)
   })
 
   it('opens a card into the drawer', () => {

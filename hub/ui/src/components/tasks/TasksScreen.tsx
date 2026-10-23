@@ -6,6 +6,7 @@ import {
   useAllowedTransitions,
   useRetryIntegration,
   useStartWorkOnTask,
+  useTask,
   useTasks,
   useUpdateTask,
   type Task,
@@ -280,7 +281,11 @@ export function TasksScreen({
     )
   }
 
-  const openTask = allTasks.find((task) => task.id === openTaskId) ?? null
+  // A task opened from elsewhere (a Thread knot) may be archived-completed and so absent from the
+  // board's page; read it by id rather than landing on the board with nothing open.
+  const pageTask = allTasks.find((task) => task.id === openTaskId) ?? null
+  const { data: fetchedTask } = useTask(openTaskId && !pageTask && !isLoading ? openTaskId : null)
+  const openTask = pageTask ?? (fetchedTask?.id === openTaskId ? fetchedTask : null)
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="tasks-screen">
