@@ -39052,7 +39052,7 @@ Repro, two real turns by `builder` (claude-haiku-4-5). Turn 1 called `submit_spe
 
 ## F945 (B) -- the Spec header's requirements fact counts every requirement not verified or rejected as "in progress", including ones not started and ones with no task
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121; `scripts/drive/s1022_sp_ui.py header`).
+**Status:** fixed cb80cae 2026-10-23 (night iteration 10). Test `specHealthLine.test.tsx` (names each state; failed before). Drive: scratch Hub :8129, Chromium `scripts/drive/f945_ui.py`: approved change with untouched requirements reads "0/2 verified · 2 not started", proposed change with no task reads "0/2 verified · 2 with no task". Was: open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121; `scripts/drive/s1022_sp_ui.py header`).
 **Source:** drive
 **Theme:** Spec documents
 **Ready:** yes
