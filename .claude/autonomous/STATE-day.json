@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "7c63120",
     "stop_at": "2026-10-23T17:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "night-recheck-drive",
-    "next_action": "Run night-recheck-drive per .claude/loops/day-window.md 'Re-driving last night's fixes': re-drive the 12 fixes named in its detail (plus the Copilot task-story credits, 9f4b91a) on a scratch Hub (port 8110+, haiku only), log CONFIRMED/REOPENED F<n>, reopen with evidence.",
+    "current": "sweep-vault-sweep",
+    "next_action": "Run sweep-vault-sweep per .claude/loops/day-window.md: Sweep: Knowledge vault x Manager jobs x CLI & lifecycle. First: `agentweave --profile <p> --port <n>` itself (cmd_hub_start; unreached until 2026-10-23) on a throwaway profile, start then status; F919 reset on a profile whose Hub runs; F918 Add dialog unsupported extension + POST /vault/sources NUL text 400; F946 'Vault not checked' with the spec-vault-check job off. Scratch Hub port 8110+, haiku runner only (pick the runner named 'haiku', never the default Claude runner).",
     "queue": [
         {
             "id": "plan-review",
@@ -23,7 +23,7 @@
         },
         {
             "id": "night-recheck-drive",
-            "status": "open",
+            "status": "done",
             "title": "Re-drive last night's fixes live",
             "model": "sonnet",
             "effort": "medium",
