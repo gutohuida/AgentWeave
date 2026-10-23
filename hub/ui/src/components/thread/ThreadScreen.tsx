@@ -96,7 +96,8 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
     }
   }, [addressed, fetchLevel, store])
 
-  // An address: open every ancestor at the page that holds the way down, then land on the knot.
+  // An address: open every ancestor at the page that holds the way down, then land on the knot,
+  // itself opened when it holds knots, as clicking it would have.
   React.useEffect(() => {
     if (!knot || knot === written.current) return
     let cancelled = false
@@ -105,16 +106,21 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
       const found = await getJson<{ knot: ThreadKnot; ancestors: string[] }>(knotUrl(projectId, knot))
       const path = [SURFACE, ...found.ancestors]
       const targets = [...found.ancestors, found.knot.key]
-      const loaded = await Promise.all(path.map((under, i) => fetchLevel({ under, around: targets[i] })))
+      const holds = found.knot.child_count > 0
+      const [loaded, own] = await Promise.all([
+        Promise.all(path.map((under, i) => fetchLevel({ under, around: targets[i] }))),
+        holds ? fetchLevel({ under: found.knot.key, first: true }) : Promise.resolve(undefined),
+      ])
       if (cancelled || !alive.current) return
       setLevels((prev) => {
         const next = { ...prev }
         path.forEach((under, i) => {
           next[under] = loaded[i]
         })
+        if (own) next[found.knot.key] = own
         return next
       })
-      setOpen(new Set(found.ancestors))
+      setOpen(new Set(holds ? targets : found.ancestors))
       setCurrent(found.knot.key)
       setReveal((n) => n + 1)
     })().catch(() => !cancelled && setFailed(true))
