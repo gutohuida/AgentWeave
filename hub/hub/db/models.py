@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models — 5 tables, all scoped to project_id."""
 
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import (
     JSON,
@@ -1144,11 +1144,42 @@ class ManagerJob(Base):
     )
     runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    # Migration 0142: whether the job fires on its own trigger (True) or only when the operator
+    # presses its button (False). Read by the chapters job; the other jobs ignore it.
+    automatic: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
     )
 
     __table_args__ = (PrimaryKeyConstraint("project_id", "job", name="pk_manager_jobs"),)
+
+
+class ChapterVersion(Base):
+    """One saved state of a project's chapters (migration 0142). Append-only: never updated or deleted.
+
+    `chapters` is the whole list as saved, each `{id, title, summary, start, end, members, cites}`;
+    `known_knots` is the surface knots of the thread when it was saved, which the next save is
+    measured against (`hub/hub/chapters.py`). `version` counts from 1 within the project.
+    """
+
+    __tablename__ = "chapter_versions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    author: Mapped[str] = mapped_column(String(64), nullable=False)
+    asked_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    asked_for: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    chapters: Mapped[List[Dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    known_knots: Mapped[List[str]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_chapter_versions_project_version", "project_id", "version", unique=True),
+    )
 
 
 # Why a project's work stopped moving (`a-stalled-project-wakes-a-doctor-that-unblocks-it`). Each is
