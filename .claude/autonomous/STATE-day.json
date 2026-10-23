@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "7c63120",
     "stop_at": "2026-10-23T17:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-reach-sweep",
-    "next_action": "Run sweep-reach-sweep per .claude/loops/day-window.md: Sweep: Permissions & sandbox x Capability plane x Agent environment. First: F928 permission card only in the asking conversation, another conversation's bar says it is waiting on you; F933 a no-approver (no tool server) run gets no inherited Ask-me/Workspace-only default, roster says what it gets (both CONFIRMED live in iteration 3 on unchanged code: a quick look suffices), then the rows' least-driven paths: a Copilot host grant, Copilot under Full access (real Copilot is drivable, claude-haiku-4.5, about 0.33 premium requests a turn), `$x..`/brace/URL judge shapes. Scratch Hub port 8110+ (not 8130), haiku runner only.",
+    "current": "sweep-spec-sweep",
+    "next_action": "Run sweep-spec-sweep per .claude/loops/day-window.md: Sweep: Spec documents x Corpus & folding. First: F944 read_spec_document include=full / include=delivery returns delivery, and a read -> edit -> submit_spec_document round trip keeps the flow (F944 CONFIRMED live in iteration 3 on unchanged code: a quick look suffices); then the rows' least-driven paths: report_cannot_satisfy and the operator's amend/accept/reject answer (F700), an agent amending from a tester turn, PUT /documents/{path}/roadmap, delete-document note (F829), fold with retire-what-it-supersedes. Scratch Hub port 8110+ (not 8130/8131), haiku runner only.",
     "queue": [
         {
             "id": "plan-review",
@@ -43,7 +43,7 @@
         },
         {
             "id": "sweep-reach-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Permissions & sandbox x Capability plane x Agent environment",
             "detail": "First: F928 permission card only in the asking conversation, another conversation's bar says it is waiting on you; F933 a no-approver (no tool server) run not given an inherited Ask-me/Workspace-only default, roster says what it gets."
         },
