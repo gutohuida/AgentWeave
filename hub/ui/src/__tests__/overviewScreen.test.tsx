@@ -11,6 +11,7 @@ let questions: Question[] = []
 let questionsError: Error | null = null
 let ledgerError: Error | null = null
 let accountingData: Record<string, unknown> = { budget: { exhausted: false } }
+let queueStatuses: Array<Record<string, unknown>> = []
 const answerMutate = vi.fn()
 
 vi.mock('@/api/agents', () => ({
@@ -57,6 +58,7 @@ vi.mock('@/api/ledger', () => ({
     },
   }),
 }))
+vi.mock('@/api/queue', () => ({ useQueueStatuses: () => queueStatuses }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: accountingData }) }))
 vi.mock('@/components/overview/AgentPostureChips', () => ({ AgentPostureChips: () => null }))
 
@@ -82,6 +84,7 @@ beforeEach(() => {
   questionsError = null
   ledgerError = null
   accountingData = { budget: { exhausted: false } }
+  queueStatuses = []
   answerMutate.mockClear()
 })
 
@@ -211,5 +214,30 @@ describe('a query the Hub did not answer', () => {
       expect(row).toHaveTextContent('—')
       expect(row).not.toHaveTextContent('$')
     })
+  })
+
+  it('names the limit, the use and what is held when the token budget is spent, and links to Budgets (F953)', () => {
+    accountingData = { budget: { exhausted: true, limit_tokens: 100_000, used_tokens: 265_821, remaining_tokens: 0 } }
+    queueStatuses = [
+      { agent: 'builder', waiting_count: 1, running: false, waiting_reason: 'token budget exhausted' },
+      { agent: 'other', waiting_count: 2, running: false, waiting_reason: 'agent is busy' },
+    ]
+    const onNavigate = vi.fn()
+    render(<OverviewScreen onNavigate={onNavigate} />)
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Token limit reached: 265.8K of 100K')
+    expect(alert).toHaveTextContent('1 turn waiting')
+    fireEvent.click(within(alert).getByRole('button', { name: /Budgets/ }))
+    expect(onNavigate).toHaveBeenCalledWith('budgets')
+    // A turn held for the budget is something the operator must act on: the summary says so.
+    expect(screen.getByText('1 turn held by the budget')).toBeInTheDocument()
+  })
+
+  it('does not count a turn held for another reason as held by the budget (F953)', () => {
+    accountingData = { budget: { exhausted: true, limit_tokens: 100_000, used_tokens: 120_000, remaining_tokens: 0 } }
+    queueStatuses = [{ agent: 'builder', waiting_count: 3, running: false, waiting_reason: 'agent is busy' }]
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    expect(screen.getByRole('alert')).not.toHaveTextContent('waiting')
+    expect(screen.queryByText(/held by the budget/)).toBeNull()
   })
 })

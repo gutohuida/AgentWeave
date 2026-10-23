@@ -86,6 +86,7 @@ export function OverviewView({
   onAnswer,
   onOpenQuestions,
   taskTotal,
+  heldByBudget,
   onOpenTasks,
   notice,
   loading,
@@ -112,6 +113,8 @@ export function OverviewView({
   onOpenQuestions?: () => void
   /** The ledger's own task total, never the length of a page of it (F202). */
   taskTotal?: number
+  /** Turns waiting only for the budget: they need the operator, so they are not "nothing" (F953). */
+  heldByBudget?: number
   onOpenTasks?: () => void
   /** A project-wide condition worth one line above everything (a paused budget). */
   notice?: React.ReactNode
@@ -138,9 +141,17 @@ export function OverviewView({
             <span className="aw-overview-status-need">
               {needs.length} {needs.length === 1 ? 'thing needs' : 'things need'} you
             </span>
-          ) : (
+          ) : heldByBudget ? null : (
             <span>Nothing needs you</span>
           )}
+          {heldByBudget ? (
+            <>
+              {needs.length ? <span aria-hidden="true">·</span> : null}
+              <span className="aw-overview-status-need">
+                {heldByBudget} {heldByBudget === 1 ? 'turn' : 'turns'} held by the budget
+              </span>
+            </>
+          ) : null}
           <span aria-hidden="true">·</span>
           <span>{running.length ? `${running.length} running` : 'Nothing running'}</span>
           {taskTotal != null ? (

@@ -3,6 +3,7 @@ import { useAccounting } from '@/api/accounting'
 import { conversationLabel, useProjectConversations } from '@/api/agentChat'
 import { useAgents } from '@/api/agents'
 import { useProjectLedger } from '@/api/ledger'
+import { useQueueStatuses } from '@/api/queue'
 import { useAnswerQuestion, useQuestions } from '@/api/questions'
 import { isWaitedOn } from '@/lib/pendingQuestions'
 import { useTasks, type Task } from '@/api/tasks'
@@ -56,6 +57,11 @@ export function OverviewScreen({
     ['the ledger', ledgerError],
     ['the budget', accountingError],
   ]
+  // Turns the budget is holding: the queue's own reason, per agent, never inferred from the total.
+  const queueStatuses = useQueueStatuses(agents.map((a) => a.name))
+  const heldByBudget = accounting?.budget.exhausted
+    ? queueStatuses.reduce((n, s) => n + (/budget/i.test(s.waiting_reason ?? '') ? s.waiting_count : 0), 0)
+    : 0
   const answer = useAnswerQuestion()
   const now = new Date()
 
@@ -199,6 +205,7 @@ export function OverviewScreen({
       agents={strip}
       spend={spend}
       taskTotal={taskPage?.total}
+      heldByBudget={heldByBudget}
       onOpenTasks={() => onNavigate('tasks')}
       onOpenLedger={() => onNavigate('activity')}
       onOpenQuestions={() => onNavigate('questions')}
@@ -208,7 +215,16 @@ export function OverviewScreen({
           <>
             {/* A failed query would otherwise read as fact here: no questions, nobody working, $0. */}
             <QueryErrorNotice failures={failures} />
-            {accounting?.budget.exhausted ? <BudgetExhaustionNotice exhausted /> : null}
+            {accounting?.budget.exhausted ? (
+              <BudgetExhaustionNotice
+                exhausted
+                embedded
+                limitTokens={accounting.budget.limit_tokens}
+                usedTokens={accounting.budget.used_tokens}
+                heldCount={heldByBudget}
+                onOpenBudgets={() => onNavigate('budgets')}
+              />
+            ) : null}
           </>
         ) : null
       }
