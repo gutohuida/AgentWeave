@@ -82,7 +82,7 @@
     "stop_at": null,
     "stop_when_queue_empties": false
   },
-  "design": "Tier 1, with a hazard named: this is the operator's launch path; a broken change means AgentWeave does not open. Rollback: revert the commit; the change is CLI-only plus a packaged page and two WAVs.\nD1. `_open_app_window_native(url_or_start, warm)` takes either a URL or a start-up callable returning (url | None, failure text). It creates the window with html=splash, background ink, and passes the work to webview.start(func=...), which pywebview runs on its own thread.\nD2. The worker waits for the page's `loaded` event, starts the sound, runs the start-up, waits out the minimum, asks the page `awSplashLeave()` (ms until the thread is next fully drawn plus the fade), sleeps that, then `load_url`.\nD3. The detached cold path moves its body (scaffold, migrations, spawn, health, resolve URL) into `_hub_spawn_detached(...)`, which returns the URL or a failure, unchanged in what it prints; the native window calls it from the worker. Without pywebview, the old order stays.\nD4. Sound is a WAV made offline by scripts/make_opening_sound.py (Karplus-Strong, seeded, the thread lab's settings: key D, brightness 0.45, ring 0.55, room 0.18), notes timed to the corners of the W under the splash's own easing. Played with winsound.SND_ASYNC (stdlib) or afplay/paplay in a subprocess; failures are silent.",
+  "design": "Tier 1, with a hazard named: this is the operator's launch path; a broken change means AgentWeave does not open. Rollback: revert the commit; the change is CLI-only plus a packaged page and two WAVs.\nD1. `_open_app_window_native(url_or_start, warm)` takes either a URL or a start-up callable returning (url | None, failure text). It creates the window with html=splash, background ink, and passes the work to webview.start(func=...), which pywebview runs on its own thread.\nD2. The worker waits for the page's `loaded` event, starts the sound, runs the start-up, waits out the minimum, asks the page `awSplashLeave()` (ms until the thread is next fully drawn plus the fade), sleeps that, then `load_url`.\nD3. The detached cold path moves its body into `_prepare` (hub import, scaffold, migrations; shared with the foreground start) and `_bring_up` (spawn, health, resolve URL), which returns the URL or a failure, unchanged in what it prints; the native window calls it from the worker. Without pywebview, the old order stays.\nD4. Sound is the struck glass (operator's pick in sound round 2): brand/sound/agentweave-sound.js is the one synth; scripts/render_opening_sound.py renders its `open` and `openShort` offline in headless Chromium to the two WAVs, and opening-sound.json pins the synth's hash (a stale render fails tests/test_splash.py). Revised 2026-10-23: the first WAVs came from a separate Python Karplus-Strong copy that drifted out of tune. Played with winsound.SND_ASYNC (stdlib) or afplay/paplay in a subprocess; failures are silent.\nD5. The 'already running?' probe asks /health only of a port that accepts a 0.3 s connect (`_hub_port_accepts`): a refused connect on Windows took 4 s for localhost and held the window back.",
   "evidence": {
     "checked": [],
     "limits": []
@@ -140,7 +140,7 @@
       "A packaged splash page (agentweave/assets/splash.html): self-contained, no network, the shuttle-pass intro, then the weave-through loop while waiting, still under reduced motion",
       "The native app window created first on the splash, with the Hub's start-up (migrations, spawn, health, launch URL) run off the UI thread, then the window navigated to the app",
       "A minimum splash time: 2.0 s on a cold start, 1.2 s when the Hub is already running (a short intro)",
-      "An opening sound packaged as WAV (agentweave/assets/opening.wav, opening-short.wav), generated reproducibly by scripts/make_opening_sound.py from the thread lab's instrument; played by the CLI with the stdlib (winsound on Windows; afplay/paplay where present) when the splash page has loaded",
+      "An opening sound packaged as WAV (agentweave/assets/opening.wav, opening-short.wav), rendered from the brand synth (brand/sound/agentweave-sound.js, the struck glass) by scripts/render_opening_sound.py; played by the CLI with the stdlib (winsound on Windows; afplay/paplay where present) when the splash page has loaded",
       "An opt-out: AGENTWEAVE_SOUND=0 silences it",
       "A start-up failure shown on the splash in words, then the window closes and the CLI returns 1 as today"
     ],
@@ -190,11 +190,13 @@
       "depends_on": [
         "drive"
       ],
-      "description": "scripts/make_opening_sound.py and the two WAVs; the stdlib player",
+      "description": "brand/sound/agentweave-sound.js, scripts/render_opening_sound.py, the two WAVs and their manifest; the stdlib player",
       "files": [
-        "scripts/make_opening_sound.py",
+        "brand/sound/agentweave-sound.js",
+        "scripts/render_opening_sound.py",
         "src/agentweave/assets/opening.wav",
-        "src/agentweave/assets/opening-short.wav"
+        "src/agentweave/assets/opening-short.wav",
+        "src/agentweave/assets/opening-sound.json"
       ],
       "from": null,
       "key": "sound",

@@ -140,11 +140,14 @@ a bright glint runs ahead of the madder thread as it draws the W, like a shuttle
 then the name and tagline appear. A cold open lasts at least about 2 s and keeps weaving until the
 Hub is ready; a warm open (Hub already running) plays a short 1.2 s version.
 
-**Sound** (decided 2026-10-23): one plucked-thread instrument, synthesised in code (Karplus-Strong),
-no audio files. Opening: one note per corner of the W (D4 A4 D5 E5 A5, panned left to right with the
-thread), then a soft D-A-F♯ chord as the name appears; the CLI plays it, because the window's
-browser engine blocks sound before a click. Needs you: A4 → E5. Done: E5 → D5. Stalled or failed:
-A3 → F3, muted. Ready (after a long cold start): D5 + A5.
+**Sound** (decided 2026-10-23, two rounds): **the struck glass**. Round 1 offered five stories (taut
+thread, shuttle crossing, punched card, in the open, call and answer); the operator kept the taut
+thread and in the open; round 2 varied both and added hybrids; the pick was S4b, struck glass.
+Each note is two tones that begin slightly apart and settle into one, struck by a small mallet: murk
+becoming clear. The first shipped opening (a plucked string rendered by a separate Python copy of
+the synth) drifted up to ~24 cents out of tune with a metallic reverb, so the synth now lives once,
+in `brand/sound/agentweave-sound.js`, and the launch WAVs are rendered from it. Sounds and shapes:
+`brand/sound/README.md`.
 
 **Notifications** (decided 2026-10-23): every project on the Hub notifies, labelled with its name.
 Window in front: a toast and a quiet sound. Window in the background: the sound, a count in the
@@ -176,6 +179,6 @@ As of 2026-10-23:
 - No Apple touch icon in the app (the PNG exists here in `logos/`).
 - Built 2026-10-23: the loading thread in the app (`the-thread-is-how-agentweave-shows-it-is-loading`)
   and the opening splash with its sound (`agentweave-opens-on-the-thread`: the window opens at once
-  on `src/agentweave/assets/splash.html`, the CLI plays `opening.wav` / `opening-short.wav`, made by
-  `scripts/make_opening_sound.py`; `AGENTWEAVE_SOUND=0` silences it). Next: sounded notifications,
+  on `src/agentweave/assets/splash.html`, the CLI plays `opening.wav` / `opening-short.wav`, rendered from
+  `brand/sound/agentweave-sound.js` by `scripts/render_opening_sound.py`; `AGENTWEAVE_SOUND=0` silences it). Next: sounded notifications,
   then a test of real Windows notifications.
