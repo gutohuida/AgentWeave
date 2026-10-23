@@ -39042,7 +39042,7 @@ Repro: open `/?project=<p>&tab=environment&section=bogus`, and then `...&section
 
 ## F944 (B) -- an agent's `read_spec_document include=full` never returns `delivery`, so a read, edit and resubmit silently erases the document's flow, agent, reviewer and schedule
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8121, two real Haiku 4.5 turns).
+**Status:** fixed 24aa973 (2026-10-23). Drive: scratch Hub :8124, two real Haiku 4.5 turns -- turn 1 submitted a `delivery` and its `read_spec_document include=full` returned it (cron `*/7 * * * *`); turn 2 read full, changed a statement, resubmitted every returned field, and the file's `delivery` and `checked_by` survived. Found 2026-10-22. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8121, two real Haiku 4.5 turns).
 **Source:** drive
 **Theme:** Spec documents
 **Ready:** yes
