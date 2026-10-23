@@ -84,6 +84,8 @@ WORDS = {
     "fold": "Folded",
 }
 
+#: Named on a knot whose stored records name no one (the Hub itself acted).
+SYSTEM_ACTOR = "Hub"
 _OPERATOR = {"user", "operator"}
 _ID_LIKE = re.compile(
     r"\b(?:tsk|task|run|spdoc|fct|spev|spreq|conv|perm|msg|tin|ev|jr|job|loop)-[A-Za-z0-9]{6,}\b"
@@ -213,10 +215,17 @@ class Thread:
             for child in knot.children:
                 walk(child)
             if knot.children:
+                if not knot.actors:
+                    for child in knot.children:
+                        for name in child.actors:
+                            if name not in knot.actors:
+                                knot.actors.append(name)
                 knot.start = min([knot.start] + [c.start for c in knot.children])
                 knot.end = max([knot.end] + [c.end for c in knot.children])
                 knot.children.sort(key=lambda c: c.sort_key)
             knot.descendants = sum(c.descendants + 1 for c in knot.children)
+            if not knot.actors:
+                knot.actors.append(SYSTEM_ACTOR)
 
         for knot in self.top:
             walk(knot)
@@ -242,7 +251,7 @@ class Thread:
             return self.knots[key]
         if not key.startswith("fold:") or "|" not in key:
             return None
-        parent_key = key[len("fold:") :].split("|", 1)[0]
+        parent_key = _fold_parent(key)
         parent = None if parent_key == SURFACE else self.find(parent_key)
         if parent_key != SURFACE and parent is None:
             return None
@@ -264,7 +273,7 @@ class Thread:
 
     def _parent_of(self, knot: Knot) -> Optional[str]:
         if knot.kind == "fold":
-            head = knot.key[len("fold:") :].split("|", 1)[0]
+            head = _fold_parent(knot.key)
             return None if head == SURFACE else head
         if knot.parent is None:
             # A surface knot: beneath a surface group when one holds it.
@@ -281,6 +290,12 @@ class Thread:
             if sibling.kind == "fold" and any(m.key == knot.key for m in sibling.members):
                 return sibling.key
         return knot.parent
+
+
+def _fold_parent(key: str) -> str:
+    """The level a fold sits in. A fold's key ends in its first member's key (which holds no `|`),
+    and the parent before it may itself be a fold, so split from the right."""
+    return key[len("fold:") :].rsplit("|", 1)[0]
 
 
 def _fold_node(parent_key: str, members: Sequence[Knot], fold_of: str, title: str) -> Knot:
@@ -395,10 +410,9 @@ async def build(
         Conversation.created_at,
         where=Conversation.project_id == project_id,
     )
-    job_names = {
-        row.id: row.name
-        for row in await rows(AIJob.id, AIJob.name, where=AIJob.project_id == project_id)
-    }
+    job_rows = await rows(AIJob.id, AIJob.name, AIJob.agent, where=AIJob.project_id == project_id)
+    job_names = {row.id: row.name for row in job_rows}
+    job_agents = {row.id: row.agent for row in job_rows}
     loop_docs = {
         row.job_id: row.spec_document_id
         for row in await rows(
@@ -735,6 +749,7 @@ async def build(
             f"{name} fired ({human(row.status)})",
             row.fired_at,
             parent=doc_parent(loop_docs.get(row.job_id)),
+            actors=[job_agents.get(row.job_id)],
             link={"object": "job-firing", "id": row.id, "job_id": row.job_id},
         )
 

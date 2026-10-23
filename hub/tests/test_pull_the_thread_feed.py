@@ -22,6 +22,7 @@ from hub.db.models import (
     Run,
     SpecDocument,
     SpecDocumentEvent,
+    SpecDocumentMerge,
     SpecRequirement,
     Task,
     TaskIntegration,
@@ -417,3 +418,64 @@ async def test_a_busy_project_opens_inside_a_second(app, auth_headers):
     await level(app, auth_headers, "document:spdoc-1")
     timings["knot"] = time.perf_counter() - started
     assert max(timings.values()) < 1.0, timings
+
+
+async def test_a_routine_fold_inside_a_surface_group_opens(app, auth_headers):
+    await save(
+        doc(1, 0),
+        AIJob(
+            id="job-1",
+            project_id="proj-test",
+            name="Nightly",
+            agent="builder",
+            message="go",
+            cron="* * * * *",
+        ),
+        *[
+            JobRun(id=f"jr-{i}", job_id="job-1", project_id="proj-test", fired_at=at(10 + i))
+            for i in range(5)
+        ],
+    )
+    knots = await walk(app, auth_headers)
+    firings = [k for k in knots if k["kind"] == "firing"]
+    assert len(firings) == 5
+    assert all(k["actors"] == ["builder"] for k in firings)
+
+
+async def test_vault_entries_and_document_merges_are_in_the_walk_and_knots_name_actors(
+    app, auth_headers
+):
+    from hub import project_thread
+
+    await save(
+        doc(1, 0),
+        doc(2, 0),
+        SpecDocumentMerge(
+            id="spmg-1",
+            project_id="proj-test",
+            capability_document_id="spdoc-2",
+            actor_kind="operator",
+            change_document_id="spdoc-1",
+            created_at=at(3),
+        ),
+        task("a", 1, "spdoc-1"),
+        transition(2),
+    )
+    async with async_session_factory() as session:
+        thread = await project_thread.build(
+            session,
+            "proj-test",
+            [{"id": "vlt-1", "name": "Notes", "created_at": at(5).isoformat()}],
+        )
+    reached = []
+
+    def visit(key):
+        for knot in thread.level(key) or []:
+            if knot.kind != "fold":
+                reached.extend(knot.records)
+            assert knot.actors, knot.key
+            visit(knot.key)
+
+    visit(None)
+    assert "document-merge:spmg-1" in reached and "vault:vlt-1" in reached
+    assert len(reached) == len(set(reached))
