@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9234463",
     "stop_at": "2026-10-23T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-22-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F946-impl",
-    "next_action": "Do queue item F946-impl: read its FINDINGS.md entry, write the failing test, fix, drive, close the finding, commit and push.",
+    "current": "F952-impl",
+    "next_action": "Do queue item F952-impl: read its FINDINGS.md entry, write the failing test, fix, drive, close the finding, commit and push.",
     "queue": [
         {
             "id": "F919-impl",
@@ -71,9 +71,9 @@
         },
         {
             "id": "F946-impl",
-            "status": "open",
+            "status": "done",
             "title": "F946: Spec header says Vault agrees when the check is off",
-            "detail": "Tier 0. Read the F946 entry in scripts/drive/FINDINGS.md (grep '## F946 '). Test at the seam it names, red then green, fix, drive, set Status: fixed <sha> with a drive line. UI changes: rebuild bundle via scripts/refresh_ui_bundle.py and drive in a browser."
+            "detail": "Fixed ca0e398."
         },
         {
             "id": "F952-impl",

@@ -39062,7 +39062,7 @@ Repro: approved change `hdr-main`, where FR-1 is verified (accepted evidence, la
 
 ## F946 (B) -- the Spec header says "Vault agrees" on a project whose spec-vault check is off and has never run, and pressing "Check against the vault again" answers only "The spec vault check job is disabled."
 
-**Status:** open 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121; `scripts/drive/s1022_sp_ui.py fact <path> spec-health-vault "Check against"`).
+**Status:** fixed ca0e398 2026-10-23 (Tier 0). `GET /vault/warnings` now carries `checked` (whether the job ever fired on the document); the header reads "Vault not checked" with no tone when there are no warnings and no firing, and its action reads "Check against the vault"; the 409 sentences name Project settings → Manager. Drive: scratch Hub :8131, Chromium `scripts/drive/f946_ui.py`: "Vault not checked", press -> toast "The spec vault check job is disabled. Turn it on under Project settings → Manager." Found 2026-10-22. Found by the day sweep `sweep-spec-sweep` (Chromium, scratch Hub :8121; `scripts/drive/s1022_sp_ui.py fact <path> spec-health-vault "Check against"`).
 **Source:** drive
 **Theme:** Knowledge vault
 **Ready:** yes
