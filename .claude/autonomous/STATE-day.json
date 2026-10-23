@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "7c63120",
     "stop_at": "2026-10-23T17:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-spec-sweep",
-    "next_action": "Run sweep-spec-sweep per .claude/loops/day-window.md: Sweep: Spec documents x Corpus & folding. First: F944 read_spec_document include=full / include=delivery returns delivery, and a read -> edit -> submit_spec_document round trip keeps the flow (F944 CONFIRMED live in iteration 3 on unchanged code: a quick look suffices); then the rows' least-driven paths: report_cannot_satisfy and the operator's amend/accept/reject answer (F700), an agent amending from a tester turn, PUT /documents/{path}/roadmap, delete-document note (F829), fold with retire-what-it-supersedes. Scratch Hub port 8110+ (not 8130/8131), haiku runner only.",
+    "current": "sweep-evidence-sweep",
+    "next_action": "Run sweep-evidence-sweep per .claude/loops/day-window.md: Sweep: Requirements, evidence & coverage x Drift. First: F945 SpecHealthLine names each unfinished state (not started, no task, drifting, stale, awaiting review) and the warn tone -- check it against the coverage bar after a drift and a reword (Chromium); then least-driven: list_evidence / decide_evidence from an agent, a rejected requirement at contract or gate rigor, the operator's overturn (F692), the Evidence view + RequirementStory, drift answered once. Scratch Hub port 8110+ (not 8114), haiku runner only. Tally turn_usage BEFORE e2e.py clean (clean deletes the rows).",
     "queue": [
         {
             "id": "plan-review",
@@ -49,7 +49,7 @@
         },
         {
             "id": "sweep-spec-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Spec documents x Corpus & folding",
             "detail": "First: F944 read_spec_document include=full / include=delivery returns delivery, and a read -> edit -> submit_spec_document round trip keeps the flow (real haiku agent)."
         },
