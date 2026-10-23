@@ -330,6 +330,24 @@ class TestAppModeNativeWindow:
         assert Path(icon_path).name == "icon.ico"
         assert Path(icon_path).is_file()
 
+    def test_the_plain_window_also_remembers_what_the_operator_chose(self, monkeypatch, tmp_path):
+        """The window without the splash keeps its storage too (private_mode=False), so a theme or
+        any other saved preference survives a relaunch."""
+        import sys
+        import types
+
+        from agentweave.cli import _open_app_window_native
+
+        started = {}
+        fake_webview = types.SimpleNamespace(
+            create_window=lambda title, url, **kwargs: None,
+            start=lambda **kwargs: started.update(kwargs),
+        )
+        monkeypatch.setitem(sys.modules, "webview", fake_webview)
+        assert _open_app_window_native("http://127.0.0.1:8010/") is True
+        assert started.get("private_mode") is False
+        assert Path(started["storage_path"]) == tmp_path / "app-window"
+
     def test_webview_start_exception_falls_back(self, monkeypatch, capsys):
         """4.3 — a broken backend (e.g. no WebView2/WebKitGTK/Qt) must not crash the
         invocation. It's caught, a message naming what happened is printed, and the

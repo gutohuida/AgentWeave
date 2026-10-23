@@ -57,7 +57,7 @@ def _fake_webview(log):
         return window
 
     def start(func=None, args=None, **kwargs):
-        log.append(("start", kwargs.get("icon"), time.monotonic()))
+        log.append(("start", kwargs, time.monotonic()))
         worker = threading.Thread(target=func, args=tuple(args or ())) if func else None
         if worker:
             worker.start()
@@ -193,3 +193,16 @@ def test_the_launch_sounds_are_rendered_from_the_brand_synth():
         assert manifest["files"][name] == hashlib.sha256(data).hexdigest(), name
         with wave.open(str(assets / name)) as w:
             assert (w.getframerate(), w.getnchannels(), w.getsampwidth()) == (44100, 2, 2), name
+
+
+def test_the_window_remembers_what_the_operator_chose(fake, tmp_path):
+    """pywebview's default `private_mode=True` throws the window's storage away when it closes, so
+    the theme the operator picked (and every other saved preference) was gone on the next launch
+    (operator, 2026-10-23: "the agentweave is not remembering my choice in theme"). The window
+    keeps its storage in a folder under the Hub's directory instead."""
+    from agentweave import cli
+
+    assert cli._open_app_with_splash(lambda: ("http://127.0.0.1:8161/", None), warm=True) == 0
+    kwargs = _first(fake.log, "start")[1]
+    assert kwargs.get("private_mode") is False
+    assert Path(kwargs["storage_path"]) == tmp_path / "app-window"

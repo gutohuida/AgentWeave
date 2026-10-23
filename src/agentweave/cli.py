@@ -1143,6 +1143,22 @@ def _enable_default_context_menus(window: Any) -> None:
         window.events.before_show += _subscribe
 
 
+def _app_window_storage() -> Dict[str, Any]:
+    """Where the app window keeps its storage, as `webview.start` keyword arguments.
+
+    pywebview starts in private mode by default and throws the window's storage away when it
+    closes, so the operator's theme and every other saved preference were gone on the next launch
+    (operator, 2026-10-23). A folder under the Hub's directory keeps them. If it cannot be made,
+    the window still opens, privately, as before.
+    """
+    folder = HUB_DIR / "app-window"
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return {}
+    return {"private_mode": False, "storage_path": str(folder)}
+
+
 def _open_app_window_native(url: str) -> bool:
     """Open `url` in a native OS window via pywebview.
 
@@ -1164,7 +1180,7 @@ def _open_app_window_native(url: str) -> bool:
         _enable_default_context_menus(window)
         marker = _app_window_register(url, window)
         try:
-            webview.start(icon=_app_icon_path())
+            webview.start(icon=_app_icon_path(), **_app_window_storage())
         finally:
             if marker is not None:
                 with contextlib.suppress(OSError):
@@ -1324,7 +1340,7 @@ def _open_app_with_splash(
         window.load_url(url)
 
     try:
-        webview.start(func=_work, icon=_app_icon_path())
+        webview.start(func=_work, icon=_app_icon_path(), **_app_window_storage())
     except Exception as exc:
         print_error(f"Native app window unavailable ({exc}); falling back to browser.")
         if not state["started"]:

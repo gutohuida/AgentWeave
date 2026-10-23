@@ -46,7 +46,8 @@ function loadConfig(): StoredConfig {
   return {
     apiKey: session.apiKey ?? '',
     hubUrl: session.hubUrl ?? window.location?.origin ?? '',
-    mode: prefs.mode ?? 'light',
+    // Dark until the operator picks otherwise (operator, 2026-10-23); index.html boots dark too.
+    mode: prefs.mode ?? 'dark',
   }
 }
 
