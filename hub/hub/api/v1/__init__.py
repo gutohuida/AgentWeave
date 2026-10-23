@@ -20,6 +20,7 @@ from .ledger import router as ledger_router
 from .logs import router as logs_router
 from .loops import router as loops_router
 from .manager import router as manager_router
+from .mender import mender_router, stalls_router
 from .messages import router as messages_router
 from .model_catalog import router as model_catalog_router
 from .native_dialog import router as native_dialog_router
@@ -70,9 +71,11 @@ project_resources_router.include_router(checkpoints_router)
 project_resources_router.include_router(runners_router)
 project_resources_router.include_router(charters_router)
 project_resources_router.include_router(manager_router)
+project_resources_router.include_router(stalls_router)
 project_resources_router.include_router(vault_router)
 project_resources_router.include_router(traces_router)
 v1_router.include_router(project_resources_router)
 
+v1_router.include_router(mender_router)
 v1_router.include_router(agent_actions_router)
 v1_router.include_router(setup_router)

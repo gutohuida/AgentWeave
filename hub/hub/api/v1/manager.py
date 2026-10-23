@@ -79,7 +79,16 @@ async def update_manager_job(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=undeclared_model_reason(runner.cli, model),
                 )
-    await manager.set_job(session, project_id, key, **fields)
+    row = await manager.set_job(session, project_id, key, **fields)
+    if key == manager.MENDER and row.enabled:
+        # The mender is an agent (`stalls.py`): turning it on makes or updates that agent, and a
+        # project agent already named `mender` refuses it rather than being taken over.
+        from ... import stalls
+
+        agent, refusal = await stalls.ensure_mender(session, project_id)
+        if agent is None:
+            await session.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal)
     await session.commit()
     return await manager.get_job(session, project_id, key)
 

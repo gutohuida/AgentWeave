@@ -2,53 +2,53 @@
   "acceptance_criteria": [
     {
       "checked_by": "agent",
-      "given": "a scratch Hub on this code with the mender enabled on claude-haiku-4-5, a project whose loop has two approved tasks left unmerged by a dirty tracked file the operator owns, and a third task depending on both whose prerequisites conflict in one file",
-      "how_to_check": "py -3.11 scripts/drive/d1023_stall_mender.py (written first, failing on master before the build)",
+      "given": "a scratch Hub on this code with the mender on claude-haiku-4-5-20251001, a documentless loop's approved task whose merge is skipped because the checkout holds the operator's uncommitted tracked change",
+      "how_to_check": "py -3.11 scripts/drive/d1023_stall_mender.py <project> <agent> (written first: 10 FAIL on master 68e04f9's code, 2026-10-23)",
       "key": "replay-last-night",
       "requirement": "mender-is-a-run",
-      "then": "exactly one mender run starts; it asks under Needs you about the dirty file without touching it; after the operator answers, it resolves the conflict, the integrations land, and the next firing delivers the third task",
-      "when": "the loop fires and the third task's delivery is refused"
+      "then": "one stall and exactly one mender run; the mender asks under Needs you and leaves the file untouched; after the operator commits their file, main moves with a conflicting change and the operator answers, the mender resolves the conflict and the work lands with the mender as actor and no second review",
+      "when": "the task is approved, and its merge retried while the change is still there"
     },
     {
       "checked_by": "agent",
-      "given": "the replay after the operator's answer, with project checks configured",
-      "how_to_check": "same drive, phase two; task_integrations actor and the absence of an under_review transition",
+      "given": "an approved task whose merge failed on a conflict, and a mender run",
+      "how_to_check": "test_the_mender_lands_a_conflicts_resolution_with_no_review; drive phase 4",
       "key": "fix-lands-unreviewed",
       "requirement": "unblock-without-review",
-      "then": "the checks run, the commit merges with actor 'mender' and no review task or QA turn is created; with a check made to fail, nothing merges and a Needs-you question names the failing check",
-      "when": "the mender commits its conflict resolution"
+      "then": "the first is refused naming the missing commit; the second merges with actor 'mender', both merge stalls end 'fixed', and no transition or review turn is added",
+      "when": "the mender submits a commit that drops the task's work, then its real resolution"
     },
     {
       "checked_by": "agent",
       "given": "the replay's stall, unanswered",
-      "how_to_check": "same drive, second phase; plus a unit test on the stall key",
+      "how_to_check": "drive phase 3; test_a_skipped_merge_is_one_stall_however_often_it_is_retried",
       "key": "same-stall-once",
       "requirement": "once-per-stall",
-      "then": "still exactly one mender run and one stall record; a new cause on the same project starts a second",
-      "when": "the loop fires three more times on the same refusal"
+      "then": "still exactly one stall (its count grows) and one mender run",
+      "when": "the merge is retried again on the same obstacle"
     },
     {
       "checked_by": "agent",
-      "given": "an enabled loop with open work and the no-progress window set to 2 minutes",
-      "how_to_check": "unit test with a frozen clock beside the scheduler tests",
+      "given": "an enabled loop with an open task and nothing started or moved for 35 minutes",
+      "how_to_check": "test_a_loop_with_open_work_and_no_progress_is_a_stall",
       "key": "no-progress-catch-all",
       "requirement": "stall-recorded",
-      "then": "a stall with cause no_progress is recorded and the mender wakes",
-      "when": "no run starts and no task moves for the window"
+      "then": "a no_progress stall is recorded naming the loop; once a run starts, the next sweep ends it 'resolved'",
+      "when": "the stall sweep runs"
     },
     {
       "checked_by": "agent",
-      "given": "a mender run whose only fix is to discard an uncommitted tracked change it did not make",
-      "how_to_check": "drive phase three; the file's hash before and after",
+      "given": "the replay's dirty checkout",
+      "how_to_check": "drive phase 2",
       "key": "hardcore-is-asked",
       "requirement": "ask-before-hardcore",
-      "then": "a Needs-you question exists, the file is unchanged, and the loop does not fire work until the answer",
-      "when": "it runs"
+      "then": "a Needs-you question from the mender exists and the operator's file's hash is unchanged",
+      "when": "the mender runs"
     },
     {
       "checked_by": "operator",
       "given": "the replay finished",
-      "how_to_check": "operator test guide in the drive's README",
+      "how_to_check": "Operator test guide: in Project settings -> Manager, turn on Mender with a cheap model. Make a merge stall (approve a task while your checkout has an uncommitted edit to a tracked file). Overview -> Needs you should show the merge row with 'The mender is on it'; open it, read the mender's question, answer it, and see the row disappear once the work lands. GET /api/v1/projects/<id>/stalls lists the stall ended 'fixed'.",
       "key": "operator-reads-it",
       "requirement": "outcome-recorded",
       "then": "they can tell what stalled, what the mender did without asking, what it asked, and that it ended 'fixed', without reading a transcript",
@@ -58,13 +58,13 @@
   "algorithms": [],
   "aw_identity": {
     "digests": {
-      "FR-1": "a55dac9d0ec923fb118f2626fdff33a2718a21b180a5962f596260eb935dafe9",
-      "FR-2": "f83687da740ba60c6b2aa0a9092cbc652ebe413d38d79e97e960382eb5cd46e7",
+      "FR-1": "2917cd4c50c4bf4199b67fb1326ac11ddeb59d9c9f1c5dc6dc8ce1a93a379de1",
+      "FR-2": "7ec807a7394e062f11c0c07269b90739b7820eaf19e3cd8a760df69c9f1bb02a",
       "FR-3": "687fc15703a6c2a6c924abeb00faa552d5399a6278eb03d4aed07ea9e9e589ad",
-      "FR-4": "232f96852952ec2c34fd9991b2c9cd8fea477e071ebea5cd6517f90b637c5f14",
-      "FR-5": "6c36f3ccb9b0b62bcd0df04d65540b01731ed505339318eb67a1018ff5fa8c31",
+      "FR-4": "d661791c6971c060b7b34923658030483a7a90fe9d0930b9cc168135cbb16c04",
+      "FR-5": "a41c6507057064f5e5b738997244974270b7afd1293de24c1a42ebc73e50cf75",
       "FR-6": "4f1e243572fe5cdce9483fc82155aacd3cc693d997d83caeb46e2c4796d368f4",
-      "FR-7": "c0e7616ee87e9fa215a64d8279bb326c3d13588865054ab53be5cd4100a64a8b"
+      "FR-7": "7b9e70044aa663422f4b70a23f8151b71de853a042aa56feb64df7dbde2ee482"
     },
     "high_water": 7,
     "requirements": {
@@ -87,7 +87,7 @@
     "stop_at": null,
     "stop_when_queue_empties": false
   },
-  "design": "Tier 2: an autonomous agent changing git state on the operator's work without review, a migration, a cross-cutting hook in the scheduler. Rollback: the mender is off by default and per project; disabling it leaves stall records as an inert table.\nD1. A stall is a row (migration): project, key (cause + subject, e.g. delivery_refused:task-x), cause, text, first_seen, mender_run_id, outcome. Recorded where each signal is already decided: decide_firing's stalled/refused results, the integration writer, _emit_review_unstaffed, run reconciliation, plus one periodic no-progress sweep in the existing scheduler (not a new process).\nD2. The mender is the first manager entry that is an agent run, not a one-shot: a JobSpec with needs_runner and a new 'agent' flag. It runs under a reserved Hub-owned agent identity per project (name chosen to pass AGENT_NAME_RE and checked against existing agents, never added to RESERVED_AGENT_NAMES), so turn_scheduler, budgets, traces and ask_user all apply unchanged. This revises manager.py's 'not an agent' rule for this one entry; say so in that docstring.\nD3. Autonomy is enforced by the tools, not only the prompt: the mender's tool set adds the unblock actions of FR unblock-without-review as Hub routes that refuse anything in ask-before-hardcore unless a matching answered question id is passed. The prompt explains; the routes guarantee.\nD4. Its merges skip review by being Hub-performed integrations of mender commits, gated on project checks, recorded with actor 'mender'.\nD5. Needs you: a mender question is an ordinary Question with blocking=true, so the existing Overview list shows it (OverviewScreen.tsx:78-111); the stall row also gets a Needs-you entry until resolved, which closes the gap that stalled loops never appear there.\nD6. Name (operator, 2026-10-23, 'something in the brand's voice'): the mender, who mends the red thread where it snapped. Agent name `mender`; if the project already has an agent of that name that the Hub did not create, enabling is refused with that reason rather than taking it over. Defaults accepted by the operator: no-progress window 30 minutes, 40 turns per stall. Built directly in an interactive session, no flow.",
+  "design": "Tier 2: an autonomous agent changing git state on the operator's work without review, a migration, a cross-cutting hook in the scheduler. Rollback: the mender is off by default and per project; disabling it leaves stall records as an inert table.\nD1. A stall is a row (migration): project, key (cause + subject, e.g. delivery_refused:task-x), cause, text, first_seen, mender_run_id, outcome. Recorded where each signal is already decided: decide_firing's stalled/refused results, the integration writer, _emit_review_unstaffed, run reconciliation, plus one periodic no-progress sweep in the existing scheduler (not a new process).\nD2. The mender is the first manager entry that is an agent run, not a one-shot: a JobSpec with needs_runner and a new 'agent' flag. It runs under a reserved Hub-owned agent identity per project (name chosen to pass AGENT_NAME_RE and checked against existing agents, never added to RESERVED_AGENT_NAMES), so turn_scheduler, budgets, traces and ask_user all apply unchanged. This revises manager.py's 'not an agent' rule for this one entry; say so in that docstring.\nD3. Autonomy is bounded by what the Hub offers, not only by the prompt: the mender's own routes (`/agent-actions/mender/*`, refused 403 to any agent the Hub did not make) cover exactly the unblock actions -- land a resolution, retry a merge, withdraw refused input, hand a task back along the edges any run may take -- and nothing hardcore has a route. Its git work happens in its own worktree; touching another checkout is outside its workspace, so the ordinary permission posture puts it to the operator.\nD4. A resolution lands in place of approval's own targets (`task_transition_service.land_resolution`): the commit must contain every commit approval would merge (evidence-governed or branch tip alike), the project's checks run on it merged onto main first, and the merge is recorded with the mender as actor. No transition, no review turn. Built 2026-10-23: moving the task branch instead was rejected because flow tasks merge accepted evidence, not their branch tip.\nD5. Needs you: a mender question is an ordinary Question, so it already shows. Every open stall is a Needs-you row of its own, except a merge stall, which is the existing merge row with 'The mender is on it' beside it.\nD6. Name (operator, 2026-10-23, 'something in the brand's voice'): the mender, who mends the red thread where it snapped. Agent name `mender`; if the project already has an agent of that name that the Hub did not create, enabling is refused with that reason rather than taking it over. Defaults accepted by the operator: no-progress window 30 minutes, 40 turns per stall. Built directly in an interactive session, no flow.",
   "evidence": {
     "checked": [],
     "limits": []
@@ -136,7 +136,7 @@
       "modal": "MUST",
       "party": null,
       "rationale": "Operator: 'ask the user about more hardcore changes'. Last night's first cause was another process's files, which only the operator may decide about.",
-      "statement": "The mender MUST ask the operator through ask_user, and MUST NOT act until answered, before touching uncommitted changes it did not make, rewriting or reverting main or deleting a branch or work, rejecting or deleting a task, changing a specification or its requirements, changing agents, permissions, budgets or project settings, or changing product logic beyond the conflicting hunks; the question MUST appear under Overview -> Needs you and the stalled loop MUST stay paused until it is answered."
+      "statement": "The mender MUST ask the operator through ask_user, and MUST NOT act until answered, before touching uncommitted changes it did not make, rewriting or reverting main or deleting a branch or work, rejecting or deleting a task, changing a specification or its requirements, changing agents, permissions, budgets or project settings, or changing product logic beyond the conflicting hunks; the question MUST appear under Overview -> Needs you; the stalled work stays where it stalled, counted on the same stall, until it is answered."
     },
     {
       "key": "outcome-recorded",

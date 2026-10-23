@@ -72,6 +72,7 @@ TASK_REFERENCES: List[Reference] = [
     ("conversations", "task_id", CLEAR),
     ("messages", "task_id", CLEAR),
     ("questions", "blocked_task_id", CLEAR),
+    ("stalls", "task_id", CLEAR),
 ]
 
 EVIDENCE_REFERENCES: List[Reference] = [
@@ -103,6 +104,7 @@ LOOP_REFERENCES: List[Reference] = [
     ("tasks", "loop_id", CLEAR),
     ("event_logs", "loop_id", CLEAR),
     ("checkpoints", "loop_id", CLEAR),
+    ("stalls", "loop_id", CLEAR),
 ]
 
 JOB_REFERENCES: List[Reference] = [

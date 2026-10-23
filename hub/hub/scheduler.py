@@ -14,7 +14,7 @@ from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
-from . import dependency_gate, requirement_evidence, requirement_links, traces
+from . import dependency_gate, requirement_evidence, requirement_links, stalls, traces
 from .checkpoint_generation import format_notes, render_checkpoint
 from .checkpoints import (
     checkpoint_by_task_author,
@@ -3954,6 +3954,16 @@ class JobScheduler:
                     await _emit_review_unstaffed(
                         session, job, loop, unstaffed_task_id, unstaffed_reason
                     )
+                    # A turn or review nobody can take is a stall (`stalls.py`); the same one on
+                    # every tick is one stall, counted.
+                    stalls.report(
+                        job.project_id,
+                        cause=stalls.classify_unstaffed(unstaffed_reason),
+                        subject=unstaffed_task_id,
+                        text=unstaffed_reason,
+                        task_id=unstaffed_task_id,
+                        loop_id=loop.id,
+                    )
                 for deferred_task_id, deferred_reason in decision.deferred:
                     # Design D6. Logged, never surfaced -- a flow with more ready work than agents
                     # defers on every tick by design, and an event for that would bury
@@ -4018,6 +4028,16 @@ class JobScheduler:
                         run.status = "skipped"
                         run.error_summary = stall_reason
                         await session.commit()
+                        if not decision.unstaffed:
+                            # Nothing claimable for a reason no task names (the unstaffed ones
+                            # were reported above, each under its task).
+                            stalls.report(
+                                job.project_id,
+                                cause="loop_stalled",
+                                subject=loop.id,
+                                text=stall_reason,
+                                loop_id=loop.id,
+                            )
                         if pending_edit_payload is not None:
                             await _emit_loop_edit_applied(session, pending_edit_payload)
                             pending_edit_payload = None

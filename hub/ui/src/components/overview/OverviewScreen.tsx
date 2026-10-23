@@ -5,6 +5,7 @@ import { useAgents } from '@/api/agents'
 import { useProjectLedger } from '@/api/ledger'
 import { useQueueStatuses } from '@/api/queue'
 import { useAnswerQuestion, useQuestions } from '@/api/questions'
+import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
 import { isWaitedOn } from '@/lib/pendingQuestions'
 import { useTasks, type Task } from '@/api/tasks'
 import { accountingDisplayLabel, formatAiCredits } from '@/components/accounting/accountingDisplay'
@@ -17,6 +18,20 @@ import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { AgentPostureChips } from './AgentPostureChips'
 import { OverviewView, type AgentStripItem, type FinishedItem, type NeedItem, type RunningItem } from './OverviewView'
+
+/** The Hub's own agent for stalled work (`hub/hub/stalls.py`, `MENDER`). */
+const MENDER = 'mender'
+
+const STALL_TITLE: Record<Stall['cause'], string> = {
+  loop_stalled: 'A loop has nothing it can start',
+  delivery_refused: 'An agent’s turn was refused',
+  integration_skipped: 'Approved work did not merge',
+  integration_failed: 'Approved work failed to merge',
+  review_unstaffed: 'Nobody can review a task',
+  dead_run: 'A run stopped answering',
+  stuck_task: 'A task is stuck in progress',
+  no_progress: 'A loop has stopped moving',
+}
 
 /** `latest_integration` rides on the task list response but is not on the `Task` type yet. */
 type TaskWithIntegration = Task & {
@@ -45,6 +60,8 @@ export function OverviewScreen({
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { data: agents = [], isLoading: agentsLoading, error: agentsError } = useAgents()
   const { data: questions = [], error: questionsError } = useQuestions(false)
+  const { data: openStalls = [], error: stallsError } = useOpenStalls()
+  const endStall = useEndStall()
   const { data: taskPage, error: tasksError } = useTasks()
   const { data: conversationPage, error: conversationsError } = useProjectConversations(projectId || null)
   const { data: ledger, error: ledgerError } = useProjectLedger()
@@ -52,6 +69,7 @@ export function OverviewScreen({
   const failures: QueryFailure[] = [
     ['the agents', agentsError],
     ['the questions', questionsError],
+    ['the stalls', stallsError],
     ['the tasks', tasksError],
     ['the conversations', conversationsError],
     ['the ledger', ledgerError],
@@ -99,14 +117,37 @@ export function OverviewScreen({
       })),
     ...tasks
       .filter((t) => t.status === 'approved' && t.latest_integration && t.latest_integration.outcome !== 'merged')
-      .map<NeedItem>((t) => ({
-        id: `merge-${t.id}`,
-        kind: 'merge',
-        agent: null,
-        title: `“${t.title}” was approved but not merged`,
-        detail: t.latest_integration!.reason ? sentence(t.latest_integration!.reason) : null,
-        at: t.latest_integration!.created_at,
-        primary: { label: 'Open task', onClick: () => openTask(t.id) },
+      .map<NeedItem>((t) => {
+        const mending = openStalls.find((st) => st.task_id === t.id && st.conversation_id)
+        return {
+          id: `merge-${t.id}`,
+          kind: 'merge',
+          agent: null,
+          title: `“${t.title}” was approved but not merged`,
+          detail: t.latest_integration!.reason ? sentence(t.latest_integration!.reason) : null,
+          at: t.latest_integration!.created_at,
+          primary: { label: 'Open task', onClick: () => openTask(t.id) },
+          secondary: mending ? { label: 'The mender is on it', onClick: () => openConversation(MENDER, mending.conversation_id!) } : undefined,
+        }
+      }),
+    // Every other stall (`hub/hub/stalls.py`); a merge stall is the merge row above.
+    ...openStalls
+      .filter((st) => !(st.cause.startsWith('integration_') && tasks.some((t) => t.id === st.task_id)))
+      .map<NeedItem>((st) => ({
+        id: `stall-${st.id}`,
+        kind: 'stall',
+        agent: st.conversation_id ? MENDER : null,
+        colorIndex: st.conversation_id ? colorOf(MENDER) : null,
+        title: STALL_TITLE[st.cause],
+        detail: sentence(st.reason) + (st.conversation_id ? ' The mender is on it.' : ''),
+        at: st.last_seen_at,
+        primary: st.conversation_id
+          ? { label: 'Open the mender’s thread', onClick: () => openConversation(MENDER, st.conversation_id!) }
+          : st.task_id
+            ? { label: 'Open task', onClick: () => openTask(st.task_id!) }
+            : { label: 'Open tasks', onClick: () => onNavigate('tasks') },
+        // Ended by hand: what the operator says when they have dealt with it themselves.
+        secondary: { label: 'Dismiss', onClick: () => endStall.mutate(st.id) },
       })),
   ]
 

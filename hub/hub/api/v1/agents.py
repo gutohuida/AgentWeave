@@ -1666,6 +1666,66 @@ def _operations() -> List[_Operation]:
                 f"merges. {_SCHEDULED_WORK_SETTING}"
             ),
         ),
+        # The mender's tools (`hub/hub/stalls.py`). Described to every agent, because they are
+        # served to every run; each says it answers only the Hub's mender, so nobody else tries.
+        _Operation(
+            tool="mend_stalls",
+            args="",
+            method="GET",
+            path="/mender/stalls",
+            fields=(),
+            required=(),
+            text="the mender only (others are refused): the project's open stalls, newest first.",
+        ),
+        _Operation(
+            tool="mend_task_branch",
+            args="task_id, commit=None",
+            method="POST",
+            path="/mender/tasks/{task_id}/branch",
+            fields=("commit",),
+            required=(),
+            text=(
+                "the mender only: land an approved task's stuck work with no review. `commit` is "
+                "your resolution of its conflict and must contain the work its merge names; the "
+                "project's checks run on it first. Without `commit`, retry the merge."
+            ),
+        ),
+        _Operation(
+            tool="mend_withdraw_input",
+            args="entry_id",
+            method="POST",
+            path="/mender/queue/{entry_id}/withdraw",
+            fields=(),
+            required=(),
+            text=(
+                "the mender only: withdraw input waiting in another agent's queue whose delivery "
+                "was refused, so the next firing briefs that agent again."
+            ),
+        ),
+        _Operation(
+            tool="mend_reset_task",
+            args="task_id, status, assignee=None",
+            method="POST",
+            path="/mender/tasks/{task_id}/reset",
+            fields=("status", "assignee"),
+            required=("status",),
+            text=(
+                "the mender only: hand a stuck task back, `status` `assigned` (to `assignee`) or "
+                "`pending`, along the edges any run may take."
+            ),
+        ),
+        _Operation(
+            tool="mend_end_stall",
+            args="stall_id, outcome, summary",
+            method="POST",
+            path="/mender/stalls/{stall_id}/end",
+            fields=("outcome", "summary"),
+            required=("outcome", "summary"),
+            text=(
+                "the mender only: end your stall, `outcome` `fixed` or `gave_up`, with a two or "
+                "three sentence summary for the operator."
+            ),
+        ),
     ]
 
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { Question } from '@/api/questions'
+import type { Stall } from '@/api/stalls'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 
@@ -12,6 +13,7 @@ let questionsError: Error | null = null
 let ledgerError: Error | null = null
 let accountingData: Record<string, unknown> = { budget: { exhausted: false } }
 let queueStatuses: Array<Record<string, unknown>> = []
+let openStalls: Stall[] = []
 const answerMutate = vi.fn()
 
 vi.mock('@/api/agents', () => ({
@@ -59,6 +61,8 @@ vi.mock('@/api/ledger', () => ({
   }),
 }))
 vi.mock('@/api/queue', () => ({ useQueueStatuses: () => queueStatuses }))
+const endStallMutate = vi.fn()
+vi.mock('@/api/stalls', () => ({ useOpenStalls: () => ({ data: openStalls }), useEndStall: () => ({ mutate: endStallMutate }) }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: accountingData }) }))
 vi.mock('@/components/overview/AgentPostureChips', () => ({ AgentPostureChips: () => null }))
 
@@ -85,6 +89,7 @@ beforeEach(() => {
   ledgerError = null
   accountingData = { budget: { exhausted: false } }
   queueStatuses = []
+  openStalls = []
   answerMutate.mockClear()
 })
 
@@ -141,6 +146,60 @@ describe('the wired Overview', () => {
     render(<OverviewScreen onNavigate={vi.fn()} />)
     expect(screen.getByText('Add the tokenizer')).toBeInTheDocument()
     expect(screen.getByText(/approved by you/)).toBeInTheDocument()
+  })
+})
+
+function stall(overrides: Partial<Stall> = {}): Stall {
+  return {
+    id: 'stall-1',
+    key: 'delivery_refused:task-4',
+    cause: 'delivery_refused',
+    reason: 'Developer holds task-4, and delivering its turn to them was refused. No firing will retry it',
+    task_id: 'task-4',
+    loop_id: 'loop-1',
+    first_seen_at: '2026-10-23T00:35:00Z',
+    last_seen_at: '2026-10-23T00:40:00Z',
+    seen_count: 2,
+    conversation_id: null,
+    mender_turns: 0,
+    outcome: 'open',
+    outcome_detail: '',
+    ended_at: null,
+    ...overrides,
+  }
+}
+
+describe('a stalled project under Needs you', () => {
+  it('lists a stall nobody is mending, and opens its task', () => {
+    openStalls = [stall()]
+    const onNavigate = vi.fn()
+    render(<OverviewScreen onNavigate={onNavigate} />)
+    const row = screen.getByText('An agent’s turn was refused').closest('li') as HTMLElement
+    expect(row).toHaveTextContent('No firing will retry it.')
+    fireEvent.click(within(row).getByRole('button', { name: 'Open task' }))
+    expect(useTaskFilterStore.getState().pendingOpenTaskId).toBe('task-4')
+    fireEvent.click(within(row).getByRole('button', { name: 'Dismiss' }))
+    expect(endStallMutate).toHaveBeenCalledWith('stall-1')
+  })
+
+  it('says the mender is on a stall it holds, and opens its thread', () => {
+    openStalls = [stall({ conversation_id: 'conv-m' })]
+    const onOpenConversation = vi.fn()
+    render(<OverviewScreen onNavigate={vi.fn()} onOpenConversation={onOpenConversation} />)
+    const row = screen.getByText('An agent’s turn was refused').closest('li') as HTMLElement
+    expect(row).toHaveTextContent('The mender is on it.')
+    fireEvent.click(within(row).getByRole('button', { name: 'Open the mender’s thread' }))
+    expect(onOpenConversation).toHaveBeenCalledWith('mender', 'conv-m')
+  })
+
+  it('folds a merge stall into the merge row rather than listing it twice', () => {
+    openStalls = [stall({ id: 'stall-2', key: 'integration_failed:task-9', cause: 'integration_failed', task_id: 'task-9', conversation_id: 'conv-m' })]
+    const onOpenConversation = vi.fn()
+    render(<OverviewScreen onNavigate={vi.fn()} onOpenConversation={onOpenConversation} />)
+    expect(screen.queryByText('Approved work failed to merge')).toBeNull()
+    const row = screen.getByText('“Rename the parser” was approved but not merged').closest('li') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: 'The mender is on it' }))
+    expect(onOpenConversation).toHaveBeenCalledWith('mender', 'conv-m')
   })
 })
 

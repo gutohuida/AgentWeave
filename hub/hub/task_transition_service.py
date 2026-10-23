@@ -1122,7 +1122,31 @@ async def integrate_task(session: AsyncSession, task: Task, actor: Actor) -> lis
         return await _integrate_task(session, task, actor)
 
 
-async def _integrate_task(session: AsyncSession, task: Task, actor: Actor) -> list:
+def _is_ancestor(root, ancestor: Optional[str], descendant: str) -> Optional[bool]:
+    """`True` when *ancestor* is in *descendant*'s history (the same question `integrate` asks)."""
+    from . import requirement_evidence
+
+    if not ancestor:
+        return True
+    return requirement_evidence.is_reachable_from(root, ancestor, descendant)
+
+
+class ResolutionRefusedError(Exception):
+    """A resolution commit that does not carry the work approval would merge."""
+
+
+async def land_resolution(session: AsyncSession, task: Task, actor: Actor, commit: str) -> list:
+    """Merge *commit* in place of the approved task's own targets: the mender's resolution of a
+    conflict (`stalls.py`). *commit* must contain every commit approval would merge, so nothing
+    accepted is dropped; everything after the merge -- the record, reachability, the re-drain, the
+    task's stalls -- is `integrate_task`'s own. Raises `ResolutionRefusedError`."""
+    async with traces.work("task_integration", task.project_id, **{"aw.task.id": task.id}):
+        return await _integrate_task(session, task, actor, resolution=commit)
+
+
+async def _integrate_task(
+    session: AsyncSession, task: Task, actor: Actor, *, resolution: Optional[str] = None
+) -> list:
     """Put the approved work in the product, and record what happened either way.
 
     **After** the transition row, and never able to undo it. Approval is a judgement that the work
@@ -1141,15 +1165,48 @@ async def _integrate_task(session: AsyncSession, task: Task, actor: Actor) -> li
         return []
 
     def _record(result: task_integration.IntegrationResult) -> list:
+        by = actor.agent or ("operator" if actor.is_operator else "")
         task_integration.record(
             session,
             task,
             result,
             actor_kind=actor.kind,
             # Who integrated, by name: the operator carries no agent, and "" read as nobody (F731).
-            actor=actor.agent or ("operator" if actor.is_operator else ""),
+            actor=by,
         )
+        _note_stall(result, by)
         return [result]
+
+    def _note_stall(result: task_integration.IntegrationResult, by: str) -> None:
+        # Approved work that did not reach the product is a stall (`stalls.py`); work that did
+        # ends the task's merge stalls. A skip because it is already in the main branch is neither.
+        from . import stalls
+
+        if result.outcome == task_integration.MERGED:
+            stalls.resolve_task_after_commit(session, task.project_id, task.id, by=by)
+        elif result.outcome in (task_integration.SKIPPED, task_integration.FAILED) and (
+            result.reason
+            != task_integration.ALREADY_INTEGRATED.format(
+                commit=(result.commit_sha or "")[:12], target=result.target_branch
+            )
+        ):
+            cause = (
+                "integration_failed"
+                if result.outcome == task_integration.FAILED
+                else "integration_skipped"
+            )
+            stalls.report_after_commit(
+                session,
+                task.project_id,
+                cause=cause,
+                subject=task.id,
+                text=(
+                    f"{task.id} ({task.title!r}) was approved, but its merge into "
+                    f"{result.target_branch or 'the main branch'} {result.outcome}: "
+                    f"{(result.reason or '').strip()[:1500]}"
+                ),
+                task_id=task.id,
+            )
 
     if not project.main_branch:
         return _record(
@@ -1207,6 +1264,24 @@ async def _integrate_task(session: AsyncSession, task: Task, actor: Actor) -> li
                 target_branch=project.main_branch,
             )
         )
+
+    if resolution is not None:
+        missing = [
+            target.commit_sha
+            for target in targets
+            if _is_ancestor(root, target.commit_sha, resolution) is not True
+        ]
+        if missing:
+            raise ResolutionRefusedError(
+                f"{resolution[:12]} does not contain {', '.join(sha[:12] for sha in missing)}, "
+                "which approving this task merges: branch from that work, then merge the main "
+                "branch into it."
+            )
+        targets = [
+            task_integration.Target(
+                commit_sha=resolution, branch=f"mend/{task.id}", task_id=task.id
+            )
+        ]
 
     hub_written = await hub_written_documents(session, workspace, task.project_id)
     results = [

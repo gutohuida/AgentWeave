@@ -27,6 +27,8 @@ const SSE_EVENT_TYPES = [
   'queue_entry_abandoned',
   'question_asked',
   'question_answered',
+  'stall_recorded',
+  'stall_ended',
   'agent_heartbeat',
   'agent_created',
   'agent_output',
@@ -498,6 +500,10 @@ export function useSSE(onEvent?: SSEListener) {
             queryKey: ['project', pid, 'task', (event.data as { task_id?: string } | null)?.task_id, 'integrations'],
           })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
+          break
+        case 'stall_recorded':
+        case 'stall_ended':
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'stalls'] })
           break
         case 'question_asked':
         case 'question_answered':

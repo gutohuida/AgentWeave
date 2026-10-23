@@ -52,6 +52,7 @@ from hub.db.models import (
     SpecRequirement,
     SpecRequirementRevision,
     SpecRigorEvent,
+    Stall,
     Task,
     TaskCheckRun,
     TaskDependency,
@@ -78,6 +79,7 @@ from hub.project_workspace import ProjectPathError
 # live model registry in `test_sweep_covers_every_project_scoped_table_in_the_model_registry`
 # below instead of silently drifting out of date.
 PROJECT_SCOPED_TABLE_NAMES = [
+    "stalls",
     "workspace_fingerprints",
     "requirement_drift",
     "evidence_reviews",
@@ -150,6 +152,15 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
     session.add(Runner(id=f"runner-{tag}", project_id=project_id, name="Runner", cli="claude"))
     session.add(Agent(id=f"agent-{tag}", project_id=project_id, name=f"agent-{tag}"))
     session.add(Task(id=f"task-{tag}", project_id=project_id, title="Task"))
+    session.add(
+        Stall(
+            id=f"stall-{tag}",
+            project_id=project_id,
+            key=f"stuck_task:task-{tag}",
+            cause="stuck_task",
+            task_id=f"task-{tag}",
+        )
+    )
     session.add(Conversation(id=f"conv-{tag}", project_id=project_id, agent=f"agent-{tag}"))
     session.add(
         Message(
