@@ -2528,3 +2528,9 @@ When `hub/hub/mcp_server.py` changes, its tool-server digest is new, and several
   --timeout=300 --timeout-method=thread` (CI's flags) took 11m44s. Under it,
   `test_project_checks_gate.py::test_asking_without_a_result_starts_a_run_and_answers_at_once`
   failed once and passed alone (21/21). (2026-10-21)
+
+## 2026-10-23 (day sweep, Checkpoints x Accounting)
+
+- **Copilot's context meter is its own count, not the provider's usage.** A Copilot provider runner on a stub that reports `input_tokens: 190000` per call reads ~40K / 128K in the meter (`usage_update`), and never compacts. To reach Copilot's own compaction (at 80%) and a near-window reading at zero spend, send operator messages of just under the **10,000-character** cap on `/agent/trigger` (anything longer is a 422) into one conversation of a stub agent. About 10 messages of 9,990 characters took one from 35K to 104K and compacted it (`scripts/drive/s1023_ck_fill.py`). (2026-10-23)
+- **A stub that numbers its tool calls by step loops on Copilot.** A variant whose steps read 170 KB files (Copilot saves large output to a temp file and the context never grows) made 2,660 requests in 8 minutes and never finished, because the `toolu_<step>` ids repeated. Stop the run with `POST /projects/{p}/agent/{name}/stop`. (2026-10-23)
+- **Real Copilot turns are drivable at home** (the operator's licensed account, since 2026-10-19): a `cli: copilot`, `model: claude-haiku-4.5` runner charged 5.51 AI credits and 0.33 premium requests for one task turn. The day log's 2026-10-23 iteration 3 line "Codex/Copilot plans are undrivable" was wrong for Copilot; only Codex is undrivable. (2026-10-23)
