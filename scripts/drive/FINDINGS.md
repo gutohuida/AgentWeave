@@ -19156,7 +19156,7 @@ with the wrong invalidation; here there is no event to answer.
 
 ## F251 (B) — the Hub broadcasts 17 event names the client discards before any listener, 9 of them into handling code written for them
 
-**Status:** fixed 8179c93 (driven live 2026-09-26, drive Hub :8037, `d0926_stream_gap.py`: a stalled operator-stream subscriber, 3,000 events, one `stream_gap` frame `{dropped: 1362, severity: warn}`, no `project_id`; received 1638 + dropped 1362 = 3000. The UI half, tasks.md 3.2, NOT driven in a browser -- unit tests only). Filed as follows: Filed by the row-16 drive (`00b5dd9`). [classified 2026-09-09, D-2]
+**Status:** open -- reopened 2026-10-23 (day `sweep-questions-sweep`, scratch Hub :8117, Chromium, `scripts/drive/s1023_cv_rail.py`): 8179c93 built F253's `stream_gap` and never touched the allowlist. `hub/ui/src/hooks/useSSE.ts:21-68` still omits `conversation_updated` (0 occurrences in the file) and `:362` drops any frame not listed; 15 broadcast kinds are still dropped (`conversation_updated`, `conversation_cut_over`, `checkpoint_due`, `checkpoint_ready`, `checkpoint_warning_dismissed`, `agent_requested`, `project_deleted`, `question_declined`, `queue_agent_held`, `queue_agent_paused`, `review_unstaffed`, `run_diverged`, `task_blocked`, `task_unblocked`, `worktree_released`). Live instance: a rename and an archive made from the conversation header (`AgentOutputPanel.tsx:507-533`, relying on the broadcast per `api/agentChat.ts:244-247`) leave the rail on the old title, and the archived conversation listed open with "Show archived (0)", 25 s later; a fresh load is right. A generated title (`conversation_titles.py:385-395`) only `persist_event`s, no broadcast, so the header keeps the first message. The unbuilt openspec leftover `every-event-the-hub-sends-reaches-the-app` covers it: move it across, do not finish it there. Previously: fixed 8179c93 (driven live 2026-09-26, drive Hub :8037, `d0926_stream_gap.py`: a stalled operator-stream subscriber, 3,000 events, one `stream_gap` frame `{dropped: 1362, severity: warn}`, no `project_id`; received 1638 + dropped 1362 = 3000. The UI half, tasks.md 3.2, NOT driven in a browser -- unit tests only). Filed as follows: Filed by the row-16 drive (`00b5dd9`). [classified 2026-09-09, D-2]
 **Re-measured 2026-09-13 (day `d1-drive`), and now coupled to F335.** A live Chromium session
 received `task_updated` and rendered it. It rendered nothing for the `run_divergence_resolved`
 the wire carried in the same instant (captured with `curl -N /api/v1/events`). A static diff of
@@ -38372,7 +38372,7 @@ The Copilot message "Say hello." failed three times on `initialize` (run-ca95833
 
 ## F860 (B) -- the conversation never shows a tool's output: an expanded tool row reads only "tool completed" or "tool failed", so a Hub refusal's sentence (F794's read grant included) never reaches the place the operator watches the turn
 
-**Status:** fixed 2026-10-22 (Tier 0): `WorkRow` (`AgentTimeline.tsx`) now shows the paired result's `payload.output`, falling back to `content`. Tests in `agentTimeline.test.tsx` (the refusal case failed before; the fallback case pins the old reading); full vitest 2228 passed, eslint and tsc clean; UI bundle refreshed. Tested through the real component, not driven in a browser. Originally: open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, Chromium on the served bundle, `scripts/drive/s1021_rc_reach_ui.py`, conversation conv-e5e9db86ecb0, run-e34a086c8e63).
+**Status:** fixed 2026-10-22 (Tier 0): `WorkRow` (`AgentTimeline.tsx`) now shows the paired result's `payload.output`, falling back to `content`. Tests in `agentTimeline.test.tsx` (the refusal case failed before; the fallback case pins the old reading); full vitest 2228 passed, eslint and tsc clean; UI bundle refreshed. Tested through the real component, not driven in a browser. **Confirmed in Chromium 2026-10-23** (day `sweep-questions-sweep`, :8117, `scripts/drive/s1023_cv_live.py`): the expanded `mcp__agentweave__send_message` row shows its arguments and the whole refusal "Hub rejected POST /messages (404): The operator is not a message recipient. ..." (`testbed/ui-judge/s1023-conversations/122507/f860_row_8.png`). Originally: open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, Chromium on the served bundle, `scripts/drive/s1021_rc_reach_ui.py`, conversation conv-e5e9db86ecb0, run-e34a086c8e63).
 **Source:** drive
 **Theme:** Conversations & composer
 **Ready:** yes
@@ -38540,7 +38540,7 @@ alpha agent created
 
 ## F909 (B) -- a conversation reads "waiting" on the rail and the Overview's agent card says "Waiting for your answer" for a question whose asking run has already ended, while Needs you, on the same screen, says nobody is waiting on it
 
-**Status:** fixed 4060a64 (2026-10-23). `conversation_attention`'s question arm (`hub/hub/conversations.py`) now skips a question whose `created_by_run_id` names a run that is no longer `running`, the same rule as `asker_waiting`; an unrecorded asker stays presumed waiting. Test: `hub/tests/test_conversation_attention.py` (3 parametrised cases completed/failed/stopped failed before; two neighbouring tests used a completed asker incidentally and now use a live one). Drive: scratch Hub :8126 (profile f909, torn down), real Haiku turn asking with a 10 s timeout then ending: question `answered` false, `wait_ended_at` NULL, run `completed`, `asker_waiting` false, and both `/conversations` and `/agent/beta/conversations` read `attention` "idle" (UI reads this field; no bundle change). Found 2026-10-22. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8113, profile qs1022, `proj-7716d9f754a0`, Chromium against the served bundle, `scripts/drive/s1022_qs_drive.py timeout` then `scripts/drive/s1022_qs_ui.py needs`).
+**Status:** fixed 4060a64 (2026-10-23). `conversation_attention`'s question arm (`hub/hub/conversations.py`) now skips a question whose `created_by_run_id` names a run that is no longer `running`, the same rule as `asker_waiting`; an unrecorded asker stays presumed waiting. Test: `hub/tests/test_conversation_attention.py` (3 parametrised cases completed/failed/stopped failed before; two neighbouring tests used a completed asker incidentally and now use a live one). Drive: scratch Hub :8126 (profile f909, torn down), real Haiku turn asking with a 10 s timeout then ending: question `answered` false, `wait_ended_at` NULL, run `completed`, `asker_waiting` false, and both `/conversations` and `/agent/beta/conversations` read `attention` "idle" (UI reads this field; no bundle change). **Confirmed in Chromium 2026-10-23** (day `sweep-questions-sweep`, :8116, `scripts/drive/s1023_qa_ui.py f909`): a stopped asker and a 10 s timeout both leave no rail "waiting", Needs you reads "is asking" with "The turn that asked has ended", the agent cards read "Last active"; the live-blocked control still reads "waiting". Found 2026-10-22. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8113, profile qs1022, `proj-7716d9f754a0`, Chromium against the served bundle, `scripts/drive/s1022_qs_drive.py timeout` then `scripts/drive/s1022_qs_ui.py needs`).
 **Source:** drive
 **Theme:** Questions
 **Ready:** yes -- reproduced with one real Haiku turn.
@@ -39495,3 +39495,73 @@ Repro: truncate a change's `spec.json`. `POST …/propose` and `POST …/phase?t
 **Tier:** 0
 
 Repro: `PUT /settings` with checks `[{"name":"status","command":"git status --short","timeout_seconds":10}]`; on an `in_progress` task with no commit, `POST /tasks/{id}/checks/run` → 202 `run_id: null, running: false`; `GET …/checks` stays `{"configured": true, "runs": []}`. Cause: `hub/hub/project_checks.py:428-457` returns `None` for six different reasons and `hub/hub/api/v1/tasks.py:1410-1411` passes none on. **Expected:** a `reason` field ("no commit to check yet", …), shown where the press is. **Test:** `test_project_checks_run.py`: a task with no targets → the answer carries a reason. Seam: Tasks (checks) x Worktrees.
+
+## F986 (B) -- an answer to a question whose asking run has ended is delivered into the agent's most recently active conversation, not the one the question was asked in
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8116, profile qa1023, `proj-4f66170b9633`, `scripts/drive/s1023_qa_drive.py`).
+**Source:** drive
+**Theme:** Questions
+**Ready:** yes
+**Tier:** 0
+
+`gamma` (Haiku 4.5) asked `q-c89789c5f0a3` in `conv-0f96dd45a214`; that run (`run-c826abe6cd14`) was stopped. gamma then ran in a newer conversation `conv-2599b9f224f8`. `PATCH /projects/{p}/questions/q-c89789c5f0a3 {"answer":"maybe next week","labels":["maybe"]}` -> 200; `inbound_queue_entries` row `entry-b772aa7b17cf` has `conversation_id` = `conv-2599b9f224f8` ("Question: Rename the module to utils?\n\nAnswer: maybe next week") and was delivered in `run-7aeb3da3fcbd` there. The question's own `conversation_id` is `conv-0f96dd45a214`. Since F804 the ask card shows only in the asking conversation, so the operator answers there and the turn runs somewhere else.
+
+Cause (verified): `deliver_batch_if_complete` (`hub/hub/api/v1/questions.py:164`) picks `latest_open_conversation(...)`, ordered by `updated_at` (`hub/hub/conversations.py:203-217`), ignoring `question.conversation_id`; answer, decline and the expiry report all go through it. Same pattern as F964 (cannot-satisfy replies) -- fix with one helper if it fits.
+
+**Expected:** deliver into `question.conversation_id` while it is open; fall back to the latest open conversation only when it is archived or null. **Test:** beside `hub/tests/test_a_question_names_its_conversation.py`: an agent with two open conversations, the question asked in the older one, its asking run ended; answering queues an entry whose `conversation_id` is the question's. Fails today. Seam: Questions x Inbound queue x Conversations.
+
+## F987 (C) -- Stop on a Claude run blocked in an `aw-tool ask_user` call leaves that call's process tree running until the question's own deadline, holding the agent's worktree open
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8116, profile qa1023).
+**Source:** drive
+**Theme:** Runs
+**Ready:** yes
+**Tier:** 0
+
+`gamma` (`question_timeout_seconds` 600, aw-tool call mode) called `aw-tool ask_user .agentweave/calls/ask_rename.json`. `POST /agent/gamma/stop` -> 200 "stopping"; the run went `stopped` at 11:25:42 UTC. At 11:33 UTC these were still alive: bash.exe 14272/28492 (`eval 'aw-tool ask_user .agentweave/calls/ask_rename.json'`), sh.exe 15556 (`aw-tool`), python.exe 15256 (`.../tool-server/e20febd905ba97dc/mcp_server.py --call ask_user`), their parent 24716 gone. They exited ~12:35:35 local, exactly 600 s after the question was created. Meanwhile `DELETE` project (204) could not remove its folder: `[WinError 32] ... .agentweave\worktrees\gamma`. Unverified: that 24716 was the run's own `claude.exe` (the project delete removed the runs row).
+
+Cause (verified): `stop_agent_run` calls `pty.terminate(force=True)` (`hub/hub/api/v1/agent_trigger.py:2587-2591`); Claude runs are `spawn_kind = "pty"` (`hub/hub/runner_adapters/claude.py:64`), so this is `PtySession.terminate` -> `self._proc.terminate(force)` (`hub/hub/pty_runner.py:345-346`), the direct child only, as `terminate_process_tree`'s docstring says (`pty_runner.py:228-231`). Hub shutdown uses `terminate_process_tree` (`agent_trigger.py:2636`); Stop does not. The older "Stop kills the process" result (~l.15645) measured children not blocked in a tool call.
+
+**Expected:** Stop takes the run's whole tree (`terminate_process_tree(pty.pid)` for a PtySession). **Test:** in the stop tests (`hub/tests/`): stopping an active PtySession-backed run calls `terminate_process_tree` with its pid (monkeypatched). Fails today. Seam: Runs (Stop) x Questions.
+
+## F988 (C) -- an archived conversation opened by its URL reads "New conversation" in its header, with no archived notice, "Continuing this conversation" and a live composer
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-questions-sweep` (Conversations row; scratch Hub :8117, profile cv1023, `proj-8cd25053c03e`, Chromium on the served bundle, `scripts/drive/s1023_cv_rail.py`).
+**Source:** drive
+**Theme:** Conversations & composer
+**Ready:** yes
+**Tier:** 0
+
+`POST .../agent/alpha/conversations/conv-9c177acf95dd/archive`, then load `/?project=...&agent=alpha&conversation=conv-9c177acf95dd`: header "alpha / New conversation" above the old transcript, no archived notice, live composer; the More menu has no Archive/rename (`conversation` is null). Screenshot `testbed/ui-judge/s1023-conversations/123844/rail_00_archived_open.png`.
+
+Cause: the header looks the conversation up only in `useAgentConversations` (`hub/ui/src/components/agents/AgentOutputPanel.tsx:413`), which lists open conversations (`agent_chat.py:515-533`, `lifecycle` defaults to `open`); undefined -> the 'New conversation' fallback (`:1246`). F846 is the cut-over-predecessor case of the same gap; this is the general archived one plus the lost title.
+
+**Expected:** the header names the archived conversation, and the page says it is archived, with Unarchive. **Test:** `hub/ui/src/__tests__/` beside the conversation-bar tests: an archived conversation id absent from the open list gets its real title and an archived notice. Fails today ("New conversation"). Seam: Conversations (lifecycle) x `ConversationBar`.
+
+## F989 (C) -- the conversation side panel names a fresh, unindexed document by its minted folder ("silver-fenrir"), not its title, so the panel's "Search by title" cannot find it
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-questions-sweep` (Conversations row; :8117, `scripts/drive/s1023_cv_spec.py`).
+**Source:** drive
+**Theme:** Conversations & composer
+**Ready:** yes
+**Tier:** 0
+
+Fresh project, `POST /project/documents {"title":"Composer drive change","kind":"change-spec"}`; `GET /project/specs` returns the entry with path, state `unindexed`, phase, document_id and **no `title`**. The side panel's specs tab shows "silver-fenrir / spec.json"; the Spec tab's own list and the Ctrl+K palette show "Composer drive change".
+
+Cause: `spec_documents.py:715-729` sets `title` only from the manifest; `api/v1/spec.py:142-151` merges the tracked row's `phase` and `id` but not its `title`; `specNavigation.ts:135` falls back to `deriveTitle(path)`. Related: F949 (new documents read as index issues).
+
+**Expected:** an entry with a tracked row carries the row's title. **Test:** `hub/tests/`: `GET /project/specs` right after a create, no index rebuild -> the entry's `title` is the document's. Fails today. Seam: Side panel specs tab x Corpus index.
+
+## F990 (D) -- the composer's `$` menu offers a skill's supporting files as skills
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-questions-sweep` (Conversations row; :8117, `scripts/drive/s1023_cv_composer.py`).
+**Source:** drive
+**Theme:** Conversations & composer
+**Ready:** yes
+**Tier:** 0
+
+Commit `.claude/skills/greet/{SKILL.md,reference.md,run.py}`, type `$` in the composer: options `['greet', 'greet/reference', 'greet/run.py']`.
+
+Cause (verified): `hub/ui/src/lib/composerTriggerSources.ts:8-13` maps every path under `.claude/skills/` and collapses only `*/SKILL.md`; the skill branch (`:41-47`) never filters to `*/SKILL.md` (or a top-level `.md`).
+
+**Expected:** only `greet`. **Test:** a `resolveTriggerResults` unit case with those three paths -> `[greet]`. Fails today. Seam: Composer `$skill` x workspace listing.

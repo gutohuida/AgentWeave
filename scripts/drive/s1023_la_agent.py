@@ -8,12 +8,11 @@ look -- runs, job_runs (requested_by_run_id), questions, events since
 py -3.11 scripts/drive/s1023_la_agent.py <phase>
 """
 
-import json
 import sys
 import time
 
 sys.path.insert(0, __file__.rsplit("\\", 1)[0].rsplit("/", 1)[0])
-from s1023_la_lib import P, q, req, show  # noqa: E402
+from s1023_la_lib import P, q, show  # noqa: E402
 
 B = f"projects/{P}"
 LIVE = ("running", "queued", "starting", "pending")

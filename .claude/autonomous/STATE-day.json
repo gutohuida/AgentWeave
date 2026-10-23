@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "7c63120",
     "stop_at": "2026-10-23T17:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-10-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-questions-sweep",
-    "next_action": "Run sweep-questions-sweep per .claude/loops/day-window.md: Sweep: Questions x Conversations & composer. First: F909 a question whose asking run ended no longer reads 'waiting' on the rail or in Needs you (Chromium); then least-driven: an agent-written @ reaching a runner escaped, live thinking staying open, number keys on the ask card, an answer after timeout, the side panel's six tab kinds, F860 tool output in an expanded row. Scratch Hub port 8110+ (not 8114, 8115, 8130), haiku runner only, never leave a job enabled. Tally turn_usage BEFORE e2e.py clean. Up to three foreground subagents on their own ports; they report, you file. Write files with the Write tool: the Bash tool rejects long heredocs containing apostrophes.",
+    "current": "sweep-traces-sweep",
+    "next_action": "Run sweep-traces-sweep per .claude/loops/day-window.md: Sweep: Traces x Runs x Logs, events & SSE. First: F907 the Activity digest ends a turn on run_stopped / run_failed (stop one, kill one), in Chromium; then F251 (reopened 10-23: useSSE drops 15 broadcast kinds) as seen from Logs/Activity, F987 (Stop leaves a blocked tool-call tree) on a plain long shell call, and the trace drawer for a run. Scratch Hub port 8110+ (not 8114, 8115, 8130), haiku runner only, never leave a job enabled. Tally turn_usage BEFORE e2e.py clean. Up to three foreground subagents on their own ports; they report, you file. Run `py -3.11 -m ruff check scripts/ --select E9,F63,F7,F82,F401,F841` before committing (CI lints drive scripts). Write files with the Write tool: the Bash tool rejects long heredocs containing apostrophes.",
     "queue": [
         {
             "id": "plan-review",
@@ -67,7 +67,7 @@
         },
         {
             "id": "sweep-questions-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Questions x Conversations & composer",
             "detail": "First: F909 a question whose asking run ended no longer reads 'waiting' on the rail or in Needs you."
         },

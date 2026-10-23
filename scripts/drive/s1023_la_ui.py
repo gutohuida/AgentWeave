@@ -11,7 +11,7 @@ import re
 import sys
 
 sys.path.insert(0, __file__.rsplit("\\", 1)[0].rsplit("/", 1)[0])
-from s1023_la_lib import P, e2e, req  # noqa: E402
+from s1023_la_lib import P, e2e  # noqa: E402
 from uiharness import Judge  # noqa: E402
 
 

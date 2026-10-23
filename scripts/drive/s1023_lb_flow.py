@@ -4,7 +4,6 @@ parallel, the tester's review turns, the waiting-review withdrawal on a verdict.
     AW_P=proj-... py -3.11 scripts/drive/s1023_lb_flow.py status|fire|watch [secs]|queue <agent>|story <task>|events [types]
 """
 
-import json
 import pathlib
 import sys
 import time

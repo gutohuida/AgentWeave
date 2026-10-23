@@ -9,7 +9,6 @@ sweep  -- archive every job left (never leave one enabled)
 py -3.11 scripts/drive/s1023_la_f925.py <phase>
 """
 
-import json
 import sys
 
 sys.path.insert(0, __file__.rsplit("\\", 1)[0].rsplit("/", 1)[0])

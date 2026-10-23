@@ -6,8 +6,6 @@ faults: doc <path> | githead <task-id> | wtfile <task-id> | vaultfile | projjson
 """
 
 import json
-import pathlib
-import shutil
 import sys
 import time
 import urllib.parse
