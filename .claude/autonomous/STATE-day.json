@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "7c63120",
     "stop_at": "2026-10-23T17:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sweep-evidence-sweep",
-    "next_action": "Run sweep-evidence-sweep per .claude/loops/day-window.md: Sweep: Requirements, evidence & coverage x Drift. First: F945 SpecHealthLine names each unfinished state (not started, no task, drifting, stale, awaiting review) and the warn tone -- check it against the coverage bar after a drift and a reword (Chromium); then least-driven: list_evidence / decide_evidence from an agent, a rejected requirement at contract or gate rigor, the operator's overturn (F692), the Evidence view + RequirementStory, drift answered once. Scratch Hub port 8110+ (not 8114), haiku runner only. Tally turn_usage BEFORE e2e.py clean (clean deletes the rows).",
+    "current": "sweep-loops-sweep",
+    "next_action": "Run sweep-loops-sweep per .claude/loops/day-window.md: Sweep: Jobs & loops x Flows & review x Resilience. First: F925 a job on a deleted/archived agent queues nothing, cannot be enabled, Run now 409 naming why (API and Jobs screen); then least-driven: a parallel or multi-agent flow, a verdict withdrawing waiting reviews, an idle holder's release, a new loop adopting an archived loop's leftovers, Hub killed with a run in flight, route failure injection. Scratch Hub port 8110+ (not 8114, 8115, 8130), haiku runner only, never leave a job enabled. Tally turn_usage BEFORE e2e.py clean (clean deletes the rows).",
     "queue": [
         {
             "id": "plan-review",
@@ -55,7 +55,7 @@
         },
         {
             "id": "sweep-evidence-sweep",
-            "status": "open",
+            "status": "done",
             "title": "Sweep: Requirements, evidence & coverage x Drift",
             "detail": "First: F945 SpecHealthLine names each unfinished state (not started, no task, drifting, stale, awaiting review) and the warn tone — check it against the coverage bar after a drift and a reword."
         },
