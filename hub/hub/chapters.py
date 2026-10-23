@@ -15,6 +15,7 @@ A chapter is `{id, title, summary, start, end, members, cites}`. `members` are s
 from __future__ import annotations
 
 import asyncio
+import re
 import subprocess
 import uuid
 from dataclasses import dataclass, field
@@ -34,7 +35,7 @@ from .db.models import (
     SpecRequirement,
     Task,
 )
-from .project_thread import Thread, _parse, aware
+from .project_thread import Knot, Thread, _parse, aware
 from .subprocess_windows import no_console_kwargs
 
 # Hub record ids a chapter may cite, by id prefix.
@@ -253,6 +254,163 @@ async def save(
     else:
         await db.flush()
     return SaveResult(version_record(row), dropped)
+
+
+def _git_lines(repo: Path, args: List[str]) -> List[str]:
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(repo), *args],
+            capture_output=True,
+            timeout=60,
+            **no_console_kwargs(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if done.returncode != 0:
+        return []
+    return done.stdout.decode("utf-8", "replace").splitlines()
+
+
+_TAG_SUFFIX = re.compile(r"[~^].*$")
+UNRELEASED = "Not yet released"
+
+
+def _commit_facts(repo: Path, shas: List[str]) -> Dict[str, Dict[str, Any]]:
+    """For each commit sha: its full sha, date, author, subject and the release tag it shipped in
+    (the nearest tag reaching it, `Not yet released` for none). Commits git cannot show are absent.
+    """
+    facts: Dict[str, Dict[str, Any]] = {}
+    rows = _git_lines(
+        repo,
+        ["show", "-s", "--no-patch", "--format=%H%x1f%aI%x1f%an%x1f%s", *shas],
+    )
+    for row in rows:
+        parts = row.split("\x1f")
+        if len(parts) != 4:
+            continue
+        full, date, author, subject = parts
+        facts[full] = {"sha": full, "date": date, "author": author, "subject": subject}
+    full_shas = list(facts)
+    if full_shas:
+        # One output line per input, in order; `undefined` for a commit no tag reaches.
+        named = _git_lines(repo, ["name-rev", "--tags", "--name-only", *full_shas])
+        for sha, name in zip(full_shas, named, strict=False):
+            name = _TAG_SUFFIX.sub("", name.strip())
+            facts[sha]["tag"] = name if name and name != "undefined" else UNRELEASED
+    for fact in facts.values():
+        fact.setdefault("tag", UNRELEASED)
+    return facts
+
+
+def _resolve_shas(repo: Path, shas: List[str]) -> Dict[str, str]:
+    """Each cited sha (maybe abbreviated) as the full sha git knows it by."""
+    out: Dict[str, str] = {}
+    for sha in shas:
+        lines = _git_lines(repo, ["rev-parse", "-q", "--verify", f"{sha}^{{commit}}"])
+        if lines:
+            out[sha] = lines[0].strip()
+    return out
+
+
+def _derived(chapter_id: str, kind: str, name: str) -> str:
+    return f"{kind}:{chapter_id}|{name}"
+
+
+async def overlay(
+    db: AsyncSession, project_id: str, thread: Thread, repo: Optional[Path] = None
+) -> Thread:
+    """Make *thread*'s surface its current chapters, ordered by start, followed by every surface
+    knot no chapter holds yet. A chapter's children are the knots it groups; a chapter from before
+    the Hub, which cites commits, opens into release tags and those into commits. A project with no
+    chapters is left exactly as slice 1 built it."""
+    history = await versions(db, project_id)
+    if not history:
+        return thread
+    current = ordered(history[-1].chapters)
+    author = history[-1].author
+    by_key = {knot.key: knot for knot in thread.top}
+
+    cited: List[str] = []
+    for chapter in current:
+        cited.extend(c.partition(":")[2] for c in chapter["cites"] if c.startswith("commit:"))
+
+    resolved: Dict[str, str] = {}
+    facts: Dict[str, Dict[str, Any]] = {}
+    if cited and repo is not None:
+        resolved = await asyncio.to_thread(_resolve_shas, repo, list(dict.fromkeys(cited)))
+        facts = await asyncio.to_thread(_commit_facts, repo, list(dict.fromkeys(resolved.values())))
+
+    def count(knot: Knot) -> int:
+        knot.descendants = sum(count(c) + 1 for c in knot.children)
+        return knot.descendants
+
+    placed: set = set()
+    chapter_knots: List[Knot] = []
+    for chapter in current:
+        start, end = _parse(chapter["start"]), _parse(chapter["end"])
+        knot = Knot(
+            key=f"chapter:{chapter['id']}",
+            kind="chapter",
+            title=chapter["title"],
+            start=start,  # type: ignore[arg-type]
+            end=end,  # type: ignore[arg-type]
+            actors=[author],
+            records=[chapter["id"]],
+            record_count=1,
+            summary=chapter["summary"],
+        )
+        members = [by_key[m] for m in chapter["members"] if m in by_key]
+        placed.update(m.key for m in members)
+        for member in members:
+            member.parent = knot.key
+        knot.children = sorted(members, key=lambda k: k.sort_key)
+        tags: Dict[str, List[Knot]] = {}
+        for cite in chapter["cites"]:
+            if not cite.startswith("commit:"):
+                continue
+            fact = facts.get(resolved.get(cite.partition(":")[2], ""))
+            if fact is None:
+                continue
+            when = _parse(fact["date"])
+            commit = Knot(
+                key=_derived(chapter["id"], "commit", fact["sha"]),
+                kind="commit",
+                title=fact["subject"],
+                start=when,  # type: ignore[arg-type]
+                end=when,  # type: ignore[arg-type]
+                actors=[fact["author"]],
+                records=[fact["sha"][:12]],
+                record_count=1,
+            )
+            if any(c.key == commit.key for group in tags.values() for c in group):
+                continue
+            tags.setdefault(fact["tag"], []).append(commit)
+        for name, commits in tags.items():
+            commits.sort(key=lambda k: k.sort_key)
+            release = Knot(
+                key=_derived(chapter["id"], "tag", name),
+                kind="release",
+                title=name,
+                start=commits[0].start,
+                end=commits[-1].end,
+                actors=list(dict.fromkeys(a for c in commits for a in c.actors)),
+                records=[name],
+                record_count=1,
+                children=commits,
+            )
+            for commit in commits:
+                commit.parent = release.key
+                thread.add(commit)
+            release.parent = knot.key
+            thread.add(release)
+            knot.children.append(release)
+        knot.children.sort(key=lambda k: k.sort_key)
+        thread.add(knot)
+        count(knot)
+        chapter_knots.append(knot)
+    ungrouped = [k for k in thread.top if k.key not in placed]
+    thread.chaptered = chapter_knots + ungrouped
+    return thread
 
 
 async def read(

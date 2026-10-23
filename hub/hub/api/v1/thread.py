@@ -1,16 +1,18 @@
 """The project's thread: one level of its history at a time, paged by time in both directions."""
 
 import asyncio
+import contextlib
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import project_thread, vault
+from ... import chapters, project_thread, vault
 from ...auth import get_project
 from ...db.engine import get_session
-from .vault import roots
+from .vault import project_root, roots
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/thread", tags=["thread"])
@@ -37,9 +39,14 @@ async def vault_additions(session: AsyncSession, project_id: str) -> List[Dict[s
 
 
 async def built(session: AsyncSession, project_id: str) -> project_thread.Thread:
-    return await project_thread.build(
+    thread = await project_thread.build(
         session, project_id, await vault_additions(session, project_id)
     )
+    repo: Optional[Path] = None
+    # No workspace: chapters still show; commits they cite cannot be opened.
+    with contextlib.suppress(HTTPException):
+        repo = await project_root(session, project_id)
+    return await chapters.overlay(session, project_id, thread, repo)
 
 
 @router.get("")
