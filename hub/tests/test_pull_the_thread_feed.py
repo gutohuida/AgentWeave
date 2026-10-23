@@ -395,6 +395,18 @@ async def test_siblings_are_in_recorded_time_order_and_paging_walks_both_ways(ap
     assert every and len(every) == 20
 
 
+async def test_a_page_can_be_asked_for_around_a_knot(app, auth_headers):
+    await save(*[row for i in range(10) for row in (doc(i, i * 10), task(f"{i:02d}", i * 10 + 5))])
+    middle = await level(app, auth_headers, limit=5, around="document:spdoc-5")
+    keys = [k["key"] for k in middle["knots"]]
+    assert "document:spdoc-5" in keys and len(keys) == 5
+    assert middle["has_before"] and middle["has_after"]
+    newest = await level(app, auth_headers, limit=5, around="document:spdoc-9")
+    assert "document:spdoc-9" in [k["key"] for k in newest["knots"]] and len(newest["knots"]) == 5
+    refused = await app.get(THREAD, params={"around": "document:nowhere"}, headers=auth_headers)
+    assert refused.status_code == 422
+
+
 async def test_six_runs_then_a_merge_fold_the_runs_only(app, auth_headers):
     await save(task("a", 0), *[run(i, 10 + i * 2, "task-a") for i in range(6)], merge(60))
     kids = (await level(app, auth_headers, "task:task-a"))["knots"]

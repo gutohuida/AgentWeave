@@ -49,6 +49,7 @@ async def get_thread(
     before: Optional[str] = Query(None, description="Page ending just before this cursor"),
     after: Optional[str] = Query(None, description="Page starting just after this cursor"),
     first: bool = Query(False, description="The oldest page instead of the newest"),
+    around: Optional[str] = Query(None, description="The page with this knot (by address) in it"),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -58,7 +59,9 @@ async def get_thread(
     level = thread.level(under)
     if level is None:
         raise HTTPException(status_code=404, detail="There is no such knot")
-    result = project_thread.page(level, limit=limit, before=before, after=after, first=first)
+    result = project_thread.page(
+        level, limit=limit, before=before, after=after, first=first, around=around
+    )
     if result is None:
         raise HTTPException(status_code=422, detail="That is not a cursor this thread gave out")
     result["knots"] = [project_thread.face(k, thread) for k in result["knots"]]

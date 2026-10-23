@@ -12,6 +12,7 @@ const mode = new URLSearchParams(window.location.search).get('mode') === 'light'
 document.documentElement.dataset.mode = mode
 const now = new Date('2026-10-23T20:00:00Z')
 
+// eslint-disable-next-line react-refresh/only-export-components -- a mock entry point, not a module
 function Page() {
   const [dark, setDark] = React.useState(mode === 'dark')
   React.useEffect(() => {
