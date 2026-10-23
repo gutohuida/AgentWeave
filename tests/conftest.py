@@ -62,3 +62,15 @@ def _webview_unimportable(monkeypatch: pytest.MonkeyPatch) -> None:
     patching it opens a real OS window and the suite never finishes.
     """
     monkeypatch.setitem(sys.modules, "webview", None)
+
+
+@pytest.fixture(autouse=True)
+def _nothing_listens_locally(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the CLI's "is a Hub already on this port?" probe answer no, as on CI's runners.
+
+    `_hub_port_accepts` opens a real socket to 127.0.0.1. On a developer machine the operator's
+    own Hub holds :8000, so tests that only faked `/health` passed locally and failed on every CI
+    runner, where nothing listens (agentweave-opens-on-the-thread, 2026-10-23). A test that
+    simulates a running Hub says so by patching the probe over this, as it fakes `/health`.
+    """
+    monkeypatch.setattr("agentweave.cli._hub_port_accepts", lambda port, timeout=0.3: False)

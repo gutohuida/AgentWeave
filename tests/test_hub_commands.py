@@ -593,6 +593,7 @@ class TestNativeStartProjectLifecycle:
         assert flags & create_no_window, "the Hub must own a console with no window"
         assert not flags & detached_process, "a console-less Hub reopens F341"
 
+    @patch("agentweave.cli._hub_port_accepts", new=lambda port, timeout=0.3: True)  # a running Hub accepts
     def test_already_running_instance_still_opens_the_directory(self, tmp_path):
         """Design decision 6: whether the instance was already running or was just
         started, bare invocation opens/registers its directory the same way."""
@@ -608,6 +609,7 @@ class TestNativeStartProjectLifecycle:
         mock_resolve.assert_called_once_with(8000, tmp_path)
         mock_open_window.assert_called_once_with("resolved-url")
 
+    @patch("agentweave.cli._hub_port_accepts", new=lambda port, timeout=0.3: True)  # a running Hub accepts
     def test_already_running_without_app_flag_still_registers_project(self, tmp_path):
         """The open call is unconditional; only opening a browser window is gated
         by --app. A bare status-style check must still register the directory."""
@@ -664,6 +666,7 @@ class TestNativeStartProjectLifecycle:
         assert kwargs["target"].__name__ == "_wait_and_open_app"
         assert kwargs["args"] == (8000, tmp_path)
 
+    @patch("agentweave.cli._hub_port_accepts", new=lambda port, timeout=0.3: True)  # a running Hub accepts
     def test_zero_project_direct_hub_start_opens_without_a_project(self, tmp_path):
         """A directly started Hub (e.g. Docker, or native with no invocation
         directory) opens with no project selected rather than guessing one."""
