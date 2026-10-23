@@ -19156,7 +19156,7 @@ with the wrong invalidation; here there is no event to answer.
 
 ## F251 (B) — the Hub broadcasts 17 event names the client discards before any listener, 9 of them into handling code written for them
 
-**Status:** fixed 8179c93 (driven live 2026-09-26, drive Hub :8037, `d0926_stream_gap.py`: a stalled operator-stream subscriber, 3,000 events, one `stream_gap` frame `{dropped: 1362, severity: warn}`, no `project_id`; received 1638 + dropped 1362 = 3000. The UI half, tasks.md 3.2, NOT driven in a browser -- unit tests only). Filed as follows: Filed by the row-16 drive (`00b5dd9`). [classified 2026-09-09, D-2]
+**Status:** open -- reopened 2026-10-23 (day `sweep-questions-sweep`, scratch Hub :8117, Chromium, `scripts/drive/s1023_cv_rail.py`): 8179c93 built F253's `stream_gap` and never touched the allowlist. `hub/ui/src/hooks/useSSE.ts:21-68` still omits `conversation_updated` (0 occurrences in the file) and `:362` drops any frame not listed; 15 broadcast kinds are still dropped (`conversation_updated`, `conversation_cut_over`, `checkpoint_due`, `checkpoint_ready`, `checkpoint_warning_dismissed`, `agent_requested`, `project_deleted`, `question_declined`, `queue_agent_held`, `queue_agent_paused`, `review_unstaffed`, `run_diverged`, `task_blocked`, `task_unblocked`, `worktree_released`). Live instance: a rename and an archive made from the conversation header (`AgentOutputPanel.tsx:507-533`, relying on the broadcast per `api/agentChat.ts:244-247`) leave the rail on the old title, and the archived conversation listed open with "Show archived (0)", 25 s later; a fresh load is right. A generated title (`conversation_titles.py:385-395`) only `persist_event`s, no broadcast, so the header keeps the first message. The unbuilt openspec leftover `every-event-the-hub-sends-reaches-the-app` covers it: move it across, do not finish it there. Previously: fixed 8179c93 (driven live 2026-09-26, drive Hub :8037, `d0926_stream_gap.py`: a stalled operator-stream subscriber, 3,000 events, one `stream_gap` frame `{dropped: 1362, severity: warn}`, no `project_id`; received 1638 + dropped 1362 = 3000. The UI half, tasks.md 3.2, NOT driven in a browser -- unit tests only). Filed as follows: Filed by the row-16 drive (`00b5dd9`). [classified 2026-09-09, D-2]
 **Re-measured 2026-09-13 (day `d1-drive`), and now coupled to F335.** A live Chromium session
 received `task_updated` and rendered it. It rendered nothing for the `run_divergence_resolved`
 the wire carried in the same instant (captured with `curl -N /api/v1/events`). A static diff of
@@ -36530,7 +36530,7 @@ All seven change documents that built `evidence-goes-agentic-and-the-project-bec
 
 ## F729 (D) -- after a project delete the app refetches the deleted project
 
-**Status:** fixed 7a55bb1 2026-10-18 (Tier 0): the delete no longer writes the selected project itself (which raced App's destination->store effect back to the deleted id); navigation resolves the fallback once, and no query for the deleted project runs.
+**Status:** fixed 7a55bb1 2026-10-18 (Tier 0): the delete no longer writes the selected project itself (which raced App's destination->store effect back to the deleted id); navigation resolves the fallback once, and no query for the deleted project runs. Recurred 2026-10-23 (day `sweep-projects-sweep`): filed as F1021.
 
 **Found:** open 2026-10-18. Sweep groups A and D. Ten-odd queries for the deleted project return 404 in the console before the app navigates away. Seam: Projects (UI).
 
@@ -38374,7 +38374,7 @@ The Copilot message "Say hello." failed three times on `initialize` (run-ca95833
 
 ## F860 (B) -- the conversation never shows a tool's output: an expanded tool row reads only "tool completed" or "tool failed", so a Hub refusal's sentence (F794's read grant included) never reaches the place the operator watches the turn
 
-**Status:** fixed 2026-10-22 (Tier 0): `WorkRow` (`AgentTimeline.tsx`) now shows the paired result's `payload.output`, falling back to `content`. Tests in `agentTimeline.test.tsx` (the refusal case failed before; the fallback case pins the old reading); full vitest 2228 passed, eslint and tsc clean; UI bundle refreshed. Tested through the real component, not driven in a browser. Originally: open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, Chromium on the served bundle, `scripts/drive/s1021_rc_reach_ui.py`, conversation conv-e5e9db86ecb0, run-e34a086c8e63).
+**Status:** fixed 2026-10-22 (Tier 0): `WorkRow` (`AgentTimeline.tsx`) now shows the paired result's `payload.output`, falling back to `content`. Tests in `agentTimeline.test.tsx` (the refusal case failed before; the fallback case pins the old reading); full vitest 2228 passed, eslint and tsc clean; UI bundle refreshed. Tested through the real component, not driven in a browser. **Confirmed in Chromium 2026-10-23** (day `sweep-questions-sweep`, :8117, `scripts/drive/s1023_cv_live.py`): the expanded `mcp__agentweave__send_message` row shows its arguments and the whole refusal "Hub rejected POST /messages (404): The operator is not a message recipient. ..." (`testbed/ui-judge/s1023-conversations/122507/f860_row_8.png`). Originally: open 2026-10-21. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8157, Chromium on the served bundle, `scripts/drive/s1021_rc_reach_ui.py`, conversation conv-e5e9db86ecb0, run-e34a086c8e63).
 **Source:** drive
 **Theme:** Conversations & composer
 **Ready:** yes
@@ -38542,7 +38542,7 @@ alpha agent created
 
 ## F909 (B) -- a conversation reads "waiting" on the rail and the Overview's agent card says "Waiting for your answer" for a question whose asking run has already ended, while Needs you, on the same screen, says nobody is waiting on it
 
-**Status:** fixed 4060a64 (2026-10-23). `conversation_attention`'s question arm (`hub/hub/conversations.py`) now skips a question whose `created_by_run_id` names a run that is no longer `running`, the same rule as `asker_waiting`; an unrecorded asker stays presumed waiting. Test: `hub/tests/test_conversation_attention.py` (3 parametrised cases completed/failed/stopped failed before; two neighbouring tests used a completed asker incidentally and now use a live one). Drive: scratch Hub :8126 (profile f909, torn down), real Haiku turn asking with a 10 s timeout then ending: question `answered` false, `wait_ended_at` NULL, run `completed`, `asker_waiting` false, and both `/conversations` and `/agent/beta/conversations` read `attention` "idle" (UI reads this field; no bundle change). Found 2026-10-22. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8113, profile qs1022, `proj-7716d9f754a0`, Chromium against the served bundle, `scripts/drive/s1022_qs_drive.py timeout` then `scripts/drive/s1022_qs_ui.py needs`).
+**Status:** fixed 4060a64 (2026-10-23). `conversation_attention`'s question arm (`hub/hub/conversations.py`) now skips a question whose `created_by_run_id` names a run that is no longer `running`, the same rule as `asker_waiting`; an unrecorded asker stays presumed waiting. Test: `hub/tests/test_conversation_attention.py` (3 parametrised cases completed/failed/stopped failed before; two neighbouring tests used a completed asker incidentally and now use a live one). Drive: scratch Hub :8126 (profile f909, torn down), real Haiku turn asking with a 10 s timeout then ending: question `answered` false, `wait_ended_at` NULL, run `completed`, `asker_waiting` false, and both `/conversations` and `/agent/beta/conversations` read `attention` "idle" (UI reads this field; no bundle change). **Confirmed in Chromium 2026-10-23** (day `sweep-questions-sweep`, :8116, `scripts/drive/s1023_qa_ui.py f909`): a stopped asker and a 10 s timeout both leave no rail "waiting", Needs you reads "is asking" with "The turn that asked has ended", the agent cards read "Last active"; the live-blocked control still reads "waiting". Found 2026-10-22. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8113, profile qs1022, `proj-7716d9f754a0`, Chromium against the served bundle, `scripts/drive/s1022_qs_drive.py timeout` then `scripts/drive/s1022_qs_ui.py needs`).
 **Source:** drive
 **Theme:** Questions
 **Ready:** yes -- reproduced with one real Haiku turn.
@@ -38822,7 +38822,7 @@ The worker is given the one entry (`hub/hub/vault_reports.py`, the review prompt
 
 ## F925 (B) -- a job whose agent a session sync deleted (or the operator archived) can still be enabled and fired; the press answers 500 and records the firing `failed`, but leaves a queued entry and an open conversation that the next agent of that name receives and runs
 
-**Status:** fixed 0f2771e 2026-10-23 (night). `scheduler.agent_unfirable_reason` is asked before a firing writes its run, entry and conversation (plain job) or enters a task (loop): a gone or archived agent records `failed` + `job_run_failed` and queues nothing; `PATCH enabled:true` runs job create's roster check (which no longer counts an archived agent the synced roster still lists); a press refused for this reason answers 409 with the sentence. Tests `hub/tests/test_a_job_for_a_vanished_agent_does_not_fire.py` (6, red before). Drive on scratch Hub :8122 (profile f925, torn down): enabled jobs for delta/gamma, sync removed delta, gamma archived -> press 409 each, one `failed` row each, no queue entry or conversation for either, re-enable 400. The optional design note (sync/archive answers naming the jobs left behind) is not done. Originally: open 2026-10-22. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8116, profile ag1022, real Haiku, `scripts/drive/s1022_ag_api.py` and `s1022_ag_lib.py` calls).
+**Status:** fixed 0f2771e 2026-10-23 (night) for plain jobs, re-driven 2026-10-23 day (`sweep-loops-sweep`, API + Jobs screen, held); a *loop* job on a gone or archived agent still answers 500 and writes no row: filed as F970. `scheduler.agent_unfirable_reason` is asked before a firing writes its run, entry and conversation (plain job) or enters a task (loop): a gone or archived agent records `failed` + `job_run_failed` and queues nothing; `PATCH enabled:true` runs job create's roster check (which no longer counts an archived agent the synced roster still lists); a press refused for this reason answers 409 with the sentence. Tests `hub/tests/test_a_job_for_a_vanished_agent_does_not_fire.py` (6, red before). Drive on scratch Hub :8122 (profile f925, torn down): enabled jobs for delta/gamma, sync removed delta, gamma archived -> press 409 each, one `failed` row each, no queue entry or conversation for either, re-enable 400. The optional design note (sync/archive answers naming the jobs left behind) is not done. Originally: open 2026-10-22. Found by the day sweep `sweep-agents-sweep` (scratch Hub :8116, profile ag1022, real Haiku, `scripts/drive/s1022_ag_api.py` and `s1022_ag_lib.py` calls).
 **Source:** drive
 **Theme:** Agents
 **Ready:** yes
@@ -38913,6 +38913,8 @@ Repro: `POST /projects/{p}/jobs {"name": "  ", "agent": "alpha", "message": "Rep
 **Tier:** 0
 
 Repro: Jobs -> a job's **More for ui probe** -> **Archive**. The confirm "Archive ui probe? It stops firing. Nothing is deleted ..." opens with `document.activeElement` = the header's `BUTTON aria-label="Close"`, not **Cancel**. Pressing **Archive** closes it, the row goes, and focus is `BODY` (measured for two jobs). The checklist's dialog rule is that a confirm takes focus on Cancel and that focus returns to something sensible after. Cause: `DialogContent` (`hub/ui/src/components/ui/dialog.tsx:14-45`) renders the Radix `Close` first and sets no initial focus, so Radix focuses the first focusable element. `JobsView.tsx:376-400` uses it as is. The older D5 dialogs mark their initial control with `data-dialog-initial-focus` (`useDialogFocus`). Other `DialogContent` users (`AgentSettingsSections.tsx`, `GeneralSettings.tsx`, `VaultAddDialog.tsx`, `VaultStorageDialog.tsx`) were not measured here. **Expected:** the archive confirm focuses Cancel (`onOpenAutoFocus` on `DialogContent`, or an `initialFocus` prop), and after Archive focus moves to the Jobs list or **New job**. **Test:** a JobsView test: open the archive confirm -> the active element is Cancel. This fails today. Seam: Keyboard & dialogs x Jobs & loops.
+
+**Widened 2026-10-23** (day sweep `sweep-projects-sweep`, Keyboard & dialogs row, :8118, profile kb1023): **F931 still reproduces (initial focus), widened:** the agent's **Archive…** confirm (`AgentSettingsSections.tsx:143-166`, settings → Identity) opens with focus on the header's Close (X), not **Keep alpha** (`s1023_kb_dialogs.py archive-agent`). Escape then returns focus to Archive… (held, it has a `DialogTrigger`). The Vault Add and Vault storage dialogs also open on the X. They are forms, so this matters less there. F931's "after Archive focus drops to the page" half has the same cause as F1029 (no `DialogTrigger`).
 
 ## F932 (C) -- deleting a document whose flow has finished also deletes the flow's job, its loop and every firing record, and nothing says so: not the confirm, not the answer, not the event
 
@@ -39019,6 +39021,8 @@ Repro, with `document.activeElement` read after each step:
 
 In all three, Cancel and Escape do return focus to the opener (held). Only the confirmed path loses it, because its opener is gone or disabled. For a keyboard user the next Tab starts again from the top of the page (rail, project switcher). **Expected:** focus lands on the nearest sensible control: (a) the next row's Edit button, or **New runner**; (b) the editor; (c) the new screen's main heading or first tab. **Test:** one per site in the existing dialog tests: after confirm, `document.activeElement` is not `document.body`. These fail today. Seam: Keyboard & dialogs.
 
+**Widened 2026-10-23** (day sweep `sweep-projects-sweep`, Keyboard & dialogs row, :8118, profile kb1023): **F941 (b) still reproduces, and also on a plain Save:** Project instructions → empty the editor → Save → **Clear instructions** sends one PUT, and focus is `BODY`. A non-empty **Save** (Enter on it) does the same: focus is `BODY`, because Save disables once the draft is clean (`s1023_kb_instructions.py`). The clear-confirm itself held: focus on Cancel, Tab trapped, Escape back on Save with the draft kept.
+
 ## F942 (C) -- a Copilot provider runner whose key variable starts with `AW_` is refused as "one of the Hub's own credentials", even for a name that is no credential at all; the refusal never says `AW_` names are reserved
 
 **Status:** open 2026-10-22. Found by the day sweep `sweep-projects-sweep` (Chromium, scratch Hub :8119, the runner dialog; `scripts/drive/s1022_pj_ui.py extra`).
@@ -39099,6 +39103,10 @@ Three repros on `spec/changes/hdr-explore/spec.json` and `hdr-proposed`.
 (3) Pressing the primary **Approve** on a proposed document with gaps: the 409 renders "Not approved: the Hub found these gaps… Approve anyway", and focus is on `<body>`, although the Approve button is still on screen (`useSpecPhaseControls`; the button is disabled while busy, so it loses focus). The keyboard user has to Tab from the top of the page to reach "Approve anyway". This is the same class as F941.
 
 **Expected:** (1) the confirm takes focus on Cancel and gives it back to More actions. Open the dialog after the menu has closed, or use `onCloseAutoFocus={e => e.preventDefault()}` when an item opens a dialog. (2) the palette ignores Shift+K. (3) focus moves to Approve anyway, or stays on Approve. **Tests:** `specDocumentHeader.test.tsx`: Delete from the menu, then the active element is inside the dialog. `CommandPalette.test.tsx`: Ctrl+Shift+K does not open it. All fail today. Seam: Keyboard & dialogs x Spec documents.
+
+**Widened 2026-10-23** (day sweep `sweep-projects-sweep`, Keyboard & dialogs row, :8118, profile kb1023): **F948 (1) still reproduces, and is wider than the Spec header's Archive/Delete.** Measured again 2026-10-23 (`scripts/drive/s1023_kb_spec.py`, `s1023_kb_conv.py sheets`; shots `testbed/ui-judge/s1023-kb/spec_menu_*.png`, `conv_checkpoints_sheet.png`). Every dialog opened from a Radix menu item behaves the same way. At +200 ms and +1500 ms, focus is still on the menu trigger behind the scrim. Escape closes the dialog and focus is `BODY`. Instances: Spec header **More actions → Start a flow…** (`useSpecPhaseControls.tsx:461`), **Archive…**, **Delete document…** (`SpecDocumentHeader.tsx:169-174`), **Retire capability…** on a capability (`useSpecPhaseControls.tsx:475-479`), and the conversation bar's **More conversation actions → Checkpoints** (`ConversationBar.tsx:197` → `CheckpointsPanel.tsx:104`). The same dialogs opened from a plain button hold. **Fold into capability…** (primary button) opens on Cancel and returns focus to the button. One shared fix in the `MenuItem`-opens-a-dialog path covers all five.
+
+**Widened 2026-10-23** (day sweep `sweep-projects-sweep`, Keyboard & dialogs row, :8118, profile kb1023): **F948 (2) still reproduces in a second place:** in a conversation, Ctrl+Shift+K (`ConversationView.tsx:142-150`) opens `['Command palette', 'Search documents']`, and it takes two Escapes (`s1023_kb_conv.py shiftk`). The cause is the same: `CommandPalette.tsx:76-77` does not check `!shiftKey`.
 
 ## F949 (C) -- every new document, and every phase move the Hub itself makes, lights a warn-toned "index issue" on every document's header until someone presses Rebuild, and the index details say "Choose it." / "Adopt it first." with no control or pointer to where that is done
 
@@ -39261,3 +39269,1159 @@ These load into every session that edits the CLI, so they mislead the agent work
 **Tier:** 0
 
 `CHANGELOG.md:9` is the newest section; `git log --oneline v1.1.0..master | wc -l` is 3927. Both `pyproject.toml` files still say 1.1.0. The next release has nothing to draw its notes from. **Open question (why Ready: no):** the operator decides whether to keep a hand-written changelog (start an `[Unreleased]` section and keep it), generate one at release time from Tier-tagged commit subjects, or drop the file. **Test:** none until that is chosen.
+
+## F959 (B) -- a second `agentweave --profile <p> --port <m>` while the profile's Hub runs on another port starts a second Hub on the same database: every job fires twice, and the newcomer's startup fails the first Hub's live firing
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-vault-sweep` (throwaway profile `vs1023`, Hubs started by the CLI itself on :8150 and :8151; the profile was reset after).
+**Source:** drive
+**Theme:** CLI & lifecycle
+**Ready:** yes
+**Tier:** 0
+
+Repro: from `testbed/cli1023`, `agentweave --profile vs1023 --port 8150` (Hub A, PID file `hub-vs1023-8150.pid`). Then `agentweave --profile vs1023 --port 8151` -> a second Hub starts, `hub-vs1023-8151.pid`, both answering `/health`, both on `~/.agentweave/hub/profiles/vs1023/agentweave.db` (same `instance_identity.json`). Nothing refuses or warns. Then on A, an agent `idle` with its runner unbound and `POST /projects/{p}/jobs {"name":"twice","agent":"idle","message":"tick","cron":"* * * * *"}`; restart B so its scheduler loads the job. `job_runs` for the job: **08:35:00.016 and 08:35:00.019, 08:36:00.017 and 08:36:00.019** — two firings per tick, each in its own new conversation (5 conversations for `idle` in 3 minutes). B's startup `reconcile_stale_job_runs` also marked A's in-flight 08:34 firing `failed` "Reconciled on Hub start: no live run behind this firing". With a runner bound, each tick would be two paid turns. What held: B's `reconcile_interrupted_runs` left A's live run alone (it checks the PID), a turn for a busy agent through B was queued ("agent is already running") and drained once, and disabling the job on A stopped both Hubs firing (the enabled flag is read at fire time).
+
+The CLI comment at `cli.py:1271` names exactly this trap ("two SQLite writers shared one file") as what profiles were for, but `_hub_native_start` checks only *this port's* health (`:1245`) and *this port's* stale PID (`_hub_pid_running(port, profile)`). `_hub_pid_files_of(profile)` (`:593`) already lists the profile's other PID files. **Expected:** a start whose profile has a live Hub on another port refuses, naming it: "Profile 'vs1023' is already served on port 8150 (PID 7396). Open that one, or stop it first: agentweave --profile vs1023 --port 8150 stop" (exit 1), and does not start a process. **Test:** `tests/test_cli.py`: with a `hub-vs1023-8150.pid` naming a live PID, `cmd_hub_start(--profile vs1023 --port 8151)` returns 1 and never calls `Popen` (fails today: it spawns).
+
+## F960 (B) -- the vault-reports job is shown only the first 50,000 characters of a fact's source, so a correct fact from further in is referred with "the source does not contain" it, and the fact turns disputed
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-vault-sweep` (scratch Hub :8150, profile `vs1023`, `scripts/drive/s1023_vault.py`, Chromium `s1023_vault_ui.py`, shot `testbed/ui-judge/s1023-vault/094616/01_reports.png`).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+Repro: a 70,041-character `note` source `ops-handbook` whose line 405 (char ~61,000) reads "The on-call pager escalation timeout is 17 minutes, set by Ines Carvalho." Distillation (Haiku) stores `fct-4b28a2236fec` "The on-call pager escalation timeout is 17 minutes.", citing `src-33cefa5f852e` lines 405-405 (F682's fix holds: both pieces distilled). An agent turn files `vault_report(fct-4b28a2236fec, "This fact is incomplete. … set by Ines Carvalho; the fact should name her.")`. The `vault-reports` firing answers **referred**: "The source provided (Operations handbook) does not contain any information about a 17-minute pager escalation timeout, Ines Carvalho, or pager escalation settings. … The entry cites a different source identifier (src-33cefa5f852e, line 405) than the one provided for verification." The fact now reads `disputed: true`, and the Vault → Reports card shows that sentence as "Referred to you". The same report on a short source (`backup-note`) came back **corrected** with a new fact superseding the old one, so the outcome depends only on where in the source the fact sits.
+
+Seam: `vault_reports._review` (`hub/hub/vault_reports.py:282`) passes `text[:SOURCE_CHARS]` whatever the fact's citations say; the archived change `a-working-agent-tells-the-manager-an-entry-is-wrong` states "the text of its first cited source up to 50,000 characters", so the requirement wording is part of the gap. `POST /vault/reports/{id}/review` takes the same path. A referred report cannot be looked into again (409 "is referred, not pending"), so the fix does not repair reports already referred. **Expected:** for a fact, the worker sees a window of at most `SOURCE_CHARS` that contains its cited lines (centred on `line_start..line_end`, the window's first line number stated in the prompt so located quotes still map), and the capability requirement says "the part of its first cited source holding the cited lines, up to 50,000 characters" (amend it through the Hub). **Test:** `hub/tests/test_vault_reports.py`: a source of 70,000 characters with the cited line past 60,000; the faked `run_worker` asserts the prompt contains the cited line (fails today: the prompt holds only the first 50,000 characters).
+
+## F961 (B) -- the Activity tab's Ledger counts a Copilot turn's AI credits and an unpriced turn as $0.00: a Copilot-only project reads "Spent $0.00 · Nothing was spent yet", and the agent and task that spent 5.51 AI credits read "$0.00"
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8112, profile `ck1023`, `scripts/drive/s1023_ck_setup.py`, `s1023_ck_ui.py ledger|overview|story`, shots `testbed/ui-judge/s1023-ck-ledger/100304/ledger.png`, `s1023-ck-overview/100250/`).
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 0
+
+Repro: a project whose only spend is Copilot. Agent `copr` on a real Copilot runner (`cli: copilot`, `model: claude-haiku-4.5`), task `task-3d674922843e` "Fix add() in src/calc.py" assigned to it, one turn with `task_id`. `turn_usage`: 110,288 tokens, `api_equivalent_usd_micros` NULL, `ai_nano_aiu` 5,507,540,000, `premium_requests` 0.33. Plus Copilot provider-runner turns (stub, no cost reported). Every other surface says what was spent. The task drawer reads "Cost 5.51 AI credits · 0.33 req" with the run row "copr worked · claude-haiku-4.5 · 5.51 AI credits". The Overview line (F952's fix) reads "5.51 AI credits so far · 262.3M tokens". Budgets reads "copr 5.51 AI credits · 0.33 premium requests · 110.3K tokens". The **Ledger** (Activity → Ledger, `GET /projects/{p}/ledger`) reads "Spent **$0.00** · 262.3M tokens", "Spend by day: **Nothing was spent yet.**", By agent "copbig $0.00 · copr $0.00 · cop $0.00", and By task "Fix add() in src/calc.py **$0.00**". After two Haiku agents and a checkpoint added $0.29, the line became "Spend by day $0.29" with copr and its task still "$0.00", ranked below the priced agents. So the Ledger contradicts the task story for the same task, and the "dash, not $0.00, for an unpriced agent" rule F952 set holds on Overview and Budgets but not here.
+
+Seam: `project_ledger.py:128-191` sums `api_equivalent_usd_micros or 0` alone, so a NULL cost is 0 and credits are dropped. `spend` carries no `ai_nano_aiu`, `premium_requests` or unpriced count at any level. `ProjectLedger.tsx` renders `money()` of those numbers (`:248`, `:286`, `:299`), and `SpendByDay` returns "Nothing was spent yet." whenever the largest day's `usd` is 0 (`:60-61`), whatever the tokens. F952 noted that the ledger has no credits field, but fixed only the Overview line by reading `/accounting`. **Expected:** the ledger's total, each day, each agent and each task carry credits and premium requests (summed from `turn_usage` / `worker_invocations`), plus an unpriced-turn count beside `usd`. The view shows credits where a row has them, "—" for a row with no priced turn and no credits, and "N turns unpriced" beside a partly priced total. A day with tokens but no dollars is not "Nothing was spent". **Test:** `hub/tests/test_project_ledger.py`: a project with one Copilot turn (`ai_nano_aiu` 5.5e9, cost NULL) on a task, where `by_agent[0]` and `by_task[0]` carry the credits and `unpriced_turns: 1`. This fails today, since the keys are absent. Also a `ProjectLedger` render test fed that payload, in the field order the route returns, that renders "5.51 AI credits" for the agent and does not render "Nothing was spent yet."
+
+## F962 (C) -- after Copilot compacts a conversation, its context meter keeps the pre-compaction reading: the header says "104,485 / 128,000 · 81.63%" directly above the card "Copilot compacted this conversation automatically (104,485 → 32,455 tokens of 128,000)"
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-checkpoints-sweep` (scratch Hub :8112, profile `ck1023`, zero spend: the Copilot stub `scripts/drive/s1018_A_copilot_stub.py`; `scripts/drive/s1023_ck_fill.py`, Chromium `s1023_ck_ui.py conv`, shot `testbed/ui-judge/s1023-ck-conv/100832/convcop.png`).
+**Source:** drive
+**Theme:** Checkpoints
+**Ready:** yes
+**Tier:** 0
+
+Repro: agent `cop` on a Copilot provider runner aimed at the stub. Ten operator messages of 9,990 characters each into one conversation, `s1023_ck_fill.py cop 30`. Copilot's `usage_update` readings climb 42,395 → 97,588 (76.24%) → 104,485 (81.63%). On that turn Copilot compacts on its own: a `status` output "Copilot compacted this conversation automatically (104,485 → 32,455 tokens of 128,000)" at 09:07:52.256. The turn's last reading is the `context_warning` at 09:07:52.020, before the compaction. After the run, `GET /conversations?agent=cop` gives `context_usage` 104,485 / 81.63%, and the conversation header shows "104,485 / 128,000 · 81.63%", "Context window Used 104,485 tok", with the compaction card right under it. Nothing records the post-compaction size until the next turn's `usage_update`. (On the next turn, Copilot reported 111,450 and compacted again to 32,522. Under a stub summariser that is Copilot's own count, not the Hub's, and it is not part of this finding.) What held: the compaction is relayed with both sizes; it counts as the threshold (`consider_from_compaction`), and the offered banner with Checkpoint now is shown; "final" is correctly not raised for an undismissed conversation (`checkpoint_trigger.py:268`).
+
+Seam: Copilot readings come only from ACP `usage_update` (`copilot_acp.usage_sample`, `hub/hub/copilot_acp.py:1711`). `_compaction` (`:1390-1452`) has `postCompactionTokens` and `tokenLimit` in hand and emits only the `compacted` status. **Expected:** a successful compaction with a post count and a limit also records a context reading (`context_tokens = post`, `limit_tokens = tokenLimit`, `source: copilot_acp`), so the meter agrees with the card at once. A compaction with no post count changes nothing. **Test:** in `hub/tests/test_copilot_acp*.py`, feeding a `session.compaction_complete` with `preCompactionTokens: 104485, postCompactionTokens: 32455, tokenLimit: 128000` yields a usage sample of 32,455 / 128,000 after the `compacted` event. This fails today, since only the status is emitted.
+
+## F963 (B) -- an agent with no tool server whose *own* default is "Ask me" (or "Workspace only") shows that posture on its composer pill, its settings row and the Overview, while every run it starts gets "Edit files": an operator who chose Ask me watches it write without asking
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-reach-sweep` (scratch Hub :8113, profile `rc1023`, project `proj-421826485996`; Chromium against the served bundle, `scripts/drive/s1023_rc_ui.py` and `s1023_rc_ui_send.py`; shots `testbed/ui-judge/s1023-reach/104652/`, `testbed/ui-judge/s1023-reach-send/104754/01_after_send.png`).
+**Source:** drive
+**Theme:** Permissions & sandbox
+**Ready:** yes
+**Tier:** 0
+
+Repro: agent beta on a Claude Haiku runner with `config.hub_client: "cli"`, so it has no tool server and no approver. Open beta → settings → Execution → Permissions → **Default permissions for beta** → **Ask me**. `PATCH /agents/beta {"default_permission_mode": "manual"}` → 200. The row now reads "Ask me" with the note "Claude Code still runs commands it treats as read-only (such as echo or git status) without asking; writes and other commands come to you." `GET /agents` says beta `default_permission_mode: "manual"`, `permission_mode_at_rest: "acceptEdits"`, `permission_mode_built_in: "acceptEdits"`. That is F933's fix (89ce56a) working: an inherited default that needs an approver is skipped for a run with none. Open beta's conversation: the composer reads "Permissions: Ask me". From that composer, with the pill untouched, send "Use your Write tool to create the file pill-check.txt containing the word hi …" (`run-253b446d2409`). The file is written in beta's worktree, `GET /permission-requests` has nothing for the run, no card appears, and beta replies "File written successfully to pill-check.txt." The pill still reads "Ask me" afterwards. With `default_permission_mode: "workspace"` the roster is likewise `acceptEdits`, while every screen says Workspace only (roster measured; not sent from the composer). A project default does not show the mismatch, because the agent's own field stays null, and the pill then reads `permission_mode_at_rest`, which is right.
+
+Cause: `postureAtRest` (`hub/ui/src/api/agents.ts:733-736`) reads `agentRow.default_permission_mode ?? agentRow.permission_mode_at_rest`, preferring the agent's own field over the Hub's resolved one. Before F933 the two always agreed whenever the field was set. Since F933, `permission_mode_at_rest` is the only truthful value. The same assumption sits in `AgentPostureChips.tsx:125`, the Overview's agent details (`posture = agent.default_permission_mode ? labelFor(...) : "Built-in default (...)"`), and in `AgentSettingsPage.tsx:267-274`, whose Ask-me note promises "writes and other commands come to you". Nothing on the settings row says the choice does not apply to this agent. **Expected:** the pill and the Overview show `permission_mode_at_rest`. Where the agent's own default differs from it, the settings row says why, e.g. "Ask me needs an approver, and beta has no tool server (Hub client: command line), so its runs get Edit files". The Ask-me note is not shown for such an agent. Offering the choice is fine (the Hub stores it and applies it once the agent has a tool server). **Test:** in `hub/ui/src/__tests__/`, `postureAtRest({default_permission_mode: 'manual', permission_mode_at_rest: 'acceptEdits'})` → `{permission_mode: 'acceptEdits'}`. This fails today. Seam: Permissions & sandbox (composer pill, agent settings, Overview) x the roster's resolved posture.
+
+## F964 (B) -- the operator's answer to a cannot-satisfy report is delivered into the reporter's most recently active conversation, not the one that reported, and unbound to the task: after a reject the reporter cannot report again (403), and after an accept it does the task's work on its own branch instead of the task's checkout
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8114, profile `sp1023`, project `proj-5d1a4f5172a6`; seven real Haiku 4.5 turns; `scripts/drive/s1023_sp_setup.py`).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+Repro. builder (claude-haiku-4-5) has two open conversations. In the first, `conv-7b98d1151605` (operator origin, no task), it ran an unrelated turn on another document. The second, `conv-01652c671291`, is bound to `task-ddc3099981de` of approved change `spec/changes/sp-report/spec.json`. There, `run-f6f10aa6c8bd` called `report_cannot_satisfy` for both criteria, giving `amd-20bce705688a` (c-fast, `task_blocked: true`) and `amd-bbfa905afd09` (c-tiny). The operator then sends one message in the older conversation (`run-421d3ab958bb`, "reply OK"), which makes it the more recently updated one. Next, `POST /projects/{p}/project/documents/spec/changes/sp-report/spec.json/amendments/amd-20bce705688a/respond {"response":"reject","reason":"Measure it on a 1 KB string instead …"}` → 200. The note is queued as `entry-9221d9f18b94` with `conversation_id: conv-7b98d1151605, task_id: null`, and it starts `run-8c0cb4d9ab69` there with `task_id: None`. Following the note ("Try again …, or report back what still stands in the way"), builder calls `report_cannot_satisfy` (c-fast) → **403 "only a run working or testing a task of this document may report a criterion it cannot satisfy"**. Its `update_task` to `in_progress` → 403 (F965), and it ends asking in prose. Then `respond` on `amd-bbfa905afd09 {"response":"accept"}` → 200 `task_unblocked: true`, and the task goes `in_progress`. That note is also queued into `conv-7b98d1151605` (`entry-db196a204021`, `task_id: null`), and `run-a33e299337a9` runs unbound. builder edits `textkit/words.py` in **its agent worktree** (`.agentweave/worktrees/builder`, commit `c12f68c` "Auto-snapshot: builder's turn" on `agentweave/builder`). The task's checkout `.agentweave/tasks/task-ddc3099981de` stays clean at `a03ac52`. It records `ev-0c331fe27de8` with `task_id: task-ddc3099981de`, `run_id: run-a33e299337a9`, and ends without completing the task. 10-20's drive did not show this because the reporter had only one conversation.
+
+Cause: `spec_amendments.queue_note_to_reporter` (`hub/hub/spec_amendments.py:868`) picks `conversations.latest_open_conversation(agent)`, ordered by `updated_at` (`conversations.py:215`), and builds the entry with no `task_id`. The report itself records `run_id` (`amendment.run_id`, here `run-f6f10aa6c8bd`), whose conversation is the bound one. **Expected:** the note goes into the reporting run's conversation (`runs.conversation_id` of the report's `run_id`), falling back to the latest open one only when that conversation is archived, and the entry carries the report's `task_id`. The turn the answer starts is then bound to the task: its checkout, `report_cannot_satisfy`, evidence. **Test** (`hub/tests/`, beside the F700 respond tests): a reporter with two open conversations, the reporting one older and bound to the task. `respond` reject → the queued entry's `conversation_id` is the reporting conversation and its `task_id` the report's task. This fails today. Seam: Spec documents (report answer) x Inbound queue x Worktrees.
+
+## F965 (C) -- an agent asking to move a task out of `blocked` after its own cannot-satisfy report is refused with the sentence for a question wait ("the operator answers or declines the question, or your own wait for it expires and ask_user reports that"), though no question exists
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8114; `run-8c0cb4d9ab69`, real Haiku 4.5 turn).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+Repro: `task-ddc3099981de` is `blocked` with `blocked_reason` "cannot satisfy criterion c-fast: …" (set by `report_cannot_satisfy`, `spec_amendments.py:512`), and the operator rejected that report. The reporter calls `update_task {"task_id": "task-ddc3099981de", "status": "in_progress"}` → 403 "A task waiting on a person is released when the wait actually ends — the operator answers or declines the question, or your own wait for it expires and ask_user reports that. An agent cannot move it out of 'blocked' by asking to." (`hub/hub/api/v1/tasks.py:1753`). The comment above it lists the "three real releases" as the question answer, the decline and an expired wait, so it predates F700's report answers. The agent reads it and cannot tell what releases the task: the operator's **amend** or **accept** on the report in the document's Amendments panel (a reject keeps it blocked, `spec_amendments.py:681`). **Expected:** when the block came from a cannot-satisfy report (an open or rejected `cannot_satisfy` amendment naming this task), the refusal says so and names the way out. For example: "task-ddc… is blocked by your report that criterion c-fast cannot be satisfied (amd-20bce…); the operator rejected it: <reason>. It is released when the operator amends the criterion or accepts a report; report again if something still stands in the way." The question sentence stays for question waits. **Test:** `hub/tests/` — block a task through `report_cannot_satisfy`, then the agent's PATCH `in_progress` → 403 whose detail names the report and not "question". This fails today. Context, not a separate defect: after that reject, accepting the *other* report on the same task (`amd-bbfa905afd09`) unblocked it (`_unblock` runs on any accept). Seam: Tasks (agent transitions) x Spec documents (cannot-satisfy).
+
+## F966 (C) -- a flow document that names `delivery.tester` is still warned `reviewer_undeclared` ("the flow will give each review to any free agent"), though every review goes to the named tester
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-spec-sweep` (scratch Hub :8114; the flow's review turn `run-6d5559ec7825` went to `tester`).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+Repro: `PUT /projects/{p}/project/documents/spec/changes/sp-flow/spec.json/content` with `delivery {"mode": "flow", "agent": "builder", "tester": "tester", "stop_when_queue_empties": true}` and no task `reviewer` → 200 with `warnings: [{"code": "reviewer_undeclared", "where": "tasks", "message": "neither `delivery.reviewer` nor any task's `reviewer` is set, so the flow will give each review to any free agent; if a particular agent should review, set `delivery.reviewer` …"}]`. After approval and builder's completed turn, the flow staged the review for **tester** (`run-6d5559ec7825`, test duty included), as `review_turn.py:226-230` says: a named tester reviews every task naming no reviewer, ahead of `delivery.reviewer`. The warning tells the operator the opposite. Cause: `spec_completeness.reviewer_undeclared_warnings` (`hub/hub/spec_completeness.py:558`) returns early only on `delivery.reviewer`. **Expected:** no warning when `delivery.tester` is a name (the warning stays when it is `false` or unset). **Test:** `hub/tests/test_spec_reviewer_undeclared_warning.py` — a flow delivery with `tester: "tester"` and no reviewer → no `reviewer_undeclared`. This fails today. Seam: Spec documents (submission warnings) x Flows & review.
+
+## F967 (B) -- an agent's evidence whose locator names its test file watches only that test file, so reverting the implementation on the main line raises no drift: the requirement keeps reading "verified" while its own named test fails
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8115, profile `ev1023`, project `proj-563f2775ab60`; `scripts/drive/s1023_ev_setup.py`).
+**Source:** drive
+**Theme:** Drift
+**Ready:** yes
+**Tier:** 1
+
+Repro. builder (claude-haiku-4-5, `run-30bb84be135f`) fixed `textkit/words.py` (`split(' ')` → `split()`) and added tests in one commit, `fad8fee` on `agentweave/task/task-a2cf84a08020`. It recorded `ev-70160b95bae5` for FR-2 ("count_words MUST return 0 for an empty or blank string") with `locator: "tests/test_words.py::test_empty_string and tests/test_words.py::test_blank_string"`. The evidence was accepted, and Land merged the task (`dfff3d4`). Its footprint `efp-7cd33520c87f` has `entries: {"tests/test_words.py": …}` and `watched_from: ["locator"]`, so `textkit/words.py` is not watched. On master, commit a revert of the fix in `textkit/words.py` only. `py -3.11 -m pytest tests -q` → **2 failed** (test_empty_string, test_blank_string). `POST /projects/{p}/project/spec/drift/detect` → `{"raised": [], "rebuilt": 0}`, and `GET /spec/coverage` still reads FR-1 and FR-2 `verified`, `integrated`. Touching `tests/test_words.py` alone (a comment line) raises drift on both. So the scan watches the proof and not the thing proved. Neither the drift panel nor the Evidence view says what a piece watches (`spec-drift-unwatched` lists only pieces watching nothing), so the operator cannot see the gap.
+
+Cause: deliberate. `requirement_evidence.watched_files` (`hub/hub/requirement_evidence.py:938`) takes "the **first** source that names a file … not their union": a locator naming any file wins over the branch's changes. This narrowing came after `drift-watches-the-files-its-evidence-is-about` D1, which specified a union, because on `:8000` a union made 22 of 46 agent rows watch a shared file. The narrowing fixed noise, and the price is this blind spot whenever an agent's locator is its test (the shape the MCP tool's own example invites, `mcp_server.py` `record_evidence`). A design gap, not a slip, hence Tier 1. Options for the change: (a) when every locator path is a test file (`tests/`, `test_*`, `*_test.*`, `*.test.*`), add the branch's non-test changes (rule 3) to it; (b) at least name the watched paths on the evidence card and the drift strip, so a test-only watch is visible. **Acceptance drive:** this repro, where the implementation-only revert on master raises a candidate for FR-2 and the test-only touch still raises one. Seam: Requirements, evidence & coverage (record) x Drift (scan).
+
+## F968 (B) -- a granted agent rejecting an awaiting piece of a *completed* task leaves the task completed and tells its author nothing: the reason the tool says "is what the author reads to fix it" reaches nobody
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8115; `run-1fea7e495c79`, a real Haiku 4.5 turn by `checker`, granted `can_accept_evidence`).
+**Source:** drive
+**Theme:** Requirements, evidence & coverage
+**Ready:** yes
+**Tier:** 1
+
+Repro: `task-a2cf84a08020` is `completed` by builder, with awaiting evidence for FR-1 and FR-2. checker, granted with `PATCH /projects/{p}/agents/checker {"can_accept_evidence": true}`, is not dispatched as a reviewer; it is asked to review evidence in an ordinary turn. It calls `list_evidence(review_state="awaiting")`, then `decide_evidence(ev-40cc02c9763c, accepted, …)` → 200 and `decide_evidence(ev-70160b95bae5, rejected, "the criterion also needs a test of a tab-only string; record it again with that test")` → 200. Afterwards: `inbound_queue_entries` holds no entry for builder (only the operator's two prompts); the task stays `completed` (`has_rejected_evidence: true`); nothing starts a builder turn. The only party who learns of it is the operator, from the Spec header ("1 rejected") and later from Land's 409 `gate_unsatisfied`, whose sentence tells *a reviewer* to "move the task to revision_needed with notes naming the rejected requirement". The `decide_evidence` docstring (`hub/hub/mcp_server.py:5514`) promises the reason "is what the author reads to fix it". The author reads it only if somebody moves the task to `revision_needed`: the F504 fix lists rejected pieces with their reasons on that turn. The decide answer does not tell the deciding agent that this step is needed. Cause: neither decide route (`hub/hub/api/v1/agent_actions.py:1679`, operator `spec.py:1777`) does anything for a rejected piece of a task that is not `approved` (`_reopen_an_approved_task` handles approved only). **Expected (the change chooses one):** a rejection of a completed task's awaiting evidence either moves the task to `revision_needed` with the reason as its note (the operator path already reopens an approved task, vis-D1), or queues the reason to the author bound to the task. Either way the decide answer says which happened. **Acceptance drive:** this repro, where after the reject builder gets a turn bound to the task carrying the reason, or the task reads `revision_needed`. Seam: Requirements, evidence & coverage (agent decision) x Tasks x Inbound queue.
+
+## F969 (C) -- on the Spec page the coverage panel and the header's requirements fact name the same states in different words, and every drifting row points at "Drifting, below", which is not on screen
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-evidence-sweep` (scratch Hub :8115; Chromium against the served bundle, `scripts/drive/s1023_ev_ui.py health|drift`).
+**Source:** drive
+**Theme:** Requirements, evidence & coverage
+**Ready:** yes
+**Tier:** 0
+
+Repro, on `spec/changes/ev-main/spec.json` (five requirements, one with no task): (1) The header fact reads "2/5 verified · 1 rejected · 1 not started · **1 with no task** · 1 not merged", and its popover reads FR-5 "**No task**". Show details opens the coverage panel under the header, which reads "**1 no work linked**" and "FR-5 — **No work linked**". The same state gets three names on one screen. The same split exists for `amendment_unreviewed`: "**changed, unreviewed**" in the header (`SpecHealthLine.tsx:254`) and "**Amendment not reviewed**" in the panel (`SpecCoverageBar.tsx:20`); that state was not reached on screen in this drive. (2) After a scan raised three drift candidates, the header fact reads "0/5 verified · 3 drifting · …" with the warn tone (F945 holds). Its Show details panel then explains each drifting row as "The implementation changed after this was verified. Say which one was wrong — **answer it under Drifting, below.**" (`SpecCoverageBar.tsx:16`). Nothing named Drifting is below. The answers live in the **drift** fact's own detail, and the page shows one detail at a time (`SpecDocumentPanel.tsx:149`, `detail` is a single key), so opening the requirements detail is exactly what hides them. Screenshot `testbed/ui-judge/s1023-evidence/113810/b1_coverage.png`. **Expected:** one word per state across the header, its popover and the panel (the coverage panel's `STATES` labels and `SpecHealthLine`'s `OPEN_STATES`/`STATE_LABEL` from one table), and a drifting row's sentence that names where to answer it, e.g. "answer it from the drift fact above ('N drifted')", or, better, a link that opens that detail. **Test:** `hub/ui/src/__tests__/specHealthLine.test.tsx` — render the header and the coverage bar for an `unserved` row and assert that the same label is used; and that a `drifting` row's `why` does not say "below". Both fail today. Seam: Requirements, evidence & coverage (header) x Drift (strip).
+
+## F970 (B) -- a *loop* job whose agent a session sync deleted (or the operator archived) answers Run now with 500 "Failed to fire job", and every firing emits a `job_run_failed` event naming a job_run_id that has no row
+
+**Status:** open 2026-10-23. F925's fix (0f2771e) holds for plain jobs only. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8111, profile `la1023`, project `proj-655cbdd8ca29`; `scripts/drive/s1023_la_f925.py`, `s1023_la_loops.py`).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: two enabled loop jobs (`initial_tasks` with one task, far-future cron), `gone1 loop` for agent gone1 and `arch1 loop` for arch1. `POST /session/sync {"data":{"agents":{"alpha":{},"arch1":{}}}}` → gone1 removed; `POST /agents/arch1/archive` → 200. `POST /jobs/job-2cc35804fe0a/run` → **500 `{"detail":"Failed to fire job"}`**, the same on a second press and for arch1's loop. `GET /jobs/{id}/history` → `[]`; `job_runs` has no row for either loop, but `event_logs` has `job_run_failed` events naming `run-008137496f71`, `run-9f475933ba06`, … that do not exist. On cron `* * * * *` a new event with a new id was written at 11:00, 11:01 and 11:02, still with no row; the plain job beside it counted into one row (`tick_count` 5). Queue and conversations stayed clean. The 500 sentence reaches the Jobs screen and an agent's `run_job` alike ("(500): Failed to fire job", run-17fa via MCP). Plain jobs on the same agents: enable → 400 with the create's sentence, Run now → 409 with the trigger's sentence, one `failed` row + `job_run_failed`, nothing queued (F925 holds there).
+
+Cause: in the loop branch the SELECT inside `agent_unfirable_reason` (`hub/hub/scheduler.py:4041-4049`) autoflushes the `JobRun` built above it; `_discard_unused_run` (`scheduler.py:1116`) then `session.delete(run)`s it. The `except` at `scheduler.py:4274` (`run if "run" in locals() and run in session`) still finds the deleted object, stamps it `failed`, persists the event naming it, and the commit deletes the row. `run_job` sees no new row, `_loop_flow_busy_refusal` / `_loop_in_flight_decision` return None, and it answers 500 at `hub/hub/api/v1/jobs.py:1908`. **Expected:** as for a plain job: one `failed` row whose id the event names, cron ticks counting into it, and the press answering 409 with "gone1 is not an agent in this project…" / "arch1 is archived…". Optional (F925's design note, still not done): the sync and archive answers name the jobs left naming the agent; the Jobs rows still read "Active · Next: Jan 1 2027". **Test:** `hub/tests/test_a_job_for_a_vanished_agent_does_not_fire.py` fires plain jobs only: add a job with `initial_tasks` → press 409 with the sentence, `JobRun` count 1 with the event's `job_run_id`, a second tick increments `tick_count`. Seam: Agents (sync/archive) x Jobs & loops (loop firing).
+
+## F971 (C) -- Run on a loop whose agent has no runner answers, on the second press, "Every task on this loop's queue is already being worked … nothing is wrong" while nothing is worked
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8111; `scripts/drive/s1023_la_loops.py`).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: `PATCH /agents/norun {"runner_id": null}`; a loop job for norun. First `POST /jobs/job-1f2782f2a3bc/run` → 200 with `waiting_reason` "No runner is bound…" (the entry stays queued with that reason). Second press → **409 "Every task on this loop's queue is already being worked. Nothing was started, and nothing is wrong — the next firing picks up whatever finishes."** Nothing will finish: no runner. Cause: `_held_in_flight_reasons` (`hub/hub/api/v1/jobs.py:1685`) names the provider hold and the spent token budget (F441) but not the agent-wide environment refusals (no runner bound, runner CLI missing). **Expected:** 409 naming the hold, e.g. "norun has no runner bound, so its queued turn cannot start. Bind one in the Hub UI." **Test:** beside `hub/tests/test_run_names_a_spent_token_budget.py`: a runnerless loop agent, two presses; the second's detail names the runner and does not contain "nothing is wrong". Seam: Jobs & loops x Runners.
+
+## F972 (C) -- a firing queued behind another waiting entry for the same agent answers 200 with no `waiting_reason`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8111).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: runnerless agent norun with two jobs. `POST /jobs/{norun plain}/run` → 200 with `waiting_reason` "No runner is bound…". Then `POST /jobs/{norun loop}/run` → 200 `{"success":true,"job_run_id":"run-9aa91e126e3e",…}` with **no** `waiting_reason`; `inbound_queue_entries` row `entry-f08bfc095cda` is `queued` with `waiting_reason` NULL, while `GET /queue/norun/status` says "No runner is bound…". Cause: `hub/hub/api/v1/jobs.py:1949-1963` reads only this firing's own entry's `waiting_reason`, and the queue stamps the reason on the head entry only. **Expected:** the press carries the agent's waiting reason whenever its entry is queued behind a hold (read the queue status, not the entry). **Test:** `hub/tests/test_a_job_for_an_agent_with_no_runner_waits.py`: two jobs for the same runnerless agent; the second press has `waiting_reason`. Seam: Jobs & loops x Inbound queue.
+
+## F973 (C) -- an ended or archived loop still accepts definition edits and control changes, and its tab then says the edit "applies at the next firing" of a loop that never fires again
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8111; Chromium against the served bundle, `scripts/drive/s1023_la_ui.py`).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: loop B stopped with a reason (`ending_state: stopped`). `PATCH /jobs/job-cb4be9d8fac9 {"purpose":"edit an ended loop"}` → 200, writes `loop_edit_staged`, `pending_purpose` set. `POST /loops/loop-7871385dea5f/control {"control":"creator"}` on archived loop A → 200, `control: creator`, `loop_control_changed` written; the same on ended loop B. The neighbours refuse correctly: `stop_reason` → 409 `loop_already_ended`, `enabled` → 409 `loop_ended`, archive → 400. Loop B's tab (Chromium) reads "Stopped early: operator: not needed after all … Edit staged — it applies at the next firing … Until then the loop runs on the definition below marked 'In force now'". Spec `agent-loops` ac99 says an ended loop's settings are read-only. Cause: the staging branch of `update_job` (`hub/hub/api/v1/jobs.py` ~1297-1320) never checks `loop.ending_state`; `set_loop_control` (`hub/hub/api/v1/loops.py:203-237`) checks neither `archived_at` nor `ending_state`. **Expected:** 409 saying the loop has ended and to create a new loop (as `loop_ended` already does); nothing staged, no event. **Test:** `hub/tests/test_jobs*.py` / the loops tests: a stopped loop, then a PATCH of `purpose` and a POST to `control` → each 409, no `pending_*` set, no event. Seam: Jobs & loops (Settings, Delegate) x loop ending.
+
+## F974 (C) -- after a press, the Loop tab and the Jobs screen take 4-5 s to show what the Hub applied in 0.3 s; one Delegate press fires about 59 GETs
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8111; Chromium, `scripts/drive/s1023_la_ui.py storm|latency loop-c4e818c86b61`).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 1
+
+Repro (Chromium, request log): idle 10 s → no loop GETs. Press "Let norun decide" → 39 × `GET /loops/{id}` + 20 × `GET /loops` in about 5 s, then quiet; the POST's 200 arrived at 0.32 s but the controller text changed only at 4.8 s (4.2 s on a second try). On flow C a Delegate press took ~13 s to show, and Stop's ending was still not on screen 3 s later. Jobs screen: Pause fires 14 × `GET /jobs` within 0.13 s and its toast appears at 3.5 s; Run now's 200 at 0.29 s, toast at 4.1 s. Cause (partial): the mutation's `onSettled` (`hub/ui/src/api/loops.ts:66-68`) and the SSE `loop_*` case (`hub/ui/src/hooks/useSSE.ts:605-612`) each invalidate twice; that does not account for ~59 requests, and the rest was not found, hence Tier 1. **Expected:** a few refetches, and the tab or toast updates when the response lands. **Test:** a vitest under `hub/ui/src/__tests__` with mocked fetch: press "Let X decide" → at most 3 loop GETs and the controller text updates once the POST resolves. Seam: Jobs & loops UI x SSE invalidation.
+
+## F975 (D) -- the one-loop-per-document refusal names only ids and gives no way out
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8111).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: `POST /jobs` with `spec_document_id` claimed by a live loop → 409 `"document 'spdoc-ba5dc3e6cd7b' is already claimed by loop 'loop-7871385dea5f'"`. No document path or title, no job name, and nothing saying that stopping or archiving that loop frees the document (driven: loop B adopted A's pending task once A was archived, `loop_tasks_adopted`). **Expected:** the sentence names the document's path or title and the claiming job, and says "stop or archive it first, and the new loop adopts its unfinished tasks." **Test:** `hub/tests/test_jobs.py` beside the existing claimed-document test: the 409 detail contains the job name and "archive". Seam: Jobs & loops x Spec documents.
+
+## F976 (B) -- a tester's own `change_criterion` amendment makes the builder's evidence stale, so the tester's approval is refused, and every remedy offered to the tester and the operator is one the Hub then refuses
+
+**Status:** open 2026-10-23. Extends F758 (the gate's remedy for a stale piece is refused) at the seam where it fires on every tester criterion fix. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8112, profile `lb1023`, project `proj-ea9d9171917e`, real Haiku 4.5; `scripts/drive/s1023_lb_flow.py`, `s1023_lb_hold.py`).
+**Source:** drive
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 1
+
+Repro: flow document `delivery {"mode":"flow","agent":"alpha","tester":"tester"}`; task `t-slug`; criterion `c-slug` deliberately wrong (`slugify('  Hello,  World! ') == 'hello--world'`). beta's rework records `ev-83ff5ed0fcae` at `9877b026`. Review turn `run-573d56ff11e9` is briefed "**Your verdict decides this task's evidence** (`ev-83ff5ed0fcae` for `FR-2` at `9877b026baa9`). Approving accepts it and merges the work". The tester runs the `how_to_check`, gets `'hello-world'`, and calls `amend_spec_document op=change_criterion` (`amd-a3ad1918556b`) → revision `sprev-f470d3396bfc` (`reworded`, actor tester); FR-2's digest changes. Then `update_task approved` → 409 `gate_unsatisfied` three times ("This task's work has been recorded and nobody has judged it: FR-2 at 9877b026baa9 … accept the evidence, or grant an agent the capability to accept it — both are the operator's"); `record_evidence` → 409 ("a reviewer judges the evidence the task's author recorded"); `decide_evidence` → 403; `ask_user` `q-b0951e26759f` times out. The operator is told (divergence `div-67fb88d5aa14`) the review "ended without recording a verdict … naming a different reviewer, reviewing it yourself, or asking this one again is the way forward", and the loop's stall reason says "Ask tester again, review it yourself, or send it back". Following it: `PATCH /tasks/task-a1499b2857e6 {"status":"approved"}` → the same 409 ("accept the evidence"); `POST /project/spec/evidence/ev-83ff5ed0fcae/decision {"decision":"accepted"}` → 409 `evidence_stale`. Only send-back → builder re-records (`run-93aa17ce491b`) → a fresh tester review (`run-12f4e4dd6d53`) landed it: two extra paid turns. On screen the drawer story ends "tester's turn ended with the task still under review · surfaced" with no reason (`run_divergences` has no reason column); the piece reads plain "awaiting", not stale.
+
+Cause: `requirement_evidence.decide_with_verdict` skips a stale piece when accepting (`hub/hub/requirement_evidence.py` ~1415-1418, the F751 fix); `requirement_gate._operator_only_remedy` (`hub/hub/requirement_gate.py:1286-1289`) treats the task's own pieces as never the operator's hold, so `approval_held_for_operator` returns None and the divergence says "ended without recording a verdict" instead of the gate's sentence; `review_turn.verdict_evidence_sentence` (`hub/hub/review_turn.py:339`) promises "Approving accepts it" whether or not the piece is stale. **Expected:** once a review run's own amendment makes the reviewed piece stale, its approve refusal (and the amendment's tool answer) names the piece as stale and gives `revision_needed` as the remedy so the author re-records; the divergence and stall reason carry the gate's sentence; the drawer marks the piece stale. **Acceptance drive:** this repro, where the tester's approve is answered with the stale sentence and `revision_needed` lands without the operator. **Test:** `hub/tests/test_the_reviewers_verdict_decides_the_tasks_evidence.py`: a review run amends the criterion, then approves → refusal naming staleness with `revision_needed` as the remedy; `run_diverged` reason carries the gate's sentence. Seam: Flows & review (tester turn) x Requirements, evidence & coverage (stale).
+
+## F977 (D) -- a drained flow reads "Active · Waiting for its next firing · Next: Jan 1 2027" after its last approval; the stop is recorded only when something next fires it
+
+**Status:** open 2026-10-23. Extends F655 (the same display fix, for `stop_when_queue_empties`). Found by the day sweep `sweep-loops-sweep` (scratch Hub :8112; Chromium).
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+Repro: the flow's last approval landed 11:07:04. `GET /loops/loop-8142093fc880` then still had `stop_reason: null, ending_state: null, queue {"approved": 2}`; the Jobs card read "2 of 2 tasks approved · Waiting for its next firing · Next: Jan 1 2027 · Active". Run now at 11:08:22 → 409 "loop queue is empty" and `loop_stopped` recorded. Cause: the fallback text at `hub/ui/src/components/jobs/JobsView.tsx:276`. **Expected:** "Finished: every task approved" (or "Stops at its next firing") once a `stop_when_queue_empties` loop's queue is all approved/rejected. **Test:** a JobsView test with a loop whose queue is all approved and `stop_when_queue_empties` set → it does not read "Waiting for its next firing". Seam: Jobs & loops x Flows.
+
+## F978 (D) -- two labels in the review machinery: an operator's send-back reaches the author as "The reviewer sent it back", and a withdrawn review's reason carries the raw status `revision_needed`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8112).
+**Source:** drive
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+Repro: the operator's `PATCH /tasks/{id} {"status":"revision_needed","notes":…}` (`ttr-5d9bcf579404`, `actor_kind` operator) → beta's rework briefing reads "## Why it came back / The reviewer sent it back with these notes: > Operator: …". Cause: `hub/hub/scheduler.py:3172` `by or 'The reviewer'`, where `actor_agent` is None for the operator. Withdrawn review: "Withdrawn: task task-a1499b2857e6 was revision_needed, so there is no longer a review of it to start." reaches the conversation and the story verbatim (`hub/hub/run_task_binding.py:865`). **Expected:** "The operator sent it back…"; "was sent back for revision" (words, not the enum). **Test:** the revision-briefing test for an operator transition; a test that the withdrawal reason does not contain `revision_needed`. Seam: Flows & review x Tasks.
+
+## F979 (B) -- when a project's own `.git` is unreadable and its folder sits inside another repository, the Hub uses the enclosing repository: it creates the agent's worktree and branch there and commits to it
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113, profile `lc1023`, projects `proj-486861916a9d`, `proj-e35fc30d0076`; `scripts/drive/s1023_lc_fault.py`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 1
+
+Repro: an outer repo `~/Documents/lc1023outer` (branch `main`, holding `OUTER.md`) containing a project repo `inner/`. Open `inner` as a project, create agent gamma (Haiku), write `garbage` into `inner/.git/HEAD`. `GET /worktrees` → 200 `{"repository": true, "unavailable_reason": null}`. `POST /agent/trigger` gamma → 200, `run-8ca5ab556815` completed with `workspace_dir=inner\.agentweave\worktrees\gamma`. Effect: `git -C lc1023outer worktree list` shows `inner/.agentweave/worktrees/gamma [agentweave/gamma]`; the agent's checkout holds `OUTER.md` (the wrong code), and the outer repo's branch has `e3dd480 AgentWeave "Auto-snapshot: gamma's turn"` adding `.agentweave/context/gamma.md`. Moving `inner/.git` aside entirely does the same, and `/worktrees` lists the outer repo's worktree as this project's. After HEAD is restored the next trigger is held with a legible reason ("refusing existing path … not the registered git worktree … `rm -r …`"), but following it, or deleting the project (204), leaves the outer repo's worktree registration, branch and commit behind. A project under `testbed/` inside this repository is exposed the same way (the subagent's first try resolved the AgentWeave repo; nothing was written there, checked with `git status` and the branch list).
+
+Cause: `is_git_repo` (`hub/hub/worktrees.py:126-145`) runs `git rev-parse --is-inside-work-tree` with `cwd=project`, which answers true inside any enclosing repository; callers include `hub/hub/api/v1/agent_trigger.py:1290`, `hub/hub/api/v1/worktrees.py:161` and the same probe in `hub/hub/task_integration.py:170` (`repository_fault`). Workspace-isolation D2 notes git "answers about the enclosing repository", but only for checkouts. **Expected:** a project root counts as a repository only when `git rev-parse --show-toplevel` resolves to that root; otherwise it reads "not a git repository" with git's own error, a writing agent fails closed, and nothing is ever written to another repository. **Acceptance drive:** this repro → trigger held or refused naming the project's `.git`, outer repo unchanged (`worktree list`, branches). **Test:** `hub/tests/test_worktrees.py`: tmp outer repo, inner dir with garbage `.git/HEAD` → `is_git_repo(inner)` False and agent-worktree provisioning refuses. Seam: Projects x Worktrees x Resilience.
+
+## F980 (C) -- `PUT /project/documents/{path}/content` answers a bare 500 when the document's file cannot be written
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113; `scripts/drive/s1023_lc_fault.py`).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+Repro: `attrib +R spec/changes/cobalt-selkie/spec.json`, then a content PUT with a valid payload → **500 "Internal Server Error"**; the Hub log shows `PermissionError: [Errno 13] … spec.json`. A directory in place of the file → the same 500. The `spec_documents` row (digest, `updated_at`) is unchanged: no partial state. Cause: `write_document` (`hub/hub/spec_documents.py:317-323`) lets the OSError escape via `_apply_and_write` (`hub/hub/spec_service.py:325`); the route (`hub/hub/api/v1/spec.py:829`) catches only `SaveRefusedError`. The agent amend path goes through the same `save_document` (not driven). **Expected:** 409 naming the file and the OS reason ("spec.json is read-only or locked; close what holds it and save again"). **Test:** route test for the content PUT with `Path.write_text` monkeypatched to raise `PermissionError` → 409. Seam: Spec documents x Resilience.
+
+## F981 (C) -- `POST /vault/sources` answers a bare 500 when the tracked vault root `knowledge/` cannot be written (F717's fix covered only the private location)
+
+**Status:** open 2026-10-23. Extends F717. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113).
+**Source:** drive
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+Repro: make `knowledge` a file in the project root; `POST /vault/sources {"name":"Fault note","type":"note","content":"…"}` → **500**; log `FileExistsError: [WinError 183] … lcproj\knowledge`. In the same state map, settings, contradictions and reports answer 200. Cause: `Storage.write` (`hub/hub/vault.py:150`) `mkdir`s, reached from `vault.py:936`/`:978`; `hub/hub/api/v1/vault.py:183` catches only `VaultError`. **Expected:** 409 naming `knowledge/` and why it cannot be written. **Test:** `hub/tests/test_vault*.py`: a tracked add with `knowledge` as a file → 409. Seam: Knowledge vault x Resilience.
+
+## F982 (C) -- the first Claude turn after an interrupted or stopped turn in the same session records no cost, though the CLI reported it
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113; kill/restart and Stop drives, `scripts/drive/s1023_lc_kill.py`).
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 1
+
+Repro: an interrupted (Hub killed) or stopped turn leaves a `turn_usage` row `status=unavailable, session_totals=null`. The next measured turn in that session has `session_totals` but `api_equivalent_usd_micros = NULL`: `run-d01f4744bd6a` (session `f5ece8dc`, 74,901 tokens, totals 10,425 µ$), `run-d391a64a639c` (`e708aaff`, 118,661, 17,704 µ$), `run-4d578d7ce374` (`f483dd06`, 73,357, 43,891 µ$). The turn after is priced (`run-86708a79d7a3` 5,863 µ$). `GET /accounting` for the project: `api_equivalent_usd_micros: 5863, unpriced_turns: 7` (~$0.006) against ~$0.078 the CLI reported. Cause: `hub/hub/usage_accounting.py:168-172`: "earlier rows but none with recorded totals → no cost" (meant for legacy pre-0132 rows) also fires when the only earlier rows are `unavailable` rows from a process that died. It decides where the cut turn's spend is counted, hence Tier 1. **Expected:** when every earlier row in the session is `unavailable`, use a zero baseline so the session's reported spend is counted. **Test:** `hub/tests/test_a_claude_turn_records_its_own_cost.py`: an `unavailable` row with null totals followed by a measured row with totals → priced. Seam: Runs (interrupt/stop) x Accounting.
+
+## F983 (C) -- a corrupt `.agentweave/project.json` in a registered folder cannot be fixed from the app: open answers 409, and the remedy it offers answers 409 too
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113; API only, not browsed).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Repro: write `{not json` into the project's marker. `POST /projects/open {"path": <dir>}` → 409 `project_identity_conflict` "project marker is unreadable or invalid"; the same with `"register_copy_as_new": true` → the identical 409. Meanwhile `GET /projects` reports `directory_state: "available"`, and settings, agents and documents answer 200. Cause: `hub/hub/project_lifecycle.py:85-86` sends a registered path to `_require_marker` before reading `register_copy_as_new`; `_read_marker` (`:535`) raises without naming the file or a fix. By code reading only (unverified), a *missing* marker hits the same wall (`:548-549`). **Expected:** for a path this database has registered, rewrite the marker from the registered id, or refuse naming `.agentweave/project.json` and how to repair it. **Test:** `hub/tests/test_project_lifecycle*.py`: a registered project with a corrupt marker, opened again → marker rewritten or a refusal naming the file. Seam: Projects x Resilience.
+
+## F984 (D) -- propose, phase and rigor on a document whose file is invalid JSON say it "has not been written by the Hub", which is false
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+Repro: truncate a change's `spec.json`. `POST …/propose` and `POST …/phase?to=proposed` → 422 `no_payload` "this document carries no payload to check; it has not been written by the Hub"; `POST …/rigor {"rigor":"contract"}` → 409 "the document carries no payload; it was not written by the Hub". `GET /project/spec` correctly answers 422 "holds no readable spec payload", and a content PUT with a valid payload repairs the file (200). Cause: `hub/hub/spec_service.py:1824-1828` and `hub/hub/spec_rigor.py:148-149` do not use `spec_documents.payload_problem` (`:238`, F702). **Expected:** `payload_problem`'s wording, naming the fix (save the document's content again). **Test:** the propose route on a truncated file → detail does not contain "not been written". Seam: Spec documents x Resilience.
+
+## F985 (D) -- `POST /tasks/{id}/checks/run` answers 202 `{"run_id": null, "running": false}` with checks configured and starts nothing, without saying why
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-loops-sweep` (scratch Hub :8113).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+Repro: `PUT /settings` with checks `[{"name":"status","command":"git status --short","timeout_seconds":10}]`; on an `in_progress` task with no commit, `POST /tasks/{id}/checks/run` → 202 `run_id: null, running: false`; `GET …/checks` stays `{"configured": true, "runs": []}`. Cause: `hub/hub/project_checks.py:428-457` returns `None` for six different reasons and `hub/hub/api/v1/tasks.py:1410-1411` passes none on. **Expected:** a `reason` field ("no commit to check yet", …), shown where the press is. **Test:** `test_project_checks_run.py`: a task with no targets → the answer carries a reason. Seam: Tasks (checks) x Worktrees.
+
+## F986 (B) -- an answer to a question whose asking run has ended is delivered into the agent's most recently active conversation, not the one the question was asked in
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8116, profile qa1023, `proj-4f66170b9633`, `scripts/drive/s1023_qa_drive.py`).
+**Source:** drive
+**Theme:** Questions
+**Ready:** yes
+**Tier:** 0
+
+`gamma` (Haiku 4.5) asked `q-c89789c5f0a3` in `conv-0f96dd45a214`; that run (`run-c826abe6cd14`) was stopped. gamma then ran in a newer conversation `conv-2599b9f224f8`. `PATCH /projects/{p}/questions/q-c89789c5f0a3 {"answer":"maybe next week","labels":["maybe"]}` -> 200; `inbound_queue_entries` row `entry-b772aa7b17cf` has `conversation_id` = `conv-2599b9f224f8` ("Question: Rename the module to utils?\n\nAnswer: maybe next week") and was delivered in `run-7aeb3da3fcbd` there. The question's own `conversation_id` is `conv-0f96dd45a214`. Since F804 the ask card shows only in the asking conversation, so the operator answers there and the turn runs somewhere else.
+
+Cause (verified): `deliver_batch_if_complete` (`hub/hub/api/v1/questions.py:164`) picks `latest_open_conversation(...)`, ordered by `updated_at` (`hub/hub/conversations.py:203-217`), ignoring `question.conversation_id`; answer, decline and the expiry report all go through it. Same pattern as F964 (cannot-satisfy replies) -- fix with one helper if it fits.
+
+**Expected:** deliver into `question.conversation_id` while it is open; fall back to the latest open conversation only when it is archived or null. **Test:** beside `hub/tests/test_a_question_names_its_conversation.py`: an agent with two open conversations, the question asked in the older one, its asking run ended; answering queues an entry whose `conversation_id` is the question's. Fails today. Seam: Questions x Inbound queue x Conversations.
+
+## F987 (C) -- Stop on a Claude run blocked in an `aw-tool ask_user` call leaves that call's process tree running until the question's own deadline, holding the agent's worktree open
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-questions-sweep` (scratch Hub :8116, profile qa1023).
+**Source:** drive
+**Theme:** Runs
+**Ready:** yes
+**Tier:** 0
+
+`gamma` (`question_timeout_seconds` 600, aw-tool call mode) called `aw-tool ask_user .agentweave/calls/ask_rename.json`. `POST /agent/gamma/stop` -> 200 "stopping"; the run went `stopped` at 11:25:42 UTC. At 11:33 UTC these were still alive: bash.exe 14272/28492 (`eval 'aw-tool ask_user .agentweave/calls/ask_rename.json'`), sh.exe 15556 (`aw-tool`), python.exe 15256 (`.../tool-server/e20febd905ba97dc/mcp_server.py --call ask_user`), their parent 24716 gone. They exited ~12:35:35 local, exactly 600 s after the question was created. Meanwhile `DELETE` project (204) could not remove its folder: `[WinError 32] ... .agentweave\worktrees\gamma`. Unverified: that 24716 was the run's own `claude.exe` (the project delete removed the runs row).
+
+Cause (verified): `stop_agent_run` calls `pty.terminate(force=True)` (`hub/hub/api/v1/agent_trigger.py:2587-2591`); Claude runs are `spawn_kind = "pty"` (`hub/hub/runner_adapters/claude.py:64`), so this is `PtySession.terminate` -> `self._proc.terminate(force)` (`hub/hub/pty_runner.py:345-346`), the direct child only, as `terminate_process_tree`'s docstring says (`pty_runner.py:228-231`). Hub shutdown uses `terminate_process_tree` (`agent_trigger.py:2636`); Stop does not. The older "Stop kills the process" result (~l.15645) measured children not blocked in a tool call.
+
+**Widened 2026-10-23 (`sweep-traces-sweep`, Runs row, :8118, `scripts/drive/s1023_rn_stop_tree.py`):** the cause is general, not ask_user-specific. A run blocked in a plain shell call (`py -3.11 -c ... range(300)`): tree claude.exe 16780 -> cmd.exe 16348 -> powershell.exe 22628 -> py.exe 22256 -> python.exe 23760 (+ tool server, conhosts). `POST /agent/alpha/stop` -> 200, run `stopped` in 4.1 s; 8 s later powershell 22628, py 22256, python 23760 and conhost 26816 still alive, and renaming `.agentweave/worktrees/alpha` failed `[WinError 32]`. Reproduced twice. The failure-path kill (F359, `agent_trigger.py:3857-3860`) is also `pty.terminate(force=True)`; the fix should cover it too.
+
+**Expected:** Stop takes the run's whole tree (`terminate_process_tree(pty.pid)` for a PtySession). **Test:** in the stop tests (`hub/tests/`): stopping an active PtySession-backed run calls `terminate_process_tree` with its pid (monkeypatched). Fails today. Seam: Runs (Stop) x Questions.
+
+## F988 (C) -- an archived conversation opened by its URL reads "New conversation" in its header, with no archived notice, "Continuing this conversation" and a live composer
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-questions-sweep` (Conversations row; scratch Hub :8117, profile cv1023, `proj-8cd25053c03e`, Chromium on the served bundle, `scripts/drive/s1023_cv_rail.py`).
+**Source:** drive
+**Theme:** Conversations & composer
+**Ready:** yes
+**Tier:** 0
+
+`POST .../agent/alpha/conversations/conv-9c177acf95dd/archive`, then load `/?project=...&agent=alpha&conversation=conv-9c177acf95dd`: header "alpha / New conversation" above the old transcript, no archived notice, live composer; the More menu has no Archive/rename (`conversation` is null). Screenshot `testbed/ui-judge/s1023-conversations/123844/rail_00_archived_open.png`.
+
+Cause: the header looks the conversation up only in `useAgentConversations` (`hub/ui/src/components/agents/AgentOutputPanel.tsx:413`), which lists open conversations (`agent_chat.py:515-533`, `lifecycle` defaults to `open`); undefined -> the 'New conversation' fallback (`:1246`). F846 is the cut-over-predecessor case of the same gap; this is the general archived one plus the lost title.
+
+**Expected:** the header names the archived conversation, and the page says it is archived, with Unarchive. **Test:** `hub/ui/src/__tests__/` beside the conversation-bar tests: an archived conversation id absent from the open list gets its real title and an archived notice. Fails today ("New conversation"). Seam: Conversations (lifecycle) x `ConversationBar`.
+
+## F989 (C) -- the conversation side panel names a fresh, unindexed document by its minted folder ("silver-fenrir"), not its title, so the panel's "Search by title" cannot find it
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-questions-sweep` (Conversations row; :8117, `scripts/drive/s1023_cv_spec.py`).
+**Source:** drive
+**Theme:** Conversations & composer
+**Ready:** yes
+**Tier:** 0
+
+Fresh project, `POST /project/documents {"title":"Composer drive change","kind":"change-spec"}`; `GET /project/specs` returns the entry with path, state `unindexed`, phase, document_id and **no `title`**. The side panel's specs tab shows "silver-fenrir / spec.json"; the Spec tab's own list and the Ctrl+K palette show "Composer drive change".
+
+Cause: `spec_documents.py:715-729` sets `title` only from the manifest; `api/v1/spec.py:142-151` merges the tracked row's `phase` and `id` but not its `title`; `specNavigation.ts:135` falls back to `deriveTitle(path)`. Related: F949 (new documents read as index issues).
+
+**Expected:** an entry with a tracked row carries the row's title. **Test:** `hub/tests/`: `GET /project/specs` right after a create, no index rebuild -> the entry's `title` is the document's. Fails today. Seam: Side panel specs tab x Corpus index.
+
+## F990 (D) -- the composer's `$` menu offers a skill's supporting files as skills
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-questions-sweep` (Conversations row; :8117, `scripts/drive/s1023_cv_composer.py`).
+**Source:** drive
+**Theme:** Conversations & composer
+**Ready:** yes
+**Tier:** 0
+
+Commit `.claude/skills/greet/{SKILL.md,reference.md,run.py}`, type `$` in the composer: options `['greet', 'greet/reference', 'greet/run.py']`.
+
+Cause (verified): `hub/ui/src/lib/composerTriggerSources.ts:8-13` maps every path under `.claude/skills/` and collapses only `*/SKILL.md`; the skill branch (`:41-47`) never filters to `*/SKILL.md` (or a top-level `.md`).
+
+**Expected:** only `greet`. **Test:** a `resolveTriggerResults` unit case with those three paths -> `[greet]`. Fails today. Seam: Composer `$skill` x workspace listing.
+
+## F991 (D) -- an operator start naming an unknown `task_id` is refused with the agent-delegation sentence ("A delegation may only name a task in the project the delegating run belongs to")
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Runs row; scratch Hub :8118, profile rn1023, `proj-71764bd56b63`, `scripts/drive/s1023_rn_busy.py` and direct `e2e.py api`).
+**Source:** drive
+**Theme:** Runs
+**Ready:** yes
+**Tier:** 0
+
+`POST /projects/{p}/agent/trigger {"agent":"alpha","message":"reply ack","task_id":"task-000000000000"}` -> 404 `"Task 'task-000000000000' does not exist in this project. A delegation may only name a task in the project the delegating run belongs to."` The operator is not a delegating run. The same probe with `review_task_id` already answers in the operator's words ("There is no task 'task-000000000000' in this project to review."): F731(5), 13f76d8, fixed only that branch.
+
+Cause (verified): `trigger_agent` calls `resolve_task_for_project(session, body.task_id, project_id)` (`hub/hub/api/v1/agent_trigger.py:2298`), whose only sentence is the delegation one (`hub/hub/run_task_binding.py:143-146`). The `review_task_id` branch below it (`agent_trigger.py:2340-2346`) got its own operator sentence; the `task_id` branch did not.
+
+**Expected:** e.g. "There is no task 'task-...' in this project. Check the id, or omit task_id to start alpha unbound." **Test:** beside `hub/tests/test_a_start_names_its_agents_own_task.py` (F731(5)'s test): an operator trigger with an unknown `task_id` -> 404 whose detail does not contain "delegation". Fails today. Seam: Runs (trigger) x Tasks (binding).
+
+## F992 (D) -- Stop is keyed by agent, not by run, so a Stop arriving after its run ended stops the next turn the queue just started, in another conversation, and consumes that queued message
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Runs row; scratch Hub :8118, profile rn1023, `scripts/drive/s1023_rn_busy.py`).
+**Source:** drive
+**Theme:** Runs
+**Ready:** yes
+**Tier:** 0
+
+alpha ran a 200 s sleep in `conv-d66b1d033c30` (`run-589082213417`). An operator message to alpha's other conversation `conv-d8cde5a74273` was queued ("agent is already running", `entry-9d1492e68dd1`). `POST /agent/alpha/stop` -> 200 for run-589082213417; it ended 11:58:43.70 and the queue started `run-e3613547662e` in conv-d8cde5a74273 at 11:58:44.22. A further `POST /agent/alpha/stop` ~3 s later -> 200 `"Stop signal sent to alpha (run run-e3613547662e)."`; that turn went `stopped` at 11:58:47.8 without replying, and the queued message is `delivered` into it (consumed). The caller cannot say which run it means. The UI mostly avoids it (`handleStop` holds `isStopping` until `run_stopped`; since F844 the other conversation's bar has no Stop), but a second tab, a stale bar or an API client hits it. Related to F15 (stop stops one run, the queue starts another) and the openspec leftover `an-agent-can-be-paused-and-keeps-its-input`, which are about pausing, not a Stop landing on the wrong turn.
+
+Cause (verified): `stop_agent_run` (`hub/hub/api/v1/agent_trigger.py:2554-2610`) takes no run or conversation id and selects the newest `running` run for the agent (`:2568-2574`); the UI posts with no body (`hub/ui/src/components/agents/AgentOutputPanel.tsx:981`).
+
+**Expected:** Stop accepts an optional `run_id` (the UI sends the run its bar shows) and answers 409 "run X already ended; <agent> is now running Y in <conversation>" when that run is no longer the running one. **Test:** in the stop tests (`hub/tests/test_agent_trigger.py`): run A finished, run B running for the same agent, `POST /agent/{a}/stop {"run_id": A}` -> 409 and B not terminated. Fails today (body ignored, B stopped). Seam: Runs (Stop) x Inbound queue drain x Conversations.
+
+## F993 (C) -- the "events were not delivered" notice has no screen: `ActivityLog`, the only component that renders `stream_gap`, mounts only when `GET /ledger` answers 404
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Logs row; scratch Hub :8119, profile ev1023, `proj-c01bff86cc78`, Chromium on the served bundle, `scripts/drive/s1023_ev_sse_gap.py`).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes
+**Tier:** 0
+
+Wire: `s1023_ev_sse_gap.py wire 400 60` (a raw socket on `/api/v1/events` that reads the headers then stops reading, while 400 x 60 KB `POST /projects/{p}/logs` go in) read 264 `log_event` frames and one `event: stream_gap data: {"dropped":136,"severity":"warn"}` (264 + 136 = 400): the Hub half works, first time reached. Browser: three attempts with the app on Activity never showed "fell behind" (main thread blocked 25 s under 400 x 60 KB and 300 x 200 KB; CDP throttling at 200 KB/s for 200 s). Even if a gap arrived, no mounted view renders it.
+
+Cause (verified): the sentence lives in `hub/ui/src/lib/eventSummary.ts:22` and is rendered only by `ActivityLog` (`hub/ui/src/components/activity/ActivityLog.tsx:140-148`), whose only mount is `ProjectLedger`'s 404 branch (`ProjectLedger.tsx:186-198`, "This Hub predates the ledger"). `ActivityScreen.tsx:60-63` renders `ProjectLedger`, `LiveDigest` (`buildDigest` over `/logs`, which never carries a gap) or `LogsView`; none handles `stream_gap`. `useSSE.ts:349-360` dispatches it and runs the catch-up, so the data heals silently. The current spec still requires the notice: `spec/capabilities/agent-stream-events` ac67, "Activity shows that events were not delivered whichever project is selected".
+
+**Expected:** on a Hub with the ledger, a gap is said on screen (digest or Activity tab header), whichever project is selected. **Test:** `hub/ui/src/__tests__/` beside the ActivityScreen/digest tests: dispatch a `stream_gap` `{dropped: 136}` with the Activity tab on the Activity (or Ledger) view and a ledger answering 200; "events were not delivered" is rendered. Fails today. Seam: SSE stream x Activity tab (ledger rebuild).
+
+## F994 (C) -- a query bound written with a non-UTC offset is compared as its wall-clock time: `DELETE /traces?until=<an hour ago, +02:00>` deleted traces from the last minute, and `GET /logs?since=<11:00Z as +02:00>` answers 0 of 32
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` twice, independently (Traces row, scratch Hub :8120, profile tc1023, `scripts/drive/s1023_tc_probes.py`; Logs row, :8119, profile ev1023, `scripts/drive/s1023_ev_sse_probe.py`).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+Traces (four traces, all started 12:17 UTC or later): `GET /traces/export?since=2026-10-23T12:00:00+00:00` -> 158 spans, `...T12:00:00Z` -> 158, `...T14:00:00+02:00` (same instant) -> **0**, `...T09:00:00-03:00` -> 268 (all). `DELETE /traces?until=2026-10-23T13:17:48+02:00` (11:17:48 UTC, before every trace) -> `{"deleted_spans": 4, "deleted_traces": 4}`, counts 4 -> 0. The list cursor too: `before=2026-10-23T14:07:50.327755+02:00|b75e3daf0001c60b` (the same instant as the route's own `+00:00` cursor) returns 61 traces instead of 30.
+
+Logs (32 events, 11:52:18Z..12:05:07Z): `GET /projects/{p}/logs?limit=500&since=2026-10-23T11:00:00Z` -> 32; `since=2026-10-23T13:00:00%2B02:00` (11:00Z) -> **0**; `since=2026-10-23T06:00:00-05:00` -> 32 (right only because 06:00 wall clock is also earlier). The route's own refusal for a bad `since` tells callers how to send an offset ("a + must be sent as %2B"); F255's check compared only `+00:00` with `Z`.
+
+Cause (verified): `traces.parse_bound` returns the aware datetime with its offset kept (`hub/hub/traces.py:1801-1804`), `list_traces` the same for `before` (`:1676`), and `list_logs` passes `datetime.fromisoformat(since)` straight into the filter (`hub/hub/api/v1/logs.py:86,95`). `UTCDateTime` (`hub/hub/db/models.py:30-51`) has `process_result_value` only, no `process_bind_param`, and SQLite's `DATETIME` bind drops tzinfo (`'2026-10-23T13:00:00+02:00'` binds as `'2026-10-23 13:00:00.000000'`), so an aware non-UTC value is compared against naive-UTC storage as its wall time. Any route binding a caller's aware datetime against a `UTCDateTime` column shares it.
+
+**Expected:** `UTCDateTime.process_bind_param` converts an aware value to UTC (`astimezone(timezone.utc)`) for every column, or at least `parse_bound`, the trace cursor and `list_logs` do. **Test:** `hub/tests/`: a trace started 12:30 UTC — `export?since=...T14:00:00+02:00` includes it and `DELETE ?until=...T13:00:00+02:00` deletes nothing; events after 11:52Z — `logs?since=...T13:00:00%2B02:00` returns them all (beside `test_the_logs_page_is_the_newest_and_pages_back` in `hub/tests/test_a_request_means_what_it_says.py`). All fail today. Seam: Traces (export/clear) and Logs x the database's datetime binding.
+
+## F995 (B) -- the run-text redaction joins a Claude turn's separate thinking and text blocks as one string: a value split across two replies is not redacted when the model thinks between them, and the ordinary word opening the next block after an `aw_live_`-shaped token is replaced by `<redacted>`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Logs row; scratch Hub :8119, profile ev1023, `scripts/drive/s1023_ev_sse_secret.py`).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes
+**Tier:** 2 -- secrets (CLAUDE.md's table). Hazard: the redaction floor itself; no migration, rows already stored keep what they hold.
+
+A Haiku turn (`run-f44cb8dee387`) was asked to say `Channel prefix aw_live_`, run `echo one`, say `Q7xP2mK4R9sT is the channel. Notes are in C:\Users\...\README.md`, run `echo two`, say `Second channel aw_live_N4bV6`, run `echo three`, say `Finished cleanly.` (whole fake keys were refused by Haiku). `agent_outputs`:
+
+```
+ 2 text      "Channel prefix aw_live_"
+ 5 thinking  "<redacted>, echo one completed. Now I need to say the text for step 3."
+ 6 text      "Q7xP2mK4R9sT is the channel. Notes are in C:\Users\huida\Documents\aw-ev1023\README.md"
+ 9 thinking  "Good, echo two completed. Now step 5: say the text."
+10 text      "Second channel <redacted>"
+13 thinking  "<redacted> the tool calls are done. Now the final step: say \"Finished cleanly.\""
+```
+
+Seq 2 + seq 6 read `aw_live_` + `Q7xP2mK4R9sT` verbatim, the F488/F602 split guarantee broken; ordinary words opening seq 5 ("Good") and seq 13 were redacted instead. Paths were correctly kept.
+
+Cause (verified): `scrub_stream` (`hub/hub/run_secrets.py:137-195`) carries one tail per run across both `STREAM_KINDS` (`:37`, text and thinking), strips whitespace at the boundary (`:153`, `:168`) and joins, so the dangling half of a text block is consumed by the next *thinking* block and joined with its first word, which is redacted; the next text block starts from a tail no longer ending in `aw_live_` (`:188`). Claude almost always thinks after a tool result, so for Claude text the split guarantee rarely holds. The boundary join was designed for Copilot's mid-token deltas, where a boundary is not a word break; Claude's blocks are whole blocks.
+
+**Expected:** a tail per stream kind, so a value split between two text blocks is redacted with thinking between them; a word opening a new Claude block is not pulled into a token that ended the previous block. **Test:** `hub/tests/test_run_secrets_stream.py`: for one registered run, text `"Channel prefix aw_live_"`, thinking `"Good, done."`, text `"Q7xP2mK4R9sT is it"` -> the thinking comes back unchanged and the second text starts with `<redacted>`. Both fail today. Seam: Runs (Claude executor) x redaction (F488/F602).
+
+## F996 (D) -- after a killed turn, the Hub's automatic re-delivery reads in the Activity digest as a second operator turn with the same message, and its `run_triggered` says `initiator: "operator"`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Logs row; :8119, profile ev1023, `scripts/drive/s1023_ev_sse_f907.py kill`, `scripts/drive/f907_ui.py`).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes
+**Tier:** 0
+
+`run-b90d366a5373`'s claude.exe was killed (run `failed`, `run_failed` warn). 0.3 s later the Hub re-queued `entry-e6e328365c30` (`queue_entry_queued` carrying the failed `run_id`) and delivered it in `run-676f4f39e098` (`run_triggered` `session_mode: resume`, `initiator: "operator"`; `delivery_attempts` 1). Haiku's thinking: "The previous attempt was interrupted. I'll run it again" — it re-ran the 120 s sleep. The digest shows two rows, "alpha stopped with an error | Run this exact shell command..." and "alpha was stopped | Run this exact shell command...", and nothing says the second was the Hub retrying, not the operator sending again.
+
+Cause (verified): `queue_entry_delivered` and `run_triggered` carry no attempt number and the re-delivery is stamped `initiator: "operator"`; `buildDigest` maps an entry to its last delivery only (`hub/ui/src/lib/activityDigest.ts:76-80`), so it cannot tell attempt 2 from a new send.
+
+**Expected:** a re-delivery's events carry the attempt (e.g. `delivery_attempt: 2`) and the digest row says "retried after ...". **Test:** an `activityDigest.test.ts` case in the Hub's order — `run_failed`, `queue_entry_queued`, `run_triggered`, `queue_entry_delivered` (attempt 2), `run_started` — the second row names the retry. Fails today. Seam: Inbound queue (re-delivery) x Activity digest.
+
+## F997 (C) -- every check run's trace shows routine git answers as red error spans: `merge-base --is-ancestor` exit 1 and `worktree unlock`/`remove` exit 128 on a checkout that is not there
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; scratch Hub :8120, profile tc1023, `POST /tasks/{id}/checks/run`, check run chk-d23dfb3a61f7).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+The `check_run` work trace has 20 `aw.command` children, 9 of them `error`. Only 2 are real (the `fails` check, exit 3, on the merged work and on main). The other 7 are routine: `git merge-base --is-ancestor <target> <main>` "exit code 1" (not an ancestor, an answer); `git worktree unlock .agentweave/checks/<task>` exit 128 four times; `git worktree remove --force --force` exit 128 twice with no checkout to remove. All draw red in the waterfall ("An error is red whatever the operation: it is the one thing to find").
+
+Cause (verified): `project_checks._git` calls `traces.run` without `ok_codes` (`hub/hub/project_checks.py:84-101`); the ancestor probe is at `:121`, and `_remove_checkout` unlocks and removes unconditionally (`:155-169`). F791 fixed only the two `MERGE_HEAD` probes in `worktrees.py`; `worktrees.py:480` and `:703` use the same `--is-ancestor` with `check=False` and no `ok_codes` (not seen in this drive).
+
+**Expected:** `--is-ancestor` passes `ok_codes=(0, 1)`; `_remove_checkout` unlocks/removes only a checkout that exists or is registered (or records those exits as answers). **Test:** beside `hub/tests/test_a_merge_head_probe_is_not_a_failed_command.py`: a check run whose checks all pass, on a fresh task, leaves no `aw.command` span with `status == "error"`. Fails today. Seam: Traces x Worktrees & integration (project checks).
+
+**Widened 2026-10-23** (day sweep `sweep-tasks-sweep`, Worktrees row, :8160, `scripts/drive/s1023_wt_drive.py`): each of four passing check runs had 12 `aw.command` spans, 4 `error` (`merge-base --is-ancestor` exit 1, `worktree unlock` 128 twice, `worktree remove` 128). Every `task_integration` trace, successful merges included, also carries a red `git merge-base --is-ancestor <commit> master` exit 1 (`requirement_evidence.is_reachable_from`, `hub/hub/requirement_evidence.py:1103`, called from `task_integration.integrate`), and a branchless task's integration a red `git rev-parse --verify refs/heads/agentweave/task/<id>` exit 128 (`task_branch_tip`, `hub/hub/task_integration.py:430`). The fix should cover these probes too.
+
+## F998 (C) -- a secret in a project check's command is stored and served verbatim in the `project_settings_updated` event, while the same event's copy on the trace reads `<redacted>`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; scratch Hub :8120, profile tc1023).
+**Source:** drive
+**Theme:** Logs, events & SSE
+**Ready:** yes
+**Tier:** 2 -- secrets (CLAUDE.md's table); the diff is one redaction call, no migration (rows already stored keep their value).
+
+`PUT /projects/{p}/settings` with `checks: [{"name":"prints-key","command":"py -3.11 -c \"print('token sk-ant-api03-TRACEfake0123456789abcdefghijKLMNOPqrstuv')\""}]`. The `event_logs` row evt-32da84378834 (`project_settings_updated`) holds the key verbatim, twice (`changed.checks.now`, `settings.checks`), and `GET /events/history` returns it unchanged. No `trace_spans` row holds it: the event recorded on the PUT's request span, and the check's `aw.command` span (`print('token <redacted>')`), are both redacted. Related (noted by the Logs drive, not separately filed): `POST /logs` also stores an `aw_live_` value verbatim — the same unredacted `persist_event`.
+
+Cause (verified): `persist_event` stores `data` as given (`hub/hub/utils.py:71-78`) and `sse_manager.broadcast` sends it unchanged (`hub/hub/api/v1/projects.py:725-732`); only the trace copy goes through `redact` (`traces._event_record`, `hub/hub/traces.py:1137`).
+
+**Expected:** the event history and the trace agree: `persist_event` stores `data` through the same `redact_text_secrets` floor the trace uses. **Test:** `hub/tests/`: a settings PUT whose check command carries an `sk-ant-` key leaves `/events/history` without the key. Fails today. Seam: Traces (event copy) x Logs, events & SSE.
+
+## F999 (D) -- Clear leaves its own `DELETE /traces` request trace behind: the screen reads "0 traces" while the Hub holds 1, and the next clear promises "0 traces, 0 spans" then reports "Cleared 1 trace (1 span)"
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; scratch Hub :8120, Chromium on the served bundle, `scripts/drive/s1023_tc_ui.py section`).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+Settings -> General -> Traces -> "Clear traces..." -> confirm: status "Cleared 67 traces (268 spans)", Recorded "0 traces · 0 spans"; `GET /traces/settings` straight after -> `trace_count 1, span_count 1`. Clear again: the dialog reads "... deleted — 0 traces, 0 spans", then the status line reads "Cleared 1 trace (1 span)".
+
+Cause (verified): every non-GET request is kept as a trace (`hub/hub/trace_requests.py:33-38`), so the DELETE writes its own span after the delete committed; `useClearTraces` invalidates on success (`hub/ui/src/api/traces.ts:213-215`) and refetches before the span writer flushes.
+
+**Expected:** "clear everything" leaves nothing: `DELETE /traces` is not kept as a request trace (or its span is dropped by its own clear), so Recorded, the confirm's count and the result agree. **Test:** a route test: `DELETE /traces`, flush the span writer, `trace_count == 0`. Fails today. Seam: Traces (clear) x request tracing.
+
+## F1000 (D) -- the task story reads "0 tokens" for a run whose usage was never reported
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; scratch Hub :8120, task-013fd5cbc415, stopped run run-c33ff06dad08).
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 0
+
+The run was stopped mid-tool-call; its `turn_usage` row is `status unavailable` with every token column null, and its trace root says `aw.usage.status: unavailable`. `GET /tasks/{id}/story` returns `"tokens": 0, "cost_usd": null`; the drawer's story reads "12s · 0 tokens · stopped · ... · trace". `/ledger` `spend.by_agent` likewise reports `breaker` (3 runs, all unavailable) as `usd 0.0, tokens 0`. Same family as F961 (the Ledger's $0.00 for unpriced turns).
+
+Cause (verified): `hub/hub/task_story.py:202,225` gives `"tokens": tokens if rows else None`; an unavailable row still counts as a row, so its null tokens sum to 0. Cost is right through `priced` (`:199`).
+
+**Expected:** `tokens` is null when no row reported `total_tokens`, so the story shows no token count, as it shows no cost. **Test:** a task-story test: one `turn_usage` row, status `unavailable`, `total_tokens` null -> `tokens is None`. Fails today. Seam: TaskStory x Accounting.
+
+## F1001 (D) -- a Claude run that fails at CLI startup is traced as a 3.3 s model call whose assistant output is the CLI's error, and the root says only "run failed"
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; :8120, runner `broken` with flags `["--definitely-not-a-flag"]`; run-58adc321402d, run-231feacb21d8, run-91f6d81bd183).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+All three attempts exited 1 with `runs.error` null. Each trace: root `error`, `status_message: "run failed"`, plus a `chat claude-haiku-4-5-20251001` span of 3.3-3.6 s whose `gen_ai.output.messages` is `[{"role":"assistant","parts":[{"type":"text","content":"error: unknown option '--definitely-not-a-flag'"}]}]`. No model was called. The drawer's red line reads "run failed"; the cause appears only as the "model call" output.
+
+Cause (verified): `parse_claude_line` turns any non-JSON stdout line into a `text` event (`hub/hub/runner_parsing.py:290-297`), traced as the chat segment's output; `finish_run` falls back to "run failed" when `run.error` is empty (`hub/hub/traces.py:738-740`).
+
+**Expected:** the root's message names the failure, e.g. "run failed (exit 1): error: unknown option '--definitely-not-a-flag'" (exit code and last output when `run.error` is empty). **Test:** a `finish_run` test: failed run, `error` None, exit 1, one text output -> `status_message` contains "exit 1" and that text. Fails today. Seam: Traces x Runs (runner output parsing).
+
+## F1002 (D) -- a retried delivery's trace starts at the input's first arrival: attempt 3 reads "22.1 s" with an 18.6 s delivery bar, for a turn that "Worked for 4s"
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; :8120, Chromium, `scripts/drive/s1023_tc_ui.py fail`, entry-09a99679e9c3).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+The three attempts' `aw.deliver` spans all start at 12:07:50.449 (the entry's arrival) and end at 12:08:00.948, 12:08:05.124, 12:08:09.008 (`aw.queue.delivery_attempt` 1, 2, 3). Run 3 lasted 12:08:09.002-12:08:12.567, but its drawer header reads "error breaker ... · 22.1 s · 7 spans" with an 18.6 s delivery row; the conversation says "Worked for 4s". Each attempt's trace covers all the earlier attempts' time.
+
+Cause (verified): `record_deliveries` starts at `min(entry.arrived_at, at)` (`hub/hub/traces.py:562`) — the docstring's "from its arrival to this delivery" — for every attempt.
+
+**Expected:** an attempt after the first starts its `aw.deliver` at its own re-queue (the previous attempt's end / `queue_entry_queued`), so the attempts' traces do not overlap. **Test:** `record_deliveries` for an entry on its third attempt starts after attempt 2's end. Fails today. Seam: Traces x Inbound queue (retries).
+
+## F1003 (D) -- a trace carrying a Hub warning looks like every other trace in the list and the drawer header; the warning appears only in the root span's Events
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; :8120, Chromium, Settings -> General -> Traces -> Work). First time a Hub warning on a project trace was reached (held a file open in a task checkout's `.agentweave/calls/` while a turn started).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 0
+
+Two of ten `inbound_queue` Work traces carry a WARNING `log` event (`could not remove ...calls\held.json ...: [WinError 32]`); it renders in the drawer's span detail and is exported as an OTLP log record. But all ten list rows read the same ("inbound_queue · work · 431 ms · 12 · Open") and the drawer header reads "ended ...": the warning is visible only after selecting the root span, under Events.
+
+Cause (verified): `_summary` (`hub/hub/traces.py:1629-1649`) carries no warning fact, so `TracesSection`'s row (`hub/ui/src/components/environment/TracesSection.tsx:105-130`) and `TraceView`'s header have nothing to show.
+
+**Expected:** the summary carries the trace's warning count, and the list row and the drawer header show it ("1 warning"). **Test:** `GET /traces` for a work trace with one `log` event -> summary warning count 1. Fails today. Seam: Traces (hub-warnings-are-on-their-trace) x Settings list.
+
+## F1004 (D) -- a mistyped `otlp_headers` body is refused with the header's value echoed in `detail[].input`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-traces-sweep` (Traces row; scratch Hub :8120, `scripts/drive/s1023_tc_probes.py`).
+**Source:** drive
+**Theme:** Traces
+**Ready:** yes
+**Tier:** 2 -- secrets (CLAUDE.md's table); a response echo only, nothing persisted.
+
+`PUT /traces/settings {"otlp_headers":{"Authorization":["Bearer quokka-header-value-7781"]}}` -> 422 with `"input": ["Bearer quokka-header-value-7781"]`; `{"otlp_headers":"Authorization=Bearer quokka-header-value-7781"}` -> 422 with the whole string as `input`. The value is in neither `trace_spans` nor `event_logs`. The section promises "Values are stored and never shown again".
+
+Cause (verified): `otlp_headers: Optional[Dict[str, str]]` (`hub/hub/api/v1/traces.py:113-115`) is checked by the schema; the runner schema deliberately types `provider_config` as `Any` for exactly this reason (`hub/hub/schemas/runners.py:19-22`).
+
+**Expected:** `otlp_headers` typed loosely and checked in the route, with a sentence naming the header and never its value. **Test:** the PUT above -> 422 and the body does not contain "quokka-header-value". Fails today. Seam: Traces settings x request validation.
+
+## F1005 (B) -- Retry merges whatever the task's branch now points at: a commit pushed after approval lands on main with no check run, no review and no override, past a check that would have refused it
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Worktrees row; scratch Hub :8160, profile wt1023, proj-1fff2af61236, `scripts/drive/s1023_wt_drive.py bypass`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 1
+
+A hand-made task (no loop, no requirement link) merges its own branch tip (F622's `review_alone_gates` route). T1 was worked by a Haiku turn, its checks passed on `fd2dc80`, it was Landed, and `fd2dc80` merged. Then:
+
+```
+PUT /settings  checks: tests + nobad = py -3.11 -c "import os, sys; sys.exit(4 if os.path.exists('bad.txt') else 0)"
+operator commits bad.txt on agentweave/task/<T1>          -> b3b2f87
+GET  /tasks/<T1>/integration-preview -> "approval will merge one commit into master; it merges cleanly as of now"
+POST /tasks/<T1>/integrations/retry  -> 200  [merged fd2dc80, merged b3b2f87]
+git show master:bad.txt              -> "this file fails the nobad check"
+GET  /tasks/<T1>/checks              -> one run, passed, target_shas [fd2dc80]   (b3b2f87 never checked)
+task_transitions for T1              -> no new row, override_reason null
+```
+
+The same door, on the path the gate itself prescribes: T2's merge failed on a conflict, the operator resolved it on T2's branch (`f45b763`, "Resolve the conflict on the branch"), pressed **Try again** in the drawer, and `f45b763` merged; T2's checks list still holds only the run on `8dcf6c7`. Contrast Land on T4, whose `nohowdy` check failed: 409 `gate_unsatisfied` naming the check, a blank `override_checks_reason` refused, and only a stated reason landed it (recorded on the transition).
+
+Cause (verified): `retry_integration` (`hub/hub/task_transition_service.py:1068-1091`) goes straight to `integrate_task`, which resolves targets afresh with `merge_targets` (`:1193`); for a branch-tip task that is `task_branch_tip` (`hub/hub/task_integration.py:552`), i.e. whatever the branch holds now, not what approval judged. Neither `evaluate_approval` (checks, conflict) nor `project_checks.request_run` is asked, and the route (`hub/hub/api/v1/tasks.py:1414`) accepts it on an already-merged task whose newest row is `retryable: false`.
+
+**Expected:** a retry merges only what approval judged; where the branch has moved past it, the retry runs the approval gate on the new tip (checks, conflict) and refuses with the gate's sentence, or asks for the same override reason Land does. **Acceptance drive:** this repro -> retry refused naming `nobad`, `master` unchanged. **Test:** `hub/tests/test_task_integration_retry.py`: an approved, merged branch-tip task, a commit added to its branch that fails a configured check, `POST /integrations/retry` -> master does not contain the commit and the answer names the check. Fails today. Seam: Worktrees & integration (retry) x project checks x approval gate.
+
+## F1006 (C) -- after Try again lands a re-resolved branch, the drawer still reads "Merge failed -- CONFLICT ..." above the merge and keeps offering Try again, while the card says nothing is wrong
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Worktrees row; scratch Hub :8160, profile wt1023, proj-1fff2af61236, `scripts/drive/s1023_wt_ui.py tryagain T2` / `drawer T2`, Chromium, served bundle fresh).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+T2's rows, in the route's order: skipped `8dcf6c74` (dirty checkout), failed `8dcf6c74` (CONFLICT), failed `8dcf6c74`, then merged `f45b7632` (the branch after the operator merged master into it), `rode_along_commits: [8dcf6c74]`. A fresh page, drawer of T2:
+
+```
+Merge failed -- Auto-merging greet.py CONFLICT (content): Merge conflict in greet.py Automatic merge failed; fix conflicts and then commit the result. (tried 01:34 PM)
+Merged f45b7632 into master
+1 earlier commit on the same branch also landed with this merge, not just the reviewed one.
+Try again                                   <- task-integration-retry-<T2>: 1
+board card T2: no status line, no Retry     <- latest_integration merged
+```
+
+The "earlier commit ... not just the reviewed one" is `8dcf6c74`, which is the commit that was reviewed; the one nobody reviewed is `f45b7632` (F1005). The rode-along wording itself, for a task's own earlier commits, is F1009.
+
+Cause (verified): `newestPerTarget` keys rows by `commit_sha@target_branch` (`hub/ui/src/components/tasks/TaskIntegrationNote.tsx:16-37`); a merge suppresses only rows with its own key or a null commit, so a failure on the branch's earlier tip survives a merge of its later tip, and `canRetry` (`:71`) is true while any surviving row is retryable. F769 fixed the same-commit and null-commit cases only.
+
+**Expected:** once a row for the task's branch (`source_branch`) has merged, earlier unmerged rows from that branch are not shown and Try again is not offered; the drawer agrees with the card. **Test:** `hub/ui/src/__tests__/taskIntegrationRetry.test.tsx`, rows in the route's order above -> no "Merge failed" text and no `task-integration-retry-<id>`. Fails today. Seam: Worktrees & integration x Tasks (drawer vs card).
+
+## F1007 (C) -- a merge that fails on a conflict is recorded with git's "fix conflicts and then commit the result" after the Hub has already aborted it; the remedy that works ("resolve the conflict on the branch") never reaches the drawer
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Worktrees row; scratch Hub :8160, profile wt1023, proj-1fff2af61236, `scripts/drive/s1023_wt_drive.py retry`, `s1023_wt_ui.py tryagain T2`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+T2 approved over a dirty checkout (skipped, retryable), then T1 merged the same line of `greet.py`. `GET /tasks/<T2>/integration-preview` already said `conflicts: [{"paths": ["greet.py"]}]`. `POST /tasks/<T2>/integrations/retry` -> 200, a `failed` row whose whole reason is `Auto-merging greet.py\nCONFLICT (content): Merge conflict in greet.py\nAutomatic merge failed; fix conflicts and then commit the result.`; `git status` in the project is clean afterwards (nothing to fix or commit there). The drawer shows exactly that sentence beside Try again; pressed again in Chromium it records a third identical row. The gate's sentence for the same state, seen when approving T3 from the drawer, is legible: "This task's work does not merge cleanly into master: greet.py. Resolve the conflict on the branch, then approve ...". The pre-approval note above Approve reads only "The Hub: approval will be refused: greet.py in commit 62412ed99266 conflict with master" with no remedy either.
+
+Cause (verified): `integrate` runs `git merge --no-ff` on the operator's checkout without asking `would_conflict` first, then `merge --abort` and stores git's stderr as the reason (`hub/hub/task_integration.py:713-731`); the gate's wording lives only in `requirement_gate._tip_merge_detail` (`hub/hub/requirement_gate.py:317-330`).
+
+**Expected:** integration asks `would_conflict` before merging (the plumbing the gate and preview already use) and records a reason naming the paths and the gate's remedy ("resolve it on agentweave/task/<id>, then Try again"); the operator's checkout never enters a merge that is known to conflict. **Test:** `hub/tests/test_task_integration.py`: `integrate()` on a target that conflicts with main -> outcome failed, reason names `greet.py` and does not contain "commit the result". Fails today. Seam: Worktrees & integration (retry) x legibility.
+
+## F1008 (D) -- a hand-made task with no branch is told "no accepted evidence names a commit" on approve, retry and preview, the evidence sentence F622 retired for tasks evidence does not govern
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Worktrees row; scratch Hub :8160, profile wt1023, proj-1fff2af61236, `scripts/drive/s1023_wt_drive.py skip`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+Task N: made by hand, no loop (`loop_id` null), no requirement link, no run, in a project with zero `requirement_evidence` rows. `PATCH` it to `approved` -> `latest_integration: skipped, "no accepted evidence names a commit, so there is nothing to merge"`; `GET /tasks/<N>/integration-preview` -> the same reason. Its siblings T1-T4 (same shape, but with a branch) merge their branch tip, so evidence never governed N either; the honest sentence is `NO_TASK_BRANCH` ("this task has no branch of its own"). With the project's `.git` moved aside, the preview of the approved branch-tip task T4 also answered the evidence sentence.
+
+Cause (verified): `_integrate_task` picks the empty reason on `evidence_governs` alone (`hub/hub/task_transition_service.py:1204`), and so does the preview (`hub/hub/api/v1/tasks.py:1192-1195`); `merge_targets` (`hub/hub/task_integration.py:550`) also asks `review_alone_gates`, which F622 added and these two never learned.
+
+**Expected:** both ask the same question `merge_targets` does, so a review-alone task with no branch reads `NO_TASK_BRANCH`. **Test:** `hub/tests/test_task_integration.py`: a loopless, linkless task with no branch, approved -> reason == `NO_TASK_BRANCH`, and the preview's `reason` the same. Fails today. Seam: Worktrees & integration x Tasks. Same preview sentence, other case: F1010 (awaiting evidence).
+
+## F1009 (C) -- after a send-back, merging a task's own branch shows an amber warning that "1 earlier commit on the same branch also landed with this merge, not just the reviewed one": the task's own first-round commit reads as unreviewed work riding along
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Tasks row; scratch Hub :8162, profile tk1023, proj-d51843e66b2a, `scripts/drive/s1023_tk_drive.py workw/revise/workw2/approve`, `scripts/drive/s1023_tk_ui.py drawer W`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+Task W (`task-0ac0709e7e50`), per-task checkout `agentweave/task/task-0ac0709e7e50`. Real Haiku turns:
+
+```
+run-356cfd288e13 (alpha): commit ad95ad6 "add mul", W -> completed
+PATCH /tasks/W {"status":"revision_needed","notes":"Add a test for mul() ..."}  -> 200
+run-73f28d2e43bc (alpha): commit 0b165fb "add test_mul" on the same branch, W -> completed
+POST /tasks/W/land {} -> 200 approved, merged 0b165fb
+GET /tasks/W/integrations -> {"commit_sha":"0b165fb...","rode_along_commits":["ad95ad63efe0..."], ...}
+Chromium, drawer (Story and Details): "Merged 0b165fb0 into master  [amber warning] 1 earlier commit on the same branch also landed with this merge, not just the reviewed one."
+```
+
+Both commits are W's own work, made by W's own runs on W's own branch, and W has no evidence: the operator reviewed the task, not one commit. The warning was F58's (one per-agent branch carrying other tasks' work). Since per-task checkouts (2026-08-27) the branch is the task's own, so the amber warning fires on every task that took more than one commit (every send-back cycle) and tells the operator unreviewed work reached master when none did.
+
+Cause (verified): `commits_riding_along` is `git rev-list <main>..<commit_sha>` minus the tip (`hub/hub/task_integration.py:598-611`), computed for every merge (`:706`, stored `:736`/`:758`). Recording the task's own groundwork is deliberate (`hub/tests/test_task_integration.py:340-380`, `test_later_commits_on_the_branch_are_not_merged`: "an earlier commit on the same task's own branch is groundwork ... it has to land with it ... the record still says which commit was reviewed"), and `test_another_tasks_commits_do_not_ride_along` (`:383-423`) shows another task's work no longer can. The defect is the presentation: the drawer renders any non-empty list as a warning, worded as unreviewed work (`hub/ui/src/components/tasks/TaskIntegrationNote.tsx:130-144`), without telling this task's own commits from anything else.
+
+**Expected:** this task's own earlier commits read neutrally ("with 1 earlier commit of this task: ad95ad6 add mul"), and the amber warning is reserved for commits that did not come from this task's runs (a prerequisite merged in, foreign work), naming whose they are. **Test:** in `hub/ui/src/__tests__/taskIntegrationRetry.test.tsx` (the file that already asserts the rode-along line): a merged integration whose `rode_along_commits` are the task's own renders no `warning` icon and no "not just the reviewed one". Fails today. Seam: Tasks (send-back) x Worktrees & integration.
+
+## F1010 (C) -- the drawer says "Approving will not merge anything: no accepted evidence names a commit, so there is nothing to merge" beside a task whose evidence names commit f13fe58 and awaits review; Land is then refused saying the opposite
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Tasks row; scratch Hub :8162, profile tk1023, proj-d51843e66b2a, `scripts/drive/s1023_tk_drive.py spec/workr`, `scripts/drive/s1023_tk_ui.py land R`).
+**Source:** drive
+**Theme:** Requirements, evidence & coverage
+**Ready:** yes
+**Tier:** 0
+
+Task R (`task-8cd706681ed0`, `t-div` of an approved change document, serves FR-1). Real Haiku turn `run-4358a089b744`: commit `f13fe58` on `agentweave/task/task-8cd706681ed0`, `record_evidence` -> `ev-865460461102` (`review_state: awaiting`, locator "calc/ops.py (commit f13fe58)"), task `completed`.
+
+```
+GET /tasks/R/integration-preview -> 200 {"targets": [], "will_attempt_merge": false,
+    "reason": "no accepted evidence names a commit, so there is nothing to merge"}
+POST /tasks/R/land {} -> 409 gate_unsatisfied, unaccepted[0].kind "awaiting_evidence", unlanded commits ["f13fe588..."],
+    message "This task's work has been recorded and nobody has judged it: FR-1 at f13fe5883a44. Approving now would record that the work is good and merge none of it ... accept the evidence ..."
+Chromium, drawer Details, both on screen at once:
+    (info) "Approving will not merge anything: no accepted evidence names a commit, so there is nothing to merge."
+    (refusal, after Land it) "This task's work has been recorded and nobody has judged it: FR-1 at f13fe5883a44 ..."
+```
+
+Before pressing Land, the operator is told there is nothing to merge and that approving is harmless; there is a recorded commit waiting on their decision, and approving is refused. The preview's sentence is true only of *accepted* evidence and is read as a statement about the work.
+
+Cause (verified): the preview's empty answer is `NOTHING_TO_MERGE` whenever evidence governs and no *accepted* target exists (`hub/hub/api/v1/tasks.py:1192-1194`, `:1280-1283`; sentence `hub/hub/task_integration.py:69`); it never asks about awaiting evidence, which the gate does (`unaccepted` / `unlanded` in the 409). The drawer prints it verbatim (`hub/ui/src/components/tasks/TaskDetailDrawer.tsx:87`).
+
+**Expected:** where evidence awaits review, the preview says so in the gate's terms ("FR-1's evidence at f13fe58 awaits your review: accept it and approving merges it; approving now is refused"), and links to the Evidence view; "nothing to merge" only where no evidence names a commit at all. **Test:** in the integration-preview tests: a task with one awaiting evidence piece naming a commit -> the preview's `reason` does not contain "nothing to merge" and names the piece. Fails today. Seam: Tasks (drawer) x Requirements, evidence & coverage (gate). Same sentence, other case: F1008 (a task with no branch).
+
+## F1011 (C) -- an agent's illegal-move refusal names moves the same route then refuses that agent: "available: assigned, blocked, completed" (blocked is always 403 for an agent) and "available: under_review" (403 for the task's author)
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Tasks row; scratch Hub :8162, profile tk1023, proj-d51843e66b2a, `scripts/drive/s1023_tk_drive.py probe`: a real Haiku turn `run-ff6278552103` running `tools/agent_probe.py` with its own run credential against `/agent-actions/tasks/*`).
+**Source:** drive
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 0
+
+beta's own task `Bown` (`task-0d47510b8fa7`, in_progress, assignee beta), in order:
+
+```
+PATCH /agent-actions/tasks/Bown {"status":"approved"}     -> 409 "Cannot move a task from 'in_progress' to 'approved'. From 'in_progress' the available transitions are: assigned, blocked, completed."
+PATCH /agent-actions/tasks/Bown {"status":"blocked"}      -> 403 "A task is recorded as waiting on a person because AgentWeave saw the run end with an unanswered blocking question, not because an agent said so. Use ask_user ..."
+PATCH /agent-actions/tasks/Bown {"status":"completed"}    -> 200
+PATCH /agent-actions/tasks/Bown {"status":"approved"}     -> 409 "Cannot move a task from 'completed' to 'approved'. From 'completed' the available transitions are: under_review."
+PATCH /agent-actions/tasks/Bown {"status":"under_review"} -> 403 "Cannot move task ... to 'under_review' with 'beta' as its holder: it is the agent recorded as completing this task ... the operator can move it on."
+```
+
+Each refusal on its own is right; the first of each pair sends the agent to a move that is always refused to it, so an agent following the refusal's advice spends a call on a second refusal (Haiku "wanders" exactly this way). From `completed` the author has no move at all, and the map's sentence says it has one.
+
+Cause (verified): `refusal_detail` lists `allowed_targets(from_status, actor_kind)` (`hub/hub/task_transitions.py:385-403`), the map for the actor *kind*. `blocked` is in the run's map (`:115`, `_BOTH`, because the runtime takes that edge on the run's behalf) and refused to the agent by `update_task_for_actor` (`hub/hub/api/v1/tasks.py:1703-1716`); `completed -> under_review` is `_BOTH` (`task_transitions.py:138`) and refused to the author by `_guard_reviewer_is_not_the_author` (`hub/hub/task_transition_service.py:452`).
+
+**Expected:** an agent's map refusal lists only moves that agent can make on this task (no `blocked`; no `under_review` for the task's author), and where none remain says so ("nothing more is yours to do on this task; the operator or a reviewer moves it on"). **Test:** `hub/tests/test_task_transitions_api.py`: a run-actor PATCH `in_progress -> approved` -> detail does not contain "blocked"; the completing run's `completed -> approved` -> detail does not offer `under_review`. Both fail today. Seam: Tasks (agent plane) x Capability plane.
+
+## F1012 (D) -- the task story records the operator's send-back and block with no reason: "You moved it to sent back" and "You moved it to waiting on you" carry neither the revision notes nor the blocked reason
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Tasks row; scratch Hub :8162, profile tk1023, proj-d51843e66b2a, `scripts/drive/s1023_tk_drive.py revise/stall/story`, `scripts/drive/s1023_tk_ui.py drawer W|S`).
+**Source:** drive
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 2
+
+```
+PATCH /tasks/W {"status":"revision_needed","notes":"Add a test for mul() in tests/test_ops.py asserting mul(2, 3) == 6."} -> 200
+PATCH /tasks/S {"status":"blocked","blocked_reason":"Which currency should OK use?"} -> 200
+GET /tasks/W/story -> {"kind":"transition","from":"completed","to":"revision_needed","actor":"operator","override_reason":null, ...}   (no notes)
+Chromium story W: "You moved it to sent back from completed · 3m ago"     story S: "You moved it to waiting on you from in progress · just now"
+DB task_transitions columns: ... origin, job_id, policy_digest, override_reason, created_at   (no reason/notes column)
+```
+
+The why of the two operator moves that most need one lives only in the task's single `notes` / `blocked_reason` fields, which the next write overwrites (`update_task`'s own docstring: "Overwrites the task's existing notes"). After a second round the story cannot say why the task was sent back the first time. The card shows the block's reason today only because it is still blocked.
+
+Cause (verified): `task_transitions` stores no reason except `override_reason` (`hub/hub/db/models.py:844`); the story builds transition events from those rows only (`hub/hub/task_story.py:171-189`). Tier 2 because the natural fix adds a column (a migration); reading the reason back from the `task_updated` event of the same moment avoids it.
+
+**Expected:** a send-back, rejection or block records its reason with the transition, and the story shows it under the move ("You sent it back: Add a test for mul() ..."). **Test:** a story test: `revision_needed` with notes, then the author completes with new notes -> the story's revision_needed event still carries the first notes. Fails today. Seam: Tasks (story) x Flows & review.
+
+## F1013 (C) -- the same-file warning compares declared paths as raw strings: `./lib.py`, `pkg//lib.py`, `pkg/../pkg/lib.py`, `.` and a case variant all overlap `lib.py`-style paths with no warning, and `../outside.py` is accepted as repo-relative
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Dependencies row; scratch Hub :8161, profile dp1023, proj-f68af439d5d3, `scripts/drive/s1023_dp_overlap_paths.py` and `s1023_dp_planner.py`).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+One exploring change document, two tasks with no `depends_on`, rewritten per case through `PUT /projects/{p}/project/documents/{path}/content`; the warning codes each save answered with:
+
+```
+['lib.py']      vs ['lib.py']              -> ['unordered_file_overlap']
+['pkg/lib.py']  vs ['pkg\\lib.py']         -> ['unordered_file_overlap']
+['pkg']         vs ['pkg/lib.py']          -> ['unordered_file_overlap']
+['lib.py']      vs ['./lib.py']            -> []
+['Lib.py']      vs ['lib.py']              -> []     (one file on this Windows checkout)
+['pkg/lib.py']  vs ['pkg/../pkg/lib.py']   -> []
+['pkg/lib.py']  vs ['pkg//lib.py']         -> []
+['.']           vs ['lib.py']              -> []     ("a directory covers what is beneath it")
+['../outside.py']                          -> 200, stored; absolute and empty paths are refused 422
+```
+
+The `./lib.py` case went end to end in `s1023_dp_planner.py`: `t1` files `["lib.py"]`, `t2` files `["./lib.py"]`, no order. Save, propose and the approval 409 carried no `unordered_file_overlap`; Approve anyway created both tasks with no prerequisite, so they would be built in parallel. Every other warning the drive saw was correct.
+
+Cause (verified): `_normalise_path` (`hub/hub/spec_completeness.py:418-419`) only swaps backslashes and strips leading/trailing `/`; `paths_overlap` (`:422-429`) then compares strings exactly or by `prefix + "/"`. A `./` or `..` segment, a doubled slash, `.` and case are never folded. The payload validator (`hub/hub/spec_payload.py:564-576`) refuses empty and absolute paths but not one that climbs out with `..`.
+
+**Expected:** declared paths are normalised before comparison (`posixpath.normpath`, `.` as the repo root that covers every path, case-folded where the checkout's filesystem is case-insensitive), so every spelling of one path draws the warning; a path that normalises outside the repo (`../x`) is refused like an absolute one, naming the task and the path. **Test:** beside `hub/tests/test_spec_task_files.py`: `paths_overlap("lib.py", "./lib.py")`, `("pkg/lib.py", "pkg//lib.py")`, `(".", "lib.py")` each return the shared path, and a payload with `files: ["../x.py"]` is `payload_invalid`. Fail today. Seam: Dependencies x Spec documents (the planner's same-file warning).
+
+## F1014 (C) -- a document's tasks with no `files` are named only to the agent that saves it: propose, the approval 409 and the approval report never mention them, so the operator approves tasks the Hub cannot order
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Dependencies row; scratch Hub :8161, profile dp1023, proj-f68af439d5d3, `scripts/drive/s1023_dp_planner.py`, Chromium `s1023_dp_ui.py`).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+Document `spec/changes/amber-roc` with four tasks, `t3` and `t4` declaring no `files`:
+
+```
+PUT .../documents/{path}/content  -> 200 warnings: [undeclared_task_files "tasks 't3', 't4' declare no `files`, so the Hub cannot tell whether they edit the same path; ..."]
+POST .../documents/propose        -> 200 warnings: criterion_without_check x4, no_acceptance_drive, steps_skipped   (no undeclared_task_files)
+POST .../documents/phase?to=approved -> 409 approval_warnings: the same three codes                  (no undeclared_task_files)
+approve anyway                     -> 4 tasks created; the Spec page's "Approved over these gaps" lists the same three
+```
+
+The app never calls `PUT .../content` (no `/content` caller in `hub/ui/src`), so the only reader of that warning is the agent whose save it answered; the operator who decides at propose and approve is never told. F694 fixed exactly this for `unordered_file_overlap` ("the save result's advisory alone never reached the operator, so proposal and approval say it too") and left its sibling behind.
+
+Cause (verified): `phase_findings` (`hub/hub/spec_service.py:1959-1965`) adds `spec_completeness.overlap_warnings(payload)` but not `undeclared_files_warnings`, which only the save result carries (`spec_service.py:420-421`).
+
+**Expected:** propose and approval report `undeclared_task_files` too -- as a note (`NOTE_CODES`, `spec_service.py:1798`) if it must not make every file-less multi-task document need Approve anyway, but on the operator's screen either way. **Test:** beside `hub/tests/test_approval_warnings_routes.py`: propose a two-task document whose tasks declare no `files`; the propose answer and the approval 409 (or its notes) carry `undeclared_task_files`. Fails today. Seam: Dependencies x Spec documents (approval).
+
+## F1015 (C) -- the approval gap list shows one same-file pair however many there are: "unordered_file_overlap ×2 -- tasks 't1' and 't2' both declare 'lib.py' ... (tasks, tasks)"; the second pair is never named
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-tasks-sweep` (Dependencies row; scratch Hub :8161, profile dp1023, proj-f68af439d5d3, Chromium against the served bundle, `scripts/drive/s1023_dp_ui.py overlap`, shot `testbed/ui-judge/s1023-dp/134147/overlap_approve.png`).
+**Source:** drive
+**Theme:** Dependencies
+**Ready:** yes
+**Tier:** 0
+
+Document "Two same-file pairs": `t1`/`t2` both declare `lib.py`, `t3`/`t4` both declare `util.py`, no `depends_on`. Propose answers both warnings correctly:
+
+```
+"tasks 't1' and 't2' both declare 'lib.py' and neither depends_on the other, ...; chain them with depends_on"
+"tasks 't3' and 't4' both declare 'util.py' and neither depends_on the other, ...; chain them with depends_on"
+```
+
+Press **Approve** on the Spec page; the gap list (`approval-warning-unordered_file_overlap`) reads, in full:
+
+```
+unordered_file_overlap ×2 — tasks 't1' and 't2' both declare 'lib.py' and neither depends_on the other, so they would be built in parallel; chain them with depends_on (tasks, tasks)
+```
+
+The operator cannot learn from the screen that `t3` and `t4` collide on `util.py`; the "places" add nothing, because every overlap finding's `where` is `"tasks"`. The same rendering is used for "Approved over these gaps" afterwards.
+
+Cause (verified): `GapLines` (`hub/ui/src/components/spec/SpecPhaseParts.tsx:20-48`) groups gaps by code and prints only `group[0].message` plus up to three `where`s; `overlap_warnings` gives every pair `where="tasks"` (`hub/hub/spec_completeness.py:466-474`). Grouping suits a code whose places differ (`criterion_without_check` × 4 lists `acceptance_criteria[0..]`) and loses everything for a code whose difference is in the message.
+
+**Expected:** each pair is named on screen -- either `GapLines` lists every distinct message when the places do not distinguish them, or `overlap_warnings` sets `where` to the pair (`tasks[0], tasks[1]` / the keys) so the place list names them. **Test:** `hub/ui/src/__tests__/specApprovalWarnings.test.tsx`: two `unordered_file_overlap` gaps with different messages and `where: "tasks"` render both task pairs. Fails today. Seam: Dependencies x Spec documents (approval report on screen).
+
+## F1016 (B) -- an operator's "nothing merges" (Main branch cleared) is silently undone the next time the folder is opened: the Hub re-adopts `master`, records no settings change, and drains the approved work that was waiting
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, inline probe after `scripts/drive/s1023_pj_api.py branch`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Settings -> Integration -> Main branch says "Approving a task merges its work here. Empty: nothing merges." Emptying the field sends `main_branch: null` (`hub/ui/src/components/settings/GeneralSettings.tsx:230`, `v || null`) and toasts "Approved work no longer merges". Through the API, on a git project whose branch is `master`:
+
+```
+PUT  /projects/proj-19b3a5f0a902/settings {"main_branch": null}   -> 200, main_branch null
+GET  /projects/proj-19b3a5f0a902/settings                         -> main_branch null
+POST /projects/open {"path": "C:\\Users\\huida\\Documents\\aw-pj1023-a"} -> 200   (re-adding the folder; the CLI's start does the same open)
+GET  /projects/proj-19b3a5f0a902/settings                         -> main_branch 'master'
+GET  /projects/proj-19b3a5f0a902/events/history                   -> the clear ("was 'master', now None") is recorded; the change back to 'master' is not
+```
+
+Cause (verified by reading): `open_project` always calls `_adopt_detected_main_branch` (`hub/hub/api/v1/projects.py:374`), which writes the detected branch into any falsy `main_branch` (`:408`, `:425`) and then runs `_integrate_what_was_waiting_for_a_branch` (`:427`). Its docstring says a project "that has chosen a branch has made a statement" -- but `null` is both "never chosen" and the operator's explicit "nothing merges", so the statement is overwritten. Not driven: the drain itself (no approved-and-skipped task existed); by `:427` each approved task that skipped "for want of a main branch" while merging was off would then merge into `master` with nobody asking.
+
+**Expected:** an explicit "nothing merges" survives a reopen -- either the empty choice is stored distinctly from "never chosen" (e.g. `""` or a flag, which `_adopt_detected_main_branch` leaves alone), or the adoption runs only on first registration; any change the Hub makes to settings on its own is recorded as a settings event. **Test:** `hub/tests/test_project_*` beside the F4 adoption test: open a repository project, `PUT main_branch null`, `POST /projects/open` again -> `main_branch` is still null (fails today). Seam: Projects (open) x Integration (merge target).
+
+## F1017 (C) -- a second Browse while the native folder dialog is open says only "The folder dialog could not be opened.": the Hub's 409 "A folder dialog is already open" never reaches the screen, and nothing says where the open one is
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, Chromium against the served bundle, `scripts/drive/s1023_pj_native.py`, shots `testbed/ui-judge/s1023-pj/135501/10_native_pending.png`, `11_native_second_tab.png`, `12_native_reopened.png`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Add project -> Browse... (native dialog available). Tab 1's button reads "Waiting..." (disabled) while the Hub's Tk dialog is up on the Hub's desktop. Then:
+
+- Tab 2, Add project -> Browse... -> `POST /fs/native-dialog/open` 409 `{"detail": "A folder dialog is already open"}`; the modal shows **"The folder dialog could not be opened."**
+- Tab 2, Escape, reopen Add project: Browse... is enabled again; pressing it -> the same 409 and the same sentence.
+- The same happens in one tab: close the modal while the dialog waits, reopen, press Browse.
+
+The operator is told the dialog failed when one is in fact open (possibly behind the browser window) and waiting for them for up to 120 s; nothing says to look for it or that the button frees when it closes.
+
+Cause (verified): `openNativeFolderDialog`'s `onError` (`hub/ui/src/components/projects/ProjectManagerModal.tsx:69`) replaces every error with a fixed sentence instead of `readableApiError(error, ...)`; the Hub's reason is raised at `hub/hub/native_dialog.py:142` and passed through as the 409 detail (`hub/hub/api/v1/native_dialog.py`).
+
+**Expected:** a 409 reads like "A folder dialog is already open on this computer -- finish or cancel it there (it may be behind this window); it closes by itself after 2 minutes." Other errors keep the Hub's reason. **Test:** `hub/ui/src/__tests__/projectManagerDirectoryPicker.test.tsx`: the open mutation rejects with a 409 carrying that detail -> the status text contains "already open" (fails today). Seam: Projects (Add-project dialog) x the Hub's native dialog.
+
+## F1018 (C) -- deleting a project while a run is active is refused with "project cannot be deleted while a run is active": no run, no agent, no way out named, and the dialog shows exactly that line
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-c29934c5b878, `scripts/drive/s1023_pj_busy_delete.py`, one Haiku turn, shot `testbed/ui-judge/s1023-pj/140344/55_delete_during_run.png`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Agent `beta` (claude, Haiku) runs a turn holding a 100 s shell sleep (`run-7b777daa282e`, `running`). Then:
+
+```
+DELETE /projects/proj-c29934c5b878?remove_private=true
+  -> 409 {"detail": {"code": "project_has_active_run", "message": "project cannot be deleted while a run is active"}}
+Settings -> Delete project... -> type the name -> Delete project
+  -> role=alert in the dialog: "project cannot be deleted while a run is active"
+```
+
+The refusal is correct; it does not say which agent is running, that stopping it (the agent's Stop) is the way through, or that the delete can then be retried. Relocate has the same sentence shape ("project cannot be relocated while a run is active", `hub/hub/project_lifecycle.py:397`).
+
+Cause (verified): `ProjectLifecycleService.delete` raises the bare message (`hub/hub/project_lifecycle.py:245-249`) after counting `Run.status == 'running'` without keeping which.
+
+**Expected:** "aw-pj1023-b can't be deleted while beta is running (run run-7b777daa282e). Stop beta, then delete again." (each running agent named), and the same for relocate. **Test:** `hub/tests/test_project_lifecycle*.py` / the delete-route test: with one `running` run, the 409 message names the agent and the stop remedy (fails today). Seam: Projects (delete) x Runs.
+
+## F1019 (C) -- the Instructions editor saves over instructions written since it loaded: a stale tab silently replaces a newer save, with no conflict check
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, Chromium against the served bundle, `scripts/drive/s1023_pj_ui.py instr`, shot `testbed/ui-judge/s1023-pj/140258/40_instr_stale_save.png`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 1
+
+```
+PUT /project/instructions {"content": "v1: use tabs."}
+open Settings -> Instructions               editor shows 'v1: use tabs.'
+PUT /project/instructions {"content": "v2: written elsewhere, keep this."}   (another tab / window)
+in the open editor: type 'v1: use tabs.\nv1b: added here.' -> Save (no refusal, no notice)
+GET /project/instructions -> 'v1: use tabs.\nv1b: added here.'      (v2 is gone; no notice)
+```
+
+The operator's own pywebview window and a browser tab are an ordinary pair. Instructions ride every agent turn and the clear dialog itself warns "AgentWeave keeps no copy -- there is no history and no undo", so a silently lost write is unrecoverable.
+
+Cause (verified): the query never re-reads on its own (`refetchOnWindowFocus: false`, `hub/ui/src/main.tsx:17`; no SSE event for instructions), and `put_instructions` (`hub/hub/api/v1/instructions.py:53-61`) overwrites with no version or `If-Match`. When the query *does* refetch with a different value (an SSE reconnect invalidates everything), `useEffect(() => setDraft(content), [content])` (`hub/ui/src/components/settings/OtherSettings.tsx:32`) replaces an unsaved draft instead.
+
+**Expected:** the PUT carries the version (or content hash) the editor read, and a mismatch answers 409 "these instructions changed since you opened them" with the current text, which the editor shows beside the draft; a refetch never overwrites a dirty draft. **Test:** `hub/tests/test_instructions.py`: PUT with a stale version -> 409, content unchanged (fails today, no version exists); a UI test that a changed `content` prop leaves a dirty draft alone. Seam: Projects (instructions) x multiple windows.
+
+## F1020 (D) -- naming a main branch on a project that is not a git repository is refused as "This project has no branch named 'main' ... it has to exist first"
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-cda38bae12bd, `scripts/drive/s1023_pj_api.py branch`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+A folder with no `.git` (`C:\Users\huida\Documents\aw-pj1023 sp ção`), opened as a project: `GET /main-branch-suggestion` -> `{"suggestion": null, "chosen": null, "is_repository": false}`. `PUT /settings {"main_branch": "main"}` -> 400 "This project has no branch named 'main'. Approval merges into it, so it has to exist first." There is no branch to create: the folder is not a repository, which the suggestion route knows. The app disables the field for a non-repository ("This folder is not a git repository, so there is nothing to merge into."), so only an API or agent caller meets this. Cause (verified): `update_project_settings` checks only `task_integration.branch_exists` (`hub/hub/api/v1/projects.py:685-691`). **Expected:** "This folder is not a git repository, so there is no branch to merge into; run `git init` and commit first." **Test:** beside the existing no-such-branch settings test in `hub/tests/`: a non-repository project's PUT names the missing repository (fails today). Seam: Projects (settings) x Integration.
+
+## F1021 (D) -- F729 is back: deleting a project fires six GETs of the deleted project (all 404), and the app lands on another project's Overview with no word of the delete; a link to a deleted project does the same silently
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-81f4e76f8e92 and proj-c29934c5b878, Chromium against the served bundle, `scripts/drive/s1023_pj_ui.py delete` / `dead`, shots `testbed/ui-judge/s1023-pj/140401/51_after_delete.png`, `140509/60_dead_settings.png`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+Settings -> Delete project... -> type the name -> Enter. `DELETE` 204, the private vault folder is gone (fix-D1 holds), and then:
+
+```
+404 GET /api/v1/projects/proj-81f4e76f8e92/agents
+404 GET /api/v1/projects/proj-81f4e76f8e92/tasks?limit=1000
+404 GET /api/v1/projects/proj-81f4e76f8e92/questions?answered=false
+404 GET /api/v1/projects/proj-81f4e76f8e92/ledger
+404 GET /api/v1/projects/proj-81f4e76f8e92/conversations?lifecycle=open
+404 GET /api/v1/projects/proj-81f4e76f8e92/accounting
+```
+
+(eight on the first delete, proj-c29934c5b878). The page then shows the other project's Overview: no toast, no "Deleted aw-pj1023-b" line. F729 (fixed 7a55bb1, 2026-10-18) promised "no query for the deleted project runs"; the ui-finesse shell rewrite (a8ca6e2) came after. Opening `/?project=<deleted id>&tab=environment&section=settings` (or `section=instructions`) lands on another project's Overview with ~12 more 404s and nothing saying the requested project does not exist -- so a failed settings read (F197's alert) cannot be provoked through a deleted id; navigation hides it.
+
+**Expected:** no request for the deleted id after the 204 (the Overview queries included); after a delete, a one-line "Deleted <name>. Its folder was left as it was." where the app lands; a link to an unknown project says so before falling back. **Test:** `hub/ui/src/__tests__/` beside the F729 test: deliver the `project_deleted` event the route broadcasts and mount the Overview the delete navigates through -> no fetch of the deleted id (the F729 test used neither). Seam: Projects (delete) x Overview / navigation.
+
+## F1022 (D) -- small Projects items from the 2026-10-23 sweep: `/favicon.ico` is index.html, identical compact-rail tiles, a typed UNC path ignored by the in-Hub browser, junctions listed as folders
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, `scripts/drive/s1023_pj_brand.py`, `s1023_pj_ui.py picker`, `s1023_pj_api.py fs`; shots `testbed/ui-judge/s1023-pj/135317/04_compact_light.png`, `140158/20_picker_3.png`).
+**Source:** drive
+**Theme:** Projects
+**Ready:** yes
+**Tier:** 0
+
+1. **`GET /favicon.ico` answers 200 `text/html` (the SPA's index.html, 1059 bytes)**, while the brand commit (e23cbc6) rewrote `hub/hub/static/ui/favicon.ico` (2,941 bytes), which nothing can serve: only `/assets` is mounted and `serve_spa` (`hub/hub/main.py:744`) answers every other path. The page's own `<link rel=icon>` (`/assets/favicon-DzfNCeau.svg`, 200 `image/svg+xml`, the loop on `#15171C`) is fine, so browsers show the right icon; a client that asks for `/favicon.ico` (a bookmark/shortcut, a non-SVG consumer) gets HTML labelled 200. Either serve `favicon.ico` from the bundle root or drop the dead file.
+2. **Compact rail tiles are the first two letters of the name** (`hub/ui/src/components/layout/Sidebar.tsx:433`): `aw-pj1023-a` and `aw-pj1023-b` both read **AW**, told apart only by hovering (`title`). Projects sharing a prefix (`agentweave-*`, `aw-*`) are indistinguishable at a glance; agent tiles (`:453`) have the same scheme.
+3. **A typed UNC path is ignored by the in-Hub browser.** Typing `\\localhost\c$\Users\huida\Documents` and opening "Browse within the Hub instead" lists `C:\` (`$Recycle.Bin`, `c`, ...), though `GET /fs/list` lists the UNC path correctly (200, its entries): `startPath` accepts only `X:\` or `/` (`hub/ui/src/components/projects/ProjectManagerModal.tsx:159`). Same for a bare `C:` (listed from `C:\`, while `/fs/list?path=C:` is 400 "path must be absolute" without saying `C:\` would do).
+4. **Junctions are listed and followed.** `GET /fs/list?path=C:\Users` lists `Default User` (a junction); `GET /fs/list?path=C:/Users/Default User` answers `path: C:\Users\Default`. `fs_browse.py`'s docstring promises "a symlinked directory is excluded rather than traversed"; `entry.is_dir(follow_symlinks=False)` (`hub/hub/fs_browse.py:109`) is true for a Windows junction on Python 3.11 and `Path.resolve` follows it (F799's class, for the picker). Harmless in native mode; it is the containment claim `AW_WORKSPACE_ROOT` relies on.
+
+**Expected / Tests:** (1) a `hub/tests/` test that `GET /favicon.ico` is not `text/html`; (2) a Sidebar test with two `aw-*` projects whose compact tiles differ; (3) `projectManagerDirectoryPicker.test.tsx`: a typed `\\server\share\dir` starts the picker there; (4) `hub/tests/test_fs_browse*.py`: a junction (`mklink /J`) is excluded like a symlink. Seam: Projects (brand, rail, folder browser).
+
+## F1023 (C) -- rebinding an agent to a runner of another CLI resumes the conversation's old provider session on the new CLI: Copilot starts over with a notice, Claude fails the turn twice ("No conversation found with session ID") before the queue drops the session and silently starts a fresh one
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_rebind.py`, Chromium `scripts/drive/s1023_rm_ui2.py`, shot `testbed/ui-judge/s1023-rm/140238/13_conversation_after_cli_rebind.png`).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 1
+
+Agent `a-run` on Claude runner `ch` (model `haiku`) had two Claude turns in `conv-f45e1b5b2180` (Claude session `62f1c78b-...`). Then the agent was rebound with the Execution screen's own door and given one more turn in that conversation, then rebound back:
+
+```
+PATCH /projects/{p}/agents/a-run {"runner_id": <copilot runner, model auto>}  -> 200
+POST  /projects/{p}/agent/trigger {"agent":"a-run","message":"Reply with exactly the single word OK.","conversation_id":"conv-f45e1b5b2180"}
+  run-ac31c018701e (copilot) completed; on screen: "Copilot had no saved session 62f1c78b-519b-4c54-93a3-79caab462564; a new one was started."
+  conversations.provider_session_id -> b36d6aef-... (Copilot's)
+PATCH /projects/{p}/agents/a-run {"runner_id": <ch, claude>}  -> 200
+POST  /projects/{p}/agent/trigger (same conversation, one message)
+  run-48eb218457b6 failed exit 1: "No conversation found with session ID: b36d6aef-4b63-4d07-8e6c-ab63539cc2c7" (printed twice), "Turn failed"
+  run-e6eee0b7e373 failed exit 1: the same, twice, "Turn failed"            (queue_entry_queued -> redelivered, initiator "operator")
+  run-d079343e0501 completed, session_mode "new", session 822b2667-...        (no notice that the context was dropped)
+```
+
+The operator sent one message and sees two failed turns with four copies of a Claude error naming an id Claude never issued, then an answer from a session that has lost the whole conversation, with nothing saying so. Copilot's leg recovers only because Copilot alone has the "no saved session" rescue (`copilot_acp.py:2700-2716`, `agent_trigger.py:4385-4398`).
+
+Cause (verified): the agent PATCH changes `runner_id` and leaves every conversation's `provider_session_id` alone (`hub/hub/api/v1/agents.py:3158-3165`); the launch resumes `conversation.provider_session_id` whatever CLI wrote it (`hub/hub/api/v1/agent_trigger.py:1280-1281`); for Claude only the queue's generic give-up clears it, after `RESUME_RETRY_LIMIT = 2` failed deliveries (`hub/hub/inbound_queue.py:365`, `:463`).
+
+**Expected:** a provider session is resumed only by the CLI that created it. A turn whose conversation's session belongs to another CLI starts a new session at once and says so in the conversation ("a-run now runs on Copilot; this conversation's earlier turns were on Claude and are not carried into its session"), rather than failing twice. Recording the session's CLI beside `provider_session_id` (or clearing it when the agent is rebound to another CLI) are both candidate shapes; the notice is the point. **Test:** beside `hub/tests/test_runner_binding_redrain.py`: a conversation with a Claude `provider_session_id`, the agent rebound to a Copilot (or Codex) runner and back; the next launch's command carries no `--resume <foreign id>` and the conversation gets the notice. Fails today. Seam: Runners & models (rebind) x Runs (session resume) x Inbound queue (retry).
+
+## F1024 (C) -- a conversation's per-run model survives the agent's rebind to another CLI and is handed to it as is: Copilot was launched with `--model haiku`, ran `claude-sonnet-5` on a premium request, and the Hub recorded the run as model `haiku`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_turn.py` then `scripts/drive/s1023_rm_rebind.py`).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 0
+
+```
+POST /projects/{p}/agent/trigger {"agent":"a-run", ..., "conversation_id":"conv-f45e1b5b2180", "overrides":{"model":"haiku"}}   (a-run on Claude runner ch)
+  conversations.runtime_overrides = {"model": "haiku"}   -- stored as written, correct for Claude
+PATCH /projects/{p}/agents/a-run {"runner_id": <copilot runner, model "auto">}  -> 200, no word about the conversation's model
+POST /projects/{p}/agent/trigger {"agent":"a-run","message":"Reply with exactly the single word OK.","conversation_id":"conv-f45e1b5b2180"}  (no overrides)
+  event run_started: {"runner": "copilot", "model": "haiku"}
+  conversation: "Copilot ran claude-sonnet-5 instead of the requested haiku; this plan allows: [claude-sonnet-5, ..., claude-haiku-4.5, ...]"
+  turn_usage: runner copilot, model claude-sonnet-5, premium_requests 1.0
+```
+
+`haiku` is a Claude alias the `copilot` catalog does not declare (`POST /runners {"cli":"copilot","model":"sonnet"}` is 400 naming Copilot's ids). The operator chose the cheapest model; the turn ran on the plan's default instead, and the Hub's own record says `haiku`. The same stored value is what `inherit_runtime_overrides` copies into a job's or a peer message's new conversation (`hub/hub/conversations.py:66-110`; the job door was driven and inherits `{"model": "haiku"}` as written, `s1023_rm_jobdoor2.py`).
+
+Cause (verified): "Overrides were already validated against the catalog when the operator set them ... so they are trusted here rather than re-validated per turn" (`hub/hub/api/v1/agent_trigger.py:1189-1200`): for a runner without a provider, `model = conversation_overrides.get("model") or config.get("model")`. They were validated against the CLI bound *then*. The provider branch just above already declines a stored model that no longer fits (`:1194-1198`, design D7); a plain CLI change has no such branch, and the rebind (`hub/hub/api/v1/agents.py:3158-3165`) does not look at conversations.
+
+**Expected:** at launch, a stored per-run model the bound runner's CLI does not declare is not applied (kept, as D7 keeps it, so rebinding back restores it); the turn runs on the runner's model and the conversation says so once ("this conversation's model haiku is not one Copilot offers; running on the runner's model"). The composer's model pill reads what will run. **Test:** in `hub/tests/test_agent_trigger_overrides.py`: a conversation with `runtime_overrides {"model": "haiku"}`, the agent rebound to a Copilot runner, trigger -> the spawned command carries no `--model haiku`. Fails today. Seam: Runners & models (rebind) x Conversations (per-run model) x Jobs (inherited overrides).
+
+## F1025 (C) -- the Manager screen's model menu lists no aliases, so a job's model stored as `sonnet` (accepted by the API and stored as written) reads "sonnet -- Not in the model catalog"
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_holders.py`, Chromium against the served bundle `scripts/drive/s1023_rm_ui2.py`, shots `testbed/ui-judge/s1023-rm/140238/11_manager_runner_menu.png`, `12_manager_model_menu.png`).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 0
+
+```
+PATCH /projects/{p}/manager/jobs/vault-distillation {"runner_id": <claude runner ch>, "model": "sonnet"}  -> 200 {"model": "sonnet"}
+manager_jobs row: model 'sonnet'
+```
+
+Project settings -> Manager -> Vault distillation -> Model: the closed menu reads `sonnet`; opened, it lists the eight Claude ids and, last, `sonnet` with the detail **"Not in the model catalog"**. `sonnet` is a declared Claude alias (`GET /model-catalog`: `claude-sonnet-5-5` aliases `["sonnet"]`); the same API answers an undeclared model with 400, so the label tells the operator the Hub holds something it would have refused. Nor can an alias be chosen on this screen, though the Add-agent dialog ("Latest: sonnet -- latest (now Sonnet 5.5)") and the checkpoint model menu both offer them.
+
+Cause (verified): `ManagerSettings.tsx:130` calls `catalogModelOptions(..., { stored: job.model, aliases: false })`; with aliases off, `settingsOptions.tsx:111` appends any stored value not in the list as "Not in the model catalog". `GeneralSection.tsx:136` (checkpoint model) leaves aliases on.
+
+**Expected:** the Manager model menu offers the aliases as the other menus do ("sonnet, the latest -- Now Sonnet 5.5"), so a stored alias reads as that choice; "Not in the model catalog" is kept for a value the catalog really lacks. **Test:** `hub/ui/src/__tests__/managerSection.test.tsx`: a job with `runner_id` of a Claude runner and `model: "sonnet"` renders no "Not in the model catalog". Fails today. Seam: Runners & models (catalog aliases) x Manager jobs (screen).
+
+## F1026 (D) -- unarchiving an agent whose runner was deleted while it was archived answers "An agent with no charter still runs" while it has no runner and cannot run
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_edges.py`, also `s1023_rm_holders.py` with agent `a-cop`).
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes
+**Tier:** 0
+
+```
+POST /projects/{p}/runners {"name":"arch2","cli":"claude","model":"haiku"}       -> 201
+POST /projects/{p}/agents {"name":"a-arch2","runner_id":<arch2>}                  -> 201
+POST /projects/{p}/agents/a-arch2/archive                                         -> 200
+DELETE /projects/{p}/runners/<arch2>                                              -> 204   (a-arch2.runner_id -> NULL)
+POST /projects/{p}/agents/a-arch2/unarchive -> 200
+  "message": "No charter is bound. Archiving releases an agent's charter and unarchiving does not restore it. An agent with no charter still runs — bind one only if this agent should have one."
+GET /projects/{p}/agents/launchability -> a-arch2: runnable false, "No runner is bound to this agent. Bind one in the Hub UI before it can run."
+```
+
+The answer names the one release it knows about (the charter) and asserts the agent runs, while the release that matters, the runner the delete unbound (`hub/hub/api/v1/runners.py:291-303`, F532's fix), goes unmentioned. A message then sent to it is held ("Input queued for a-cop", `waiting_reason` "No runner is bound ..."). The app's Unarchive (`ArchivedAgentNotice.tsx`) does not show the message, so the reader is an API or tool caller; the agent's Execution screen does say "This agent cannot run".
+
+Cause (verified): the sentence is a constant (`hub/hub/api/v1/agents.py:3449-3456`) and does not read `agent_row.runner_id`.
+
+**Expected:** with no runner bound, the answer says so first ("a-arch2 has no runner: the runner it had was deleted while it was archived. Bind one in its settings before it can run."), and the charter sentence no longer claims it runs. **Test:** beside `hub/tests/test_a_runner_a_setting_names_cannot_be_deleted.py`: archive an agent, delete its runner, unarchive -> the message names the missing runner and does not contain "still runs". Fails today. Seam: Runners & models (delete) x Agents (unarchive).
+
+## F1027 (C) -- one Escape on the Add-agent dialog's open Provider list closes the whole dialog and throws away the typed name; the list takes no arrow keys
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_layers.py popover`, shot `testbed/ui-judge/s1023-kb/layers_add_agent_provider_open.png`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro, keyboard only, with `document.activeElement` read after each key: focus the rail's **Add agent to aw-kb1023** and press Enter. The Create agent dialog opens with focus in the name field (held). Type `kbtwo`, Tab to **Provider** ("Select a provider"), and press Enter. The listbox opens (`[role=listbox]` count 1). Focus stays on the Provider button. ArrowDown twice: nothing moves, and focus is still on the button. Tab reaches the options ("Claude Code", then "Codex CLI"). Now press Escape once, with focus on the button or on an option. **Both** the listbox and the dialog close (`dialogs` = `[]`), focus returns to Add agent, and the typed name is gone.
+
+Cause (verified): `ProviderPicker` (`hub/ui/src/components/agents/AgentCreateDialog.tsx:26-115`) is a hand-built `role="listbox"` with only a click toggle and an outside-mousedown close. It has no key handling, so it never claims Escape. The dialog's `useDialogFocus` Escape branch (`hub/ui/src/hooks/useDialogFocus.ts:41-58`) stands down only when `event.defaultPrevented` (line 53), so it closes the dialog. This is the arbitration F310 introduced. The listbox also has no ArrowUp/ArrowDown/Enter handling.
+
+**Expected:** with the list open, Escape closes only the list (`preventDefault()`, as `DirectoryPicker` does) and focus returns to Provider. A second Escape closes the dialog. Arrow keys move between options, and Enter picks one. Alternatively, use the Radix `Select` the Vault dialogs already use. Those Kind/Storage selects inside their Radix dialogs held: one Escape closed one layer.
+
+**Test:** `hub/ui/src/__tests__/agentCreateDialogFocusRestore.test.tsx` (or a sibling): open the dialog, open Provider, fire Escape; the dialog is still open and the listbox is gone. It fails today. Seam: Keyboard & dialogs x Agents (create).
+
+## F1028 (C) -- Ctrl+K over an open dialog or the task drawer: the palette opens on top, but the first Tab moves focus into the dialog behind it, and typing goes into a field the operator cannot see
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_palette_over.py`, shots `testbed/ui-judge/s1023-kb/palette_over_add_agent.png`, `palette_over_task_drawer.png`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro 1: focus **Add agent**, press Enter, and the Create agent dialog has focus. Press Ctrl+K. The palette opens over the dialog with focus in its input (`dialogs` = `['Create agent', 'Command palette']`). Press Tab once. Focus is now the Create agent **name field** (placeholder `codex-reviewer`), and the palette is still drawn on top of it (shot). Type `zz`, and it lands in that hidden name field. The `input` whose value holds `zz` is the agent name, not the palette. One Escape then closes the palette (held), and the dialog shows `zz` in its name.
+
+Repro 2: the same with the task drawer open (Enter on a board card). After Ctrl+K, Tab puts focus on the drawer's Close button behind the palette.
+
+Cause (verified): `CommandPalette` (`hub/ui/src/components/palette/CommandPalette.tsx:74-87`) opens whatever is open beneath it. It is a cmdk/Radix dialog and is not in `useDialogFocus`'s `openDialogs` stack. The older dialog therefore still believes it is the newest. Its Tab branch sees focus "outside" its panel (`useDialogFocus.ts:73`) and pulls it to its own first control. This is F307's fix firing against a layer it does not know about.
+
+**Expected:** either the palette does not open while a modal is open, or `useDialogFocus` stands down when focus is inside another modal layer, so Tab stays in the palette. Registering the palette in the same stack would also work.
+
+**Test:** `hub/ui/src/__tests__/useDialogFocus.test.tsx`: mount a `useDialogFocus` panel and a second `role="dialog"` with focus in it. Fire Tab: focus stays in the second dialog. It fails today. Seam: Keyboard & dialogs (palette x every `useDialogFocus` dialog).
+
+## F1029 (C) -- the Vault's Add and Vault storage dialogs drop keyboard focus to `<body>` on every close: Escape, Cancel and the X alike
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_dialogs.py vault`, shots `testbed/ui-judge/s1023-kb/dlg_vault-add_open.png`, `dlg_vault-storage_open.png`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro, on a project with one vault entry: focus **Add** (`vault-upload-open`) and press Enter. The dialog "Add to the vault" opens with focus on the header's **Close** (X). Press Escape, and focus is `BODY`. Reopen, Tab to **Cancel**, and press Enter: focus is `BODY`. Do the same with **Vault storage** (the toolbar's icon button) and the result is the same, `BODY` both ways. A keyboard user's next Tab starts again from the rail. Tab was trapped in both dialogs (held), and the Kind/Storage selects inside them close one layer at a time (held).
+
+Cause (verified): both are controlled Radix dialogs with no `DialogTrigger`: `VaultAddDialog.tsx:131` and `VaultStorageDialog.tsx:39`, opened from buttons at `VaultLibrary.tsx:221` and `:312`. On close, Radix's modal content prevents its default focus restore and focuses `context.triggerRef.current` (`hub/ui/node_modules/@radix-ui/react-dialog/dist/index.mjs:146-148`). With no Trigger that ref is null, so nothing is focused. The shared `DialogContent` (`hub/ui/src/components/ui/dialog.tsx:14-45`) offers no way to say where focus goes back to. `JobsView.tsx:376` has the same shape: it is F931's "after Archive focus drops to the page" half. The Radix dialogs that do use a `DialogTrigger` held: the agent's Archive confirm and Add check both returned focus to their opener.
+
+**Expected:** focus returns to **Add** / **Vault storage** after any close. Either wrap each opener in `DialogTrigger`, or give `DialogContent` a `returnFocusTo` ref used in `onCloseAutoFocus`.
+
+**Test:** `hub/ui/src/__tests__/vaultTab.test.tsx`: open Add with the keyboard, press Escape, and `document.activeElement` is the Add button. It fails today. Seam: Keyboard & dialogs x Knowledge vault.
+
+## F1030 (C) -- in the task drawer, Escape on the inline "Delete this task?" confirm closes the whole drawer, not just the confirm
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle at 1440 and 760 px, `scripts/drive/s1023_kb_tasks.py`, shot `testbed/ui-judge/s1023-kb/task_delete_confirm_1440.png`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro: on the board, focus a card (`task-open-<id>`) and press Enter. The drawer opens with focus on Close. Tab to **Details** and press Enter. Tab to **Delete** (`task-delete-<id>`) and press Enter. The inline confirm appears and focus lands on its **Cancel** (held). Press Escape once. The confirm **and** the drawer both go (`dialogs` = `[]`), and focus is back on the board card. The operator who meant "no, don't delete" has lost the ticket as well. The result is the same at 760 px.
+
+Cause (verified): the confirm (`hub/ui/src/components/tasks/TaskDetailDrawer.tsx:703-745`) has no Escape handling. The drawer's `useDialogFocus(open, panelRef, onClose)` (`:375`) therefore takes the key and closes the drawer. The blocking-reason panel in the same drawer claims Escape with `preventDefault()` (`:775-781`, F310's fix), and the delete confirm was left out. The comment at `:701-702` chose an inline confirm precisely so that "a nested dialog would [not] take both with it".
+
+**Expected:** Escape on the confirm cancels it (like its Cancel button) and focus returns to **Delete**. A second Escape closes the drawer.
+
+**Test:** `hub/ui/src/__tests__/taskDetailDrawer.test.tsx`: open the confirm, fire Escape, and the drawer is still mounted with the confirm gone. It fails today. Seam: Keyboard & dialogs x Tasks (delete).
+
+## F1031 (C) -- a task can be renamed only with a mouse: the drawer's title is a click-only heading, and after Enter or Escape in the title field focus falls to `<body>`
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_tasks.py`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro: open a task's drawer with Enter and Tab through it (30 presses, cycling). The title `task-drawer-title-<id>` is never a stop: it is an `H2` with `tabIndex -1` and no role. Enter on any reachable control does not open the rename. Clicking the title opens the input (`task-drawer-title-input-<id>`). Typing and Enter save once (exactly one `PATCH /tasks/<id>`, held), but focus is then `BODY`. Clicking again, typing and pressing Escape cancels and keeps the drawer open (held: one layer), but focus is again `BODY`. The checklist's Tasks row says "rename in the drawer (Enter saves, Esc cancels)". A keyboard user cannot reach the rename at all.
+
+Cause (verified): `TaskDetailDrawer.tsx:491-502` is `<h2 ... title="Click to rename" onClick=...>` with no `tabIndex`, `role` or key handler. When the input unmounts, nothing receives focus, because the heading cannot take it. A scan of `hub/ui/src/components` for `onClick` on a non-interactive element without `role`/`tabIndex`/`onKeyDown` finds only this one, apart from scrim backdrops.
+
+**Expected:** the title is a button (or `role="button" tabIndex={0}` with Enter/F2) labelled "Rename", and after save or cancel focus returns to it.
+
+**Test:** `hub/ui/src/__tests__/taskDetailDrawer.test.tsx`: the title is reachable with `userEvent.tab()`, Enter opens the input, and after Enter the active element is the title control, not `document.body`. It fails today. Seam: Keyboard & dialogs x Tasks (rename).
+
+## F1032 (C) -- the pane resizers are tab stops with no visible focus: the line meant to light up on focus is pinned to its resting colour by an inline style
+
+**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_tabwalk.py`, `s1023_kb_rings.py`, shots `testbed/ui-judge/s1023-kb/ring_light_pane-resizer.png`, `ring_dark_pane-resizer.png`).
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Repro: from a fresh load, Tab through the shell. Stop 12 is `DIV role=separator aria-label="Resize navigation"` (`pane-resizer`). Every other rail and top-bar stop draws a ring: the teal `--ring` box-shadow, or the browser's outline on Search, Add project and the agent menu. This one draws nothing. Its outline is `solid 2px rgba(0,0,0,0)`, its box-shadow is `none`, and the 1px line inside reads `rgba(0, 0, 0, 0.06)` both unfocused and focused (light mode, `--ring` = `#1d6b6e`). The control works: ArrowRight moves the rail from 248 to 256. The operator cannot see that they are on it, so arrow keys pressed there appear to do nothing until the rail moves.
+
+Cause (verified): `hub/ui/src/components/layout/PaneResizer.tsx:139-160` sets `focus-visible:outline-none` on the separator. It relies on the inner span's `group-focus-visible:bg-[var(--ring)]`, but the same span has `style={{ background: 'var(--border-region)' }}`, and the inline style beats the class in both hover and focus. Every `PaneResizer` has this, including **Resize conversation** (`ConversationView.tsx:581-588`). The hover colour is dead for the same reason.
+
+**Expected:** a focused resizer shows the `--ring` line (move the resting colour into a class, or set the colour from state), and it reads in both modes.
+
+**Test:** `hub/ui/src/__tests__/PaneResizer.test.tsx`: after focus, the line's computed background is `var(--ring)`. In jsdom, assert that the inline style no longer pins `background`. It fails today. Seam: Keyboard & dialogs (focus visibility).
+
+---

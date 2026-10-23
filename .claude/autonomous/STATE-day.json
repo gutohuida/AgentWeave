@@ -8,26 +8,92 @@
     "parent_branch": "master",
     "parent_sha": "7c63120",
     "stop_at": "2026-10-23T17:00:00+01:00",
-    "iteration": 1,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "plan-review",
-    "next_action": "Do the 'plan-review' item per .claude/loops/day-window.md 'The pretask': run e2e skill Step 0 incl. plan-against-code inventory, edit the checklist in .claude/skills/e2e-loop/SKILL.md, commit it alone, log the PLAN: line, and insert sweep-<area>-sweep items (every checklist row exactly once) before night-recheck-drive.",
+    "current": "sweep-agents-sweep",
+    "next_action": "Run sweep-agents-sweep per .claude/loops/day-window.md (time guard first: no sweep started after 16:15): Sweep: Agents x Charters x Inbound queue & messages. Least-driven first: an abandoned entry's 'Last attempt failed', binding a runner later drains a held message (F96); then reserved/route-word/case-variant names (F811), unknown-field PATCH, archive/unarchive, request_agent and agent_budget, POST /session/sync keeping agents (F774/F849/F850), charters create/edit/bind/delete, hop-budget hold + delivery_note, Withdraw/Continue. Scratch Hub port 8116-8118 (not 8000, 8010, 8114, 8115, 8130), bind claude-haiku-4-5-20251001 by full id (the alias `haiku` now runs haiku-5-5), never leave a job enabled, NEVER press the native folder dialog. Tally turn_usage BEFORE e2e.py clean. Up to three foreground subagents on their own ports, each with its own AW_E2E_STATE; they write drafts to scripts/drive/_draft_*.md, you number and file them (next free F1033). Run `py -3.11 -m ruff check scripts/ --select E9,F63,F7,F82,F401,F841` before committing. Write files with the Write tool: the Bash tool rejects long heredocs containing apostrophes.",
     "queue": [
         {
             "id": "plan-review",
-            "status": "open",
+            "status": "done",
             "title": "Check the e2e checklist against the code; queue a full sweep",
             "detail": "Playbook 'The pretask'. Drives nothing. Inserts sweep items before night-recheck-drive. Nothing new in DIRECTION.md for today (newest section 2026-09-07)."
         },
         {
             "id": "night-recheck-drive",
-            "status": "open",
+            "status": "done",
             "title": "Re-drive last night's fixes live",
             "model": "sonnet",
             "effort": "medium",
             "detail": "Fixed 2026-10-22 night, UI/route/run/gate: F907 (activity digest stopped/failed turn), F909 (waiting rail vs Needs you), F918 (vault Add non-PDF/image file), F919 (reset with live Hub), F925 (job on deleted agent), F928 (permission card in wrong conversation), F933 (no-tool-server manual mode), F944 (read_spec_document delivery), F945 (requirements in-progress count), F946 (Vault agrees when check off), F952 (Overview spend line), F953 (budget-spent Overview). Log CONFIRMED/REOPENED each."
+        },
+        {
+            "id": "sweep-vault-sweep",
+            "status": "done",
+            "title": "Sweep: Knowledge vault x Manager jobs x CLI & lifecycle",
+            "detail": "First: `agentweave --profile <p> --port <n>` itself (cmd_hub_start; unreached until 2026-10-23) on a throwaway profile, start then status; F919 reset on a profile whose Hub runs; F918 Add dialog unsupported extension + POST /vault/sources NUL text 400; F946 'Vault not checked' with the spec-vault-check job off."
+        },
+        {
+            "id": "sweep-checkpoints-sweep",
+            "status": "done",
+            "title": "Sweep: Checkpoints x Accounting & allowance",
+            "detail": "First: F952 Overview spend line vs Budgets (API-equivalent label, N turns unpriced, AI credits, dash for an unpriced agent); F953 spent token budget notice (limit, use, held-turn count, Budgets link, 'N turns held by the budget' summary); Copilot AI credits in the task story."
+        },
+        {
+            "id": "sweep-reach-sweep",
+            "status": "done",
+            "title": "Sweep: Permissions & sandbox x Capability plane x Agent environment",
+            "detail": "First: F928 permission card only in the asking conversation, another conversation's bar says it is waiting on you; F933 a no-approver (no tool server) run not given an inherited Ask-me/Workspace-only default, roster says what it gets."
+        },
+        {
+            "id": "sweep-spec-sweep",
+            "status": "done",
+            "title": "Sweep: Spec documents x Corpus & folding",
+            "detail": "First: F944 read_spec_document include=full / include=delivery returns delivery, and a read -> edit -> submit_spec_document round trip keeps the flow (real haiku agent)."
+        },
+        {
+            "id": "sweep-evidence-sweep",
+            "status": "done",
+            "title": "Sweep: Requirements, evidence & coverage x Drift",
+            "detail": "First: F945 SpecHealthLine names each unfinished state (not started, no task, drifting, stale, awaiting review) and the warn tone — check it against the coverage bar after a drift and a reword."
+        },
+        {
+            "id": "sweep-loops-sweep",
+            "status": "done",
+            "title": "Sweep: Jobs & loops x Flows & review x Resilience",
+            "detail": "First: F925 a job on a deleted/archived agent queues nothing, cannot be enabled, Run now 409 naming why (API and Jobs screen)."
+        },
+        {
+            "id": "sweep-questions-sweep",
+            "status": "done",
+            "title": "Sweep: Questions x Conversations & composer",
+            "detail": "First: F909 a question whose asking run ended no longer reads 'waiting' on the rail or in Needs you."
+        },
+        {
+            "id": "sweep-traces-sweep",
+            "status": "done",
+            "title": "Sweep: Traces x Runs x Logs, events & SSE",
+            "detail": "First: F907 the Activity digest ends a turn on run_stopped / run_failed (stop one, kill one)."
+        },
+        {
+            "id": "sweep-tasks-sweep",
+            "status": "done",
+            "title": "Sweep: Tasks x Dependencies x Worktrees & integration",
+            "detail": "No new path. Least-driven first: integration Retry, the planner's same-file warning; then one representative path per row."
+        },
+        {
+            "id": "sweep-projects-sweep",
+            "status": "done",
+            "title": "Sweep: Projects x Runners & models x Keyboard & dialogs",
+            "detail": "First: the brand mark (BrandLoop, favicon; e23cbc6) in light/dark and a narrow rail; then the native folder dialog and Delete-project dialog in a browser (least-driven)."
+        },
+        {
+            "id": "sweep-agents-sweep",
+            "status": "open",
+            "title": "Sweep: Agents x Charters x Inbound queue & messages",
+            "detail": "No new path. Least-driven first: an abandoned entry's 'Last attempt failed', binding a runner later drains a held message (F96)."
         },
         {
             "id": "ledger-tidy",
