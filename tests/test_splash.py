@@ -166,3 +166,30 @@ def test_the_splash_and_sounds_are_packaged():
     html = (assets / "splash.html").read_text(encoding="utf-8")
     assert "Run your AI factory in the open." in html
     assert "http" not in html.replace("http://www.w3.org/2000/svg", ""), "the splash loads nothing"
+
+
+def test_the_launch_sounds_are_rendered_from_the_brand_synth():
+    """The opening WAVs are renders of brand/sound/agentweave-sound.js, the one synth the app's
+    notification sounds will also play, so what the operator approves is what the CLI plays.
+
+    The first opening.wav came from a separate Python copy of the synth that drifted: notes up to
+    ~24 cents out of tune and a metallic reverb (operator, 2026-10-23: "The sound doesnt sound like
+    the ones in the mock"). The manifest pins the synth's hash: change the synth without
+    re-running scripts/render_opening_sound.py and this fails.
+    """
+    import hashlib
+    import json
+    import wave
+
+    root = Path(__file__).resolve().parents[1]
+    assets = root / "src" / "agentweave" / "assets"
+    synth = root / "brand" / "sound" / "agentweave-sound.js"
+    manifest = json.loads((assets / "opening-sound.json").read_text(encoding="utf-8"))
+    assert manifest["source"] == "brand/sound/agentweave-sound.js"
+    text = synth.read_bytes().replace(b"\r\n", b"\n")
+    assert manifest["source_sha256"] == hashlib.sha256(text).hexdigest(), "re-render the WAVs"
+    for name in ("opening.wav", "opening-short.wav"):
+        data = (assets / name).read_bytes()
+        assert manifest["files"][name] == hashlib.sha256(data).hexdigest(), name
+        with wave.open(str(assets / name)) as w:
+            assert (w.getframerate(), w.getnchannels(), w.getsampwidth()) == (44100, 2, 2), name
