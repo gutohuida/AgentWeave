@@ -1,0 +1,79 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "Decided with the operator 2026-10-23: one vertical thread for the whole project, for anyone; knots are recursive (a knot opens into its own thread of finer knots); a new Thread tab beside Overview; the page opens at the present with a jump to the beginning; work outside any specification is on the thread too; the thread is drawn in madder. Built in order: a thread derived from records the Hub already links, then manager-authored chapters and summaries, then whatever gaps the first two reveal.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Which history is missing today? The operator knows of none yet; decided after the first slice is visible.",
+      "resolved": false,
+      "slice": "history-gaps"
+    },
+    {
+      "question": "When does the manager re-write chapters (on each merge, on a schedule, on request), and what may it cost per firing?",
+      "resolved": false,
+      "slice": "manager-chapters"
+    }
+  ],
+  "problem": "History in AgentWeave is recorded but scattered across per-object views and capped, newest-first lanes. Nobody can follow a project start to finish, and a business stakeholder cannot read it at all. The product's promise — nothing appears out of thin air — is not something a person can see.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "One thread through a project's whole history, in the app"
+    ],
+    "non_goals": [
+      "A thread across several projects",
+      "Acting on work from the thread",
+      "Replacing the Activity tab or per-object history views",
+      "Publishing the thread outside the app"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "On the trial Hub, this repository's project shows a Thread tab whose surface reaches back to the project's first record, and opening a change knot down to a run knot ends at a link that opens that run's transcript.",
+      "intent": "Open the Thread tab and follow the project from its first record to now, opening any knot into finer knots down to links to the real objects.",
+      "key": "thread-from-records",
+      "title": "The thread from what is already recorded"
+    },
+    {
+      "builds_after": [
+        "thread-from-records"
+      ],
+      "done": "With the new manager job enabled, the Thread surface shows manager-written chapters whose every cited record exists, and disabling the job returns the surface to the structural chapters of the first slice.",
+      "intent": "The surface reads as a story: the Hub's manager groups changes and other work into titled chapters with plain-language summaries that cite only real records.",
+      "key": "manager-chapters",
+      "title": "Chapters the manager writes"
+    },
+    {
+      "builds_after": [
+        "thread-from-records"
+      ],
+      "done": "Each gap the operator chose to close appears as knots on the thread for activity that happens after the slice ships.",
+      "intent": "Whatever the first two slices show the Hub never recorded (decided once they are visible) starts being recorded and appears on the thread.",
+      "key": "history-gaps",
+      "title": "Record what the thread shows is missing"
+    }
+  ],
+  "summary": "Make the identity's red thread real in the app: one vertical thread through a project's entire history that anyone can read at the surface and anyone can pull down, knot by knot, to exactly what happened and who did it.",
+  "tasks": [],
+  "title": "The red thread: a project's history you can pull"
+}

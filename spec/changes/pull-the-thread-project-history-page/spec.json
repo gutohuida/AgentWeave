@@ -1,0 +1,510 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "two projects on the trial Hub",
+      "how_to_check": "e2e drive on trial Hub :8010 with two projects; assert tab order and that no knot links to the other project's objects",
+      "key": "ac-tab",
+      "requirement": "thread-tab",
+      "then": "the tab sits right after Overview and each shows only its own project's knots",
+      "when": "the operator opens the Thread tab of each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with history spanning more than a month",
+      "how_to_check": "browser drive asserting which knot is in the viewport at each step",
+      "key": "ac-present",
+      "requirement": "opens-at-present",
+      "then": "the newest surface knot is in view first, then the oldest, then the newest again",
+      "when": "the Thread tab is opened, then 'jump to the beginning' is used, then 'back to the present'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fixture project seeded with at least one item of every listed kind",
+      "how_to_check": "Hub test over the thread feed: seeded ids equal the ids reached by walking every knot, with no duplicates",
+      "key": "ac-whole",
+      "requirement": "whole-history",
+      "then": "every seeded item appears exactly once",
+      "when": "the thread is fully opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two documents with three hand-made tasks and a conversation recorded between them",
+      "how_to_check": "Hub test over the surface level of the feed",
+      "key": "ac-surface",
+      "requirement": "surface-knots",
+      "then": "it shows document, one folded knot of four items naming its span, document — in that order",
+      "when": "the surface is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with an approved task whose run recorded evidence that was accepted and merged",
+      "how_to_check": "browser drive on this repository's project on the trial Hub",
+      "key": "ac-recursive",
+      "requirement": "recursive-knots",
+      "then": "each level shows the listed children in time order, and after closing the task knot is in view",
+      "when": "the reader opens document, then task, then run, then closes the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the surface of this repository's project",
+      "how_to_check": "browser drive scanning rendered text",
+      "key": "ac-face",
+      "requirement": "knot-face",
+      "then": "every knot shows glyph, kind word, title, date or span and actors, and no text on the page matches an id pattern (tsk-, run-, spdoc-, fct-) or a snake_case event name",
+      "when": "the page is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a run knot",
+      "how_to_check": "browser drive; repeat for one knot of each object kind",
+      "key": "ac-links",
+      "requirement": "object-links",
+      "then": "the run's transcript opens",
+      "when": "its link is followed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fixture project whose records carry known timestamps",
+      "how_to_check": "Hub test over the feed; the test fails if the feed's order is reversed",
+      "key": "ac-faithful",
+      "requirement": "faithful",
+      "then": "every knot names at least one stored record and siblings are in non-decreasing recorded time",
+      "when": "the feed is walked"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with six consecutive runs and then a merge",
+      "how_to_check": "Hub test over the task's children",
+      "key": "ac-fold",
+      "requirement": "fold-routine",
+      "then": "one folded knot reads six runs, followed by the merge knot unfolded",
+      "when": "the task knot is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the address of a run knot three levels deep",
+      "how_to_check": "browser drive",
+      "key": "ac-address",
+      "requirement": "addressable",
+      "then": "document, task and run are open, the run knot is in view and has keyboard focus",
+      "when": "it is opened in a fresh window"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Thread tab open, once at the present end and once scrolled to the beginning",
+      "how_to_check": "browser drive against trial Hub with a status change made through the API",
+      "key": "ac-live",
+      "requirement": "live-end",
+      "then": "its knot appears at the present end within five seconds, and the scrolled-away view does not move",
+      "when": "a task changes status"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a trial-Hub project seeded with 10,000 items",
+      "how_to_check": "timed browser drive on the operator's machine, three runs, worst case reported",
+      "key": "ac-scale",
+      "requirement": "scale",
+      "then": "each shows content within one second",
+      "when": "the tab is opened, the beginning is jumped to, and a knot is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Thread tab with reduced motion enabled, using only the keyboard",
+      "how_to_check": "browser drive with prefers-reduced-motion emulated and a greyscale screenshot",
+      "key": "ac-access",
+      "requirement": "motion-and-access",
+      "then": "every step works, no animation runs, and knot kinds remain distinguishable in a greyscale screenshot",
+      "when": "the reader moves to a knot, opens it and closes it"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the mock of the Thread page in light and dark, fed recorded fixtures",
+      "how_to_check": "operator review of the mock screenshots and the running mock",
+      "key": "ac-visual",
+      "requirement": "motion-and-access",
+      "then": "the operator judges that it reads as the identity's red thread and approves the look before the tab is wired in",
+      "when": "the operator looks at it, opens knots, and watches the thread draw"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "ff81a3d69244b5422c9653697c18160a3ed117422adb3fa4ebacd703c6761959",
+      "FR-10": "0ef09b10355acaea7f65eff92207650757e437a16218f04e842e886ebfa5d3af",
+      "FR-11": "6e7ed10264aecd24fe58e5673fba9104c9aeaa49d3f0a023da66a3096b4f5c43",
+      "FR-12": "6acff8b0e66d1511cc79d0824df0e8cd9268ce89102ea4e5d88cb07e980dac22",
+      "FR-13": "1a4622247f9c19e323630e2c365fa34828f54f893b42860efc73534c95e98d7d",
+      "FR-2": "7228b8cbbe015e758bddbd11511189e28051debefba815bae14c989f1fc84e3b",
+      "FR-3": "0a870deba60193d25001349ff0459094e1be4cdcd1323adb7f2a48e68e00ddb5",
+      "FR-4": "bf8305d7bacdbbc81bbcfc49ce4e7ecf01a1a8c0ed353ddaa7b6960c130b5f39",
+      "FR-5": "2de2f1b961acee238a6fdb96a8b45ade46b7b4e609cbe033f544a05e5b542c83",
+      "FR-6": "66dedb8e08d3bce3aec73e306abc59f9c0d3708ebf01d2f6cb4f8e8488f8a1d9",
+      "FR-7": "a62110bd77454967615f4a433b828ad95f94565bd2129ca5854b2d0dcce921a0",
+      "FR-8": "45c7adaeb3f3a1accd0c732ee7da591dc2b916581b7e5081b6441c71da887cfd",
+      "FR-9": "5a06202acc6a3e87ffa1fecc2155ce51f027d62a07a372586d2403705116a77e"
+    },
+    "high_water": 13,
+    "requirements": {
+      "addressable": "FR-10",
+      "faithful": "FR-8",
+      "fold-routine": "FR-9",
+      "knot-face": "FR-6",
+      "live-end": "FR-11",
+      "motion-and-access": "FR-13",
+      "object-links": "FR-7",
+      "opens-at-present": "FR-2",
+      "recursive-knots": "FR-5",
+      "scale": "FR-12",
+      "surface-knots": "FR-4",
+      "thread-tab": "FR-1",
+      "whole-history": "FR-3"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reviewer": "QA",
+    "stop_at": null,
+    "stop_when_queue_empties": true,
+    "tester": "QA"
+  },
+  "design": "Decided with the operator 2026-10-23: one vertical thread, for anyone, recursive knots, a Thread tab after Overview, opening at the present with a jump to the beginning, outside work on the thread, madder for the thread.\n\nGrounding (read, not run): tasks carry spec_document_id and runs carry task_id (hub/hub/db/models.py:753, :1308); evidence carries requirement, task and run (:2749); task_transitions, task_integrations, messages, questions, permission_requests, job_runs, spec_document_events (:2376, no reader today) all carry timestamps. event_logs has no task or run column, so links from it live in its data. No route today returns a merged chronological, paged project feed; the Activity ledger is capped per lane (hub/hub/project_ledger.py).\n\nVisual direction (from research, to be proven in the mock): a single madder spine left of centre; knots are monochrome glyphs on it; sticky month and day headers; a date scrubber on the right edge as an extra control, never a replacement for scrolling. Opening a knot unspools a finer madder strand from it, indented beneath, with its children; the existing tokens time it (--dur-expand 320ms, --stagger 32ms, --ease). The thread draws once as it first comes into view; under reduced motion it is shown already drawn. The present end carries a verdigris 'now' marker, verdigris being the identity's state accent. Pattern precedents: GitHub's issue timeline (weight by kind), Linear's collapsed history (folding), Google Photos' date scrubber (jumping months), WAI-ARIA feed and disclosure patterns (keyboard).\n\nOrder: the feed's shape is fixed first; the mock is built from real components on recorded fixtures and shown to the operator; only then is the tab wired in. Hazard: a committed UI bundle reaches the operator's live :8000 app on its next reload, so the wiring commit is timed deliberately.\n\nDelivery: a flow (operator, 2026-10-23: this repository is now built with AgentWeave). Developer builds; QA reviews and tests each finished task by driving the running product; the flow fires every five minutes and stops when its queue empties. The mock task carries the operator-checked visual criterion (ac-visual): its approval is the operator's, so the wire task, which ships the UI bundle into the live :8000 app, cannot start on an agent's approval alone.",
+  "evidence": {
+    "checked": [
+      "models and routes read for links and timestamps (see design)",
+      "Activity tab, Overview, navigation and mock harness read (hub/ui/src/lib/navigation.ts:26, hub/ui/mock/README.md)"
+    ],
+    "limits": [
+      "Nothing was run; the 10,000-item and one-second figures are targets, not measurements",
+      "Which event_logs types carry a task or run in their data was not checked"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": "large",
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Who uses the page and for what? — Anyone: a stakeholder reads the surface, a developer dives in.",
+      "resolved": true
+    },
+    {
+      "question": "What is a knot? — Any level; a knot opens into its own thread of finer knots.",
+      "resolved": true
+    },
+    {
+      "question": "One thread or many? — One thread for the whole project.",
+      "resolved": true
+    },
+    {
+      "question": "Layout direction? — One vertical thread.",
+      "resolved": true
+    },
+    {
+      "question": "Placement? — A new Thread tab after Overview.",
+      "resolved": true
+    },
+    {
+      "question": "Reading direction? — Oldest at top; opens at the present with a jump to the beginning.",
+      "resolved": true
+    },
+    {
+      "question": "Is work outside any specification on the thread? — Yes.",
+      "resolved": true
+    },
+    {
+      "question": "Manager in this slice? — No, roadmap slice manager-chapters.",
+      "resolved": true
+    },
+    {
+      "question": "May the thread be madder? — Yes.",
+      "resolved": true
+    },
+    {
+      "question": "How is this slice built? A flow: Developer builds, QA reviews and tests, every five minutes, stopping when the queue empties.",
+      "resolved": true
+    }
+  ],
+  "problem": "The identity now tells a story — every rope spun with a red thread so any piece can be traced to where it was made — but the app cannot show it. History is scattered: the Activity tab's ledger shows separate lanes, each newest-first and capped; a task's story, a document's rigor history, a job's firings and an agent's timeline are each per-object. There is no single place to follow a project from its first specification to its latest merge, so 'how did we get here, and why?' means opening a dozen screens, and is unanswerable for anyone who does not already know which screens.",
+  "requirements": [
+    {
+      "key": "thread-tab",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every project offers a tab labelled Thread, placed immediately after Overview, that shows that project's thread and nothing from any other project."
+    },
+    {
+      "key": "opens-at-present",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Most visits ask 'what happened lately and why'; the story from the start must be one action away, not a long scroll.",
+      "statement": "The thread reads in time order, oldest at the top and newest at the bottom; opening the tab shows the most recent surface knots with the present end in view, and one control moves to the project's first surface knot and another returns to the present."
+    },
+    {
+      "key": "whole-history",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One thread for the whole project: an item missing from it is history that appears out of thin air.",
+      "statement": "Every recorded item of these kinds appears beneath exactly one surface knot: specification documents and their phase changes; tasks and their status changes; runs; evidence and its review verdicts; merges into main; questions and their answers; permission decisions; messages between agents; job and loop firings; operator conversations; vault additions."
+    },
+    {
+      "key": "surface-knots",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "At the surface, each specification document is one knot placed at its first recorded activity; items belonging to no document are surface knots of their own, and consecutive such knots with no document knot between them are folded into one knot naming their count and time span."
+    },
+    {
+      "key": "recursive-knots",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Opening a knot shows, in place and directly beneath it, its own thread of child knots in time order: a document knot holds its phase changes and its tasks; a task knot holds its status changes, runs, evidence, verdicts and merge; a run knot holds its questions, permission decisions, messages and evidence. Closing it restores the parent thread with the closed knot still in view."
+    },
+    {
+      "key": "knot-face",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every knot shows, without being opened: its kind as a glyph and a word, a plain-language title, its date or time span, the names of who acted, and how many knots it holds when it holds any. No raw identifiers or event-type names appear on the face."
+    },
+    {
+      "key": "object-links",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every knot that stands for a stored object (document, task, run, evidence, conversation, job firing, vault entry) links to that object's existing view in the app."
+    },
+    {
+      "key": "faithful",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The page's whole claim is traceability; an invented or misplaced knot breaks it for every reader.",
+      "statement": "Every knot corresponds to stored records and is placed by their recorded time; the thread never shows an item that has no stored record, and never reorders items against their recorded times."
+    },
+    {
+      "key": "fold-routine",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "Within any thread, four or more consecutive knots of the same routine kind (runs, status changes, messages, firings) are shown as one folded knot naming the kind and count, which opens to show them individually; milestone knots (document approved, evidence accepted, merge) are never folded."
+    },
+    {
+      "key": "addressable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every knot has an address in the app; opening that address shows the thread with the knot's ancestors open and the knot in view and keyboard-focused."
+    },
+    {
+      "key": "live-end",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Activity recorded while the tab is open appears at the present end within five seconds without a reload, and does not move the reader's view when they are reading elsewhere on the thread."
+    },
+    {
+      "key": "scale",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "For a project with 10,000 recorded items, the tab shows its first knots within one second of opening on the operator's machine, and moving to the beginning or opening any knot shows its contents within one second; scrolling never waits for the whole history to load."
+    },
+    {
+      "key": "motion-and-access",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The thread is drawn in madder and knots are told apart by glyph and word, never by colour alone; knots open and close with Enter or Space and the reader moves between knots with the keyboard; scrolling is always the browser's own; under reduced-motion settings nothing draws, slides or fades, and the page shows the same content."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/red-thread-project-history-roadmap/spec.json",
+    "slice": "thread-from-records"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A Thread tab for every project, between Overview and Tasks",
+      "One thread covering the project's whole recorded history, opening at the present with a jump to the beginning",
+      "Recursive knots: project surface → change (specification document) → task → run → the run's moments",
+      "Work outside any specification (hand-made tasks, operator conversations, loop and job firings) as knots on the same thread",
+      "Links from every knot that stands for a stored object to that object's existing view",
+      "Addressable knots, live arrival of new activity, folding of routine runs, keyboard and reduced-motion behaviour",
+      "A mock of the page built from the real components, for the operator to judge the visuals before the tab ships"
+    ],
+    "non_goals": [
+      "Manager-written chapters, titles or summaries (roadmap slice manager-chapters)",
+      "Recording any kind of history the Hub does not record today (roadmap slice history-gaps)",
+      "Removing or changing the Activity tab, its Ledger, or any per-object history view",
+      "Acting on anything from the thread: approving, retrying, editing or deleting",
+      "A thread spanning several projects, or one per requirement",
+      "Horizontal, metro-map or overview-strip layouts",
+      "Export, printing, or sharing the thread outside the app"
+    ]
+  },
+  "summary": "A Thread tab where anyone follows one red thread through a project's entire history, from its first record to now. Each knot opens in place into its own thread of finer knots, so a stakeholder reads the story at the surface and a developer pulls down to the exact run, evidence and verdict, with links to the objects themselves. This slice builds the thread only from what the Hub already records and links.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "A Hub route returning one level of the thread at a time (the surface, or a knot's children), paged by time in both directions, with each knot's kind, title, span, actors, child count, object link and address. Includes folding and the Hub tests over seeded fixtures.",
+      "files": [
+        "hub/hub/project_thread.py",
+        "hub/hub/api/v1/thread.py",
+        "hub/hub/api/v1/__init__.py",
+        "hub/tests/test_project_thread.py"
+      ],
+      "from": null,
+      "key": "feed",
+      "requirements": [
+        "whole-history",
+        "surface-knots",
+        "recursive-knots",
+        "faithful",
+        "fold-routine",
+        "scale",
+        "knot-face",
+        "object-links"
+      ],
+      "reviewer": null,
+      "title": "A paged, chronological thread feed for a project"
+    },
+    {
+      "depends_on": [
+        "feed"
+      ],
+      "description": "The thread, knot, fold and scrubber components with their styles, rendered in the mock harness from fixtures recorded from the trial Hub's feed, in light and dark, with the draw and unspool motion and reduced-motion fallback. Screenshots go to the operator for the visual approval.",
+      "files": [
+        "hub/ui/src/components/thread/",
+        "hub/ui/src/styles/thread.css",
+        "hub/ui/mock/screens/Thread.tsx",
+        "hub/ui/mock/routes.ts",
+        "hub/ui/mock/fixtures.ts",
+        "hub/ui/mock/MockApp.tsx"
+      ],
+      "from": null,
+      "key": "mock",
+      "requirements": [
+        "knot-face",
+        "motion-and-access",
+        "recursive-knots",
+        "opens-at-present"
+      ],
+      "reviewer": null,
+      "title": "The Thread page's components, proven in the mock"
+    },
+    {
+      "depends_on": [
+        "mock"
+      ],
+      "description": "Add the tab after Overview, fetch the feed level by level, knot addresses, jump to beginning and back to present, live arrival from the operator event stream, and the refreshed UI bundle. Only after the operator approved the mock.",
+      "files": [
+        "hub/ui/src/lib/navigation.ts",
+        "hub/ui/src/App.tsx",
+        "hub/ui/src/components/layout/TopBar.tsx",
+        "hub/ui/src/hooks/useThread.ts",
+        "hub/ui/src/components/thread/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "wire",
+      "requirements": [
+        "thread-tab",
+        "opens-at-present",
+        "addressable",
+        "live-end",
+        "scale",
+        "motion-and-access"
+      ],
+      "reviewer": null,
+      "title": "The Thread tab in the app"
+    },
+    {
+      "depends_on": [
+        "wire"
+      ],
+      "description": "Drive the agent-checked criteria end to end on the trial Hub against this repository's project and a seeded 10,000-item project, and record the evidence.",
+      "files": [
+        "scripts/drive/thread_drive.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "thread-tab",
+        "opens-at-present",
+        "recursive-knots",
+        "object-links",
+        "addressable",
+        "live-end",
+        "scale",
+        "motion-and-access",
+        "knot-face"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive on the trial Hub"
+    },
+    {
+      "depends_on": [],
+      "description": "In hub/hub/project_thread.py a fold's key is `fold:{parent_key}|{first member key}`, and Thread.find/_parent_of recover the parent with `key[5:].split('|', 1)[0]`. When the parent is itself a fold (a surface group holding four or more consecutive routine knots, e.g. firings of a job with no loop document, or runs with no task), the inner fold's key is `fold:fold:surface|x|x` and the recovered parent is `fold:surface`, which does not exist. The inner fold then reports child_count 0 and GET /thread?under=<it> answers 404, so its members are unreachable. Make fold keys unambiguous (or resolve the parent another way) so nested folds open, report their count, and appear in /thread/knot ancestors. Add a Hub test: one document plus five firings of a non-loop job; walking the thread reaches all five firings once. Also extend the ac-whole fixture to cover the listed kinds it currently omits: a vault addition and a document merge (SpecDocumentMerge).",
+      "from": null,
+      "key": "fold-inside-surface-group",
+      "requirements": [
+        "whole-history",
+        "fold-routine",
+        "recursive-knots"
+      ],
+      "reviewer": null,
+      "title": "A routine fold inside a surface group opens"
+    },
+    {
+      "depends_on": [],
+      "description": "FR-6 requires every knot's face to show the names of who acted. In hub/hub/project_thread.py document knots are built with no actors and settle() never gathers them from children; firing knots ignore the job's agent (AIJob.agent); tasks with no assigner/assignee and merges/integrations with a null actor also come out empty. Give each knot actors from its stored records: a document from its events/merges and the actors beneath it, a firing from its job's agent, and containers (document, task, conversation) at least the actors of what they hold. Add a Hub test asserting every knot reached by walking the feed has a non-empty actors list, over a fixture that includes a document, a firing and a merge.",
+      "from": null,
+      "key": "knot-face-actors",
+      "requirements": [
+        "knot-face"
+      ],
+      "reviewer": null,
+      "title": "Every knot in the feed names who acted"
+    },
+    {
+      "depends_on": [],
+      "description": "ac-address requires that opening the address of a run knot three levels deep leaves document, task AND run open, with the run knot in view and focused. ThreadScreen.tsx (address effect, ~line 117) does setOpen(new Set(found.ancestors)), so only the ancestors open and the addressed knot stays closed. Open the addressed knot too when it holds knots (keep focus on its head and keep it in view), and cover it with a ThreadScreen test that fails while the addressed run stays closed.",
+      "files": [
+        "hub/ui/src/components/thread/ThreadScreen.tsx",
+        "hub/ui/src/__tests__/ThreadScreen.test.tsx"
+      ],
+      "from": null,
+      "key": "address-opens-the-knot",
+      "requirements": [
+        "addressable"
+      ],
+      "reviewer": null,
+      "title": "Opening a knot's address also opens the knot itself"
+    },
+    {
+      "depends_on": [],
+      "description": "The link on a task knot calls openTask (App.tsx ~418), which sets pendingOpenTaskId and navigates to the Tasks tab. TasksScreen opens the drawer only when the task is in its page, and that page is loaded with excludeArchivedCompleted. Most tasks in a history are archived-completed, so the link lands on the board with no task open. Make following a task knot's link show that task whatever its status or archival (for example, fetch it by id for the drawer, or include it in the page), and test it with an archived approved task.",
+      "files": [
+        "hub/ui/src/App.tsx",
+        "hub/ui/src/components/tasks/TasksScreen.tsx"
+      ],
+      "from": null,
+      "key": "task-link-opens-the-task",
+      "requirements": [
+        "object-links"
+      ],
+      "reviewer": null,
+      "title": "A task knot's link opens that task"
+    }
+  ],
+  "title": "Pull the thread: a project's whole history"
+}
