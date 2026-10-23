@@ -82,6 +82,9 @@ WORDS = {
     "conversation": "Conversation",
     "vault-entry": "Vault entry",
     "fold": "Folded",
+    "chapter": "Chapter",
+    "release": "Release",
+    "commit": "Commit",
 }
 
 #: Who a knot names when the stored record names nobody (the Hub acted on its own).
@@ -167,6 +170,8 @@ class Knot:
     record_count: int = 0
     descendants: int = 0
     parent: Optional[str] = None
+    # Chapters only: the plain-language summary the manager (or an agent) wrote.
+    summary: Optional[str] = None
 
     @property
     def sort_key(self) -> Tuple[datetime, str]:
@@ -209,6 +214,9 @@ class Thread:
     def __init__(self) -> None:
         self.knots: Dict[str, Knot] = {}
         self.top: List[Knot] = []
+        #: When the project has chapters (`chapters.overlay`): the surface -- its chapters by start,
+        #: then the knots no chapter holds -- in place of the structural surface.
+        self.chaptered: Optional[List[Knot]] = None
 
     def add(self, knot: Knot) -> Knot:
         self.knots[knot.key] = knot
@@ -256,7 +264,7 @@ class Thread:
     def level(self, key: Optional[str]) -> Optional[List[Knot]]:
         """The knots one level down from `key` (the surface when None), folded; None if unknown."""
         if key is None or key == SURFACE:
-            return group_surface(self.top)
+            return list(self.chaptered) if self.chaptered is not None else group_surface(self.top)
         if key.startswith("fold:"):
             fold = self.find(key)
             if fold is None:
@@ -295,6 +303,8 @@ class Thread:
         if knot.kind == "fold":
             head = fold_parent(knot.key)
             return None if head == SURFACE else head
+        if knot.parent is None and self.chaptered is not None:
+            return None  # a chapter, or a knot no chapter holds yet: both sit on the surface
         if knot.parent is None:
             # A surface knot: beneath a surface group when one holds it, and beneath a routine
             # fold inside that group when one holds it there.
@@ -846,11 +856,14 @@ def page(
         point = _cursor_tuple(before or after or "")
         if point is None:
             return None
+        # A chaptered surface is ordered by position (chapters, then ungrouped knots) and need not
+        # be sorted by start, so a cursor names its place by key; bisecting is the fallback.
+        index = next((i for i, k in enumerate(ordered) if k.key == point[1]), None)
         if before is not None:
-            hi = bisect.bisect_left(sort_keys, point)
+            hi = index if index is not None else bisect.bisect_left(sort_keys, point)
             lo = max(0, hi - limit)
         else:
-            lo = bisect.bisect_right(sort_keys, point)
+            lo = index + 1 if index is not None else bisect.bisect_right(sort_keys, point)
             hi = min(total, lo + limit)
     else:
         lo, hi = max(0, total - limit), total
@@ -886,4 +899,5 @@ def face(knot: Knot, thread: Thread) -> Dict[str, Any]:
         "link": knot.link,
         "records": knot.records[:RECORDS_SHOWN],
         "record_count": knot.record_count,
+        "summary": knot.summary,
     }
