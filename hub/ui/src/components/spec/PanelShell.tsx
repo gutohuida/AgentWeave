@@ -190,7 +190,7 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
             role="tabpanel"
             id="panel-tabpanel"
             aria-labelledby={`panel-tab-${activeTab.id}`}
-            className="h-full min-h-0"
+            className="flex h-full min-h-0 flex-col"
             data-testid="panel-tab-content"
           >
             {renderTabContent(activeTab)}

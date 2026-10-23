@@ -85,6 +85,15 @@ describe('PanelShell', () => {
     expect(screen.getByRole('tab', { name: 'Specs' })).toHaveAttribute('aria-selected', 'false')
   })
 
+  it('lays tab content out as a flex column, so a document fills the panel', () => {
+    // The spec document's root grows with `flex: 1`; in a block container that does nothing, and
+    // its frame fell back to the browser's 150px iframe height (operator, 2026-10-23).
+    usePanelTabsStore.getState().openTab(PROJECT, 'specs')
+    renderShell()
+
+    expect(screen.getByTestId('panel-tab-content')).toHaveClass('flex', 'flex-col', 'h-full', 'min-h-0')
+  })
+
   it('opens a tab from the plus menu', async () => {
     const user = userEvent.setup()
     renderShell()
