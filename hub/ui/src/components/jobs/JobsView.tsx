@@ -12,6 +12,7 @@ import { describeCron, formatAgo, formatDateTime, formatIn } from '@/lib/format'
 import { jobState, loopStateLabel } from '@/lib/jobState'
 import { TrendDots } from './JobDetails'
 import '@/styles/jobs.css'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /** The Jobs tab: one full-width row per job.
  *
@@ -123,14 +124,7 @@ export function JobsView({
       ) : null}
 
       {loading ? (
-        <ul className="aw-jobs-list aw-delayed" aria-label="Loading jobs">
-          {[0, 1, 2].map((i) => (
-            <li key={i} className="aw-job-row" aria-hidden="true">
-              <span className="skeleton aw-job-icon" />
-              <span className="skeleton h-4 w-2/5" />
-            </li>
-          ))}
-        </ul>
+        <LoadingThread label="Loading jobs" />
       ) : filter === 'archived' ? (
         archivedError ? (
           // Not "No archived jobs": a list that could not be read is not an empty one.

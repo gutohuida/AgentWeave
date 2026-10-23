@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { LogLine } from './LogLine'
 import { useQueryClient } from '@tanstack/react-query'
 import { tint } from '@/lib/colorTint'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 const SEVERITIES = ['all', 'error', 'warn', 'info', 'debug'] as const
 type Severity = (typeof SEVERITIES)[number]
@@ -391,9 +392,7 @@ export function LogsView() {
         style={{ background: 'var(--bg)' }}
       >
         {isLoading ? (
-          <div className="space-y-2 p-3" aria-label="Loading log entries">
-            {[0, 1, 2, 3, 4, 5].map((row) => <div key={row} className="skeleton h-6 w-full" aria-hidden="true" />)}
-          </div>
+          <LoadingThread label="Loading log entries" />
         ) : logsError && entries.length === 0 ? (
           // A failed read is not an empty log: "No log entries yet" was what it said.
           <p role="alert" className="font-mono text-xs p-4" style={{ color: 'var(--amber)' }}>

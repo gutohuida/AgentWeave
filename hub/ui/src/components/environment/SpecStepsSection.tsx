@@ -8,6 +8,7 @@ import {
 } from '@/api/spec'
 import { Button } from '@/components/ui/button'
 import { SettingsSection } from '@/components/environment/SettingsSection'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 const SIZES: SpecSize[] = ['fix', 'small', 'large']
 const DEFAULT_NEW_SIZES: SpecSize[] = ['small', 'large']
@@ -144,7 +145,7 @@ export function SpecStepsSection() {
           {readableApiError(loadError, "This project's spec steps could not be read.")}
         </div>
       )}
-      {!data && !loadError && <div aria-label="Loading spec steps" className="skeleton my-4 h-[58px] w-full" />}
+      {!data && !loadError && <LoadingThread label="Loading spec steps" minHeight={90} />}
       {data && (
       <div data-testid="spec-steps">
         {diagnostics.length > 0 && (

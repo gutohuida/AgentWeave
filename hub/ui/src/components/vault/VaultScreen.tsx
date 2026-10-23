@@ -33,6 +33,7 @@ import { VaultLibrary } from './VaultLibrary'
 import type { VaultFact } from './VaultReader'
 import { hasTrackedFile } from './vaultKinds'
 import '@/styles/vault.css'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /**
  * The Vault tab: the library (`VaultLibrary`) fed from the Hub
@@ -133,7 +134,7 @@ export function VaultScreen() {
   if (!map.data) {
     return (
       <div className="vault-state">
-        <div aria-label="Loading the vault" className="skeleton aw-delayed h-[160px] w-full max-w-[720px]" />
+        <LoadingThread label="Loading the vault" />
       </div>
     )
   }

@@ -1,0 +1,236 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the hub/ui source tree",
+      "how_to_check": "npx vitest run src/__tests__/loadingThread.test.tsx (written first; fails on master ed872fb)",
+      "key": "no-skeleton-left",
+      "requirement": "one-loader",
+      "then": "it finds no className containing 'skeleton' and no 'animate-spin' in components/, and LoadingThread renders role=status with its label and a [data-loading-thread] svg",
+      "when": "the loader sweep test runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Vite dev against the trial Hub with the Hub's answers delayed so the Tasks and Vault screens wait",
+      "how_to_check": "py -3.11 scripts/drive/d1023_loading_thread.py (written first; fails on master ed872fb)",
+      "key": "it-weaves-live",
+      "requirement": "weave-motion",
+      "then": "a [data-loading-thread] svg is visible after 300 ms, its stroke dash offset changes between two frames 200 ms apart, and it is gone once the content arrives",
+      "when": "each screen is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same drive with reducedMotion: reduce",
+      "how_to_check": "same drive, reduced-motion pass",
+      "key": "still-when-reduced",
+      "requirement": "still-under-reduced-motion",
+      "then": "the thread is fully drawn and does not change between frames",
+      "when": "a screen waits"
+    },
+    {
+      "checked_by": "agent",
+      "given": "LoadingThread rendered in a test",
+      "how_to_check": "npx vitest run src/__tests__/loadingThread.test.tsx",
+      "key": "quiet-when-fast",
+      "requirement": "no-flash",
+      "then": "its root carries .aw-delayed (300 ms hold, then fade in)",
+      "when": "it mounts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a former skeleton site, e.g. the Vault screen loading",
+      "how_to_check": "npx vitest run src/__tests__/loadingThread.test.tsx",
+      "key": "named-status",
+      "requirement": "announced",
+      "then": "getByRole('status', {name: 'Loading the vault'}) finds the thread",
+      "when": "it renders while loading"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator's app after the bundle lands",
+      "how_to_check": "operator, by eye",
+      "key": "looks-right",
+      "requirement": "sizes",
+      "then": "the thread reads as the brand mark at each size and in both themes",
+      "when": "they open Tasks, the Vault and a spec on a slow load"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "dbd95a2003f94b29744b3066b1afac98dc1b447c327c207bacf6904d671fd42e",
+      "FR-2": "2c5981e00635d764fb3844f0a30e403311dc834517853cd6895e5584013f60ac",
+      "FR-3": "1e5e6857aab51a9e65371cc18cbdeabe073e0c5247012b6fcbbe6f89d905e43b",
+      "FR-4": "fd3c29d2b6acc8b532e6ec4d795ceb6a05b095485c7c0c7d68966e89c2e112f4",
+      "FR-5": "5acb7d0dc4411a1a553b18f1a4517acfd9b4940e190212fe43bef363cac8e886",
+      "FR-6": "582b6af5f9a5f61f5fe7109f18401c44a7b25a05fcb52004bacd085edaeb9a6f"
+    },
+    "high_water": 6,
+    "requirements": {
+      "announced": "FR-6",
+      "no-flash": "FR-3",
+      "one-loader": "FR-1",
+      "sizes": "FR-4",
+      "still-under-reduced-motion": "FR-5",
+      "weave-motion": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1: UI only, no Hub code, no migration; the committed bundle reaches :8000 on reload (that is the delivery).\nD1. One component, components/common/LoadingThread.tsx, animated by CSS keyframes on stroke-dasharray/dashoffset over pathLength=1 paths (no JS animation loop), so dozens of instances cost nothing. The mask's cut path animates with the second stroke so the gap opens only when that stroke crosses.\nD2. Size is a prop: 'panel' | 'inline' | 'control'. Panel centres in a box whose min-height the call site passes, keeping the layout stability the skeletons gave.\nD3. .aw-delayed stays the delay mechanism, applied by the component.\nD4. The .skeleton CSS goes with its last user; hubVisualLanguage's foundation list swaps .skeleton for .aw-loading-thread.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "The operator asked that 'everywhere that needs loading in AgentWeave use the thread animation'. Today about 65 skeleton placeholders across 31 components and one spinning icon (JobForm) show loading; none of them is the brand's motion, and they differ per screen. The thread exists only in the identity kit (brand/components/LoadingThread).",
+  "requirements": [
+    {
+      "key": "one-loader",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator: 'Every where that needs loading in agentweave use the thread animation.'",
+      "statement": "The app MUST render every loading placeholder with the LoadingThread component; no component may render a .skeleton placeholder or a spinning icon for loading."
+    },
+    {
+      "key": "weave-motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Picked over 'draw and fade' and 'shuttle' in the thread lab (https://claude.ai/artifact/GniK2BGBQJzh2ouG3boTpN).",
+      "statement": "LoadingThread MUST animate the loop with the weave-through motion: the visible stretch of thread grows from the left end to the right end over the first half of a 1.8 s cycle, then its start follows to the right end over the second half, repeating without a fade; the crossing gap opens only once the second stroke reaches it."
+    },
+    {
+      "key": "no-flash",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Fast loads must keep showing nothing (the existing .aw-delayed rule).",
+      "statement": "LoadingThread MUST stay invisible for the first 300 ms after it mounts, then fade in, so a load shorter than that shows nothing."
+    },
+    {
+      "key": "sizes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The kit's two drawings: master at 48 px and up, small at 16 to 32 px.",
+      "statement": "LoadingThread MUST offer a panel size (64 px, master drawing, centred in the space the content will take), an inline size (24 px, small drawing, followed by its label as visible text) and a control size (16 px, small drawing, stroke in currentColor so it sits inside a button)."
+    },
+    {
+      "key": "still-under-reduced-motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The kit's rule; the app honours prefers-reduced-motion elsewhere.",
+      "statement": "Under prefers-reduced-motion LoadingThread MUST stand still, fully drawn."
+    },
+    {
+      "key": "announced",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The replaced placeholders carry aria-labels that tests and screen readers use.",
+      "statement": "LoadingThread MUST expose role=status with the accessible name its call site gives, keeping each replaced placeholder's existing label."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A LoadingThread component in hub/ui (panel 64 px master drawing, inline 24 px small drawing beside a label, control 16 px small drawing in currentColor)",
+      "The 'weave through' motion: the thread draws in from the left end through the loop to the right end, then its tail follows it out; 1.8 s cycle, continuous, madder (--brand-madder), currentColor at control size",
+      "Replacing every .skeleton placeholder and the JobForm spinner with it, keeping each site's accessible label",
+      "Brand book: the LoadingThread guideline moves from 'draw, hold, fade' to 'weave through' and drops 'short inline waits keep the spinner'"
+    ],
+    "non_goals": [
+      "The startup splash and the opening sound (a separate change)",
+      "Notification sounds (a separate change)",
+      "Busy states that are text only ('Saving...' labels without a placeholder)"
+    ]
+  },
+  "summary": "Every place the app waits for data shows the brand's loading thread, the loop drawn by the 'weave through' motion (operator's pick in the thread lab, 2026-10-23), instead of the grey shimmer skeletons and the one spinner. One component, three sizes, still invisible for loads under 300 ms, still under reduced motion.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "loadingThread.test.tsx (source sweep and render) and scripts/drive/d1023_loading_thread.py (delayed Hub answers, Playwright against :8010)",
+      "files": [
+        "hub/ui/src/__tests__/loadingThread.test.tsx",
+        "scripts/drive/d1023_loading_thread.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "one-loader",
+        "weave-motion",
+        "still-under-reduced-motion"
+      ],
+      "reviewer": null,
+      "title": "Acceptance test and drive, failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "components/common/LoadingThread.tsx, keyframes in index.css, reduced-motion rule",
+      "files": [
+        "hub/ui/src/components/common/LoadingThread.tsx",
+        "hub/ui/src/index.css"
+      ],
+      "from": null,
+      "key": "component",
+      "requirements": [
+        "weave-motion",
+        "no-flash",
+        "sizes",
+        "still-under-reduced-motion",
+        "announced"
+      ],
+      "reviewer": null,
+      "title": "LoadingThread component and CSS"
+    },
+    {
+      "depends_on": [
+        "component"
+      ],
+      "description": "the 31 components that render .skeleton, plus JobForm's animate-spin; tests that query skeletons follow",
+      "files": [
+        "hub/ui/src/components"
+      ],
+      "from": null,
+      "key": "sweep",
+      "requirements": [
+        "one-loader",
+        "announced"
+      ],
+      "reviewer": null,
+      "title": "Replace every skeleton and the spinner"
+    },
+    {
+      "depends_on": [
+        "sweep"
+      ],
+      "description": "brand/components/LoadingThread README and preview to weave-through; rebuild and refresh the UI bundle",
+      "files": [
+        "brand/components/LoadingThread/README.md",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "brand",
+      "requirements": [
+        "weave-motion"
+      ],
+      "reviewer": null,
+      "title": "Brand book and bundle"
+    }
+  ],
+  "title": "The thread is how AgentWeave shows it is loading"
+}

@@ -11,6 +11,7 @@ import { useTaskStory, type StoryEvent, type TaskStory as Story } from '@/api/ta
 import { hubDate } from '@/lib/hubTime'
 import { evidenceTone, statusTone } from '@/lib/storyTones'
 import { formatAiCreditAmount, formatAiCredits } from '@/components/accounting/accountingDisplay'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /**
  * A task's whole story (slice task-story of the visibility roadmap): a summary that answers "is
@@ -513,15 +514,7 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
 
 function Loading() {
   return (
-    <div className="grid gap-3" aria-label="Loading the story">
-      <div className="aw-skeleton" style={{ height: 56, borderRadius: 10 }} />
-      {[70, 55, 80].map((width, index) => (
-        <div key={index} className="grid gap-1.5" style={{ paddingLeft: 34 }}>
-          <div className="aw-skeleton" style={{ width: `${width}%` }} />
-          <div className="aw-skeleton" style={{ width: '30%', height: 9 }} />
-        </div>
-      ))}
-    </div>
+    <LoadingThread label="Loading the story" />
   )
 }
 

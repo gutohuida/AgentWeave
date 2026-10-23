@@ -115,19 +115,42 @@ Why each value:
   report of the connection, so it stays).
 - Voice rules are in `brand/README.md` § Voice: plain, active, no hype, no emoji, no "AI magic".
 
-## 7. Motion: the loading thread
+## 7. Motion
 
-The brand's one motion. The thread draws itself from the left end, through the loop, to the right
-end, holds, fades, and repeats every **1.6 s** on `cubic-bezier(0.16, 1, 0.3, 1)`:
+**The loading thread: "weave through"** (operator's pick, 2026-10-23, in the thread lab
+https://claude.ai/artifact/GniK2BGBQJzh2ouG3boTpN). The thread draws in from the left end through
+the loop to the right end, then its tail follows it out the far end, continuously, on a **1.8 s**
+cycle with no fade:
 
-- path A: `stroke-dashoffset` 1 → 0 over 0–45%, holds to 85%, fades out by 100%;
-- path B: starts at 30%, draws by 75%, holds to 85%, fades with A;
-- both paths use `pathLength="1"` and `stroke-dasharray: 1`;
+- path A's stretch grows over 0–25% of the cycle, path B's over 25–50%; the tail runs through A over
+  50–75% and through B over 75–100%; each quarter eases in and out, so the thread pauses briefly at
+  the loop, where the human is;
+- both paths use `pathLength="1"`; a visible window [s, e] is `stroke-dasharray: e-s 2;
+  stroke-dashoffset: -s`, and the mask's crossing cut follows path B, so the gap opens only when B
+  reaches the crossing;
 - under `prefers-reduced-motion` it stands still, fully drawn.
 
-Sizes: 64 px in an empty panel, 24 px inline. Intended for whole-panel and first loads longer than
-about half a second, behind the app's delayed-loader class so quick loads never flash it. Reference
-implementation: `brand/components/LoadingThread/preview.html`.
+Sizes: 64 px (master drawing) for a panel, 24 px inline beside its label, 16 px inside a button in
+the text colour. It is every loading state in the app, held back for 300 ms so quick loads show
+nothing. It replaced the kit's first motion ("draw, hold, fade, every 1.6 s"), which read as
+restarting on long waits.
+
+**The opening splash: "shuttle pass"** (operator's pick, 2026-10-23). The window opens at once and
+a bright glint runs ahead of the madder thread as it draws the W, like a shuttle crossing the loom;
+then the name and tagline appear. A cold open lasts at least about 2 s and keeps weaving until the
+Hub is ready; a warm open (Hub already running) plays a short 1.2 s version.
+
+**Sound** (decided 2026-10-23): one plucked-thread instrument, synthesised in code (Karplus-Strong),
+no audio files. Opening: one note per corner of the W (D4 A4 D5 E5 A5, panned left to right with the
+thread), then a soft D-A-F♯ chord as the name appears; the CLI plays it, because the window's
+browser engine blocks sound before a click. Needs you: A4 → E5. Done: E5 → D5. Stalled or failed:
+A3 → F3, muted. Ready (after a long cold start): D5 + A5.
+
+**Notifications** (decided 2026-10-23): every project on the Hub notifies, labelled with its name.
+Window in front: a toast and a quiet sound. Window in the background: the sound, a count in the
+title and a flashing taskbar button. One sound at most every few seconds; a burst is one sound and
+one grouped toast. Sounds by default for "needs you" and "stalled or failed"; "done" is off by
+default.
 
 ## 8. Where it shipped
 
@@ -151,6 +174,6 @@ As of 2026-10-23:
   "Multi-agent AI collaboration framework…"; the tagline was offered as the replacement and not
   yet answered.
 - No Apple touch icon in the app (the PNG exists here in `logos/`).
-- The loading thread exists only in this kit, not in the app.
-- Being explored (2026-10-23): a startup splash that plays the thread before the window opens, the
-  thread for every loading state, a sound with the opening animation, and sounded notifications.
+- Being built (2026-10-23): the loading thread in the app (change
+  `the-thread-is-how-agentweave-shows-it-is-loading`). Next: the splash with the opening sound, then
+  sounded notifications, then a test of real Windows notifications.

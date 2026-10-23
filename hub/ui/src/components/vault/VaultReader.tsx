@@ -10,6 +10,7 @@ import { toast } from '@/lib/toast'
 import { formatAgo, formatDateTime, formatDay } from '@/lib/format'
 import { baseName, canExtract, fileLabel, folderOf, hasTrackedFile, kindOf, parseTranscript } from './vaultKinds'
 import { ContradictionCard, type VaultActionResult } from './VaultReview'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /** One entry, read. The text is rendered for what it is: a document as Markdown, a transcript as
  *  speaker turns, a rule or decision as a statement. Metadata is a quiet row of label/value pairs;
@@ -258,7 +259,7 @@ function EntryText({
   const heldElsewhere = !entry.available && !hasTrackedFile(entry)
   if (!page) {
     if (heldElsewhere) return <PrivateNote entry={entry} />
-    return <div className="skeleton aw-delayed h-[180px] w-full max-w-[72ch]" aria-label="Loading the entry" />
+    return <LoadingThread label="Loading the entry" minHeight={180} />
   }
   if (page.content === null) {
     // The Hub says why there is no text: held on another machine, or not read yet.

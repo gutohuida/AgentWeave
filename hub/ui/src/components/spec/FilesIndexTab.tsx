@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { FileTree } from './FileTree'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 interface FilesIndexTabProps {
   paths: readonly string[]
@@ -52,9 +53,7 @@ export function FilesIndexTab({ paths, isLoading, currentPath, onSelect }: Files
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-testid="files-index-results">
         {isLoading ? (
-          <div className="flex flex-col gap-2 p-2" aria-label="Loading files">
-            {[72, 84, 61, 78].map((width) => <div key={width} className="skeleton h-7" style={{ width: `${width}%` }} />)}
-          </div>
+          <LoadingThread label="Loading files" />
         ) : typed ? (
           matches.length === 0 ? (
             <p style={{ padding: 10, fontSize: 12, color: 'var(--text-3)' }}>No matching files.</p>

@@ -22,6 +22,7 @@ import { BOARD_COLUMNS, BoardView, type BoardMoves, type TasksView } from './Boa
 import type { ColumnDropState } from './BoardColumn'
 import { DependencyListView } from './DependencyListView'
 import { TaskDetailDrawer } from './TaskDetailDrawer'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 const FOLDS_KEY = 'aw.boardFolds'
 const MOVE_INSTRUCTIONS_ID = 'task-board-move-instructions'
@@ -259,15 +260,7 @@ export function TasksScreen({
   let body: React.ReactNode
   if (isLoading) {
     body = (
-      <div className="aw-board-loading aw-delayed" aria-label="Loading tasks">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i}>
-            <div className="skeleton h-3 w-20" />
-            <div className="skeleton h-16 w-full" />
-            <div className="skeleton h-16 w-full" />
-          </div>
-        ))}
-      </div>
+      <LoadingThread label="Loading tasks" minHeight={240} />
     )
   } else if (isError) {
     body = (

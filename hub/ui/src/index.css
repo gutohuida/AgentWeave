@@ -466,23 +466,42 @@
     pointer-events: none;
   }
 
-  /* Shape-matched loading keeps layout stable while content arrives. The
-     static shape remains when reduced motion removes the sweep. */
-  .skeleton {
-    position: relative;
-    overflow: hidden;
-    border-radius: var(--radius-sm);
-    background: var(--surface-3);
+  /* Loading is the brand's thread (LoadingThread.tsx; the-thread-is-how-agentweave-shows-it-is-loading).
+     The loop weaves through on a 1.8s cycle: path A's stretch grows over the first quarter, path B's
+     over the second, then the tail follows out through A and B. Each path has pathLength=1, so a
+     visible window [s, e] is `stroke-dasharray: e-s 2; stroke-dashoffset: -s`, and an empty one is
+     parked at offset -1.5, where a round cap's zero-length dash falls off the path. The crossing
+     cut in the mask runs aw-weave-b too, so the gap opens only when B reaches it. */
+  .aw-loading-thread { color: var(--text-2); }
+  .aw-loading-thread--panel { display: grid; place-items: center; width: 100%; min-height: 160px; }
+  .aw-loading-thread--inline { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  .aw-loading-thread--control { display: inline-flex; vertical-align: middle; }
+  .aw-loading-thread .aw-thread { stroke: var(--brand-madder); }
+  .aw-loading-thread--control .aw-thread { stroke: currentColor; }
+  .aw-loading-thread svg { flex: none; overflow: visible; }
+  .aw-loading-thread .aw-thread-a,
+  .aw-loading-thread .aw-thread-b {
+    animation-duration: 1.8s;
+    animation-iteration-count: infinite;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
   }
-  .skeleton::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(90deg, transparent, var(--border-hi), transparent);
-    transform: translateX(-100%);
-    animation: skeleton-shimmer 1.8s var(--ease) infinite;
+  .aw-loading-thread .aw-thread-a { animation-name: aw-weave-a; }
+  .aw-loading-thread .aw-thread-b { animation-name: aw-weave-b; }
+  @keyframes aw-weave-a {
+    0%        { stroke-dasharray: 0 2; stroke-dashoffset: 0; }
+    25%, 50%  { stroke-dasharray: 1 2; stroke-dashoffset: 0; }
+    75%       { stroke-dasharray: 0 2; stroke-dashoffset: -1; }
+    75.01%, 100% { stroke-dasharray: 0 2; stroke-dashoffset: -1.5; }
   }
-  @keyframes skeleton-shimmer { to { transform: translateX(100%); } }
+  @keyframes aw-weave-b {
+    0%, 25%   { stroke-dasharray: 0 2; stroke-dashoffset: -1.5; }
+    25.01%    { stroke-dasharray: 0 2; stroke-dashoffset: 0; }
+    50%, 75%  { stroke-dasharray: 1 2; stroke-dashoffset: 0; }
+    100%      { stroke-dasharray: 0 2; stroke-dashoffset: -1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .aw-loading-thread .aw-thread-a, .aw-loading-thread .aw-thread-b { animation: none; stroke-dasharray: none; }
+  }
 
   .interactive-card {
     transition: border-color var(--dur-fast) var(--ease),
@@ -589,13 +608,6 @@
      comment sitting directly above the element it styles; removed again 2026-08-23. */
   .spec-reading-header { background: var(--rail); }
   .spec-reading-body { background: var(--bg); box-shadow: inset 0 1px var(--lift-hi); }
-  .spec-loading-card {
-    margin: 18px;
-    padding: 16px;
-    border: 1px solid var(--border-region);
-    border-radius: var(--radius-lg);
-    background: var(--surface);
-  }
 
   /* S2/S4 considered task surfaces: the board stays dense and neutral, while depth and motion
      make whole-card actions, nested columns, dialogs and graph lineage legible. */
@@ -1850,23 +1862,6 @@
     color: var(--text-2);
   }
   .trust-state-icon.is-error { color: var(--red); background: color-mix(in srgb, var(--red) 9%, var(--surface-2)); }
-  /* One skeleton vocabulary, not two. This used to be a flat `--surface-3` bar with no shimmer,
-     sitting on the same screens as `.skeleton` — a static grey bar reads as an empty row rather
-     than as loading. It now composes with `.skeleton` and only sets its own height. */
-  .trust-state-skeleton {
-    height: 8px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-3);
-    position: relative;
-    overflow: hidden;
-  }
-  .trust-state-skeleton::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(90deg, transparent, var(--border-hi), transparent);
-    animation: skeleton-shimmer 1.8s var(--ease) infinite;
-  }
   .setup-dialog { animation: setup-dialog-in var(--dur-base) var(--ease); }
   @keyframes setup-dialog-in {
     from { opacity: 0; transform: translateY(6px) scale(0.99); }

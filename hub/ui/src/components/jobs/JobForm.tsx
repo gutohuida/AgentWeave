@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { JobCreate } from '@/api/jobs'
 import { cronDayAmbiguity, describeCron, formatNextRun, nextRuns } from '@/lib/cron'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 interface JobFormProps {
   onSubmit: (job: JobCreate) => void
@@ -392,7 +393,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
             <Button variant="primary" size="md" type="submit" disabled={isPending}>
               {isPending ? (
                 <>
-                  <Icon name="sync" size={18} className="animate-spin" />
+                  <LoadingThread label="Creating" size="control" />
                   Creating…
                 </>
               ) : (

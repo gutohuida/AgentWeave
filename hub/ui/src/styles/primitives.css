@@ -320,7 +320,7 @@
 .aw-icon-button:hover { background: var(--row-hover); color: var(--text); }
 .aw-icon-button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
 
-/* ── Loading: never flash a skeleton for a fast load ─────────────────── */
+/* ── Loading: never flash a loader for a fast load ───────────────────── */
 /* A loader that appears and vanishes within a frame or two reads as a flicker. This holds it
    invisible for 300ms, then fades it in; a load faster than that shows nothing at all. */
 .aw-delayed { animation: aw-delayed-in 200ms ease 300ms both; }

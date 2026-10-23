@@ -12,6 +12,7 @@ import {
 import { evidenceTone, statusTone } from '@/lib/storyTones'
 import { hubDate } from '@/lib/hubTime'
 import { wordDiff } from '@/lib/wordDiff'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /**
  * One requirement's story (slice requirement-story): its wording now, every revision with who
@@ -159,10 +160,8 @@ export function RequirementStory({
 
   if (isLoading) {
     return (
-      <div className="aw-evidence-page" aria-label="Loading the requirement">
-        {[60, 85, 70].map((width, index) => (
-          <div key={index} className="aw-skeleton" style={{ width: `${width}%`, height: 14 }} />
-        ))}
+      <div className="aw-evidence-page">
+        <LoadingThread label="Loading the requirement" />
       </div>
     )
   }

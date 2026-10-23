@@ -53,19 +53,17 @@ import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { usePanelTabsStore, loopTabId } from '@/store/panelTabsStore'
 import { CheckpointStatusBanner } from '@/components/checkpoints/CheckpointStatusBanner'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 export function HubConnectionState({ state, onRetry }: { state: 'pending' | 'unreachable'; onRetry?: () => void }) {
   const pending = state === 'pending'
   return (
-    <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }} role={pending ? 'status' : undefined} aria-label={pending ? 'Connecting to the Hub' : undefined}>
+    <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }}>
       <div className="trust-state" role={pending ? undefined : 'alert'}>
         <span className={`trust-state-icon${pending ? '' : ' is-error'}`}><Icon name={pending ? 'sync' : 'error_outline'} size={22} /></span>
         <h1 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{pending ? 'Connecting to the Hub' : "Can't reach the Hub"}</h1>
         {pending ? (
-          <div className="mx-auto mt-4 max-w-52 space-y-2" aria-hidden="true">
-            <div className="trust-state-skeleton w-full" />
-            <div className="trust-state-skeleton mx-auto w-2/3" />
-          </div>
+          <LoadingThread label="Connecting to the Hub" minHeight={96} className="mt-2" />
         ) : (
           <>
             <p className="mx-auto mt-2 text-xs" style={{ maxWidth: 320, color: 'var(--text-3)' }}>

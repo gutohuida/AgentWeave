@@ -254,7 +254,7 @@ describe('SpecRetiredRequirements', () => {
     const detail = screen.getByTestId('spec-retired-detail-FR-2')
     expect(detail).toHaveTextContent('Could not load FR-2')
     expect(detail).toHaveTextContent('database is locked')
-    expect(detail.querySelector('.skeleton')).toBeNull()
+    expect(detail.querySelector('[data-loading-thread]')).toBeNull()
   })
 
   it('says the list could not be loaded when the requirements read fails', () => {

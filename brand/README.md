@@ -74,7 +74,7 @@ The ink tile: `ink-tile` ground, `madder` (dark value) thread, corner `radius-ic
 ## Shape and motion
 
 - Radii: `radius-lg` (10px) is the base, with `radius-sm`, `radius-md`, `radius-xl` derived from it; `radius-content` (24px) for self-contained results.
-- Motion is quiet and short: 150, 250 and 500ms on cubic-bezier(0.16, 1, 0.3, 1). The one brand motion is the loading thread (see its component): the loop draws itself once per cycle. Under reduced motion it stands still.
+- Motion is quiet and short: 150, 250 and 500ms on cubic-bezier(0.16, 1, 0.3, 1). The brand motion is the thread: the loading thread "weaves through" (draws in, then its tail follows out, every 1.8s) and is every loading state in the app; the opening splash is the "shuttle pass", a glint running ahead of the thread as it draws. Under reduced motion both stand still. Sound and notifications: `identity-record.md` §7.
 
 ## Iconography
 

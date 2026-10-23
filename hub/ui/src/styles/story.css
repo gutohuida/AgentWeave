@@ -347,19 +347,9 @@
   transition: transform var(--dur-base) var(--ease);
 }
 
-/* Skeleton rows while the story loads, instead of a spinner. */
-.aw-skeleton {
-  height: 12px;
-  border-radius: 4px;
-  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
-  background-size: 200% 100%;
-  animation: aw-shimmer 1.4s ease-in-out infinite;
-}
-@keyframes aw-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-
 @media (prefers-reduced-motion: reduce) {
   .aw-pill, .aw-tl-item, .aw-tl-item::before, .aw-tl-item[data-fresh="true"] .aw-tl-body,
-  .aw-pill[data-live="true"]::before, .aw-tl-dot[data-live="true"], .aw-skeleton { animation: none; }
+  .aw-pill[data-live="true"]::before, .aw-tl-dot[data-live="true"] { animation: none; }
   .aw-expander, .aw-segmented-thumb, .aw-segmented button, .aw-link svg, .aw-diff-head svg { transition: none; }
 }
 

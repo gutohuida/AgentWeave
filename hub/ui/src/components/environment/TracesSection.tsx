@@ -20,6 +20,7 @@ import { formatDuration } from '@/components/traces/traceModel'
 import { Button } from '@/components/ui/button'
 import { hubDate } from '@/lib/hubTime'
 import { useConfigStore } from '@/store/configStore'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 const DESCRIPTION =
   'Every run is recorded as a trace: its model calls, tool calls, permission decisions and waits. So is what the Hub does around them: the requests that changed or failed, its events, its background work and the commands it ran, and its warnings. Export them as OTLP, or send them to a collector as they finish.'
@@ -82,7 +83,7 @@ function RecentTraces() {
   )
   let body
   if (isLoading) {
-    body = <div className="space-y-1.5">{[0, 1, 2].map((row) => <div key={row} className="skeleton h-5 w-80" />)}</div>
+    body = <LoadingThread label="Loading traces" size="inline" />
   } else if (error) {
     body = (
       <p role="alert" className="text-xs" style={{ color: 'var(--red)' }}>
@@ -196,9 +197,7 @@ export function TracesSection() {
   if (isLoading || !settings || !projectId) {
     return (
       <SettingsSection title="Traces" description={DESCRIPTION}>
-        <div aria-label="Loading trace settings" className="space-y-3 py-4">
-          {[0, 1, 2].map((row) => <div key={row} className="skeleton h-[58px] w-full" />)}
-        </div>
+        <LoadingThread label="Loading trace settings" minHeight={200} />
       </SettingsSection>
     )
   }

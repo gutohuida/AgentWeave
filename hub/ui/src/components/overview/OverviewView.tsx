@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatAgo, formatDateTime, formatDuration, formatMoney, formatTokens, formatTokensExact } from '@/lib/format'
 import '@/styles/overview.css'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /** The Overview: what needs the operator, what is running, what just finished.
  *
@@ -126,10 +127,8 @@ export function OverviewView({
 }) {
   if (loading) {
     return (
-      <div className="aw-overview aw-delayed" aria-label="Loading overview">
-        <div className="skeleton h-4 w-2/5" />
-        <div className="skeleton mt-6 h-16 w-full" />
-        <div className="skeleton mt-3 h-16 w-full" />
+      <div className="aw-overview">
+        <LoadingThread label="Loading overview" minHeight={240} />
       </div>
     )
   }

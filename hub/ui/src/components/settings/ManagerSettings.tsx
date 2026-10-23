@@ -9,6 +9,7 @@ import type { Runner } from '@/api/runners'
 import type { ModelDescriptor } from '@/api/modelCatalog'
 import { formatDateTime, formatDuration, formatMoney } from '@/lib/format'
 import { catalogModelOptions, runnerChoiceOptions } from './settingsOptions'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 /** Project settings → Manager: the work the Hub does in the background with a model.
  *
@@ -174,7 +175,7 @@ function ManagerHistory({
       </p>
     )
   }
-  if (!firings) return <div aria-label="Loading activity" className="skeleton aw-delayed my-3 h-[40px] w-full" />
+  if (!firings) return <LoadingThread label="Loading activity" size="inline" className="my-3" />
   if (firings.length === 0) return <p className="aw-empty-line">No job has spawned a model yet.</p>
   return (
     <div className="aw-history" role="table" aria-label="Manager history">

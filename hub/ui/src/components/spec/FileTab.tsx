@@ -5,6 +5,7 @@ import { readableApiError } from '@/api/client'
 import { useWorkspaceFile } from '@/api/workspace'
 import { fileColourFor, fileIconFor } from './fileIcons'
 import { FilePreview } from './FilePreview'
+import { LoadingThread } from '@/components/common/LoadingThread'
 
 interface FileTabProps {
   path: string
@@ -74,13 +75,7 @@ export function FileTab({ path, onInsertIntoComposer, onClose }: FileTabProps) {
       ) : null}
       <div className="min-h-0 flex-1 overflow-auto">
         {isLoading ? (
-          <div className="space-y-2 p-4" aria-label="Loading file">
-            <div className="skeleton h-3 w-1/3" />
-            <div className="skeleton h-3 w-11/12" />
-            <div className="skeleton h-3 w-3/4" />
-            <div className="skeleton h-3 w-5/6" />
-            <div className="skeleton h-3 w-2/3" />
-          </div>
+          <LoadingThread label="Loading file" />
         ) : error ? (
           <div className="p-6" data-testid="file-tab-error" style={{ color: 'var(--text-3)', fontSize: 13 }}>
             {readableApiError(error, 'This file could not be read.')}

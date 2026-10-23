@@ -189,17 +189,13 @@ describe('LoopsIndexTab — the governance glance (task B5.1)', () => {
     expect(screen.queryByText('stalled')).not.toBeInTheDocument()
   })
 
-  it('previews the shape of a row while loading, not a stack of blocks', () => {
-    // Finding 7: "the point of a skeleton is that it previews the shape of what's coming". The
-    // build used three 64px solid blocks; the mock uses four icon-plus-line rows and a toolbar
-    // skeleton. Asserted by count and by the icon square's fixed 14px, which a block does not have.
+  it('shows the loading thread while loading, not a stack of blocks', () => {
+    // Finding 7 replaced three 64px solid blocks; the-thread-is-how-agentweave-shows-it-is-loading
+    // replaced the row-shaped skeleton with the brand's loading thread, one named status.
     const { container } = renderIndex([], { isLoading: true })
 
-    const skeletons = container.querySelectorAll('.skeleton')
-    expect(skeletons.length).toBe(9) // one toolbar line + four rows of (icon square + line)
-    const iconSquares = Array.from(skeletons).filter(
-      (el) => (el as HTMLElement).style.width === '14px'
-    )
-    expect(iconSquares.length).toBe(4)
+    expect(screen.getByRole('status', { name: 'Loading loops' })).toBeInTheDocument()
+    expect(container.querySelectorAll('svg[data-loading-thread]').length).toBe(1)
+    expect(screen.queryByText('No loops yet.', { exact: false })).not.toBeInTheDocument()
   })
 })

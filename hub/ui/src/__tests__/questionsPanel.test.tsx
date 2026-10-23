@@ -104,11 +104,12 @@ describe('QuestionsPanel trust surface', () => {
     )
   })
 
-  it('uses question-shaped loading content with a named status', () => {
+  it('shows the loading thread as a named status while loading', () => {
     loading = true
     render(<QuestionsPanel />)
-    expect(screen.getByLabelText('Loading questions')).toBeInTheDocument()
-    expect(document.querySelectorAll('.question-row')).toHaveLength(2)
+    const status = screen.getByRole('status', { name: 'Loading questions' })
+    expect(status.querySelector('svg[data-loading-thread]')).not.toBeNull()
+    expect(document.querySelectorAll('.question-row')).toHaveLength(0)
   })
 
   it('starts at the top when navigation replaces a scrolled overview', () => {
