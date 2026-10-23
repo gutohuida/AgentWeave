@@ -66,7 +66,10 @@ export function SpecHealthLine({
   const count = (state: string) => coverage.filter((r) => r.state === state).length
   const verified = count('verified')
   const rejected = count('rejected')
-  const working = coverage.length - verified - rejected
+  // Every other state is named as it is: a requirement nobody has touched is not "in progress",
+  // and a drifting or stale one is a warning, not progress (F945).
+  const open = OPEN_STATES.map((s) => ({ ...s, n: count(s.state) })).filter((s) => s.n > 0)
+  const needsLook = open.some((s) => s.warn)
   const decided = tasks.filter((t) => t.status === 'approved' || t.status === 'rejected').length
   const notMerged = coverage.filter((r) => r.state === 'verified' && r.integration === 'not_integrated')
 
@@ -87,7 +90,7 @@ export function SpecHealthLine({
         <Fact
           fact="requirements"
           active={activeDetail === 'requirements'}
-          tone={notMerged.length || coverageDiagnostics ? 'warn' : undefined}
+          tone={notMerged.length || coverageDiagnostics || needsLook ? 'warn' : undefined}
           label={
             <>
               <span className="aw-health-bar" aria-hidden="true">
@@ -96,7 +99,12 @@ export function SpecHealthLine({
               </span>
               <strong>{verified}</strong>/{coverage.length} verified
               {rejected ? <span className="aw-health-bad"> · {rejected} rejected</span> : null}
-              {working ? <span> · {working} in progress</span> : null}
+              {open.map((s) => (
+                <span key={s.state} className={s.warn ? 'aw-health-warn' : undefined}>
+                  {' · '}
+                  {s.n} {s.label}
+                </span>
+              ))}
               {notMerged.length ? <span> · {notMerged.length} not merged</span> : null}
               {coverageDiagnostics ? <span> · {coverageDiagnostics} broken</span> : null}
             </>
@@ -223,6 +231,17 @@ export function SpecHealthLine({
     </div>
   )
 }
+
+/** The unfinished states, as the header's count names them (the popover lists each by name). */
+const OPEN_STATES: { state: string; label: string; warn?: boolean }[] = [
+  { state: 'drifting', label: 'drifting', warn: true },
+  { state: 'stale', label: 'stale', warn: true },
+  { state: 'amendment_unreviewed', label: 'changed, unreviewed', warn: true },
+  { state: 'evidence_awaiting_review', label: 'awaiting review' },
+  { state: 'in_progress', label: 'in progress' },
+  { state: 'not_started', label: 'not started' },
+  { state: 'unserved', label: 'with no task' },
+]
 
 const STATE_LABEL: Record<string, string> = {
   verified: 'Verified',

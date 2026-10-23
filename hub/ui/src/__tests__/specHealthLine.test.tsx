@@ -60,6 +60,25 @@ describe('the health line', () => {
     expect(fact).toHaveAttribute('data-tone', 'warn')
   })
 
+  it('names each unfinished state instead of calling it all in progress (F945)', () => {
+    renderLine({ coverage: [entry('FR-1', 'verified', 'integrated'), entry('FR-2', 'not_started')] })
+    const fact = screen.getByTestId('spec-health-requirements')
+    expect(fact).toHaveTextContent('1/2 verified · 1 not started')
+    expect(fact).not.toHaveTextContent('in progress')
+
+    cleanup()
+    renderLine({ coverage: [entry('FR-1', 'unserved')] })
+    expect(screen.getByTestId('spec-health-requirements')).toHaveTextContent('0/1 verified · 1 with no task')
+    expect(screen.getByTestId('spec-health-requirements')).not.toHaveTextContent('in progress')
+
+    cleanup()
+    renderLine({ coverage: [entry('FR-1', 'in_progress'), entry('FR-2', 'drifting')] })
+    const mixed = screen.getByTestId('spec-health-requirements')
+    expect(mixed).toHaveTextContent('1 drifting')
+    expect(mixed).toHaveTextContent('1 in progress')
+    expect(mixed).toHaveAttribute('data-tone', 'warn')
+  })
+
   it('leaves out what the Hub could not answer', () => {
     renderLine({ coverage: [], driftCount: null, vaultWarnings: null, tasks: [] })
     expect(screen.queryByTestId('spec-health-requirements')).toBeNull()
