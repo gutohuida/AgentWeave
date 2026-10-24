@@ -32,15 +32,19 @@ describe('F1039 — one stream, even when the subscriber remounts while connecti
       const index = open.push(true) - 1
       // The Hub answers after the remount has happened, as a real request does.
       await new Promise((resolve) => setTimeout(resolve, 10))
+      // The stale attempt's stream is cancelled before its event is due; a real server stops
+      // writing to a closed connection, so the pending write is dropped rather than thrown.
+      let pending: ReturnType<typeof setTimeout> | undefined
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
-          setTimeout(() => {
+          pending = setTimeout(() => {
             controller.enqueue(new TextEncoder().encode(
               'event: question_asked\ndata: {"id":"q-1","from_agent":"Developer","blocking":false,"project_id":"p"}\n\n',
             ))
           }, 30)
         },
         cancel() {
+          clearTimeout(pending)
           open[index] = false
         },
       })
