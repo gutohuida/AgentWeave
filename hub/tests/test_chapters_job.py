@@ -355,3 +355,20 @@ def test_git_digest_groups_commits_under_each_release_tag(tmp_path):
     assert "v2 (2026-01-05): 1 commits" in digest
     assert f"{chapters.UNRELEASED}: 1 commits" in digest
     assert "Ana: change 1" in digest
+
+
+@pytest.mark.asyncio
+async def test_a_surface_key_cited_or_a_bad_cite_does_not_discard_the_answer(
+    app, auth_headers, worker
+):
+    await seed(doc(1, 0))
+    await _configure(app, auth_headers)
+    knots = await _knots()
+    worker(("story", [draft("a", knots, cites=[knots[0], "task-nope"])]))
+    assert await _fire(chapters_job.REQUESTED) == "written"
+
+    async with async_session_factory() as session:
+        state = await chapters.read(session, P)
+    assert [c["id"] for c in state["chapters"]] == ["a"]
+    assert state["chapters"][0]["cites"] == []
+    assert (await _firings())[0]["dropped_cites"] == ["task-nope"]

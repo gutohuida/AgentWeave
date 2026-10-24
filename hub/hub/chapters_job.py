@@ -312,6 +312,40 @@ async def prepare(project_id: str, *, trigger: str) -> Plan:
     )
 
 
+def _without_surface_cites(drafts: List[Dict[str, Any]], surface: List[str]) -> List[Dict[str, Any]]:
+    """A surface key names a knot (a member), never a citation: a model that echoes one into
+    `cites` would have the whole answer refused."""
+    return _without_cites(drafts, set(surface))
+
+
+def _without_cites(drafts: List[Dict[str, Any]], bad: Any) -> List[Dict[str, Any]]:
+    return [{**d, "cites": [c for c in d.get("cites", []) if c not in bad]} for d in drafts]
+
+
+def _unresolved_cites(problems: List[str]) -> set:
+    prefix, suffix = "citation ", " does not resolve"
+    return {
+        p[len(prefix) : -len(suffix)]
+        for p in problems
+        if p.startswith(prefix) and p.endswith(suffix)
+    }
+
+
+async def _save(plan: Plan, drafts: List[Dict[str, Any]], reason: str, asked_for: bool) -> Any:
+    async with async_session_factory() as db:
+        return await chapters.save(
+            db,
+            plan.project_id,
+            chapters=drafts,
+            surface=plan.surface,
+            author=AUTHOR,
+            reason=reason,
+            asked_for=asked_for,
+            asked_by="operator" if asked_for else None,
+            repo=plan.repo,
+        )
+
+
 async def weave(plan: Plan, *, trigger: str, subject: Dict[str, Any]) -> str:
     """Spawn the model once on the planned input, save what it answers and record the firing.
     Answers the outcome."""
@@ -333,19 +367,20 @@ async def weave(plan: Plan, *, trigger: str, subject: Dict[str, Any]) -> str:
     else:
         answer = result.parsed
         reason = answer.reason.strip() or f"Woven after {trigger.replace('_', ' ')}."
+        drafts = _without_surface_cites(
+            [draft.model_dump() for draft in answer.chapters], plan.surface
+        )
         try:
-            async with async_session_factory() as db:
-                saved = await chapters.save(
-                    db,
-                    plan.project_id,
-                    chapters=[draft.model_dump() for draft in answer.chapters],
-                    surface=plan.surface,
-                    author=AUTHOR,
-                    reason=reason,
-                    asked_for=asked_for,
-                    asked_by="operator" if asked_for else None,
-                    repo=plan.repo,
-                )
+            try:
+                saved = await _save(plan, drafts, reason, asked_for)
+            except chapters.ChapterRefusedError as refusal:
+                # One bad citation must not discard a whole answer: drop only the ones that
+                # do not resolve, keep the rest, and say so on the firing.
+                bad = _unresolved_cites(refusal.problems)
+                if not bad or len(bad) != len(refusal.problems):
+                    raise
+                extra["dropped_cites"] = sorted(bad)
+                saved = await _save(plan, _without_cites(drafts, bad), reason, asked_for)
         except chapters.ChapterRefusedError as refusal:
             outcome, detail = "failed", f"The answer was refused: {refusal}"
             extra["refused"] = refusal.problems

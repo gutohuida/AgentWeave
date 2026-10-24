@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, getJson, patchJson } from './client'
+import { ApiError, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
 /** One of the Hub's background jobs (`hub/hub/manager.py`'s registry) and what the operator chose
@@ -69,6 +69,18 @@ export function useManagerActivity(limit = 50) {
     enabled: isConfigured && !!projectId,
     retry: (count, error) => !isNoManager(error) && count < 2,
     refetchInterval: (query) => (isNoManager(query.state.error) ? false : 10_000),
+  })
+}
+
+/** "Weave the thread": ask the chapters job to fire now, whatever its automatic/button choice. */
+export function useWeaveThread() {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: () => postJson<unknown>(`/api/v1/projects/${projectId}/manager/jobs/chapters/run`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'manager', 'activity'] })
+    },
   })
 }
 
