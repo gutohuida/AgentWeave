@@ -16,9 +16,24 @@ export interface ManagerJob {
   runner_id: string | null
   /** Null: the runner's own model. */
   model: string | null
+  /** The chapters job only: fire on its triggers, or only when 'Weave the thread' is pressed. */
+  mode?: 'automatic' | 'button'
+  /** The chapters job only: what all its firings in this project recorded, summed. */
+  usage_total?: JobUsageTotal
 }
 
-export type ManagerJobInput = Partial<Pick<ManagerJob, 'enabled' | 'runner_id' | 'model'>>
+/** `firings` counts the job's firings; each other dimension is summed over those that reported it. */
+export interface JobUsageTotal {
+  firings: number
+  input_tokens?: number
+  output_tokens?: number
+  cache_read_tokens?: number
+  cache_write_tokens?: number
+  reasoning_tokens?: number
+  cost_usd_micros?: number
+}
+
+export type ManagerJobInput = Partial<Pick<ManagerJob, 'enabled' | 'runner_id' | 'model' | 'mode'>>
 
 /** One model spawn a job made — a `manager_job_fired` event's payload plus its id and time. */
 export interface ManagerFiring {

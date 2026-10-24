@@ -32,6 +32,7 @@ function KnotFace({ knot, now }: { knot: ThreadKnot; now: Date }) {
         <span className="aw-knot-word">{knot.word}</span>
       </span>
       <span className="aw-knot-title">{knot.title}</span>
+      {knot.summary ? <span className="aw-knot-summary">{knot.summary}</span> : null}
       <span className="aw-knot-meta">
         <span>{when(knot, now)}</span>
         {knot.actors.length > 0 ? <span>{knot.actors.join(', ')}</span> : null}
