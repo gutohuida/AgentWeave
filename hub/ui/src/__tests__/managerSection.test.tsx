@@ -272,4 +272,36 @@ describe('Project settings → Manager', () => {
     render(<ManagerSection />, { wrapper })
     expect(await screen.findByText(/No job has spawned a model yet/)).toBeInTheDocument()
   })
+
+  it('shows the chapters job’s firing choice, each firing’s tokens and money, and the project total', async () => {
+    const user = userEvent.setup()
+    const chapters = {
+      key: 'chapters', title: 'Thread chapters', description: 'Writes the Thread’s chapters.', trigger: 'document_approved',
+      needs_runner: true, enabled: true, runner_id: 'runner-haiku', model: null, mode: 'button',
+      usage_total: { firings: 2, input_tokens: 1300, output_tokens: 500, cost_usd_micros: 95_000 },
+    }
+    const firing = (id: string, usage: Record<string, number>) => ({
+      id, at: '2026-10-09T15:01:00+00:00', job: 'chapters', trigger: 'requested', subject: {}, runner_id: 'runner-haiku',
+      cli: 'claude', model: null, outcome: 'written', detail: null, duration_ms: 4200, usage,
+    })
+    manager = (url) => {
+      if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [JOB, chapters] } }
+      if (url.includes('/manager/activity')) {
+        return { status: 200, body: { firings: [
+          firing('evt-b', { input_tokens: 800, output_tokens: 200, cost_usd_micros: 60_000 }),
+          firing('evt-a', { input_tokens: 500, output_tokens: 300, cost_usd_micros: 35_000 }),
+        ] } }
+      }
+      return undefined
+    }
+    render(<ManagerSection />, { wrapper })
+    await waitFor(() => expect(menuSelect('Thread chapters firing')).toHaveTextContent('Button only'))
+    expect(screen.getByTestId('manager-job-chapters-total')).toHaveTextContent('2 firings · 1,800 tokens · $0.10')
+    expect(within(await screen.findByTestId('manager-firing-0')).getByText('1,000 tokens · $0.06')).toBeInTheDocument()
+    expect(within(screen.getByTestId('manager-firing-1')).getByText('800 tokens · $0.04')).toBeInTheDocument()
+    expect(screen.queryByTestId('manager-job-conversation-titles-total')).toBeNull()
+
+    await chooseMenuOption(user, 'Thread chapters firing', /^Automatic/)
+    await waitFor(() => expect(patches).toContainEqual({ url: expect.stringContaining('/manager/jobs/chapters'), body: { mode: 'automatic' } }))
+  })
 })

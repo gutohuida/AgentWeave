@@ -18,6 +18,9 @@ export type KnotKind =
   | 'conversation'
   | 'vault-entry'
   | 'fold'
+  | 'chapter'
+  | 'release'
+  | 'commit'
 
 /** Where a knot that stands for a stored object leads. */
 export interface KnotLink {
@@ -42,6 +45,8 @@ export interface ThreadKnot {
   child_count: number
   descendant_count: number
   link: KnotLink | null
+  /** A chapter's plain-language summary; absent on every other kind. */
+  summary?: string | null
 }
 
 /** One level of the thread, oldest first. `hasBefore`/`hasAfter` say whether more lies beyond. */
@@ -63,6 +68,8 @@ export interface ThreadPageResponse {
   before_cursor: string | null
   after_cursor: string | null
   under: string
+  /** True while the chapters job is on: the page offers 'Weave the thread'. Absent on an older Hub. */
+  can_weave?: boolean
 }
 
 /** One level as the container holds it: the page(s) loaded so far and the cursors to walk on. */

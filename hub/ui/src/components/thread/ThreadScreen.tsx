@@ -14,6 +14,7 @@ import {
 import { useSSE } from '@/hooks/useSSE'
 import { joinPage, refreshEnd } from '@/lib/threadKnots'
 import { Thread } from './Thread'
+import { WeaveButton } from './WeaveButton'
 
 /** Events that can add or change something on the thread. Anything else leaves it alone. */
 const THREAD_EVENTS = new Set([
@@ -52,6 +53,7 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
   const [current, setCurrent] = React.useState<string | null>(null)
   const [reveal, setReveal] = React.useState(0)
   const [failed, setFailed] = React.useState(false)
+  const [canWeave, setCanWeave] = React.useState(false)
   const [now] = React.useState(() => new Date())
 
   const levelsRef = React.useRef(levels)
@@ -69,8 +71,12 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
   const written = React.useRef<string | null>(null)
 
   const fetchLevel = React.useCallback(
-    async (query: ThreadQuery): Promise<LoadedLevel> =>
-      toLoadedLevel(await getJson<ThreadPageResponse>(threadUrl(projectId, query))),
+    async (query: ThreadQuery): Promise<LoadedLevel> => {
+      const page = await getJson<ThreadPageResponse>(threadUrl(projectId, query))
+      // Every page says whether the chapters job is on; a Hub that predates the job omits it.
+      if (alive.current) setCanWeave(page.can_weave === true)
+      return toLoadedLevel(page)
+    },
     [projectId],
   )
   const store = React.useCallback((under: string, level: LoadedLevel) => {
@@ -226,6 +232,7 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
           Part of the thread could not be read.
         </p>
       ) : null}
+      {canWeave ? <WeaveButton /> : null}
       <Thread
         levels={levels}
         open={open}

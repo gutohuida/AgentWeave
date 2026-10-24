@@ -31,6 +31,17 @@ export function formatMoney(value: number): string {
   return `$${value.toFixed(2)}`
 }
 
+/** A firing's cost in words: its tokens, then its money when the runner reported it. */
+export function formatUsage(usage: { input_tokens?: number; output_tokens?: number; cost_usd_micros?: number } | null | undefined): string {
+  if (!usage) return '—'
+  const tokens = (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0)
+  const money = usage.cost_usd_micros
+  const parts: string[] = []
+  if (usage.input_tokens != null || usage.output_tokens != null) parts.push(`${WHOLE.format(tokens)} tokens`)
+  if (money != null) parts.push(money < 10_000 ? '<$0.01' : formatMoney(money / 1_000_000))
+  return parts.length ? parts.join(' · ') : '—'
+}
+
 /** 0.1345 → "13%", 0.0583 → "5.8%". */
 export function formatPercent(ratio: number): string {
   const pct = ratio * 100

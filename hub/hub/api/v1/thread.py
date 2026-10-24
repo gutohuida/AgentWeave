@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import chapters, project_thread, vault
+from ... import chapters, manager, project_thread, vault
 from ...auth import get_project
 from ...db.engine import get_session
 from .vault import project_root, roots
@@ -73,6 +73,9 @@ async def get_thread(
         raise HTTPException(status_code=422, detail="That is not a cursor this thread gave out")
     result["knots"] = [project_thread.face(k, thread) for k in result["knots"]]
     result["under"] = under or project_thread.SURFACE
+    # 'Weave the thread' is offered only while the chapters job is on.
+    row = await manager.get_job_row(session, project[0], manager.CHAPTERS)
+    result["can_weave"] = bool(row is not None and row.enabled)
     return result
 
 

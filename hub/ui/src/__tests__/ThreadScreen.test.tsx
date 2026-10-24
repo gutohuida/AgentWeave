@@ -5,9 +5,15 @@ import { ThreadScreen } from '@/components/thread/ThreadScreen'
 import { joinPage, refreshEnd, linkTarget } from '@/lib/threadKnots'
 import { parseDestination, serializeDestination, PROJECT_TABS, threadDestination } from '@/lib/navigation'
 import type { LoadedLevel, ThreadKnot } from '@/api/thread'
+import { useConfigStore } from '@/store/configStore'
 
 const getJson = vi.fn()
-vi.mock('@/api/client', () => ({ getJson: (path: string) => getJson(path) }))
+const postJson = vi.fn()
+vi.mock('@/api/client', () => ({
+  getJson: (path: string) => getJson(path),
+  postJson: (path: string) => postJson(path),
+  readableApiError: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
+}))
 vi.mock('@/hooks/useSSE', () => ({ useSSE: () => undefined }))
 
 function knot(key: string, kind: ThreadKnot['kind'], title: string, start: string, children = 0): ThreadKnot {
@@ -31,6 +37,8 @@ const tsk = knot('task:t1', 'task', 'Build it', '2026-09-02T09:00:00+00:00', 1)
 const run = knot('run:r1', 'run', 'Builder worked', '2026-09-03T09:00:00+00:00')
 
 beforeEach(() => {
+  useConfigStore.setState({ apiKey: 'aw_live_test', hubUrl: 'http://hub', isConfigured: true, selectedProjectId: 'proj-a' })
+  postJson.mockReset()
   getJson.mockReset()
   getJson.mockImplementation(async (path: string) => {
     const url = new URL(path, 'http://hub')
@@ -100,6 +108,69 @@ describe('ThreadScreen', () => {
     await screen.findByText('Build it')
     fireEvent.click(screen.getByText('Jump to the beginning'))
     await screen.findByText('First change')
+  })
+})
+
+describe('ThreadScreen chapters and the Weave button', () => {
+  const chapter = (key: string, title: string, start: string, summary: string): ThreadKnot => ({
+    ...knot(key, 'chapter', title, start, 1), word: 'Chapter', actors: ['manager'], summary,
+  })
+  const one = chapter('chapter:ch-1', 'Foundations', '2026-03-07T09:00:00+00:00', 'The first months.')
+  const two = chapter('chapter:ch-2', 'The Hub arrives', '2026-10-01T09:00:00+00:00', 'Specs and flows.')
+
+  it('shows each chapter with title, summary, span and author, and opens one into its knots', async () => {
+    getJson.mockImplementation(async (path: string) => {
+      const under = new URL(path, 'http://hub').searchParams.get('under')
+      return under === 'chapter:ch-1' ? page([doc]) : page([one, two])
+    })
+    mount()
+    await screen.findByText('Foundations')
+    expect(screen.getByText('The first months.')).toBeTruthy()
+    expect(screen.getByText('Specs and flows.')).toBeTruthy()
+    expect(screen.getAllByText('manager')).toHaveLength(2)
+    const titles = screen.getAllByText(/Foundations|The Hub arrives/).map((n) => n.textContent)
+    expect(titles).toEqual(['Foundations', 'The Hub arrives'])
+    fireEvent.click(screen.getByText('Foundations'))
+    await screen.findByText('First change')
+  })
+
+  it('draws a chapter from before the Hub with release tags and commits beneath', async () => {
+    const release = { ...knot('tag:ch-1|v1.0.0', 'release', 'v1.0.0', '2026-03-08T09:00:00+00:00', 1), word: 'Release' }
+    const commit = { ...knot('commit:ch-1|abc', 'commit', 'Add the CLI', '2026-03-08T09:00:00+00:00'), word: 'Commit', actors: ['Ada'] }
+    getJson.mockImplementation(async (path: string) => {
+      const under = new URL(path, 'http://hub').searchParams.get('under')
+      if (under === 'chapter:ch-1') return page([release])
+      if (under === release.key) return page([commit])
+      return page([one])
+    })
+    mount()
+    fireEvent.click(await screen.findByText('Foundations'))
+    fireEvent.click(await screen.findByText('v1.0.0'))
+    await screen.findByText('Add the CLI')
+    expect(screen.getByText('Ada')).toBeTruthy()
+  })
+
+  it('offers Weave the thread only while the feed says the job is on, and presses it', async () => {
+    getJson.mockImplementation(async () => page([one], { can_weave: false }))
+    const off = mount()
+    await screen.findByText('Foundations')
+    expect(screen.queryByText('Weave the thread')).toBeNull()
+    off.unmount()
+
+    getJson.mockImplementation(async () => page([one], { can_weave: true }))
+    postJson.mockResolvedValue({ started: true })
+    mount()
+    fireEvent.click(await screen.findByText('Weave the thread'))
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('/api/v1/projects/proj-a/manager/jobs/chapters/run'))
+    await screen.findByText(/Weaving the thread/)
+  })
+
+  it('says why a press was refused', async () => {
+    getJson.mockImplementation(async () => page([one], { can_weave: true }))
+    postJson.mockRejectedValue(new Error('The chapters job has no runner.'))
+    mount()
+    fireEvent.click(await screen.findByText('Weave the thread'))
+    await screen.findByText('The chapters job has no runner.')
   })
 })
 

@@ -7,7 +7,7 @@ import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
 import type { ManagerFiring, ManagerJob, ManagerJobInput } from '@/api/manager'
 import type { Runner } from '@/api/runners'
 import type { ModelDescriptor } from '@/api/modelCatalog'
-import { formatDateTime, formatDuration, formatMoney } from '@/lib/format'
+import { formatDateTime, formatDuration, formatUsage } from '@/lib/format'
 import { catalogModelOptions, runnerChoiceOptions } from './settingsOptions'
 import { LoadingThread } from '@/components/common/LoadingThread'
 
@@ -132,6 +132,37 @@ export function ManagerSettings({
                   />
                 }
               />
+              {job.mode ? (
+                <SettingsRow
+                  label="Fires"
+                  inactive={!job.enabled}
+                  description="Automatic: after a document is approved or archived and after its last task is approved, and on the button. Button only: just when you press Weave the thread on the Thread page."
+                  control={
+                    <MenuSelect
+                      label={`${job.title} firing`}
+                      value={job.mode}
+                      onChange={(v) => onChange(job.key, { mode: v }, `${job.title} fires ${v === 'automatic' ? 'automatically' : 'only on the button'}`)}
+                      options={[
+                        { value: 'automatic' as const, label: 'Automatic', detail: 'On major events and on the button' },
+                        { value: 'button' as const, label: 'Button only', detail: 'Only when you press Weave the thread' },
+                      ]}
+                    />
+                  }
+                />
+              ) : null}
+              {job.usage_total ? (
+                <SettingsRow
+                  label="Cost so far"
+                  description="Everything this job has spent in this project; each firing's own cost is in the history below."
+                  control={
+                    <span className="tabular" data-testid={`manager-job-${job.key}-total`}>
+                      {job.usage_total.firings === 0
+                        ? 'No firings yet'
+                        : `${job.usage_total.firings} ${job.usage_total.firings === 1 ? 'firing' : 'firings'} · ${formatUsage(job.usage_total)}`}
+                    </span>
+                  }
+                />
+              ) : null}
               {blocked ? (
                 <p className="aw-inline-warning">
                   <Icon name="warning" size={13} /> On, but it has no runner, so it will not run.
@@ -190,7 +221,6 @@ function ManagerHistory({
         const job = jobs.find((j) => j.key === firing.job)
         const outcome = OUTCOME[firing.outcome] ?? { label: firing.outcome, tone: 'neutral' }
         const expanded = open === firing.id
-        const cost = firing.usage?.cost_usd_micros
         const runner = runners.find((r) => r.id === firing.runner_id)
         return (
           <div key={firing.id} className="aw-history-item" data-open={expanded ? 'true' : 'false'} data-testid={`manager-firing-${index}`}>
@@ -221,7 +251,7 @@ function ManagerHistory({
                 </span>
               </span>
               <span role="cell" className="tabular text-right">{formatDuration(firing.duration_ms / 1000)}</span>
-              <span role="cell" className="tabular text-right">{cost != null ? (cost < 10_000 ? '<$0.01' : formatMoney(cost / 1_000_000)) : '—'}</span>
+              <span role="cell" className="tabular text-right">{formatUsage(firing.usage)}</span>
             </button>
             {expanded ? (
               <div className="aw-history-answer">

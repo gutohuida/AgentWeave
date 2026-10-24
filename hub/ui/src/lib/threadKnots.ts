@@ -18,6 +18,9 @@ export const KNOT_GLYPH: Record<KnotKind, string> = {
   conversation: 'forum',
   'vault-entry': 'archive',
   fold: 'more_horiz',
+  chapter: 'menu_book',
+  release: 'tag',
+  commit: 'file_vcs',
 }
 
 /** What following a knot's link is called, in the words of the place it leads. */

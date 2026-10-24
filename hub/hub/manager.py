@@ -151,7 +151,47 @@ def _listed(spec: JobSpec, row: Optional[ManagerJob]) -> Dict[str, Any]:
 
 async def get_job(db: AsyncSession, project_id: str, key: str) -> Dict[str, Any]:
     """The job as the routes list it. *key* must be registered."""
-    return _listed(_BY_KEY[key], await get_job_row(db, project_id, key))
+    job = _listed(_BY_KEY[key], await get_job_row(db, project_id, key))
+    if key == CHAPTERS:
+        job["usage_total"] = await usage_total(db, project_id, key)
+    return job
+
+
+#: The usage dimensions a job's total sums; one a runner never reported stays absent from it.
+TOTALLED = (
+    "input_tokens",
+    "output_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "reasoning_tokens",
+    "cost_usd_micros",
+)
+
+
+async def usage_total(db: AsyncSession, project_id: str, key: str) -> Dict[str, Any]:
+    """What every firing of job *key* in the project recorded, summed per dimension, with how
+    many firings there were. Reads the same events `list_firings` lists, so the two agree."""
+    rows = (
+        (
+            await db.execute(
+                select(EventLog.data).where(
+                    EventLog.project_id == project_id, EventLog.event_type == FIRED_EVENT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    total: Dict[str, Any] = {"firings": 0}
+    for data in rows:
+        if (data or {}).get("job") != key:
+            continue
+        total["firings"] += 1
+        for name in TOTALLED:
+            value = ((data or {}).get("usage") or {}).get(name)
+            if isinstance(value, (int, float)):
+                total[name] = total.get(name, 0) + int(value)
+    return total
 
 
 async def list_jobs(db: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
@@ -161,7 +201,11 @@ async def list_jobs(db: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
         .all()
     )
     by_key = {row.job: row for row in rows}
-    return [_listed(spec, by_key.get(spec.key)) for spec in JOBS]
+    listed = [_listed(spec, by_key.get(spec.key)) for spec in JOBS]
+    for job in listed:
+        if job["key"] == CHAPTERS:
+            job["usage_total"] = await usage_total(db, project_id, CHAPTERS)
+    return listed
 
 
 async def set_job(db: AsyncSession, project_id: str, key: str, **fields: Any) -> ManagerJob:
