@@ -40455,3 +40455,13 @@ An agent in `.agentweave/tasks/task-919d0e3104b5` linked `hub/ui/node_modules` t
 **Tier:** 0
 
 A change document must have a task for every requirement, so a correction with no code gets a task whose work is the fold itself. Approving the document creates that task (`pending`, unassigned). `_fold_state` (`hub/hub/api/v1/spec.py:528`) answers `tasks_open` while any declared task is neither approved nor rejected, and `useSpecPhaseControls.tsx:403` shows Fold only for `ready`, so the task's own work is hidden behind the task. An agent cannot close it either (`pending -> rejected` is operator-only, `task_transitions.py:105`); the operator has to reject a task that was never wrong for the button to appear. Two candidate fixes, not chosen: let a document task be marked as the fold (closed by the fold), or allow a size-`fix` document with no tasks. Also check what the document header says in `tasks_open`: the operator saw no Fold and no reason.
+
+## F1041 (C) -- the fold dialog's retire list is collapsed, so two folds in a row retired nothing they were meant to
+
+**Status:** open 2026-10-24. Found by the Architect checking the operator's two project-checks folds (`spmrg-947e84fcc1eb`, `spmrg-61cd21e89bc4`): both were instructed to retire requirements, and neither merge's content event shows a retirement.
+**Source:** drive
+**Theme:** Spec flow
+**Ready:** yes
+**Tier:** 0
+
+`FoldIntoCapabilityDialog.tsx` puts retirement behind a closed "Also retire from the capability" toggle (`retireOpen` defaults to false), below the requirement rows, and confirming with nothing retired raises no question. Retiring is how a change that supersedes a capability requirement keeps the capability from contradicting itself, so skipping it silently leaves two active statements of the same rule. A missed retirement can't be repaired: an archived change refuses a second fold into the same capability (`fold_already_folded`, `spec_service.py:1062`), and capabilities take no direct edits, so the only route is a new change that carries something real to fold. The fold route also accepts `replaces` (replace a capability requirement in place, `spec_service.py` `fold_draft`), which the dialog never sends. Candidate fixes, not chosen: open the retire list by default when the change's statements resemble existing ones, show "retiring nothing" next to Confirm, offer "replaces" per row.
