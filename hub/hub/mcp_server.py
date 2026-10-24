@@ -823,6 +823,34 @@ def vault_report(entry_id: str, message: str) -> Dict[str, Any]:
     return _hub_request("POST", "/vault/reports", {"entry_id": entry_id, "message": message})
 
 
+@_tool()
+def read_chapters() -> Dict[str, Any]:
+    """The project's thread chapters, and every version of them.
+
+    Answers `{"chapters": [...], "ungrouped": [...], "versions": [...]}`. A chapter is `{id, title,
+    summary, start, end, members, cites}`: `members` are surface knot keys, `cites` are Hub record
+    ids (`task-...`), `commit:<sha>` or `tag:<name>`. `versions` is newest first, each with
+    `author`, `asked_by`, `at` and `reason` and the chapters it held. `ungrouped` are knots no
+    chapter holds yet. Works whether or not the chapters job is on.
+    """
+    return _hub_request("GET", "/chapters")
+
+
+@_tool()
+def save_chapters(chapters: List[Dict[str, Any]], reason: str) -> Dict[str, Any]:
+    """Save the complete set of chapters as a new version under your name, with a reason.
+
+    `chapters` is every chapter you want shown (not only the changed ones): create, retitle,
+    resummarise, regroup or remove by sending the set you want. Each is `{id, title, summary,
+    start, end, members, cites}` with ISO `start`/`end`. Every surface knot (see `read_chapters`)
+    must be in exactly one chapter's `members`, and every `cites` entry must exist (a Hub record
+    id, `commit:<sha>` or `tag:<name>` of the project's repository). A version that breaks either
+    is refused with 422 naming each problem, and the previous version stays shown. Use it when a
+    user asks you to organise the thread.
+    """
+    return _hub_request("POST", "/chapters", {"chapters": chapters, "reason": reason})
+
+
 # Restated from `hub/hub/vault.py` (this module imports nothing from the Hub);
 # `test_vault_paths.py` asserts they agree.
 VaultSourceType = Literal["transcript", "document", "rules", "example", "note"]
