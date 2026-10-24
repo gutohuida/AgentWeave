@@ -11,7 +11,10 @@ import pytest
 from hub import project_lifecycle
 from hub.api.v1 import fs_browse
 
-_STALL = 1.5
+# Long enough that a blocked loop (elapsed >= _STALL) stays far from the bound below even on a
+# loaded machine running the suite in parallel.
+_STALL = 4.0
+_HEALTHY = 2.5
 
 
 def _stalling(real):
@@ -46,7 +49,7 @@ async def test_a_slow_folder_listing_does_not_block_other_requests(
         lambda: app.get("/api/v1/fs/list", params={"path": str(tmp_path)}, headers=auth_headers),
     )
 
-    assert elapsed < 1.0
+    assert elapsed < _HEALTHY
 
 
 @pytest.mark.asyncio
@@ -66,7 +69,7 @@ async def test_a_slow_project_open_does_not_block_other_requests(
         lambda: app.post("/api/v1/projects/open", json={"path": str(target)}, headers=auth_headers),
     )
 
-    assert elapsed < 1.0
+    assert elapsed < _HEALTHY
 
 
 @pytest.mark.asyncio
@@ -88,7 +91,7 @@ async def test_a_slow_project_create_does_not_block_other_requests(
         ),
     )
 
-    assert elapsed < 1.0
+    assert elapsed < _HEALTHY
 
 
 @pytest.mark.asyncio
@@ -116,4 +119,4 @@ async def test_a_slow_project_relocate_does_not_block_other_requests(
         ),
     )
 
-    assert elapsed < 1.0
+    assert elapsed < _HEALTHY

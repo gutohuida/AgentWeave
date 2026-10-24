@@ -230,3 +230,73 @@ async def test_versions_keep_author_asker_time_and_reason_and_are_never_rewritte
     async with async_session_factory() as session:
         rows = (await session.execute(select(ChapterVersion))).scalars().all()
         assert [r.version for r in rows] == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_a_committed_save_tells_the_thread_page_and_a_refused_one_does_not(app, monkeypatch):
+    """task-219208c952ad: the Thread page listened for `job_fired`, which no manager firing sends, so
+    woven chapters appeared only on a reload. Every committed save now says `chapters_updated`."""
+    from hub.sse import sse_manager
+
+    sent = []
+    monkeypatch.setattr(sse_manager, "publish", lambda *args: sent.append(args))
+    await seed(doc(1, 0))
+
+    with pytest.raises(chapters.ChapterRefusedError):
+        await save([chapter("c1", [])])
+    assert sent == []
+
+    await save([chapter("c1", await surface())])
+    assert sent == [(P, chapters.UPDATED_EVENT, {"version": 1, "author": "manager"})]
+    assert chapters.UPDATED_EVENT == "chapters_updated"
+
+
+def test_cited_shas_resolve_in_one_git_call_short_long_and_missing(repo, monkeypatch):
+    """task-6ac1bb3d4d39: one `git rev-parse` per cited sha on every thread request (8.7 s for 300).
+    Now one `cat-file --batch-check`; a sha git lacks, or one that is not hex, is simply absent."""
+    root, sha = repo
+    calls = []
+    real = subprocess.run
+    monkeypatch.setattr(
+        chapters.subprocess, "run", lambda *a, **k: calls.append(a[0]) or real(*a, **k)
+    )
+
+    resolved = chapters._resolve_shas(root, [sha[:7], sha, "deadbeef", "-q", sha[:7]])
+
+    assert resolved == {sha[:7]: sha, sha: sha}
+    assert len(calls) == 1
+
+
+def test_commit_facts_are_read_in_chunks(repo, monkeypatch):
+    """Past ~780 full shas one `git show` argv passes Windows' command-line limit, and the swallowed
+    OSError emptied the chapter. Chunked, every commit still gets its facts and its tag."""
+    root, first = repo
+    for name in ("b", "c"):
+        (root / f"{name}.txt").write_text(name)
+        subprocess.run(["git", "-C", str(root), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-m",
+                name,
+            ],
+            check=True,
+            capture_output=True,
+        )
+    shas = subprocess.run(
+        ["git", "-C", str(root), "rev-list", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.split()
+    monkeypatch.setattr(chapters, "GIT_ARGS_PER_CALL", 2)
+
+    facts = chapters._commit_facts(root, shas)
+
+    assert set(facts) == set(shas)
+    assert facts[first]["tag"] == "v1" and facts[first]["subject"] == "first"
+    assert {facts[s]["tag"] for s in shas if s != first} == {chapters.UNRELEASED}

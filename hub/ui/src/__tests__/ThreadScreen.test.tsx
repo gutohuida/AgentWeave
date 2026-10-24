@@ -14,7 +14,12 @@ vi.mock('@/api/client', () => ({
   postJson: (path: string) => postJson(path),
   readableApiError: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }))
-vi.mock('@/hooks/useSSE', () => ({ useSSE: () => undefined }))
+const sse = vi.hoisted(() => ({ handler: null as null | ((event: { type: string; data: unknown }) => void) }))
+vi.mock('@/hooks/useSSE', () => ({
+  useSSE: (handler: (event: { type: string; data: unknown }) => void) => {
+    sse.handler = handler
+  },
+}))
 
 function knot(key: string, kind: ThreadKnot['kind'], title: string, start: string, children = 0): ThreadKnot {
   return {
@@ -163,6 +168,22 @@ describe('ThreadScreen chapters and the Weave button', () => {
     fireEvent.click(await screen.findByText('Weave the thread'))
     await waitFor(() => expect(postJson).toHaveBeenCalledWith('/api/v1/projects/proj-a/manager/jobs/chapters/run'))
     await screen.findByText(/Weaving the thread/)
+  })
+
+  it('refreshes when a chapters version is saved, and not for another project', async () => {
+    // task-219208c952ad: it listened for `job_fired`, which no manager firing sends; a save says
+    // `chapters_updated` (hub/hub/chapters.py), stamped with its project as the stream does.
+    mount()
+    await screen.findByText('First change')
+    const surfaceReads = () => getJson.mock.calls.filter(([path]) => !String(path).includes('under=')).length
+    const before = surfaceReads()
+
+    sse.handler?.({ type: 'chapters_updated', data: { project_id: 'proj-b', version: 2 } })
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    expect(surfaceReads()).toBe(before)
+
+    sse.handler?.({ type: 'chapters_updated', data: { project_id: 'proj-a', version: 2 } })
+    await waitFor(() => expect(surfaceReads()).toBeGreaterThan(before))
   })
 
   it('says why a press was refused', async () => {

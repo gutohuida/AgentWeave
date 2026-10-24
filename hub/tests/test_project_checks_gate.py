@@ -21,7 +21,7 @@ from hub.requirement_gate import (
 from hub.schemas.tasks import TaskUpdate
 from hub.task_transitions import Actor
 
-from .test_project_checks_run import FAIL, MAIN_FAIL, PASS, _project, _runs, _task_with_work
+from .test_project_checks_run import FAIL, MAIN_FAIL, PASS, PY, _project, _runs, _task_with_work
 from .test_task_integration import commit_on_branch, commits_on, git
 
 TASKS = "/api/v1/projects/proj-test/tasks"
@@ -81,12 +81,14 @@ async def test_asking_without_a_result_starts_a_run_and_answers_at_once(
     app, auth_headers, tmp_path
 ):
     task_id, work = await _task_with_work(tmp_path)
-    await _project([PASS])
+    # A check that takes 8 s, so answering "at once" (< 5 s) cannot be the run finishing inline,
+    # and a loaded machine still has room.
+    await _project([{**PASS, "command": f'{PY} -c "import time; time.sleep(8)"'}])
     assert await _runs(task_id) == []
 
     started = time.monotonic()
     refused = await _approve(app, auth_headers, task_id)
-    assert time.monotonic() - started < 2
+    assert time.monotonic() - started < 5
     assert refused.status_code == 409, refused.text
     assert refused.json()["detail"]["checks"][0]["state"] == "running"
     assert "still running" in refused.json()["detail"]["message"]

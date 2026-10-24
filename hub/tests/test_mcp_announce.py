@@ -181,7 +181,9 @@ async def test_wait_returns_soon_after_the_announce_arrives_during_it(app):
     task = asyncio.create_task(announce_later())
     started = asyncio.get_running_loop().time()
     assert await mcp_announce.wait("run-wait-live", 5.0) is True
-    assert asyncio.get_running_loop().time() - started < 1.5
+    # Well short of the 5 s timeout a missed announce would wait out; loose enough for a machine
+    # running the suite under -n auto beside live agents.
+    assert asyncio.get_running_loop().time() - started < 4.0
     await task
 
 

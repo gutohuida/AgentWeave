@@ -42,6 +42,8 @@ const SSE_EVENT_TYPES = [
   'job_updated',
   'job_deleted',
   'job_fired',
+  // A chapters version was committed (`hub/hub/chapters.py` save): the Thread page refreshes.
+  'chapters_updated',
   'loop_stopped',
   'loop_queue_exhausted',
   'loop_archived',

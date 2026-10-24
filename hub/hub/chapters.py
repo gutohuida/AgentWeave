@@ -254,6 +254,13 @@ async def save(
     db.add(row)
     if commit:
         await db.commit()
+        # The Thread page refreshes on this (F: it listened for `job_fired`, which no manager
+        # firing sends, so woven chapters appeared only on a reload). Said here, where every save
+        # lands -- the job's and an agent's `save_chapters` alike -- and only once committed, so a
+        # refresh it triggers reads the new version.
+        from .sse import sse_manager
+
+        sse_manager.publish(project_id, UPDATED_EVENT, {"version": row.version, "author": author})
     else:
         await db.flush()
     return SaveResult(version_record(row), dropped)
@@ -275,29 +282,43 @@ def _git_lines(repo: Path, args: List[str]) -> List[str]:
 
 
 _TAG_SUFFIX = re.compile(r"[~^].*$")
+_SHA = re.compile(r"[0-9a-fA-F]{4,64}")
+#: Shas per git call: well inside Windows' command-line limit at 41 characters a sha.
+GIT_ARGS_PER_CALL = 200
+#: Sent on the project's stream once a chapters version is committed (`save`).
+UPDATED_EVENT = "chapters_updated"
 UNRELEASED = "Not yet released"
+
+
+def _chunks(items: List[str]) -> Iterable[List[str]]:
+    for start in range(0, len(items), GIT_ARGS_PER_CALL):
+        yield items[start : start + GIT_ARGS_PER_CALL]
 
 
 def _commit_facts(repo: Path, shas: List[str]) -> Dict[str, Dict[str, Any]]:
     """For each commit sha: its full sha, date, author, subject and the release tag it shipped in
     (the nearest tag reaching it, `Not yet released` for none). Commits git cannot show are absent.
+
+    In chunks, because one argv naming every sha passes Windows' 32,767-character command line at
+    about 780 full shas, and the OSError that raises would silently empty the chapter.
     """
     facts: Dict[str, Dict[str, Any]] = {}
-    rows = _git_lines(
-        repo,
-        ["show", "-s", "--no-patch", "--format=%H%x1f%aI%x1f%an%x1f%s", *shas],
-    )
-    for row in rows:
-        parts = row.split("\x1f")
-        if len(parts) != 4:
-            continue
-        full, date, author, subject = parts
-        facts[full] = {"sha": full, "date": date, "author": author, "subject": subject}
+    for chunk in _chunks(shas):
+        rows = _git_lines(
+            repo,
+            ["show", "-s", "--no-patch", "--format=%H%x1f%aI%x1f%an%x1f%s", *chunk],
+        )
+        for row in rows:
+            parts = row.split("\x1f")
+            if len(parts) != 4:
+                continue
+            full, date, author, subject = parts
+            facts[full] = {"sha": full, "date": date, "author": author, "subject": subject}
     full_shas = list(facts)
-    if full_shas:
+    for chunk in _chunks(full_shas):
         # One output line per input, in order; `undefined` for a commit no tag reaches.
-        named = _git_lines(repo, ["name-rev", "--tags", "--name-only", *full_shas])
-        for sha, name in zip(full_shas, named, strict=False):
+        named = _git_lines(repo, ["name-rev", "--tags", "--name-only", *chunk])
+        for sha, name in zip(chunk, named, strict=False):
             name = _TAG_SUFFIX.sub("", name.strip())
             facts[sha]["tag"] = name if name and name != "undefined" else UNRELEASED
     for fact in facts.values():
@@ -306,12 +327,32 @@ def _commit_facts(repo: Path, shas: List[str]) -> Dict[str, Dict[str, Any]]:
 
 
 def _resolve_shas(repo: Path, shas: List[str]) -> Dict[str, str]:
-    """Each cited sha (maybe abbreviated) as the full sha git knows it by."""
+    """Each cited sha (maybe abbreviated) as the full sha git knows it by.
+
+    One `git cat-file --batch-check` for all of them, the shas on stdin: it was one `git rev-parse`
+    per sha on every thread request, 8.7 s for 300 cited commits on this repository.
+    """
+    wanted = [sha for sha in dict.fromkeys(shas) if _SHA.fullmatch(sha)]
+    if not wanted:
+        return {}
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(repo), "cat-file", "--batch-check=%(objectname) %(objecttype)"],
+            input="".join(f"{sha}^{{commit}}\n" for sha in wanted).encode("ascii"),
+            capture_output=True,
+            timeout=60,
+            **no_console_kwargs(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if done.returncode != 0:
+        return {}
     out: Dict[str, str] = {}
-    for sha in shas:
-        lines = _git_lines(repo, ["rev-parse", "-q", "--verify", f"{sha}^{{commit}}"])
-        if lines:
-            out[sha] = lines[0].strip()
+    # One output line per input line, in order: `<full> commit`, or `<input> missing`.
+    for sha, line in zip(wanted, done.stdout.decode("ascii", "replace").splitlines(), strict=False):
+        parts = line.split()
+        if len(parts) == 2 and parts[1] == "commit":
+            out[sha] = parts[0]
     return out
 
 

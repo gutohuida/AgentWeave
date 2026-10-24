@@ -32,6 +32,7 @@ const THREAD_EVENTS = new Set([
   'permission_requested',
   'permission_decided',
   'job_fired',
+  'chapters_updated',
   'agent_output',
 ])
 /** Bursts of events (a run streams many) become one refresh. Well inside the five seconds. */

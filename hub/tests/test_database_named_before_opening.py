@@ -21,6 +21,10 @@ from pathlib import Path
 
 import pytest
 
+# A real Hub runs every migration before it reports startup. 30 s was enough alone and not under
+# `-n auto` beside live agents; the bound only catches a Hub that never starts.
+STARTUP_SECONDS = 120
+
 
 class TestLogDatabaseBeforeOpeningUnit:
     def test_sqlite_url_logs_absolute_path_existence_and_pid(self, tmp_path, monkeypatch, caplog):
@@ -133,7 +137,7 @@ class TestGroup2LineOrderingRealProcess:
         reader = threading.Thread(target=_drain_stderr, args=(proc, lines), daemon=True)
         reader.start()
 
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + STARTUP_SECONDS
         try:
             while time.monotonic() < deadline:
                 if any("Application startup complete" in ln for ln in lines):
@@ -145,7 +149,8 @@ class TestGroup2LineOrderingRealProcess:
                 time.sleep(0.05)
             else:
                 pytest.fail(
-                    "uvicorn did not report startup complete within 30s:\n" + "".join(lines)
+                    f"uvicorn did not report startup complete within {STARTUP_SECONDS}s:\n"
+                    + "".join(lines)
                 )
         finally:
             proc.kill()

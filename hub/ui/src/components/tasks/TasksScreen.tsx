@@ -284,7 +284,9 @@ export function TasksScreen({
   // A task opened from elsewhere (a Thread knot) may be archived-completed and so absent from the
   // board's page; read it by id rather than landing on the board with nothing open.
   const pageTask = allTasks.find((task) => task.id === openTaskId) ?? null
-  const { data: fetchedTask } = useTask(openTaskId && !pageTask && !isLoading ? openTaskId : null)
+  const { data: fetchedTask, error: fetchedTaskError } = useTask(
+    openTaskId && !pageTask && !isLoading ? openTaskId : null,
+  )
   const openTask = pageTask ?? (fetchedTask?.id === openTaskId ? fetchedTask : null)
 
   return (
@@ -322,6 +324,8 @@ export function TasksScreen({
           />
         </BoardView>
       )}
+      {/* A task opened by id that cannot be read would otherwise open nothing, silently. */}
+      <QueryErrorNotice failures={[['the task you opened', fetchedTaskError]]} className="aw-board-notice" />
       <TaskDetailDrawer task={openTask} onClose={() => setOpenTaskId(null)} onOpenRequirement={onOpenRequirement} />
     </div>
   )

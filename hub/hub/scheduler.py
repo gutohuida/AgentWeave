@@ -2208,6 +2208,29 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                 )
             )
             continue
+        # **Not while the turn that finished it is still running** (task-1d2e8ad5d79a). An author
+        # marks its task `completed` mid-turn, and its work is committed to the task branch only
+        # when that turn ends. Measured on slice 2 of the red thread: completed 22:59:57, the flow
+        # fired 23:00:00, the author's snapshot landed 23:00:08 -- and the reviewer was handed the
+        # branch's base commit, master's previous integrate, and reviewed nothing. Deferred, so the
+        # next firing offers it once the work is on the branch.
+        from .db.models import Run as _Run
+
+        still_running = (
+            await session.execute(
+                select(_Run.agent).where(_Run.task_id == task.id, _Run.status == "running").limit(1)
+            )
+        ).scalar_one_or_none()
+        if still_running is not None and not wedged_review:
+            deferred.append(
+                (
+                    task.id,
+                    f"{still_running}'s turn on it is still running; its work is committed to the "
+                    f"task branch when that turn ends, and only then is there something to review",
+                )
+            )
+            continue
+
         # **Can a review turn be provisioned for this at all?** Asked before a reviewer is
         # resolved, because a task with no commit to check out cannot be reviewed by anybody, and
         # `prepare_review_turn` is going to refuse it either way.
