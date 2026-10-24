@@ -1,0 +1,29 @@
+{
+  "id": "fct-3cffa18db1b1",
+  "kind": "fact",
+  "claim": "The UI checks (npm run lint, tsc, vitest) are not enabled as project checks because a scratch checkout has no node_modules.",
+  "citations": [
+    {
+      "source": "src-1f5af54ca293",
+      "quote": "**The UI checks (`npm run lint`, `tsc`, `vitest`) are still left out.**",
+      "line_start": 29,
+      "line_end": 29
+    },
+    {
+      "source": "src-1f5af54ca293",
+      "quote": "A scratch checkout has no\n  `node_modules`.",
+      "line_start": 29,
+      "line_end": 30
+    }
+  ],
+  "sources": [
+    "src-1f5af54ca293"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T12:01:15.444314Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

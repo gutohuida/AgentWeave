@@ -1,0 +1,23 @@
+{
+  "id": "fct-058436a52da6",
+  "kind": "fact",
+  "claim": "All five checks can be enabled in Settings → General → Checks for project proj-d85a82bf4216, in the order lint, format, types, cli-tests, hub-tests.",
+  "citations": [
+    {
+      "source": "src-1f5af54ca293",
+      "quote": "All five can be enabled in\n**Settings → General → Checks** for project `proj-d85a82bf4216`, in this order:",
+      "line_start": 4,
+      "line_end": 5
+    }
+  ],
+  "sources": [
+    "src-1f5af54ca293"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T12:01:15.377960Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "fct-7f35add9cb35",
+  "kind": "fact",
+  "claim": "When a check failure names a timing test the task did not touch, it should be treated as a flake and the checks re-run before reworking anything.",
+  "citations": [
+    {
+      "source": "src-1f5af54ca293",
+      "quote": "When a check failure names a timing test that the task did not\ntouch, treat it as a flake and re-run the checks before reworking anything.",
+      "line_start": 49,
+      "line_end": 50
+    }
+  ],
+  "sources": [
+    "src-1f5af54ca293"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T12:01:15.462434Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

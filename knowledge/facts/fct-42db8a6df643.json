@@ -1,0 +1,23 @@
+{
+  "id": "fct-42db8a6df643",
+  "kind": "fact",
+  "claim": "A task cannot be moved to 'under_review' while its holder is the agent recorded as completing it, because that would claim its own author is reviewing it.",
+  "citations": [
+    {
+      "source": "src-cb168bd3373f",
+      "quote": "\"Cannot move task ... to 'under_review' with\n    'DeveloperOpus' as its holder: it is the agent recorded as completing this task, so the move\n    would claim its own author is reviewing it.",
+      "line_start": 13,
+      "line_end": 15
+    }
+  ],
+  "sources": [
+    "src-cb168bd3373f"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T15:47:32.493843Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

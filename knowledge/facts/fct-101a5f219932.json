@@ -1,0 +1,23 @@
+{
+  "id": "fct-101a5f219932",
+  "kind": "fact",
+  "claim": "None of the task tools offered to agents can reassign a task; only the operator can move it on.",
+  "citations": [
+    {
+      "source": "src-cb168bd3373f",
+      "quote": "None of the task tools you are offered reassigns a\n    task; the operator can move it on.",
+      "line_start": 15,
+      "line_end": 16
+    }
+  ],
+  "sources": [
+    "src-cb168bd3373f"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T15:47:32.500885Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

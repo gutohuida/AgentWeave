@@ -1,0 +1,19 @@
+{
+  "id": "ctr-fba22cc3ba47",
+  "kind": "contradiction",
+  "facts": [
+    "fct-42f7f8872ede",
+    "fct-1fd9ba243cf8"
+  ],
+  "presumed": "fct-42f7f8872ede",
+  "explanation": "The new fact says cli-tests deselects tests/test_skill_sync.py, while the existing fact gives a cli-tests command that runs all of tests/ with no deselection.",
+  "status": "open",
+  "visibility": "tracked",
+  "holder": null,
+  "created_at": "2026-10-24T12:01:32.215094Z",
+  "found_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  },
+  "resolution": null
+}

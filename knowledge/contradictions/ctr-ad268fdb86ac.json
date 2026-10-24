@@ -1,0 +1,19 @@
+{
+  "id": "ctr-ad268fdb86ac",
+  "kind": "contradiction",
+  "facts": [
+    "fct-9c436a3e8f54",
+    "fct-3f3cdbc454d6"
+  ],
+  "presumed": "fct-9c436a3e8f54",
+  "explanation": "The new note supersedes the advice to enable checks in stages, while the existing fact says the checks should not all be turned on at once.",
+  "status": "open",
+  "visibility": "tracked",
+  "holder": null,
+  "created_at": "2026-10-24T12:01:32.181456Z",
+  "found_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  },
+  "resolution": null
+}

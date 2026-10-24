@@ -1,0 +1,23 @@
+{
+  "id": "fct-c8a8be0b5e15",
+  "kind": "fact",
+  "claim": "A change the operator will drive is not a flow: its delivery is set to none, its tasks go to DeveloperOpus, and the operator starts those tasks.",
+  "citations": [
+    {
+      "source": "src-cb9a7e28e315",
+      "quote": "A change the operator will drive is not a flow: its delivery is `none`, and its\n  tasks go to `DeveloperOpus` and are started by the operator.",
+      "line_start": 13,
+      "line_end": 14
+    }
+  ],
+  "sources": [
+    "src-cb9a7e28e315"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T13:53:59.150927Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

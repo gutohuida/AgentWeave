@@ -1,0 +1,23 @@
+{
+  "id": "fct-a67f412137e5",
+  "kind": "fact",
+  "claim": "If a check fails on both the task's run and master's re-run, the Hub holds the approval for the operator, as implemented in hub/hub/requirement_gate.py.",
+  "citations": [
+    {
+      "source": "src-1f5af54ca293",
+      "quote": "If it fails on both, the Hub holds the approval for the operator\n(`hub/hub/requirement_gate.py`).",
+      "line_start": 48,
+      "line_end": 49
+    }
+  ],
+  "sources": [
+    "src-1f5af54ca293"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T12:01:15.454536Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

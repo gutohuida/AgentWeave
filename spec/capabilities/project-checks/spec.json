@@ -222,6 +222,90 @@
       "requirement": "the-rest-of-what-the-hub-records-becomes-reachabl-checks-history",
       "then": "the newest leads and the two earlier runs are listed with each check's exit code and duration",
       "when": "the checks row renders and is opened"
+    },
+    {
+      "given": "two completed tasks A and B in one project, each with a passed result for the current main tip",
+      "key": "checks-wait-less-fresh-results-after-maste-ac-land-a-refreshes-b",
+      "requirement": "checks-wait-less-fresh-res-main-moving-refreshes-waiting-results",
+      "then": "a new check run for B starts on the new main tip without B's approval being requested, and once it passes, approving B is not refused for checks",
+      "when": "A is approved and its work lands on main"
+    },
+    {
+      "given": "a task in in_progress with a recorded check run",
+      "key": "checks-wait-less-fresh-results-afte-ac-in-progress-not-refreshed",
+      "requirement": "checks-wait-less-fresh-res-main-moving-refreshes-waiting-results",
+      "then": "no check run starts for it",
+      "when": "main moves"
+    },
+    {
+      "given": "a completed task with a passed result and the Hub running",
+      "key": "checks-wait-less-fresh-results-after-master-mov-ac-outside-merge",
+      "requirement": "checks-wait-less-fresh-re-a-move-from-outside-the-hub-is-noticed",
+      "then": "a check run for the task on the new tip has started within 120 seconds",
+      "when": "a commit is made on the main branch with git directly, not through the Hub"
+    },
+    {
+      "given": "a check run in progress for task B",
+      "key": "checks-wait-less-fresh-results-after-master-moves-ac-superseded",
+      "requirement": "checks-wait-less-fresh-results-afte-a-superseded-run-is-replaced",
+      "then": "that run ends recorded as superseded, not failed, its process tree is ended, and a run for B on the new tip is started",
+      "when": "main moves"
+    },
+    {
+      "given": "three tasks completed at t1 < t2 < t3, each stale after main moves",
+      "key": "checks-wait-less-fresh-results-after-master-moves-and-c-ac-order",
+      "requirement": "checks-wait-less-fresh-results-aft-refresh-order-is-oldest-first",
+      "then": "the t1 and t2 tasks' runs start before the t3 task's",
+      "when": "the refresh starts with two concurrent slots"
+    },
+    {
+      "given": "a task whose only result passed on an older main tip",
+      "key": "checks-wait-less-fresh-results-after-mast-ac-stale-still-refused",
+      "requirement": "checks-wait-less-fresh-the-gate-still-requires-a-current-result",
+      "then": "it is refused as checks running or not current, not approved",
+      "when": "approval is requested"
+    },
+    {
+      "given": "the project's Checks settings",
+      "key": "checks-wait-less-fresh-results-after-master-moves-ac-paths-saved",
+      "requirement": "checks-wait-less-fresh-results-after-a-check-may-name-its-paths",
+      "then": "the check carries them on reload, and a run credential's attempt to change them is refused",
+      "when": "the operator adds the patterns hub/** and constraints-dev.txt to a check and saves"
+    },
+    {
+      "given": "a check scoped to hub/** and a task whose work changes only spec/x.json",
+      "key": "checks-wait-less-fresh-results-after-master-mo-ac-skip-unmatched",
+      "requirement": "checks-wait-less-fresh-results-aft-an-unmatched-check-is-skipped",
+      "then": "the check's command is not executed and the result records it as skipped",
+      "when": "its checks run"
+    },
+    {
+      "given": "the same check and a task whose work changes hub/hub/a.py",
+      "key": "checks-wait-less-fresh-results-after-master-moves-ac-run-matched",
+      "requirement": "checks-wait-less-fresh-results-aft-an-unmatched-check-is-skipped",
+      "then": "the command is executed and its exit code recorded",
+      "when": "its checks run"
+    },
+    {
+      "given": "a check with no path patterns and a task that changes only spec/x.json",
+      "key": "checks-wait-less-fresh-results-after-master-m-ac-unscoped-always",
+      "requirement": "checks-wait-less-fresh-results-aft-an-unmatched-check-is-skipped",
+      "then": "the command is executed",
+      "when": "its checks run"
+    },
+    {
+      "given": "a run whose only non-passing entry is a skipped check",
+      "key": "checks-wait-less-fresh-results-after-ma-ac-skip-passes-and-shows",
+      "requirement": "checks-wait-less-fresh-re-a-skipped-check-is-recorded-and-passes",
+      "then": "approval is not refused for checks, and the drawer shows that check as skipped (no matching changes)",
+      "when": "approval is requested and the task drawer's checks row is opened"
+    },
+    {
+      "given": "spec/capabilities/project-checks after this change",
+      "key": "checks-wait-less-fresh-results-after-maste-ac-capability-amended",
+      "requirement": "checks-wait-less-fresh-results-aft-the-capability-says-what-runs",
+      "then": "it states the stop-at-the-task's-own-first-failure rule and no longer says every configured check runs",
+      "when": "its run requirement is read"
     }
   ],
   "algorithms": [],
@@ -236,7 +320,16 @@
       "FR-15": "1d6e7d8db7c5659f9524c11707ff3e9675365040ba1a7c2b27159642e0921baa",
       "FR-16": "828a14f8104a9fa5f28f5cebbe5e6468ce2093038f449f43d338ab76297f4ab6",
       "FR-17": "8fe5fca7dfbfb07807f1ddbec601e9b26649e33c8448dc95ed10da16d7817efd",
+      "FR-18": "9200143fc1452d7ea4d159e4d076483a9144117d0903b6c4781f382cc5c6104d",
+      "FR-19": "39b7287a5f05fb2ff4caef25b6ee69d5876550f8cabb1eb48b08d3753af657f0",
       "FR-2": "b413f57ebcba36139e13ec83c9178aae38d9e4375281f710036602898530effa",
+      "FR-20": "084ffa4c8f33495c22fb83da972d5fa71559cc81f86f17dbdf9bf015270a83bc",
+      "FR-21": "3d8fa7eaaa7f995240973a5152f5f48823678033e72ca8d5a0e90ad11e4ce4de",
+      "FR-22": "bb39a28eccd540c908baebb23ff8d7f4d98c2a41a4bddbb920b5c1ba616597b3",
+      "FR-23": "d1b7a55d13de2217c30f2156179406f8449f6e5789b94510f3cb5e601b2574ed",
+      "FR-24": "bf5f570d8af0210daa746fb1ce66a251ed9c8be0f2c06b897597c6c10781fe19",
+      "FR-25": "c56aa76d9c946c3f3694f853eaf94c38203efa5dde96eb24b09cbc6849833fc1",
+      "FR-26": "5c80ab3042fe65087367e02c0532b68ed310aa077e498f0913a8d4f0df29d0d6",
       "FR-3": "c90e76333fc87d07bd6ceb18b914cf94e00dbc30ede4de0b5209945bc76859f5",
       "FR-4": "b74b03cef2a76c22c2aa71334059cdf8cbe93c4f414646b91be3719f342b8015",
       "FR-5": "2d28561ac45d97f18654f91b15d058c3bdaa1fe6023e8641861eee028409e1e6",
@@ -245,7 +338,7 @@
       "FR-8": "8aea269a27df923c8e3cec427fe2eabafe42d6d7de4cfdeff6eb4cb9980825f9",
       "FR-9": "854991160e82881901ab1fac712c64fd0b2d738ebf6882854911a222d5105cf6"
     },
-    "high_water": 17,
+    "high_water": 26,
     "requirements": {
       "a-check-run-is-never-lost-silently": "FR-3",
       "a-check-runs-with-the-hub-s-environment-minus-the-hub-s-cred": "FR-4",
@@ -255,6 +348,15 @@
       "a-project-s-checks-are-configured-by-the-operator-only": "FR-1",
       "approval-is-refused-unless-the-project-s-checks-passed-on-th": "FR-12",
       "checks-run-in-the-background-on-the-work-approval-would-merg": "FR-2",
+      "checks-wait-less-fresh-re-a-move-from-outside-the-hub-is-noticed": "FR-19",
+      "checks-wait-less-fresh-re-a-skipped-check-is-recorded-and-passes": "FR-25",
+      "checks-wait-less-fresh-res-main-moving-refreshes-waiting-results": "FR-18",
+      "checks-wait-less-fresh-results-aft-an-unmatched-check-is-skipped": "FR-24",
+      "checks-wait-less-fresh-results-aft-refresh-order-is-oldest-first": "FR-21",
+      "checks-wait-less-fresh-results-aft-the-capability-says-what-runs": "FR-26",
+      "checks-wait-less-fresh-results-afte-a-superseded-run-is-replaced": "FR-20",
+      "checks-wait-less-fresh-results-after-a-check-may-name-its-paths": "FR-23",
+      "checks-wait-less-fresh-the-gate-still-requires-a-current-result": "FR-22",
       "n1": "FR-5",
       "n2": "FR-6",
       "n3": "FR-7",
@@ -407,6 +509,69 @@
       "party": null,
       "rationale": null,
       "statement": "The task drawer's checks row MUST offer the task's earlier check runs, each with its state, time and every check's exit code and duration."
+    },
+    {
+      "key": "checks-wait-less-fresh-res-main-moving-refreshes-waiting-results",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approval was where the stale result was discovered, so the whole suite ran while the approver waited.",
+      "statement": "When a project's main tip changes, the Hub MUST start a check run, in the background, for every task of that project in completed or under_review whose latest result is not for the new tip, without anyone requesting approval."
+    },
+    {
+      "key": "checks-wait-less-fresh-re-a-move-from-outside-the-hub-is-noticed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator lands work on master by hand; a refresh that fires only on the Hub's own merges would leave those stale.",
+      "statement": "A main tip change made outside the Hub (an operator's own merge or push to the main branch) MUST trigger the same refresh within 120 seconds of the change."
+    },
+    {
+      "key": "checks-wait-less-fresh-results-afte-a-superseded-run-is-replaced",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Finishing it produces a result the gate will refuse as stale anyway, while holding one of two check slots.",
+      "statement": "A check run still running when its project's main tip changes MUST be ended, recorded as superseded rather than failed, and replaced by a run on the new tip."
+    },
+    {
+      "key": "checks-wait-less-fresh-results-aft-refresh-order-is-oldest-first",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "The oldest waiting task is the one most likely to be approved next.",
+      "statement": "Refresh runs SHOULD start in the order their tasks entered completed, oldest first, within the existing limit on concurrent runs."
+    },
+    {
+      "key": "checks-wait-less-fresh-the-gate-still-requires-a-current-result",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Two tasks can each pass alone and break main together; only a run on the merged tree catches it (operator, 2026-10-24).",
+      "statement": "Approval MUST continue to accept only a result for the current main tip and the current merge targets; a result for an older tip MUST NOT count as passing."
+    },
+    {
+      "key": "checks-wait-less-fresh-results-after-a-check-may-name-its-paths",
+      "modal": "MAY",
+      "party": "producer",
+      "rationale": null,
+      "statement": "The operator MAY give each check an optional list of path patterns, set in the project's Checks settings and refused from any run credential, as the rest of the check is."
+    },
+    {
+      "key": "checks-wait-less-fresh-results-aft-an-unmatched-check-is-skipped",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "A check with path patterns MUST be skipped when no file changed between the run's main tip and the merged commit matches any of them, and MUST run, as today, when one does or when it has no patterns."
+    },
+    {
+      "key": "checks-wait-less-fresh-re-a-skipped-check-is-recorded-and-passes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A skipped check MUST be recorded in the run's results as skipped, with the reason that no changed file matched its paths, MUST count as passing at the gate, and MUST appear as skipped (no matching changes) wherever the run's checks are shown, never left out."
+    },
+    {
+      "key": "checks-wait-less-fresh-results-aft-the-capability-says-what-runs",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Shipped 2026-10-24 (31f77f2); the capability still says 'every configured check'.",
+      "statement": "The project-checks capability MUST state that a run executes the configured checks in order and stops after the first one that fails on the merged work and passes on main, and that a failure main shares does not stop it."
     }
   ],
   "schema_version": 1,

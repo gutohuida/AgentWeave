@@ -1,0 +1,270 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "two completed tasks A and B in one project, each with a passed result for the current main tip",
+      "key": "ac-land-a-refreshes-b",
+      "requirement": "main-moving-refreshes-waiting-results",
+      "then": "a new check run for B starts on the new main tip without B's approval being requested, and once it passes, approving B is not refused for checks",
+      "when": "A is approved and its work lands on main"
+    },
+    {
+      "given": "a task in in_progress with a recorded check run",
+      "key": "ac-in-progress-not-refreshed",
+      "requirement": "main-moving-refreshes-waiting-results",
+      "then": "no check run starts for it",
+      "when": "main moves"
+    },
+    {
+      "given": "a completed task with a passed result and the Hub running",
+      "key": "ac-outside-merge",
+      "requirement": "a-move-from-outside-the-hub-is-noticed",
+      "then": "a check run for the task on the new tip has started within 120 seconds",
+      "when": "a commit is made on the main branch with git directly, not through the Hub"
+    },
+    {
+      "given": "a check run in progress for task B",
+      "key": "ac-superseded",
+      "requirement": "a-superseded-run-is-replaced",
+      "then": "that run ends recorded as superseded, not failed, its process tree is ended, and a run for B on the new tip is started",
+      "when": "main moves"
+    },
+    {
+      "given": "three tasks completed at t1 < t2 < t3, each stale after main moves",
+      "key": "ac-order",
+      "requirement": "refresh-order-is-oldest-first",
+      "then": "the t1 and t2 tasks' runs start before the t3 task's",
+      "when": "the refresh starts with two concurrent slots"
+    },
+    {
+      "given": "a task whose only result passed on an older main tip",
+      "key": "ac-stale-still-refused",
+      "requirement": "the-gate-still-requires-a-current-result",
+      "then": "it is refused as checks running or not current, not approved",
+      "when": "approval is requested"
+    },
+    {
+      "given": "the project's Checks settings",
+      "key": "ac-paths-saved",
+      "requirement": "a-check-may-name-its-paths",
+      "then": "the check carries them on reload, and a run credential's attempt to change them is refused",
+      "when": "the operator adds the patterns hub/** and constraints-dev.txt to a check and saves"
+    },
+    {
+      "given": "a check scoped to hub/** and a task whose work changes only spec/x.json",
+      "key": "ac-skip-unmatched",
+      "requirement": "an-unmatched-check-is-skipped",
+      "then": "the check's command is not executed and the result records it as skipped",
+      "when": "its checks run"
+    },
+    {
+      "given": "the same check and a task whose work changes hub/hub/a.py",
+      "key": "ac-run-matched",
+      "requirement": "an-unmatched-check-is-skipped",
+      "then": "the command is executed and its exit code recorded",
+      "when": "its checks run"
+    },
+    {
+      "given": "a check with no path patterns and a task that changes only spec/x.json",
+      "key": "ac-unscoped-always",
+      "requirement": "an-unmatched-check-is-skipped",
+      "then": "the command is executed",
+      "when": "its checks run"
+    },
+    {
+      "given": "a run whose only non-passing entry is a skipped check",
+      "key": "ac-skip-passes-and-shows",
+      "requirement": "a-skipped-check-is-recorded-and-passes",
+      "then": "approval is not refused for checks, and the drawer shows that check as skipped (no matching changes)",
+      "when": "approval is requested and the task drawer's checks row is opened"
+    },
+    {
+      "given": "spec/capabilities/project-checks after this change",
+      "key": "ac-capability-amended",
+      "requirement": "the-capability-says-what-runs",
+      "then": "it states the stop-at-the-task's-own-first-failure rule and no longer says every configured check runs",
+      "when": "its run requirement is read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "9200143fc1452d7ea4d159e4d076483a9144117d0903b6c4781f382cc5c6104d",
+      "FR-2": "39b7287a5f05fb2ff4caef25b6ee69d5876550f8cabb1eb48b08d3753af657f0",
+      "FR-3": "084ffa4c8f33495c22fb83da972d5fa71559cc81f86f17dbdf9bf015270a83bc",
+      "FR-4": "3d8fa7eaaa7f995240973a5152f5f48823678033e72ca8d5a0e90ad11e4ce4de",
+      "FR-5": "bb39a28eccd540c908baebb23ff8d7f4d98c2a41a4bddbb920b5c1ba616597b3",
+      "FR-6": "d1b7a55d13de2217c30f2156179406f8449f6e5789b94510f3cb5e601b2574ed",
+      "FR-7": "bf5f570d8af0210daa746fb1ce66a251ed9c8be0f2c06b897597c6c10781fe19",
+      "FR-8": "c56aa76d9c946c3f3694f853eaf94c38203efa5dde96eb24b09cbc6849833fc1",
+      "FR-9": "5c80ab3042fe65087367e02c0532b68ed310aa077e498f0913a8d4f0df29d0d6"
+    },
+    "high_water": 9,
+    "requirements": {
+      "a-check-may-name-its-paths": "FR-6",
+      "a-move-from-outside-the-hub-is-noticed": "FR-2",
+      "a-skipped-check-is-recorded-and-passes": "FR-8",
+      "a-superseded-run-is-replaced": "FR-3",
+      "an-unmatched-check-is-skipped": "FR-7",
+      "main-moving-refreshes-waiting-results": "FR-1",
+      "refresh-order-is-oldest-first": "FR-4",
+      "the-capability-says-what-runs": "FR-9",
+      "the-gate-still-requires-a-current-result": "FR-5"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 — Keep the gate strict, remove the wait. A result still counts only for the main tip it ran on; what changes is that the Hub starts the new run when main moves, not when someone approves. By the time a reviewer or the operator approves, the result is usually current.\n\nD2 — Notice main moving from any source. The Hub lands work itself, but the operator also merges by hand, so detection cannot rely on the Hub's own integration alone.\n\nD3 — A run that main has already moved past is wasted work; it is ended and replaced rather than finished.\n\nD4 — Path scoping is opt-in per check. A check with no paths behaves exactly as today. A check whose paths the merged work does not touch is recorded as skipped, with the reason, and counts as passing. The changed files are those between the main tip the run was cut from and the merged commit it checks.\n\nD5 — The UI field for a check's paths is part of this change; a field reachable only through the API is not something the operator would use. A skipped check is shown, as \"skipped (no matching changes)\", not left out: a check that silently disappears reads as one that never ran (operator, 2026-10-24).\n\nD6 — Who builds it: DeveloperOpus, in one task, as a one-shot; Architect reviews (operator, 2026-10-24; vault rule src-cb9a7e28e315). Not a flow.",
+  "evidence": {
+    "checked": [
+      "hub/hub/project_checks.py view(): a result is stale when run.main_sha != tip",
+      "hub/hub/requirement_gate.py:1044-1052: a stale or missing result starts a run only when approving",
+      "hub/hub/project_checks.py:41 MAX_CONCURRENT_RUNS = 2",
+      "Measured 2026-10-24 on this machine: Hub suite 9:13 before, 6:25 after the conftest template and loadgroup change (8877 passed); merged to master as 31f77f2",
+      "spec/capabilities/project-checks requirement checks-run-in-the-background-on-the-work-approval-would-merg says 'execute every configured check, in order', contradicted by 31f77f2's fail-fast"
+    ],
+    "limits": [
+      "How the Hub should detect an outside merge (poll interval, ref watching) is not settled here; 120s is the requirement, not a design",
+      "Which hub tests read files outside hub/ (spec/, src/agentweave/templates/) has not been surveyed; the operator's path patterns for hub-tests should wait for that survey",
+      "The acceptance criteria are proposed coverage; none has run yet"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Should a skipped check appear in the task drawer as 'skipped (no matching changes)', or be left out of the list?",
+      "resolved": true
+    }
+  ],
+  "problem": "A check result counts only for the exact main tip it ran on (`hub/hub/project_checks.py` `view`: `run.main_sha != tip` → `stale`). In a flow, landing task A moves main, so every other task waiting for review now holds a stale result; approving one of them starts a new run (`requirement_gate.py:1044-1052`) and the approval is refused as \"still running\" for the length of the Hub suite (about 6½ minutes on this machine, 20 under agent load). With N tasks waiting, each approval pays that again. The operator also lands work on master by hand, which stales every waiting result the same way.\n\nSeparately, every configured check runs for every task. A task that only edits `spec/` or `hub/ui/` still runs the full Hub and CLI suites, which cannot fail because of it, and occupies one of the two concurrent check slots (`MAX_CONCURRENT_RUNS = 2`) other tasks are waiting for.\n\nWho has it: the operator, waiting to approve, and every flow, whose throughput is bounded by approvals. Accepting a stale green with a warning was considered and rejected (operator, 2026-10-24): two tasks can each pass alone and break main together, and only a run on the merged tree catches that.",
+  "requirements": [
+    {
+      "key": "main-moving-refreshes-waiting-results",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approval was where the stale result was discovered, so the whole suite ran while the approver waited.",
+      "statement": "When a project's main tip changes, the Hub MUST start a check run, in the background, for every task of that project in completed or under_review whose latest result is not for the new tip, without anyone requesting approval."
+    },
+    {
+      "key": "a-move-from-outside-the-hub-is-noticed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator lands work on master by hand; a refresh that fires only on the Hub's own merges would leave those stale.",
+      "statement": "A main tip change made outside the Hub (an operator's own merge or push to the main branch) MUST trigger the same refresh within 120 seconds of the change."
+    },
+    {
+      "key": "a-superseded-run-is-replaced",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Finishing it produces a result the gate will refuse as stale anyway, while holding one of two check slots.",
+      "statement": "A check run still running when its project's main tip changes MUST be ended, recorded as superseded rather than failed, and replaced by a run on the new tip."
+    },
+    {
+      "key": "refresh-order-is-oldest-first",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "The oldest waiting task is the one most likely to be approved next.",
+      "statement": "Refresh runs SHOULD start in the order their tasks entered completed, oldest first, within the existing limit on concurrent runs."
+    },
+    {
+      "key": "the-gate-still-requires-a-current-result",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Two tasks can each pass alone and break main together; only a run on the merged tree catches it (operator, 2026-10-24).",
+      "statement": "Approval MUST continue to accept only a result for the current main tip and the current merge targets; a result for an older tip MUST NOT count as passing."
+    },
+    {
+      "key": "a-check-may-name-its-paths",
+      "modal": "MAY",
+      "party": "producer",
+      "rationale": null,
+      "statement": "The operator MAY give each check an optional list of path patterns, set in the project's Checks settings and refused from any run credential, as the rest of the check is."
+    },
+    {
+      "key": "an-unmatched-check-is-skipped",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "A check with path patterns MUST be skipped when no file changed between the run's main tip and the merged commit matches any of them, and MUST run, as today, when one does or when it has no patterns."
+    },
+    {
+      "key": "a-skipped-check-is-recorded-and-passes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A skipped check MUST be recorded in the run's results as skipped, with the reason that no changed file matched its paths, MUST count as passing at the gate, and MUST appear as skipped (no matching changes) wherever the run's checks are shown, never left out."
+    },
+    {
+      "key": "the-capability-says-what-runs",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Shipped 2026-10-24 (31f77f2); the capability still says 'every configured check'.",
+      "statement": "The project-checks capability MUST state that a run executes the configured checks in order and stops after the first one that fails on the merged work and passes on main, and that a failure main shares does not stop it."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Starting check runs in the background for tasks awaiting review when the project's main tip changes, whoever moved it",
+      "Ending a check run whose main tip is no longer current and starting its replacement",
+      "An optional list of path patterns per check, set in the project's Checks settings",
+      "Recording a check skipped for lack of matching changes, and showing it",
+      "Amending the project-checks capability's 'every configured check, in order' requirement to match the stop-at-the-task's-own-first-failure behaviour shipped 2026-10-24"
+    ],
+    "non_goals": [
+      "Accepting a result that ran on an older main tip, with or without a warning (operator, 2026-10-24)",
+      "Raising MAX_CONCURRENT_RUNS or changing how many checks run at once",
+      "Choosing the path patterns for AgentWeave's own checks; that is the operator's configuration",
+      "Test-selection inside a check (running only the tests a change affects)",
+      "Re-running checks for tasks not awaiting review (in progress, revision needed, approved)",
+      "Caching the migration chain inside test_migrations.py (dropped: no longer on the critical path)"
+    ]
+  },
+  "summary": "Approving a task should not wait on its checks. Two causes remain after 2026-10-24's speed-up (Hub suite 9:13 → 6:25, checks stop at the task's own first failure): a green result goes stale every time main moves and approval then starts a fresh run, and every check runs for every task even when the task touched nothing it tests. This change re-runs stale results in the background as soon as main moves, and lets the operator scope a check to the paths it covers. Built in one task by DeveloperOpus, reviewed by Architect (operator, 2026-10-24).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Build the whole change in one task: refresh stale check results in the background when main moves (from the Hub's own integration and from outside it, within 120s), end and replace superseded runs, oldest completed first; keep the gate's current-tip rule; add optional per-check path patterns (operator-only, in the settings API and the Checks settings UI), skip unmatched checks as skipped-and-passing, shown as 'skipped (no matching changes)' in the drawer; refresh the committed UI bundle; amend spec/capabilities/project-checks through the Hub's document routes. Builder DeveloperOpus, reviewer Architect.",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/hub/task_integration.py",
+        "hub/hub/main.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/hub/requirement_gate.py",
+        "hub/ui/src",
+        "hub/hub/static/ui",
+        "hub/tests",
+        "spec/capabilities/project-checks"
+      ],
+      "from": null,
+      "key": "checks-wait-less",
+      "requirements": [
+        "main-moving-refreshes-waiting-results",
+        "a-move-from-outside-the-hub-is-noticed",
+        "a-superseded-run-is-replaced",
+        "refresh-order-is-oldest-first",
+        "the-gate-still-requires-a-current-result",
+        "a-check-may-name-its-paths",
+        "an-unmatched-check-is-skipped",
+        "a-skipped-check-is-recorded-and-passes",
+        "the-capability-says-what-runs"
+      ],
+      "reviewer": null,
+      "title": "Checks wait less (one shot)"
+    }
+  ],
+  "title": "Checks wait less"
+}

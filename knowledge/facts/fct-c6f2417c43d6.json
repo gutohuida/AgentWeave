@@ -1,0 +1,23 @@
+{
+  "id": "fct-c6f2417c43d6",
+  "kind": "fact",
+  "claim": "When a check fails, the Hub re-runs it on master to determine whether the failure belongs to the task, so a failed hub-tests run costs about 40 minutes.",
+  "citations": [
+    {
+      "source": "src-1f5af54ca293",
+      "quote": "When it fails, the Hub runs it\n  again on master to see whether the failure is the task's, so a red task costs about 40 minutes.",
+      "line_start": 27,
+      "line_end": 28
+    }
+  ],
+  "sources": [
+    "src-1f5af54ca293"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T12:01:15.437805Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}
