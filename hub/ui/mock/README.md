@@ -70,3 +70,19 @@ py -3.11 mock/drive_thread.py mock/thread-shots   # checks + screenshots (the la
 `mock-thread.html` renders the page on its own, so it needs none of the replica fixtures; the same
 screen is also `#thread` in the full mock. Its checks mirror the task's criteria (present, recursive,
 face, access) and write the light/dark/drawing/unspooling/greyscale screenshots for the operator.
+
+## The Thread page as a loom (mock, 2026-10-24)
+
+The operator's feedback on the Thread page: try left to right, show more about the selected knot
+underneath, make the line less like a git graph and more like a thread, and add motion. The mock
+answers with real components in `src/components/thread/loom/` (`Loom`, `ThreadLoom`, `geometry.ts`)
+and `src/styles/thread-loom.css`. It is a proposal, not wired into the app.
+
+```
+npx vite --config vite.mock.config.ts     # http://localhost:5199/mock-loom.html
+```
+
+Switches on the mock bar: left to right / top to bottom, a single wave / a rope with the red thread
+twisted through it, dark / light, and replay the draw-in. The fixture, `mock/thread-chapters-fixture.json`,
+is this repository's thread with its 17 chapters, recorded with the Hub's own code (`project_thread.build`
+plus `chapters.overlay`) from a read-only copy of the operator's database. Screenshots: `mock/loom-shots/`.
