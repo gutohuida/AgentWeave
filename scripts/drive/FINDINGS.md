@@ -40445,3 +40445,13 @@ An agent in `.agentweave/tasks/task-919d0e3104b5` linked `hub/ui/node_modules` t
 **Tier:** 0
 
 `connect()` (`hub/ui/src/hooks/useSSE.ts`) guarded a second attempt with `connectingUrl`, but `cancelReconnect()` (run when the last subscriber unmounts) cleared it while the first `fetch` was still in flight and had nothing to cancel yet. StrictMode's mount, unmount, mount does exactly that, so a remount started a second fetch; when both resolved, both readers stayed open (the page showed two `/api/v1/events` requests). Every listener got each event twice, which was harmless for cache invalidation and visible once something counted. **Fix:** a connect generation, bumped by each attempt and by `cancelReconnect`; an attempt whose fetch resolves stale cancels its own body and returns without scheduling a reconnect. **Test:** `hub/ui/src/__tests__/useSSE-one-stream.test.tsx` renders a subscriber under `<StrictMode>` with a fetch that answers after the remount: 2 deliveries before, 1 after, one stream left open. **Drive:** `scripts/drive/d1023_notifications.py` asserts '(1) AgentWeave' (it read '(2)' before). **2026-10-24:** the test's own fixture kept CI's `ui-test` red from f72cace on. The stale stream the fix cancels still had a timer queued to enqueue into it, so Vitest reported `Invalid state: Controller is already closed` as an unhandled error even though every test passed. The fixture's `cancel()` now clears that timer, which is what a server does with a closed connection.
+
+## F1040 (C) -- a spec-only change whose one task is the fold can never show Fold, and nothing says why
+
+**Status:** open 2026-10-24. Found by the Architect authoring `project-checks-says-what-a-run-does` (size fix, no code); the operator reported "it's not showing the fold into capability".
+**Source:** drive
+**Theme:** Spec flow
+**Ready:** yes
+**Tier:** 0
+
+A change document must have a task for every requirement, so a correction with no code gets a task whose work is the fold itself. Approving the document creates that task (`pending`, unassigned). `_fold_state` (`hub/hub/api/v1/spec.py:528`) answers `tasks_open` while any declared task is neither approved nor rejected, and `useSpecPhaseControls.tsx:403` shows Fold only for `ready`, so the task's own work is hidden behind the task. An agent cannot close it either (`pending -> rejected` is operator-only, `task_transitions.py:105`); the operator has to reject a task that was never wrong for the button to appear. Two candidate fixes, not chosen: let a document task be marked as the fold (closed by the fold), or allow a size-`fix` document with no tasks. Also check what the document header says in `tasks_open`: the operator saw no Fold and no reason.
