@@ -83,7 +83,7 @@ with sync_playwright() as p:
     # recursive: document > task > run, from the recorded chain
     import json
 
-    chain = json.load(open(pathlib.Path(__file__).parent / "thread-fixture.json"))["chain"]
+    chain = json.loads((pathlib.Path(__file__).parent / "thread-fixture.json").read_text(encoding="utf-8"))["chain"]
     doc, task, run = chain
     page.get_by_role("button", name="Jump to the beginning").click()
     page.wait_for_timeout(150)
@@ -117,18 +117,17 @@ with sync_playwright() as p:
         times = child_times(key)
         check(f"recursive: {level} shows its children", len(times) > 0, f"{len(times)} children")
     # Recorded order: siblings come from the Hub oldest first; the page must not reorder them.
-    fixture_levels = json.load(open(pathlib.Path(__file__).parent / "thread-fixture.json"))["levels"]
+    fixture_levels = json.loads((pathlib.Path(__file__).parent / "thread-fixture.json").read_text(encoding="utf-8"))["levels"]
     for key in (doc, task, run):
-        drawn = [
-            k
-            for k in page.evaluate(
+        drawn = list(
+            page.evaluate(
                 """(key) => {
                     const li = [...document.querySelectorAll('[data-knot-key]')].find((e) => e.dataset.knotKey === key)
                     return [...li.querySelectorAll(':scope > .aw-knot-opened > .aw-knot-opened-inner > .aw-thread-level > .aw-knot')].map((e) => e.dataset.knotKey)
                 }""",
                 key,
             )
-        ]
+        )
         recorded = [k["key"] for k in fixture_levels[key]["knots"]]
         check(f"recursive: {key.split(':')[0]} children in recorded time order", drawn == recorded)
     head(page, task).click()

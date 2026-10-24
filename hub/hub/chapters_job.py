@@ -345,7 +345,9 @@ async def prepare(project_id: str, *, trigger: str) -> Plan:
     )
 
 
-def _without_surface_cites(drafts: List[Dict[str, Any]], surface: List[str]) -> List[Dict[str, Any]]:
+def _without_surface_cites(
+    drafts: List[Dict[str, Any]], surface: List[str]
+) -> List[Dict[str, Any]]:
     """A surface key names a knot (a member), never a citation: a model that echoes one into
     `cites` would have the whole answer refused."""
     return _without_cites(drafts, set(surface))

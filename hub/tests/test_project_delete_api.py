@@ -24,6 +24,7 @@ from hub.db.models import (
     AIJob,
     ApiKey,
     Base,
+    ChapterVersion,
     Charter,
     Checkpoint,
     CheckpointNote,
@@ -124,6 +125,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "event_logs",
     "conversations",
     "checkpoint_notes",
+    "chapter_versions",
     "charters",
     "api_keys",
     "ai_jobs",
@@ -305,6 +307,16 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
         )
     )
     session.add(VaultFetch(project_id=project_id, entry_id=f"entry-{tag}", count=2))
+    session.add(
+        ChapterVersion(
+            id=f"chapters-{tag}",
+            project_id=project_id,
+            version=1,
+            author="manager",
+            chapters=[],
+            known_knots=[],
+        )
+    )
     session.add(
         VaultReader(project_id=project_id, entry_id=f"entry-{tag}", agent=f"agent-{tag}", count=2)
     )

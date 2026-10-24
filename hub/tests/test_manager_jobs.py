@@ -410,21 +410,47 @@ async def test_the_chapters_job_lists_its_total_and_the_thread_offers_the_button
     assert feed.json()["can_weave"] is False
 
     async with async_session_factory() as db:
-        for usage in ({"input_tokens": 10, "output_tokens": 5, "cost_usd_micros": 70}, {"input_tokens": 3}, None):
+        for usage in (
+            {"input_tokens": 10, "output_tokens": 5, "cost_usd_micros": 70},
+            {"input_tokens": 3},
+            None,
+        ):
             await manager.record_firing(
-                db, "proj-test", job="chapters", trigger="requested", subject={}, runner_id="r",
-                cli="claude", model=None, outcome="written", detail=None, duration_ms=1, usage=usage,
+                db,
+                "proj-test",
+                job="chapters",
+                trigger="requested",
+                subject={},
+                runner_id="r",
+                cli="claude",
+                model=None,
+                outcome="written",
+                detail=None,
+                duration_ms=1,
+                usage=usage,
             )
         await manager.record_firing(
-            db, "proj-test", job=JOB, trigger="t", subject={}, runner_id="r", cli="claude",
-            model=None, outcome="written", detail=None, duration_ms=1, usage={"input_tokens": 999},
+            db,
+            "proj-test",
+            job=JOB,
+            trigger="t",
+            subject={},
+            runner_id="r",
+            cli="claude",
+            model=None,
+            outcome="written",
+            detail=None,
+            duration_ms=1,
+            usage={"input_tokens": 999},
         )
     listed = (await app.get(f"{BASE}/manager/jobs", headers=auth_headers)).json()["jobs"]
     total = next(j for j in listed if j["key"] == "chapters")["usage_total"]
     assert total == {"firings": 3, "input_tokens": 13, "output_tokens": 5, "cost_usd_micros": 70}
 
     patched = await app.patch(
-        f"{BASE}/manager/jobs/chapters", json={"enabled": True, "mode": "button"}, headers=auth_headers
+        f"{BASE}/manager/jobs/chapters",
+        json={"enabled": True, "mode": "button"},
+        headers=auth_headers,
     )
     assert patched.status_code == 200 and patched.json()["usage_total"]["firings"] == 3
     feed = await app.get(f"{BASE}/thread?first=true", headers=auth_headers)
