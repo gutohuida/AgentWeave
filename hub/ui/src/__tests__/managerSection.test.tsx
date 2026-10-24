@@ -34,6 +34,8 @@ const JOB = {
   enabled: true,
   runner_id: 'runner-titles',
   model: 'claude-haiku-4-5-20251001',
+  // The route returns `mode` for every job, not only the chapters one.
+  mode: 'automatic',
 }
 // Newest first, the order `GET /manager/activity` returns.
 const FIRINGS = [
@@ -300,6 +302,8 @@ describe('Project settings → Manager', () => {
     expect(within(await screen.findByTestId('manager-firing-0')).getByText('1,000 tokens · $0.06')).toBeInTheDocument()
     expect(within(screen.getByTestId('manager-firing-1')).getByText('800 tokens · $0.04')).toBeInTheDocument()
     expect(screen.queryByTestId('manager-job-conversation-titles-total')).toBeNull()
+    expect(screen.queryByText('Conversation titles firing')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Conversation titles firing' })).toBeNull()
 
     await chooseMenuOption(user, 'Thread chapters firing', /^Automatic/)
     await waitFor(() => expect(patches).toContainEqual({ url: expect.stringContaining('/manager/jobs/chapters'), body: { mode: 'automatic' } }))

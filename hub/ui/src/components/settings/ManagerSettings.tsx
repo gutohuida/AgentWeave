@@ -132,7 +132,7 @@ export function ManagerSettings({
                   />
                 }
               />
-              {job.mode ? (
+              {job.key === 'chapters' && job.mode ? (
                 <SettingsRow
                   label="Fires"
                   inactive={!job.enabled}
