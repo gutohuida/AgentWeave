@@ -40475,3 +40475,13 @@ A change document must have a task for every requirement, so a correction with n
 **Tier:** 0
 
 `chapters.save` (`hub/hub/chapters.py:231-234`) requires every knot known at the previous save to be in a chapter, and with no previous save it requires the whole surface (`required = set(surface)`), which is what `every-knot-once` in `the-thread-reads-as-chapters-the-manager-writes` states. The job's prompt (`hub/hub/chapters_job.py:107-109`) tells the model "A knot no chapter holds yet may be placed in a chapter or left out", which on a first run covers every knot. The model followed the prompt: it placed the other kinds and left the spec-document knots out, and the Hub refused the whole answer. The trial-Hub acceptance drive passed because its project was small enough for the model to place everything. Fix candidates: the prompt states that a first version places every knot, and that later versions may leave out only knots recorded since the last version (a test asserts the first-run prompt says so); consider whether a refusal made only of unplaced knots should be answered back to the model once rather than discarding a paid answer.
+
+## F1043 (B) -- every run longer than 10 minutes is reported dead: the stall sweep reads a heartbeat column nothing writes
+
+**Status:** open 2026-10-24. Raised by the operator ("long running work keeps triggering the stale state and making the mender run to do nothing"); confirmed on `:8000` read-only.
+**Source:** drive
+**Theme:** Mender
+**Ready:** yes
+**Tier:** 0
+
+`stalls._sweep` (`hub/hub/stalls.py`, `cause="dead_run"`) takes `run.last_heartbeat_at or run.started_at` and reports a run dead when that is older than `HEARTBEAT_STALE_AFTER * 5` (10 minutes, `agent_status.py:8`). No code writes `Run.last_heartbeat_at` (the only heartbeat route writes `AgentHeartbeat` rows), so the sweep always measures from the run's start. On `:8000`: 250 runs, 0 with `last_heartbeat_at` set; 43 `dead_run` stalls since the mender shipped (d8f7303, 2026-10-23), over 9 runs, and all 9 ended `completed` -- every one a false alarm. They cost 41 mender turns, and the same live run was re-reported every sweep after the mender closed it (`run-4ab083547f1e`, Architect, 21:24, 21:29, 21:34, 21:39), twice with the mender wrongly concluding no process existed. Silence is not death: a run waiting on a 19-minute test suite sends nothing and is healthy. The Hub already holds an authoritative answer for its own runs, `run_liveness.active_ptys` / `active_app_server_runs` (an entry exists exactly while this process executes the run), and every run row carries `pid`.
