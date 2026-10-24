@@ -40,6 +40,7 @@ TITLES = "conversation-titles"
 DISTILLATION = "vault-distillation"
 REPORTS = "vault-reports"
 SPEC_VAULT_CHECK = "spec-vault-check"
+CHAPTERS = "chapters"
 MENDER = "mender"
 
 
@@ -94,6 +95,18 @@ JOBS = (
         ),
         trigger="document_proposed",
     ),
+    JobSpec(
+        key=CHAPTERS,
+        title="Thread chapters",
+        description=(
+            "Writes the Thread's chapters: titled, dated groups of the project's history, "
+            "reaching back through its git history. Fires after a document is approved or "
+            "archived and after a document's last task is approved (automatic), and when you "
+            "press Weave the thread. It adds chapters on its own and rewrites existing ones "
+            "only when you ask. Needs a runner. Off: the Thread shows its structural surface."
+        ),
+        trigger="document_approved",
+    ),
     # The one entry that is an agent, not a one-shot spawn (`stalls.py`): its runner and model
     # become the `mender` agent's, and a stall briefs it through the ordinary queue.
     JobSpec(
@@ -132,6 +145,7 @@ def _listed(spec: JobSpec, row: Optional[ManagerJob]) -> Dict[str, Any]:
         "runner_id": row.runner_id if row is not None else None,
         "model": row.model if row is not None else None,
         "automatic": bool(row.automatic) if row is not None else True,
+        "mode": "automatic" if row is None or row.automatic else "button",
     }
 
 

@@ -4,13 +4,13 @@
 recent firings. The jobs are `hub/hub/manager.py`'s registry; a job's row holds only the choice.
 """
 
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import manager
+from ... import chapters_job, manager
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Runner
@@ -23,6 +23,8 @@ class JobUpdate(BaseModel):
     enabled: Optional[bool] = None
     runner_id: Optional[str] = Field(default=None, max_length=64)
     model: Optional[str] = Field(default=None, max_length=256)
+    # The chapters job only: fire on its triggers ("automatic") or only on the button ("button").
+    mode: Optional[Literal["automatic", "button"]] = None
 
     model_config = {"extra": "forbid"}
 
@@ -49,6 +51,15 @@ async def update_manager_job(
     fields = body.model_dump(exclude_unset=True)
     if fields.get("enabled") is None:
         fields.pop("enabled", None)
+    mode = fields.pop("mode", None)
+    if mode is not None:
+        if key != manager.CHAPTERS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="mode chooses between automatic firing and the button, and only the "
+                "chapters job has a button",
+            )
+        fields["automatic"] = mode == "automatic"
     runner_id = fields.get("runner_id")
     if runner_id:
         runner = await session.get(Runner, runner_id)
@@ -91,6 +102,26 @@ async def update_manager_job(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal)
     await session.commit()
     return await manager.get_job(session, project_id, key)
+
+
+@router.post("/jobs/chapters/run", status_code=status.HTTP_202_ACCEPTED)
+async def weave_the_thread(
+    background: BackgroundTasks,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """'Weave the thread': the operator asks the chapters job to fire now, whatever its automatic
+    choice. Refused (409) while the job is off or has no runner; otherwise the firing runs after
+    the answer and is recorded as one `manager_job_fired` event."""
+    project_id = project[0]
+    try:
+        await chapters_job.gate(session, project_id, chapters_job.REQUESTED)
+    except chapters_job.CannotWeaveError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.reason) from exc
+    background.add_task(
+        chapters_job.weave_in_background, project_id, trigger=chapters_job.REQUESTED
+    )
+    return {"started": True}
 
 
 @router.get("/activity")

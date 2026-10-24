@@ -884,6 +884,17 @@ async def apply_transition(
 
     if to_status == "approved":
         await integrate_task(session, task, actor)
+        # The last open task of a document approved is a major event of the project's story: the
+        # chapters job fires once this commits, if it is on with automatic firing.
+        from . import chapters_job
+
+        if await chapters_job.is_last_open_task(session, task):
+            chapters_job.fire_after_commit(
+                session,
+                task.project_id,
+                chapters_job.LAST_TASK_APPROVED,
+                {"task": task.id, "document": task.spec_document_id},
+            )
 
     # A task completed outside a turn has its work committed already, so its checks can start now
     # (approval-runs-the-projects-checks D4). One completed by a run is checked at that run's end,
