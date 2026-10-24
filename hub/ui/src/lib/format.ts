@@ -32,12 +32,42 @@ export function formatMoney(value: number): string {
 }
 
 /** A firing's cost in words: its tokens, then its money when the runner reported it. */
-export function formatUsage(usage: { input_tokens?: number; output_tokens?: number; cost_usd_micros?: number } | null | undefined): string {
+export interface TokenUsage {
+  input_tokens?: number
+  output_tokens?: number
+  cache_read_tokens?: number
+  cache_write_tokens?: number
+  reasoning_tokens?: number
+  cost_usd_micros?: number
+}
+
+const TOKEN_DIMENSIONS: Array<[keyof TokenUsage, string]> = [
+  ['input_tokens', 'input'],
+  ['output_tokens', 'output'],
+  ['cache_read_tokens', 'cache read'],
+  ['cache_write_tokens', 'cache write'],
+  ['reasoning_tokens', 'reasoning'],
+]
+
+/** Every token dimension a runner reported, summed — on a claude runner most input is cache. */
+function totalTokens(usage: TokenUsage): number | null {
+  const reported = TOKEN_DIMENSIONS.filter(([key]) => usage[key] != null)
+  return reported.length ? reported.reduce((sum, [key]) => sum + (usage[key] ?? 0), 0) : null
+}
+
+/** "10 input · 4,486 output · 7,679 cache write", for a tooltip beside the total. */
+export function formatTokenBreakdown(usage: TokenUsage | null | undefined): string | undefined {
+  if (!usage) return undefined
+  const parts = TOKEN_DIMENSIONS.filter(([key]) => usage[key] != null).map(([key, label]) => `${WHOLE.format(usage[key] ?? 0)} ${label}`)
+  return parts.length ? parts.join(' · ') : undefined
+}
+
+export function formatUsage(usage: TokenUsage | null | undefined): string {
   if (!usage) return '—'
-  const tokens = (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0)
+  const tokens = totalTokens(usage)
   const money = usage.cost_usd_micros
   const parts: string[] = []
-  if (usage.input_tokens != null || usage.output_tokens != null) parts.push(`${WHOLE.format(tokens)} tokens`)
+  if (tokens != null) parts.push(`${WHOLE.format(tokens)} tokens`)
   if (money != null) parts.push(money < 10_000 ? '<$0.01' : formatMoney(money / 1_000_000))
   return parts.length ? parts.join(' · ') : '—'
 }

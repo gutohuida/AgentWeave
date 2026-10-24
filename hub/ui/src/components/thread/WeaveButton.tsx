@@ -15,7 +15,7 @@ export function WeaveButton() {
         </span>
       ) : weave.isSuccess ? (
         <span role="status" className="aw-knot-meta">
-          Weaving the thread. New chapters appear here when it finishes.
+          Weaving the thread. Reload this page once it finishes to see the new chapters.
         </span>
       ) : null}
       <Button variant="outline" data-slot="weave-thread" disabled={weave.isPending} onClick={() => weave.mutate()}>

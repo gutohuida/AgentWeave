@@ -308,4 +308,28 @@ describe('Project settings → Manager', () => {
     await chooseMenuOption(user, 'Thread chapters firing', /^Automatic/)
     await waitFor(() => expect(patches).toContainEqual({ url: expect.stringContaining('/manager/jobs/chapters'), body: { mode: 'automatic' } }))
   })
+
+  it('counts cache tokens in a firing and in the total, and breaks them down in a tooltip', async () => {
+    const usage = { input_tokens: 10, output_tokens: 4486, cache_read_tokens: 0, cache_write_tokens: 7679, cost_usd_micros: 37798 }
+    const chapters = {
+      key: 'chapters', title: 'Thread chapters', description: 'Writes the Thread’s chapters.', trigger: 'document_approved',
+      needs_runner: true, enabled: true, runner_id: 'runner-haiku', model: null, mode: 'button',
+      usage_total: { firings: 1, ...usage },
+    }
+    manager = (url) => {
+      if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [JOB, chapters] } }
+      if (url.includes('/manager/activity')) {
+        return { status: 200, body: { firings: [{
+          id: 'evt-a', at: '2026-10-09T15:01:00+00:00', job: 'chapters', trigger: 'requested', subject: {}, runner_id: 'runner-haiku',
+          cli: 'claude', model: null, outcome: 'written', detail: null, duration_ms: 4200, usage,
+        }] } }
+      }
+      return undefined
+    }
+    render(<ManagerSection />, { wrapper })
+    const total = await screen.findByTestId('manager-job-chapters-total')
+    expect(total).toHaveTextContent('1 firing · 12,175 tokens · $0.04')
+    expect(total).toHaveAttribute('title', '10 input · 4,486 output · 0 cache read · 7,679 cache write')
+    expect(within(await screen.findByTestId('manager-firing-0')).getByText('12,175 tokens · $0.04')).toBeInTheDocument()
+  })
 })

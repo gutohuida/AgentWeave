@@ -7,7 +7,7 @@ import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
 import type { ManagerFiring, ManagerJob, ManagerJobInput } from '@/api/manager'
 import type { Runner } from '@/api/runners'
 import type { ModelDescriptor } from '@/api/modelCatalog'
-import { formatDateTime, formatDuration, formatUsage } from '@/lib/format'
+import { formatDateTime, formatDuration, formatTokenBreakdown, formatUsage } from '@/lib/format'
 import { catalogModelOptions, runnerChoiceOptions } from './settingsOptions'
 import { LoadingThread } from '@/components/common/LoadingThread'
 
@@ -155,7 +155,7 @@ export function ManagerSettings({
                   label="Cost so far"
                   description="Everything this job has spent in this project; each firing's own cost is in the history below."
                   control={
-                    <span className="tabular" data-testid={`manager-job-${job.key}-total`}>
+                    <span className="tabular" data-testid={`manager-job-${job.key}-total`} title={formatTokenBreakdown(job.usage_total)}>
                       {job.usage_total.firings === 0
                         ? 'No firings yet'
                         : `${job.usage_total.firings} ${job.usage_total.firings === 1 ? 'firing' : 'firings'} · ${formatUsage(job.usage_total)}`}
@@ -251,7 +251,7 @@ function ManagerHistory({
                 </span>
               </span>
               <span role="cell" className="tabular text-right">{formatDuration(firing.duration_ms / 1000)}</span>
-              <span role="cell" className="tabular text-right">{formatUsage(firing.usage)}</span>
+              <span role="cell" className="tabular text-right" title={formatTokenBreakdown(firing.usage)}>{formatUsage(firing.usage)}</span>
             </button>
             {expanded ? (
               <div className="aw-history-answer">
