@@ -8,9 +8,14 @@ configuration removed from the environment (D8), stopping at the first failure t
 (a failure main shares does not stop it), and records a `TaskCheckRun` row (D3).
 
 Runs are started in the background, never inside a request (D5): when a task is completed outside a
-turn, when a turn bound to a completed task ends (its work is only committed then), and when approval
-finds no current result. At most two run at once per Hub, and one per task (D4). The approval gate only
-*reads* what is recorded (`view`).
+turn, when a turn bound to a completed task ends (its work is only committed then), when approval
+finds no current result, and when the project's main tip moves (`refresh`: the Hub's own merge, or
+`watch_main_forever` noticing one made outside it). A run main moved past is ended, recorded
+`superseded`, and replaced. At most two run at once per Hub, and one per task (D4). The approval gate
+only *reads* what is recorded (`view`), and still counts only a result for the current tip.
+
+A check may name the paths it covers (`paths`): where no file the merged work changes matches one, it
+is not executed and is recorded skipped, which passes.
 """
 
 from __future__ import annotations
@@ -27,12 +32,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import traces
 from .db.engine import async_session_factory
-from .db.models import Project, Run, Task, TaskCheckRun
+from .db.models import Project, Run, Task, TaskCheckRun, TaskTransition
 from .subprocess_windows import no_console_kwargs
 from .utils import short_id
 
@@ -47,8 +52,15 @@ GIT_TIMEOUT_SECONDS = 60
 #: under load ran past `GIT_TIMEOUT_SECONDS` (F516: 3,300 files, 60s, the run recorded `error`).
 CHECKOUT_TIMEOUT_SECONDS = 900
 
-#: Terminal states a gate may judge on, as opposed to `running` and `interrupted`.
+#: Terminal states a gate may judge on, as opposed to `running`, `interrupted` and `superseded`.
 DECIDED = ("passed", "failed", "error")
+#: A run ended because the main tip it was cut from moved; a run on the new tip replaces it.
+SUPERSEDED = "superseded"
+#: The task states whose results are refreshed when main moves: those waiting for review.
+AWAITING_REVIEW = ("completed", "under_review")
+#: How often each project's main tip is read, to notice a move made outside the Hub. Two looks fit
+#: inside the 120 seconds the refresh promises.
+WATCH_SECONDS = 30.0
 
 #: The Hub's own configuration, never handed to a project's command: its credentials, its database,
 #: its address. A check runs the *project's* tests; the Hub's settings are not the project's.
@@ -74,9 +86,70 @@ def configured_checks(project: Optional[Project]) -> List[Dict[str, Any]]:
                     "name": str(check["name"]),
                     "command": str(check["command"]),
                     "timeout_seconds": int(check.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS),
+                    "paths": [str(p) for p in check.get("paths") or [] if str(p).strip()],
                 }
             )
     return checks
+
+
+# --- paths ---------------------------------------------------------------------------------------
+
+
+def _pattern_regex(pattern: str) -> "re.Pattern[str]":
+    """A glob over repository-relative paths: `**` crosses directories, `*` and `?` do not, and a
+    pattern ending in `/` names everything beneath that directory."""
+    pattern = pattern.strip().replace("\\", "/").lstrip("/")
+    if pattern.endswith("/"):
+        pattern += "**"
+    out, i = [], 0
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif pattern.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif pattern[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        elif pattern[i] == "?":
+            out.append("[^/]")
+            i += 1
+        else:
+            out.append(re.escape(pattern[i]))
+            i += 1
+    return re.compile("".join(out) + r"\Z")
+
+
+def path_matches(pattern: str, path: str) -> bool:
+    return bool(_pattern_regex(pattern).match(path))
+
+
+def changed_paths(root: Path, base: str, merged: str) -> Optional[List[str]]:
+    """The files that differ between *base* and *merged*, both sides of a rename; `None` if unknown."""
+    result = _git(root, "diff", "--name-only", "--no-renames", "-z", base, merged)
+    if result.returncode != 0:
+        return None
+    return [path for path in result.stdout.split("\0") if path]
+
+
+def skipped(check: Dict[str, Any], changed: Optional[List[str]]) -> Optional[Dict[str, Any]]:
+    """The skipped result for *check* where it names paths and no file in *changed* matches one,
+    else `None`: it runs. Unknown changes run it; a check is never skipped on a guess."""
+    paths = check.get("paths") or []
+    if not paths or changed is None:
+        return None
+    if any(path_matches(pattern, path) for pattern in paths for path in changed):
+        return None
+    return {
+        "name": check["name"],
+        "skipped": True,
+        "reason": "no changed file matched its paths (" + ", ".join(paths) + ")",
+        "exit_code": None,
+        "timed_out": False,
+        "duration_seconds": 0.0,
+        "output_tail": "",
+    }
 
 
 # --- git -----------------------------------------------------------------------------------------
@@ -220,10 +293,13 @@ def scrub(text: str, removed: Sequence[str]) -> str:
     return _CREDENTIAL_RE.sub(_REDACTED, text)
 
 
-def run_one(check: Dict[str, Any], cwd: Path) -> Dict[str, Any]:
-    """Run one check to completion or its timeout; end its whole process tree on a timeout."""
+def run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> Dict[str, Any]:
+    """Run one check to completion or its timeout; end its whole process tree on a timeout.
+
+    *owner*, a task id, registers the process so `supersede` can end its tree from the event loop.
+    """
     with traces.command(check["command"], name=f"check {check['name']}") as span:
-        result = _run_one(check, cwd)
+        result = _run_one(check, cwd, owner)
         traces.exited(
             span,
             result["exit_code"],
@@ -232,7 +308,7 @@ def run_one(check: Dict[str, Any], cwd: Path) -> Dict[str, Any]:
     return result
 
 
-def _run_one(check: Dict[str, Any], cwd: Path) -> Dict[str, Any]:
+def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> Dict[str, Any]:
     from .pty_runner import IS_WINDOWS, terminate_process_tree
 
     env, removed = check_environment()
@@ -248,6 +324,8 @@ def _run_one(check: Dict[str, Any], cwd: Path) -> Dict[str, Any]:
         start_new_session=not IS_WINDOWS,
         **no_console_kwargs(),
     )
+    if owner is not None:
+        _processes[owner] = proc
     timed_out = False
     try:
         output, _ = proc.communicate(timeout=check["timeout_seconds"])
@@ -259,6 +337,9 @@ def _run_one(check: Dict[str, Any], cwd: Path) -> Dict[str, Any]:
         except subprocess.TimeoutExpired:
             proc.kill()
             output = b""
+    finally:
+        if owner is not None and _processes.get(owner) is proc:
+            _processes.pop(owner, None)
     text = scrub((output or b"").decode("utf-8", "replace"), removed)
     if timed_out:
         text += f"\n[the check ran past its {check['timeout_seconds']}s timeout and was ended]"
@@ -272,6 +353,8 @@ def _run_one(check: Dict[str, Any], cwd: Path) -> Dict[str, Any]:
 
 
 def failed(result: Dict[str, Any]) -> bool:
+    if result.get("skipped"):
+        return False  # no changed file matched its paths, which passes
     return bool(result.get("timed_out")) or result.get("exit_code") != 0
 
 
@@ -294,7 +377,7 @@ class _MainBaseline:
     """
 
     def __init__(self, root: Path, task_id: str, main_sha: str) -> None:
-        self.root, self.main_sha = root, main_sha
+        self.root, self.main_sha, self.task_id = root, main_sha, task_id
         self.name = f"{task_id}.main"
         self.path: Optional[Path] = None
         self.unavailable = False
@@ -305,7 +388,9 @@ class _MainBaseline:
         try:
             if self.path is None:
                 self.path = await asyncio.to_thread(_checkout, self.root, self.name, self.main_sha)
-            _record_main_result(result, await asyncio.to_thread(run_one, check, self.path))
+            _record_main_result(
+                result, await asyncio.to_thread(run_one, check, self.path, self.task_id)
+            )
         except Exception:  # noqa: BLE001 -- the task's own result stands without main's
             self.unavailable = True
             logger.warning("could not run check %s on main", check["name"], exc_info=True)
@@ -370,7 +455,11 @@ async def view(
         return CheckView("missing")
     if run.state in ("running", "interrupted"):
         return CheckView(run.state, run)
-    if run.main_sha != tip or list(run.target_shas or []) != list(target_shas):
+    if (
+        run.state == SUPERSEDED
+        or run.main_sha != tip
+        or list(run.target_shas or []) != list(target_shas)
+    ):
         return CheckView("stale", run)
     return CheckView(run.state, run)
 
@@ -382,7 +471,7 @@ async def _finish(run_id: str, **fields: Any) -> None:
             return
         for name, value in fields.items():
             setattr(run, name, value)
-        if fields.get("state") in DECIDED:
+        if fields.get("state") in (*DECIDED, SUPERSEDED):
             run.ended_at = datetime.now(timezone.utc)
         await session.commit()
 
@@ -390,6 +479,14 @@ async def _finish(run_id: str, **fields: Any) -> None:
 # --- the queue -----------------------------------------------------------------------------------
 
 _inflight: Dict[str, "asyncio.Task[None]"] = {}
+#: The project and main tip each in-flight run was cut from, by task.
+_inflight_tips: Dict[str, Tuple[str, str]] = {}
+#: Tasks whose in-flight run main has moved past, to the tip it moved to.
+_superseded: Dict[str, str] = {}
+#: The check process each task's run is executing now, so a superseded run's tree can be ended.
+_processes: Dict[str, subprocess.Popen] = {}
+#: The main tip each project was last seen at, by the watcher or a refresh.
+_seen_tips: Dict[str, str] = {}
 _starting: Set[str] = set()
 _pending: Set["asyncio.Task[Any]"] = set()
 _semaphores: Dict[int, asyncio.Semaphore] = {}
@@ -491,7 +588,8 @@ async def request_run(
             )
         )
         _inflight[task_id] = job
-        job.add_done_callback(lambda done: _inflight.pop(task_id, None))
+        _inflight_tips[task_id] = (project_id, tip)
+        job.add_done_callback(lambda done: _ended(project_id, task_id, done))
         return run_id
     finally:
         _starting.discard(task_id)
@@ -506,19 +604,47 @@ async def _execute(
     checks: List[Dict[str, Any]],
 ) -> None:
     results: List[Dict[str, Any]] = []
+
+    async def superseded() -> bool:
+        """Whether main moved past this run; if so it ends recorded `superseded`, not failed."""
+        new_tip = _superseded.get(task_id)
+        if new_tip is None:
+            return False
+        await _finish(
+            run_id,
+            state=SUPERSEDED,
+            results=list(results),
+            error=(
+                f"the main branch moved from {main_sha[:12]} to {new_tip[:12]} before this run "
+                "finished; a run on the new tip replaces it"
+            ),
+        )
+        return True
+
     try:
         async with _semaphore():
+            if await superseded():
+                return
             merged, why = await asyncio.to_thread(build_merged_commit, root, main_sha, targets)
             if merged is None:
                 await _finish(run_id, state="error", error=why)
                 return
-            path = await asyncio.to_thread(_checkout, root, task_id, merged)
+            changed = await asyncio.to_thread(changed_paths, root, main_sha, merged)
+            path: Optional[Path] = None
             baseline = _MainBaseline(root, task_id, main_sha)
             try:
                 for check in checks:
-                    result = await asyncio.to_thread(run_one, check, path)
-                    if failed(result):
-                        await baseline.record(check, result)
+                    if await superseded():
+                        return
+                    result = skipped(check, changed)
+                    if result is None:
+                        if path is None:
+                            path = await asyncio.to_thread(_checkout, root, task_id, merged)
+                        result = await asyncio.to_thread(run_one, check, path, task_id)
+                        if failed(result) and task_id not in _superseded:
+                            await baseline.record(check, result)
+                        if await superseded():
+                            return  # its tree was ended for the move: not a result
                     results.append(result)
                     await _finish(run_id, merged_sha=merged, results=list(results))
                     if failed(result) and not preexisting(result):
@@ -528,8 +654,11 @@ async def _execute(
                         # follows may still be.
                         break
             finally:
-                await asyncio.to_thread(_remove_checkout, root, path)
+                if path is not None:
+                    await asyncio.to_thread(_remove_checkout, root, path)
                 await baseline.close()
+            if await superseded():
+                return
             state = "failed" if any(failed(r) for r in results) else "passed"
             await _finish(run_id, state=state, merged_sha=merged, results=list(results))
     except Exception as exc:  # noqa: BLE001 -- a run must end recorded, never `running` forever
@@ -553,6 +682,170 @@ def schedule(project_id: str, task_id: str, targets: Optional[Sequence[str]] = N
         return
     _pending.add(job)
     job.add_done_callback(_pending.discard)
+
+
+# --- main moving -----------------------------------------------------------------------------------
+
+
+def _ended(project_id: str, task_id: str, job: "asyncio.Task[None]") -> None:
+    """A run's job is done: forget it, and replace it if main moved past it."""
+    if _inflight.get(task_id) is job:
+        _inflight.pop(task_id, None)
+        _inflight_tips.pop(task_id, None)
+    if _superseded.pop(task_id, None) is not None:
+        _background(_replace(project_id, task_id), f"replace the checks of {task_id}")
+
+
+def _background(coro: Any, what: str) -> None:
+    try:
+        job = asyncio.get_running_loop().create_task(coro)
+    except Exception:  # noqa: BLE001
+        coro.close()
+        logger.warning("could not %s", what, exc_info=True)
+        return
+    _pending.add(job)
+    job.add_done_callback(_pending.discard)
+
+
+async def _replace(project_id: str, task_id: str) -> None:
+    """The run main moved past is ended; start its replacement if the task still waits for review."""
+    try:
+        async with async_session_factory() as session:
+            task = await session.get(Task, task_id)
+            if task is None or task.status not in AWAITING_REVIEW:
+                return
+        await request_run(project_id, task_id)
+    except Exception:  # noqa: BLE001 -- approval still starts one when asked
+        logger.warning("could not replace the checks of %s", task_id, exc_info=True)
+
+
+async def supersede(task_id: str, new_tip: str) -> bool:
+    """End *task_id*'s in-flight run if it was cut from a tip other than *new_tip*: its executing
+    check's process tree is ended, the run records `superseded`, and `_ended` replaces it."""
+    from .pty_runner import terminate_process_tree
+
+    job = _inflight.get(task_id)
+    cut = _inflight_tips.get(task_id)
+    if job is None or job.done() or cut is None or cut[1] == new_tip:
+        return False
+    _superseded[task_id] = new_tip
+    proc = _processes.get(task_id)
+    if proc is not None and proc.poll() is None:
+        await asyncio.to_thread(terminate_process_tree, proc.pid)
+    return True
+
+
+async def _awaiting_review_oldest_first(session: AsyncSession, project_id: str) -> List[str]:
+    """The project's tasks waiting for review, in the order they last entered `completed`."""
+    rows = (
+        await session.execute(
+            select(Task.id, Task.created_at).where(
+                Task.project_id == project_id, Task.status.in_(AWAITING_REVIEW)
+            )
+        )
+    ).all()
+    if not rows:
+        return []
+    completed = dict(
+        (
+            await session.execute(
+                select(TaskTransition.task_id, func.max(TaskTransition.sequence))
+                .where(
+                    TaskTransition.task_id.in_([row.id for row in rows]),
+                    TaskTransition.to_status == "completed",
+                )
+                .group_by(TaskTransition.task_id)
+            )
+        ).all()
+    )
+    # A task with no recorded move to `completed` was created there; it sorts first, by creation.
+    rows.sort(key=lambda row: (row.id in completed, completed.get(row.id, 0), row.created_at))
+    return [row.id for row in rows]
+
+
+async def _current_tip(session: AsyncSession, project: Project) -> Optional[str]:
+    from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
+
+    if not project.main_branch:
+        return None
+    try:
+        root = (await resolve_project_workspace(session, project.id)).root
+    except ProjectWorkspaceError:
+        return None
+    return await asyncio.to_thread(main_tip, root, project.main_branch)
+
+
+async def refresh(project_id: str) -> None:
+    """The project's main tip moved, or may have: bring every waiting result up to it.
+
+    Every in-flight run cut from another tip is superseded (and replaced once it has ended), then a
+    run is requested for each task waiting for review, oldest completed first, so the semaphore
+    admits them in that order. `request_run` starts nothing for a result already current. Nothing
+    here is a gate: approval still counts only a result for the tip it reads (`view`).
+    """
+    async with async_session_factory() as session:
+        project = await session.get(Project, project_id)
+        if project is None or not configured_checks(project):
+            return
+        tip = await _current_tip(session, project)
+        if tip is None:
+            return
+        _seen_tips[project_id] = tip
+        waiting = await _awaiting_review_oldest_first(session, project_id)
+    for task_id, (owner, _) in list(_inflight_tips.items()):
+        if owner == project_id:
+            await supersede(task_id, tip)
+    for task_id in waiting:
+        if is_running(task_id):
+            continue  # current, or superseded and replaced when it ends
+        try:
+            await request_run(project_id, task_id)
+        except Exception:  # noqa: BLE001 -- one task's failure does not hold the others
+            logger.warning("could not refresh the checks of %s", task_id, exc_info=True)
+
+
+def schedule_refresh(project_id: str) -> None:
+    """Fire-and-forget `refresh`, for a caller that has just moved main (the Hub's own merge, after
+    its commit). Never raises, and nor does what it starts."""
+    _background(_refresh_logged(project_id), f"refresh the checks of {project_id}")
+
+
+async def _refresh_logged(project_id: str) -> None:
+    try:
+        await refresh(project_id)
+    except Exception:  # noqa: BLE001 -- the watcher looks again; approval still starts a run
+        logger.warning("could not refresh the checks of %s", project_id, exc_info=True)
+
+
+async def watch_main_once() -> None:
+    """Refresh every project with checks whose main tip is not the one last seen. A first look
+    counts as a move: a Hub restarted after a merge has results to bring up to date."""
+    async with async_session_factory() as session:
+        projects = [
+            project
+            for project in (await session.execute(select(Project))).scalars()
+            if configured_checks(project) and project.main_branch
+        ]
+        tips: Dict[str, Optional[str]] = {}
+        for project in projects:
+            try:
+                tips[project.id] = await _current_tip(session, project)
+            except Exception:  # noqa: BLE001 -- one project's git does not hold the others
+                logger.warning("could not read the main tip of %s", project.id, exc_info=True)
+    for project_id, tip in tips.items():
+        if tip is not None and _seen_tips.get(project_id) != tip:
+            await _refresh_logged(project_id)
+
+
+async def watch_main_forever() -> None:
+    """Notice a main tip moved outside the Hub (an operator's own merge or push), started in
+    `main.lifespan` and cancelled with it."""
+    while True:
+        await asyncio.sleep(WATCH_SECONDS)
+        try:
+            await watch_main_once()
+        except Exception:  # noqa: BLE001 -- the next look tries again
+            logger.warning("could not look for a moved main branch", exc_info=True)
 
 
 async def _after_run(project_id: str, run_id: str) -> None:
@@ -592,7 +885,10 @@ def after_run(project_id: str, run_id: str) -> None:
 
 async def drain() -> None:
     """Wait for every scheduled request and executing run (tests, and shutdown)."""
-    while _pending or any(not job.done() for job in _inflight.values()):
+    while True:
+        await asyncio.sleep(0)  # a finished run's callback may have scheduled its replacement
+        if not (_pending or any(not job.done() for job in _inflight.values())):
+            return
         await asyncio.gather(*list(_pending), *list(_inflight.values()), return_exceptions=True)
 
 

@@ -195,12 +195,17 @@ export interface TaskCheckResult {
   output_tail: string
   /** True when this check fails on main too, so the failure is not the task's work. */
   preexisting?: boolean
+  /** True when the check names paths and the work changed none of them: not run, and it passes. */
+  skipped?: boolean
+  /** Why it was skipped, naming its paths. */
+  reason?: string
 }
 
 /** One run of the project's checks on the work this task's approval would merge. */
 export interface TaskCheckRun {
   id: string
-  state: 'running' | 'passed' | 'failed' | 'error' | 'interrupted'
+  /** `superseded`: the main branch moved before it finished; a run on the new tip replaces it. */
+  state: 'running' | 'passed' | 'failed' | 'error' | 'interrupted' | 'superseded'
   main_sha: string
   target_shas: string[]
   merged_sha: string | null
@@ -340,7 +345,7 @@ export type StoryEvent =
       at: string | null
       state: string
       ended_at: string | null
-      results: { name?: string; command?: string; exit_code?: number; passed?: boolean }[]
+      results: { name?: string; command?: string; exit_code?: number | null; passed?: boolean; skipped?: boolean }[]
       error: string | null
       merged_sha: string | null
     }

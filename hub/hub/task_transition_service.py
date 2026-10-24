@@ -1355,7 +1355,12 @@ def _redrain_pending(session: Session) -> None:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return  # the next project open, run end or settings save drains it
+    from . import project_checks
+
     for project_id in pending:
+        # Main moved: the results waiting for review are stale now, so they re-run now rather
+        # than when someone approves (`checks-wait-less`, FR-1). Never raises.
+        project_checks.schedule_refresh(project_id)
         redrain = loop.create_task(_redrain(project_id))
         _redrains_in_flight.add(redrain)
         redrain.add_done_callback(_redrains_in_flight.discard)

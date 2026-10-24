@@ -134,6 +134,9 @@ export interface ProjectCheck {
   name: string
   command: string
   timeout_seconds: number
+  /** Globs over repository paths (`hub/**`). Empty or absent: it runs for every task. Otherwise it
+   *  is skipped, and passes, when the work changes no file matching one. */
+  paths?: string[]
 }
 
 /** The server merges a partial body onto what is stored (`projects.py`), so a caller sends only

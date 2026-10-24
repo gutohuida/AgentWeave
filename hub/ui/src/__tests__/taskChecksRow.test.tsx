@@ -144,3 +144,54 @@ describe('slice remaining-hidden-data — earlier check runs are in the drawer',
     expect(screen.queryByTestId('task-checks-history-toggle-task-1')).toBeNull()
   })
 })
+
+describe('checks-wait-less — a skipped check is shown, never left out', () => {
+  const skipped = {
+    name: 'hub-tests',
+    skipped: true,
+    reason: 'no changed file matched its paths (hub/**)',
+    exit_code: null,
+    timed_out: false,
+    duration_seconds: 0,
+    output_tail: '',
+  }
+  const ran = { name: 'lint', exit_code: 0, timed_out: false, duration_seconds: 1, output_tail: '' }
+
+  it('says a passed run skipped a check, and does not count it as failing (FR-8)', () => {
+    checks = { configured: true, running: false, runs: [run('passed', { results: [skipped, ran] })] }
+    render(<TaskChecksRow taskId="task-1" />)
+    expect(screen.getByText('Checks passed')).toBeInTheDocument()
+    expect(screen.getByTestId('task-checks-skipped-task-1')).toHaveTextContent(
+      'hub-tests · skipped (no matching changes)',
+    )
+    expect(screen.getByTestId('task-checks-skipped-task-1')).not.toHaveTextContent('lint')
+  })
+
+  it('shows it in an earlier run too, not as an exit code', () => {
+    checks = {
+      configured: true,
+      running: false,
+      runs: [run('passed', { id: 'chk-2' }), run('failed', { id: 'chk-1', results: [skipped, { ...ran, exit_code: 1 }] })],
+    }
+    render(<TaskChecksRow taskId="task-1" />)
+    fireEvent.click(screen.getByTestId('task-checks-history-toggle-task-1'))
+    expect(screen.getByTestId('task-check-result-chk-1-hub-tests')).toHaveTextContent(
+      'hub-tests · skipped (no matching changes)',
+    )
+    expect(screen.getByTestId('task-check-result-chk-1-hub-tests')).not.toHaveTextContent('exit')
+  })
+
+  it('says a superseded run was replaced because main moved (FR-3)', () => {
+    checks = {
+      configured: true,
+      running: true,
+      runs: [run('superseded', { error: 'the main branch moved from aaa to bbb before this run finished' })],
+    }
+    render(<TaskChecksRow taskId="task-1" />)
+    expect(screen.getByText('Checks running')).toBeInTheDocument()
+    checks = { configured: true, running: false, runs: [run('superseded', { error: 'main moved' })] }
+    render(<TaskChecksRow taskId="task-2" />)
+    expect(screen.getByText('Checks superseded: the main branch moved')).toBeInTheDocument()
+    expect(screen.getByText('main moved')).toBeInTheDocument()
+  })
+})

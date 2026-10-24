@@ -45,7 +45,7 @@ function makeSettings(): {
   checkpoint_model: string | null
   checkpoint_auto_continue: boolean
   main_branch: string | null
-  checks: Array<{ name: string; command: string; timeout_seconds: number }> | null
+  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[] }> | null
 } {
   return {
     name: 'Website',
@@ -226,6 +226,36 @@ describe('Project settings → General, applied on change', () => {
     await user.type(command, 'ruff check src')
     await user.click(within(dialog).getByRole('button', { name: 'Save check' }))
     expect(lastPatch()).toEqual({ checks: [{ name: 'lint', command: 'ruff check src', timeout_seconds: 120 }] })
+  })
+
+  it('scopes a check to the paths it covers (checks-wait-less FR-6)', async () => {
+    const user = userEvent.setup()
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: /Add check/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Name'), 'hub-tests')
+    await user.type(within(dialog).getByLabelText('Command'), 'pytest hub')
+    await user.type(within(dialog).getByLabelText('Paths'), 'hub/**{enter}constraints-dev.txt{enter}hub/**')
+    await user.click(within(dialog).getByRole('button', { name: 'Add check' }))
+    expect(lastPatch()).toEqual({
+      checks: [{ name: 'hub-tests', command: 'pytest hub', timeout_seconds: 900, paths: ['hub/**', 'constraints-dev.txt'] }],
+    })
+  })
+
+  it('shows the paths of a saved check and keeps them through an edit', async () => {
+    const user = userEvent.setup()
+    settings = {
+      ...makeSettings(),
+      checks: [{ name: 'hub-tests', command: 'pytest hub', timeout_seconds: 900, paths: ['hub/**', 'constraints-dev.txt'] }],
+    }
+    render(<GeneralSection />)
+    expect(screen.getByTestId('project-check-paths-0')).toHaveTextContent('hub/** +1')
+    await user.click(screen.getByRole('button', { name: 'Edit hub-tests' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByLabelText('Paths')).toHaveValue('hub/**\nconstraints-dev.txt')
+    await user.clear(within(dialog).getByLabelText('Paths'))
+    await user.click(within(dialog).getByRole('button', { name: 'Save check' }))
+    expect(lastPatch()).toEqual({ checks: [{ name: 'hub-tests', command: 'pytest hub', timeout_seconds: 900 }] })
   })
 
   it('offers the detected branch without choosing it', () => {

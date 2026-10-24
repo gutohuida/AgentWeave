@@ -11,18 +11,20 @@ CHECKS = [
     {"name": "lint", "command": "ruff check .", "timeout_seconds": 120},
     {"name": "tests", "command": "py -3.11 -m pytest -q", "timeout_seconds": 900},
 ]
+#: What is stored and read back: a check names no paths unless the operator gives some.
+SAVED = [{**check, "paths": []} for check in CHECKS]
 
 
 @pytest.mark.asyncio
 async def test_the_operator_saves_and_reads_checks_in_order(app, auth_headers):
     saved = await app.put(URL, json={"checks": CHECKS}, headers=auth_headers)
     assert saved.status_code == 200, saved.text
-    assert saved.json()["checks"] == CHECKS
+    assert saved.json()["checks"] == SAVED
 
     read = await app.get(URL, headers=auth_headers)
-    assert read.json()["checks"] == CHECKS
+    assert read.json()["checks"] == SAVED
     async with async_session_factory() as session:
-        assert (await session.get(Project, "proj-test")).checks == CHECKS
+        assert (await session.get(Project, "proj-test")).checks == SAVED
 
 
 @pytest.mark.asyncio
@@ -32,7 +34,9 @@ async def test_a_timeout_defaults_and_other_settings_are_untouched(app, auth_hea
         URL, json={"checks": [{"name": "t", "command": "pytest"}]}, headers=auth_headers
     )
     assert saved.status_code == 200, saved.text
-    assert saved.json()["checks"] == [{"name": "t", "command": "pytest", "timeout_seconds": 900}]
+    assert saved.json()["checks"] == [
+        {"name": "t", "command": "pytest", "timeout_seconds": 900, "paths": []}
+    ]
     assert saved.json()["hop_budget"] == before["hop_budget"]
 
 
@@ -53,6 +57,9 @@ async def test_no_checks_is_null_and_clearing_is_expressible(app, auth_headers):
         ([{"name": "", "command": "x"}], "name"),
         ([{"name": "a", "command": "x", "timeout_seconds": 5}], "timeout_seconds"),
         ([{"name": "a", "command": "x", "timeout_seconds": 3601}], "timeout_seconds"),
+        ([{"name": "a", "command": "x", "paths": ["/etc/**"]}], "paths"),
+        ([{"name": "a", "command": "x", "paths": ["../other/**"]}], "paths"),
+        ([{"name": "a", "command": "x", "paths": "hub/**"}], "paths"),
     ],
 )
 async def test_bad_checks_are_refused_naming_the_problem(app, auth_headers, checks, field):
@@ -81,3 +88,34 @@ async def test_a_run_credential_cannot_change_checks(app, auth_headers):
     refused = await app.put(URL, json={"checks": CHECKS}, headers=agent)
     assert refused.status_code in (401, 403), refused.text
     assert (await app.get(URL, headers=auth_headers)).json()["checks"] is None
+
+
+PATHS = [{"name": "hub-tests", "command": "pytest", "paths": ["hub/**", "constraints-dev.txt"]}]
+
+
+@pytest.mark.asyncio
+async def test_the_operator_scopes_a_check_to_paths_and_a_run_cannot(app, auth_headers):
+    """ac-paths-saved (`checks-wait-less`, FR-6)."""
+    saved = await app.put(URL, json={"checks": PATHS}, headers=auth_headers)
+    assert saved.status_code == 200, saved.text
+    read = await app.get(URL, headers=auth_headers)
+    assert read.json()["checks"][0]["paths"] == ["hub/**", "constraints-dev.txt"]
+
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-checks-paths",
+                project_id="proj-test",
+                agent="builder",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token("aw_run_paths-secret"),
+            )
+        )
+        await session.commit()
+    agent = {"Authorization": "Bearer aw_run_paths-secret"}
+    widened = [{**PATHS[0], "paths": ["**"]}]
+    refused = await app.put(URL, json={"checks": widened}, headers=agent)
+    assert refused.status_code in (401, 403), refused.text
+    after = await app.get(URL, headers=auth_headers)
+    assert after.json()["checks"][0]["paths"] == ["hub/**", "constraints-dev.txt"]
