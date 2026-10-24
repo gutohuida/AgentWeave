@@ -40485,3 +40485,23 @@ A change document must have a task for every requirement, so a correction with n
 **Tier:** 0
 
 `stalls._sweep` (`hub/hub/stalls.py`, `cause="dead_run"`) takes `run.last_heartbeat_at or run.started_at` and reports a run dead when that is older than `HEARTBEAT_STALE_AFTER * 5` (10 minutes, `agent_status.py:8`). No code writes `Run.last_heartbeat_at` (the only heartbeat route writes `AgentHeartbeat` rows), so the sweep always measures from the run's start. On `:8000`: 250 runs, 0 with `last_heartbeat_at` set; 43 `dead_run` stalls since the mender shipped (d8f7303, 2026-10-23), over 9 runs, and all 9 ended `completed` -- every one a false alarm. They cost 41 mender turns, and the same live run was re-reported every sweep after the mender closed it (`run-4ab083547f1e`, Architect, 21:24, 21:29, 21:34, 21:39), twice with the mender wrongly concluding no process existed. Silence is not death: a run waiting on a 19-minute test suite sends nothing and is healthy. The Hub already holds an authoritative answer for its own runs, `run_liveness.active_ptys` / `active_app_server_runs` (an entry exists exactly while this process executes the run), and every run row carries `pid`.
+
+## F1044 (C) -- the specs need an ordering
+
+**Status:** open 2026-10-25. Operator request, noted at their ask for later ("We need to create ordering for the spec"); not explored.
+**Source:** operator
+**Theme:** Spec flow
+**Ready:** no
+**Tier:** ?
+
+Recorded in the operator's words only. Before any work, ask what is to be ordered and by what: the documents in the Spec tab's list (by phase, by date, by hand), the slices or changes in build order, or the requirements and tasks inside one document.
+
+## F1045 (C) -- Overview shows notifications that cannot be dismissed and offer nothing to do
+
+**Status:** open 2026-10-25. Operator request, noted at their ask for later ("there are some notifications in overview that are not dismissable and I have no action to take on them they are just living there"); not explored.
+**Source:** operator
+**Theme:** Overview
+**Ready:** no
+**Tier:** ?
+
+Seen on the operator's `:8000` Hub. Not yet looked at: which notices they are, what raises them, and whether each should carry an action, clear itself when its cause ends, or be dismissable. Start by asking the operator for a screenshot or by reading the Overview's notice sources read-only.
