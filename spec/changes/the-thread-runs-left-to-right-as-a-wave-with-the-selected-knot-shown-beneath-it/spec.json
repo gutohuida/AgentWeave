@@ -1,154 +1,198 @@
 {
   "acceptance_criteria": [
     {
+      "checked_by": "operator",
       "given": "the trial Hub's Thread page for this repository and the mock at mock-loom.html?layout=horizontal&thread=wave, both at 1440x900 with the same chapter selected, in dark and in light",
+      "how_to_check": "The drive saves the four screenshots (page and mock, dark and light) side by side as evidence and states every difference it sees; the operator opens them, or both pages, and confirms they look the same.",
       "key": "ac-mock-match",
       "requirement": "looks-like-mock",
       "then": "the thread's shape, knot positions and sizes, labels, header line and panel layout match, and any difference is limited to agent chip colours or knots the mock's recording does not have",
       "when": "the two are screenshotted after the draw-in has finished"
     },
     {
+      "checked_by": "agent",
       "given": "a project with 17 chapters and one newer knot not in a chapter",
+      "how_to_check": "Drive: open the Thread tab on the trial Hub, read the selected bead (aria-selected) and its bounding box against the scroller's, compare every bead's start time left to right, press 'The beginning' and read the selected bead again. A ThreadScreen unit test covers the same with a route-ordered payload.",
       "key": "ac-opens-newest",
       "requirement": "left-to-right",
       "then": "the newest surface knot is selected and in view at the right, every knot to its left is older, and the beginning control selects chapter 1",
       "when": "the operator opens the Thread tab"
     },
     {
+      "checked_by": "agent",
       "given": "two neighbouring chapters two months apart and two a day apart",
+      "how_to_check": "Unit test of geometry.weave: bead positions for knots with uneven time gaps differ by the same step; the drive also measures bead centres on the real page.",
       "key": "ac-even",
       "requirement": "left-to-right",
       "then": "the horizontal distance between each pair of neighbouring knots is the same",
       "when": "the thread is drawn"
     },
     {
+      "checked_by": "agent",
       "given": "two neighbouring surface knots, the second starting 60 days after the first ended",
+      "how_to_check": "Unit test rendering Loom with such knots and asserting the gap labels present and absent.",
       "key": "ac-silence",
       "requirement": "wave",
       "then": "the stretch between them carries the label '2 months later', and a stretch between knots a day apart carries none",
       "when": "the thread is drawn"
     },
     {
+      "checked_by": "agent",
       "given": "a surface of 5 knots",
+      "how_to_check": "Unit test of geometry.weave (bead sides alternate around the middle) and of Loom (each label's data-side matches its bead); the drive reads the line's computed stroke against --brand-madder.",
       "key": "ac-alternate",
       "requirement": "wave",
       "then": "the knots sit alternately above and below the middle, each label is on the side away from the middle, and the line is the madder colour",
       "when": "the thread is drawn"
     },
     {
+      "checked_by": "agent",
       "given": "17 chapters spanning Mar 7 to Oct 24 and 1 newer conversation not in a chapter",
+      "how_to_check": "Unit test rendering ThreadLoom with that surface and reading the header text; the drive reads it on the trial Hub.",
       "key": "ac-count",
       "requirement": "page-count",
       "then": "it reads '17 chapters', 'Mar 7 to Oct 24', and '1 newer knot not in a chapter yet'",
       "when": "the page opens"
     },
     {
+      "checked_by": "agent",
       "given": "the chapter 'The mender and the stall alarms' (47 knots, 97 all the way down: 45 conversations, 1 vault entry, 1 document) selected",
+      "how_to_check": "Unit test rendering ThreadLoom with that chapter from mock/thread-chapters-fixture.json and reading the panel's text; the drive repeats it on whichever chapter the trial Hub has, with its own figures.",
       "key": "ac-panel",
       "requirement": "detail-panel",
       "then": "it reads 'Chapter 17 of 17', the title, the summary, 'Oct 24 · 1 day', '47 knots · 97 all the way down', chips for manager, Operator, mender and Architect, and '45 conversations', '1 vault entry', '1 document'",
       "when": "the panel shows it"
     },
     {
+      "checked_by": "agent",
       "given": "a conversation knot selected",
+      "how_to_check": "Drive: select a conversation knot, press the button, and confirm the app shows that conversation (URL and heading).",
       "key": "ac-panel-link",
       "requirement": "detail-panel",
       "then": "the app opens that conversation, as the old thread's link did",
       "when": "the operator presses 'Open the conversation'"
     },
     {
+      "checked_by": "agent",
       "given": "chapter 16 selected",
+      "how_to_check": "Unit test clicking 'The knot after' and reading the selection and the control's disabled state.",
       "key": "ac-before-after",
       "requirement": "detail-panel",
       "then": "chapter 17 is selected, and on chapter 17 the 'after' control is disabled",
       "when": "the operator presses the panel's 'after' control"
     },
     {
+      "checked_by": "agent",
       "given": "a chapter holding 47 conversations selected",
+      "how_to_check": "Unit test clicking the third inner bead and then the trail entry; the drive does the same on the trial Hub.",
       "key": "ac-descend",
       "requirement": "descend",
       "then": "the panel describes that conversation as 'Conversation 3 of 47', with a trail naming the chapter, and choosing the chapter in the trail selects the chapter again",
       "when": "the operator chooses the third knot on the panel's thread"
     },
     {
+      "checked_by": "agent",
       "given": "a knot that holds nothing selected",
+      "how_to_check": "Unit test selecting a leaf and reading the inner thread's beads and which one is aria-selected.",
       "key": "ac-leaf",
       "requirement": "descend",
       "then": "the panel's thread shows the knots beside it with it marked as selected",
       "when": "the panel shows it"
     },
     {
+      "checked_by": "agent",
       "given": "a chapter stored as 2026-10-24T00:00:00Z to 2026-10-24T23:59:59Z, with the browser in UTC+1 and in UTC-5",
+      "how_to_check": "Unit test run under TZ=Europe/Berlin and TZ=America/New_York (or the drive with Playwright's timezone_id set to each) reading the bead label and the panel.",
       "key": "ac-days",
       "requirement": "chapter-days",
       "then": "both read 'Oct 24' and the panel reads '1 day'",
       "when": "it is shown on the thread and in the panel"
     },
     {
+      "checked_by": "agent",
       "given": "a surface of 165 knots with the newest 40 loaded and the 40th selected",
+      "how_to_check": "ThreadScreen unit test with route-ordered pages and a 'before' cursor, asserting the request and the selection; the drive turns the chapters overlay off (the trial project's structural surface has 160+ knots), scrolls left, and compares a visible bead's screen position before and after the page arrives.",
       "key": "ac-page-earlier",
       "requirement": "paging",
       "then": "the next older page is requested and drawn to the left, the selected knot is unchanged and the knots that were in view stay where they were on screen",
       "when": "the reader scrolls to within one screen width of the left end"
     },
     {
+      "checked_by": "agent",
       "given": "a project with 10,000 recorded items on the operator's machine",
+      "how_to_check": "Drive on this machine against a trial project seeded with 10,000 items: time from navigation to the first bead visible, and from pressing 'The beginning' to its bead visible.",
       "key": "ac-scale",
       "requirement": "paging",
       "then": "knots show within one second each time",
       "when": "the Thread tab is opened, and then the beginning control is pressed"
     },
     {
+      "checked_by": "agent",
       "given": "a run three levels below a chapter selected, and the URL copied",
+      "how_to_check": "Drive: descend three levels, copy the URL, open it in a fresh page, and read the selection, the trail, both beads' visibility and document.activeElement.",
       "key": "ac-address",
       "requirement": "address",
       "then": "that run is selected with a trail of its chapter and the knots between, it is in view on the panel's thread, its chapter is in view on the surface, and it has keyboard focus",
       "when": "the URL is opened in a new tab"
     },
     {
+      "checked_by": "agent",
       "given": "the page open at the beginning of the thread with chapter 1 selected",
+      "how_to_check": "Drive: with chapter 1 selected, start a real Haiku run in the trial project, and within five seconds read the newest page for the new knot while chapter 1 stays aria-selected and visible.",
       "key": "ac-live",
       "requirement": "live",
       "then": "within five seconds the new activity is on the thread's present end, and chapter 1 is still selected and still in view",
       "when": "an agent's run starts in the project"
     },
     {
+      "checked_by": "agent",
       "given": "chapter 10 focused",
+      "how_to_check": "Unit test with user-event key presses, reading selection and document.activeElement after each; the drive repeats it in the browser.",
       "key": "ac-keys",
       "requirement": "keyboard-pointer",
       "then": "chapter 11 is selected, then the first knot inside chapter 11, then chapter 11 again, focus following each time",
       "when": "the reader presses Right, then Enter, then Escape"
     },
     {
+      "checked_by": "agent",
       "given": "the pointer pressed on a knot",
+      "how_to_check": "Drive: mouse down on a bead, move 200px, mouse up, and compare the scroller's scrollLeft and the selected bead before and after.",
       "key": "ac-drag",
       "requirement": "keyboard-pointer",
       "then": "the thread has scrolled 200 pixels and the selected knot has not changed",
       "when": "it is dragged 200 pixels left and released"
     },
     {
+      "checked_by": "agent",
       "given": "the browser set to reduced motion",
+      "how_to_check": "Drive with Playwright's reduced_motion='reduce': screenshot at 50ms and at 2s and confirm they match, read getAnimations() as empty, and compare the page text with a normal-motion run.",
       "key": "ac-reduced",
       "requirement": "motion",
       "then": "the thread, knots, labels and panel show at once with no drawing, glint, pulse, rise or glide, and the content is the same as without reduced motion",
       "when": "the page opens and a knot is chosen"
     },
     {
+      "checked_by": "agent",
       "given": "normal motion settings",
+      "how_to_check": "Drive: screenshots at 250ms (thread partly drawn from the left) and at 2s (all beads at full opacity).",
       "key": "ac-draws",
       "requirement": "motion",
       "then": "the thread is partly drawn from the left a quarter of a second in, and fully drawn with every knot shown within two seconds",
       "when": "the page opens"
     },
     {
+      "checked_by": "agent",
       "given": "the chapters job on",
+      "how_to_check": "ThreadScreen unit test with can_weave true asserting the button and its POST; the existing weave test carried over.",
       "key": "ac-weave",
       "requirement": "carried-controls",
       "then": "'Weave the thread' is offered and pressing it asks the job to fire, as before",
       "when": "the page opens"
     },
     {
+      "checked_by": "agent",
       "given": "the thread route failing",
+      "how_to_check": "ThreadScreen unit test with the route answering 500, reading the alert text.",
       "key": "ac-unreadable",
       "requirement": "carried-controls",
       "then": "it says the thread could not be read and to reload",
@@ -198,7 +242,7 @@
     "stop_at": null,
     "stop_when_queue_empties": true
   },
-  "design": "Decision records.\n\n0. The mock is on master (operator, 2026-10-25: merged at c1029ae). Files: hub/ui/src/components/thread/loom/{Loom.tsx,ThreadLoom.tsx,geometry.ts}, hub/ui/src/styles/thread-loom.css, hub/ui/mock/{loom-main.tsx,loom.css,screens/ThreadLoom.tsx,thread-chapters-fixture.json}, hub/ui/mock-loom.html, and a section in hub/ui/mock/README.md. Run it with `npx vite --config vite.mock.config.ts` and open http://localhost:5199/mock-loom.html?layout=horizontal&thread=wave. That rendering, left to right and wave, in dark and light, is the visual standard: the build wires these components and does not redraw, restyle or re-space them.\n\n1. The mock's components are the deliverable (hub/ui/mock/README.md rule). Building is wiring `ThreadScreen` (which already fetches levels, follows addresses, pages with cursors and refreshes live) to `ThreadLoom` instead of `Thread`. The rope style and the top-to-bottom orientation were mock switches the operator did not choose; they are removed, not kept as options. The mock entry keeps working on the wave and left-to-right only.\n\n2. Even spacing, not time-proportional. This repository's first 8 chapters span seven months and the last 9 span three days; spacing by time crushes the recent ones. Time is shown by each knot's date label and by a label on long silences.\n\n3. Retires approved behaviour. This change contradicts three requirements of the approved document pull-the-thread-project-history-page: FR-2 (oldest at the top, newest at the bottom), FR-5 (knots open in place directly beneath themselves) and FR-13's \"scrolling is always the browser's own\" (the selected knot now glides into view). It also reverses that document's non-goal \"Horizontal ... layouts\", which the operator has now asked for. Everything else there (FR-1, FR-3, FR-4, FR-6..FR-12) still holds, restated here only where the new layout changes how it shows. When the thread documents are folded into a capability, these three are retired by this change.\n\n4. Chapter dates are calendar days. The manager writes a chapter's span as whole days (stored as 00:00 to 23:59:59 UTC). Read as instants they shift a day in any time zone east of UTC; the mock showed \"Oct 23 – Oct 24\" for a one-day chapter until it read them as days.\n\n5. Agent colours come from each agent's registered colour, as everywhere else in the app (agentColors.ts). The mock assigned them by order of appearance; that was mock state only, and the one visual difference from the mock the build is expected to show.",
+  "design": "Decision records.\n\n0. The mock is on master (operator, 2026-10-25: merged at c1029ae). Files: hub/ui/src/components/thread/loom/{Loom.tsx,ThreadLoom.tsx,geometry.ts}, hub/ui/src/styles/thread-loom.css, hub/ui/mock/{loom-main.tsx,loom.css,screens/ThreadLoom.tsx,thread-chapters-fixture.json}, hub/ui/mock-loom.html, and a section in hub/ui/mock/README.md. Run it with `npx vite --config vite.mock.config.ts` and open http://localhost:5199/mock-loom.html?layout=horizontal&thread=wave. That rendering, left to right and wave, in dark and light, is the visual standard: the build wires these components and does not redraw, restyle or re-space them.\n\n1. The mock's components are the deliverable (hub/ui/mock/README.md rule). Building is wiring `ThreadScreen` (which already fetches levels, follows addresses, pages with cursors and refreshes live) to `ThreadLoom` instead of `Thread`. The rope style and the top-to-bottom orientation were mock switches the operator did not choose; they are removed, not kept as options. The mock entry keeps working on the wave and left-to-right only.\n\n2. Even spacing, not time-proportional. This repository's first 8 chapters span seven months and the last 9 span three days; spacing by time crushes the recent ones. Time is shown by each knot's date label and by a label on long silences.\n\n3. Retires approved behaviour. This change contradicts three requirements of the approved document pull-the-thread-project-history-page: FR-2 (oldest at the top, newest at the bottom), FR-5 (knots open in place directly beneath themselves) and FR-13's \"scrolling is always the browser's own\" (the selected knot now glides into view). It also reverses that document's non-goal \"Horizontal ... layouts\", which the operator has now asked for. Everything else there (FR-1, FR-3, FR-4, FR-6..FR-12) still holds, restated here only where the new layout changes how it shows. When the thread documents are folded into a capability, these three are retired by this change.\n\n4. Chapter dates are calendar days. The manager writes a chapter's span as whole days (stored as 00:00 to 23:59:59 UTC). Read as instants they shift a day in any time zone east of UTC; the mock showed \"Oct 23 – Oct 24\" for a one-day chapter until it read them as days.\n\n5. Agent colours come from each agent's registered colour, as everywhere else in the app (agentColors.ts). The mock assigned them by order of appearance; that was mock state only, and the one visual difference from the mock the build is expected to show.\n\n6. Who checks what. Every criterion is checkable by an agent (unit tests in hub/ui/src/__tests__, or the drive in a real browser against the trial Hub) except ac-mock-match, whose last word is the operator's eye: the drive supplies side-by-side screenshots, and the operator judges \"exactly like that\".",
   "evidence": {
     "checked": [
       "The mock at hub/ui/mock-loom.html renders the real components against this repository's thread recorded with the Hub's own code (project_thread.build + chapters.overlay) from a read-only copy of the operator's database; the operator viewed it and approved it as rendered (2026-10-24 and 2026-10-25)",
