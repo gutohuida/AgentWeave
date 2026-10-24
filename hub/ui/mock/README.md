@@ -85,4 +85,6 @@ npx vite --config vite.mock.config.ts     # http://localhost:5199/mock-loom.html
 Switches on the mock bar: left to right / top to bottom, a single wave / a rope with the red thread
 twisted through it, dark / light, and replay the draw-in. The fixture, `mock/thread-chapters-fixture.json`,
 is this repository's thread with its 17 chapters, recorded with the Hub's own code (`project_thread.build`
-plus `chapters.overlay`) from a read-only copy of the operator's database. Screenshots: `mock/loom-shots/`.
+plus `chapters.overlay`) from a read-only copy of the operator's database. The operator approved it as
+it renders on 2026-10-25 ("it should look exactly like that"): the build wires these components, it does
+not redraw them. `py -3.11 mock/shoot.py`-style screenshots land in `mock/loom-shots/` (PNGs are ignored).
