@@ -17,7 +17,6 @@ from .inbound_queue import router as inbound_queue_router
 from .instructions import router as instructions_router
 from .jobs import router as jobs_router
 from .ledger import router as ledger_router
-from .thread import router as thread_router
 from .logs import router as logs_router
 from .loops import router as loops_router
 from .manager import router as manager_router
@@ -34,6 +33,7 @@ from .setup import router as setup_router
 from .spec import router as spec_router
 from .status import router as status_router
 from .tasks import router as tasks_router
+from .thread import router as thread_router
 from .traces import router as traces_router
 from .vault import router as vault_router
 from .workspace import router as workspace_router

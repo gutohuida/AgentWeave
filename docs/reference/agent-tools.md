@@ -81,6 +81,13 @@ carry **outbound intent only**. There is no tool for reading an inbox.
 | `vault_report(entry_id, message)` | Report an entry that looks wrong. |
 | `vault_add(paths, distil, visibility?, type?, dated?)` | Add files to the vault by path. |
 
+## Thread chapters
+
+| Tool | Purpose |
+|---|---|
+| `read_chapters()` | The project's chapters and every version of them, with author, who asked, time and reason. |
+| `save_chapters(chapters, reason)` | Save the complete chapter set as a new version under your name. Citations must resolve and every thread knot must sit in exactly one chapter. |
+
 ## Agents and scheduled work
 
 | Tool | Purpose |

@@ -625,6 +625,72 @@ async def file_vault_report(
     return report
 
 
+async def _chapters_surface(session: AsyncSession, project_id: str):
+    from ... import project_thread
+    from .thread import vault_additions
+
+    return await project_thread.build(
+        session, project_id, await vault_additions(session, project_id)
+    )
+
+
+@router.get("/chapters")
+async def read_chapters(
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """The project's chapters now, every version of them (newest first, each with its author, who
+    asked, when and why) and the surface knots no chapter holds yet. Works whether the chapters
+    job is on or off."""
+    from ... import chapters
+
+    thread = await _chapters_surface(session, actor.project_id)
+    return await chapters.read(session, actor.project_id, thread)
+
+
+class ChaptersSave(RequestModel):
+    chapters: List[Dict[str, Any]]
+    reason: str = Field(max_length=2000)
+
+
+@router.post("/chapters")
+async def save_chapters(
+    body: ChaptersSave,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Save the complete set of chapters as a new version under the calling agent's name, through
+    the validation the manager's job goes through: every citation resolves and every surface knot
+    sits in exactly one chapter. Refused with 422 naming each problem; the previous version stays.
+    The agent is acting on a user's ask, so the save may change existing chapters."""
+    from contextlib import suppress
+
+    from ... import chapters
+    from .vault import project_root
+
+    thread = await _chapters_surface(session, actor.project_id)
+    repo: Optional[Path] = None
+    with suppress(HTTPException):
+        repo = await project_root(session, actor.project_id)
+    try:
+        result = await chapters.save(
+            session,
+            actor.project_id,
+            chapters=body.chapters,
+            surface=chapters.surface_keys(thread),
+            author=actor.agent,
+            reason=body.reason,
+            asked_for=True,
+            repo=repo,
+        )
+    except chapters.ChapterRefusedError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"message": str(exc), "problems": exc.problems},
+        ) from exc
+    return {"version": result.version}
+
+
 async def granted_vault_roots(
     session: AsyncSession, project_id: str, agent: str, project_root: Path
 ) -> List[Path]:

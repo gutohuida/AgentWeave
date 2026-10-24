@@ -1512,6 +1512,33 @@ def _operations() -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="read_chapters",
+            args="",
+            method="GET",
+            path="/chapters",
+            fields=(),
+            required=(),
+            text=(
+                "the project's thread chapters, every version of them (newest first, with author, "
+                "who asked, time and reason) and the surface knots no chapter holds yet. Works "
+                "whether or not the chapters job is on."
+            ),
+        ),
+        _Operation(
+            tool="save_chapters",
+            args="chapters, reason",
+            method="POST",
+            path="/chapters",
+            fields=("chapters", "reason"),
+            required=("chapters", "reason"),
+            text=(
+                "save the complete set of thread chapters as a new version under your name, with a "
+                "reason: each chapter is {id, title, summary, start, end, members, cites}; every "
+                "surface knot must be in exactly one chapter and every citation must exist, or the "
+                "version is refused naming each problem and the previous one stays shown."
+            ),
+        ),
+        _Operation(
             tool="vault_add",
             args="paths, distil, visibility=None, type='document', dated=None",
             method="POST",
