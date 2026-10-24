@@ -1,0 +1,178 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a project with a task materialised from document D, a task created with requirement_ids that resolve to D only, and a task created with no requirements",
+      "key": "ac-card",
+      "requirement": "card-names-document",
+      "then": "the first two cards name D's title and the third reads 'No spec'",
+      "when": "the operator opens the board"
+    },
+    {
+      "given": "a task belonging to an approved document D",
+      "key": "ac-drawer",
+      "requirement": "drawer-opens-document",
+      "then": "the drawer showed D's title and 'approved', and D's page opens",
+      "when": "the operator opens its drawer and clicks the document control"
+    },
+    {
+      "given": "a task with no document",
+      "key": "ac-drawer-none",
+      "requirement": "drawer-opens-document",
+      "then": "it says the task belongs to no spec, with no control to open one",
+      "when": "the operator opens its drawer"
+    },
+    {
+      "given": "document D with three declared tasks and one task created by an agent with requirement_ids that name D's FR-1, with no loop",
+      "key": "ac-list",
+      "requirement": "document-lists-its-tasks",
+      "then": "all four tasks are listed with status and assignee, and only the agent-created one is marked as a follow-up",
+      "when": "the operator opens D's page"
+    },
+    {
+      "given": "approved document D, the slice of an approved roadmap R, with all declared tasks approved and one follow-up pending",
+      "key": "ac-open-count",
+      "requirement": "open-count-on-document",
+      "then": "both show '1 task open' beside D; after that follow-up is approved, neither shows a count",
+      "when": "the operator opens D's page and R's page"
+    },
+    {
+      "given": "the trial Hub :8010 with a copy of this project's tasks, or seeded the same way",
+      "key": "ac-drive",
+      "requirement": "open-count-on-document",
+      "then": "the slice-2 document lists its 7 declared tasks plus task-6ac1bb3d4d39 as a follow-up, and shows its open count; this is the acceptance drive, run before the build and failing",
+      "when": "the operator opens spdoc-75175af77f8f's page and the red-thread roadmap"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "311e4ef0e550c12b06acfb28f443edda29c2a2f24a6e4fa231214db59bbb1b05",
+      "FR-2": "1a6916249c6bad50d81381fc0b9c4ae3603eb11304fa94ab7ec4ce884b450ea0",
+      "FR-3": "c7482dc556121389fcc2f8e48c1b3452916323ae856e0f036dc6e7603e6910f7",
+      "FR-4": "e3ea8f24f7c98f53f0a4c87548145d60d7c3a21deff3a0ddd903ec91a61e9876"
+    },
+    "high_water": 4,
+    "requirements": {
+      "card-names-document": "FR-1",
+      "document-lists-its-tasks": "FR-3",
+      "drawer-opens-document": "FR-2",
+      "open-count-on-document": "FR-4"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Display only. Nothing new is recorded: tasks.spec_document_id is set when a document materialises its tasks and, for an agent's create_task, when its requirement_ids resolve to one document (hub/hub/api/v1/tasks.py:821). Since 2026-10-24 the review briefing tells a reviewer to name requirement_ids and spec_document on a side finding (hub/hub/review_turn.py findings_lines), so follow-ups from reviews now carry the document. A task counts as open when its status is anything other than approved or rejected. A follow-up is a task whose spec_task_key is empty or is not among the document's declared task keys.",
+  "evidence": {
+    "checked": [
+      "On :8000 (read-only), project proj-d85a82bf4216: slice 2's 7 declared tasks are approved; 5 follow-ups filed by QA during review; 1 of them (task-6ac1bb3d4d39) carries spdoc-75175af77f8f, the other 4 named no requirements and carry none; none carries the flow's loop_id",
+      "Only DependencyListView.tsx groups tasks by document; TaskCardCompact.tsx and TaskDetailDrawer.tsx don't name it",
+      "A roadmap slice's state is the phase of the document naming it (a-roadmap-shows-which-of-its-slices-are-done), so an approved document reads as done regardless of its open tasks"
+    ],
+    "limits": [
+      "Whether the tasks route's spec_document_id filter returns follow-ups and declared tasks in one call was not driven",
+      "The acceptance criteria are proposed coverage; none has been run"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Operator, 2026-10-24: \"It's hard to know from which spec each task came\", and slice 2 of the red thread (spdoc-75175af77f8f) looked finished while five follow-ups were open, three of them defects it had introduced. Every task already records its document (tasks.spec_document_id, set by the document's materialisation or by the requirements an agent names), but only the Dependencies view groups tasks by document. Board cards and the task drawer don't name it. A document's flow lists only its own queue (loop_id), so a follow-up filed with create_task appears nowhere near the document. The flow stopped when its queue emptied, and nothing on the document or its roadmap slice said that work against it was still open.",
+  "requirements": [
+    {
+      "key": "card-names-document",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator could not find which spec a task came from. Showing 'No spec' rather than nothing tells apart 'none' from 'not loaded'.",
+      "statement": "Every task card on the board names the title of the specification document the task belongs to; a task that belongs to no document is marked 'No spec' instead."
+    },
+    {
+      "key": "drawer-opens-document",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The drawer is where someone reads one task's whole story; the document is the standard it was built against.",
+      "statement": "A task's drawer names its document's title and phase, with a control that opens that document; a task with no document says it belongs to none."
+    },
+    {
+      "key": "document-lists-its-tasks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A follow-up a reviewer filed during the flow carries the document but not the flow's queue, so the flow's own list never shows it.",
+      "statement": "A specification document's page lists every task whose document is that document, each with its title, status and assignee, and marks the tasks the document did not declare as follow-ups."
+    },
+    {
+      "key": "open-count-on-document",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice 2 read as done (approved, flow stopped) with five tasks open. The count is a warning, not a gate (operator, 2026-10-08: approvals are scarce, warn don't gate).",
+      "statement": "An approved change document whose tasks are not all approved or rejected shows how many are still open, on its page header and beside its slice on its roadmap's page; with none open, nothing extra is shown."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The document a task belongs to, named on its board card and in its drawer, with a way to open it",
+      "A plain 'no spec' marking on a task that belongs to no document",
+      "A document's page listing every task against it, its declared tasks and its follow-ups alike, with each one's status",
+      "A count of open tasks on an approved change document, and beside its slice on the roadmap page"
+    ],
+    "non_goals": [
+      "Per-spec statistics: cost, run counts, evidence verdicts per runner, time per task (vault note src-109565ec0558; a separate change)",
+      "Adding follow-up tasks to a flow's queue automatically, or restarting a stopped flow",
+      "Changing how a slice's phase is derived, or blocking approval or archive on open tasks",
+      "Guessing a document for a task whose requirements name none or several (the Hub records nothing then, deliberately)",
+      "Changing the reviewer's instructions (done separately as a Tier 0 change on 2026-10-24)"
+    ]
+  },
+  "summary": "Every task names the specification document it belongs to, on the board and in its drawer, and says so plainly when it belongs to none. A document's page lists every task against it, including follow-ups a reviewer filed during its flow, so a document whose flow has stopped no longer looks finished while work against it is still open.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Name the document's title on each board card (or 'No spec') and its title, phase and an open control in the task drawer. The task payload already carries spec_document_id; resolve titles from the project's documents. UI tests with fixtures in the order the routes return them; mock first (hub/ui/mock), then wire; refresh the committed UI bundle.",
+      "files": [
+        "hub/ui/src/components/tasks",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "task-names-document",
+      "requirements": [
+        "card-names-document",
+        "drawer-opens-document"
+      ],
+      "reviewer": null,
+      "title": "Board card and drawer name the task's spec"
+    },
+    {
+      "depends_on": [
+        "task-names-document"
+      ],
+      "description": "On a document's page, list every task with that spec_document_id (the tasks route already filters by it), marking those whose spec_task_key the document does not declare as follow-ups; show the open count on the header and beside the slice on the roadmap page. Write the acceptance drive (ac-drive) first and record it failing.",
+      "files": [
+        "hub/ui/src/components/spec",
+        "hub/hub/static/ui",
+        "scripts/drive"
+      ],
+      "from": null,
+      "key": "document-tasks-and-open-count",
+      "requirements": [
+        "document-lists-its-tasks",
+        "open-count-on-document"
+      ],
+      "reviewer": null,
+      "title": "A document lists its tasks and shows what is open"
+    }
+  ],
+  "title": "A task shows the spec it came from, and a spec shows its open follow-ups"
+}

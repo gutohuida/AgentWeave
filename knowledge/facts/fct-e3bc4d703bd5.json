@@ -1,0 +1,23 @@
+{
+  "id": "fct-e3bc4d703bd5",
+  "kind": "fact",
+  "claim": "`requirement_evidence` together with `evidence_reviews` records who produced each piece of evidence and who decided on it.",
+  "citations": [
+    {
+      "source": "src-109565ec0558",
+      "quote": "`requirement_evidence` with `evidence_reviews` (who produced each piece of evidence and who\n    decided it)",
+      "line_start": 31,
+      "line_end": 32
+    }
+  ],
+  "sources": [
+    "src-109565ec0558"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T10:05:40.158366Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

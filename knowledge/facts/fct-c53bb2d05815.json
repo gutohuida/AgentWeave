@@ -1,0 +1,23 @@
+{
+  "id": "fct-c53bb2d05815",
+  "kind": "fact",
+  "claim": "While master is red on a check, every task in every flow stops for the operator, and new failures inside an already-red suite cannot be distinguished from old ones.",
+  "citations": [
+    {
+      "source": "src-2c4713ed8e82",
+      "quote": "While master is red on a check, every task in every flow therefore stops for the operator, and a new failure a task adds\ninside an already-red suite cannot be told apart from the old ones.",
+      "line_start": 52,
+      "line_end": 54
+    }
+  ],
+  "sources": [
+    "src-2c4713ed8e82"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T10:55:32.672827Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

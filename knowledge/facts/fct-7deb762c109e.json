@@ -1,0 +1,23 @@
+{
+  "id": "fct-7deb762c109e",
+  "kind": "fact",
+  "claim": "On master commit 7b53161, `types` passes.",
+  "citations": [
+    {
+      "source": "src-2c4713ed8e82",
+      "quote": "| `types` | Passes |",
+      "line_start": 35,
+      "line_end": 35
+    }
+  ],
+  "sources": [
+    "src-2c4713ed8e82"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T10:55:32.659691Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "fct-4b2a6bf3def7",
+  "kind": "fact",
+  "claim": "`cli-tests` and `hub-tests` should be added only once the project-delete tests are fixed and the remaining master failures are fixed or marked as skipped.",
+  "citations": [
+    {
+      "source": "src-2c4713ed8e82",
+      "quote": "Add `cli-tests` and `hub-tests` once the project-delete tests are fixed and the remaining\n   master failures are fixed or marked as skipped.",
+      "line_start": 61,
+      "line_end": 62
+    }
+  ],
+  "sources": [
+    "src-2c4713ed8e82"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T10:55:32.679376Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

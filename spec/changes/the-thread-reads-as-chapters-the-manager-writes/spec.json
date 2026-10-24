@@ -1,0 +1,516 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a trial-Hub project with two stored chapters, and a second project with none",
+      "how_to_check": "Hub test over the thread feed plus browser drive on trial Hub :8010",
+      "key": "ac-surface",
+      "requirement": "chapters-on-surface",
+      "then": "the first shows the two chapters ordered by start, each with title, summary, span and author, and the opened chapter shows its knots beneath it; the second shows exactly slice 1's structural surface",
+      "when": "the Thread tab of each is opened and one chapter is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two chapters whose spans intersect",
+      "how_to_check": "Hub test",
+      "key": "ac-overlap",
+      "requirement": "overlap-allowed",
+      "then": "both are accepted and shown, ordered by start",
+      "when": "they are saved and the surface is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with stored chapters, then one more task recorded after them",
+      "how_to_check": "Hub test comparing the chapter walk to the structural walk; fails if a knot is dropped or doubled",
+      "key": "ac-once",
+      "requirement": "every-knot-once",
+      "then": "the knots reached equal slice 1's surface knots with no duplicates, and the new task appears after the chapters ungrouped",
+      "when": "every chapter is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "existing chapters",
+      "how_to_check": "Hub test",
+      "key": "ac-once-refused",
+      "requirement": "every-knot-once",
+      "then": "both are refused naming the knot, and the previous version is still shown",
+      "when": "a version that leaves one knot out, and another that puts one knot in two chapters, are saved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "existing chapters",
+      "how_to_check": "Hub test against a fixture git repository",
+      "key": "ac-cite",
+      "requirement": "citations-resolve",
+      "then": "both are refused naming the citation, and the previous version is still shown",
+      "when": "a version citing a task id that does not exist, and one citing a commit sha absent from the repository, are saved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "this repository's project on the trial Hub with the job on and a real runner",
+      "how_to_check": "e2e drive on trial Hub :8010 with a cheap model; check each cited sha with git cat-file",
+      "key": "ac-git",
+      "requirement": "before-the-hub",
+      "then": "chapters dated before the project's first Hub record appear above every Hub knot, every commit they cite exists in the repository, and opening one shows its commits grouped under release tags with date, author and subject",
+      "when": "'Weave the thread' is pressed"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the chapters written by the ac-git drive",
+      "how_to_check": "operator review of the running page",
+      "key": "ac-story",
+      "requirement": "before-the-hub",
+      "then": "the operator judges that it tells this project's story truthfully enough to show a stakeholder",
+      "when": "the operator reads the Thread surface"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the job on with automatic firing",
+      "how_to_check": "e2e drive on trial Hub :8010 counting manager_job_fired events for the chapters job",
+      "key": "ac-fires",
+      "requirement": "fires-on-major-events",
+      "then": "each records one chapters firing",
+      "when": "a document is approved, a document is archived, a document's last task is approved, and the button is pressed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a new project",
+      "how_to_check": "e2e drive on trial Hub :8010",
+      "key": "ac-controls",
+      "requirement": "user-controls",
+      "then": "the default shows no button and records no firing; button-only records no firing on approval but one on the press; the press's firing records the chosen runner and model",
+      "when": "a document is approved with the job at its default, then with button-only, then with a chosen runner and model and the button pressed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two chapters firings in a project",
+      "how_to_check": "browser drive on trial Hub :8010 comparing the shown figures to the recorded events",
+      "key": "ac-cost",
+      "requirement": "cost-visible",
+      "then": "each firing's tokens (and money where reported) and the project's total for the job are shown, and match what the firings recorded",
+      "when": "the operator looks for their cost in the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "existing chapters and a new document approved",
+      "how_to_check": "Hub test with a stubbed model answer",
+      "key": "ac-no-rewrite",
+      "requirement": "no-unasked-rewrite",
+      "then": "the new chapter is saved, the retitle is refused, and the existing chapter is unchanged",
+      "when": "an automatic firing returns output that both adds a chapter for the new knots and retitles an existing chapter"
+    },
+    {
+      "checked_by": "agent",
+      "given": "existing chapters",
+      "how_to_check": "Hub test with a stubbed model answer",
+      "key": "ac-rewrite-asked",
+      "requirement": "no-unasked-rewrite",
+      "then": "the retitle is saved as a new version",
+      "when": "the operator presses 'Weave the thread' and the firing retitles an existing chapter"
+    },
+    {
+      "checked_by": "agent",
+      "given": "chapters changed by an automatic firing, a requested firing and an agent",
+      "how_to_check": "Hub test reading the versions route and the firing's prompt",
+      "key": "ac-versions",
+      "requirement": "versions-kept",
+      "then": "all three versions are returned with author, who asked, time and reason, and the firing's input contains them",
+      "when": "an agent reads the chapters' versions, and the next firing is started"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent with the job off",
+      "how_to_check": "e2e drive on trial Hub :8010 with a Haiku agent asked to make a chapter",
+      "key": "ac-agent",
+      "requirement": "agent-tools",
+      "then": "the chapter appears on the surface as a version under the agent's name, and the edit is refused",
+      "when": "it creates a chapter through its tools, then submits an edit citing a missing record"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Saving a chapters version",
+      "steps": [
+        "Take the proposed chapters, the author (manager or agent name), who asked (operator or none), the reason, and whether the save was asked for.",
+        "Every citation must resolve: Hub record ids against the project's tables, commit shas and tag names against the project's repository. Any that does not resolve refuses the whole version, naming it.",
+        "Every surface knot of the structural thread that existed when the previous version was saved must sit in exactly one chapter; a missing or doubled knot refuses the version, naming it. Knots recorded since may be placed or left ungrouped.",
+        "If the save was not asked for, compare each existing chapter with the proposal: any change to its title, summary or members is dropped and named in the result; only new chapters are kept. If nothing new is left, no version is written.",
+        "Write the version as a new row; never update or delete an earlier one."
+      ]
+    },
+    {
+      "name": "A chapters firing",
+      "steps": [
+        "Skip if the job is off; skip an automatic trigger if the job is button-only.",
+        "Gather the structural surface (slice 1's feed), the current chapters with every earlier version and its reason, and, if no chapter yet covers the time before the first Hub record, a digest of the repository's history before it: release tags with their dates and the subjects of the commits between them.",
+        "Spawn the job's runner and model once with that input; record the firing with its usage whatever the outcome.",
+        "Save the answer through 'Saving a chapters version' with author manager, asked-for when the trigger was the button."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "78be174ac9c3baa8e38a3456fb0e6a4678b0b55fa6bd71fceeea127772a66814",
+      "FR-10": "5152ac681639105f01335e1fe09fc3fe8d0a5bd4136ba61655961035a17ed25a",
+      "FR-11": "db9ba6796265e301df398d8ff1ee8870aa4d452078a64dea13ea8d6ff5fd2852",
+      "FR-2": "80c713d07b001ce5cea106e1d2f446871f9c369e0465249cd661c318b1416d78",
+      "FR-3": "ba195e420802b64183558b18877dba7f92169750cb83ebf97a1a107d5e065735",
+      "FR-4": "d0511ebb2d7e6b5a131cd7f1f1a246dfbf7422e667eb97463a3ef32c5357e09c",
+      "FR-5": "1822cecc01a162a3a6887dd9a516b8ac1e1a6f3e1689f6fcc77b620eb8a3446e",
+      "FR-6": "35e3366c04372b1556ec3b2517225b369e064f146b1cd1a8fd1f390885bd82ae",
+      "FR-7": "e5fc7f79decc9b3e111abb18117f0a14c3e2d27a134ff723d0f4801023c350b1",
+      "FR-8": "ea37f0cc14f540603acc5e0ee6da36962c52cd712beb65cb6b4775495f400037",
+      "FR-9": "feec7d04b7cf0b7121fd196b1c6da9b3854bcfa81e604fa11029c7b526faf6c0"
+    },
+    "high_water": 11,
+    "requirements": {
+      "agent-tools": "FR-8",
+      "before-the-hub": "FR-4",
+      "chapters-on-surface": "FR-1",
+      "citations-resolve": "FR-3",
+      "cost-visible": "FR-11",
+      "every-knot-once": "FR-2",
+      "fires-on-major-events": "FR-5",
+      "no-unasked-rewrite": "FR-6",
+      "overlap-allowed": "FR-9",
+      "user-controls": "FR-10",
+      "versions-kept": "FR-7"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reviewer": "QA",
+    "stop_at": null,
+    "stop_when_queue_empties": true,
+    "tester": "QA"
+  },
+  "design": "Grounding (read, not run): manager jobs are a code registry (hub/hub/manager.py JOBS) with a per-project ManagerJob row (enabled, runner, model; db/models.py:1128); a sibling job is fired after a phase change with background.add_task (hub/hub/api/v1/spec.py:3075, vault_spec_check.check_in_background); firings are recorded as manager_job_fired with usage, and the Manager settings page already shows each firing's cost (hub/ui/src/components/settings/ManagerSettings.tsx:193) but no total. The thread feed is built in hub/hub/project_thread.py and served by hub/hub/api/v1/thread.py; slice 1's surface groups non-document knots with group_surface (:371).\n\nThe Hub enforces the rules, not the model: citations, every-knot-once and no-unasked-rewrite are checked when a version is saved, so a model that ignores its instructions changes nothing it was not allowed to.\n\nAcceptance drive first: the acceptance-drive task writes scripts/drive/chapters_drive.py and shows it failing before the build; every other task depends on it, and drive-green runs it to pass.\n\nHazards: storing chapters needs a migration, and the operator's :8000 runs this checkout's migrations on its next restart. The ui task's committed bundle reaches their live app on reload. The first firing over 5,382 commits is the expensive one; its cost is shown, never capped.\n\nDelivery: a flow, as slice 1. Developer builds; QA reviews and tests each finished task by driving the running product; every five minutes; stops when the queue empties. Tasks that share hub/hub/api/v1/thread.py are chained (feed, job, agent-tools).",
+  "evidence": {
+    "checked": [
+      "Roadmap spdoc-013eab645399 slice manager-chapters, reworded and re-approved 2026-10-23",
+      "Slice 1 spdoc-d053e7625ba2: surface = one knot per document plus group folds (hub/hub/project_thread.py group_surface, :371)",
+      "Manager registry, ManagerJob row and firing record (hub/hub/manager.py:1-113, db/models.py:1128); per-firing cost shown, no total (ManagerSettings.tsx:193, :224)",
+      "Phase-change background job pattern (hub/hub/api/v1/spec.py:3075)",
+      "Read-only count on :8000: proj-d85a82bf4216 has 159 documents, first created 2026-10-22 23:21 (the import), and 8 tasks",
+      "git on master: 5,382 commits (4,154 first-parent) from 2026-03-07, 91 tags, 221 archived openspec changes with dated folders"
+    ],
+    "limits": [
+      "No chapters were distilled; this only shows the git history carries dated anchors to distil from",
+      "Cost per firing over 5,382 commits was not measured",
+      "Whether the runners report money as well as tokens was not checked",
+      "The acceptance criteria are proposed coverage; none has been run"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": "large",
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "When does the manager rewrite chapters, and what may one firing cost? On major events and a 'Weave the thread' button; rewrites only when asked; no cost cap, the cost is shown and the operator controls whether it runs.",
+      "resolved": true
+    },
+    {
+      "question": "Which events are major? A document approved, a document archived, a document's last task approved.",
+      "resolved": true
+    },
+    {
+      "question": "What is beneath a chapter from before the Hub? Its commits, grouped by release.",
+      "resolved": true
+    },
+    {
+      "question": "A switch to hide chapters? No: once created they stay shown.",
+      "resolved": true
+    },
+    {
+      "question": "May chapters overlap in time? Yes.",
+      "resolved": true
+    },
+    {
+      "question": "Is version history shown to the operator? Not for now: agents and firings only.",
+      "resolved": true
+    },
+    {
+      "question": "The roadmap's done-condition contradicted 'chapters stay'. Reworded after the operator reopened it on 2026-10-23.",
+      "resolved": true
+    },
+    {
+      "question": "How is it built? A flow: Developer builds, QA reviews and tests, every five minutes, stopping when the queue empties.",
+      "resolved": true
+    }
+  ],
+  "problem": "Slice 1's surface is one knot per specification document plus folds such as '12 items outside any document'. It is faithful but it isn't a story. On :8000 this project already has 159 documents (49 capabilities, 98 changes, 5 roadmaps, 7 system maps), all first recorded on 2026-10-22/23 because the corpus was imported then. The surface is therefore a list of document titles crowded onto two days, while seven months of work (from 2026-03-07) appear nowhere. A stakeholder can't tell from it what the project set out to do, in what order, or why.",
+  "requirements": [
+    {
+      "key": "chapters-on-surface",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: the manager decides what grouping best represents the work, whether by time, theme or roadmap; once chapters exist they stay shown.",
+      "statement": "When a project has chapters, the Thread surface shows them ordered by when each begins, each with a title, a plain-language summary, its time span and who wrote it; opening a chapter shows, in place, the knots it groups. A project with no chapters shows slice 1's structural surface."
+    },
+    {
+      "key": "overlap-allowed",
+      "modal": "MAY",
+      "party": null,
+      "rationale": "Operator, 2026-10-23.",
+      "statement": "Chapters may overlap in time, so that two themes built in the same weeks are two chapters whose spans intersect."
+    },
+    {
+      "key": "every-knot-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Chapters are a reading of the history, not a filter on it; an item a chapter drops appears to the reader as if it never happened.",
+      "statement": "Every surface knot of slice 1 belongs to exactly one chapter, so opening every chapter reaches the same items as the structural thread, none twice and none missing; a knot recorded after the latest chapter version appears after the chapters, ungrouped, until a later version places it. A chapter version that would drop or duplicate a knot is refused."
+    },
+    {
+      "key": "citations-resolve",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roadmap's done-condition: chapters cite only real records. The page's promise is that nothing appears out of thin air.",
+      "statement": "Every record a chapter cites (a stored Hub record, or a commit or tag in the project's repository) exists when the chapter is saved; a chapter version with any citation that does not resolve is refused and the previous version stays shown."
+    },
+    {
+      "key": "before-the-hub",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: this project's imported history is distilled from git, and its commits are shown grouped. Here that is 5,382 commits from 2026-03-07, 91 release tags and 221 dated archived openspec changes.",
+      "statement": "For history earlier than the project's first Hub record, the manager writes chapters distilled from the project's git history, placed at the dates of the commits they cite and before every Hub-recorded knot. Opening one shows its commits grouped by the release tag they shipped in, each commit with its date, author and subject."
+    },
+    {
+      "key": "fires-on-major-events",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: these events are enough for now.",
+      "statement": "With the chapters job enabled and automatic firing on, it fires after each major event in the project: a specification document approved, a document archived, or the last task of a document approved. It also fires whenever the operator presses 'Weave the thread' on the Thread page."
+    },
+    {
+      "key": "user-controls",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: a user who does not want this, or wants it done only by hand with a specific agent, must be able to say so.",
+      "statement": "The operator can, per project: leave the chapters job off (the default), turn it on with automatic firing, or turn it on for the 'Weave the thread' button only; and choose which runner and model it uses. With the job off, the button is absent and nothing fires, and an agent the operator asks can still write chapters through its tools."
+    },
+    {
+      "key": "cost-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: no cost cap; control and visibility instead. The first firing over a long git history is the expensive one.",
+      "statement": "Each chapters firing records what it cost (tokens and, where the runner reports it, money) and the operator can see the cost of each firing and the project's total for the job."
+    },
+    {
+      "key": "no-unasked-rewrite",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: rewriting is allowed but avoided unless the user asked, so the story a reader saw yesterday is still there today. The Hub enforces it rather than trusting the model to obey.",
+      "statement": "A firing the operator did not ask for only adds chapters for knots no chapter yet holds; any change it proposes to an existing chapter is refused and the existing chapter stays as it was. Existing chapters are rewritten only by a firing the operator asked for, or by an agent a user asked to."
+    },
+    {
+      "key": "versions-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: future runs must know how the thread changed. Shown to agents only, for now.",
+      "statement": "Every change to a project's chapters is kept as a new version recording who made it (the manager or a named agent), who asked for it when anyone did, when, and why; no earlier version is lost, and each firing and each agent reading chapters is given the earlier versions and their reasons."
+    },
+    {
+      "key": "agent-tools",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: a user can ask an agent to organise the view as they like, using git commits or anything else the agent can read.",
+      "statement": "An agent can read a project's chapters and their versions, and can create, retitle, resummarise, regroup or remove chapters through its tools; each edit is subject to citations-resolve and every-knot-once, and is recorded as a version under the agent's name."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/red-thread-project-history-roadmap/spec.json",
+    "slice": "manager-chapters"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A manager job that writes chapters for one project's thread, grouping as it judges best",
+      "Chapters before the Hub's first record, distilled from the project's git history",
+      "Firing on major AgentWeave events and on a 'Weave the thread' button on the Thread page",
+      "Agent tools to read and edit chapters, used when a user asks an agent to organise the view",
+      "A kept history of every version of the chapters, readable by agents and later firings",
+      "User control over whether and how chapters are written, and visibility of what each firing cost"
+    ],
+    "non_goals": [
+      "A cost cap or budget on the chapters job (operator, 2026-10-23: control and visibility instead)",
+      "Recording any history the Hub does not record today, other than reading git (slice history-gaps)",
+      "A thread across several projects",
+      "Acting on work from the thread",
+      "Changing slice 1's structural thread",
+      "Editing chapters by hand in the app (an agent edits them on the user's behalf)",
+      "Showing chapter versions to the operator in the app (agents and firings only, for now)",
+      "A switch that hides chapters once they exist"
+    ]
+  },
+  "summary": "The Thread tab's surface reads as a story. A manager job groups the project's history into titled chapters with plain-language summaries, each citing only records that exist, and reaches back before the Hub's first record through the project's git history. It fires on major events and on a 'Weave the thread' button. It may add new chapters on its own, but rewrites existing ones only when asked. Agents can edit chapters through their tools when a user asks them to. Every change is kept as a version. The user decides whether it runs automatically, manually or not at all, and sees what each run cost.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Write scripts/drive/chapters_drive.py covering ac-git, ac-fires, ac-controls, ac-cost and ac-agent against trial Hub :8010 with Haiku models, the way scripts/drive/thread_drive.py drives slice 1. Run it before anything is built and record that it fails at the first missing piece (no chapters job). It is not part of the pytest suite, so it does not hold the project's checks red.",
+      "files": [
+        "scripts/drive/chapters_drive.py"
+      ],
+      "from": null,
+      "key": "acceptance-drive",
+      "requirements": [
+        "before-the-hub",
+        "fires-on-major-events",
+        "user-controls",
+        "cost-visible",
+        "agent-tools"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, written and failing first"
+    },
+    {
+      "depends_on": [
+        "acceptance-drive"
+      ],
+      "description": "Store a project's chapters as append-only versions (author, asked-by, reason, asked-for, time), with a migration, and add the per-job 'automatic' choice beside enabled/runner/model in the same migration. Implement the 'Saving a chapters version' algorithm: citations resolve against Hub tables and the project's git repository, every surface knot of slice 1 once, unasked saves keep only new chapters. Reading returns the current chapters and every version. Hub tests for ac-overlap, ac-once-refused, ac-cite, ac-no-rewrite and ac-rewrite-asked at the store level, with a fixture git repository.",
+      "files": [
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/",
+        "hub/hub/thread_chapters.py",
+        "hub/tests/test_thread_chapters.py"
+      ],
+      "from": null,
+      "key": "store",
+      "requirements": [
+        "every-knot-once",
+        "citations-resolve",
+        "overlap-allowed",
+        "no-unasked-rewrite",
+        "versions-kept"
+      ],
+      "reviewer": null,
+      "title": "Chapters and their versions are stored and validated"
+    },
+    {
+      "depends_on": [
+        "acceptance-drive",
+        "store"
+      ],
+      "description": "When a project has chapters, the thread feed's surface is its chapters ordered by start (title, summary, span, author) followed by any knots no chapter holds yet; a chapter's children are the knots it groups. A chapter from before the Hub opens into its release tags, each opening into its commits with date, author and subject. With no chapters the surface is exactly slice 1's. Hub tests for ac-surface and ac-once over the feed, in the order the route returns.",
+      "files": [
+        "hub/hub/project_thread.py",
+        "hub/hub/api/v1/thread.py",
+        "hub/tests/test_project_thread.py"
+      ],
+      "from": null,
+      "key": "feed",
+      "requirements": [
+        "chapters-on-surface",
+        "every-knot-once",
+        "before-the-hub"
+      ],
+      "reviewer": null,
+      "title": "The thread feed shows chapters"
+    },
+    {
+      "depends_on": [
+        "acceptance-drive",
+        "feed"
+      ],
+      "description": "Register a thread-chapters manager job (off by default) and implement 'A chapters firing': its input includes the structural surface, every earlier version with its reason, and the git digest before the first Hub record. Fire it after a document is approved or archived and after a document's last task is approved (only when automatic), and from a new operator route behind 'Weave the thread' (asked-for). The manager settings route accepts the automatic/button-only choice. Each firing is recorded with its usage like the other manager jobs. Hub tests: ac-versions (the firing's input holds earlier versions), triggers fire once each, button-only ignores automatic triggers, off fires nothing.",
+      "files": [
+        "hub/hub/manager.py",
+        "hub/hub/thread_weaving.py",
+        "hub/hub/api/v1/manager.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/api/v1/thread.py",
+        "hub/tests/test_thread_weaving.py"
+      ],
+      "from": null,
+      "key": "job",
+      "requirements": [
+        "fires-on-major-events",
+        "before-the-hub",
+        "no-unasked-rewrite",
+        "versions-kept",
+        "user-controls",
+        "cost-visible"
+      ],
+      "reviewer": null,
+      "title": "The manager job that weaves the thread"
+    },
+    {
+      "depends_on": [
+        "acceptance-drive",
+        "job"
+      ],
+      "description": "Add agent tools to read a project's chapters with their versions, and to save a new chapters version under the agent's name with a reason, going through the same validation as the job. Works whether the job is on or off. Hub tests: a saved version carries the agent's name; an edit citing a missing record is refused naming it.",
+      "files": [
+        "hub/hub/mcp_server.py",
+        "hub/hub/api/v1/thread.py",
+        "hub/tests/test_thread_chapters_tools.py"
+      ],
+      "from": null,
+      "key": "agent-tools",
+      "requirements": [
+        "agent-tools",
+        "versions-kept",
+        "citations-resolve"
+      ],
+      "reviewer": null,
+      "title": "Agents read and edit chapters through their tools"
+    },
+    {
+      "depends_on": [
+        "acceptance-drive",
+        "agent-tools"
+      ],
+      "description": "Thread page: chapter knots show title, summary, span and author and open into their knots; pre-Hub chapters open into release tags and commits; a 'Weave the thread' button shows only when the job is on. Manager settings: the thread-chapters job with off / automatic / button-only, runner and model, and the project's total cost for the job beside its per-firing costs. UI tests, then the refreshed UI bundle (it reaches the operator's live app on reload).",
+      "files": [
+        "hub/ui/src/components/thread/",
+        "hub/ui/src/hooks/useThread.ts",
+        "hub/ui/src/api/",
+        "hub/ui/src/components/settings/ManagerSettings.tsx",
+        "hub/ui/src/__tests__/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "chapters-on-surface",
+        "user-controls",
+        "cost-visible",
+        "fires-on-major-events"
+      ],
+      "reviewer": null,
+      "title": "Chapters, the button and the cost in the app"
+    },
+    {
+      "depends_on": [
+        "acceptance-drive",
+        "ui"
+      ],
+      "description": "Run scripts/drive/chapters_drive.py against trial Hub :8010 with the built work until it passes end to end, fix what it finds, check every cited sha with git cat-file, record evidence for each requirement, and leave the Thread page with real chapters for the operator's ac-story review.",
+      "files": [
+        "scripts/drive/chapters_drive.py"
+      ],
+      "from": null,
+      "key": "drive-green",
+      "requirements": [
+        "before-the-hub",
+        "fires-on-major-events",
+        "user-controls",
+        "cost-visible",
+        "agent-tools",
+        "chapters-on-surface"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive passes; evidence recorded"
+    }
+  ],
+  "title": "The thread reads as chapters the manager writes"
+}

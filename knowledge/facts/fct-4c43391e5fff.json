@@ -1,0 +1,23 @@
+{
+  "id": "fct-4c43391e5fff",
+  "kind": "fact",
+  "claim": "Open follow-up `task-85a6c6d51cd8`: deleting a project does not remove `chapter_versions`, and 3 project-delete tests fail.",
+  "citations": [
+    {
+      "source": "src-109565ec0558",
+      "quote": "`task-85a6c6d51cd8`: deleting a project does not remove `chapter_versions`, and 3 project-delete\n  tests fail.",
+      "line_start": 104,
+      "line_end": 105
+    }
+  ],
+  "sources": [
+    "src-109565ec0558"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T10:05:40.173821Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

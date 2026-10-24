@@ -1,0 +1,23 @@
+{
+  "id": "fct-dd4d98e08ae4",
+  "kind": "fact",
+  "claim": "Check 5 is `hub-tests`, with command `cd hub && py -3.11 -m pytest tests/ -q -n auto --dist loadfile --timeout=300 --timeout-method=thread -p no:cacheprovider` and a 3600 s timeout, taking about 24 minutes.",
+  "citations": [
+    {
+      "source": "src-2c4713ed8e82",
+      "quote": "| 5 | `hub-tests` | `cd hub && py -3.11 -m pytest tests/ -q -n auto --dist loadfile --timeout=300 --timeout-method=thread -p no:cacheprovider` | 3600 | 24 min |",
+      "line_start": 22,
+      "line_end": 22
+    }
+  ],
+  "sources": [
+    "src-2c4713ed8e82"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T10:55:32.649122Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

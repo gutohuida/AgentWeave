@@ -1,0 +1,29 @@
+{
+  "id": "fct-fe9f4e045fda",
+  "kind": "fact",
+  "claim": "When a check fails on a task and also fails on master, the Hub neither passes nor blames the task but holds the approval for the operator (the PREEXISTING_CHECKS hold).",
+  "citations": [
+    {
+      "source": "src-2c4713ed8e82",
+      "quote": "When a check fails on a task and the same check also fails on master, the Hub neither passes nor\nblames the task.",
+      "line_start": 50,
+      "line_end": 51
+    },
+    {
+      "source": "src-2c4713ed8e82",
+      "quote": "It **holds the approval for the operator** (`hub/hub/requirement_gate.py:1057`,\nthe PREEXISTING_CHECKS hold).",
+      "line_start": 51,
+      "line_end": 52
+    }
+  ],
+  "sources": [
+    "src-2c4713ed8e82"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T10:55:32.668813Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

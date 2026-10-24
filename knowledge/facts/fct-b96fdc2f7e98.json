@@ -1,0 +1,23 @@
+{
+  "id": "fct-b96fdc2f7e98",
+  "kind": "fact",
+  "claim": "In slice 2, every requirement FR-1 to FR-11 ended with accepted evidence.",
+  "citations": [
+    {
+      "source": "src-109565ec0558",
+      "quote": "Every\n  requirement, FR-1 to FR-11, ended with accepted evidence.",
+      "line_start": 47,
+      "line_end": 48
+    }
+  ],
+  "sources": [
+    "src-109565ec0558"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T10:05:40.169752Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

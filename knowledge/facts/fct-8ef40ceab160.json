@@ -1,0 +1,23 @@
+{
+  "id": "fct-8ef40ceab160",
+  "kind": "fact",
+  "claim": "Check 1 is `lint`, with command `py -3.11 -m ruff check src/ hub/ tests/ && py -3.11 -m ruff check scripts/ --select E9,F63,F7,F82,F401,F841` and a 300 s timeout.",
+  "citations": [
+    {
+      "source": "src-2c4713ed8e82",
+      "quote": "| 1 | `lint` | `py -3.11 -m ruff check src/ hub/ tests/ && py -3.11 -m ruff check scripts/ --select E9,F63,F7,F82,F401,F841` | 300 | 3 s |",
+      "line_start": 18,
+      "line_end": 18
+    }
+  ],
+  "sources": [
+    "src-2c4713ed8e82"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T10:55:32.639862Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "fct-25057a0828bf",
+  "kind": "fact",
+  "claim": "The check commands are the same ones CI runs in .github/workflows/ci.yml, adapted for `py -3.11` on this machine.",
+  "citations": [
+    {
+      "source": "src-2c4713ed8e82",
+      "quote": "These are the same commands CI runs (`.github/workflows/ci.yml`), adapted for `py -3.11` on this\nmachine.",
+      "line_start": 24,
+      "line_end": 25
+    }
+  ],
+  "sources": [
+    "src-2c4713ed8e82"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T10:55:32.650642Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}
