@@ -191,6 +191,39 @@ async def _runs(task_id):
 
 
 @pytest.mark.asyncio
+async def test_the_tasks_own_failure_stops_the_run(app, tmp_path):
+    """Operator, 2026-10-24: a lint failure found in seconds waited twenty minutes for the Hub
+    suite after it before anyone heard of it. The checks after the task's own failure are not run;
+    the failing one was run on main at once, which is how the run knew it was the task's."""
+    task_id, _ = await _task_with_work(tmp_path)
+    await _project([FAIL, PASS])
+
+    assert await project_checks.request_run("proj-test", task_id)
+    await project_checks.drain()
+
+    [run] = await _runs(task_id)
+    assert run.state == "failed"
+    assert [r["name"] for r in run.results] == ["tests"], "nothing runs after the task's failure"
+    assert run.results[0]["on_main"]["exit_code"] == 0 and not run.results[0]["preexisting"]
+    assert not (tmp_path / ".agentweave" / "checks" / f"{task_id}.main").exists()
+
+
+@pytest.mark.asyncio
+async def test_a_failure_main_shares_does_not_stop_the_run(app, tmp_path):
+    task_id, _ = await _task_with_work(tmp_path)
+    await _project([MAIN_FAIL, PASS])
+
+    assert await project_checks.request_run("proj-test", task_id)
+    await project_checks.drain()
+
+    [run] = await _runs(task_id)
+    assert run.state == "failed"
+    assert [r["name"] for r in run.results] == ["suite", "ok"]
+    assert run.results[0]["preexisting"]
+    assert not (tmp_path / ".agentweave" / "checks" / f"{task_id}.main").exists()
+
+
+@pytest.mark.asyncio
 async def test_a_failing_check_is_recorded_and_the_root_is_untouched(app, tmp_path):
     task_id, work = await _task_with_work(tmp_path)
     await _project([PASS, FAIL])
@@ -201,7 +234,10 @@ async def test_a_failing_check_is_recorded_and_the_root_is_untouched(app, tmp_pa
     [run] = await _runs(task_id)
     assert run.state == "failed"
     assert run.target_shas == [work]
-    assert [r["name"] for r in run.results] == ["ok", "tests"], "every check runs, in order"
+    assert [r["name"] for r in run.results] == [
+        "ok",
+        "tests",
+    ], "every check up to the failure runs, in order"
     assert run.results[1]["exit_code"] == 3 and "boom" in run.results[1]["output_tail"]
     assert git(tmp_path, "status", "--porcelain").stdout == ""
     assert not (tmp_path / ".agentweave" / "checks" / task_id).exists()

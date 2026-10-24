@@ -95,6 +95,7 @@ for _name in RUN_ENVIRONMENT_NAMES:
 TEST_PROJECT_ID = "proj-test"
 TEST_PROJECT_NAME = "Test Project"
 
+import sqlalchemy as sa  # noqa: E402
 from sqlalchemy import event, select  # noqa: E402
 
 from hub.db.engine import async_session_factory, engine, init_db  # noqa: E402
@@ -177,6 +178,33 @@ def _move_to_a_fresh_database_file() -> None:
     for suffix in ("", "-wal", "-shm"):
         with contextlib.suppress(OSError):
             os.remove(previous + suffix)
+    shutil.copyfile(_schema_template(), _current_test_db_file)
+
+
+_schema_template_file: "str | None" = None
+
+
+def _schema_template() -> str:
+    """A database file holding the models' schema and nothing else, built once per process.
+
+    Every test used to build the schema itself (`drop_all` + `create_all`, under `BEGIN
+    IMMEDIATE`) on the fresh file it had just been moved to. Measured 2026-10-24: about 240 ms a
+    test, against a few ms to copy this file, which over ~8,900 tests was more than half of CI's
+    Hub-suite wall clock. The schema still comes from `create_all` on the current models, as it
+    always has; it is only built once instead of once per test. A plain synchronous engine in the
+    default rollback-journal mode, so the result is one self-contained file: the per-connection
+    pragmas above (WAL included) apply to each test's copy when the suite opens it.
+    """
+    global _schema_template_file
+    if _schema_template_file is None:
+        path = str(Path(_TEST_DB_DIR) / "schema-template.db")
+        builder = sa.create_engine(f"sqlite:///{Path(path).as_posix()}")
+        try:
+            Base.metadata.create_all(builder)
+        finally:
+            builder.dispose()
+        _schema_template_file = path
+    return _schema_template_file
 
 
 # The real engine, bound once. `test_suite_database_isolation.py` monkeypatches this module's
@@ -833,8 +861,8 @@ async def app(monkeypatch):
     await _REAL_ENGINE.dispose()
     # F292's fix: the pool is empty, so every connection from here on opens a file no earlier
     # test has touched. The dispose above is kept - it closes idle connections, so their file
-    # can actually be deleted - and so is the reset below, which on a fresh file finds nothing
-    # to drop but still builds the schema under one write lock.
+    # can actually be deleted - and so is the reset below, which on the fresh copy of the schema
+    # template finds every table already built and confirms that under one write lock.
     _move_to_a_fresh_database_file()
     _f292_before_drop = _f292_snapshot("before drop_all")
 
@@ -871,7 +899,9 @@ async def app(monkeypatch):
             # different finding and a much narrower one.
             if connection.dialect.name == "sqlite":
                 await connection.exec_driver_sql("BEGIN IMMEDIATE")
-            await connection.run_sync(Base.metadata.drop_all)
+            # The fresh file is a copy of `_schema_template()`, so there is nothing to drop and
+            # `create_all` only confirms each table is there; it creates one only if a model was
+            # added after the template was built.
             await connection.run_sync(Base.metadata.create_all)
     except Exception:
         # The F292 diagnostic above, printed only on the failure path. pytest shows
@@ -1149,6 +1179,29 @@ def bind_project_workspace(monkeypatch):
         return project
 
     return _bind
+
+
+#: Files whose tests share no state with one another, so `--dist loadgroup` spreads them over every
+#: worker instead of keeping each file whole on one. Measured 2026-10-24: `test_migrations.py`'s
+#: tests add up to ~26 minutes under load (each replays the migration chain), and kept whole it was
+#: the Hub suite's critical path however many workers ran. Every file in this set passes under
+#: `-n 10 --dist load`, i.e. split and in any order. Add a file only after checking the same.
+SPREAD_ACROSS_WORKERS = frozenset({"test_migrations.py"})
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(config, items):  # noqa: ANN001, ANN201
+    """Group every test by its file for `--dist loadgroup`, except the files that may be spread.
+
+    `--dist loadfile` keeps a file whole and in order because some files rely on an earlier test
+    in the same file (test_scheduler.py, F264). `loadgroup` does the same for each group, and sends
+    an ungrouped test wherever a worker is free, so this gives loadfile's guarantee to every file
+    but the ones named above. Under any other `--dist` the marks change nothing.
+    """
+    del config
+    for item in items:
+        if item.path.name not in SPREAD_ACROSS_WORKERS:
+            item.add_marker(pytest.mark.xdist_group(name=item.nodeid.split("::")[0]))
 
 
 def pytest_sessionfinish(session, exitstatus):  # noqa: ANN001

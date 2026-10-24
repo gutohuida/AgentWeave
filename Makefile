@@ -19,7 +19,7 @@ install-hub:
 	pip install -c constraints-dev.txt -e "hub/[dev]"
 
 test-hub:
-	pytest hub/tests/ -n auto
+	pytest hub/tests/ -n auto --dist loadgroup
 
 # ── Both ─────────────────────────────────────────────────────────────────────
 

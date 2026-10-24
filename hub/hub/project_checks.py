@@ -4,7 +4,8 @@ The operator configures checks (`Project.checks`); nothing an agent sends is eve
 builds the commit approval would produce -- main's tip with each merge target applied, through
 `git merge-tree` and `commit-tree`, touching no checkout (design D1) -- checks it out in a scratch
 worktree under `.agentweave/checks/<task_id>` (D2), runs each check there with the Hub's own
-configuration removed from the environment (D8), and records a `TaskCheckRun` row (D3).
+configuration removed from the environment (D8), stopping at the first failure that is the task's own
+(a failure main shares does not stop it), and records a `TaskCheckRun` row (D3).
 
 Runs are started in the background, never inside a request (D5): when a task is completed outside a
 turn, when a turn bound to a completed task ends (its work is only committed then), and when approval
@@ -285,33 +286,33 @@ def _record_main_result(result: Dict[str, Any], on_main: Dict[str, Any]) -> None
     result["preexisting"] = failed(on_main)
 
 
-async def _check_main_too(
-    root: Path,
-    task_id: str,
-    main_sha: str,
-    checks: List[Dict[str, Any]],
-    results: List[Dict[str, Any]],
-) -> None:
-    """Run each failing check on the main tip as well, and record what main said (F605, D1).
+class _MainBaseline:
+    """The main tip the run was cut from, checked out on the first failure and kept for the rest.
 
-    Only failing checks, so a passing project pays nothing. Best-effort: a baseline that cannot be
-    taken leaves the results as they were, charged to the task as before.
+    A failing check is run there at once (F605, D1): its answer decides whether the run goes on.
+    Best-effort: a baseline that cannot be taken leaves the result as it was, charged to the task.
     """
-    failing = [r for r in results if failed(r)]
-    if not failing:
-        return
-    by_name = {check["name"]: check for check in checks}
-    try:
-        path = await asyncio.to_thread(_checkout, root, task_id, main_sha)
+
+    def __init__(self, root: Path, task_id: str, main_sha: str) -> None:
+        self.root, self.main_sha = root, main_sha
+        self.name = f"{task_id}.main"
+        self.path: Optional[Path] = None
+        self.unavailable = False
+
+    async def record(self, check: Dict[str, Any], result: Dict[str, Any]) -> None:
+        if self.unavailable:
+            return
         try:
-            for result in failing:
-                check = by_name.get(result["name"])
-                if check is not None:
-                    _record_main_result(result, await asyncio.to_thread(run_one, check, path))
-        finally:
-            await asyncio.to_thread(_remove_checkout, root, path)
-    except Exception:  # noqa: BLE001 -- the task's own result stands without main's
-        logger.warning("could not run task %s's failing checks on main", task_id, exc_info=True)
+            if self.path is None:
+                self.path = await asyncio.to_thread(_checkout, self.root, self.name, self.main_sha)
+            _record_main_result(result, await asyncio.to_thread(run_one, check, self.path))
+        except Exception:  # noqa: BLE001 -- the task's own result stands without main's
+            self.unavailable = True
+            logger.warning("could not run check %s on main", check["name"], exc_info=True)
+
+    async def close(self) -> None:
+        if self.path is not None:
+            await asyncio.to_thread(_remove_checkout, self.root, self.path)
 
 
 # --- records -------------------------------------------------------------------------------------
@@ -512,13 +513,23 @@ async def _execute(
                 await _finish(run_id, state="error", error=why)
                 return
             path = await asyncio.to_thread(_checkout, root, task_id, merged)
+            baseline = _MainBaseline(root, task_id, main_sha)
             try:
                 for check in checks:
-                    results.append(await asyncio.to_thread(run_one, check, path))
+                    result = await asyncio.to_thread(run_one, check, path)
+                    if failed(result):
+                        await baseline.record(check, result)
+                    results.append(result)
                     await _finish(run_id, merged_sha=merged, results=list(results))
+                    if failed(result) and not preexisting(result):
+                        # The task's own failure already decides the run; the checks after it
+                        # would only make its author wait for them (operator, 2026-10-24). A
+                        # failure main shares does not stop it: it is not the task's, and what
+                        # follows may still be.
+                        break
             finally:
                 await asyncio.to_thread(_remove_checkout, root, path)
-            await _check_main_too(root, task_id, main_sha, checks, results)
+                await baseline.close()
             state = "failed" if any(failed(r) for r in results) else "passed"
             await _finish(run_id, state=state, merged_sha=merged, results=list(results))
     except Exception as exc:  # noqa: BLE001 -- a run must end recorded, never `running` forever

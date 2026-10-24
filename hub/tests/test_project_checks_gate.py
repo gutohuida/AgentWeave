@@ -318,7 +318,8 @@ async def test_a_land_refused_for_a_conflict_does_not_restart_the_checks(
 @pytest.mark.asyncio
 async def test_a_check_failing_on_main_too_is_recorded_as_preexisting(app, tmp_path):
     task_id, _ = await _task_with_work(tmp_path)
-    await _checked(task_id, [PASS, FAIL, MAIN_FAIL])
+    # MAIN_FAIL before FAIL: a failure main shares does not stop the run, the task's own does.
+    await _checked(task_id, [PASS, MAIN_FAIL, FAIL])
 
     [run] = await _runs(task_id)
     by_name = {r["name"]: r for r in run.results}
@@ -355,7 +356,7 @@ async def test_a_new_failure_beside_a_preexisting_one_stays_the_authors(
     app, auth_headers, tmp_path
 ):
     task_id, _ = await _task_with_work(tmp_path)
-    await _checked(task_id, [FAIL, MAIN_FAIL])
+    await _checked(task_id, [MAIN_FAIL, FAIL])
 
     refused = await _approve(app, auth_headers, task_id)
 
