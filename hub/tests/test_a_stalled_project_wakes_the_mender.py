@@ -470,3 +470,91 @@ async def test_ending_a_stall_withdraws_a_brief_the_mender_never_read(
         )
     assert entry.state == "withdrawn"
     assert "ended resolved" in entry.abandoned_reason
+
+
+# F1043: silence is not death. Every run over 10 minutes was reported dead because the sweep read
+# a heartbeat column nothing writes; on :8000 all 9 runs it named had completed normally.
+
+
+async def _running_run(run_id, started):
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id=run_id,
+                project_id="proj-test",
+                agent="builder",
+                status="running",
+                turn_depth=0,
+                started_at=started,
+            )
+        )
+        await session.commit()
+
+
+@pytest.fixture
+def executing():
+    """Runs this Hub process is executing, as `run_liveness` holds them during a turn."""
+    from hub import run_liveness
+
+    added: list = []
+
+    def add(run_id):
+        run_liveness.active_app_server_runs.add(run_id)
+        added.append(run_id)
+
+    yield add
+    for run_id in added:
+        run_liveness.active_app_server_runs.discard(run_id)
+
+
+@pytest.mark.asyncio
+async def test_a_long_silent_run_this_hub_is_executing_is_not_dead(app, executing):
+    now = datetime.now(timezone.utc)
+    await _running_run("run-long", now - timedelta(minutes=30))
+    executing("run-long")
+    async with async_session_factory() as session:
+        assert await stalls._sweep(session, now) == 0
+    await stalls.drain()
+    assert await all_stalls() == []
+
+
+@pytest.mark.asyncio
+async def test_a_running_run_this_hub_is_not_executing_is_dead(app):
+    now = datetime.now(timezone.utc)
+    await _running_run("run-gone", now - timedelta(minutes=10))
+    async with async_session_factory() as session:
+        assert await stalls._sweep(session, now) == 1
+    await stalls.drain()
+    [row] = await all_stalls()
+    assert (row.cause, row.key) == ("dead_run", "dead_run:run-gone")
+    assert "not executing" in row.reason
+
+
+@pytest.mark.asyncio
+async def test_a_run_still_starting_is_not_judged(app):
+    now = datetime.now(timezone.utc)
+    await _running_run("run-new", now - timedelta(minutes=1))
+    async with async_session_factory() as session:
+        assert await stalls._sweep(session, now) == 0
+
+
+@pytest.mark.asyncio
+async def test_a_dead_run_stall_ends_once_its_run_is_live_or_over(app, executing):
+    now = datetime.now(timezone.utc)
+    await _running_run("run-a", now - timedelta(minutes=10))
+    await _running_run("run-b", now - timedelta(minutes=10))
+    async with async_session_factory() as session:
+        assert await stalls._sweep(session, now) == 2
+    await stalls.drain()
+
+    executing("run-a")
+    async with async_session_factory() as session:
+        run_b = await session.get(Run, "run-b")
+        run_b.status = "completed"
+        await session.commit()
+    async with async_session_factory() as session:
+        assert await stalls._sweep(session, now) == 0
+    assert {row.key: row.outcome for row in await all_stalls()} == {
+        "dead_run:run-a": "resolved",
+        "dead_run:run-b": "resolved",
+    }

@@ -40478,7 +40478,7 @@ A change document must have a task for every requirement, so a correction with n
 
 ## F1043 (B) -- every run longer than 10 minutes is reported dead: the stall sweep reads a heartbeat column nothing writes
 
-**Status:** open 2026-10-24. Raised by the operator ("long running work keeps triggering the stale state and making the mender run to do nothing"); confirmed on `:8000` read-only.
+**Status:** fixed 2026-10-24 (Tier 0): a run is dead only when it is recorded running, this Hub is not executing it (`run_liveness.live_run_ids`) and it started over 5 minutes ago; an open `dead_run` stall ends itself once its run is live or over. A live run that goes silent is the operator's, never the mender's (operator's option b): change `a-run-that-goes-quiet-is-shown-to-the-operator`, Tier 2, not built. Raised by the operator ("long running work keeps triggering the stale state and making the mender run to do nothing"); confirmed on `:8000` read-only.
 **Source:** drive
 **Theme:** Mender
 **Ready:** yes

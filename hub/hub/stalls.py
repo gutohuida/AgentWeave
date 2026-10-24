@@ -62,6 +62,9 @@ NO_PROGRESS_MINUTES = 30
 #: Operator, 2026-10-23: the most mender turns one stall gets.
 MENDER_TURN_CAP = 40
 SWEEP_SECONDS = 300
+#: How long a new run may be recorded `running` before this Hub registers it as executing: the
+#: row is written before the process starts (worktree, briefing, spawn).
+DEAD_RUN_GRACE = timedelta(minutes=5)
 STALL_RECORDED = "stall_recorded"
 STALL_ENDED = "stall_ended"
 
@@ -656,7 +659,8 @@ async def sweep(*, now: Optional[datetime] = None) -> int:
 
 
 async def _sweep(db: AsyncSession, now: datetime) -> int:
-    from .agent_status import HEARTBEAT_STALE_AFTER
+    from . import instance_identity
+    from .run_liveness import live_run_ids
 
     window = timedelta(minutes=NO_PROGRESS_MINUTES)
     reported = 0
@@ -666,20 +670,31 @@ async def _sweep(db: AsyncSession, now: datetime) -> int:
         .all()
     )
     live_tasks = {run.task_id for run in running if run.task_id}
+    # A run is dead when it is recorded running and this Hub is not executing it (F1043). How long
+    # it has been quiet says nothing: a run waiting on a 20-minute test suite sends nothing and is
+    # well, and the heartbeat this used to read is written by nothing, so every run over ten
+    # minutes was reported. The registry holds a run exactly while this process executes it.
+    live = live_run_ids()
+    here = instance_identity.get()
+    await _end_dead_run_stalls_that_recovered(db, live)
     for run in running:
-        beat = _aware(run.last_heartbeat_at) or _aware(run.started_at)
-        if beat is not None and beat < now - HEARTBEAT_STALE_AFTER * 5:
-            report(
-                run.project_id,
-                cause="dead_run",
-                subject=run.id,
-                text=(
-                    f"{run.agent}'s run {run.id} has sent no heartbeat since "
-                    f"{beat:%H:%M} UTC; its process may have died."
-                ),
-                task_id=run.task_id,
-            )
-            reported += 1
+        started = _aware(run.started_at)
+        if run.id in live or started is None or started > now - DEAD_RUN_GRACE:
+            continue
+        if run.instance_id and here and run.instance_id != here:
+            continue  # another Hub's run; this process cannot see its registry
+        report(
+            run.project_id,
+            cause="dead_run",
+            subject=run.id,
+            text=(
+                f"{run.agent}'s run {run.id} (started {started:%H:%M} UTC) is recorded running, "
+                "but this Hub is not executing it: its process ended without the end being "
+                "recorded."
+            ),
+            task_id=run.task_id,
+        )
+        reported += 1
     stuck = (await db.execute(select(Task).where(Task.status == "in_progress"))).scalars().all()
     for task in stuck:
         updated = _aware(task.updated)
@@ -752,6 +767,22 @@ async def _sweep(db: AsyncSession, now: datetime) -> int:
         )
         reported += 1
     return reported
+
+
+async def _end_dead_run_stalls_that_recovered(db: AsyncSession, live: set) -> None:
+    """End each open `dead_run` stall whose run this Hub is executing, or which has ended."""
+    open_stalls = (
+        (await db.execute(select(Stall).where(Stall.cause == "dead_run", Stall.ended_at.is_(None))))
+        .scalars()
+        .all()
+    )
+    for stall in open_stalls:
+        run_id = stall.key.split(":", 1)[-1]
+        run = await db.get(Run, run_id)
+        if run_id in live:
+            await end(db, stall, "resolved", "The run is alive: this Hub is executing it.")
+        elif run is None or run.status != "running":
+            await end(db, stall, "resolved", "The run has ended.")
 
 
 async def sweep_forever() -> None:
