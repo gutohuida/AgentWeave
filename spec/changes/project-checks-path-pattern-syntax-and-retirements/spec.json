@@ -1,0 +1,103 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the patterns hub/**, constraints-dev.txt, **/*.py, src/*.py and hub/",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_refresh_when_main_moves.py -k path_patterns_match_as_globs -q",
+      "key": "globs-match",
+      "requirement": "a-path-pattern-matches-as-a-glob",
+      "then": "hub/** matches hub/hub/a.py and not hubx/a.py; constraints-dev.txt does not match hub/constraints-dev.txt; **/*.py matches a.py and hub/hub/a.py; src/*.py does not match src/x/a.py; hub/ matches hub/hub/a.py",
+      "when": "each is matched against paths inside and outside what it names"
+    },
+    {
+      "checked_by": "operator",
+      "given": "project-checks after this change is folded",
+      "how_to_check": "Open Spec, project-checks; search 'every configured check' (no match) and 'n2' (no requirement with that key).",
+      "key": "retired",
+      "requirement": "a-path-pattern-matches-as-a-glob",
+      "then": "'every configured check' finds nothing, and n2 and the-capability-says-what-runs are gone",
+      "when": "the operator reads it"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "35057022b0d6ae4c5facdd8f2a0cdfd32d017978d856499868d9f98eb4c57d71"
+    },
+    "high_water": 1,
+    "requirements": {
+      "a-path-pattern-matches-as-a-glob": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 One real requirement to fold. The fold dialog retires only alongside at least one folded requirement, so this change carries one that was genuinely missing (pattern syntax), stated from `project_checks._pattern_regex` and its test, rather than a placeholder.\n\nD2 Retire, do not replace. FR-27 and FR-28 already hold the corrected statements; this fold removes the three they supersede.",
+  "evidence": {
+    "checked": [],
+    "gaps": [
+      "Pattern validation (at most 50 patterns, 255 characters each, no absolute or `..` paths) has no test",
+      "A run whose changed files cannot be read runs every check; no test"
+    ],
+    "limits": [],
+    "tests": [
+      "hub/tests/test_checks_refresh_when_main_moves.py::test_path_patterns_match_as_globs"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": "fix",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "After two folds on 2026-10-24, `spec/capabilities/project-checks` holds both the old and the corrected statements, all `active`:\n\n- `checks-run-in-the-background-on-the-work-approval-would-merg` (FR-2) says a run executes every configured check; `project-checks-says-what-a-a-run-stops-at-the-tasks-own-failure` (FR-27) says it stops at the task's own first failure.\n- `n2` (FR-6) lists states without `superseded`; `project-checks-says-what-a-run-records-its-state-and-each-check` (FR-28) includes it.\n- `checks-wait-less-fresh-results-aft-the-capability-says-what-runs` (FR-26) is an instruction about the document, not Hub behaviour.\n\nNeither fold sent a retire list (the Hub's merge records name no retirement). The dialog's retire list is collapsed under \"Also retire from the capability\" and was missed both times; an archived change cannot be folded into the same capability again (`fold_already_folded`), so a new change is the only route.\n\nSeparately, the capability says a check MAY name path patterns (FR-23) but not how a pattern matches, so an operator writing `hub/` or `src/*.py` cannot tell from the spec what it covers.",
+  "requirements": [
+    {
+      "key": "a-path-pattern-matches-as-a-glob",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator writes these patterns by hand, and a pattern that covers less than intended skips a check that should have run, with CI as the only backstop. `constraints-dev.txt` must not match `hub/constraints-dev.txt`, and `src/*.py` must not reach `src/x/a.py`.",
+      "statement": "A check's path pattern SHALL match repository-relative paths as a glob in which `**` matches across directories, `*` and `?` match within one path segment, a pattern ending in `/` matches everything beneath that directory, and any other character matches only itself; a pattern with no wildcard SHALL match only the file at exactly that path."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "How a check's path pattern matches repository-relative paths",
+      "Retiring checks-run-in-the-background-on-the-work-approval-would-merg, n2 and checks-wait-less-fresh-results-aft-the-capability-says-what-runs from project-checks"
+    ],
+    "non_goals": [
+      "Any change to the Hub's behaviour",
+      "Validation limits on patterns (count, length, absolute or `..` paths): enforced in the settings route but untested, left out rather than specified on no evidence",
+      "What happens when a run's changed files cannot be read (every check runs): shipped but untested, left out for the same reason",
+      "Fixing the fold dialog (F1041)"
+    ]
+  },
+  "summary": "Specification only, no code. States how a check's path patterns match (shipped in ae3e151, tested, and missing from the capability), and is the fold that finally retires the three project-checks requirements the two earlier folds left in place: the old \"every configured check\" run rule, the old state list without `superseded`, and the stray requirement about the capability's own wording. Their correct replacements are already in the capability from \"project-checks says what a run does\".",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Operator. First reject this task (it only holds the change open, F1040). Then Spec, this change, Fold into capability, project-checks; keep the requirement ticked; OPEN 'Also retire from the capability' and tick checks-run-in-the-background-on-the-work-approval-would-merg, n2 and checks-wait-less-fresh-results-aft-the-capability-says-what-runs; the toggle should read '(3 chosen)'. Confirm.",
+      "files": [
+        "spec/capabilities/project-checks/spec.json"
+      ],
+      "from": null,
+      "key": "fold-and-retire",
+      "requirements": [
+        "a-path-pattern-matches-as-a-glob"
+      ],
+      "reviewer": null,
+      "title": "Fold into project-checks and retire the three superseded requirements"
+    }
+  ],
+  "title": "project-checks path pattern syntax, and the retirements"
+}

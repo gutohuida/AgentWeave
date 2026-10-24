@@ -1,0 +1,141 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a task whose merged work fails the first of two checks, which passes on main",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_checks_run.py -k own_failure_stops -q",
+      "key": "own-failure-stops",
+      "requirement": "a-run-stops-at-the-tasks-own-failure",
+      "then": "the run is failed and the second check was not executed",
+      "when": "its check run executes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose first check fails on main too",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_checks_run.py -k failure_main_shares -q",
+      "key": "shared-failure-continues",
+      "requirement": "a-run-stops-at-the-tasks-own-failure",
+      "then": "the later checks still execute and the failure is recorded pre-existing",
+      "when": "its check run executes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check whose paths match no changed file",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_refresh_when_main_moves.py -k skipped -q",
+      "key": "skipped-passes",
+      "requirement": "a-run-stops-at-the-tasks-own-failure",
+      "then": "the check is recorded skipped with its reason and the gate counts it as passing",
+      "when": "the run executes and approval is requested"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a run still executing when the project's main tip moves",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_refresh_when_main_moves.py -k superseded -q",
+      "key": "superseded-state",
+      "requirement": "a-run-records-its-state-and-each-check",
+      "then": "the run is recorded superseded, not failed, and does not pass at the gate",
+      "when": "the move is noticed"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the project-checks capability after this change is folded",
+      "how_to_check": "Open Spec, project-checks, and search for 'every configured check' (no match) and 'superseded' (a match in the run-record requirement).",
+      "key": "capability-reads-true",
+      "requirement": "a-run-records-its-state-and-each-check",
+      "then": "it no longer says 'every configured check', n2 and the-capability-says-what-runs are gone, and both requirements above are present",
+      "when": "the operator reads it"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "eaf81e4b7b40c3b3107151c64853aa19e8749f7376fe02373845e43f45098924",
+      "FR-2": "8264d98073400b196526e3af23ea5fabedbbffc81e115348bc4b4f9ba51cfbae"
+    },
+    "high_water": 2,
+    "requirements": {
+      "a-run-records-its-state-and-each-check": "FR-2",
+      "a-run-stops-at-the-tasks-own-failure": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 Replace, do not patch. The two corrected requirements restate the old ones in full with the new rule, so retiring the old ones loses nothing they said (the scratch worktree, never the root checkout; per-check exit code, timeout, duration and output tail).\n\nD2 Keep what the fold added correctly. The fold's copies of FR-1..FR-8 stay: they describe shipped, tested behaviour and do not conflict with the two below. Only the three requirements named in the problem are retired.\n\nD3 No code. Every statement here is already demonstrated by an existing test, named in the acceptance criteria; the change is done when it is folded.",
+  "evidence": {
+    "checked": [],
+    "gaps": [],
+    "limits": [],
+    "tests": [
+      "hub/tests/test_project_checks_run.py::test_the_tasks_own_failure_stops_the_run",
+      "hub/tests/test_project_checks_run.py::test_a_failure_main_shares_does_not_stop_the_run",
+      "hub/tests/test_checks_refresh_when_main_moves.py::test_a_run_main_moved_past_is_superseded_and_replaced",
+      "hub/tests/test_checks_refresh_when_main_moves.py::test_a_superseded_result_does_not_pass",
+      "hub/tests/test_checks_refresh_when_main_moves.py::test_a_check_whose_paths_match_nothing_is_skipped_and_passes"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": "fix",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "`spec/capabilities/project-checks/spec.json` after the fold (ab4b5a7) contradicts itself and the code:\n\n- `checks-run-in-the-background-on-the-work-approval-would-merg` says a run \"SHALL execute every configured check, in order\". Since 31f77f2 a run stops after the first check that fails on the merged work and passes on main (`test_the_tasks_own_failure_stops_the_run`), and since ae3e151 a check whose paths match no changed file is not executed at all.\n- `n2` lists a run's states as running, passed, failed, error or interrupted. Since ae3e151 a run can also be `superseded` (`hub/hub/project_checks.py` SUPERSEDED; migration 0143 widened the column's CHECK).\n- `checks-wait-less-fresh-results-aft-the-capability-says-what-runs` (the change's FR-9) states what the capability document must say. It is an instruction to the spec author, not something the Hub does, and no test could check it.\n\nWho has it: anyone reading the capability to learn what a check run does, an agent included; a capability that contradicts itself is worse than none (charter: a stale spec makes people confident). Why the fold did this: the planned statement edits and retirements were not applied in the dialog, and the change was archived, so it cannot be folded again.",
+  "requirements": [
+    {
+      "key": "a-run-stops-at-the-tasks-own-failure",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Replaces checks-run-in-the-background-on-the-work-approval-would-merg, whose 'every configured check' has been false since 31f77f2 (fail-fast) and ae3e151 (path-scoped checks). Stopping at the task's own failure is what made approvals stop waiting for checks that could not change the verdict; a failure main shares is not the task's, so it must not end the run early (operator, 2026-10-24).",
+      "statement": "A check run SHALL execute the configured checks in order, in a Hub-owned scratch worktree detached at a commit whose tree is the project's main branch tip with every merge target of the task's approval merged in, and SHALL never run in the project's root checkout or an agent's worktree. It SHALL stop after the first check that fails on the merged work and passes on main; a check that fails on main too SHALL NOT stop it; a check skipped because no changed file matches its paths SHALL count as passing."
+    },
+    {
+      "key": "a-run-records-its-state-and-each-check",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Replaces n2, whose state list predates `superseded` (ae3e151, migration 0143). A superseded run is one main moved past while it ran: recording it failed would blame the task for main moving.",
+      "statement": "A check run SHALL be recorded with the main tip it was built on, the merge targets, the merged commit, a state (`running`, `passed`, `failed`, `error`, `interrupted` or `superseded`) and, per check, its exit code, whether it timed out, its duration and the last 4000 characters of its combined output, or that it was skipped and why; a check that exits non-zero or exceeds its timeout SHALL fail the run, and a timed-out check SHALL have its whole process tree ended."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Restating the check-run rule: configured checks in order, in the scratch worktree, stopping at the task's own first failure, a failure main shares not stopping it, a path-skipped check counting as passing",
+      "Restating a run's recorded fields with `superseded` among its states and a skipped check recorded with its reason",
+      "Folding into project-checks with three requirements retired: checks-run-in-the-background-on-the-work-approval-would-merg, n2, checks-wait-less-fresh-results-aft-the-capability-says-what-runs"
+    ],
+    "non_goals": [
+      "Any change to the Hub's behaviour",
+      "Rewording the fold's other copied requirements (FR-1..FR-8 of Checks wait less), including their long keys",
+      "Fixing the fold dialog so planned edits cannot be skipped (a finding, if wanted, not this change)"
+    ]
+  },
+  "summary": "A correction to the project-checks capability, no code. The \"Checks wait less\" fold (2026-10-24) copied its nine requirements in verbatim and retired nothing, so the capability now says both that a run executes every configured check and that it stops at the task's own first failure; its list of run states lacks `superseded`; and it carries a requirement about the capability's own wording rather than about the Hub. This change states the run rule and the state list as the Hub behaves since ae3e151, and is folded with the three outdated requirements retired.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Operator: Spec, this change, Fold into capability, choose project-checks. Keep both requirements ticked and their statements as written. In the retire list, retire checks-run-in-the-background-on-the-work-approval-would-merg, n2 and checks-wait-less-fresh-results-aft-the-capability-says-what-runs. Leave archive ticked and confirm. Then check capability-reads-true.",
+      "files": [
+        "spec/capabilities/project-checks/spec.json"
+      ],
+      "from": null,
+      "key": "fold-with-retirements",
+      "requirements": [
+        "a-run-stops-at-the-tasks-own-failure",
+        "a-run-records-its-state-and-each-check"
+      ],
+      "reviewer": null,
+      "title": "Fold into project-checks, retiring the three outdated requirements"
+    }
+  ],
+  "title": "project-checks says what a run does"
+}

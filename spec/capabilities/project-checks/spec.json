@@ -29,20 +29,6 @@
       "when": "they save two checks with the same name, a blank command, or a timeout below 10"
     },
     {
-      "given": "main has advanced since the task branched",
-      "key": "ac5",
-      "requirement": "checks-run-in-the-background-on-the-work-approval-would-merg",
-      "then": "the checked tree is main's with the task's changes applied",
-      "when": "the task's commit merges cleanly and its checks run"
-    },
-    {
-      "given": "a check that writes files",
-      "key": "ac7",
-      "requirement": "checks-run-in-the-background-on-the-work-approval-would-merg",
-      "then": "the project's root checkout has no new or changed files",
-      "when": "it runs"
-    },
-    {
       "given": "a project with checks",
       "key": "ac12",
       "requirement": "n1",
@@ -301,11 +287,67 @@
       "when": "approval is requested and the task drawer's checks row is opened"
     },
     {
-      "given": "spec/capabilities/project-checks after this change",
-      "key": "checks-wait-less-fresh-results-after-maste-ac-capability-amended",
-      "requirement": "checks-wait-less-fresh-results-aft-the-capability-says-what-runs",
-      "then": "it states the stop-at-the-task's-own-first-failure rule and no longer says every configured check runs",
-      "when": "its run requirement is read"
+      "checked_by": "agent",
+      "given": "a task whose merged work fails the first of two checks, which passes on main",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_checks_run.py -k own_failure_stops -q",
+      "key": "project-checks-says-what-a-run-does-own-failure-stops",
+      "requirement": "project-checks-says-what-a-a-run-stops-at-the-tasks-own-failure",
+      "then": "the run is failed and the second check was not executed",
+      "when": "its check run executes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose first check fails on main too",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_checks_run.py -k failure_main_shares -q",
+      "key": "project-checks-says-what-a-run-does-shared-failure-continues",
+      "requirement": "project-checks-says-what-a-a-run-stops-at-the-tasks-own-failure",
+      "then": "the later checks still execute and the failure is recorded pre-existing",
+      "when": "its check run executes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check whose paths match no changed file",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_refresh_when_main_moves.py -k skipped -q",
+      "key": "project-checks-says-what-a-run-does-skipped-passes",
+      "requirement": "project-checks-says-what-a-a-run-stops-at-the-tasks-own-failure",
+      "then": "the check is recorded skipped with its reason and the gate counts it as passing",
+      "when": "the run executes and approval is requested"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a run still executing when the project's main tip moves",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_refresh_when_main_moves.py -k superseded -q",
+      "key": "project-checks-says-what-a-run-does-superseded-state",
+      "requirement": "project-checks-says-what-a-run-records-its-state-and-each-check",
+      "then": "the run is recorded superseded, not failed, and does not pass at the gate",
+      "when": "the move is noticed"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the project-checks capability after this change is folded",
+      "how_to_check": "Open Spec, project-checks, and search for 'every configured check' (no match) and 'superseded' (a match in the run-record requirement).",
+      "key": "project-checks-says-what-a-run-does-capability-reads-true",
+      "requirement": "project-checks-says-what-a-run-records-its-state-and-each-check",
+      "then": "it no longer says 'every configured check', n2 and the-capability-says-what-runs are gone, and both requirements above are present",
+      "when": "the operator reads it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the patterns hub/**, constraints-dev.txt, **/*.py, src/*.py and hub/",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_refresh_when_main_moves.py -k path_patterns_match_as_globs -q",
+      "key": "project-checks-path-pattern-syntax-and-retirements-globs-match",
+      "requirement": "project-checks-path-pattern-syn-a-path-pattern-matches-as-a-glob",
+      "then": "hub/** matches hub/hub/a.py and not hubx/a.py; constraints-dev.txt does not match hub/constraints-dev.txt; **/*.py matches a.py and hub/hub/a.py; src/*.py does not match src/x/a.py; hub/ matches hub/hub/a.py",
+      "when": "each is matched against paths inside and outside what it names"
+    },
+    {
+      "checked_by": "operator",
+      "given": "project-checks after this change is folded",
+      "how_to_check": "Open Spec, project-checks; search 'every configured check' (no match) and 'n2' (no requirement with that key).",
+      "key": "project-checks-path-pattern-syntax-and-retirements-retired",
+      "requirement": "project-checks-path-pattern-syn-a-path-pattern-matches-as-a-glob",
+      "then": "'every configured check' finds nothing, and n2 and the-capability-says-what-runs are gone",
+      "when": "the operator reads it"
     }
   ],
   "algorithms": [],
@@ -330,6 +372,9 @@
       "FR-24": "bf5f570d8af0210daa746fb1ce66a251ed9c8be0f2c06b897597c6c10781fe19",
       "FR-25": "c56aa76d9c946c3f3694f853eaf94c38203efa5dde96eb24b09cbc6849833fc1",
       "FR-26": "5c80ab3042fe65087367e02c0532b68ed310aa077e498f0913a8d4f0df29d0d6",
+      "FR-27": "eaf81e4b7b40c3b3107151c64853aa19e8749f7376fe02373845e43f45098924",
+      "FR-28": "8264d98073400b196526e3af23ea5fabedbbffc81e115348bc4b4f9ba51cfbae",
+      "FR-29": "35057022b0d6ae4c5facdd8f2a0cdfd32d017978d856499868d9f98eb4c57d71",
       "FR-3": "c90e76333fc87d07bd6ceb18b914cf94e00dbc30ede4de0b5209945bc76859f5",
       "FR-4": "b74b03cef2a76c22c2aa71334059cdf8cbe93c4f414646b91be3719f342b8015",
       "FR-5": "2d28561ac45d97f18654f91b15d058c3bdaa1fe6023e8641861eee028409e1e6",
@@ -338,7 +383,7 @@
       "FR-8": "8aea269a27df923c8e3cec427fe2eabafe42d6d7de4cfdeff6eb4cb9980825f9",
       "FR-9": "854991160e82881901ab1fac712c64fd0b2d738ebf6882854911a222d5105cf6"
     },
-    "high_water": 26,
+    "high_water": 29,
     "requirements": {
       "a-check-run-is-never-lost-silently": "FR-3",
       "a-check-runs-with-the-hub-s-environment-minus-the-hub-s-cred": "FR-4",
@@ -347,13 +392,11 @@
       "a-check-that-fails-on-main-too-is-not-the-tasks-land": "FR-16",
       "a-project-s-checks-are-configured-by-the-operator-only": "FR-1",
       "approval-is-refused-unless-the-project-s-checks-passed-on-th": "FR-12",
-      "checks-run-in-the-background-on-the-work-approval-would-merg": "FR-2",
       "checks-wait-less-fresh-re-a-move-from-outside-the-hub-is-noticed": "FR-19",
       "checks-wait-less-fresh-re-a-skipped-check-is-recorded-and-passes": "FR-25",
       "checks-wait-less-fresh-res-main-moving-refreshes-waiting-results": "FR-18",
       "checks-wait-less-fresh-results-aft-an-unmatched-check-is-skipped": "FR-24",
       "checks-wait-less-fresh-results-aft-refresh-order-is-oldest-first": "FR-21",
-      "checks-wait-less-fresh-results-aft-the-capability-says-what-runs": "FR-26",
       "checks-wait-less-fresh-results-afte-a-superseded-run-is-replaced": "FR-20",
       "checks-wait-less-fresh-results-after-a-check-may-name-its-paths": "FR-23",
       "checks-wait-less-fresh-the-gate-still-requires-a-current-result": "FR-22",
@@ -364,10 +407,16 @@
       "n5": "FR-9",
       "n6": "FR-10",
       "n7": "FR-11",
+      "project-checks-path-pattern-syn-a-path-pattern-matches-as-a-glob": "FR-29",
+      "project-checks-says-what-a-a-run-stops-at-the-tasks-own-failure": "FR-27",
+      "project-checks-says-what-a-run-records-its-state-and-each-check": "FR-28",
       "the-operator-may-approve-over-failing-checks-with-a-recorded": "FR-13",
       "the-rest-of-what-the-hub-records-becomes-reachabl-checks-history": "FR-17"
     },
-    "retired": {}
+    "retired": {
+      "checks-run-in-the-background-on-the-work-approval-would-merg": "FR-2",
+      "checks-wait-less-fresh-results-aft-the-capability-says-what-runs": "FR-26"
+    }
   },
   "design": "D1 Merged commit by plumbing. The commit approval would produce is built with `git merge-tree --write-tree` and `commit-tree`, one target at a time onto the main tip, skipping targets already in the base. No branch, index or checkout moves, so building it is safe while agents and the operator work.\n\nD2 Scratch worktree per task. The merged commit is checked out detached at `.agentweave/checks/<task_id>` under the project root (gitignored), with the repository's shared dependency directories symlinked in when the OS allows. It is removed after the run; a leftover locked registration is unlocked and force-removed before the next. Adding and removing it may take up to 900 s, since it writes the whole tree.\n\nD3 One record per run (`task_check_runs`). Results are written after each check, so a reader sees progress. Deleting a task deletes its runs.\n\nD4 Bounded, per-task queue. Two runs per Hub, one per task, in-process. A restart marks leftover `running` rows `interrupted` at startup.\n\nD5 Never inside a request. Completion outside a turn, the end of a turn bound to a completed task, and an approval request with no current result each schedule a background run; the approval gate itself only reads (`project_checks.view`). Only callers that are approving may schedule.\n\nD6 The gate asks only when the merge situation resolves (main branch set and existing, workspace resolvable, a repository), like the other what-would-merge gates. The override is the operator's alone, refused from any agent, and its reason is kept on the approval transition.\n\nD8 Hub configuration stays in the Hub. A check's environment drops the Hub's own variables by prefix and by credential-shaped value, and output is scrubbed of anything removed, because check output is quoted to agents.",
   "evidence": {
@@ -397,13 +446,6 @@
       "party": null,
       "rationale": "The Hub executes these commands, so only the operator may write them. A project with no checks (null or empty list) records no runs and approval ignores checks entirely.",
       "statement": "A project SHALL carry an ordered list of at most 20 checks, each with a non-blank name unique within the project, a non-blank shell command and a timeout of 10 to 3600 seconds (default 900), set only through the operator's project settings; no run credential SHALL be able to change it."
-    },
-    {
-      "key": "checks-run-in-the-background-on-the-work-approval-would-merg",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "Checking the task branch alone misses breakage caused by main having moved; checking in a shared checkout would disturb the operator or an agent. The merged commit is built with git plumbing, so no branch, index or checkout changes.",
-      "statement": "A check run SHALL execute every configured check, in order, in a Hub-owned scratch worktree detached at a commit whose tree is the project's main branch tip with every merge target of the task's approval merged in, and SHALL never run in the project's root checkout or an agent's worktree."
     },
     {
       "key": "n1",
@@ -567,11 +609,25 @@
       "statement": "A skipped check MUST be recorded in the run's results as skipped, with the reason that no changed file matched its paths, MUST count as passing at the gate, and MUST appear as skipped (no matching changes) wherever the run's checks are shown, never left out."
     },
     {
-      "key": "checks-wait-less-fresh-results-aft-the-capability-says-what-runs",
-      "modal": "MUST",
+      "key": "project-checks-says-what-a-a-run-stops-at-the-tasks-own-failure",
+      "modal": "SHALL",
       "party": null,
-      "rationale": "Shipped 2026-10-24 (31f77f2); the capability still says 'every configured check'.",
-      "statement": "The project-checks capability MUST state that a run executes the configured checks in order and stops after the first one that fails on the merged work and passes on main, and that a failure main shares does not stop it."
+      "rationale": "Replaces checks-run-in-the-background-on-the-work-approval-would-merg, whose 'every configured check' has been false since 31f77f2 (fail-fast) and ae3e151 (path-scoped checks). Stopping at the task's own failure is what made approvals stop waiting for checks that could not change the verdict; a failure main shares is not the task's, so it must not end the run early (operator, 2026-10-24).",
+      "statement": "A check run SHALL execute the configured checks in order, in a Hub-owned scratch worktree detached at a commit whose tree is the project's main branch tip with every merge target of the task's approval merged in, and SHALL never run in the project's root checkout or an agent's worktree. It SHALL stop after the first check that fails on the merged work and passes on main; a check that fails on main too SHALL NOT stop it; a check skipped because no changed file matches its paths SHALL count as passing."
+    },
+    {
+      "key": "project-checks-says-what-a-run-records-its-state-and-each-check",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Replaces n2, whose state list predates `superseded` (ae3e151, migration 0143). A superseded run is one main moved past while it ran: recording it failed would blame the task for main moving.",
+      "statement": "A check run SHALL be recorded with the main tip it was built on, the merge targets, the merged commit, a state (`running`, `passed`, `failed`, `error`, `interrupted` or `superseded`) and, per check, its exit code, whether it timed out, its duration and the last 4000 characters of its combined output, or that it was skipped and why; a check that exits non-zero or exceeds its timeout SHALL fail the run, and a timed-out check SHALL have its whole process tree ended."
+    },
+    {
+      "key": "project-checks-path-pattern-syn-a-path-pattern-matches-as-a-glob",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator writes these patterns by hand, and a pattern that covers less than intended skips a check that should have run, with CI as the only backstop. `constraints-dev.txt` must not match `hub/constraints-dev.txt`, and `src/*.py` must not reach `src/x/a.py`.",
+      "statement": "A check's path pattern SHALL match repository-relative paths as a glob in which `**` matches across directories, `*` and `?` match within one path segment, a pattern ending in `/` matches everything beneath that directory, and any other character matches only itself; a pattern with no wildcard SHALL match only the file at exactly that path."
     }
   ],
   "schema_version": 1,
