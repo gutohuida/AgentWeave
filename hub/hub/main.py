@@ -610,7 +610,15 @@ async def lifespan(app: FastAPI):
     from .stalls import sweep_forever
 
     stall_sweep = asyncio.create_task(sweep_forever())
+    # A main tip moved outside the Hub (the operator's own merge) refreshes the check results
+    # waiting for review, as the Hub's own merge does (`checks-wait-less`, FR-2).
+    from .project_checks import watch_main_forever
+
+    main_watch = asyncio.create_task(watch_main_forever())
     yield
+    main_watch.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await main_watch
     stall_sweep.cancel()
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await stall_sweep

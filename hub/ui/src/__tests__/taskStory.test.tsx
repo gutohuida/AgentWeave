@@ -301,3 +301,30 @@ describe('F768 — a completed task that waited for a reviewer says why', () => 
     }
   })
 })
+
+describe('checks-wait-less — a skipped check is in the story, not left out (FR-8)', () => {
+  it('names the skipped check on a passed run, and does not call it failing', () => {
+    storyOverride.current = {
+      ...STORY,
+      events: [
+        ...STORY.events,
+        {
+          kind: 'check', id: 'chk-1', at: '2026-10-16T14:34:00Z', state: 'passed', ended_at: '2026-10-16T14:35:00Z',
+          results: [
+            { name: 'hub-tests', exit_code: null, skipped: true },
+            { name: 'lint', exit_code: 0 },
+          ],
+          error: null, merged_sha: null,
+        },
+      ],
+    }
+    try {
+      render(<TaskStory taskId="task-1" />)
+      const item = screen.getByTestId('story-event-chk-1')
+      expect(item).toHaveTextContent('hub-tests skipped (no matching changes)')
+      expect(item.querySelector('.tone-red')).toBeNull()
+    } finally {
+      storyOverride.current = null
+    }
+  })
+})

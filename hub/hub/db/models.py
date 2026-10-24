@@ -3071,7 +3071,7 @@ class RequirementDrift(Base):
 #: something going wrong.
 INTEGRATION_OUTCOMES = ("merged", "skipped", "failed")
 
-CHECK_RUN_STATES = ("running", "passed", "failed", "error", "interrupted")
+CHECK_RUN_STATES = ("running", "passed", "failed", "error", "interrupted", "superseded")
 
 #: How the merge was performed. Only one mechanism exists today; the column exists so that a later
 #: mode integrating by a different route is distinguishable in the history rather than conflated

@@ -2,7 +2,7 @@ import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
+import { Input, Textarea } from '@/components/ui/input'
 import { MenuSelect, type SelectOption } from '@/components/ui/menu'
 import { Field, SettingsGroup, SettingsPage, SettingsRow } from '@/components/ui/settings'
 import { Switch } from '@/components/ui/switch'
@@ -250,7 +250,15 @@ export function GeneralSettings({
                   <Icon name="terminal" size={13} className="aw-check-icon" />
                   <span className="aw-check-name">{check.name}</span>
                   <code className="aw-check-command">{check.command}</code>
-                  <span className="aw-check-timeout">{check.timeout_seconds}s</span>
+                  <span className="aw-check-timeout" title={check.paths?.length ? `Runs only when the work changes ${check.paths.join(', ')}` : undefined}>
+                    {check.paths?.length ? (
+                      <span data-testid={`project-check-paths-${i}`}>
+                        {check.paths[0]}
+                        {check.paths.length > 1 ? ` +${check.paths.length - 1}` : ''} ·{' '}
+                      </span>
+                    ) : null}
+                    {check.timeout_seconds}s
+                  </span>
                   <span className="aw-reveal">
                     <button type="button" data-slot="icon-button" className="aw-icon-button" aria-label={`Move ${check.name} up`} title="Move up" disabled={i === 0} onClick={() => moveCheck(i, -1)}>
                       <Icon name="arrow_upward" size={13} />
@@ -510,7 +518,9 @@ function CheckDialog({
   const [name, setName] = React.useState(initial?.name ?? '')
   const [command, setCommand] = React.useState(initial?.command ?? '')
   const [timeout, setTimeoutValue] = React.useState(String(initial?.timeout_seconds ?? 900))
+  const [paths, setPaths] = React.useState((initial?.paths ?? []).join('\n'))
   const timeoutError = wholeNumber(10, 3600, 'seconds')(timeout)
+  const patterns = [...new Set(paths.split(/[\n,]/).map((p) => p.trim()).filter(Boolean))]
   const ready = name.trim() && command.trim() && !timeoutError
   return (
     <Dialog
@@ -521,6 +531,7 @@ function CheckDialog({
           setName(initial?.name ?? '')
           setCommand(initial?.command ?? '')
           setTimeoutValue(String(initial?.timeout_seconds ?? 900))
+          setPaths((initial?.paths ?? []).join('\n'))
         }
       }}
     >
@@ -538,7 +549,12 @@ function CheckDialog({
               size="sm"
               disabled={!ready}
               onClick={() => {
-                onSubmit({ name: name.trim(), command: command.trim(), timeout_seconds: Number(timeout) })
+                onSubmit({
+                  name: name.trim(),
+                  command: command.trim(),
+                  timeout_seconds: Number(timeout),
+                  ...(patterns.length ? { paths: patterns } : {}),
+                })
                 setOpen(false)
               }}
             >
@@ -556,6 +572,21 @@ function CheckDialog({
           </Field>
           <Field label="Time limit" htmlFor="c-timeout" error={timeout && timeoutError ? timeoutError : undefined} hint="Seconds before the check is stopped and counted as failed.">
             <Input id="c-timeout" inputMode="numeric" className="tabular" style={{ width: 96 }} value={timeout} aria-invalid={Boolean(timeoutError)} onChange={(e) => setTimeoutValue(e.target.value)} />
+          </Field>
+          <Field
+            label="Paths"
+            htmlFor="c-paths"
+            hint="Optional, one per line, like hub/** or constraints-dev.txt. When the work changes none of them, the check is skipped and counts as passed. Leave empty to run it for every task."
+          >
+            <Textarea
+              id="c-paths"
+              rows={3}
+              className="font-mono"
+              style={{ resize: 'vertical', fontSize: 12 }}
+              value={paths}
+              placeholder="hub/**"
+              onChange={(e) => setPaths(e.target.value)}
+            />
           </Field>
         </div>
       </DialogContent>

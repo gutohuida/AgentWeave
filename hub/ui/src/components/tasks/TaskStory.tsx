@@ -343,7 +343,8 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
             : event.state === 'running'
               ? 'blue'
               : 'amber'
-      const failing = event.results.filter((r) => r.passed === false || (r.exit_code ?? 0) !== 0)
+      const failing = event.results.filter((r) => !r.skipped && (r.passed === false || (r.exit_code ?? 0) !== 0))
+      const skipped = event.results.filter((r) => r.skipped)
       return (
         <TimelineItem
           key={event.id}
@@ -357,6 +358,11 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           {failing.length ? (
             <div className="aw-callout tone-red">
               {failing.map((r) => r.name ?? r.command).filter(Boolean).join(', ')}
+            </div>
+          ) : null}
+          {skipped.length ? (
+            <div className="aw-callout">
+              {skipped.map((r) => r.name ?? r.command).filter(Boolean).join(', ')} skipped (no matching changes)
             </div>
           ) : null}
           {event.error ? <div className="aw-callout tone-amber">{event.error}</div> : null}

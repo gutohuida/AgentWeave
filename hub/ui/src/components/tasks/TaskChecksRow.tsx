@@ -1,5 +1,5 @@
 import { readableApiError } from '@/api/client'
-import { useRerunTaskChecks, useTaskChecks, type TaskCheckRun } from '@/api/tasks'
+import { useRerunTaskChecks, useTaskChecks, type TaskCheckResult, type TaskCheckRun } from '@/api/tasks'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
@@ -12,6 +12,7 @@ const LABEL: Record<TaskCheckRun['state'], string> = {
   failed: 'Checks failed',
   error: 'Checks could not run',
   interrupted: 'Checks interrupted',
+  superseded: 'Checks superseded: the main branch moved',
 }
 
 const COLOR: Record<TaskCheckRun['state'], string> = {
@@ -20,9 +21,15 @@ const COLOR: Record<TaskCheckRun['state'], string> = {
   failed: 'var(--red)',
   error: 'var(--red)',
   interrupted: 'var(--text-3)',
+  superseded: 'var(--text-3)',
 }
 
 const ON_MAIN_TOO = 'fails on main too, not this task’s work'
+const SKIPPED = 'skipped (no matching changes)'
+
+/** A skipped check passes; anything else that timed out or exited non-zero failed. */
+const failedResult = (result: TaskCheckResult) =>
+  !result.skipped && (result.timed_out || result.exit_code !== 0)
 
 /**
  * The latest run of the project's checks on the work this task's approval would merge
@@ -48,10 +55,11 @@ function EarlierRun({ run }: { run: TaskCheckRun }) {
           <span
             key={result.name}
             data-testid={`task-check-result-${run.id}-${result.name}`}
-            style={{ color: result.timed_out || result.exit_code !== 0 ? 'var(--red)' : undefined }}
+            style={{ color: failedResult(result) ? 'var(--red)' : undefined }}
+            title={result.skipped ? result.reason : undefined}
           >
-            {result.name} · {result.timed_out ? 'timed out' : `exit ${result.exit_code}`}
-            {result.duration_seconds != null ? ` · ${result.duration_seconds}s` : ''}
+            {result.name} · {result.skipped ? SKIPPED : result.timed_out ? 'timed out' : `exit ${result.exit_code}`}
+            {!result.skipped && result.duration_seconds != null ? ` · ${result.duration_seconds}s` : ''}
             {result.preexisting ? ` · ${ON_MAIN_TOO}` : ''}
           </span>
         ))}
@@ -75,7 +83,8 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
   if (!data?.configured) return null
   const latest = data.runs[0]
   const state: TaskCheckRun['state'] | null = data.running ? 'running' : (latest?.state ?? null)
-  const failing = (latest?.results ?? []).filter((result) => result.timed_out || result.exit_code !== 0)
+  const failing = (latest?.results ?? []).filter(failedResult)
+  const skipped = (latest?.results ?? []).filter((result) => result.skipped)
 
   return (
     <div data-testid={`task-checks-${taskId}`} className="space-y-1">
@@ -97,7 +106,18 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
           Re-run
         </Button>
       </div>
-      {state === 'error' && latest?.error && (
+      {/* A skipped check is said, never left out: one that silently disappears reads as one that
+          never ran (operator, 2026-10-24). */}
+      {skipped.length > 0 && (
+        <ul data-testid={`task-checks-skipped-${taskId}`} className="text-[11px]" style={{ color: 'var(--text-2)' }}>
+          {skipped.map((result) => (
+            <li key={result.name} title={result.reason}>
+              {result.name} · {SKIPPED}
+            </li>
+          ))}
+        </ul>
+      )}
+      {(state === 'error' || state === 'superseded') && latest?.error && (
         <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{latest.error}</p>
       )}
       {state === 'failed' && failing.some((result) => result.preexisting) && (

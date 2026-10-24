@@ -89,6 +89,10 @@ class ProjectCheck(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     command: str = Field(min_length=1, max_length=2000)
     timeout_seconds: int = Field(default=900, ge=10, le=3600)
+    # The paths the check covers, as globs over repository-relative paths (`hub/**`,
+    # `constraints-dev.txt`). Empty runs it for every task, as before; otherwise it is skipped, and
+    # passes, where the merged work changes no file matching one (`checks-wait-less`, FR-6/FR-7).
+    paths: List[str] = Field(default_factory=list, max_length=50)
 
     model_config = {"extra": "forbid"}
 
@@ -98,6 +102,22 @@ class ProjectCheck(BaseModel):
         if not value.strip():
             raise ValueError("must not be blank")
         return value.strip()
+
+    @field_validator("paths")
+    @classmethod
+    def clean_paths(cls, value: List[str]) -> List[str]:
+        cleaned = []
+        for pattern in value:
+            pattern = pattern.strip().replace("\\", "/")
+            if not pattern:
+                continue
+            if len(pattern) > 255:
+                raise ValueError("a path pattern is at most 255 characters")
+            if pattern.startswith("/") or ".." in pattern.split("/"):
+                raise ValueError(f"paths are relative to the repository root: {pattern!r}")
+            if pattern not in cleaned:
+                cleaned.append(pattern)
+        return cleaned
 
 
 class ProjectSettings(BaseModel):
