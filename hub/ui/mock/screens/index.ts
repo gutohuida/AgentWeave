@@ -41,7 +41,7 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'vault', label: 'Vault', route: { kind: 'tab', tab: 'vault' } },
   { id: 'jobs', label: 'Jobs', route: { kind: 'tab', tab: 'jobs' } },
   { id: 'activity', label: 'Activity', route: { kind: 'tab', tab: 'activity' } },
-  { id: 'thread', label: 'Thread (the tab, before it is wired in)', route: { kind: 'thread' } },
+  { id: 'thread', label: 'Thread', route: { kind: 'thread' } },
   { id: 'conversation', label: 'Conversation', route: { kind: 'conversation', agent: 'Builder', conversationId: 'conv-e3aba2c5956a' } },
   { id: 'settings', label: 'Settings · General', route: { kind: 'settings', section: 'general' } },
   { id: 'settings-manager', label: 'Settings · Manager', route: { kind: 'settings', section: 'manager' } },

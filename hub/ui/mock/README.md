@@ -55,36 +55,22 @@ seeded component reads a new one.
 8. **States the data lacks** (an empty vault, an open question) may be simulated in the screen file, marked
    `// mock state`. Never edit fixture JSON by hand; add fixtures by dumping a replica route.
 
-## The Thread page (pull-the-thread, task `mock`)
+## The Thread page (the loom, approved 2026-10-24/25)
 
-Its components live in `src/components/thread/` (`Thread`, `Knot`, `Fold`, `Scrubber`), its styles in
-`src/styles/thread.css`, its API shapes in `src/api/thread.ts`. The fixture is the trial Hub's feed for
-this repository's project, recorded with the Hub's own code over a copy of its database:
-
-```
-py -3.11 mock/record_thread.py            # writes mock/thread-fixture.json (tracked, ~230 KB)
-npx vite --config vite.mock.config.ts     # http://localhost:5199/mock-thread.html?mode=light
-py -3.11 mock/drive_thread.py mock/thread-shots   # checks + screenshots (the last run is committed in mock/thread-shots/)
-```
-
-`mock-thread.html` renders the page on its own, so it needs none of the replica fixtures; the same
-screen is also `#thread` in the full mock. Its checks mirror the task's criteria (present, recursive,
-face, access) and write the light/dark/drawing/unspooling/greyscale screenshots for the operator.
-
-## The Thread page as a loom (mock, 2026-10-24)
-
-The operator's feedback on the Thread page: try left to right, show more about the selected knot
-underneath, make the line less like a git graph and more like a thread, and add motion. The mock
-answers with real components in `src/components/thread/loom/` (`Loom`, `ThreadLoom`, `geometry.ts`)
-and `src/styles/thread-loom.css`. It is a proposal, not wired into the app.
+The Thread page is drawn by the components in `src/components/thread/loom/` (`Loom`, `ThreadLoom`,
+`geometry.ts`) and `src/styles/thread-loom.css`; the app's `ThreadScreen` feeds them from the Hub. The
+mock feeds the same components a recording:
 
 ```
-npx vite --config vite.mock.config.ts     # http://localhost:5199/mock-loom.html
+npx vite --config vite.mock.config.ts     # http://localhost:5199/mock-loom.html?mode=light
 ```
 
-Switches on the mock bar: left to right / top to bottom, a single wave / a rope with the red thread
-twisted through it, dark / light, and replay the draw-in. The fixture, `mock/thread-chapters-fixture.json`,
-is this repository's thread with its 17 chapters, recorded with the Hub's own code (`project_thread.build`
+The bar switches dark / light and replays the draw-in. (The left-to-right / top-to-bottom and wave /
+rope switches the operator compared on 2026-10-24 are retired: left to right and the wave were chosen,
+and the others were removed from the components.) The fixture, `mock/thread-chapters-fixture.json`, is
+this repository's thread with its 17 chapters, recorded with the Hub's own code (`project_thread.build`
 plus `chapters.overlay`) from a read-only copy of the operator's database. The operator approved it as
-it renders on 2026-10-25 ("it should look exactly like that"): the build wires these components, it does
-not redraw them. `py -3.11 mock/shoot.py`-style screenshots land in `mock/loom-shots/` (PNGs are ignored).
+it renders ("it should look exactly like that"). The same screen is `#thread` in the full mock.
+`mock/thread-fixture.json` (written by `py -3.11 mock/record_thread.py`) is the trial Hub's structural
+feed without chapters, kept for checks of a surface that pages. `py -3.11 mock/shoot.py`-style
+screenshots land in `mock/loom-shots/` (PNGs are ignored).

@@ -5,7 +5,7 @@ import { KNOT_GLYPH, LINK_LABEL } from '@/lib/threadKnots'
 import { formatCount, formatDateTime, formatDay, formatDuration } from '@/lib/format'
 import type { AgentColorVars } from '@/lib/agentColors'
 import type { KnotLink, ThreadKnot } from '@/api/thread'
-import { Loom, type LoomOrientation, type LoomStyle } from './Loom'
+import { Loom, type LoomHow } from './Loom'
 import '@/styles/thread-loom.css'
 
 export interface ThreadLoomProps {
@@ -15,13 +15,33 @@ export interface ThreadLoomProps {
   /** The selected knot and the knots it lies under, surface first. */
   path: readonly string[]
   onPath: (path: string[]) => void
-  orientation: LoomOrientation
-  threadStyle: LoomStyle
   now: Date
   drawKey?: number
   actorColor: (name: string) => AgentColorVars
   onOpenLink: (link: KnotLink) => void
+  /** How many surface knots there are in all, loaded or not; the header counts them when the
+   *  project has no chapters. Defaults to the loaded ones. */
+  surfaceTotal?: number
+  /** More knots lie beyond the loaded ones of a level (`SURFACE_LEVEL` for the surface). */
+  hasMore?: (under: string, side: 'before' | 'after') => boolean
+  onMore?: (under: string, side: 'before' | 'after') => void
+  /** The header's two controls; without them they select among the loaded surface knots. */
+  onBeginning?: () => void
+  onPresent?: () => void
+  atBeginning?: boolean
+  atPresent?: boolean
+  /** Changes whenever the selected knot should take keyboard focus (an address was opened). */
+  focusTick?: number
+  /** Changes whenever the selected knot should be brought into view again. */
+  reveal?: number
+  /** Shown above the thread: what could not be read. */
+  notice?: React.ReactNode
+  /** Offered in the header beside the two controls. */
+  actions?: React.ReactNode
 }
+
+/** The key `hasMore` and `onMore` name the surface by. */
+export const SURFACE_LEVEL = 'surface'
 
 const DAY = 86_400
 
@@ -47,6 +67,11 @@ function chapterDays(knot: ThreadKnot, now: Date): string {
   return a === b ? a : `${a} – ${b}`
 }
 
+/** The day a knot starts or ends on, as `formatDay` takes it: a chapter's as the manager wrote it. */
+function dayOf(knot: ThreadKnot, edge: 'start' | 'end'): string {
+  return knot.kind === 'chapter' ? knot[edge].slice(0, 10) : knot[edge]
+}
+
 function when(knot: ThreadKnot, now: Date): string {
   const sameDay = formatDay(knot.start, now) === formatDay(knot.end, now)
   if (knot.kind === 'chapter') return chapterDays(knot, now)
@@ -64,10 +89,30 @@ function ActorChip({ name, color }: { name: string; color: AgentColorVars }) {
   )
 }
 
-/** The Thread page laid left to right (or top to bottom), with what the selected knot holds
- *  beneath it: its story, its span, who was in it, what it is made of, and the thread it opens
- *  into, which can be followed all the way down. Presentational: the container owns the path. */
-export function ThreadLoom({ surface, levels, path, onPath, orientation, threadStyle, now, drawKey, actorColor, onOpenLink }: ThreadLoomProps) {
+/** The Thread page laid left to right, with what the selected knot holds beneath it: its story, its
+ *  span, who was in it, what it is made of, and the thread it opens into, which can be followed all
+ *  the way down. Presentational: the container owns the path and what is loaded. */
+export function ThreadLoom({
+  surface,
+  levels,
+  path,
+  onPath,
+  now,
+  drawKey,
+  actorColor,
+  onOpenLink,
+  surfaceTotal,
+  hasMore,
+  onMore,
+  onBeginning,
+  onPresent,
+  atBeginning,
+  atPresent,
+  focusTick = 0,
+  reveal = 0,
+  notice,
+  actions,
+}: ThreadLoomProps) {
   const find = React.useMemo(() => {
     const all = new Map<string, ThreadKnot>()
     for (const k of surface) all.set(k.key, k)
@@ -85,10 +130,68 @@ export function ThreadLoom({ surface, levels, path, onPath, orientation, threadS
 
   // The thread beneath: what the knot holds, or, for a knot that holds nothing, the thread it lies on.
   const holds = !!focus && focus.child_count > 0
-  const innerKey = holds ? focusKey : parentKey
-  const inner = innerKey ? levels[innerKey] : undefined
+  const innerKey = holds ? focusKey : focus ? parentKey ?? SURFACE_LEVEL : null
+  const inner = innerKey === SURFACE_LEVEL ? surface : innerKey ? levels[innerKey] : undefined
   const innerSelected = holds ? null : focusKey
-  const pickInner = (key: string) => onPath(holds ? [...path, key] : [...path.slice(0, -1), key])
+  // The knots above whatever the inner thread holds.
+  const innerPrefix = holds ? path : path.slice(0, -1)
+
+  // A choice made from the keyboard takes focus with it, wherever the chosen knot is now drawn.
+  const [keyTick, setKeyTick] = React.useState(0)
+  const go = React.useCallback(
+    (next: string[], how: LoomHow = 'pointer') => {
+      onPath(next)
+      if (how === 'key') setKeyTick((n) => n + 1)
+    },
+    [onPath],
+  )
+  const pickInner = (key: string, how: LoomHow) => go([...innerPrefix, key], how)
+
+  // Enter on a knot that holds others selects the first it holds, once that has been read.
+  const descending = React.useRef<string | null>(null)
+  const enter = (prefix: readonly string[], key: string) => {
+    const knot = find.get(key)
+    if (!knot || knot.child_count === 0) return
+    const first = levels[key]?.[0]
+    if (first) {
+      descending.current = null
+      go([...prefix, key, first.key], 'key')
+    } else {
+      descending.current = key
+      go([...prefix, key], 'key')
+    }
+  }
+  React.useEffect(() => {
+    const key = descending.current
+    const first = key ? levels[key]?.[0] : undefined
+    if (!key || !first) return
+    descending.current = null
+    if (path[path.length - 1] === key) go([...path, first.key], 'key')
+  }, [levels, path, go])
+
+  const root = React.useRef<HTMLDivElement>(null)
+  const focusing = React.useRef(false)
+  React.useEffect(() => {
+    if (focusTick || keyTick) focusing.current = true
+  }, [focusTick, keyTick])
+  React.useEffect(() => {
+    if (!focusing.current || !root.current || !focusKey) return
+    // A knot is drawn on the surface, or beside its siblings on the inner thread; a knot that holds
+    // others below the surface shows its own knots there instead, so its heading takes focus.
+    const where = path.length === 1 ? '.aw-loom-main' : !holds ? '.aw-loom-inner' : null
+    const target = where
+      ? Array.from(root.current.querySelectorAll<HTMLElement>(`${where} [data-slot="loom-bead"]`)).find((el) => el.dataset.key === focusKey)
+      : root.current.querySelector<HTMLElement>('.aw-loom-detail-title')
+    if (!target) return
+    focusing.current = false
+    target.focus({ preventScroll: true })
+  })
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key !== 'Escape' || path.length < 2) return
+    event.preventDefault()
+    go(path.slice(0, -1), 'key')
+  }
 
   const kinds = React.useMemo(() => {
     if (!holds || !inner) return []
@@ -111,38 +214,40 @@ export function ThreadLoom({ surface, levels, path, onPath, orientation, threadS
   const surfaceSelected = path[0] ?? null
   const chapters = surface.filter((k) => k.kind === 'chapter').length
   const loose = surface.length - chapters
-  const vertical = orientation === 'vertical'
+  const total = surfaceTotal ?? surface.length
   const step = (by: 1 | -1) => {
     const next = siblings[index + by]
-    if (next) onPath([...path.slice(0, -1), next.key])
+    if (next) go([...path.slice(0, -1), next.key])
   }
+  const first = surface[0]
+  const last = surface[surface.length - 1]
+  const beginningOff = atBeginning ?? surfaceSelected === first?.key
+  const presentOff = atPresent ?? surfaceSelected === last?.key
 
   return (
-    <div className="aw-loom-page" data-orientation={orientation}>
+    <div className="aw-loom-page" ref={root} onKeyDown={onKeyDown}>
+      {notice}
       <header className="aw-loom-bar">
         <div className="aw-loom-bar-title">
           <span className="aw-loom-bar-count">
-            {formatCount(chapters)} {chapters === 1 ? 'chapter' : 'chapters'}
+            {chapters > 0
+              ? `${formatCount(chapters)} ${chapters === 1 ? 'chapter' : 'chapters'}`
+              : `${formatCount(total)} ${total === 1 ? 'knot' : 'knots'}`}
           </span>
-          {surface[0] ? (
+          {first && last ? (
             <span className="aw-loom-bar-span">
-              {formatDay(surface[0].start.slice(0, 10), now)} to {formatDay(surface[surface.length - 1]!.end.slice(0, 10), now)}
-              {loose > 0 ? ` · ${formatCount(loose)} newer ${loose === 1 ? 'knot' : 'knots'} not in a chapter yet` : ''}
+              {formatDay(dayOf(first, 'start'), now)} to {formatDay(dayOf(last, 'end'), now)}
+              {chapters > 0 && loose > 0 ? ` · ${formatCount(loose)} newer ${loose === 1 ? 'knot' : 'knots'} not in a chapter yet` : ''}
             </span>
           ) : null}
         </div>
         <div className="aw-loom-bar-actions" role="group" aria-label="Move along the thread">
-          <Button variant="ghost" size="sm" data-slot="loom-jump" disabled={surfaceSelected === surface[0]?.key} onClick={() => surface[0] && onPath([surface[0].key])}>
-            <Icon name={vertical ? 'arrow_upward' : 'arrow_left'} size={14} /> The beginning
+          {actions}
+          <Button variant="ghost" size="sm" data-slot="loom-jump" disabled={beginningOff} onClick={() => (onBeginning ? onBeginning() : first && go([first.key]))}>
+            <Icon name="arrow_left" size={14} /> The beginning
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            data-slot="loom-jump"
-            disabled={surfaceSelected === surface[surface.length - 1]?.key}
-            onClick={() => surface.length && onPath([surface[surface.length - 1]!.key])}
-          >
-            The present <Icon name={vertical ? 'arrow_downward' : 'arrow_forward'} size={14} />
+          <Button variant="ghost" size="sm" data-slot="loom-jump" disabled={presentOff} onClick={() => (onPresent ? onPresent() : last && go([last.key]))}>
+            The present <Icon name="arrow_forward" size={14} />
           </Button>
         </div>
       </header>
@@ -152,12 +257,15 @@ export function ThreadLoom({ surface, levels, path, onPath, orientation, threadS
           <Loom
             knots={surface}
             selected={surfaceSelected}
-            onSelect={(key) => onPath([key])}
+            onSelect={(key, how) => go([key], how)}
             now={now}
-            orientation={orientation}
-            threadStyle={threadStyle}
             scale="surface"
             drawKey={drawKey}
+            reveal={reveal + focusTick}
+            hasBefore={hasMore?.(SURFACE_LEVEL, 'before')}
+            hasAfter={hasMore?.(SURFACE_LEVEL, 'after')}
+            onMore={onMore ? (side) => onMore(SURFACE_LEVEL, side) : undefined}
+            onEnter={(key) => enter([], key)}
             numbered
             label="The project's thread"
           />
@@ -172,7 +280,7 @@ export function ThreadLoom({ surface, levels, path, onPath, orientation, threadS
                     const k = find.get(key)
                     return (
                       <React.Fragment key={key}>
-                        <button type="button" data-slot="loom-crumb" className="aw-loom-crumb" onClick={() => onPath(path.slice(0, i + 1) as string[])}>
+                        <button type="button" data-slot="loom-crumb" className="aw-loom-crumb" onClick={() => go(path.slice(0, i + 1) as string[])}>
                           <Icon name={k ? KNOT_GLYPH[k.kind] : 'more_horiz'} size={12} />
                           <span>{k?.title ?? 'Knot'}</span>
                         </button>
@@ -203,7 +311,7 @@ export function ThreadLoom({ surface, levels, path, onPath, orientation, threadS
                 </div>
               </div>
 
-              <h2 className="aw-loom-detail-title">{focus.title}</h2>
+              <h2 className="aw-loom-detail-title" tabIndex={-1}>{focus.title}</h2>
               {focus.summary ? <p className="aw-loom-detail-summary">{focus.summary}</p> : null}
 
               <dl className="aw-loom-facts">
@@ -262,7 +370,7 @@ export function ThreadLoom({ surface, levels, path, onPath, orientation, threadS
                 <div className="aw-loom-inner">
                   <div className="aw-loom-inner-head">
                     {holds ? 'Inside' : 'Beside it on the thread'}
-                    <span className="aw-loom-inner-hint">{vertical ? '' : 'Drag or scroll along it'}</span>
+                    <span className="aw-loom-inner-hint">Drag or scroll along it</span>
                   </div>
                   {inner ? (
                     <Loom
@@ -270,10 +378,13 @@ export function ThreadLoom({ surface, levels, path, onPath, orientation, threadS
                       selected={innerSelected}
                       onSelect={pickInner}
                       now={now}
-                      orientation="horizontal"
-                      threadStyle={threadStyle}
                       scale="inner"
                       drawKey={`${innerKey}|${drawKey ?? ''}`}
+                      reveal={reveal + focusTick}
+                      hasBefore={hasMore?.(innerKey, 'before')}
+                      hasAfter={hasMore?.(innerKey, 'after')}
+                      onMore={onMore ? (side) => onMore(innerKey, side) : undefined}
+                      onEnter={(key) => enter(innerPrefix, key)}
                       label={holds ? `Inside: ${focus.title}` : 'The thread this knot lies on'}
                     />
                   ) : (

@@ -1,10 +1,9 @@
-/* The Thread page as a loom (mock, 2026-10-24): the thread runs left to right as a wave that crests
+/* The Thread page as a loom (approved 2026-10-24): the thread runs left to right as a wave that crests
    and troughs at each knot, and what the selected knot holds sits beneath it. The thread is the
    logo's madder; kinds are told apart by glyph and word, never by colour. */
 
 .aw-loom-page {
   --loom-thread: var(--brand-madder);
-  --loom-strand: color-mix(in srgb, var(--text-3) 70%, transparent);
   --loom-glint: color-mix(in srgb, white 85%, var(--brand-madder));
   --loom-bead-ground: var(--bg);
   display: flex;
@@ -28,14 +27,15 @@
 .aw-loom-bar-span { font-size: 12px; color: var(--text-3); }
 .aw-loom-bar-actions { display: flex; gap: 4px; }
 
+.aw-loom-bar-actions { align-items: center; }
+.aw-loom-weave { display: flex; align-items: center; gap: 12px; margin-right: 8px; }
+.aw-loom-weave-note { font-size: 12px; color: var(--text-3); }
+
+/* What could not be read, and the page before anything has been. */
+.aw-thread-note { margin: 8px 0; color: var(--text-3); font-size: 12.5px; }
+.aw-loom-page > .aw-thread-note { margin: 4px 0 0; }
+
 .aw-loom-stage { display: flex; flex-direction: column; gap: 8px; }
-.aw-loom-page[data-orientation='vertical'] .aw-loom-stage {
-  display: grid;
-  grid-template-columns: 548px minmax(0, 1fr);
-  align-items: start;
-  gap: 24px;
-}
-.aw-loom-page[data-orientation='vertical'] .aw-loom-detail { position: sticky; top: 16px; }
 
 /* ── The loom: a scroller holding the cloth the thread is drawn on ───────────────────────── */
 
@@ -48,12 +48,6 @@
   -webkit-mask-image: linear-gradient(to right, transparent, black 48px, black calc(100% - 48px), transparent);
   mask-image: linear-gradient(to right, transparent, black 48px, black calc(100% - 48px), transparent);
 }
-.aw-loom[data-orientation='vertical'] {
-  overflow: hidden auto;
-  max-height: calc(100vh - 120px);
-  -webkit-mask-image: linear-gradient(to bottom, transparent, black 40px, black calc(100% - 40px), transparent);
-  mask-image: linear-gradient(to bottom, transparent, black 40px, black calc(100% - 40px), transparent);
-}
 .aw-loom[data-dragging='true'] { cursor: grabbing; user-select: none; }
 .aw-loom-cloth { position: relative; flex: none; }
 .aw-loom-svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
@@ -62,7 +56,6 @@
 .aw-loom-reveal {
   animation: aw-loom-reveal var(--draw) var(--ease-out) both;
 }
-.aw-loom[data-orientation='vertical'] .aw-loom-reveal { animation-name: aw-loom-reveal-down; }
 
 .aw-loom-line {
   fill: none;
@@ -78,19 +71,6 @@
   stroke-linecap: round;
   opacity: 0.08;
 }
-
-/* A rope: two neutral strands with the red thread twisted through them (the Royal Navy's red
-   thread, the brand's story), each strand passing behind and in front in turn. */
-.aw-loom-strand {
-  fill: none;
-  stroke: var(--loom-strand);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.aw-loom-strand[data-madder='true'] { stroke: var(--loom-thread); stroke-width: 2.4; }
-.aw-loom-strand[data-layer='under'] { opacity: 0.55; }
-.aw-loom[data-scale='inner'] .aw-loom-strand { stroke-width: 1.6; }
 
 /* The shuttle pass: a glint runs the thread's length once it is drawn, then now and again. */
 .aw-loom-glint {
@@ -189,11 +169,6 @@
 .aw-loom-label[data-selected='true'] .aw-loom-label-title { color: var(--text); font-weight: 600; }
 .aw-loom-bead:hover + .aw-loom-label .aw-loom-label-title { color: var(--text); }
 
-/* Top to bottom: the labels hang to the side the thread swings to. */
-.aw-loom[data-orientation='vertical'] .aw-loom-label { width: 184px; translate: 0 -50%; text-align: left; }
-.aw-loom[data-orientation='vertical'] .aw-loom-label[data-side='before'] { transform: translateX(calc(-100% - 24px)); text-align: right; }
-.aw-loom[data-orientation='vertical'] .aw-loom-label[data-side='after'] { transform: translateX(24px); }
-
 .aw-loom-gap {
   position: absolute;
   z-index: 1;
@@ -272,6 +247,7 @@
 .aw-loom-step:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .aw-loom-step:disabled { opacity: 0.35; cursor: default; }
 
+.aw-loom-detail-title:focus:not(:focus-visible) { outline: none; }
 .aw-loom-detail-title { margin: 8px 0 0; font-size: 18px; font-weight: 600; line-height: 1.3; text-wrap: balance; color: var(--text); }
 .aw-loom-detail-summary { margin: 8px 0 0; max-width: 72ch; font-size: 13.5px; line-height: 1.6; color: var(--text-2); }
 
@@ -319,7 +295,6 @@
 /* ── Motion ──────────────────────────────────────────────────────────────────────────────── */
 
 @keyframes aw-loom-reveal { from { clip-path: inset(-40px 100% -40px 0); } to { clip-path: inset(-40px 0 -40px 0); } }
-@keyframes aw-loom-reveal-down { from { clip-path: inset(0 -40px 100% -40px); } to { clip-path: inset(0 -40px 0 -40px); } }
 @keyframes aw-loom-glint {
   0% { stroke-dashoffset: 1000; opacity: 0; }
   2% { opacity: 1; }
@@ -338,12 +313,8 @@
   50% { box-shadow: 0 0 0 3px var(--loom-bead-ground), 0 0 0 9px color-mix(in srgb, var(--loom-thread) 0%, transparent); }
 }
 @keyframes aw-loom-rise { from { opacity: 0; translate: var(--rise-x, -50%) 6px; } }
-.aw-loom-detail-card > *,
-.aw-loom[data-orientation='vertical'] .aw-loom-label { --rise-x: 0; }
-.aw-loom[data-orientation='vertical'] .aw-loom-label { animation-name: aw-loom-fade; }
-@keyframes aw-loom-fade { from { opacity: 0; } }
+.aw-loom-detail-card > * { --rise-x: 0; }
 @keyframes aw-loom-card { from { opacity: 0; transform: translateY(10px) scale(0.99); } }
-@keyframes aw-loom-drop { from { transform: scaleY(0); } }
 
 @media (prefers-reduced-motion: reduce) {
   .aw-loom-reveal,
