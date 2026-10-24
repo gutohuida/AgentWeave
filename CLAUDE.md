@@ -93,7 +93,10 @@ Pick the tier **before** writing anything, and state it in the first commit:
   re-derivations go in commit messages, not appended to the design; evidence lives in tests and
   commits, while `tasks.md` carries a one-line pointer. A change whose spec outgrows its code is a smell:
   stop and split, or build.
-- **New problems found during review go to the backlog, not into the change.**
+- **New problems found during review go to the backlog, not into the change** — but only problems
+  that were there before. A defect the work under review introduces (a lint, test or type failure
+  it causes, a regression, its own feature not working) sends that task back, whatever its
+  criteria say (operator, 2026-10-24, after slice 2 of the red thread shipped three).
 - **No R1/R2/R3 review rounds by default, at any tier** (operator, 2026-10-06: "we don't need more
   R1-R2-R3"). Run a review round only when the operator asks for one.
 - **Trial until ~2026-10-18:** when a change or fix closes, append a row to `spec-queue/METRICS.md`

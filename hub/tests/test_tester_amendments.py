@@ -554,7 +554,7 @@ async def test_a_flow_review_is_a_test_turn_by_default(
 
     assert "Drive the running product" in duty
     assert f'amend_spec_document(path="{PATH}"' in duty
-    assert "side finding" in duty and "report_cannot_satisfy" in duty
+    assert "sends the task back" in duty and "report_cannot_satisfy" in duty
 
 
 @pytest.mark.asyncio

@@ -5462,8 +5462,10 @@ def amend_spec_document(
     is the work being judged. The amendment is applied at once, recorded with you as its author and
     this run, and stays **not reviewed** until the operator reviews it.
 
-    Stay within the document's stated requirements and criteria. Something outside them is a side
-    finding: put it in a task outside the flow (`create_task` with no loop), never in the spec.
+    Stay within the document's stated requirements and criteria. A defect the work under review
+    introduces sends that task back (`revision_needed`), never into the spec. A problem that was
+    there before it is a side finding: `create_task` with no loop, naming the requirement it bears
+    on with `requirement_ids` and `spec_document`.
 
     Args:
         path: The document, e.g. `spec/changes/<name>/spec.json`.

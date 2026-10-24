@@ -296,3 +296,28 @@ async def test_the_rejected_refusal_names_the_reviewers_move(app, auth_headers, 
     refused = await approve(app, auth_headers, task)
     assert refused.status_code == 409, refused.text
     assert REVIEWER_SENDS_BACK_REJECTED in refused.text
+
+
+@pytest.mark.asyncio
+async def test_both_channels_say_a_defect_the_task_introduces_sends_it_back(
+    app, auth_headers, builder, tmp_path
+):
+    """Operator, 2026-10-24: slice 2 of the red thread was approved task by task while its reviewer
+    filed a `black` failure, three red tests and a dead refresh it had caused as side tasks, because
+    the briefing called anything outside the criteria a side finding. Every review is now told a
+    defect the work introduces is the task's, and where a real side finding goes."""
+    task, _evidence = await _own_evidence_task(app, auth_headers, builder, tmp_path)
+    await _reviewer("checker", granted=False)
+
+    briefing = await _review_briefing(task, "checker")
+    context = await _review_context(task, "checker", tmp_path)
+
+    async with async_session_factory() as session:
+        assert (await session.get(Task, task)).spec_document_id
+    for rendered in (briefing, context):
+        assert "A defect this task's work introduces is this task's" in rendered
+        assert "end with `revision_needed`" in rendered
+        assert "Do not approve and file it for later." in rendered
+        # A document-linked task's side findings are filed against its document.
+        assert "`requirement_ids` and `spec_document`" in rendered
+        assert "Stay within the document's stated criteria. A problem outside them" not in rendered

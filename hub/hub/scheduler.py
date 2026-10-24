@@ -3387,6 +3387,7 @@ async def _compose_loop_briefing(
         if is_review:
             from . import review_turn
 
+            lines.extend([*review_turn.findings_lines(claimed_task), ""])
             duty = await review_turn.test_duty_lines(session, claimed_task)
             if duty:
                 lines.extend([*duty, ""])

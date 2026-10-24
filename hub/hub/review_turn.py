@@ -233,6 +233,32 @@ async def _declared_reviewer_name(
     return nobody
 
 
+def findings_lines(task: Optional[Task]) -> List[str]:
+    """Whose a problem a reviewer finds is: the task's, or a side finding (operator, 2026-10-24).
+
+    Every review gets these, in both briefing channels. Measured on slice 2 of the red thread
+    (`spdoc-75175af77f8f`): QA approved every task and filed what it found as side tasks, among them
+    a `black` failure, three red project-delete tests and a Thread page that missed its own job's
+    event -- all three caused by the work it approved. "Outside the criteria" had become a reason to
+    approve. The criteria say what the work must do; they do not license what it breaks.
+    """
+    where = (
+        "; name the requirement it bears on with `requirement_ids` and "
+        "`spec_document`, so it stays visible beside this task's document"
+        if task is not None and task.spec_document_id
+        else ""
+    )
+    return [
+        "**A defect this task's work introduces is this task's, whatever the criteria say.** A "
+        "lint, format, type or test failure it causes, a regression in something it touched, or "
+        "a feature it ships that does not work: end with `revision_needed` and notes naming it. "
+        "Do not approve and file it for later.",
+        "Only a problem that was there before this task, in code it did not touch, is a side "
+        f"finding: put it in a task with `create_task`{where}. Say in your verdict notes which "
+        "side findings you filed.",
+    ]
+
+
 async def test_duty_lines(session: AsyncSession, task: Task) -> List[str]:
     """The test duty a flow's review turn carries while its document's testing is on (tester-amends).
 
@@ -264,8 +290,8 @@ async def test_duty_lines(session: AsyncSession, task: Task) -> List[str]:
         "requirements}}, reason=..., how_to_check=...)`. The fix joins the flow at once and the "
         "implementer picks it up; say in `reason` what you ran and what it showed. Then give your "
         "verdict on the task under review.",
-        "Stay within the document's stated criteria. A problem outside them is a side finding: put "
-        "it in a task outside the flow (`create_task`), never in the spec. A criterion the work "
+        "Amend only within the document's stated criteria. A defect the work under review "
+        "introduces sends the task back (above), never into the spec. A criterion the work "
         "cannot meet as written is `report_cannot_satisfy`, never a weakened criterion.",
     ]
 

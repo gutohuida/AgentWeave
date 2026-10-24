@@ -2252,11 +2252,12 @@ async def _render_hub_agent_context(
                 "if it is not. Leaving it where it is ends your turn without a review having "
                 "happened, and the work waits for a person."
             )
-            # tester-amends: the same lines the loop briefing carries (`review_turn.test_duty_lines`).
+            # The same lines the loop briefing carries (`review_turn.findings_lines`, `test_duty_lines`).
             from ...db.models import Task as _Task
-            from ...review_turn import test_duty_lines
+            from ...review_turn import findings_lines, test_duty_lines
 
             reviewed_task = await db.get(_Task, review.task_id)
+            lines.extend(f"- {line}" for line in findings_lines(reviewed_task))
             if reviewed_task is not None:
                 lines.extend(f"- {line}" for line in await test_duty_lines(db, reviewed_task))
             # Design D8. Copilot's own built-in review agents, consulted only on a Copilot runner
