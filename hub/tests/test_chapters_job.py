@@ -372,3 +372,22 @@ async def test_a_surface_key_cited_or_a_bad_cite_does_not_discard_the_answer(
     assert [c["id"] for c in state["chapters"]] == ["a"]
     assert state["chapters"][0]["cites"] == []
     assert (await _firings())[0]["dropped_cites"] == ["task-nope"]
+
+
+def test_both_prompts_demand_end_to_end_git_coverage_and_the_check_names_gaps():
+    from hub import chapters_job
+
+    for asked_for in (True, False):
+        text = chapters_job._PROMPT.format(
+            asked=chapters_job._ASKED if asked_for else chapters_job._UNASKED,
+            surface="",
+            current="",
+            versions="",
+            git="",
+        )
+        assert "covered end to end" in text
+        assert "never in cites" in text
+
+    shown = {"v1": ["abc1234"], "v2": ["def5678"], "v3": ["0123456"]}
+    drafts = [{"cites": ["tag:v1", "commit:def5678"]}]
+    assert chapters_job.uncovered_buckets(shown, drafts) == ["v3"]
