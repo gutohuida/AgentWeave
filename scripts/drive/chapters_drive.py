@@ -75,6 +75,23 @@ def firings(pid):
     return out
 
 
+def versions_of(pid):
+    """Every stored version of the project's chapters, oldest first (read-only from the Hub's DB)."""
+    out = []
+    for author, asked_by, at, reason, chs in rows(
+        "select author, asked_by, created_at, reason, chapters from chapter_versions "
+        "where project_id=? order by version", (pid,)
+    ):
+        out.append({"author": author, "requested_by": asked_by, "at": at, "reason": reason,
+                    "chapters": json.loads(chs)})
+    return out
+
+
+def current_chapters(pid):
+    v = versions_of(pid)
+    return v[-1]["chapters"] if v else []
+
+
 def first_hub_record(pid):
     """The earliest record the Hub holds for the project, across every source a knot can come from."""
     queries = (
@@ -278,23 +295,25 @@ api("POST", f"{B}/agents", {"name": "organiser", "runner_id": rid2})
 check("the job is off for this project", not any(
     j["key"] == JOB and j.get("enabled") for j in api("GET", f"{B}/manager/jobs")[1]["jobs"]))
 approved_document(pid2, f"agent subject {TAG}")
-msg = ("Use your AgentWeave chapter tools. First create ONE chapter titled 'Drive chapter' holding "
-       "every knot of the thread, with a one-sentence summary. Then submit an edit to that chapter "
-       "citing the task id task-doesnotexist00. Report in one line whether each call was accepted "
-       "or refused. Do not use any other tools.")
+msg = ("Use your AgentWeave chapter tools: read_chapters, then save_chapters. First call "
+       "read_chapters, then save ONE chapter with id 'drive-1' titled 'Drive chapter' holding every "
+       "knot it lists as ungrouped (members), with ISO start and end spanning them, a one-sentence summary and a reason. Then call "
+       "save_chapters again, keeping that chapter, with cites ['task-doesnotexist00']. Report in one "
+       "line whether each call was accepted or refused. Do not use any other tools.")
 api("POST", f"{B}/agent/trigger", {"agent": "organiser", "message": msg}, timeout=90)
 
 
-def chapters():
-    return (api("GET", f"{B}/chapters")[1] or {}).get("chapters", [])
+def on_surface():
+    """Chapter knots on the Thread surface, as the app reads them."""
+    feed = api("GET", f"{B}/thread?limit=200")[1] or {}
+    return [k for k in feed.get("knots", []) if k.get("kind") == "chapter" and k.get("title") == "Drive chapter"]
 
 
-made = wait_for(lambda: [c for c in chapters() if c.get("title") == "Drive chapter"], 240, "the agent's chapter")
+made = wait_for(on_surface, 240, "the agent's chapter")
 check("the chapter is on the surface", bool(made))
-check("it is a version under the agent's name", bool(made) and made[0].get("author") == "organiser",
-      (made or [{}])[0].get("author"))
-c, vers = api("GET", f"{B}/chapters/versions")
-vers = vers if isinstance(vers, list) else (vers or {}).get("versions", [])
+vers = versions_of(pid2)
+check("it is a version under the agent's name", bool(vers) and vers[-1]["author"] == "organiser",
+      (vers or [{}])[-1].get("author"))
 check("exactly one version: the refused edit left none", len(vers) == 1, len(vers))
 
 print(f"\n{len(failures)} failed: {failures}" if failures else "\nall passed")
@@ -303,21 +322,39 @@ print(f"\n{len(failures)} failed: {failures}" if failures else "\nall passed")
 PROJECT = os.environ.get("AW_PROJECT")
 if PROJECT and not failures:
     C = f"/projects/{PROJECT}"
-    api("PATCH", f"{C}/manager/jobs/{JOB}", {"enabled": True, "mode": "button"})
+    # The story is read by the operator, so it earns a stronger model than the controls steps' Haiku.
+    runners = api("GET", f"{C}/runners")[1] or []
+    git_runner = os.environ.get("AW_GIT_RUNNER") or next(r["id"] for r in runners if r["cli"] == "claude")
+    c, res = api("PATCH", f"{C}/manager/jobs/{JOB}", {"enabled": True, "mode": "button", "runner_id": git_runner,
+                                                      "model": os.environ.get("AW_GIT_MODEL", "claude-sonnet-5-5")})
+    check("ac-git: the job is on for this repository", c == 200, (c, res))
+    stop_if_failed("ac-git needs the job on")
     before = len(firings(PROJECT))
-    api("POST", f"{C}/manager/jobs/{JOB}/run")
+    c, res = api("POST", f"{C}/manager/jobs/{JOB}/run")
+    check("ac-git: the press is accepted", c in (200, 202), (c, res))
+    stop_if_failed("ac-git press")
     fired(PROJECT, before, "ac-git: the press records one firing", secs=1800)
-    chs = (api("GET", f"{C}/chapters")[1] or {}).get("chapters", [])
+    chs = current_chapters(PROJECT)
     first_knot = first_hub_record(PROJECT)
+    for c in chs:
+        c["commits"] = [x for x in (cite.partition(":")[2] for cite in c["cites"] if cite.startswith("commit:"))]
     early = [c for c in chs if c.get("commits")]
     check("ac-git: chapters from git exist", bool(early), len(chs))
     check("ac-git: they are dated before the first Hub record",
-          all(str(c["starts_at"]) < str(first_knot) for c in early), first_knot)
-    shas = [x["sha"] for c in early for x in c["commits"]]
+          all(str(c["start"]) < str(first_knot) for c in early), first_knot)
+    shas = [x for c in early for x in c["commits"]]
     missing = [s for s in shas if subprocess.run(["git", "cat-file", "-e", s], cwd=REPO).returncode]
     check("ac-git: every cited commit exists in the repository", bool(shas) and not missing, f"{len(missing)} missing")
-    check("ac-git: commits carry tag, date, author and subject",
-          all(all(x.get(k) for k in ("date", "author", "subject")) and "tag" in x for x in early[0]["commits"]))
+    # Opening a chapter in the app shows its commits grouped under release tags, each with date,
+    # author and subject: read exactly that, through the feed the Thread page reads.
+    opened = api("GET", f"{C}/thread?under=chapter:{early[0]['id']}&limit=200")[1] or {}
+    tags = opened.get("knots", [])
+    leaves = []
+    for t in tags:
+        leaves += (api("GET", f"{C}/thread?under={t['key']}&limit=200")[1] or {}).get("knots", [])
+    check("ac-git: the chapter opens into release tags holding commits", bool(tags) and bool(leaves),
+          f"{len(tags)} tags, {len(leaves)} commits")
+    print("chapters:", [(c["start"][:10], c["end"][:10], c["title"]) for c in chs])
     print("ac-story is the operator's: read the Thread surface of", PROJECT)
 
 sys.exit(1 if failures else 0)
