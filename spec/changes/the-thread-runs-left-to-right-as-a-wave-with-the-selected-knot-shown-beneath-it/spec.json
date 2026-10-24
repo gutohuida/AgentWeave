@@ -1,0 +1,414 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the trial Hub's Thread page for this repository and the mock at mock-loom.html?layout=horizontal&thread=wave, both at 1440x900 with the same chapter selected, in dark and in light",
+      "key": "ac-mock-match",
+      "requirement": "looks-like-mock",
+      "then": "the thread's shape, knot positions and sizes, labels, header line and panel layout match, and any difference is limited to agent chip colours or knots the mock's recording does not have",
+      "when": "the two are screenshotted after the draw-in has finished"
+    },
+    {
+      "given": "a project with 17 chapters and one newer knot not in a chapter",
+      "key": "ac-opens-newest",
+      "requirement": "left-to-right",
+      "then": "the newest surface knot is selected and in view at the right, every knot to its left is older, and the beginning control selects chapter 1",
+      "when": "the operator opens the Thread tab"
+    },
+    {
+      "given": "two neighbouring chapters two months apart and two a day apart",
+      "key": "ac-even",
+      "requirement": "left-to-right",
+      "then": "the horizontal distance between each pair of neighbouring knots is the same",
+      "when": "the thread is drawn"
+    },
+    {
+      "given": "two neighbouring surface knots, the second starting 60 days after the first ended",
+      "key": "ac-silence",
+      "requirement": "wave",
+      "then": "the stretch between them carries the label '2 months later', and a stretch between knots a day apart carries none",
+      "when": "the thread is drawn"
+    },
+    {
+      "given": "a surface of 5 knots",
+      "key": "ac-alternate",
+      "requirement": "wave",
+      "then": "the knots sit alternately above and below the middle, each label is on the side away from the middle, and the line is the madder colour",
+      "when": "the thread is drawn"
+    },
+    {
+      "given": "17 chapters spanning Mar 7 to Oct 24 and 1 newer conversation not in a chapter",
+      "key": "ac-count",
+      "requirement": "page-count",
+      "then": "it reads '17 chapters', 'Mar 7 to Oct 24', and '1 newer knot not in a chapter yet'",
+      "when": "the page opens"
+    },
+    {
+      "given": "the chapter 'The mender and the stall alarms' (47 knots, 97 all the way down: 45 conversations, 1 vault entry, 1 document) selected",
+      "key": "ac-panel",
+      "requirement": "detail-panel",
+      "then": "it reads 'Chapter 17 of 17', the title, the summary, 'Oct 24 · 1 day', '47 knots · 97 all the way down', chips for manager, Operator, mender and Architect, and '45 conversations', '1 vault entry', '1 document'",
+      "when": "the panel shows it"
+    },
+    {
+      "given": "a conversation knot selected",
+      "key": "ac-panel-link",
+      "requirement": "detail-panel",
+      "then": "the app opens that conversation, as the old thread's link did",
+      "when": "the operator presses 'Open the conversation'"
+    },
+    {
+      "given": "chapter 16 selected",
+      "key": "ac-before-after",
+      "requirement": "detail-panel",
+      "then": "chapter 17 is selected, and on chapter 17 the 'after' control is disabled",
+      "when": "the operator presses the panel's 'after' control"
+    },
+    {
+      "given": "a chapter holding 47 conversations selected",
+      "key": "ac-descend",
+      "requirement": "descend",
+      "then": "the panel describes that conversation as 'Conversation 3 of 47', with a trail naming the chapter, and choosing the chapter in the trail selects the chapter again",
+      "when": "the operator chooses the third knot on the panel's thread"
+    },
+    {
+      "given": "a knot that holds nothing selected",
+      "key": "ac-leaf",
+      "requirement": "descend",
+      "then": "the panel's thread shows the knots beside it with it marked as selected",
+      "when": "the panel shows it"
+    },
+    {
+      "given": "a chapter stored as 2026-10-24T00:00:00Z to 2026-10-24T23:59:59Z, with the browser in UTC+1 and in UTC-5",
+      "key": "ac-days",
+      "requirement": "chapter-days",
+      "then": "both read 'Oct 24' and the panel reads '1 day'",
+      "when": "it is shown on the thread and in the panel"
+    },
+    {
+      "given": "a surface of 165 knots with the newest 40 loaded and the 40th selected",
+      "key": "ac-page-earlier",
+      "requirement": "paging",
+      "then": "the next older page is requested and drawn to the left, the selected knot is unchanged and the knots that were in view stay where they were on screen",
+      "when": "the reader scrolls to within one screen width of the left end"
+    },
+    {
+      "given": "a project with 10,000 recorded items on the operator's machine",
+      "key": "ac-scale",
+      "requirement": "paging",
+      "then": "knots show within one second each time",
+      "when": "the Thread tab is opened, and then the beginning control is pressed"
+    },
+    {
+      "given": "a run three levels below a chapter selected, and the URL copied",
+      "key": "ac-address",
+      "requirement": "address",
+      "then": "that run is selected with a trail of its chapter and the knots between, it is in view on the panel's thread, its chapter is in view on the surface, and it has keyboard focus",
+      "when": "the URL is opened in a new tab"
+    },
+    {
+      "given": "the page open at the beginning of the thread with chapter 1 selected",
+      "key": "ac-live",
+      "requirement": "live",
+      "then": "within five seconds the new activity is on the thread's present end, and chapter 1 is still selected and still in view",
+      "when": "an agent's run starts in the project"
+    },
+    {
+      "given": "chapter 10 focused",
+      "key": "ac-keys",
+      "requirement": "keyboard-pointer",
+      "then": "chapter 11 is selected, then the first knot inside chapter 11, then chapter 11 again, focus following each time",
+      "when": "the reader presses Right, then Enter, then Escape"
+    },
+    {
+      "given": "the pointer pressed on a knot",
+      "key": "ac-drag",
+      "requirement": "keyboard-pointer",
+      "then": "the thread has scrolled 200 pixels and the selected knot has not changed",
+      "when": "it is dragged 200 pixels left and released"
+    },
+    {
+      "given": "the browser set to reduced motion",
+      "key": "ac-reduced",
+      "requirement": "motion",
+      "then": "the thread, knots, labels and panel show at once with no drawing, glint, pulse, rise or glide, and the content is the same as without reduced motion",
+      "when": "the page opens and a knot is chosen"
+    },
+    {
+      "given": "normal motion settings",
+      "key": "ac-draws",
+      "requirement": "motion",
+      "then": "the thread is partly drawn from the left a quarter of a second in, and fully drawn with every knot shown within two seconds",
+      "when": "the page opens"
+    },
+    {
+      "given": "the chapters job on",
+      "key": "ac-weave",
+      "requirement": "carried-controls",
+      "then": "'Weave the thread' is offered and pressing it asks the job to fire, as before",
+      "when": "the page opens"
+    },
+    {
+      "given": "the thread route failing",
+      "key": "ac-unreadable",
+      "requirement": "carried-controls",
+      "then": "it says the thread could not be read and to reload",
+      "when": "the page opens"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "5a15f455d9adca808e8ac61e1d9d8c8745535454353fa6039e48eebdcdf5252e",
+      "FR-10": "e92ff61bde39a5647bec211bbb1f7042f594839b38d63c04f712f73062807646",
+      "FR-11": "236229c12a454d12d70e4de3632b3f6d512c2ab3733aefa88d7ceead92176a5f",
+      "FR-12": "13028e73234bfb1e5156e1e25bca1207637acd10497b5d0a2fcb4a22790eea5e",
+      "FR-13": "9daaf54f9b4f4de0a4fcca981d36c6280388444451b8fe8690b55076c26a1977",
+      "FR-2": "1f629a8ac7f8a9cbaad895d297cd6b380916def2bed36c8a854813bf569d03d5",
+      "FR-3": "1721caf29bcbe94ff59f2369b0937e3256b76314a9c64e0f2a550e79e1e86eab",
+      "FR-4": "1eb88cb363672f3922ab9b85b6a9b84f472c26b05eb49f26239d1027b4a744ef",
+      "FR-5": "f9a9b5a404f7a2314e8a4c826c5b2e6341e315a72ab17121639138a84d0c5b95",
+      "FR-6": "7965b721f5bc79095933003eed7eb718d6418df23fcf89b49d33cddbe8c336fc",
+      "FR-7": "65c4ef6315e6c7cbb4bd75164a7e2799f4c01e1f6b449fd9a32e2745fb210627",
+      "FR-8": "8120cff34176e7ceceaf0da1b40937546ab3ae2a67f5ee676fa228f5b09d5ab8",
+      "FR-9": "79a1b1e869696c6b73f90cb390c4b44c0adea5983f29e3abd768cdf40ccf5789"
+    },
+    "high_water": 13,
+    "requirements": {
+      "address": "FR-8",
+      "carried-controls": "FR-12",
+      "chapter-days": "FR-6",
+      "descend": "FR-5",
+      "detail-panel": "FR-4",
+      "keyboard-pointer": "FR-10",
+      "left-to-right": "FR-1",
+      "live": "FR-9",
+      "looks-like-mock": "FR-13",
+      "motion": "FR-11",
+      "page-count": "FR-3",
+      "paging": "FR-7",
+      "wave": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reviewer": "QA",
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decision records.\n\n0. The mock is on master (operator, 2026-10-25: merged at c1029ae). Files: hub/ui/src/components/thread/loom/{Loom.tsx,ThreadLoom.tsx,geometry.ts}, hub/ui/src/styles/thread-loom.css, hub/ui/mock/{loom-main.tsx,loom.css,screens/ThreadLoom.tsx,thread-chapters-fixture.json}, hub/ui/mock-loom.html, and a section in hub/ui/mock/README.md. Run it with `npx vite --config vite.mock.config.ts` and open http://localhost:5199/mock-loom.html?layout=horizontal&thread=wave. That rendering, left to right and wave, in dark and light, is the visual standard: the build wires these components and does not redraw, restyle or re-space them.\n\n1. The mock's components are the deliverable (hub/ui/mock/README.md rule). Building is wiring `ThreadScreen` (which already fetches levels, follows addresses, pages with cursors and refreshes live) to `ThreadLoom` instead of `Thread`. The rope style and the top-to-bottom orientation were mock switches the operator did not choose; they are removed, not kept as options. The mock entry keeps working on the wave and left-to-right only.\n\n2. Even spacing, not time-proportional. This repository's first 8 chapters span seven months and the last 9 span three days; spacing by time crushes the recent ones. Time is shown by each knot's date label and by a label on long silences.\n\n3. Retires approved behaviour. This change contradicts three requirements of the approved document pull-the-thread-project-history-page: FR-2 (oldest at the top, newest at the bottom), FR-5 (knots open in place directly beneath themselves) and FR-13's \"scrolling is always the browser's own\" (the selected knot now glides into view). It also reverses that document's non-goal \"Horizontal ... layouts\", which the operator has now asked for. Everything else there (FR-1, FR-3, FR-4, FR-6..FR-12) still holds, restated here only where the new layout changes how it shows. When the thread documents are folded into a capability, these three are retired by this change.\n\n4. Chapter dates are calendar days. The manager writes a chapter's span as whole days (stored as 00:00 to 23:59:59 UTC). Read as instants they shift a day in any time zone east of UTC; the mock showed \"Oct 23 – Oct 24\" for a one-day chapter until it read them as days.\n\n5. Agent colours come from each agent's registered colour, as everywhere else in the app (agentColors.ts). The mock assigned them by order of appearance; that was mock state only, and the one visual difference from the mock the build is expected to show.",
+  "evidence": {
+    "checked": [
+      "The mock at hub/ui/mock-loom.html renders the real components against this repository's thread recorded with the Hub's own code (project_thread.build + chapters.overlay) from a read-only copy of the operator's database; the operator viewed it and approved it as rendered (2026-10-24 and 2026-10-25)",
+      "The current ThreadScreen (hub/ui/src/components/thread/ThreadScreen.tsx) already provides cursor paging, address resolution through /thread/knot ancestors, SSE refresh and the weave button; these are what the build rewires",
+      "The approved pull-the-thread-project-history-page requirements FR-2, FR-5 and FR-13 contradicted by this change (read through read_spec_document)"
+    ],
+    "limits": [
+      "The mock never paged, followed an address, received live events or used registered agent colours: those are unproven in the new layout until the drive",
+      "The one-second figures are carried over from pull-the-thread FR-12 and have not been measured for the new layout",
+      "The mock's knots inside conversations were recorded only three levels deep"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": "small",
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Left to right or top to bottom, wave or rope? — Left to right, wave (operator, 2026-10-24: 'I want exactly this').",
+      "resolved": true
+    },
+    {
+      "question": "Who builds and who reviews? — A flow with DeveloperOpus (operator, 2026-10-25); QA reviews and drives, every five minutes, stopping when the queue empties.",
+      "resolved": true
+    },
+    {
+      "question": "Does the builder start from the mock? — Yes: merged into master, and the page must look exactly like it (operator, 2026-10-25).",
+      "resolved": true
+    }
+  ],
+  "problem": "The operator does not like the Thread page as built. Read top to bottom with a straight red line and dots, it looks like a git graph rather than AgentWeave's thread; a knot shows only a one-line face, so finding out what a chapter or a task actually was means opening it in place and losing the surrounding story; and the page is static. On 2026-10-24 the operator reviewed a mock (hub/ui/mock-loom.html, real components fed the real thread of this repository, 17 chapters) with four switches and chose: left to right, the single wave thread (not the twisted rope), with the detail panel and motion as mocked — \"I want exactly this\", and on 2026-10-25: \"the agent should use the mock. It should look exactly like that\".",
+  "requirements": [
+    {
+      "key": "looks-like-mock",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-25: 'the agent should use the mock. It should look exactly like that'.",
+      "statement": "The Thread page renders as the approved mock (hub/ui/mock-loom.html, left to right, wave) renders the same knots: the same thread shape, knot spacing and sizes, labels, header line, panel layout, typography, colours in dark and light, and motion; the only differences allowed are agents' registered colours and what real data adds (paging, live knots)."
+    },
+    {
+      "key": "left-to-right",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator chose left to right on 2026-10-24. Even spacing keeps knots from a busy few days legible beside months-long chapters.",
+      "statement": "The Thread page lays the project's surface knots on one thread from left (oldest) to right (newest), evenly spaced in time order; opening the page selects the newest surface knot with it in view, and two controls select the first surface knot and the newest one."
+    },
+    {
+      "key": "wave",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A straight line with dots read as a git graph; the wave is the operator's chosen thread.",
+      "statement": "The thread is drawn in madder as a smooth wave that passes through each knot, alternately above and below the middle, swinging further for knots that hold more; each knot carries its date or date span and its title on the side away from the middle; and where 10 or more days pass between two neighbouring knots the thread is labelled with that silence ('3 weeks later', '2 months later')."
+    },
+    {
+      "key": "page-count",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Above the thread the page states how many chapters the project has, the span of days they cover, and how many newer surface knots are not yet in a chapter; with no chapters it states the number of surface knots instead."
+    },
+    {
+      "key": "detail-panel",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator asked for more information under the thread about the selected knot, 'whatever we can show'.",
+      "statement": "Beneath the thread a panel describes the one selected knot: its kind as glyph and word with its position among the knots of that kind beside it ('Chapter 17 of 17'); its title; its summary when it has one; when it happened and how long it lasted; how many knots it holds directly and all the way down; who was in it, as named chips in each agent's registered colour, including the actors of what it holds; what it is made of, as a count per kind; a control that opens the object it stands for; and controls for the knot before and after it."
+    },
+    {
+      "key": "descend",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the selected knot holds others, the panel shows them as a smaller thread of the same kind; choosing one selects it, the panel then describes it and shows a trail naming every knot above it, each of which selects that knot again; when the selected knot holds nothing, the smaller thread shows the knots beside it with it marked."
+    },
+    {
+      "key": "chapter-days",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Chapter spans are stored as whole UTC days; read as instants they move a day east of UTC (seen in the mock).",
+      "statement": "A chapter's dates are shown as the calendar days the manager wrote, in any time zone: a chapter written for 24 October shows 'Oct 24' and '1 day', never 'Oct 24 – Oct 25' or '23h 59m'."
+    },
+    {
+      "key": "paging",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Carries pull-the-thread FR-12 into the horizontal layout, where an Earlier/Later button at the end of a list no longer fits.",
+      "statement": "A thread, surface or inner, whose loaded knots do not reach the beginning or the present loads the next page on that side when the reader scrolls within one screen width of that end, without changing the selected knot or moving the knots already in view; for a project with 10,000 recorded items the first knots show within one second of opening the page and any page loads within one second."
+    },
+    {
+      "key": "address",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Carries pull-the-thread FR-10: links to a knot keep working after the redesign.",
+      "statement": "Selecting a knot puts its address in the URL; opening a knot's address selects that knot with the trail of every knot above it, brings it into view in the panel's thread and on the surface, and gives it keyboard focus."
+    },
+    {
+      "key": "live",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Carries pull-the-thread FR-11.",
+      "statement": "Activity recorded while the page is open appears at the present end of the surface thread, and in the panel when it belongs to the selected knot, within five seconds without a reload, and does not change the selected knot or move the view when the reader is elsewhere on the thread."
+    },
+    {
+      "key": "keyboard-pointer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With a knot focused, Left and Right select and focus the knot before and after it, Home and End the first and last loaded knot, Enter on a knot that holds others selects the first knot it holds, and Escape selects the knot above; a vertical mouse wheel over a thread scrolls it sideways, and pressing and dragging a thread pulls it along without selecting the knot the drag started on."
+    },
+    {
+      "key": "motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator asked for more animation and polish, and accepted the mock's motion.",
+      "statement": "On opening, and whenever a thread is shown afresh, the thread draws in from its oldest end and each knot appears as the thread reaches it; a glint passes along the thread after it is drawn and then about every 14 seconds; the selected knot is tied with a loop and gently pulses; choosing a knot glides it into view; and the panel's contents rise in as the selection changes. Under reduced-motion settings none of this moves and the page shows the same content."
+    },
+    {
+      "key": "carried-controls",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While the chapters job is on, the page offers 'Weave the thread' as it does today; a page that cannot be read says so and asks for a reload, and a part that cannot be read says so without hiding what did load."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The Thread page's surface thread laid left to right as a wave, with date and title labels at each knot, exactly as the approved mock renders it",
+      "A panel beneath the thread describing the selected knot, with the smaller thread of what it holds and a trail back up",
+      "Paging along a long thread as the reader nears either end",
+      "Knot addresses, live arrival, the Weave the thread button and the failure notices, carried over to the new layout",
+      "Keyboard, pointer (wheel and drag) and reduced-motion behaviour",
+      "Removing the vertical thread components and styles the new page replaces"
+    ],
+    "non_goals": [
+      "The twisted-rope thread and the top-to-bottom layout (mock options the operator did not choose)",
+      "Any visual redesign beyond the mock: new spacing, sizes, fonts, colours or motion",
+      "Any change to what the thread contains, how knots are grouped or folded, or the chapters the manager writes",
+      "Any change to the Hub's thread routes or their payloads",
+      "Acting on anything from the thread: approving, retrying, editing or deleting",
+      "Placing knots proportionally to time",
+      "A minimap or overview strip of the whole history"
+    ]
+  },
+  "summary": "The Thread page is redrawn as the operator chose from the loom mock on 2026-10-24: one red thread running left to right as a wave that crests and dips at each knot, and beneath it a panel showing everything known about the selected knot, including the smaller thread of what it holds, which can be followed all the way down. The mock's components (hub/ui/src/components/thread/loom/, on master since c1029ae) become the page and it must look exactly like the mock; the vertical, open-in-place thread is retired.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "The approved mock is on master (design record 0). Open it first (npx vite --config vite.mock.config.ts, then mock-loom.html?layout=horizontal&thread=wave) and keep the page looking exactly like it: wire the components, do not redraw, restyle or re-space them. Make ThreadScreen render ThreadLoom (hub/ui/src/components/thread/loom/) in place of Thread: selection path and address in the URL, paging on approach to either end of the surface and the panel's thread, live refresh, Weave the thread and the failure notices, keyboard (Left/Right/Home/End/Enter/Escape) and drag/wheel. Use registered agent colours. Remove the rope style and vertical orientation from the loom and the mock bar, delete Thread/Knot/Fold/Scrubber and thread.css where nothing else uses them, and replace their tests with tests of the new behaviour against payloads in the order the thread route returns them. Rebuild and commit the UI bundle with its stamp (scripts/refresh_ui_bundle.py).",
+      "files": [
+        "hub/ui/src/components/thread",
+        "hub/ui/src/styles/thread.css",
+        "hub/ui/src/styles/thread-loom.css",
+        "hub/ui/src/__tests__",
+        "hub/ui/mock",
+        "hub/ui/mock-loom.html",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "looks-like-mock",
+        "left-to-right",
+        "wave",
+        "page-count",
+        "detail-panel",
+        "descend",
+        "chapter-days",
+        "paging",
+        "address",
+        "live",
+        "keyboard-pointer",
+        "motion",
+        "carried-controls"
+      ],
+      "reviewer": null,
+      "title": "Wire the loom into the Thread page"
+    },
+    {
+      "depends_on": [
+        "build"
+      ],
+      "description": "On the trial Hub (:8010, project proj-d85a82bf4216, served from source with this branch's UI), drive the Thread tab in a real browser through every acceptance criterion that a browser can show: screenshots of the page beside the mock (mock-loom.html?layout=horizontal&thread=wave) with the same knot selected, in dark and light; opening at the newest knot, the count line, the panel for a chapter, descending three levels and reloading the copied URL, keyboard, drag, reduced motion, paging to the left on a surface without chapters, and live arrival from a real Haiku run. Record screenshots and the result as evidence per requirement; send any failure, including any visual difference from the mock, back to the build task.",
+      "files": [
+        "scripts/drive"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "looks-like-mock",
+        "left-to-right",
+        "wave",
+        "page-count",
+        "detail-panel",
+        "descend",
+        "chapter-days",
+        "paging",
+        "address",
+        "live",
+        "keyboard-pointer",
+        "motion",
+        "carried-controls"
+      ],
+      "reviewer": null,
+      "title": "Drive the new Thread page end to end"
+    }
+  ],
+  "title": "The thread runs left to right as a wave, with the selected knot shown beneath it"
+}
