@@ -1,0 +1,166 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a run this Hub is executing, started 90 minutes ago, whose newest output row is 61 minutes old, and a second whose newest output is 59 minutes old",
+      "how_to_check": "Hub test over stalls._sweep with run_liveness registry entries and AgentOutput rows; fails before the change (no stall is recorded)",
+      "key": "ac-quiet-recorded",
+      "requirement": "a-quiet-run-is-recorded",
+      "then": "exactly one quiet_run stall exists, for the first run, naming its agent and the time of its last output",
+      "when": "the stall sweep runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the mender on with a runner, and the first run above",
+      "how_to_check": "Hub test with the mender on, asserting no InboundQueueEntry or Conversation for the mender",
+      "key": "ac-no-wake",
+      "requirement": "a-quiet-run-never-wakes-the-mender",
+      "then": "no mender conversation is created and the stall's conversation_id is null",
+      "when": "the sweep records its quiet_run stall"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open quiet_run stall",
+      "how_to_check": "UI test over OverviewScreen with a quiet_run stall fixture",
+      "key": "ac-shown",
+      "requirement": "a-quiet-run-is-shown",
+      "then": "the row reads 'A run has been quiet for an hour' with the stall's reason",
+      "when": "the Overview renders the stall list"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open quiet_run stall, then a new output row for its run (or the run completed)",
+      "how_to_check": "Hub test over two sweeps",
+      "key": "ac-ends",
+      "requirement": "a-quiet-run-ends-itself",
+      "then": "the stall is ended with outcome resolved",
+      "when": "the next sweep runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a database at the previous head with stalls of every existing cause",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_migrations.py -k quiet_run",
+      "key": "ac-migration",
+      "requirement": "a-quiet-run-is-recorded",
+      "then": "upgrade accepts a quiet_run row and keeps every existing row; downgrade removes quiet_run rows and restores the narrower CHECK",
+      "when": "the migration is applied and then downgraded"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "7c80d677a9ac540f5d7aa62b353a539ef7d3e185383a250e4891d937b20f59e0",
+      "FR-2": "4e00f3dabd65ead810cf6ff4cc6dd3173e8c8f83ed1eb3ffbbf9a2de6b0da00a",
+      "FR-3": "d6d9022f231a0aaa615f97c5d4df41f7b8213fe79b04a2bfa3f73a2cc12b7676",
+      "FR-4": "4fe3ccbf2087daf8018395d77724e45309b31845bf3adb25450bbdd94c40e35b"
+    },
+    "high_water": 4,
+    "requirements": {
+      "a-quiet-run-ends-itself": "FR-4",
+      "a-quiet-run-is-recorded": "FR-1",
+      "a-quiet-run-is-shown": "FR-3",
+      "a-quiet-run-never-wakes-the-mender": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 Silence is measured by output, not heartbeats. A run's last activity is its newest recorded output row (message, tool call or tool result), else its start. One long tool call (a 19-minute test suite) is one tool call row and then silence, so the threshold must sit well above the longest normal command: 60 minutes (operator, 2026-10-24).\n\nD2 A notice is a stall the mender never sees. It is recorded and listed like a stall, under its own cause `quiet_run`, so the Overview's stall list shows it with no new surface; waking skips that cause. Rejected: a new notice table (a second list for the operator to watch), and waking the mender after a longer silence (option c, rejected by the operator).\n\nD3 It ends itself. The sweep that records it ends it (\"resolved\") once the run has produced output since, or is no longer running.\n\nHazard (Tier 2): `stalls.cause` has a CHECK constraint (migration 0141), so `quiet_run` needs a migration that widens it with a batch recreate, as 0143 did for check runs. It reaches :8000's database at its next restart. Rollback: the downgrade deletes `quiet_run` rows, then restores the narrower CHECK; nothing else reads them.",
+  "evidence": {
+    "checked": [],
+    "gaps": [
+      "Nothing demonstrates any of this yet; every criterion above is proposed coverage"
+    ],
+    "limits": [],
+    "tests": []
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Until F1043 (2026-10-24) the stall sweep reported every run over 10 minutes as dead, because it read a heartbeat column nothing writes. On :8000, 43 dead_run stalls over 9 runs, all 9 of which completed normally, cost 41 mender turns. F1043 makes \"dead\" mean \"recorded running, and this Hub is not executing it\". A run the Hub is executing is now never reported, which is right for a long test suite and wrong for a process that hangs forever: nobody hears of it until the run's own timeout.\n\nWho has it: the operator, who wants to know when a live run has gone silent for a long time, and who decides whether to stop it. The mender should not be woken for it: it cannot tell a slow command from a hung one any better than the operator can, and waking it for silence is exactly the false alarm F1043 removed.",
+  "requirements": [
+    {
+      "key": "a-quiet-run-is-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A hung process is alive and silent; after F1043 nothing else reports it. 60 minutes sits well above the longest normal single command (a 19-minute test suite under load, 2026-10-24).",
+      "statement": "When a run this Hub is executing has produced no recorded output (message, tool call or tool result) for 60 minutes, measured from its newest output or, with none, from its start, the stall sweep MUST record it under the cause quiet_run, naming the agent, the run and when it last produced output."
+    },
+    {
+      "key": "a-quiet-run-never-wakes-the-mender",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-24 (option b): told to the operator, not the mender. The mender cannot tell a slow command from a hung one; waking it for silence is the false alarm F1043 removed.",
+      "statement": "A quiet_run stall MUST NOT brief or wake the mender."
+    },
+    {
+      "key": "a-quiet-run-is-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Where the operator already looks for stalls; no second list to watch.",
+      "statement": "A quiet_run stall MUST appear in the Overview's stall list with the label 'A run has been quiet for an hour' and its reason."
+    },
+    {
+      "key": "a-quiet-run-ends-itself",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A notice that outlives its cause is noise; the sweep that raises it is the one that can see it is over.",
+      "statement": "An open quiet_run stall MUST be ended 'resolved' by the next sweep once its run has produced output since the stall was recorded, or is no longer running."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Recording a quiet run for a run this Hub is executing whose newest output is older than 60 minutes",
+      "Showing it in the Overview's stall list with its own label",
+      "Ending it when the run speaks again or ends",
+      "The migration widening the stall cause CHECK, with its downgrade"
+    ],
+    "non_goals": [
+      "Waking the mender for a quiet run (option c, rejected by the operator 2026-10-24)",
+      "Stopping or interrupting the run: the operator decides, with the existing stop control",
+      "Making the 60-minute threshold configurable",
+      "Writing a heartbeat column: liveness is the Hub's run registry (F1043), activity is the output rows"
+    ]
+  },
+  "summary": "After F1043 a run the Hub is executing is never reported dead, however long it is silent. That leaves a run that is alive but hung (a process waiting forever) unnoticed until its timeout. The operator chose (2026-10-24, option b) to be told about it, never the mender: a run the Hub is executing that has produced no output for 60 minutes is shown to the operator as a quiet run, and the notice ends by itself when the run speaks again or ends.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Acceptance drive first: ac-quiet-recorded failing. Then the migration widening ck on stalls.cause (batch recreate, downgrade deletes quiet_run rows), STALL_CAUSES in models.py, the sweep rule in stalls._sweep beside F1043's dead_run rule (newest AgentOutput.timestamp for the run, else started_at), wake() skipping quiet_run, the self-ending sweep, the UI cause type in hub/ui/src/api/stalls.ts and the label in OverviewScreen.tsx, and the bundle refresh. Ruff, black, the Hub suite and the UI suite green.",
+      "files": [
+        "hub/hub/stalls.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/",
+        "hub/tests/test_a_stalled_project_wakes_the_mender.py",
+        "hub/tests/test_migrations.py",
+        "hub/ui/src/api/stalls.ts",
+        "hub/ui/src/components/overview/OverviewScreen.tsx",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "quiet-run",
+      "requirements": [
+        "a-quiet-run-is-recorded",
+        "a-quiet-run-never-wakes-the-mender",
+        "a-quiet-run-is-shown",
+        "a-quiet-run-ends-itself"
+      ],
+      "reviewer": null,
+      "title": "A run quiet for an hour is shown to the operator, never the mender"
+    }
+  ],
+  "title": "A run that goes quiet is shown to the operator"
+}
