@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -33,7 +33,7 @@ from . import chapters, manager, project_thread, project_workspace, traces
 from .db.engine import async_session_factory
 from .db.models import Runner, Task
 from .subprocess_windows import no_console_kwargs
-from .worker import run_worker
+from .worker import WorkerUsage, run_worker
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ DOCUMENT_APPROVED = "document_approved"
 DOCUMENT_ARCHIVED = "document_archived"
 LAST_TASK_APPROVED = "last_task_approved"
 AUTOMATIC_TRIGGERS = (DOCUMENT_APPROVED, DOCUMENT_ARCHIVED, LAST_TASK_APPROVED)
-PROMPT_VERSION = "chapters-1"
+PROMPT_VERSION = "chapters-2"
 #: Who writes a version a firing saves.
 AUTHOR = "manager"
 #: Roughly how much of the prompt the git digest may take.
@@ -52,6 +52,7 @@ SURFACE_START, SURFACE_END = "--- surface ---", "--- end of surface ---"
 CHAPTERS_START, CHAPTERS_END = "--- chapters ---", "--- end of chapters ---"
 VERSIONS_START, VERSIONS_END = "--- versions ---", "--- end of versions ---"
 GIT_START, GIT_END = "--- git history ---", "--- end of git history ---"
+RETRY_START, RETRY_END = "--- your previous answer ---", "--- end of your previous answer ---"
 
 
 class ChapterDraft(BaseModel):
@@ -104,9 +105,9 @@ _PROMPT = (
     '"cites": ["<citation>"]}}]}}. "chapters" is the complete set you want, existing chapters '
     "included.\n\n"
     "Rules the Hub enforces, refusing the whole answer if broken:\n"
-    "- Every knot on the surface that the earlier chapters already held stays in exactly one "
-    "chapter, named by its key in members, copied exactly. A knot no chapter holds yet may be "
-    "placed in a chapter or left out.\n"
+    "- Every knot on the surface goes in exactly one chapter, named by its key in members, "
+    "copied exactly. Leave none out: an answer missing a knot the earlier chapters already "
+    "held, or, when there are no chapters yet, any knot at all, is refused whole.\n"
     "- A citation is a Hub record id (task-..., spdoc-..., run-...), commit:<sha> or "
     "tag:<name>, copied exactly from the data below. Every one must exist.\n"
     "- Chapters may overlap in time. A chapter's span (start, end) covers what it groups.\n"
@@ -381,14 +382,40 @@ async def _save(plan: Plan, drafts: List[Dict[str, Any]], reason: str, asked_for
         )
 
 
-async def weave(plan: Plan, *, trigger: str, subject: Dict[str, Any]) -> str:
-    """Spawn the model once on the planned input, save what it answers and record the firing.
-    Answers the outcome."""
-    asked_for = trigger == REQUESTED
-    result = await run_worker(
+def _unplaced_knots(problems: List[str]) -> set:
+    prefix, suffix = "knot ", " is in no chapter"
+    return {
+        p[len(prefix) : -len(suffix)]
+        for p in problems
+        if p.startswith(prefix) and p.endswith(suffix)
+    }
+
+
+def retry_prompt(prompt: str, result: Any, unplaced: List[str]) -> str:
+    """The firing's prompt again, with the refused answer and the knots it left out (F1042)."""
+    previous = result.answer_text or result.parsed.model_dump_json()
+    return (
+        f"{prompt}\n\n{RETRY_START}\n{previous}\n{RETRY_END}\n\n"
+        "The Hub refused that answer because these knots are in no chapter: "
+        f"{', '.join(unplaced)}. Reply with the complete JSON object again, with each of them in "
+        "exactly one chapter and nothing else changed."
+    )
+
+
+def _added_usage(first: WorkerUsage, second: WorkerUsage) -> WorkerUsage:
+    """Both spawns' consumption; a dimension neither reported stays unreported."""
+    summed: Dict[str, Any] = {}
+    for name, value in asdict(first).items():
+        other = getattr(second, name)
+        summed[name] = None if value is None and other is None else (value or 0) + (other or 0)
+    return WorkerUsage(**summed)
+
+
+async def _spawn(plan: Plan, prompt: str, asked_for: bool) -> Any:
+    return await run_worker(
         project_id=plan.project_id,
         kind=JOB,
-        prompt=plan.prompt,
+        prompt=prompt,
         prompt_version=PROMPT_VERSION,
         output_model=ChaptersAnswer,
         cli=plan.cli,
@@ -396,6 +423,49 @@ async def weave(plan: Plan, *, trigger: str, subject: Dict[str, Any]) -> str:
         runner_id=plan.runner_id,
         initiator="operator" if asked_for else "autonomous",
     )
+
+
+async def weave(plan: Plan, *, trigger: str, subject: Dict[str, Any]) -> str:
+    """Spawn the model on the planned input, save what it answers and record the firing. An answer
+    refused only for knots it left out is answered back once with that list (F1042): on a first
+    run every knot must be placed, and a large surface makes one missed knot likely. Answers the
+    outcome."""
+    asked_for = trigger == REQUESTED
+    result = await _spawn(plan, plan.prompt, asked_for)
+    outcome, detail, extra = await _settle(plan, result, trigger, asked_for)
+    unplaced = sorted(_unplaced_knots(extra.get("refused", [])))
+    usage, duration = result.usage, result.duration_ms or 0
+    if unplaced and len(unplaced) == len(extra["refused"]):
+        retried = await _spawn(plan, retry_prompt(plan.prompt, result, unplaced), asked_for)
+        usage, duration = _added_usage(usage, retried.usage), duration + (retried.duration_ms or 0)
+        result = retried
+        outcome, detail, extra = await _settle(plan, result, trigger, asked_for)
+        extra["retried_for"] = unplaced
+        detail = f"{detail} (after one retry for {len(unplaced)} knots left out)"
+    async with async_session_factory() as db:
+        await manager.record_firing(
+            db,
+            plan.project_id,
+            job=JOB,
+            trigger=trigger,
+            subject=subject,
+            runner_id=plan.runner_id,
+            cli=plan.cli,
+            model=plan.model,
+            outcome=outcome,
+            detail=detail,
+            duration_ms=duration,
+            usage=manager.usage_record(usage),
+            answer=manager.answer_record(result),
+            extra=extra,
+        )
+    return outcome
+
+
+async def _settle(
+    plan: Plan, result: Any, trigger: str, asked_for: bool
+) -> Tuple[str, str, Dict[str, Any]]:
+    """Save one spawn's answer: the firing's outcome, detail and extra fields."""
     extra: Dict[str, Any] = {}
     if not result.ok or not isinstance(result.parsed, ChaptersAnswer):
         outcome, detail = "failed", str(result.error or result.outcome)
@@ -434,24 +504,7 @@ async def weave(plan: Plan, *, trigger: str, subject: Dict[str, Any]) -> str:
                 detail = f"Saved version {saved.version['version']}."
             if saved.dropped:
                 detail += f" Refused changes to existing chapters: {', '.join(saved.dropped)}."
-    async with async_session_factory() as db:
-        await manager.record_firing(
-            db,
-            plan.project_id,
-            job=JOB,
-            trigger=trigger,
-            subject=subject,
-            runner_id=plan.runner_id,
-            cli=plan.cli,
-            model=plan.model,
-            outcome=outcome,
-            detail=detail,
-            duration_ms=result.duration_ms or 0,
-            usage=manager.usage_record(result.usage),
-            answer=manager.answer_record(result),
-            extra=extra,
-        )
-    return outcome
+    return outcome, detail, extra
 
 
 #: One firing per project at a time: each reads the chapters it will save over.

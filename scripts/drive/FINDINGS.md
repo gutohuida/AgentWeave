@@ -40468,7 +40468,7 @@ A change document must have a task for every requirement, so a correction with n
 
 ## F1042 (B) -- the first chapters run on a real project is refused: the prompt says new knots may be left out, the Hub requires all of them on a first version
 
-**Status:** open 2026-10-24. Found on the operator's `:8000` Hub, AgentWeave's own project: the first "Write chapters" firing (Sonnet, 65 s, $0.22, event `manager_job_fired` 21:02:17) ended `failed`, "The answer was refused", with 146 problems, every one `knot document:spdoc-… is in no chapter`. No version was saved.
+**Status:** fixed 2026-10-24 (Tier 0), not yet driven on `:8000` (needs its restart and a "Write chapters" press). The prompt now says to leave no knot out, and an answer refused only for knots it left out is answered back once with that list, both spawns' usage on the one firing (`retried_for`). Tests: `test_the_prompt_never_invites_leaving_a_knot_out`, `test_unplaced_knots_are_answered_back_once_and_both_spawns_are_counted`, `test_a_second_refusal_is_not_retried_again`, `test_a_refusal_for_anything_else_is_not_retried`. Found on the operator's `:8000` Hub, AgentWeave's own project: the first "Write chapters" firing (Sonnet, 65 s, $0.22, event `manager_job_fired` 21:02:17) ended `failed`, "The answer was refused", with 146 problems, every one `knot document:spdoc-… is in no chapter`. No version was saved.
 **Source:** drive
 **Theme:** Thread
 **Ready:** yes

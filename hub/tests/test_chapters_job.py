@@ -158,10 +158,13 @@ async def test_an_approval_fires_once_when_automatic(
     await _approve_document(app, auth_headers, run_headers)
 
     firings = await _firings()
-    assert len(firings) == 1 and len(fake.calls) == 1
+    assert len(firings) == 1
+    # An empty first answer leaves every knot out, so it is answered back once (F1042), and the
+    # one firing carries both spawns' usage.
+    assert len(fake.calls) == 2 and firings[0]["retried_for"]
     assert firings[0]["trigger"] == chapters_job.DOCUMENT_APPROVED
     assert firings[0]["subject"] == {"document": PATH}
-    assert firings[0]["usage"] == {"input_tokens": 11, "output_tokens": 7}
+    assert firings[0]["usage"] == {"input_tokens": 22, "output_tokens": 14}
     assert fake.calls[0]["initiator"] == "autonomous"
 
 
@@ -391,3 +394,71 @@ def test_both_prompts_demand_end_to_end_git_coverage_and_the_check_names_gaps():
     shown = {"v1": ["abc1234"], "v2": ["def5678"], "v3": ["0123456"]}
     drafts = [{"cites": ["tag:v1", "commit:def5678"]}]
     assert chapters_job.uncovered_buckets(shown, drafts) == ["v3"]
+
+
+# ---------------------------------------------------------------------------
+# F1042: the first run on a real project, where every knot is new
+# ---------------------------------------------------------------------------
+
+
+def test_the_prompt_never_invites_leaving_a_knot_out():
+    """The save requires every knot of the previous version, and on a first version every knot
+    (`every-knot-once`); a prompt saying new knots "may be left out" made the model leave 146 out
+    of AgentWeave's first run, and the whole answer was refused."""
+    for asked_for in (True, False):
+        text = chapters_job._PROMPT.format(
+            asked=chapters_job._ASKED if asked_for else chapters_job._UNASKED,
+            surface="",
+            current="",
+            versions="",
+            git="",
+        )
+        assert "left out" not in text.split("- A surface key")[0].split("Rules the Hub")[1]
+        assert "Leave none out" in text
+
+
+@pytest.mark.asyncio
+async def test_unplaced_knots_are_answered_back_once_and_both_spawns_are_counted(
+    app, auth_headers, worker
+):
+    await seed(doc(1, 0), doc(2, 5))
+    await _configure(app, auth_headers)
+    knots = await _knots()
+    fake = worker(
+        ("first try", [draft("a", knots[:1])]),
+        ("placed them", [draft("a", knots)]),
+    )
+    assert await _fire(chapters_job.REQUESTED) == "written"
+
+    assert len(fake.calls) == 2
+    retry = fake.calls[1]["prompt"]
+    assert retry.startswith(fake.calls[0]["prompt"])
+    for key in knots[1:]:
+        assert key in retry.split(chapters_job.RETRY_START)[1]
+    firing = (await _firings())[0]
+    assert firing["retried_for"] == sorted(knots[1:])
+    assert firing["usage"]["input_tokens"] == 22 and firing["usage"]["output_tokens"] == 14
+    async with async_session_factory() as session:
+        state = await chapters.read(session, P)
+    assert [c["members"] for c in state["chapters"]] == [sorted(knots)]
+
+
+@pytest.mark.asyncio
+async def test_a_second_refusal_is_not_retried_again(app, auth_headers, worker):
+    await seed(doc(1, 0), doc(2, 5))
+    await _configure(app, auth_headers)
+    knots = await _knots()
+    fake = worker(("one", [draft("a", knots[:1])]), ("two", [draft("a", knots[:1])]))
+    assert await _fire(chapters_job.REQUESTED) == "failed"
+    assert len(fake.calls) == 2
+    assert "is in no chapter" in (await _firings())[0]["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_for_anything_else_is_not_retried(app, auth_headers, worker):
+    await seed(doc(1, 0))
+    await _configure(app, auth_headers)
+    knots = await _knots()
+    fake = worker(("twice", [draft("a", knots), draft("b", knots, title="Again")]))
+    assert await _fire(chapters_job.REQUESTED) == "failed"
+    assert len(fake.calls) == 1
