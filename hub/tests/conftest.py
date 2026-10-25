@@ -765,6 +765,24 @@ def _module_level_async_primitives_are_per_test():
     _rebuild()
 
 
+@pytest.fixture(autouse=True)
+async def _a_flow_fires_early_only_where_a_test_asks():
+    """`flow_advance` asks for a flow's firing a few seconds after its work moves. In a test that
+    is a firing nobody arranged, landing mid-test on whatever scheduler the test installed, so the
+    wait is set beyond any test's length and every request still waiting is cancelled at the end.
+    `test_a_flow_advances_when_its_work_moves.py` sets the wait to zero to drive it."""
+    from hub import flow_advance
+
+    flow_advance.DEBOUNCE_SECONDS = 3600
+    yield
+    pending = list(flow_advance._in_flight)
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
+    flow_advance._in_flight.clear()
+    flow_advance._scheduled.clear()
+
+
 def assert_engine_is_disposable() -> None:
     """Refuse to drop tables on any database this process did not create for itself.
 

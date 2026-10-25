@@ -88,7 +88,7 @@ Your host also has tools with similar names — `SendMessage` continues a subage
 - `mcp__agentweave__mend_stalls()` — the mender only (others are refused): the project's open stalls, newest first.
 - `mcp__agentweave__mend_task_branch(task_id, commit=None)` — the mender only: land an approved task's stuck work with no review. `commit` is your resolution of its conflict and must contain the work its merge names; the project's checks run on it first. Without `commit`, retry the merge.
 - `mcp__agentweave__mend_withdraw_input(entry_id)` — the mender only: withdraw input waiting in another agent's queue whose delivery was refused, so the next firing briefs that agent again.
-- `mcp__agentweave__mend_reset_task(task_id, status, assignee=None)` — the mender only: hand a stuck task back, `status` `assigned` (to `assignee`) or `pending`, along the edges any run may take.
+- `mcp__agentweave__mend_reset_task(task_id, status, assignee=None)` — the mender only: hand a stuck task back, `status` `assigned` (to `assignee`) or `pending`, along the edges any run may take; or `under_review` with `assignee` a reviewer, which queues that agent's review turn on finished work.
 - `mcp__agentweave__mend_end_stall(stall_id, outcome, summary)` — the mender only: end your stall, `outcome` `fixed` or `gave_up`, with a two or three sentence summary for the operator.
 
 Address a peer by its exact name from the roster above. There is no inbox tool: everything addressed to you already appears in this turn.
