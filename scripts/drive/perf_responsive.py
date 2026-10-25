@@ -15,6 +15,9 @@ Safety, enforced in code and not by convention:
     queued input in that copy are already disabled (`disable_scheduling`): starting one without that
     spawned a real agent run during the investigation.
 
+Note: the criterion for `streams` says "a scratch database"; this drive uses a scratch COPY of the
+operator's database (the same data the other in-process scenarios measure), never the original.
+
 Scenarios: one-event, no-overlap, line-appears, run-budget (--runner claude|copilot|codex-replay|codex),
 idle-budget, lists, lists-10x, loops, same-answers (--base <sha>), streams, burst.
 """
@@ -173,6 +176,46 @@ def scheduling_problems(db: Path) -> List[str]:
         c.close()
 
 
+def working_directory(db: Path) -> Optional[str]:
+    c = sqlite3.connect(str(db))
+    try:
+        row = c.execute("select working_directory from projects where id=?", (PROJECT,)).fetchone()
+        return row[0] if row else None
+    finally:
+        c.close()
+
+
+def inside_temp(path: Optional[str]) -> bool:
+    if not path:
+        return False
+    try:
+        p_ = Path(path).resolve()
+        return Path(tempfile.gettempdir()).resolve() in p_.parents
+    except OSError:
+        return False
+
+
+def sandbox_repo(db: Path, tmp: Path) -> Path:
+    """A scratch git repo under the temp dir, bound to the copy's project so real agent runs touch only it."""
+    repo = (tmp / "scratch-repo").resolve()
+    repo.mkdir()
+    (repo / ".agentweave").mkdir()
+    (repo / ".agentweave" / "project.json").write_text(
+        json.dumps({"version": 1, "project_id": PROJECT}), encoding="utf-8")
+    for cmd in (["init", "-q"], ["config", "user.email", "drive@example.invalid"], ["config", "user.name", "perf drive"],
+                ["commit", "-q", "--allow-empty", "-m", "scratch"]):
+        subprocess.run(["git", "-C", str(repo), *cmd], check=True, capture_output=True)
+    c = sqlite3.connect(str(db))
+    try:
+        key = "windows:" + os.path.normcase(os.path.normpath(str(repo))) if os.name == "nt" else f"posix:{repo}"
+        c.execute("update projects set working_directory=?, path_key=?, directory_state='available' where id=?",
+                  (str(repo), key, PROJECT))
+        c.commit()
+    finally:
+        c.close()
+    return repo
+
+
 def use_db(db: Path, hub_dir: Path) -> None:
     """Point this process's Hub import at `db`. Must run before `hub` is imported."""
     if "hub.main" in sys.modules:
@@ -231,6 +274,13 @@ class ScratchHub:
                 raise CannotRun(
                     "refusing to start a Hub with the lifespan on: the copy still has " + ", ".join(bad)
                     + " (call disable_scheduling on the copy first)"
+                )
+            wd = working_directory(self.db)
+            if not inside_temp(wd) or _same_file(Path(wd), REPO):
+                raise CannotRun(
+                    f"refusing to start a Hub with the lifespan on: the copy's project working_directory is {wd!r}, "
+                    "not a scratch repo under the temp dir (call sandbox_repo on the copy first); real agent runs "
+                    "would write branches and worktrees into it"
                 )
         cfg = uvicorn.Config(
             DelayAgents(app, self.delay) if self.delay else app,
@@ -689,6 +739,7 @@ async def settle(log: RequestLog, quiet: float = 4.0, limit: float = 40.0) -> No
         if not log.live and time.time() - last >= quiet:
             return
         await asyncio.sleep(0.5)
+    p(f"  WARNING: the tab never went quiet within {limit:.0f}s; what follows measures a storm already running")
 
 
 def tally(rows: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -782,6 +833,8 @@ async def sc_line_appears(args: argparse.Namespace, db: Path, tmp: Path) -> int:
         rows = log.gets(t0)
         await browser.close()
     counts = tally(rows)
+    # `/agent/{a}/chat` and `/agent/{a}/chat/{conversation}` are both that conversation's chat history: the
+    # open conversation is the only one the tab shows, so a history GET without an id re-reads it too.
     bad = {k: v for k, v in counts.items()
            if re.search(r"/agent/[^/]+/chat(/|$)", k) or re.search(r"/agents/[^/]+/output$", k) or k == "GET /agents"}
     p(f"  line visible in the conversation: {visible}")
@@ -797,7 +850,7 @@ PROMPT = ("Do this slowly, one step at a time, with a separate tool call per ste
 
 async def make_runner_agent(hub: ScratchHub, runner: str, model: Optional[str]) -> Dict[str, Optional[str]]:
     """An agent in the copy bound to `runner`, with no conversation yet: the turn is sent from the composer."""
-    default = {"copilot": "claude-haiku-5.5"}.get(runner)
+    default = {"copilot": "claude-haiku-5.5", "claude": "claude-haiku-5-5"}.get(runner)
     model = model or default
     if not model:
         raise CannotRun(f"--runner {runner} needs --model")
@@ -820,17 +873,6 @@ async def send_from_composer(page: Any, _tmp: Path) -> None:
     except Exception as e:  # noqa: BLE001
         await page.screenshot(path=str(shots / "composer-failed.png"))
         raise CannotRun(f"could not send from the composer ({type(e).__name__}); screenshot {shots / 'composer-failed.png'}")
-
-
-async def run_turn_real(hub: ScratchHub, who: Dict[str, Optional[str]], model: Optional[str]) -> None:
-    """Ask the conversation's agent for a long, tool-heavy turn through the route the composer uses."""
-    async with api_client(base=hub.base) as c:
-        body: Dict[str, Any] = {"agent": who["agent"], "message": PROMPT, "conversation_id": who["conversation_id"]}
-        if model:
-            body["overrides"] = {"model": model}
-        r = await c.post(f"{prefix()}/agent/trigger", json=body)
-        if r.status_code >= 300:
-            raise CannotRun(f"trigger answered {r.status_code}: {r.text[:300]}")
 
 
 async def replay_turn(hub: ScratchHub, who: Dict[str, Optional[str]], db: Path, seconds: float, source: Optional[str]) -> str:
@@ -882,6 +924,26 @@ async def replay_turn(hub: ScratchHub, who: Dict[str, Optional[str]], db: Path, 
     return f"replayed {n} recorded rows of run {run_id}"
 
 
+async def watch_output(db: Path, agent: str, stamps: List[float], stop: asyncio.Event) -> None:
+    """Record when new agent_outputs rows for `agent` appear in the scratch copy."""
+    last = None
+    while not stop.is_set():
+        c = sqlite3.connect(f"file:{db.resolve().as_posix()}?mode=ro", uri=True)
+        try:
+            n = c.execute("select count(*) from agent_outputs where project_id=? and agent=?", (PROJECT, agent)).fetchone()[0]
+        except sqlite3.Error:
+            n = last
+        finally:
+            c.close()
+        if last is not None and n is not None and n > last:
+            stamps.append(time.time())
+        last = n if n is not None else last
+        try:
+            await asyncio.wait_for(stop.wait(), 1.0)
+        except asyncio.TimeoutError:
+            pass
+
+
 async def sc_run_budget(args: argparse.Namespace, db: Path, tmp: Path) -> int:
     use_db(db, args.hub_dir)
     from playwright.async_api import async_playwright
@@ -889,22 +951,36 @@ async def sc_run_budget(args: argparse.Namespace, db: Path, tmp: Path) -> int:
     real = args.runner in ("claude", "copilot", "codex")
     if real:
         disable_scheduling(db)  # a real turn needs the lifespan; nothing else may start with it
+        repo = sandbox_repo(db, tmp)  # and its agents must work in a scratch repo, not this one
+        p(f"  real runs are bound to the scratch repo {repo}")
+    stamps: List[float] = []
+    stop = asyncio.Event()
+    watcher: Optional[asyncio.Task] = None
     async with ScratchHub(db, lifespan=real) as hub, async_playwright() as pw:
-        who = pick_agent(db, args.agent) if not (real and args.runner != "claude") else await make_runner_agent(hub, args.runner, args.model)
+        # A drive-created agent and a new conversation, never an existing agent's session.
+        who = await make_runner_agent(hub, args.runner, args.model) if real else pick_agent(db, args.agent)
         browser, page, log = await open_chat(pw, hub, who, tmp)
         await settle(log)
         t0 = time.time()
-        if real and args.runner == "claude":
-            await run_turn_real(hub, who, args.model)
-            await asyncio.sleep(args.seconds)
-            note = "real claude turn"
-        elif real:
+        if real:
+            watcher = asyncio.create_task(watch_output(db, who["agent"], stamps, stop))
             await send_from_composer(page, tmp)
             await asyncio.sleep(args.seconds)
             note = f"real {args.runner} turn, sent from the composer"
         else:
             note = await replay_turn(hub, pick_agent(db, args.agent), db, args.seconds, args.replay_run)
+        stop.set()
+        if watcher:
+            await watcher
         await browser.close()
+    if real:
+        if not stamps:
+            raise CannotRun("the turn produced no output rows: nothing streamed, so the window measures an idle tab")
+        p(f"  output arrived from t0+{stamps[0] - t0:.0f}s to t0+{stamps[-1] - t0:.0f}s ({len(stamps)} polls saw new rows)")
+        if stamps[-1] - stamps[0] < 120:
+            raise CannotRun(
+                f"output arrived over only {stamps[-1] - stamps[0]:.0f}s, short of the two minutes the criterion needs "
+                "(raise --seconds if the turn started late)")
     return report_budget(log, t0, note, limit=40, window=60.0, seconds=args.seconds)
 
 
@@ -956,7 +1032,7 @@ def parse() -> argparse.Namespace:
     ap.add_argument("--base", help="same-answers: the master revision this slice starts from")
     ap.add_argument("--runner", choices=["claude", "copilot", "codex-replay", "codex"], default="claude")
     ap.add_argument("--model", help="run-budget: model override for a real turn (e.g. haiku)")
-    ap.add_argument("--seconds", type=float, default=130.0, help="run-budget: how long the turn streams")
+    ap.add_argument("--seconds", type=float, default=280.0, help="run-budget: how long to hold the window (a real turn can take ~100s to start)")
     ap.add_argument("--idle-seconds", type=float, default=300.0)
     ap.add_argument("--replay-run", help="codex-replay: the run id to replay (default: the copy's longest run)")
     ap.add_argument("--out")
