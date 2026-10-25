@@ -168,6 +168,81 @@ describe('a streamed line or reading is applied without refetching', () => {
   })
 })
 
+describe('a run ending refreshes what only the run end changes', () => {
+  beforeEach(() => {
+    __resetSSEStateForTest()
+    configure()
+    installHub()
+  })
+  afterEach(() => {
+    cancelReconnect()
+    __resetSSEStateForTest()
+  })
+
+  it('refetches permission requests and questions on a terminal run event', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    function Probe() {
+      useQuestions()
+      usePendingPermissionRequests()
+      useAgents()
+      return null
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(client.getQueryData(['project', 'p', 'agents'])).toBeTruthy())
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    for (const type of ['run_completed', 'run_failed', 'run_stopped', 'run_interrupted']) {
+      gets = []
+      await act(async () => {
+        push(frame(type, { agent: 'a', run_id: 'run-1' }))
+        await new Promise((r) => setTimeout(r, 150))
+      })
+      expect(gets.filter((g) => g.includes('/permission-requests')).length).toBe(1)
+      expect(gets.filter((g) => g.includes('/questions')).length).toBe(1)
+    }
+  })
+
+  it('does not apply a line with no conversation to the open one', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    function Probe() {
+      useAgentChatHistory('a', 'conv-1')
+      return null
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(client.getQueryData(['project', 'p', 'agent', 'a', 'chat', 'conv-1'])).toBeTruthy())
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    await act(async () => {
+      push(
+        frame('agent_output', {
+          id: 'o9',
+          agent: 'a',
+          conversation_id: null,
+          content: 'stray',
+          kind: 'text',
+          payload: null,
+          run_id: 'run-1',
+          sequence: 1,
+          timestamp: '2026-10-25T10:00:07Z',
+        }),
+      )
+      await new Promise((r) => setTimeout(r, 150))
+    })
+    const cached = client.getQueryData<ChatHistoryResponse>(['project', 'p', 'agent', 'a', 'chat', 'conv-1'])
+    expect(cached?.entries.map((e) => e.id)).toEqual(['o1'])
+  })
+})
+
 describe('insertStreamedOutput', () => {
   it('keeps still-queued entries last and orders by time', () => {
     const base: ChatHistoryResponse = {

@@ -566,6 +566,11 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
             // before this broadcasts) — the loops list/detail's `firing_active` would otherwise
             // stay stuck true until something else happened to refetch it.
             inv({ queryKey: ['project', pid, 'loops'] })
+            // A run's end expires its unanswered permission requests and flips a question's
+            // `asker_waiting` without any permission_/question_ event, and those two lists are no
+            // longer polled: one refetch per run end (never per line) picks both up.
+            inv({ queryKey: ['project', pid, 'permission-requests'] })
+            inv({ queryKey: ['project', pid, 'questions'] })
           }
           // Run status is folded into the agents list response (agents.py's
           // agents_with_active_run), and a Hub-triggered run never posts a

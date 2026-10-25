@@ -404,7 +404,9 @@ export function useAgentChatHistory(agent: string | null, conversationId: string
         // A line carries everything the history route would say about it: apply it, do not
         // re-read the whole conversation. Another conversation's line is not this history's.
         const line = event.data as { conversation_id?: string | null }
-        if (line.conversation_id && line.conversation_id !== conversationId) return
+        // The history route filters on conversation_id equality, so a line with none is in no
+        // conversation's history either.
+        if (conversationId && line.conversation_id !== conversationId) return
         if (applyStreamedOutput(queryClient, queryKey, event.data)) return
       }
       queryClient.invalidateQueries({ queryKey })
