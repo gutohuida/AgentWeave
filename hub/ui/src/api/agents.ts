@@ -2,8 +2,9 @@ import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteJson, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
-import { onSseReconnect, useSSE, SSEEvent } from '@/hooks/useSSE'
+import { invalidateOncePerEvent, onSseReconnect, useSSE, SSEEvent } from '@/hooks/useSSE'
 import { hubDate } from '@/lib/hubTime'
+import { BACKSTOP_MS } from '@/lib/backstopPoll'
 import { PERMISSION_MODE_CONTROL } from './modelCatalog'
 import type { ReachGrants } from './projects'
 
@@ -217,15 +218,10 @@ export type AgentLifecycleFilter = 'open' | 'archived' | 'all'
 
 export function useAgents(lifecycle: AgentLifecycleFilter = 'open') {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  const queryClient = useQueryClient()
 
   // Invalidate immediately when the CLI pushes a session_synced SSE event
-  useSSE((event) => {
-    const d = (event.data ?? {}) as { project_id?: string }
-    if (event.type === 'session_synced' && d.project_id === projectId) {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents'] })
-    }
-  })
+  // session_synced refreshes the roster from useSSE's one shared handler.
+  useSSE()
 
   // Invalidated by session_synced above and by agent_heartbeat/context_warning
   // in useSSE.ts's central switch; a lost connection is now visible (the
@@ -515,7 +511,7 @@ export function useAgentTimeline(name: string | null) {
   useSSE((event) => {
     const d = (event.data ?? {}) as { project_id?: string }
     if (name && d.project_id === projectId && eventBelongsToTimeline(event, name)) {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents', name, 'timeline'] })
+      invalidateOncePerEvent(queryClient, event, { queryKey: ['project', projectId, 'agents', name, 'timeline'] })
     }
   })
 
@@ -599,7 +595,7 @@ export function useAgentOutput(name: string | null) {
   // Reconcile on SSE gap or reconnect (M21). Replaces the previous
   // unconditional `setInterval(poll, 2000)` with a one-shot gap timer
   // that's reset every time an SSE event arrives for this agent. If the
-  // stream goes quiet for >5 s the timer fires a single reconciliation
+  // stream goes quiet for >30 s the timer fires a single reconciliation
   // poll; any subsequent SSE event resets it again. SSE reconnects also
   // fire a poll since events may have arrived while the stream was down.
   useEffect(() => {
@@ -613,7 +609,7 @@ export function useAgentOutput(name: string | null) {
       gapTimerRef.current = setTimeout(() => {
         gapTimerRef.current = null
         pollRef.current?.()
-      }, 5000)
+      }, BACKSTOP_MS)
     }
 
     const poll = async () => {
@@ -638,10 +634,8 @@ export function useAgentOutput(name: string | null) {
           }
         }
       } catch {
-        // Silently fail polling - SSE is the primary source
-      } finally {
-        // A fallback poll is a reconciliation cycle, not a one-shot recovery.
-        // Re-arm even when the Hub request fails so a stalled SSE stream heals.
+        // SSE is the primary source. A failed read is retried one backstop later; a successful
+        // one is not followed by another until the stream next speaks and goes quiet.
         armGapTimer()
       }
     }
@@ -697,7 +691,7 @@ export function useAgentOutput(name: string | null) {
       gapTimerRef.current = setTimeout(() => {
         gapTimerRef.current = null
         pollRef.current?.()
-      }, 5000)
+      }, BACKSTOP_MS)
     }
 
     const current = linesCache.get(agentKey) || []

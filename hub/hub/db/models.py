@@ -1122,6 +1122,32 @@ class EventLog(Base):
     __table_args__ = (
         Index("ix_event_logs_project_ts", "project_id", "timestamp"),
         Index("ix_event_logs_loop_ts", "loop_id", "timestamp"),
+        # Migration 0144 (`the-app-stays-responsive-while-agents-run`, D5): the newest context
+        # reading per agent, per conversation and per provider session, found without reading the
+        # older ones (`context_readings`). Partial, so only `context_warning` rows are indexed and
+        # the JSON is evaluated for those rows alone; a query uses them only when it names the
+        # condition and the expressions literally, as `context_readings` does.
+        Index(
+            "ix_event_logs_context_agent_ts",
+            "project_id",
+            "agent",
+            "timestamp",
+            sqlite_where=text("event_type = 'context_warning'"),
+        ),
+        Index(
+            "ix_event_logs_context_conversation_ts",
+            "project_id",
+            text("json_extract(data, '$.conversation_id')"),
+            "timestamp",
+            sqlite_where=text("event_type = 'context_warning'"),
+        ),
+        Index(
+            "ix_event_logs_context_session_ts",
+            "project_id",
+            text("json_extract(data, '$.session_id')"),
+            "timestamp",
+            sqlite_where=text("event_type = 'context_warning'"),
+        ),
     )
 
 
@@ -1623,6 +1649,16 @@ class AgentOutput(Base):
             "agent",
             "run_id",
             "sequence",
+        ),
+        # Migration 0144 (D5): each agent's newest output, and the first output of its newest
+        # session, as seeks rather than scans of every row the agent ever wrote.
+        Index("ix_agent_outputs_project_agent_ts", "project_id", "agent", "timestamp"),
+        Index(
+            "ix_agent_outputs_project_agent_session_ts",
+            "project_id",
+            "agent",
+            "session_id",
+            "timestamp",
         ),
     )
 

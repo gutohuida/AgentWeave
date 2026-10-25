@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
+import { backstopAfterFailure } from '@/lib/backstopPoll'
 import { useSSE } from '@/hooks/useSSE'
 
 export interface PermissionRequest {
@@ -59,7 +60,7 @@ export function usePendingPermissionRequests() {
         `/api/v1/projects/${projectId}/permission-requests?include_expired=true`
       ),
     enabled: isConfigured && !!projectId,
-    refetchInterval: 3000,
+    refetchInterval: backstopAfterFailure,
   })
 }
 
