@@ -627,16 +627,22 @@ async def test_a_continuation_that_fails_after_output_fails_the_run(monkeypatch)
 
 async def test_the_continuation_uses_the_remaining_deadline(monkeypatch):
     # The cut waits the Stop grace for the cancelled prompt's usage (F786), so it is part of the
-    # bound: remaining deadline 0.4 s + grace 0.2 s, where a fresh deadline would be 1.0 s + grace.
+    # bound: 2.5 s spent + remaining 1.5 s + grace 0.2 s is about 4.2 s, where a fresh deadline
+    # cannot end before 2.5 + 4.0 + 0.2 = 6.7 s (sleeps are lower bounds). The 6.0 s line leaves
+    # ~1.8 s for a loaded machine without admitting a fresh deadline.
     monkeypatch.setattr(copilot_acp, "CANCEL_GRACE_SECONDS", 0.2)
+    # The judge's first decision in a process imports `mcp_server` (and FastMCP), 2-3 s cold; run
+    # alone, this test spent it inside the deadline and timed the first prompt out. Paid here.
+    import hub.mcp_server  # noqa: F401
+
     hang = asyncio.Event()
-    script = _new_with() + [{"sleep": 0.6}] + _refused_root() + [END_TURN, {"hang": hang}]
+    script = _new_with() + [{"sleep": 2.5}] + _refused_root() + [END_TURN, {"hang": hang}]
     started = time.monotonic()
-    fake, events, outcome = await _drive(monkeypatch, script, turn_timeout=1.0)
+    fake, events, outcome = await _drive(monkeypatch, script, turn_timeout=4.0)
     elapsed = time.monotonic() - started
     assert len(_continuations(fake)) == 1
     assert [m for m, _ in fake.sent_notifications].count("session/cancel") == 1
-    assert elapsed < 1.5, f"a fresh deadline would take over 1.6 s; took {elapsed:.2f}"
+    assert elapsed < 6.0, f"a fresh deadline would take over 6.7 s; took {elapsed:.2f}"
     assert outcome.status == "completed"
     assert fake.closed_with_force is True
     assert "copilot.refusal_continuation_failed" in _codes(events)
