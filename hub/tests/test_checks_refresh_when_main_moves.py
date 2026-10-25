@@ -168,7 +168,11 @@ async def test_a_run_main_moved_past_is_superseded_and_replaced(app, tmp_path):
     await _project([HANG])
     first = await project_checks.request_run("proj-test", task_id)
     assert first
-    await asyncio.sleep(3)  # the check is executing
+    # The check is executing: its process exists. A fixed sleep raced the checkout under load.
+    deadline = time.monotonic() + 60
+    while task_id not in project_checks._processes and time.monotonic() < deadline:
+        await asyncio.sleep(0.1)
+    assert task_id in project_checks._processes, "the check never started"
     assert project_checks.is_running(task_id)
     tip = _move_main(tmp_path)
 
@@ -182,6 +186,40 @@ async def test_a_run_main_moved_past_is_superseded_and_replaced(app, tmp_path):
     assert runs[0].id == first and runs[0].ended_at is not None
     assert runs[0].results == [], "the ended check is not recorded as a failure"
     assert tip[:12] in runs[0].error
+    assert runs[1].main_sha == tip
+
+
+async def test_a_move_during_the_checkout_still_ends_the_check(app, tmp_path, monkeypatch):
+    """The move lands before the check's process exists (its checkout is slow, as under load):
+    `supersede` finds nothing to end, so the check must end itself as it starts, not hang."""
+    import threading
+
+    entered, release = threading.Event(), threading.Event()
+    checkout = project_checks._checkout
+
+    def slow_checkout(*args):
+        entered.set()
+        release.wait(60)
+        return checkout(*args)
+
+    monkeypatch.setattr(project_checks, "_checkout", slow_checkout)
+    task_id, _ = await _task_with_work(tmp_path)
+    await _project([HANG])
+    first = await project_checks.request_run("proj-test", task_id)
+    assert first
+    assert await asyncio.to_thread(entered.wait, 60), "the run never reached its checkout"
+    tip = _move_main(tmp_path)
+
+    started = time.monotonic()
+    await project_checks.refresh("proj-test")
+    assert task_id not in project_checks._processes
+    release.set()
+    await project_checks.drain()
+    assert time.monotonic() - started < 60, "the check started after the move was not ended"
+
+    runs = await _runs(task_id)
+    assert [r.state for r in runs] == ["superseded", "passed"]
+    assert runs[0].id == first and runs[0].results == []
     assert runs[1].main_sha == tip
 
 
