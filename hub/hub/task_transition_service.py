@@ -21,7 +21,7 @@ import asyncio
 import logging
 import subprocess
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -194,21 +194,33 @@ async def completion_attribution(session: AsyncSession, task_id: str) -> Complet
     field which the approving write overwrites, and it being unable to answer this question is the
     whole reason this table exists.
     """
-    result = await session.execute(
-        select(TaskTransition.actor_kind, TaskTransition.actor_agent)
-        .where(TaskTransition.task_id == task_id)
-        .where(TaskTransition.to_status == "completed")
-        # By `sequence`, not `created_at`: transitions staged in one flush share a timestamp, and
-        # "most recent completion" must mean the last one that happened, not an arbitrary pick
-        # among ties. This matters after a revision cycle, where an earlier completion by another
-        # run is exactly what must not be chosen.
-        .order_by(TaskTransition.sequence.desc())
-        .limit(1)
-    )
-    row = result.first()
-    if row is None:
-        return CompletionAttribution(recorded=False, actor_kind=None, agent=None)
-    return CompletionAttribution(recorded=True, actor_kind=row[0], agent=row[1])
+    return (await completion_attributions(session, [task_id]))[task_id]
+
+
+async def completion_attributions(
+    session: AsyncSession, task_ids: Iterable[str]
+) -> "dict[str, CompletionAttribution]":
+    """`completion_attribution` for several tasks in one statement, keyed by every id asked."""
+    ids = sorted(set(task_ids))
+    found: "dict[str, CompletionAttribution]" = {}
+    if ids:
+        result = await session.execute(
+            select(TaskTransition.task_id, TaskTransition.actor_kind, TaskTransition.actor_agent)
+            .where(TaskTransition.task_id.in_(ids))
+            .where(TaskTransition.to_status == "completed")
+            # By `sequence`, not `created_at`: transitions staged in one flush share a timestamp,
+            # and "most recent completion" must mean the last one that happened, not an arbitrary
+            # pick among ties. This matters after a revision cycle, where an earlier completion by
+            # another run is exactly what must not be chosen.
+            .order_by(TaskTransition.task_id, TaskTransition.sequence.desc())
+        )
+        for task_id, actor_kind, actor_agent in result.all():
+            found.setdefault(
+                task_id,
+                CompletionAttribution(recorded=True, actor_kind=actor_kind, agent=actor_agent),
+            )
+    nothing = CompletionAttribution(recorded=False, actor_kind=None, agent=None)
+    return {task_id: found.get(task_id, nothing) for task_id in ids}
 
 
 async def agent_that_completed(session: AsyncSession, task_id: str) -> Optional[str]:
@@ -321,17 +333,37 @@ async def agents_that_recorded_evidence_for(session: AsyncSession, task_id: str)
     manufacture. That is why this is a function and not an expression inlined in the union: do not
     fold it back in.
     """
-    rows = await session.execute(
-        select(RequirementEvidence.actor)
-        .where(RequirementEvidence.task_id == task_id)
-        .where(RequirementEvidence.actor_kind == "agent")
-        .where(RequirementEvidence.actor != "")
-        .distinct()
-    )
-    return {agent for agent in rows.scalars().all() if agent}
+    return (await evidence_authors_by_task(session, [task_id]))[task_id]
 
 
-async def assignee_produced_the_work(session: AsyncSession, task: Task) -> bool:
+async def evidence_authors_by_task(
+    session: AsyncSession, task_ids: Iterable[str]
+) -> "dict[str, set[str]]":
+    """`agents_that_recorded_evidence_for` for several tasks in one statement, keyed by every id
+    asked."""
+    ids = sorted(set(task_ids))
+    authors: "dict[str, set[str]]" = {task_id: set() for task_id in ids}
+    if ids:
+        rows = await session.execute(
+            select(RequirementEvidence.task_id, RequirementEvidence.actor)
+            .where(RequirementEvidence.task_id.in_(ids))
+            .where(RequirementEvidence.actor_kind == "agent")
+            .where(RequirementEvidence.actor != "")
+            .distinct()
+        )
+        for task_id, agent in rows.all():
+            if agent:
+                authors[task_id].add(agent)
+    return authors
+
+
+async def assignee_produced_the_work(
+    session: AsyncSession,
+    task: Task,
+    *,
+    completion: Optional[CompletionAttribution] = None,
+    authors: Optional[set[str]] = None,
+) -> bool:
     """*"Is the agent holding this task one of the agents that produced its work?"*
 
     The wedged-review predicate (F70, F142, F167, F505), stated once for its two readers
@@ -351,8 +383,13 @@ async def assignee_produced_the_work(session: AsyncSession, task: Task) -> bool:
     """
     if not task.assignee:
         return False
-    completer = (await completion_attribution(session, task.id)).agent
-    authors = await agents_that_recorded_evidence_for(session, task.id)
+    # *completion* and *authors* are `completion_attribution` and `agents_that_recorded_evidence_for`
+    # for this task, where the caller has already read them (the scheduler's `FiringFacts`).
+    if completion is None:
+        completion = await completion_attribution(session, task.id)
+    completer = completion.agent
+    if authors is None:
+        authors = await agents_that_recorded_evidence_for(session, task.id)
     if completer is not None:
         return completer == task.assignee or task.assignee in authors
     return task.assignee in (await agents_that_worked(session, task.id) | authors)
