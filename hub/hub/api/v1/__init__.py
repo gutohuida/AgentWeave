@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from .accounting import router as accounting_router
 from .agent_actions import router as agent_actions_router
 from .agent_chat import conversations_router as project_conversations_router
+from .agent_chat import instance_conversations_router
 from .agent_chat import router as agent_chat_router
 from .agent_trigger import router as agent_trigger_router
 from .agents import router as agents_router
@@ -14,6 +15,7 @@ from .events import instance_router as instance_events_router
 from .events import router as events_router
 from .fs_browse import router as fs_browse_router
 from .inbound_queue import router as inbound_queue_router
+from .inbound_queue import statuses_router as queue_statuses_router
 from .instructions import router as instructions_router
 from .jobs import router as jobs_router
 from .ledger import router as ledger_router
@@ -45,6 +47,7 @@ v1_router.include_router(instance_events_router)
 v1_router.include_router(model_catalog_router)
 v1_router.include_router(fs_browse_router)
 v1_router.include_router(native_dialog_router)
+v1_router.include_router(instance_conversations_router)
 
 project_resources_router = APIRouter(prefix="/projects/{project_id}")
 project_resources_router.include_router(accounting_router)
@@ -68,6 +71,7 @@ project_resources_router.include_router(spec_router)
 project_resources_router.include_router(logs_router)
 project_resources_router.include_router(worktrees_router)
 project_resources_router.include_router(inbound_queue_router)
+project_resources_router.include_router(queue_statuses_router)
 project_resources_router.include_router(workspace_router)
 project_resources_router.include_router(checkpoints_router)
 project_resources_router.include_router(runners_router)

@@ -23,7 +23,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agent_roster import require_known_agent
-from ...auth import get_project
+from ...auth import get_operator, get_project
 from ...checkpoint_cutover import handover_of
 from ...context_readings import context_reading_by_conversation
 from ...conversations import (
@@ -45,6 +45,7 @@ from ...db.models import (
     JobRun,
     Loop,
     Message,
+    OperatorCredential,
     Project,
     Run,
     Runner,
@@ -61,6 +62,8 @@ router = APIRouter(prefix="/agent", tags=["agent-chat"])
 # so one request beats one per expanded agent — no waterfall when an agent expands, and the
 # archived count arrives with the rows rather than needing a second call to be countable.
 conversations_router = APIRouter(prefix="/conversations", tags=["conversations"])
+# Instance-level: several projects' listings at once, for the rail (`list_sidebar_conversations`).
+instance_conversations_router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 TimelineEntryKind = Literal["operator_input", "agent_output", "inbound_peer", "outbound_peer"]
 
@@ -512,6 +515,51 @@ async def list_project_conversations(
     its conversations immediately rather than starting a fetch.
     """
     project_id, _ = project
+    return await _project_conversations(session, project_id, lifecycle)
+
+
+#: How many projects one sidebar listing request may name; more than any rail shows.
+SIDEBAR_LISTING_LIMIT = 200
+
+
+class SidebarConversationsResponse(BaseModel):
+    """Each named project's listing, exactly as its own `GET .../conversations` would answer it.
+
+    `missing` names the requested projects this Hub does not have, which the per-project route
+    would have answered 404."""
+
+    projects: Dict[str, ProjectConversationsResponse]
+    missing: List[str] = []
+
+
+@instance_conversations_router.get("", response_model=SidebarConversationsResponse)
+async def list_sidebar_conversations(
+    project_id: List[str] = Query(..., min_length=1, max_length=SIDEBAR_LISTING_LIMIT),
+    lifecycle: Literal["open", "archived", "all"] = Query("open"),
+    operator: OperatorCredential = Depends(get_operator),
+    session: AsyncSession = Depends(get_session),
+):
+    """Several projects' conversation listings in one request: what the rail reads on first open.
+
+    The rail draws every registered project, so one request per project made the first open of
+    the app scale with the sidebar (25 projects, 25 requests queued behind each other). Each body
+    is built by the same function as the per-project route, so the two cannot disagree.
+    """
+    del operator
+    wanted = list(dict.fromkeys(project_id))
+    known = set((await session.execute(select(Project.id).where(Project.id.in_(wanted)))).scalars())
+    projects = {}
+    for pid in wanted:
+        if pid in known:
+            projects[pid] = await _project_conversations(session, pid, lifecycle)
+    return SidebarConversationsResponse(
+        projects=projects, missing=[pid for pid in wanted if pid not in known]
+    )
+
+
+async def _project_conversations(
+    session: AsyncSession, project_id: str, lifecycle: str
+) -> ProjectConversationsResponse:
     predicates = [Conversation.project_id == project_id]
     if lifecycle != "all":
         predicates.append(Conversation.lifecycle == lifecycle)
