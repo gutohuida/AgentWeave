@@ -16,6 +16,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    // Screens load as their own chunks (`src/lib/lazyScreens.ts`), but their stylesheets stay in
+    // the one file, in import order: a screen's rules refine index.css's at equal specificity, and
+    // per-chunk CSS would apply them in whatever order the chunks happened to load.
+    cssCodeSplit: false,
+  },
   server: {
     proxy: {
       '/api': hubTarget,

@@ -195,6 +195,30 @@ async def metrics(cdp: Any) -> Dict[str, float]:
     return {m["name"]: m["value"] for m in (await cdp.send("Performance.getMetrics"))["metrics"]}
 
 
+async def settle(log: Any, quiet: float = 4.0, limit: float = 60.0) -> None:
+    """Wait until no request but the event stream is in flight and none has started for `quiet` s."""
+    end = time.time() + limit
+    while time.time() < end:
+        rows = [r for r in log.rows if not r["path"].endswith("/events")]
+        live = [r for r in log.live.values() if not r["path"].endswith("/events")]
+        if not live and time.time() - max([r["t0"] for r in rows] or [0]) >= quiet:
+            return
+        await asyncio.sleep(0.5)
+    p(f"  WARNING: the tab never went quiet within {limit:.0f}s")
+
+
+def print_profile(profile: Dict[str, Any], top: int = 30) -> None:
+    """Self time by function from a CDP CPU profile (use with an unminified build)."""
+    nodes = {n["id"]: n for n in profile["nodes"]}
+    self_ms: Dict[str, float] = {}
+    for sample, delta in zip(profile["samples"], profile["timeDeltas"]):
+        cf = nodes[sample]["callFrame"]
+        key = f"{cf['functionName'] or '(anon)'}  {cf['url'].rsplit('/', 1)[-1]}:{cf['lineNumber'] + 1}"
+        self_ms[key] = self_ms.get(key, 0.0) + delta / 1000.0
+    for key, ms in sorted(self_ms.items(), key=lambda kv: -kv[1])[:top]:
+        p(f"     {ms:8.1f} ms  {key}")
+
+
 def check(name: str, value: float, limit: float, unit: str = "") -> bool:
     ok = value <= limit
     p(f"  {'ok  ' if ok else 'FAIL'} {name}: {value:g}{unit}  (budget <= {limit:g}{unit})")
@@ -265,14 +289,20 @@ async def sc_stream(args: argparse.Namespace, db: Path, tmp: Path) -> int:
             shot = tmp / "stream-failed.png"
             await page.screenshot(path=str(shot))
             raise CannotRun(f"the conversation never opened ({type(e).__name__}); screenshot {shot}")
-        await pr.settle(log, quiet=4.0, limit=60.0)
+        await settle(log)
+        if args.verbose:
+            p("  GETs while opening:", pr.tally(log.gets(0)))
         turns = await page.locator("[data-turn-boundary]").count()
         p(f"  turns rendered: {turns}")
         await page.evaluate("() => { window.__perf.longTasks = []; window.__perf.frames = []; window.__perf.recording = true }")
         t_start = await page.evaluate("() => performance.now()")
+        t_wall = time.time()
         lines, interval = int(args.lines), 60.0 / args.per_minute
         run_id = f"perf-ui-run-{uuid.uuid4().hex[:6]}"
         marker = f"perf-ui-last-{uuid.uuid4().hex[:6]}"
+        if args.profile:
+            await cdp.send("Profiler.enable")
+            await cdp.send("Profiler.start")
         async with api_client(base=hub.base) as c:
             started = time.perf_counter()
             for i in range(lines):
@@ -281,13 +311,17 @@ async def sc_stream(args: argparse.Namespace, db: Path, tmp: Path) -> int:
                     f"and the [timeline](#) — item {i + 1}.")
                 await post_output(c, who, text, 10_000 + i, run_id)
                 await asyncio.sleep(max(0.0, started + (i + 1) * interval - time.perf_counter()))
+        # Recording stops before the marker is looked for: Playwright's text search walks the whole
+        # 1,000-row DOM, and on a throttled CPU that search would be most of what was measured.
+        await page.wait_for_timeout(2000)
+        perf = await page.evaluate("() => { window.__perf.recording = false; return window.__perf }")
+        if args.profile:
+            print_profile((await cdp.send("Profiler.stop"))["profile"])
         try:
             await page.get_by_text(marker).first.wait_for(timeout=30000)
             visible = True
         except Exception:  # noqa: BLE001
             visible = False
-        await page.wait_for_timeout(1500)
-        perf = await page.evaluate("() => { window.__perf.recording = false; return window.__perf }")
         await browser.close()
     tasks = [t for t in perf["longTasks"] if t["start"] >= t_start]
     frames = perf["frames"]
@@ -297,6 +331,8 @@ async def sc_stream(args: argparse.Namespace, db: Path, tmp: Path) -> int:
     pct = 100.0 * dropped / expected if expected else 0.0
     total_long = sum(t["ms"] for t in tasks)
     longest = max([t["ms"] for t in tasks] or [0.0])
+    if args.verbose:
+        p("  GETs while streaming:", pr.tally(log.gets(t_wall)))
     p(f"  last line visible: {visible}")
     p(f"  frames {len(frames)}, dropped {dropped} ({pct:.1f}%); long tasks {len(tasks)}, "
       f"total {total_long:.0f} ms, longest {longest:.0f} ms, per line {total_long / lines:.1f} ms")
@@ -317,6 +353,7 @@ def parse() -> argparse.Namespace:
     ap.add_argument("--lines", type=int, default=90)
     ap.add_argument("--per-minute", type=float, default=90.0)
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--profile", action="store_true", help="stream: print self time by function")
     return ap.parse_args()
 
 

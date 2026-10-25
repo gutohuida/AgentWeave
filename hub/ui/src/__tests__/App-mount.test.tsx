@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
+import { loadAllScreens } from '@/lib/lazyScreens'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
@@ -130,6 +131,10 @@ function withQueryClient(node: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
+
+// The screens App opens on demand (`lazyScreens`) are loaded first, as `prefetchScreens` does in
+// the app once it is idle, so a click renders its screen at once, as the assertions expect.
+beforeAll(() => loadAllScreens())
 
 describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () => {
   beforeEach(() => {

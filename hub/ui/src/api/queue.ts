@@ -2,6 +2,7 @@ import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, fetchWithAuth } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
+import { coalescedReads, coalescedReadsByGroup } from '@/lib/coalescedReads'
 
 export interface QueueStatus {
   agent: string
@@ -66,7 +67,7 @@ export function useQueueStatus(agent: string | null) {
 
   return useQuery<QueueStatus>({
     queryKey: ['project', projectId, 'queue', agent, 'status'],
-    queryFn: () => getJson<QueueStatus>(`/api/v1/projects/${projectId}/queue/${agent}/status`),
+    queryFn: () => readQueueStatus(projectId as string, agent as string),
     enabled: isConfigured && !!projectId && !!agent,
   })
 }
@@ -79,12 +80,29 @@ export function useQueueStatuses(agents: string[]): QueueStatus[] {
   return useQueries({
     queries: agents.map((agent) => ({
       queryKey: ['project', projectId, 'queue', agent, 'status'],
-      queryFn: () => getJson<QueueStatus>(`/api/v1/projects/${projectId}/queue/${agent}/status`),
+      queryFn: () => readQueueStatus(projectId as string, agent),
       enabled: isConfigured && !!projectId,
     })),
     combine: (results) => results.flatMap((result) => (result.data ? [result.data] : [])),
   })
 }
+
+/** The Overview reads every agent's status at once: those reads travel as one request
+ *  (`coalescedReads`), and a status read on its own is the per-agent route as before. */
+const readQueueStatus = coalescedReadsByGroup<QueueStatus>((projectId) =>
+  coalescedReads(
+    (agent) => getJson<QueueStatus>(`/api/v1/projects/${projectId}/queue/${agent}/status`),
+    async (agents) => {
+      const query = agents.map((agent) => `agent=${encodeURIComponent(agent)}`).join('&')
+      const body = await getJson<{ statuses: Record<string, QueueStatus>; missing: string[] }>(
+        `/api/v1/projects/${projectId}/queue-status?${query}`,
+      )
+      return { found: body.statuses, missing: body.missing }
+    },
+    (agent) =>
+      `${agent} is not an agent in this project: nothing here is recorded under that name. Correct the name, or create the agent in the Hub UI.`,
+  ),
+)
 
 /** Withdraws an undelivered queue entry (spec: "Undelivered entries can be
  * withdrawn"). The Phase 6 endpoint already enforces "not yet delivered". */
