@@ -4,6 +4,7 @@ import { ApiError, deleteJson, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
 import { NEW_SESSION_ID } from '@/lib/constants'
+import { hubDate } from '@/lib/hubTime'
 
 export type TimelineEntryKind = 'operator_input' | 'agent_output' | 'inbound_peer' | 'outbound_peer'
 
@@ -340,6 +341,57 @@ export function eventTargetsAgent(eventType: string, data: unknown, agent: strin
   return d.to === agent || d.recipient === agent || d.agent === agent
 }
 
+/** One streamed `agent_output` payload as the history route would return it. */
+function outputPayloadToEntry(d: Record<string, unknown>): TimelineEntry | null {
+  if (typeof d.id !== 'string' || typeof d.timestamp !== 'string') return null
+  return {
+    id: d.id,
+    kind: 'agent_output',
+    content: typeof d.content === 'string' ? d.content : '',
+    timestamp: d.timestamp,
+    delivery_state: 'delivered',
+    output_kind: (d.kind as AgentOutputKind | undefined) ?? null,
+    payload: (d.payload as Record<string, unknown> | null | undefined) ?? null,
+    run_id: (d.run_id as string | null | undefined) ?? null,
+    sequence: (d.sequence as number | null | undefined) ?? null,
+  }
+}
+
+/** Put a streamed output line into a cached history in the place the route would have put it:
+ *  in time order among the delivered entries, ahead of the still-queued ones the route appends
+ *  last. Returns the same object when the line is already there. */
+export function insertStreamedOutput(
+  history: ChatHistoryResponse,
+  entry: TimelineEntry,
+  limit?: number,
+): ChatHistoryResponse {
+  if (history.entries.some((e) => e.id === entry.id)) return history
+  const entries = history.entries.slice()
+  let at = entries.length
+  while (at > 0 && entries[at - 1].delivery_state === 'queued') at -= 1
+  const t = hubDate(entry.timestamp).getTime()
+  while (at > 0 && hubDate(entries[at - 1].timestamp).getTime() > t) at -= 1
+  entries.splice(at, 0, entry)
+  return { ...history, entries: limit && entries.length > limit ? entries.slice(-limit) : entries }
+}
+
+/** Apply a streamed output line to a cached history. True when it was applied, false when there
+ *  is no cache to apply it to or the event is not a line (the caller then refetches). */
+function applyStreamedOutput(
+  queryClient: ReturnType<typeof useQueryClient>,
+  queryKey: readonly unknown[],
+  data: unknown,
+  limit?: number,
+): boolean {
+  const entry = outputPayloadToEntry((data ?? {}) as Record<string, unknown>)
+  if (!entry) return false
+  if (!queryClient.getQueryData(queryKey)) return false
+  queryClient.setQueryData<ChatHistoryResponse>(queryKey, (current) =>
+    current ? insertStreamedOutput(current, entry, limit) : current,
+  )
+  return true
+}
+
 export function useAgentChatHistory(agent: string | null, conversationId: string | null) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const queryClient = useQueryClient()
@@ -347,9 +399,15 @@ export function useAgentChatHistory(agent: string | null, conversationId: string
   useSSE((event) => {
     const d = (event.data ?? {}) as { project_id?: string }
     if (agent && d.project_id === projectId && eventTargetsAgent(event.type, event.data, agent)) {
-      queryClient.invalidateQueries({
-        queryKey: ['project', projectId, 'agent', agent, 'chat', conversationId],
-      })
+      const queryKey = ['project', projectId, 'agent', agent, 'chat', conversationId]
+      if (event.type === 'agent_output') {
+        // A line carries everything the history route would say about it: apply it, do not
+        // re-read the whole conversation. Another conversation's line is not this history's.
+        const line = event.data as { conversation_id?: string | null }
+        if (line.conversation_id && line.conversation_id !== conversationId) return
+        if (applyStreamedOutput(queryClient, queryKey, event.data)) return
+      }
+      queryClient.invalidateQueries({ queryKey })
     }
   })
 
@@ -371,9 +429,11 @@ export function useAgentRecentChat(agent: string | null, limit: number = 50) {
   useSSE((event) => {
     const d = (event.data ?? {}) as { project_id?: string }
     if (agent && d.project_id === projectId && eventTargetsAgent(event.type, event.data, agent)) {
-      queryClient.invalidateQueries({
-        queryKey: ['project', projectId, 'agent', agent, 'chat', 'recent', limit],
-      })
+      const queryKey = ['project', projectId, 'agent', agent, 'chat', 'recent', limit]
+      if (event.type === 'agent_output' && applyStreamedOutput(queryClient, queryKey, event.data, limit)) {
+        return
+      }
+      queryClient.invalidateQueries({ queryKey })
     }
   })
 

@@ -171,7 +171,7 @@ describe('stream events are handled once per tab', () => {
     })
     for (const k of Object.keys(hits)) hits[k] = 0
     await act(async () => {
-      push(frame('context_warning', { agent: 'a', conversation_id: 'c1' }))
+      push(frame('message_created', { agent: 'a', conversation_id: 'c1' }))
       await new Promise((r) => setTimeout(r, 200))
     })
     expect(Object.values(hits).sort()).toEqual([1, 1])
