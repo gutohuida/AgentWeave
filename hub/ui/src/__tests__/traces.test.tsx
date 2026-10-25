@@ -5,7 +5,7 @@
  * seam the hook actually reads.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import type { Span, TraceDetail } from '@/api/traces'
@@ -238,6 +238,9 @@ describe('TracesSection recent traces', () => {
     record_reads: false,
     spans_by_operation: { invoke_agent: 1, 'aw.request': 2 },
     dropped_spans: 0,
+    retention_days: 14,
+    retention_days_default: 14,
+    retention_days_chosen: false,
   }
   const summary = (partial: Record<string, unknown>) => ({
     root_span_id: 's',
@@ -299,5 +302,42 @@ describe('TracesSection recent traces', () => {
 
     fireEvent.click(screen.getByTestId('trace-kind-all'))
     await waitFor(() => expect(listed().slice(-1)[0]).not.toContain('operation='))
+  })
+
+  it('saves the retention window on its own and offers the default back once one is chosen', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.includes('/traces/settings')) {
+        if (init?.method === 'PUT') {
+          const body = JSON.parse(String(init.body)) as { retention_days: number | null }
+          const chosen = body.retention_days !== null
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ ...settings, retention_days: body.retention_days ?? 14, retention_days_chosen: chosen }),
+          }
+        }
+        return { ok: true, status: 200, json: async () => settings }
+      }
+      return { ok: true, status: 200, json: async () => ({ traces: [], next_before: null }) }
+    })
+    render(<TracesSection />, { wrapper })
+    const input = await screen.findByLabelText('Days of traces to keep')
+    expect(input).toHaveValue(14)
+    expect(screen.getByTestId('trace-retention')).not.toHaveTextContent('Use the default')
+    const save = within(screen.getByTestId('trace-retention')).getByRole('button', { name: 'Save' })
+    expect(save).toBeDisabled()
+
+    fireEvent.change(input, { target: { value: '30' } })
+    fireEvent.click(save)
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')
+      expect(put).toBeTruthy()
+      expect(JSON.parse(String((put![1] as RequestInit).body))).toEqual({ retention_days: 30 })
+    })
+    expect(await screen.findByRole('button', { name: 'Use the default' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Days of traces to keep')).toHaveValue(30)
+
+    fireEvent.change(screen.getByLabelText('Days of traces to keep'), { target: { value: '0' } })
+    expect(screen.getByText('A whole number of days from 1 to 3650.')).toBeInTheDocument()
   })
 })

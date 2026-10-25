@@ -30,7 +30,6 @@ import collections
 import json
 import os
 import re
-import shutil
 import socket
 import sqlite3
 import statistics
@@ -80,6 +79,18 @@ def _same_file(a: Path, b: Path) -> bool:
         return a.resolve() == b.resolve()
     except OSError:
         return False
+
+
+def backup_copy(src: Path, dst: Path) -> None:
+    """Copy a database through SQLite's backup API, never as a file: under WAL (the Hub's journal
+    since `the-database-stays-fast-as-history-grows`) a copy of the `.db` alone can omit commits."""
+    s = sqlite3.connect("file:" + src.resolve().as_posix() + "?mode=ro", uri=True)
+    d = sqlite3.connect(str(dst))
+    try:
+        s.backup(d)
+    finally:
+        s.close()
+        d.close()
 
 
 def make_copy(src: Path, tmp: Path, name: str = "work.db") -> Path:
@@ -441,7 +452,7 @@ async def sc_lists(args: argparse.Namespace, db: Path) -> int:
 
 async def sc_lists_10x(args: argparse.Namespace, db: Path, tmp: Path) -> int:
     big = tmp / "big.db"
-    shutil.copy(db, big)
+    backup_copy(db, big)
     counts = multiply_tables(big)
     p("  rows (before -> after):", {k: f"{a}->{b}" for k, (a, b) in counts.items()})
     base = _subprocess_measure(db, args)
@@ -673,7 +684,7 @@ async def sc_same(args: argparse.Namespace, db: Path, tmp: Path) -> int:
         outs = {}
         for label, hub_dir in (("base", base_dir / "hub"), ("current", REPO / "hub")):
             dbcopy = tmp / f"same-{label}.db"
-            shutil.copy(db, dbcopy)
+            backup_copy(db, dbcopy)
             out = tmp / f"{label}.json"
             r = subprocess.run(
                 [sys.executable, str(Path(__file__).resolve()), "--scenario", "dump", "--db", str(dbcopy),

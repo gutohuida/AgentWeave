@@ -17,7 +17,7 @@ from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import trace_export, traces
+from ... import trace_export, trace_retention, traces
 from ...auth import get_project
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Run, TraceSettings
@@ -116,6 +116,13 @@ class TraceSettingsUpdate(RequestModel):
     export_enabled: Optional[bool] = None
     #: Record the operator's routine reads (the app's polling) and the SSE stream too (trace-D4).
     record_reads: Optional[bool] = None
+    #: Days of spans the Hub keeps; null returns the project to the Hub's default
+    #: (`the-database-stays-fast-as-history-grows` D4).
+    retention_days: Optional[int] = Field(
+        default=None,
+        ge=trace_retention.MIN_RETENTION_DAYS,
+        le=trace_retention.MAX_RETENTION_DAYS,
+    )
 
 
 async def _settings_body(session: AsyncSession, project_id: str) -> dict:
@@ -130,6 +137,9 @@ async def _settings_body(session: AsyncSession, project_id: str) -> dict:
         "last_error": row.last_error if row else None,
         "exported_spans": row.exported_spans if row else 0,
         "record_reads": bool(row.record_reads) if row else False,
+        "retention_days": trace_retention.effective_days(row),
+        "retention_days_default": trace_retention.DEFAULT_RETENTION_DAYS,
+        "retention_days_chosen": bool(row is not None and row.retention_days),
         **counts,
     }
 
@@ -179,6 +189,8 @@ async def update_trace_settings(
         row.export_enabled = body.export_enabled
     if "record_reads" in fields and body.record_reads is not None:
         row.record_reads = body.record_reads
+    if "retention_days" in fields:
+        row.retention_days = body.retention_days
     if row.export_enabled and not row.otlp_endpoint:
         raise HTTPException(status_code=422, detail="Set an OTLP endpoint before enabling export")
     await session.commit()
