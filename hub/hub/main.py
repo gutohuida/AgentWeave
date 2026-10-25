@@ -627,7 +627,15 @@ async def lifespan(app: FastAPI):
     from .project_checks import watch_main_forever
 
     main_watch = asyncio.create_task(watch_main_forever())
+    # Trace retention and planner statistics, off every request's path
+    # (`the-database-stays-fast-as-history-grows`, D4/D5).
+    from .db_maintenance import maintain_forever
+
+    maintenance = asyncio.create_task(maintain_forever())
     yield
+    maintenance.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await maintenance
     main_watch.cancel()
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await main_watch

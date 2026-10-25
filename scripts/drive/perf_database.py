@@ -418,9 +418,17 @@ def _stored(at: datetime) -> str:
     return at.strftime("%Y-%m-%d %H:%M:%S.%f")
 
 
+async def _migrate() -> None:
+    """Bring the copy to this tree's head, as the Hub's restart would (lifespan stays off)."""
+    from hub.db.engine import _run_alembic_upgrade
+
+    await _run_alembic_upgrade()
+
+
 async def _child_retention(db: str) -> dict:
     import httpx
 
+    await _migrate()
     key = _drive_key(db)
     from hub.main import create_app
 
@@ -480,6 +488,7 @@ async def _child_retention(db: str) -> dict:
 async def _child_stall(db: str) -> dict:
     import httpx
 
+    await _migrate()
     c = sqlite3.connect(db, timeout=30)
     c.execute(
         "UPDATE trace_spans SET start_time = datetime(start_time, '-60 days'), "
@@ -548,6 +557,7 @@ async def _child_stats(db: str) -> dict:
         finally:
             c.close()
 
+    await _migrate()
     out = {"before": stat_tables()}
     try:
         from hub import db_maintenance

@@ -1741,6 +1741,9 @@ class TraceSettings(Base):
     record_reads: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # How many days of spans the Hub keeps (migration 0144, `the-database-stays-fast-as-history-
+    # grows` D4). NULL: the Hub's default, `trace_retention.DEFAULT_RETENTION_DAYS`.
+    retention_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
     )
