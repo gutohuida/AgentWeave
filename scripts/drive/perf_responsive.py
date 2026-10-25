@@ -103,7 +103,41 @@ def make_copy(src: Path, tmp: Path, name: str = "work.db") -> Path:
     )
     d.commit()
     d.close()
+    migrate_to_head(dst)
     return dst
+
+
+_MIGRATE = """
+import asyncio, sqlite3, sys
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+from hub.db.engine import _run_alembic_upgrade
+from pathlib import Path
+import hub.db.engine as e
+asyncio.run(_run_alembic_upgrade())
+head = ScriptDirectory.from_config(Config(str(Path(e.__file__).parent.parent / "alembic.ini"))).get_current_head()
+c = sqlite3.connect(sys.argv[1])
+have = c.execute("select version_num from alembic_version").fetchone()[0]
+print("MIGRATED", have, head)
+sys.exit(0 if have == head else 1)
+"""
+
+
+def migrate_to_head(db: Path) -> None:
+    """Upgrade the scratch copy to this checkout's head, as the Hub does when it starts.
+
+    The operator's database sits at whatever revision their Hub last started on; measuring this
+    checkout's queries against it without its migrations measures them without their indexes
+    (`0144` turned a 655 ms `/agents` into 21 ms on the 2026-10-25 copy).
+    """
+    env = dict(os.environ, DATABASE_URL="sqlite+aiosqlite:///" + db.resolve().as_posix())
+    r = subprocess.run(
+        [sys.executable, "-c", _MIGRATE, str(db)],
+        cwd=str(REPO / "hub"), env=env, capture_output=True, text=True,
+    )
+    if r.returncode:
+        raise CannotRun("could not migrate the scratch copy to head:\n" + r.stdout[-600:] + r.stderr[-600:])
+    p("  " + [ln for ln in r.stdout.splitlines() if ln.startswith("MIGRATED")][-1])
 
 
 def project_exists(db: Path) -> bool:
