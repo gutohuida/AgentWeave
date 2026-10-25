@@ -376,3 +376,38 @@ def test_a_long_failing_output_keeps_the_start_of_its_tracebacks(tmp_path_factor
     assert "the reason it failed" not in result["output_tail"]
     assert "the reason it failed" in result["failure_excerpt"]
     assert result["failed_tests"] == ["t.py::a"]
+
+
+# --- a check's `-n auto` is sized to its share of the machine -----------------------------------
+
+
+def test_a_checks_auto_workers_are_its_share_of_the_cpus(monkeypatch):
+    monkeypatch.delenv(project_checks.XDIST_AUTO_WORKERS_VARIABLE, raising=False)
+    env, _ = project_checks.check_environment()
+    assert env[project_checks.XDIST_AUTO_WORKERS_VARIABLE] == str(project_checks.auto_workers())
+    assert project_checks.MAX_CONCURRENT_RUNS == 2
+    assert project_checks.auto_workers(20) == 6, "two runs and the agents share 20 CPUs"
+    assert project_checks.auto_workers(2) == 1
+
+
+def test_an_operators_own_worker_count_is_kept(monkeypatch):
+    monkeypatch.setenv(project_checks.XDIST_AUTO_WORKERS_VARIABLE, "3")
+    env, _ = project_checks.check_environment()
+    assert env[project_checks.XDIST_AUTO_WORKERS_VARIABLE] == "3"
+
+
+def test_pytest_xdist_sizes_auto_by_the_variable(tmp_path_factory, monkeypatch):
+    """The knob is xdist's own: a real `-n auto` run in the check environment uses it."""
+    monkeypatch.setenv(project_checks.XDIST_AUTO_WORKERS_VARIABLE, "2")
+    outside = tmp_path_factory.mktemp("xdist")
+    (outside / "test_one.py").write_text("def test_one():\n    pass\n", encoding="utf-8")
+    result = project_checks.run_one(
+        {
+            "name": "auto",
+            "command": f"{PY} -m pytest -n auto -p no:cacheprovider test_one.py",
+            "timeout_seconds": 120,
+        },
+        outside,
+    )
+    assert result["exit_code"] == 0, result["output_tail"]
+    assert "created: 2/2 workers" in result["output_tail"], result["output_tail"]

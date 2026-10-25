@@ -300,7 +300,23 @@ def check_environment() -> Tuple[Dict[str, str], List[str]]:
             removed.append(value)
         else:
             env[name] = value
+    # `-n auto` sizes pytest-xdist to every CPU, and up to MAX_CONCURRENT_RUNS checks run at once
+    # beside the agents: on the operator's 20-CPU machine that was 40+ workers on 20 CPUs, the
+    # suite ran 5-12 min, and the timing-sensitive tests flaked (2026-10-25). Each run gets a share
+    # with room left for the agents. Only `-n auto` reads it; an explicit `-n 8` is the operator's,
+    # and so is a value already in the Hub's environment.
+    env.setdefault(XDIST_AUTO_WORKERS_VARIABLE, str(auto_workers()))
     return env, removed
+
+
+#: pytest-xdist reads this for `-n auto` (xdist/plugin.py, `auto_detect_cpus`).
+XDIST_AUTO_WORKERS_VARIABLE = "PYTEST_XDIST_AUTO_NUM_WORKERS"
+
+
+def auto_workers(cpus: Optional[int] = None) -> int:
+    """The xdist workers one check run gets for `-n auto`: the CPUs shared by the runs that may run
+    at once and one share kept for everything else (the agents, the Hub)."""
+    return max(1, (cpus or os.cpu_count() or 2) // (MAX_CONCURRENT_RUNS + 1))
 
 
 def scrub(text: str, removed: Sequence[str]) -> str:
