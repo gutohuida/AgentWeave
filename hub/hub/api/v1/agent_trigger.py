@@ -39,6 +39,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
+    blocking,
     bound_address,
     instance_identity,
     mcp_announce,
@@ -1287,7 +1288,9 @@ async def _trigger_agent_directly(
     #
     # Only where there *is* isolation to override. A project directory that is not a git
     # repository has none, so refusing there would be a guard with no subject.
-    project_is_repo = worktrees.is_git_repo(repo_root)
+    # Off the loop (`blocking`, D1): every git call of a turn start runs in a thread, so the
+    # seconds a large checkout's `worktree add` takes freeze no other request.
+    project_is_repo = await blocking.run(worktrees.is_git_repo, repo_root)
     # A review turn's workspace is decided before anything else, because it replaces the ordinary
     # resolution rather than adjusting it (design D4: exactly one workspace per review turn).
     #
@@ -1494,7 +1497,12 @@ async def _trigger_agent_directly(
         # Below `resolve_turn_workspace_inputs` because that call is the grandfathering read and
         # reads only; above `resolve_turn_workspace` because that call is the first thing that
         # *provisions*. Nothing is on disk when this refuses.
-        if worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id):
+        # Asked once, off the loop: the refusal, the catch-up, the error's scope and the branch
+        # sentence below all ask this same predicate about the same inputs.
+        takes_task = await blocking.run(
+            worktrees.takes_task_workspace, repo_root, config, turn_workspace.task_id
+        )
+        if takes_task:
             # F668: taken before the read and held until this call ends, so a second agent's
             # read waits for the first turn's committed `Run` row instead of racing it.
             key = (project_id, turn_workspace.task_id)
@@ -1519,9 +1527,7 @@ async def _trigger_agent_directly(
         # base and catch-up; this is asked only for the agent arm.
         catch_up_to = (
             await task_workspace.integration_base(session, project_id, repo_root)
-            if not worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id)
-            and worktrees.is_writing_agent(config)
-            and worktrees.is_git_repo(repo_root)
+            if not takes_task and worktrees.is_writing_agent(config) and project_is_repo
             else None
         )
         try:
@@ -1530,7 +1536,10 @@ async def _trigger_agent_directly(
                 project_id,
                 **{"aw.agent": agent, "aw.task.id": turn_workspace.task_id},
             ):
-                resolved = worktrees.resolve_turn_workspace(
+                # Serialized with every other worktree creation, release and merge, as they
+                # were while they ran on the loop (`blocking.run_serialized`, D5).
+                resolved = await blocking.run_serialized(
+                    worktrees.resolve_turn_workspace,
                     repo_root,
                     agent,
                     config,
@@ -1548,7 +1557,7 @@ async def _trigger_agent_directly(
             # `a-blocked-agent-workspace-holds-its-input`), never the exception's type and never a
             # path parsed out of its message. A classification derived from a message is one that
             # breaks the next time the message improves, and phase 4 of that change improves these.
-            if worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id):
+            if takes_task:
                 raise TriggerAgentError(
                     status.HTTP_409_CONFLICT,
                     f"Could not prepare the checkout for task {turn_workspace.task_id}: {exc}",
@@ -1567,8 +1576,8 @@ async def _trigger_agent_directly(
         # Task 6.5. Same argument as `effective_work_dir` above: computed here, from the same
         # inputs `resolve_turn_workspace` was just given, so the sentence the agent reads cannot
         # disagree with the branch its process is standing on.
-        workspace_branch = worktrees.turn_branch_name(
-            repo_root, agent, config, task_id=turn_workspace.task_id
+        workspace_branch = await blocking.run(
+            worktrees.turn_branch_name, repo_root, agent, config, task_id=turn_workspace.task_id
         )
 
     # F737: the workspace's runner configuration is compared with what it held at its last
@@ -2033,7 +2042,7 @@ async def _trigger_agent_directly(
     # F603: where the turn started, so its commits can be carried onto a task it claims mid-turn.
     # Only an author's isolated checkout: a review turn's is not its work.
     if isolated_workspace is not None and review_context is None:
-        start_head = await asyncio.to_thread(worktrees.head_of, isolated_workspace)
+        start_head = await blocking.run(worktrees.head_of, isolated_workspace)
         if start_head is not None:
             _turn_start_heads[run_id] = start_head
     # Register execution immediately after the atomic Run + delivery commit. Event rows are
@@ -3506,7 +3515,10 @@ async def _execute_run(
         await _record_events(setup_events)
 
         while True:
-            chunk = await loop.run_in_executor(None, pty.read)
+            # On the stream readers' own threads (`blocking.read_stream`, D2): this read blocks
+            # for the whole turn, and on the default executor it took a thread every
+            # `asyncio.to_thread` in the Hub shares.
+            chunk = await blocking.read_stream(pty.read)
             if not chunk:
                 break
             buffer += chunk
@@ -3516,7 +3528,7 @@ async def _execute_run(
         if buffer.strip():
             await _flush_line(buffer)
 
-        exit_code = await loop.run_in_executor(None, pty.wait)
+        exit_code = await blocking.read_stream(pty.wait)
 
         if session_id:
             post_run_accounting = await loop.run_in_executor(
@@ -3537,9 +3549,9 @@ async def _execute_run(
             # a conflict check has nothing to diff against. Best-effort: a git failure here
             # must not turn a completed/failed run into something worse than it already is.
             try:
-                # `to_thread`, not `run_in_executor`: it carries the run's trace into the thread,
-                # so the snapshot's git is in the run's trace (trace-hub-wide D2).
-                snapshot_sha = await asyncio.to_thread(worktrees.snapshot_worktree, worktree, agent)
+                # `blocking.run` carries the run's trace into the thread, as `to_thread` did, so
+                # the snapshot's git is in the run's trace (trace-hub-wide D2).
+                snapshot_sha = await blocking.run(worktrees.snapshot_worktree, worktree, agent)
             except worktrees.GitCommandError:
                 logger.warning(
                     "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True
@@ -4609,9 +4621,9 @@ async def _execute_rpc_run(
             # Same best-effort snapshot as `_execute_run` — a git failure here must not turn
             # a completed/failed run into something worse than it already is.
             try:
-                # `to_thread`, not `run_in_executor`: it carries the run's trace into the thread,
-                # so the snapshot's git is in the run's trace (trace-hub-wide D2).
-                snapshot_sha = await asyncio.to_thread(worktrees.snapshot_worktree, worktree, agent)
+                # `blocking.run` carries the run's trace into the thread, as `to_thread` did, so
+                # the snapshot's git is in the run's trace (trace-hub-wide D2).
+                snapshot_sha = await blocking.run(worktrees.snapshot_worktree, worktree, agent)
             except worktrees.GitCommandError:
                 logger.warning(
                     "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True

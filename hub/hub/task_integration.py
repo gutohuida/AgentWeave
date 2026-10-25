@@ -23,7 +23,6 @@ feature unable to damage anything shared, and it is asserted by test as well as 
 
 from __future__ import annotations
 
-import asyncio
 import contextvars
 import logging
 import subprocess
@@ -35,7 +34,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from . import requirement_evidence, traces, worktrees
+from . import blocking, requirement_evidence, traces, worktrees
 from .db.models import (
     EvidenceFootprint,
     RequirementEvidence,
@@ -548,8 +547,8 @@ async def merge_targets(session: AsyncSession, task: Task, root: Path) -> List[T
     """
     if await evidence_governs(session, task) and not await review_alone_gates(session, task):
         accepted = await _targets(session, task, requirement_evidence.ACCEPTED)
-        return await asyncio.to_thread(reduce_by_ancestry, root, accepted)
-    tip = await asyncio.to_thread(task_branch_tip, root, task.id)
+        return await blocking.run(reduce_by_ancestry, root, accepted)
+    tip = await blocking.run(task_branch_tip, root, task.id)
     if tip is None:
         return []
     # The three evidence fields stay None: there is no evidence row to point at, and `Target`'s
@@ -584,7 +583,7 @@ async def review_target(
                 refusal=f"task {task.id} has no branch to review: the project's repository "
                 f"could not be located ({getattr(exc, 'detail', None) or exc})"
             )
-    tip = await asyncio.to_thread(task_branch_tip, root, task.id)
+    tip = await blocking.run(task_branch_tip, root, task.id)
     if tip is None:
         return requirement_evidence.ReviewTarget(
             refusal=f"task {task.id} has no branch to review. Its work was never committed to a "
