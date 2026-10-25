@@ -23,7 +23,7 @@ the first.
 from datetime import datetime, timezone
 from typing import Dict, Iterable, Mapping, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import String, func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import AgentHeartbeat, AgentOutput, Run
@@ -98,13 +98,24 @@ async def latest_activity_by_agent(
         _keep_later(latest, agent, ended_at)
         _keep_later(latest, agent, beat_at)
 
-    output_rows = await session.execute(
-        select(AgentOutput.agent, func.max(AgentOutput.timestamp))
-        .where(AgentOutput.project_id == project_id, AgentOutput.agent.in_(names))
-        .group_by(AgentOutput.agent)
-    )
-    for agent, observed_at in output_rows:
-        _keep_later(latest, agent, observed_at)
+    # One max per name, each a seek on `ix_agent_outputs_project_agent_ts`, rather than one
+    # GROUP BY that reads every output row the agents ever wrote (migration 0144). A compound
+    # SELECT, because SQLite's VALUES cannot name its columns; chunked under its 500-term limit.
+    ordered = sorted(wanted)
+    for start in range(0, len(ordered), 400):
+        output_rows = await session.execute(
+            union_all(
+                *(
+                    select(
+                        literal(name, String).label("agent"),
+                        func.max(AgentOutput.timestamp).label("observed_at"),
+                    ).where(AgentOutput.project_id == project_id, AgentOutput.agent == name)
+                    for name in ordered[start : start + 400]
+                )
+            )
+        )
+        for agent, observed_at in output_rows:
+            _keep_later(latest, agent, observed_at)
 
     if heartbeats is None:
         heartbeat_rows = await session.execute(

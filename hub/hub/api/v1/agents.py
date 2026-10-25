@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from ... import (
     bound_address,
@@ -31,7 +32,7 @@ from ...agent_roster import require_agent_row, require_known_agent
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...checkpoint_policy import CHECKPOINT_MODES, agent_window, threshold_error
-from ...context_readings import usable_context_reading as _usable_context_reading
+from ...context_readings import context_reading_by_agent
 from ...conversations import new_conversation
 from ...db.engine import get_session
 from ...db.models import (
@@ -415,48 +416,44 @@ async def list_agents(
     # rows, raising TypeError. The comprehension forces row iteration.
     active_task_counts = {name: cnt for name, cnt in active_task_counts_res}  # noqa: C416
 
-    # Bulk fetch context_warning event data per agent, newest first.
-    ctx_q = (
-        select(EventLog)
-        .where(
-            EventLog.project_id == project_id,
-            EventLog.event_type == "context_warning",
-            EventLog.agent.in_(agent_names),
-        )
-        .order_by(EventLog.agent, EventLog.timestamp.desc())
-    )
-    ctx_res = await session.execute(ctx_q)
-    ctx_rows_by_agent: dict[str, List[Any]] = {}
-    for row in ctx_res.scalars().all():
-        ctx_rows_by_agent.setdefault(row.agent, []).append(row.data)
-    context_usage_map: dict[str, Any] = {
-        agent_name: _usable_context_reading(rows) for agent_name, rows in ctx_rows_by_agent.items()
-    }
+    # Each agent's context reading, from its newest rows only (D5 of
+    # `the-app-stays-responsive-while-agents-run`): this used to load every reading ever recorded.
+    context_usage_map = await context_reading_by_agent(session, project_id, agent_names)
 
-    # Bulk fetch session started_at: first output timestamp of the most recent
-    # session (by last output timestamp) per agent.
-    session_q = (
-        select(
-            AgentOutput.agent,
-            AgentOutput.session_id,
-            func.min(AgentOutput.timestamp).label("started_at"),
-            func.max(AgentOutput.timestamp).label("last_active"),
+    # Session started_at: the first output of the agent's most recent session, the session of its
+    # newest output that names one. Two index seeks per agent instead of grouping every output row
+    # the agent ever wrote by session.
+    newest_output = aliased(AgentOutput)
+    newest_session = (
+        select(newest_output.session_id)
+        .where(
+            newest_output.project_id == project_id,
+            newest_output.agent == Agent.name,
+            newest_output.session_id.isnot(None),
         )
+        .order_by(newest_output.timestamp.desc())
+        .limit(1)
+        .correlate(Agent)
+        .scalar_subquery()
+    )
+    session_started = (
+        select(func.min(AgentOutput.timestamp))
         .where(
             AgentOutput.project_id == project_id,
-            AgentOutput.agent.in_(agent_names),
-            AgentOutput.session_id.isnot(None),
+            AgentOutput.agent == Agent.name,
+            AgentOutput.session_id == newest_session,
         )
-        .group_by(AgentOutput.agent, AgentOutput.session_id)
+        .correlate(Agent)
+        .scalar_subquery()
     )
-    session_res = await session.execute(session_q)
-    session_started_map: dict[str, datetime] = {}
-    best_last_active: dict[str, datetime] = {}
-    for row in session_res.all():
-        agent, sess_id, started_at, last_active = row
-        if sess_id and (agent not in best_last_active or last_active > best_last_active[agent]):
-            best_last_active[agent] = last_active
-            session_started_map[agent] = started_at
+    session_res = await session.execute(
+        select(Agent.name, session_started).where(
+            Agent.project_id == project_id, Agent.name.in_(agent_names)
+        )
+    )
+    session_started_map: dict[str, datetime] = {
+        name: started_at for name, started_at in session_res if started_at is not None
+    }
 
     summaries = []
     for agent_name in sorted(session_agents_meta):
