@@ -40505,3 +40505,13 @@ Recorded in the operator's words only. Before any work, ask what is to be ordere
 **Tier:** ?
 
 Seen on the operator's `:8000` Hub. Not yet looked at: which notices they are, what raises them, and whether each should carry an action, clear itself when its cause ends, or be dismissable. Start by asking the operator for a screenshot or by reading the Overview's notice sources read-only.
+
+## F1046 (C) -- a spec document's task can name its reviewer but not who builds it
+
+**Status:** open 2026-10-25. Found authoring `the-app-stays-responsive-while-agents-run`, when the operator asked to define each task to a specific agent by capability and let the rest be picked up free.
+**Source:** code
+**Theme:** Spec flow
+**Ready:** yes
+**Tier:** 1
+
+`spec_payload.Task` (`hub/hub/spec_payload.py:136-170`) carries `reviewer` but no builder. The flow already honours a task's assignee: it resumes a task with an `assignee` only on that agent, and staffs unassigned tasks on the default agent and then any free one (`hub/hub/scheduler.py:2031-2125`). So per-task capability routing works, but only if the operator sets every assignee by hand on the board after approval. The author, who knows which tasks need the stronger model, has nowhere to write it down. Proposed shape: an optional per-task builder name, resolved against the roster when the task is materialised, kept rather than refused when it does not resolve (the same rule `reviewer` follows).
