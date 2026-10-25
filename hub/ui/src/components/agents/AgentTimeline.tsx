@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
@@ -22,6 +22,7 @@ import {
   pairTurnResults,
   placeTurnResults,
   reduceTurnBlocks,
+  reuseTurns,
   usageByRunId,
   type TurnPairing,
   type TurnUsageFigure,
@@ -146,7 +147,14 @@ export function AgentTimeline({
     return map
   }, [roster])
 
-  const { turns, pending } = useMemo(() => groupIntoTurns(entries), [entries])
+  // A turn whose entries did not change keeps its object, so its `TurnSection` skips the render.
+  const previousTurns = useRef<TimelineTurn[] | undefined>(undefined)
+  const { turns, pending } = useMemo(() => {
+    const grouped = groupIntoTurns(entries)
+    const stable = reuseTurns(previousTurns.current, grouped.turns)
+    previousTurns.current = stable
+    return { turns: stable, pending: grouped.pending }
+  }, [entries])
   const usageByRun = useMemo(() => usageByRunId(recentTurns ?? []), [recentTurns])
 
   // `isRunning` is `agent.status === 'running'` — a POLLED roster field, so it stays true for a
@@ -235,6 +243,10 @@ export function AgentTimeline({
     runVisiblyActive && lastTurn?.entries.length ? lastTurn.entries[0].timestamp : null
   const liveElapsed = useElapsedSeconds(runVisiblyActive, activeRunStartedAt)
   const [foldOverride, setFoldOverride] = useState<Record<string, boolean>>({})
+  const setTurnFolded = useCallback(
+    (key: string, folded: boolean) => setFoldOverride((old) => ({ ...old, [key]: folded })),
+    [],
+  )
   const [diagnosticsHidden] = useDiagnosticsHidden()
 
   // The caller always passes a defined counter (never undefined) that starts
@@ -306,81 +318,24 @@ export function AgentTimeline({
           )
         }
         const key = turn.runId ?? `turn-${turnIndex}`
-        const runStatus = turn.runId ? runs[turn.runId]?.status : undefined
-        // Foldedness is the operator's choice, never a function of position. The default used
-        // to be `!isLastTurn` — derived from the turn's index — so appending a turn silently
-        // collapsed whatever the operator was reading the moment they sent a message. Now every
-        // turn renders open until folded by hand, via the per-turn control below or
-        // "Fold all turns".
-        const folded = foldOverride[key] ?? false
-
-        if (folded) {
-          return (
-            <FoldedTurnPill
-              key={key}
-              turn={turn}
-              onClick={() => setFoldOverride((old) => ({ ...old, [key]: false }))}
-            />
-          )
-        }
-
-        const terminalLabel = runStatus ? TERMINAL_LABEL[runStatus] : undefined
-
         return (
-          // `data-turn-boundary` is how AgentOutputPanel measures the newest turn, so it can size
-          // the tail spacer and pin a just-sent message to the top of the viewport. A marker
-          // rather than a ref because the panel owns the scroll container and this component owns
-          // the turns; passing refs up for every turn would couple them far more tightly.
-          <div key={key} data-turn-boundary="" className="flex flex-col gap-[21px]">
-            {/* Every turn is foldable, including the last. Nothing folds on its own any more,
-                so gating this on `!isLastTurn` would leave a single-turn conversation with no
-                way to fold at all. */}
-            <div className="self-start flex items-center gap-1">
-              <button
-                onClick={() => setFoldOverride((old) => ({ ...old, [key]: true }))}
-                className="fold-control flex items-center gap-1 rounded px-1.5 py-1 text-[10.5px]"
-                style={{ color: 'var(--text-3)', opacity: 0.55 }}
-                title="Fold this turn"
-              >
-                <Icon name="expand_more" size={13} />
-                fold
-              </button>
-              {/* The run's trace: every model call, tool call and decision it made, timed. */}
-              {turn.runId && (
-                <TraceButton
-                  runId={turn.runId}
-                  label="trace"
-                  className="fold-control flex items-center gap-1 rounded px-1.5 py-1 text-[10.5px]"
-                  style={{ color: 'var(--text-3)', opacity: 0.55 }}
-                  testId={`turn-trace-${turn.runId}`}
-                />
-              )}
-            </div>
-            <TurnBody
-              turn={turn}
-              turnKey={key}
-              agentName={agent.name}
-              colorByName={colorByName}
-              durationSeconds={turn.runId ? runDurationSeconds(runs[turn.runId]) : undefined}
-              usage={turn.runId ? usageByRun[turn.runId] : undefined}
-              live={runVisiblyActive && turn === lastTurn}
-              hideDiagnostics={diagnosticsHidden}
-              runStatus={runStatus}
-            />
-            {terminalLabel && (
-              <div
-                className="flex items-center gap-2 justify-center text-[12px]"
-                style={{ color: 'var(--text-3)' }}
-              >
-                <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
-                {terminalLabel}
-                {turn.entries.length > 0 &&
-                  ` · ${format(hubDate(turn.entries[turn.entries.length - 1].timestamp), 'HH:mm')}`}
-                <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
-              </div>
-            )}
-            <OutsideWritesLine writes={turn.runId ? runs[turn.runId]?.outside_workspace_writes : undefined} />
-          </div>
+          <TurnSection
+            key={key}
+            turn={turn}
+            turnKey={key}
+            // Foldedness is the operator's choice, never a function of position. The default used
+            // to be `!isLastTurn` — derived from the turn's index — so appending a turn silently
+            // collapsed whatever the operator was reading the moment they sent a message. Now every
+            // turn renders open until folded by hand, via the per-turn control or "Fold all turns".
+            folded={foldOverride[key] ?? false}
+            onFold={setTurnFolded}
+            facts={turn.runId ? runs[turn.runId] : undefined}
+            agentName={agent.name}
+            colorByName={colorByName}
+            usage={turn.runId ? usageByRun[turn.runId] : undefined}
+            live={runVisiblyActive && turn === lastTurn}
+            hideDiagnostics={diagnosticsHidden}
+          />
         )
       })}
 
@@ -473,6 +428,100 @@ export function AgentTimeline({
     </div>
   )
 }
+
+/** One run's turn, drawn again only when something it shows changed.
+ *
+ * A streamed line lands in the newest turn. Every earlier turn keeps its `turn` object
+ * (`reuseTurns`), its run facts and its usage, so it skips the render: a 1,000-row conversation
+ * re-rendered whole on every line, about 660 ms of main-thread work per line on a CPU slowed six
+ * times (perf slice 4). */
+const TurnSection = memo(function TurnSection({
+  turn,
+  turnKey,
+  folded,
+  onFold,
+  facts,
+  agentName,
+  colorByName,
+  usage,
+  live,
+  hideDiagnostics,
+}: {
+  turn: TimelineTurn
+  turnKey: string
+  folded: boolean
+  onFold: (turnKey: string, folded: boolean) => void
+  facts: AgentRunFacts | undefined
+  agentName: string
+  colorByName: ColorLookup
+  usage?: TurnUsageFigure
+  live: boolean
+  hideDiagnostics: boolean
+}) {
+  if (folded) {
+    return <FoldedTurnPill turn={turn} onClick={() => onFold(turnKey, false)} />
+  }
+
+  const runStatus = facts?.status
+  const terminalLabel = runStatus ? TERMINAL_LABEL[runStatus] : undefined
+
+  return (
+    // `data-turn-boundary` is how AgentOutputPanel measures the newest turn, so it can size
+    // the tail spacer and pin a just-sent message to the top of the viewport. A marker
+    // rather than a ref because the panel owns the scroll container and this component owns
+    // the turns; passing refs up for every turn would couple them far more tightly.
+    <div data-turn-boundary="" className="flex flex-col gap-[21px]">
+      {/* Every turn is foldable, including the last. Nothing folds on its own any more,
+          so gating this on `!isLastTurn` would leave a single-turn conversation with no
+          way to fold at all. */}
+      <div className="self-start flex items-center gap-1">
+        <button
+          onClick={() => onFold(turnKey, true)}
+          className="fold-control flex items-center gap-1 rounded px-1.5 py-1 text-[10.5px]"
+          style={{ color: 'var(--text-3)', opacity: 0.55 }}
+          title="Fold this turn"
+        >
+          <Icon name="expand_more" size={13} />
+          fold
+        </button>
+        {/* The run's trace: every model call, tool call and decision it made, timed. */}
+        {turn.runId && (
+          <TraceButton
+            runId={turn.runId}
+            label="trace"
+            className="fold-control flex items-center gap-1 rounded px-1.5 py-1 text-[10.5px]"
+            style={{ color: 'var(--text-3)', opacity: 0.55 }}
+            testId={`turn-trace-${turn.runId}`}
+          />
+        )}
+      </div>
+      <TurnBody
+        turn={turn}
+        turnKey={turnKey}
+        agentName={agentName}
+        colorByName={colorByName}
+        durationSeconds={turn.runId ? runDurationSeconds(facts) : undefined}
+        usage={usage}
+        live={live}
+        hideDiagnostics={hideDiagnostics}
+        runStatus={runStatus}
+      />
+      {terminalLabel && (
+        <div
+          className="flex items-center gap-2 justify-center text-[12px]"
+          style={{ color: 'var(--text-3)' }}
+        >
+          <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+          {terminalLabel}
+          {turn.entries.length > 0 &&
+            ` · ${format(hubDate(turn.entries[turn.entries.length - 1].timestamp), 'HH:mm')}`}
+          <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+        </div>
+      )}
+      <OutsideWritesLine writes={turn.runId ? facts?.outside_workspace_writes : undefined} />
+    </div>
+  )
+})
 
 function FoldedTurnPill({ turn, onClick }: { turn: TimelineTurn; onClick: () => void }) {
   return (
@@ -1129,7 +1178,8 @@ function lastAttemptLine(lastAttempt: AgentRunFacts | undefined): string | null 
   return null
 }
 
-function MessageEntry({
+/** Memoized: a streamed line re-renders its own turn, and the messages already in it keep theirs. */
+const MessageEntry = memo(function MessageEntry({
   entry,
   agentName,
   colorByName,
@@ -1325,7 +1375,7 @@ function MessageEntry({
       </div>
     </div>
   )
-}
+})
 
 /** An outbound peer message, folded — header row plus an inline truncated preview, `useState`
  * for expansion. Same shape as `WorkRow`: a delegation the agent sent is closer to a tool call

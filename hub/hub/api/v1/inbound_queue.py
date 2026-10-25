@@ -4,7 +4,7 @@ import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import task_workspace, worktrees
-from ...agent_roster import require_known_agent
+from ...agent_roster import agent_is_known, require_known_agent
 from ...auth import get_project
 from ...conversations import get_conversation_by_id
 from ...db.engine import get_session
@@ -42,6 +42,7 @@ from ...utils import persist_accepted_event, persist_event
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/queue", tags=["inbound-queue"])
+statuses_router = APIRouter(prefix="/queue-status", tags=["inbound-queue"])
 
 
 class QueueEntryResponse(BaseModel):
@@ -163,12 +164,52 @@ async def get_queue_status(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ) -> QueueStatus:
-    from ...db.models import Run
-
     project_id, _ = project
     # F199: a typo'd name read as "idle, nothing waiting" — a sentence about an agent that is not
     # on any roster.
     await require_known_agent(session, project_id, agent)
+    return await queue_status(session, project_id, agent)
+
+
+#: How many agents one queue-status request may name; more than any roster shows.
+QUEUE_STATUSES_LIMIT = 200
+
+
+class QueueStatuses(BaseModel):
+    """Each named agent's queue status, exactly as `GET /queue/{agent}/status` would answer it.
+
+    `missing` names the requested agents this project does not know, which that route would have
+    answered 404."""
+
+    statuses: Dict[str, QueueStatus]
+    missing: List[str] = []
+
+
+@statuses_router.get("", response_model=QueueStatuses)
+async def get_queue_statuses(
+    agent: List[str] = Query(..., min_length=1, max_length=QUEUE_STATUSES_LIMIT),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> QueueStatuses:
+    """Several agents' queue statuses in one request: what the Overview's agent cards read.
+
+    One request per agent made opening a project scale with its roster. Its own prefix rather than
+    `/queue/statuses`, which `GET /queue/{agent}` would have to give up to an agent named so."""
+    project_id, _ = project
+    statuses: Dict[str, QueueStatus] = {}
+    missing: List[str] = []
+    for name in dict.fromkeys(agent):
+        if await agent_is_known(session, project_id, name):
+            statuses[name] = await queue_status(session, project_id, name)
+        else:
+            missing.append(name)
+    return QueueStatuses(statuses=statuses, missing=missing)
+
+
+async def queue_status(session: AsyncSession, project_id: str, agent: str) -> QueueStatus:
+    """Why *agent*'s queue is waiting, if it is: the body of both queue-status routes."""
+    from ...db.models import Run
+
     entries_result = await session.execute(
         select(InboundQueueEntry).where(
             InboundQueueEntry.project_id == project_id,

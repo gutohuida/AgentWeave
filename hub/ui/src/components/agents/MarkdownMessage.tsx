@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -23,14 +24,19 @@ const components: Components = {
   ),
 }
 
+const remarkPlugins = [remarkGfm, remarkBreaks]
+
 /** Renders message-level prose (operator input, agent text output, peer traffic) as Markdown.
- * Scoped to prose only — tool-call payloads stay on literal text rendering (WorkRow). */
-export function MarkdownMessage({ content }: { content: string }) {
+ * Scoped to prose only — tool-call payloads stay on literal text rendering (WorkRow).
+ *
+ * Memoized on `content`: parsing is the costly part of drawing a conversation, and a parent that
+ * re-renders (a streamed line, a tick) must not parse unchanged text again. */
+export const MarkdownMessage = memo(function MarkdownMessage({ content }: { content: string }) {
   return (
     <div className="markdown-message">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
+      <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
         {content}
       </ReactMarkdown>
     </div>
   )
-}
+})
