@@ -104,8 +104,12 @@ async def resolve_declared_reviewer(
     *,
     project_id: str,
     task: Task,
+    roster: Optional[List[Agent]] = None,
 ) -> ReviewerResolution:
     """Resolve the `reviewer` a task's specification entry declared, per task 4.3.
+
+    *roster* is every agent of the project, archived ones too, where the caller has already read
+    it (the scheduler's `FiringFacts`); the declared name is then looked up in it instead of read.
 
     **Never silently substitutes a different agent.** A document is written by someone who has no
     way to know which agents exist on the machine that will eventually run it — the payload field
@@ -127,15 +131,18 @@ async def resolve_declared_reviewer(
         "tester": "this document's tester",
     }.get(named_by or "", "this document's default reviewer")
 
-    row = (
-        (
-            await session.execute(
-                select(Agent).where(Agent.project_id == project_id, Agent.name == declared)
+    if roster is not None:
+        row = next((agent for agent in roster if agent.name == declared), None)
+    else:
+        row = (
+            (
+                await session.execute(
+                    select(Agent).where(Agent.project_id == project_id, Agent.name == declared)
+                )
             )
+            .scalars()
+            .first()
         )
-        .scalars()
-        .first()
-    )
     if row is None:
         return ReviewerResolution(
             declared=declared,

@@ -388,7 +388,12 @@ async def _adopt_and_record(
 async def _batch_loop_summaries(
     session: AsyncSession, job_ids: List[str]
 ) -> Dict[str, LoopSummary]:
-    """Compute every job's `loop` block in six fixed queries, never one query per job (design D7)."""
+    """Compute every job's `loop` block in a fixed set of queries, never a set per job (design D7).
+
+    Each loop's block includes its firing decision, and the project-wide facts those decisions read
+    are read once for the whole batch (`scheduler.FiringFacts`,
+    `the-app-stays-responsive-while-agents-run` D6), so the cost does not grow with the loop count.
+    """
     if not job_ids:
         return {}
 
@@ -397,7 +402,6 @@ async def _batch_loop_summaries(
     if not loops:
         return {}
     loop_by_job = {loop.job_id: loop for loop in loops}
-    loop_ids = [loop.id for loop in loops]
 
     # B4.2 (design D20): the label the operator recognises a loop by is its job's name — batched
     # here, alongside the other per-loop facts this function already computes, rather than making
@@ -414,48 +418,45 @@ async def _batch_loop_summaries(
         job_name_by_id[job_id] = job_name
         job_agent_by_id[job_id] = job_agent
 
-    queue_counts: Dict[str, Dict[str, int]] = {}
-    counts_result = await session.execute(
-        select(Task.loop_id, Task.status, func.count())
-        .where(Task.loop_id.in_(loop_ids))
-        .group_by(Task.loop_id, Task.status)
-    )
-    for loop_id, task_status, count in counts_result.all():
-        queue_counts.setdefault(loop_id, {})[task_status] = count
-
-    current_tasks_by_loop: Dict[str, List[Dict[str, str]]] = {}
-    # Same ordering the firing itself uses, imported rather than restated: the board and the
-    # firing must never disagree about which queue item is current, which is exactly what
-    # human-only check 13.1 asks. `Task.updated` is scoped to non-pending rows there — see that
-    # helper for the bug the scoping fixes. Imported inside the function, matching this module's
-    # existing convention for `...scheduler` (get_scheduler does the same at three call sites).
+    # Imported inside the function, matching this module's existing convention for
+    # `...scheduler` (get_scheduler does the same at three call sites).
     from ...scheduler import (
-        CURRENT_ITEM_TASK_STATUSES,
         DECISION_STALLED,
+        FiringFacts,
         _agent_for_next_firing,
         _jobs_with_active_firing,
         _loop_flow_busy_reason,
-        _loop_queue_order,
         decide_firing,
     )
 
-    candidates_result = await session.execute(
-        select(Task)
-        .where(
-            Task.loop_id.in_(loop_ids),
-            # D21: "assigned" is a live status too (`checkpoints.py`'s `_LIVE_TASK_STATUSES`,
-            # `task_transitions.py`'s `ENTRY_STATUSES` both already treat it as such) — D3's claim
-            # sets exactly this status, so without it a freshly claimed task vanished from
-            # `current_task` the moment a firing picked it up.
-            #
-            # `CURRENT_ITEM_TASK_STATUSES`, not the claimable set: the board answers "what is this
-            # loop working on", which includes a `blocked` task (`agent-loops` §85) that a firing
-            # must not claim. Sharing one constant for both questions was a live defect — see the
-            # constant's own comment for what it looked like.
-            Task.status.in_(CURRENT_ITEM_TASK_STATUSES),
-        )
-        .order_by(Task.loop_id, *_loop_queue_order())
-    )
+    # `the-app-stays-responsive-while-agents-run` D6: the roster, the provider holds, the running
+    # turns, the attendance and each loop's tasks are read once for every loop of the project, and
+    # every decision below shares those reads. Safe because `decide_firing` writes nothing.
+    facts = FiringFacts(session)
+    queue_counts: Dict[str, Dict[str, int]] = {}
+    for loop in loops:
+        counts = await facts.status_counts(loop)
+        if counts:
+            queue_counts[loop.id] = counts
+
+    current_tasks_by_loop: Dict[str, List[Dict[str, str]]] = {}
+    # The current-item candidates: each loop's tasks in `CURRENT_ITEM_TASK_STATUSES`, from the one
+    # read of the project's open tasks the decisions' walks take their candidates from
+    # (`FiringFacts.open_tasks`). In the firing's own `_loop_queue_order`, not restated: the board
+    # and the firing must never disagree about which queue item is current, which is exactly what
+    # human-only check 13.1 asks. `Task.updated` is scoped to non-pending rows there — see that
+    # helper for the bug the scoping fixes.
+    #
+    # D21: "assigned" is a live status too (`checkpoints.py`'s `_LIVE_TASK_STATUSES`,
+    # `task_transitions.py`'s `ENTRY_STATUSES` both already treat it as such) — D3's claim sets
+    # exactly this status, so without it a freshly claimed task vanished from `current_task` the
+    # moment a firing picked it up.
+    #
+    # `CURRENT_ITEM_TASK_STATUSES`, not the claimable set: the board answers "what is this loop
+    # working on", which includes a `blocked` task (`agent-loops` §85) that a firing must not
+    # claim. Sharing one constant for both questions was a live defect — see the constant's own
+    # comment for what it looked like.
+    candidates = [task for loop in loops for task in await facts.open_tasks(loop)]
     # D10 (`task-dependencies` section 9.10): the firing itself skips a gated candidate rather than
     # claiming it, so "current" has to skip the same one or the board shows a task the next firing
     # will pass over — the exact disagreement human-only check 13.1 exists to catch.
@@ -490,8 +491,11 @@ async def _batch_loop_summaries(
     # exists: F49 shipped with five vitest cases over the rendering and none over the deriving, so
     # a branch that could never match was live from the day it landed.
     #
-    # One batched query for every loop in the batch, for design D7's reason.
-    live = await task_attribution.live_runs(session, {loop.project_id for loop in loops})
+    # `live_runs`'s answer, from the running turns the decisions below read anyway (D6).
+    live_task_ids: frozenset = frozenset()
+    for project_id in {loop.project_id for loop in loops}:
+        live_task_ids |= await facts.running_task_ids(project_id)
+    live = task_attribution.LiveRuns(task_ids=live_task_ids)
     # Task A4.4 (design D13): "is a firing active for this loop" -- the one shared query, now
     # `scheduler._jobs_with_active_firing`, asked *before* the decide loop because the next
     # firing's agent depends on it (`a-flow-is-configured-from-its-own-tab` D2a). `JobRun` has no
@@ -503,7 +507,7 @@ async def _batch_loop_summaries(
         job_agent = await _agent_for_next_firing(
             session, loop, job_agent_by_id.get(job_id, ""), job_id in firing_active_jobs
         )
-        decision = await decide_firing(session, loop, default_agent=job_agent)
+        decision = await decide_firing(session, loop, default_agent=job_agent, facts=facts)
         stall_reason = decision.stall_reason
         if decision.kind == DECISION_STALLED:
             # `stall_reason` is promised to be set exactly when the next firing would be refused,
@@ -512,7 +516,9 @@ async def _batch_loop_summaries(
             # would be a false account of it: for the length of a hold, or of a turn
             # (`a-spent-allowance-holds-the-queue`, D6). Only a stalled decision is re-asked, so a
             # loop whose agent is working its task keeps reading as running, not stalled.
-            stall_reason = await _loop_flow_busy_reason(session, loop, job_agent) or stall_reason
+            stall_reason = (
+                await _loop_flow_busy_reason(session, loop, job_agent, facts) or stall_reason
+            )
         stall_reason_by_loop[loop.id] = stall_reason
         staffing_by_loop[loop.id] = task_attribution.staffing_from_decision(decision)
 
@@ -524,7 +530,7 @@ async def _batch_loop_summaries(
     #
     # No `candidate_is_startable` call here any more: the decision has already answered which task
     # is claimable, so this walk is a lookup rather than a second evaluation of the dependency gate.
-    for task in candidates_result.scalars().all():
+    for task in candidates:
         staffing = staffing_by_loop.get(
             task.loop_id, task_attribution.FlowStaffing(selected={}, unstaffable={})
         )

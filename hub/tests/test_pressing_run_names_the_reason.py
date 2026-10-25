@@ -280,7 +280,7 @@ def _race():
     """A guard that says *not busy* to the firing and *busy* to the route's re-ask."""
     calls = {"n": 0}
 
-    async def refusal(session, loop, agent):
+    async def refusal(session, loop, agent, facts=None):
         calls["n"] += 1
         if calls["n"] == 1:
             return None

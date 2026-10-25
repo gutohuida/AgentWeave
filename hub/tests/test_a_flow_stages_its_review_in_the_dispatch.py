@@ -592,9 +592,9 @@ async def test_f142s_row_is_recovered_by_the_wedge_rule_at_the_dispatch(
     real = service.assignee_produced_the_work
     calls = []
 
-    async def _spy(session, task):
+    async def _spy(session, task, **reads):
         calls.append(task.id)
-        return await real(session, task)
+        return await real(session, task, **reads)
 
     monkeypatch.setattr(service, "assignee_produced_the_work", _spy)
 

@@ -739,6 +739,21 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
         select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
     )
     agent_row = agent_result.scalars().first()
+    runner_row = None
+    if agent_row is not None and agent_row.runner_id:
+        runner_row = await db.get(Runner, agent_row.runner_id)
+    return agent_config_from_rows(session_data, agent, agent_row, runner_row)
+
+
+def agent_config_from_rows(
+    session_data: Dict[str, Any], agent: str, agent_row: Any, runner_row: Any
+) -> Dict[str, Any]:
+    """`get_agent_config`'s merge, over rows the caller has already read.
+
+    Split out so a caller asking about every agent of a project at once (the scheduler's
+    `FiringFacts`) reads the session, the agents and their runners once each instead of once per
+    agent, and still merges them by this one rule.
+    """
     meta = agent_config(session_data, agent, agent_row.config if agent_row else None)
     # A model provider is a runner's alone (slice 5 D7): one named in an agent's own config or in
     # session.json would turn its runs into provider runs no runner route ever checked.
@@ -748,7 +763,6 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
         if agent_row.runner_id:
             # Keyed on `runner_id`, not on how the agent came to exist (F30): the probe must
             # describe what `trigger_agent_directly`, which reads `runner_id`, would launch.
-            runner_row = await db.get(Runner, agent_row.runner_id)
             if runner_row is not None:
                 # Overwrites rather than defers to session.json: the bound Runner is what
                 # `agent_trigger` actually launches, so anything else here would describe an
@@ -776,9 +790,14 @@ async def is_read_only_agent(project_id: str, agent: str, db: AsyncSession) -> b
     create and PATCH, a run's claim, and a flow's ordinary-work pick. Reviews are not work here; a
     review turn runs in its detached review checkout, which is the declaration's intended use.
     """
+    return is_read_only_config(await get_agent_config(project_id, agent, db))
+
+
+def is_read_only_config(config: Dict[str, Any]) -> bool:
+    """`is_read_only_agent`'s answer for a config already merged by `get_agent_config`."""
     from . import worktrees
 
-    return not worktrees.is_writing_agent(await get_agent_config(project_id, agent, db))
+    return not worktrees.is_writing_agent(config)
 
 
 def writing_agent_work_dir_sentence(agent: str) -> str:

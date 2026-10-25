@@ -28,7 +28,7 @@ waiting.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,18 +86,28 @@ async def evaluate(session: AsyncSession, task: Task) -> DependencyRefusal:
     has nothing to iterate, so a task with no dependencies transitions exactly as it did before this
     gate existed (task 5.9).
     """
-    refusal = DependencyRefusal()
-    prerequisites = (
-        (
-            await session.execute(
-                select(Task)
-                .join(TaskDependency, TaskDependency.depends_on_task_id == Task.id)
-                .where(TaskDependency.task_id == task.id)
-            )
+    return (await evaluate_many(session, [task]))[task.id]
+
+
+async def evaluate_many(
+    session: AsyncSession, tasks: Iterable[Task]
+) -> Dict[str, DependencyRefusal]:
+    """`evaluate` for several tasks in one statement, keyed by each task's id."""
+    ids = sorted({task.id for task in tasks})
+    prerequisites: Dict[str, List[Task]] = {task_id: [] for task_id in ids}
+    if ids:
+        rows = await session.execute(
+            select(TaskDependency.task_id, Task)
+            .join(TaskDependency, TaskDependency.depends_on_task_id == Task.id)
+            .where(TaskDependency.task_id.in_(ids))
         )
-        .scalars()
-        .all()
-    )
+        for task_id, prerequisite in rows.all():
+            prerequisites[task_id].append(prerequisite)
+    return {task_id: _refusal_for(found) for task_id, found in prerequisites.items()}
+
+
+def _refusal_for(prerequisites: Iterable[Task]) -> DependencyRefusal:
+    refusal = DependencyRefusal()
     for prerequisite in prerequisites:
         if prerequisite.status == MET_STATUS:
             continue
