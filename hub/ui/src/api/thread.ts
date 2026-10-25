@@ -47,6 +47,19 @@ export interface ThreadKnot {
   link: KnotLink | null
   /** A chapter's plain-language summary; absent on every other kind. */
   summary?: string | null
+  /** What it holds directly, counted per kind over all of it (not a loaded page). Absent on an older Hub. */
+  made_of?: { kind: KnotKind; word: string; count: number }[]
+  /** Who was in it: its own actors and those of everything it holds. Absent on an older Hub. */
+  people?: string[]
+  /** Its place among the knots of its kind on its level ('Chapter 17 of 17'). Absent on an older Hub. */
+  place?: { n: number; of: number } | null
+}
+
+/** What a whole level holds, whichever page of it is loaded. Absent on an older Hub. */
+export interface LevelSummary {
+  counts: Partial<Record<KnotKind, number>>
+  /** The days it spans: its chapters' when it has chapters, every knot's otherwise. */
+  span: { start: string; end: string } | null
 }
 
 /** One level of the thread, oldest first. `hasBefore`/`hasAfter` say whether more lies beyond. */
@@ -70,12 +83,16 @@ export interface ThreadPageResponse {
   under: string
   /** True while the chapters job is on: the page offers 'Weave the thread'. Absent on an older Hub. */
   can_weave?: boolean
+  counts?: LevelSummary['counts']
+  span?: LevelSummary['span']
 }
 
 /** One level as the container holds it: the page(s) loaded so far and the cursors to walk on. */
 export interface LoadedLevel extends ThreadLevelData {
   beforeCursor: string | null
   afterCursor: string | null
+  /** The whole level's figures, from the latest page read of it. */
+  summary?: LevelSummary
 }
 
 export interface ThreadQuery {
@@ -109,5 +126,6 @@ export function toLoadedLevel(page: ThreadPageResponse): LoadedLevel {
     hasAfter: page.has_after,
     beforeCursor: page.before_cursor,
     afterCursor: page.after_cursor,
+    ...(page.counts ? { summary: { counts: page.counts, span: page.span ?? null } } : {}),
   }
 }

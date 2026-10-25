@@ -71,7 +71,9 @@ async def get_thread(
     )
     if result is None:
         raise HTTPException(status_code=422, detail="That is not a cursor this thread gave out")
-    result["knots"] = [project_thread.face(k, thread) for k in result["knots"]]
+    placed = project_thread.places(level)
+    result["knots"] = [project_thread.face(k, thread, placed.get(k.key)) for k in result["knots"]]
+    result.update(project_thread.level_summary(level))
     result["under"] = under or project_thread.SURFACE
     # 'Weave the thread' is offered only while the chapters job is on.
     row = await manager.get_job_row(session, project[0], manager.CHAPTERS)
@@ -91,4 +93,6 @@ async def get_knot(
     chain = thread.ancestors(key) if knot is not None else None
     if knot is None or chain is None:
         raise HTTPException(status_code=404, detail="There is no such knot")
-    return {"knot": project_thread.face(knot, thread), "ancestors": chain}
+    siblings = thread.level(chain[-1] if chain else None) or []
+    place = project_thread.places(siblings).get(knot.key)
+    return {"knot": project_thread.face(knot, thread, place), "ancestors": chain}

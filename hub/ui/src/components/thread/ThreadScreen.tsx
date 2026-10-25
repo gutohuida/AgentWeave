@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { getJson } from '@/api/client'
+import { useAgents } from '@/api/agents'
 import {
   SURFACE,
   knotUrl,
@@ -12,9 +13,11 @@ import {
   type ThreadQuery,
 } from '@/api/thread'
 import { useSSE } from '@/hooks/useSSE'
+import { agentColorVars } from '@/lib/agentColors'
 import { joinPage, refreshEnd } from '@/lib/threadKnots'
-import { Thread } from './Thread'
+import { ThreadLoom } from './loom/ThreadLoom'
 import { WeaveButton } from './WeaveButton'
+import '@/styles/thread-loom.css'
 
 /** Events that can add or change something on the thread. Anything else leaves it alone. */
 const THREAD_EVENTS = new Set([
@@ -40,27 +43,40 @@ const REFRESH_AFTER_MS = 400
 
 export interface ThreadScreenProps {
   projectId: string
-  /** The address in the URL: open its ancestors, bring it into view, focus it. */
+  /** The address in the URL: select it with every knot above it, bring it into view, focus it. */
   knot: string | null
-  /** The reader touched a knot: its address belongs in the URL. */
+  /** The reader chose a knot: its address belongs in the URL. */
   onAddress: (key: string) => void
   onOpenLink: (link: KnotLink) => void
 }
 
-/** The Thread tab: fetches the feed one level at a time and holds what is loaded and what is open. */
+/** The Thread tab: fetches the feed one level at a time and holds what is loaded and which knot is
+ *  selected (the path from the surface down to it); `ThreadLoom` draws it. */
 export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadScreenProps) {
   const [levels, setLevels] = React.useState<Record<string, LoadedLevel | undefined>>({})
-  const [open, setOpen] = React.useState<ReadonlySet<string>>(() => new Set())
-  const [current, setCurrent] = React.useState<string | null>(null)
-  const [reveal, setReveal] = React.useState(0)
+  const [path, setPath] = React.useState<string[]>([])
+  const [surfaceTotal, setSurfaceTotal] = React.useState<number | undefined>(undefined)
+  // A new surface drawn afresh (opening, a jump to either end): the thread draws itself in again.
+  const [drawKey, setDrawKey] = React.useState(0)
+  // An address opened: the knot it names takes keyboard focus and is brought into view.
+  const [focusTick, setFocusTick] = React.useState(0)
   const [failed, setFailed] = React.useState(false)
   const [canWeave, setCanWeave] = React.useState(false)
   const [now] = React.useState(() => new Date())
 
+  // Each agent's registered colour, as everywhere else in the app; people and the manager are neutral.
+  // A roster that cannot be read leaves every chip neutral and says so (the notice below).
+  const agents = useAgents()
+  const actorColor = React.useMemo(() => {
+    const byName = new Map<string, number | null | undefined>()
+    for (const a of Array.isArray(agents.data) ? agents.data : []) byName.set(a.name, a.color_index)
+    return (name: string) => agentColorVars(byName.get(name))
+  }, [agents.data])
+
   const levelsRef = React.useRef(levels)
   levelsRef.current = levels
-  const openRef = React.useRef(open)
-  openRef.current = open
+  const pathRef = React.useRef(path)
+  pathRef.current = path
   const alive = React.useRef(true)
   React.useEffect(() => {
     alive.current = true
@@ -70,12 +86,17 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
   }, [])
   // The address this screen itself put in the URL, so the effect below does not answer its own write.
   const written = React.useRef<string | null>(null)
+  // Pages asked for and not yet answered, so scrolling near an end asks once.
+  const asking = React.useRef(new Set<string>())
 
   const fetchLevel = React.useCallback(
     async (query: ThreadQuery): Promise<LoadedLevel> => {
       const page = await getJson<ThreadPageResponse>(threadUrl(projectId, query))
-      // Every page says whether the chapters job is on; a Hub that predates the job omits it.
-      if (alive.current) setCanWeave(page.can_weave === true)
+      if (alive.current) {
+        // Every page says whether the chapters job is on; a Hub that predates the job omits it.
+        setCanWeave(page.can_weave === true)
+        if (!query.under || query.under === SURFACE) setSurfaceTotal(page.total)
+      }
       return toLoadedLevel(page)
     },
     [projectId],
@@ -84,7 +105,26 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
     if (alive.current) setLevels((prev) => ({ ...prev, [under]: level }))
   }, [])
 
-  // Opening the tab: the newest page, so the present end is what is in view.
+  const lookup = (key: string): ThreadKnot | undefined => {
+    for (const level of Object.values(levelsRef.current)) {
+      const found = level?.knots.find((k) => k.key === key)
+      if (found) return found
+    }
+    return undefined
+  }
+  /** What a selected knot holds, read once: the panel draws it as the smaller thread. */
+  const readInside = React.useCallback(
+    (held: ThreadKnot | undefined) => {
+      if (!held || held.child_count === 0 || levelsRef.current[held.key]) return
+      fetchLevel({ under: held.key, first: true }).then(
+        (level) => store(held.key, level),
+        () => alive.current && setFailed(true),
+      )
+    },
+    [fetchLevel, store],
+  )
+
+  // Opening the tab: the newest page, with the newest surface knot selected at the right.
   const addressed = knot !== null
   React.useEffect(() => {
     if (addressed) return
@@ -94,100 +134,111 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
       .then((level) => {
         if (cancelled) return
         store(SURFACE, level)
-        setCurrent(level.knots[level.knots.length - 1]?.key ?? null)
-        setReveal((n) => n + 1)
+        const newest = level.knots[level.knots.length - 1]
+        setPath(newest ? [newest.key] : [])
+        setDrawKey((n) => n + 1)
+        readInside(newest)
       })
       .catch(() => !cancelled && setFailed(true))
     return () => {
       cancelled = true
     }
-  }, [addressed, fetchLevel, store])
+  }, [addressed, fetchLevel, store, readInside])
 
-  // An address: open every ancestor at the page that holds the way down, then land on the knot,
-  // itself opened when it holds knots, as clicking it would have.
+  // An address: read every level on the way down at the page that holds it, and what the knot itself
+  // holds, then select it with every knot above it and give it focus.
   React.useEffect(() => {
     if (!knot || knot === written.current) return
     let cancelled = false
     setFailed(false)
     ;(async () => {
       const found = await getJson<{ knot: ThreadKnot; ancestors: string[] }>(knotUrl(projectId, knot))
-      const path = [SURFACE, ...found.ancestors]
+      const under = [SURFACE, ...found.ancestors]
       const targets = [...found.ancestors, found.knot.key]
       const holds = found.knot.child_count > 0
       const [loaded, own] = await Promise.all([
-        Promise.all(path.map((under, i) => fetchLevel({ under, around: targets[i] }))),
+        Promise.all(under.map((u, i) => fetchLevel({ under: u, around: targets[i] }))),
         holds ? fetchLevel({ under: found.knot.key, first: true }) : Promise.resolve(undefined),
       ])
       if (cancelled || !alive.current) return
       setLevels((prev) => {
         const next = { ...prev }
-        path.forEach((under, i) => {
-          next[under] = loaded[i]
+        under.forEach((u, i) => {
+          next[u] = loaded[i]
         })
         if (own) next[found.knot.key] = own
         return next
       })
-      setOpen(new Set(holds ? targets : found.ancestors))
-      setCurrent(found.knot.key)
-      setReveal((n) => n + 1)
+      setPath(targets)
+      setDrawKey((n) => n + 1)
+      setFocusTick((n) => n + 1)
     })().catch(() => !cancelled && setFailed(true))
     return () => {
       cancelled = true
     }
   }, [knot, projectId, fetchLevel])
 
-  const toggle = (key: string) => {
-    const closing = openRef.current.has(key)
-    setOpen((prev) => {
-      const next = new Set(prev)
-      if (closing) next.delete(key)
-      else next.add(key)
-      return next
-    })
-    setCurrent(key)
+  const choose = (next: string[]) => {
+    const key = next[next.length - 1]
+    setPath(next)
+    if (!key) return
     written.current = key
     onAddress(key)
-    // Closing brings the closed knot back into view: the reader is not left where its children were.
-    if (closing) setReveal((n) => n + 1)
-    // Opening always asks again: what a knot holds may have grown since it was last open.
-    else fetchLevel({ under: key, first: true }).then((level) => store(key, level), () => setFailed(true))
+    readInside(lookup(key))
   }
 
   const more = (under: string, direction: 'before' | 'after') => {
     const held = levelsRef.current[under]
     const cursor = direction === 'before' ? held?.beforeCursor : held?.afterCursor
-    if (!held || !cursor) return
+    const ask = `${under}|${direction}|${cursor}`
+    if (!held || !cursor || asking.current.has(ask)) return
+    asking.current.add(ask)
     const query: ThreadQuery = { under, ...(direction === 'before' ? { before: cursor } : { after: cursor }) }
-    fetchLevel(query).then(
-      (page) => {
-        if (!alive.current) return
-        setLevels((prev) => {
-          const base = prev[under]
-          return base ? { ...prev, [under]: joinPage(base, page, direction) } : prev
-        })
-      },
-      () => setFailed(true),
-    )
+    fetchLevel(query)
+      .then(
+        (page) => {
+          if (!alive.current) return
+          setLevels((prev) => {
+            const base = prev[under]
+            return base ? { ...prev, [under]: joinPage(base, page, direction) } : prev
+          })
+        },
+        () => alive.current && setFailed(true),
+      )
+      .finally(() => asking.current.delete(ask))
+  }
+  const hasMore = (under: string, direction: 'before' | 'after') => {
+    const held = levels[under]
+    return !!held && (direction === 'before' ? held.hasBefore : held.hasAfter)
   }
 
-  const jump = (query: ThreadQuery, pick: (knots: ThreadKnot[]) => ThreadKnot | undefined) => {
-    fetchLevel(query).then(
+  // Either end of the surface: selected at once when it is loaded, read afresh when it is not.
+  const jump = (end: 'beginning' | 'present') => {
+    const surface = levelsRef.current[SURFACE]
+    if (!surface) return
+    const loadedEnd = end === 'beginning' ? !surface.hasBefore : !surface.hasAfter
+    const pick = (knots: ThreadKnot[]) => (end === 'beginning' ? knots[0] : knots[knots.length - 1])
+    if (loadedEnd) {
+      const target = pick(surface.knots)
+      if (target) choose([target.key])
+      return
+    }
+    fetchLevel(end === 'beginning' ? { first: true } : {}).then(
       (level) => {
         store(SURFACE, level)
-        setCurrent(pick(level.knots)?.key ?? null)
-        setReveal((n) => n + 1)
+        setDrawKey((n) => n + 1)
+        const target = pick(level.knots)
+        if (target) choose([target.key])
       },
-      () => setFailed(true),
+      () => alive.current && setFailed(true),
     )
   }
-  const toBeginning = () => jump({ first: true }, (knots) => knots[0])
-  const toPresent = () => jump({}, (knots) => knots[knots.length - 1])
 
   // Live: a level that reaches the present end takes the newest page; a level the reader has
   // scrolled away from is not touched, so their view does not move.
   const refresh = React.useCallback(() => {
     const reaching = Object.entries(levelsRef.current).filter(
-      ([under, level]) => level && !level.hasAfter && (under === SURFACE || openRef.current.has(under)),
+      ([under, level]) => level && !level.hasAfter && (under === SURFACE || pathRef.current.includes(under)),
     )
     for (const [under] of reaching) {
       fetchLevel({ under }).then(
@@ -218,6 +269,12 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
     timer.current = setTimeout(refresh, REFRESH_AFTER_MS)
   })
 
+  const inner = React.useMemo(() => {
+    const out: Record<string, readonly ThreadKnot[] | undefined> = {}
+    for (const [under, level] of Object.entries(levels)) if (under !== SURFACE) out[under] = level?.knots
+    return out
+  }, [levels])
+
   const surface = levels[SURFACE]
   if (!surface) {
     return (
@@ -226,28 +283,44 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
       </p>
     )
   }
+  const first = surface.knots[0]
+  const last = surface.knots[surface.knots.length - 1]
   return (
-    <>
-      {failed ? (
-        <p className="aw-thread-note" role="alert">
-          Part of the thread could not be read.
-        </p>
-      ) : null}
-      {canWeave ? <WeaveButton /> : null}
-      <Thread
-        levels={levels}
-        open={open}
-        current={current}
-        reveal={reveal}
-        now={now}
-        atBeginning={!surface.hasBefore}
-        atPresent={!surface.hasAfter}
-        onToggle={toggle}
-        onMore={more}
-        onJumpToBeginning={toBeginning}
-        onBackToPresent={toPresent}
-        onOpenLink={onOpenLink}
-      />
-    </>
+    <ThreadLoom
+      surface={surface.knots}
+      levels={inner}
+      path={path}
+      onPath={choose}
+      now={now}
+      drawKey={drawKey}
+      focusTick={focusTick}
+      actorColor={actorColor}
+      onOpenLink={onOpenLink}
+      surfaceTotal={surfaceTotal}
+      surfaceSummary={surface.summary}
+      hasMore={hasMore}
+      onMore={more}
+      onBeginning={() => jump('beginning')}
+      onPresent={() => jump('present')}
+      atBeginning={!surface.hasBefore && path[0] === first?.key}
+      atPresent={!surface.hasAfter && path[0] === last?.key}
+      notice={
+        failed || agents.isError ? (
+          <>
+            {failed ? (
+              <p className="aw-thread-note" role="alert">
+                Part of the thread could not be read.
+              </p>
+            ) : null}
+            {agents.isError ? (
+              <p className="aw-thread-note" role="status">
+                The agents could not be read, so they are shown without their colours.
+              </p>
+            ) : null}
+          </>
+        ) : null
+      }
+      actions={canWeave ? <WeaveButton /> : null}
+    />
   )
 }

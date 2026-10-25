@@ -284,3 +284,35 @@ async def test_a_chapter_from_before_the_hub_opens_into_release_tags_then_commit
     assert commits[0]["records"] == [shas[0][:12]]
     unreleased = (await level(app, auth_headers, tags[1]["key"], limit=200, first=True))["knots"]
     assert [c["title"] for c in unreleased] == ["third"]
+
+
+async def test_a_paged_level_counts_and_places_its_knots_over_all_of_it(app, auth_headers):
+    """The panel's figures come from the whole level, never the page a reader has loaded: a chapter
+    read one knot at a time still says what it is made of, who was in it, and 'n of N'."""
+    loose = task("loose", 1)
+    loose.assignee = "mender"
+    await seed(doc(1, 0), doc(2, 10), doc(3, 20), loose)
+    await write(
+        [
+            chapter("a", ["document:spdoc-1", "document:spdoc-2", "document:spdoc-3"], 0, 30),
+            chapter("b", ["task:task-loose"], 1, 2),
+        ]
+    )
+    await seed(task("late", 90))
+    body = await level(app, auth_headers, limit=1)
+    assert body["counts"] == {"chapter": 2, "task": 1}
+    assert body["span"] == {"start": at(0).isoformat(), "end": at(30).isoformat()}, "the chapters'"
+
+    surface = await level(app, auth_headers, limit=1, first=True)
+    first = surface["knots"][0]
+    assert first["key"] == "chapter:a" and first["place"] == {"n": 1, "of": 2}
+    assert first["made_of"] == [{"kind": "document", "word": "Document", "count": 3}]
+    second = await level(app, auth_headers, limit=1, after=surface["after_cursor"])
+    assert second["knots"][0]["place"] == {"n": 2, "of": 2}
+    assert "mender" in second["knots"][0]["people"], "the actors of what it holds"
+    assert second["knots"][0]["actors"] == ["manager"]
+
+    inner = await level(app, auth_headers, "chapter:a", limit=1, first=True)
+    assert inner["knots"][0]["place"] == {"n": 1, "of": 3}
+    knot = await app.get(f"{THREAD}/knot", params={"key": "document:spdoc-3"}, headers=auth_headers)
+    assert knot.json()["knot"]["place"] == {"n": 3, "of": 3}

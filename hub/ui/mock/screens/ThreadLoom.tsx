@@ -1,7 +1,6 @@
 import * as React from 'react'
 import type { ThreadKnot } from '@/api/thread'
 import { ThreadLoom } from '@/components/thread/loom/ThreadLoom'
-import type { LoomOrientation, LoomStyle } from '@/components/thread/loom/Loom'
 import { agentColorVars } from '@/lib/agentColors'
 import { LINK_LABEL } from '@/lib/threadKnots'
 import recorded from '../thread-chapters-fixture.json'
@@ -24,17 +23,7 @@ const NEUTRAL = new Set(['Operator', 'manager', 'gutohuida'])
 const agents = order.filter((a) => !NEUTRAL.has(a))
 const actorColor = (name: string) => agentColorVars(NEUTRAL.has(name) ? null : agents.indexOf(name))
 
-export default function ThreadLoomScreen({
-  orientation,
-  threadStyle,
-  drawKey,
-  now,
-}: {
-  orientation: LoomOrientation
-  threadStyle: LoomStyle
-  drawKey: number
-  now: Date
-}) {
+export default function ThreadLoomScreen({ drawKey = 0, now }: { drawKey?: number; now: Date }) {
   // Opens on the newest chapter, the way the thread opens at the present.
   const [path, setPath] = React.useState<string[]>(() => [surface[surface.length - 2]!.key])
   const [followed, setFollowed] = React.useState<string | null>(null)
@@ -45,8 +34,6 @@ export default function ThreadLoomScreen({
         levels={byKey}
         path={path}
         onPath={setPath}
-        orientation={orientation}
-        threadStyle={threadStyle}
         now={now}
         drawKey={drawKey}
         actorColor={actorColor}

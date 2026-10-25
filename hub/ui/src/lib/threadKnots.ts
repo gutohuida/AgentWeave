@@ -37,21 +37,24 @@ export const LINK_LABEL: Record<string, string> = {
 const byTime = (a: ThreadKnot, b: ThreadKnot): number =>
   a.start < b.start ? -1 : a.start > b.start ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0
 
-/** `more` joined onto the side of `level` it lies beyond. A knot already held is replaced by the
- *  fresher copy, so a page fetched twice never draws a knot twice. */
+/** `more` joined onto the side of `level` it lies beyond, in the route's own order: a chaptered
+ *  surface is ordered by position (chapters, then the knots in none), not by start. A knot already
+ *  held is replaced by the fresher copy, so a page fetched twice never draws a knot twice. */
 export function joinPage(level: LoadedLevel, more: LoadedLevel, side: 'before' | 'after'): LoadedLevel {
   const fresh = new Set(more.knots.map((k) => k.key))
-  const knots = [...level.knots.filter((k) => !fresh.has(k.key)), ...more.knots].sort(byTime)
+  const held = level.knots.filter((k) => !fresh.has(k.key))
+  const knots = side === 'before' ? [...more.knots, ...held] : [...held, ...more.knots]
   return side === 'before'
-    ? { ...level, knots, hasBefore: more.hasBefore, beforeCursor: more.beforeCursor }
-    : { ...level, knots, hasAfter: more.hasAfter, afterCursor: more.afterCursor }
+    ? { ...level, knots, hasBefore: more.hasBefore, beforeCursor: more.beforeCursor, summary: more.summary ?? level.summary }
+    : { ...level, knots, hasAfter: more.hasAfter, afterCursor: more.afterCursor, summary: more.summary ?? level.summary }
 }
 
 /** The newest page folded into a level that already reaches the present end: what the page covers
  *  is replaced (a knot may have changed), what lies before it is kept as the reader left it. */
 export function refreshEnd(level: LoadedLevel, newest: LoadedLevel): LoadedLevel {
   const first = newest.knots[0]
-  const kept = first ? level.knots.filter((k) => byTime(k, first) < 0) : level.knots
+  const at = first ? level.knots.findIndex((k) => k.key === first.key) : -1
+  const kept = !first ? level.knots : at >= 0 ? level.knots.slice(0, at) : level.knots.filter((k) => byTime(k, first) < 0)
   if (kept.length === 0) return newest
   return {
     knots: [...kept, ...newest.knots],
@@ -59,6 +62,7 @@ export function refreshEnd(level: LoadedLevel, newest: LoadedLevel): LoadedLevel
     beforeCursor: level.beforeCursor,
     hasAfter: newest.hasAfter,
     afterCursor: newest.afterCursor,
+    summary: newest.summary ?? level.summary,
   }
 }
 
