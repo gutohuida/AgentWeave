@@ -385,7 +385,24 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
         node_ids = failed_test_ids(text)
         if node_ids:
             result["failed_tests"] = node_ids
+        excerpt = failure_excerpt(text)
+        if excerpt:
+            result["failure_excerpt"] = excerpt
     return result
+
+
+_FAILURES_HEADER_RE = re.compile(r"^=+ (?:FAILURES|ERRORS) =+\s*$", re.MULTILINE)
+
+
+def failure_excerpt(output: str) -> str:
+    """The start of pytest's FAILURES (or ERRORS) section, where the tracebacks are, or `""`.
+
+    The stored tail of a long suite holds only the summary, so a failure's traceback was lost:
+    two gate runs on 2026-10-25 kept `FAILED <node id>` and nothing that said why."""
+    found = _FAILURES_HEADER_RE.search(output)
+    if found is None or len(output) - found.start() <= OUTPUT_TAIL_CHARS:
+        return ""  # none, or already inside the tail
+    return output[found.start() : found.start() + OUTPUT_TAIL_CHARS]
 
 
 # --- reuse and confirmation ----------------------------------------------------------------------

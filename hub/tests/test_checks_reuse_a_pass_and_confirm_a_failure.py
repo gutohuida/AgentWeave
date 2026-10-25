@@ -353,3 +353,26 @@ async def test_a_task_whose_own_failure_stands_is_not_re_checked_when_main_moves
     await project_checks.drain()
 
     assert [r.state for r in await _runs(task_id)] == ["failed"]
+
+
+def test_a_long_failing_output_keeps_the_start_of_its_tracebacks(tmp_path_factory):
+    """The stored tail of a long suite holds only its summary; the FAILURES section is kept too.
+    Two gate runs on 2026-10-25 kept `FAILED <node id>` and nothing that said why."""
+    outside = tmp_path_factory.mktemp("noisy")
+    script = outside / "noisy.py"
+    script.write_text(
+        "import sys\n"
+        "print('=' * 20 + ' FAILURES ' + '=' * 20)\n"
+        "print('E   AssertionError: the reason it failed')\n"
+        "print('warning line\\n' * 800)\n"
+        "print('FAILED t.py::a')\n"
+        "print('1 failed, 3 passed in 1.00s')\n"
+        "sys.exit(1)\n",
+        encoding="utf-8",
+    )
+    result = project_checks.run_one(
+        {"name": "suite", "command": f'{PY} "{script}"', "timeout_seconds": 60}, outside
+    )
+    assert "the reason it failed" not in result["output_tail"]
+    assert "the reason it failed" in result["failure_excerpt"]
+    assert result["failed_tests"] == ["t.py::a"]
