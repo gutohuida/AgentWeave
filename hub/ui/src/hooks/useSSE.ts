@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient, type Query, type QueryClient } from '@tanstack/react-query'
 import { useConfigStore } from '@/store/configStore'
+import type { AgentSummary, ContextUsage } from '@/api/agents'
+import type { AgentConversation, ProjectConversations } from '@/api/agentChat'
 
 export interface SSEEvent {
   type: string
@@ -423,6 +425,56 @@ function agentListFilter(pid: string | undefined) {
   }
 }
 
+type ReadingHolder = { context_usage?: ContextUsage | null }
+
+/** The reading to keep when *incoming* arrives for a row holding *current*: the newer one, except
+ *  that one without a percentage does not displace a complete reading of the same provider session
+ *  (the Hub's rule, `usable_context_reading`). */
+function nextReading(current: ContextUsage | null | undefined, incoming: ContextUsage): ContextUsage | null | undefined {
+  if (!current) return incoming
+  if (typeof current.observed_at === 'number' && incoming.observed_at < current.observed_at) return current
+  if (
+    (incoming.percent === null || incoming.percent === undefined) &&
+    current.percent !== null &&
+    current.percent !== undefined &&
+    current.session_id === incoming.session_id
+  ) {
+    return current
+  }
+  return incoming
+}
+
+/** Put a `context_warning` reading into the cached roster and conversation lists. Returns false
+ *  when the payload names no agent, so the caller refetches instead. */
+function applyContextReading(queryClient: QueryClient, pid: string | undefined, data: unknown): boolean {
+  const reading = data as (ContextUsage & { agent?: string; conversation_id?: string | null }) | null
+  if (!pid || !reading || typeof reading.agent !== 'string' || typeof reading.observed_at !== 'number') {
+    return false
+  }
+  const { agent, conversation_id: conversationId, ...usage } = reading
+  const incoming = usage as ContextUsage
+  const patch = <T extends ReadingHolder>(row: T): T => {
+    const next = nextReading(row.context_usage, incoming)
+    return next === row.context_usage ? row : { ...row, context_usage: next }
+  }
+  queryClient.setQueriesData<AgentSummary[]>(agentListFilter(pid), (rows) =>
+    Array.isArray(rows) ? rows.map((r) => (r.name === agent ? patch(r) : r)) : rows,
+  )
+  if (conversationId) {
+    const patchConversation = <T extends { id: string } & ReadingHolder>(rows: T[]) =>
+      rows.map((c) => (c.id === conversationId ? patch(c) : c))
+    queryClient.setQueriesData<ProjectConversations>(
+      { queryKey: ['project', pid, 'conversations'] },
+      (current) => (current?.conversations ? { ...current, conversations: patchConversation(current.conversations) } : current),
+    )
+    queryClient.setQueriesData<AgentConversation[]>(
+      { queryKey: ['project', pid, 'agent', agent, 'conversations'] },
+      (rows) => (Array.isArray(rows) ? patchConversation(rows) : rows),
+    )
+  }
+  return true
+}
+
 /** Apply one stream event to *queryClient*'s cache. Called once per event per tab (see
  *  `acquireInvalidator`), however many components subscribe. */
 function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
@@ -514,6 +566,11 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
             // before this broadcasts) — the loops list/detail's `firing_active` would otherwise
             // stay stuck true until something else happened to refetch it.
             inv({ queryKey: ['project', pid, 'loops'] })
+            // A run's end expires its unanswered permission requests and flips a question's
+            // `asker_waiting` without any permission_/question_ event, and those two lists are no
+            // longer polled: one refetch per run end (never per line) picks both up.
+            inv({ queryKey: ['project', pid, 'permission-requests'] })
+            inv({ queryKey: ['project', pid, 'questions'] })
           }
           // Run status is folded into the agents list response (agents.py's
           // agents_with_active_run), and a Hub-triggered run never posts a
@@ -548,7 +605,9 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           break
         }
         case 'context_warning':
-          inv(agentListFilter(pid))
+          // The payload is the reading itself: put it where the roster and the conversation lists
+          // show it. Only a payload that cannot be placed falls back to a refetch.
+          if (!applyContextReading(queryClient, pid, event.data)) inv(agentListFilter(pid))
           break
         case 'agent_session_changed': {
           const d = event.data as { agent?: string }
@@ -653,8 +712,10 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           break
       }
   // An event naming a conversation moves the conversation lists (the rail's, and that agent's).
+  // A streamed line or reading moves nothing a conversation list shows beyond what is applied in
+  // place, so it does not re-read the lists once per line.
   const named = (event.data ?? {}) as { conversation_id?: string; agent?: string }
-  if (named.conversation_id && pid) {
+  if (named.conversation_id && pid && event.type !== 'agent_output' && event.type !== 'context_warning') {
     inv({ queryKey: ['project', pid, 'conversations'] })
     if (named.agent) inv({ queryKey: ['project', pid, 'agent', named.agent, 'conversations'] })
   }
