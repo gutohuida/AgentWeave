@@ -12,17 +12,32 @@ import os
 import subprocess
 import sys
 import threading
-import time
 
 import pytest
 
+#: Only a hang guard, never the expected wait: a fresh database migrates every revision before the
+#: pin is logged, and on a gate machine running two Hub suites at once that ran past the 30s this
+#: test once allowed (2026-10-25: gate runs chk-f047489cd56a and chk-7658cc2ac9f7 on the operator's
+#: Hub failed here; the second's run on main passed it).
+STARTUP_HANG_GUARD_SECONDS = 600
+#: The lines that settle the question: the pin is named, or could not be made, or startup ended.
+_SETTLING = (
+    "Tool server pinned at",
+    "Could not pin the tool server",
+    "Application startup complete",
+)
 
-def _drain(proc: subprocess.Popen, buffer: list) -> None:
+
+def _drain(proc: subprocess.Popen, buffer: list, settled: threading.Event) -> None:
     try:
         for line in proc.stderr:
             buffer.append(line)
+            if any(marker in line for marker in _SETTLING):
+                settled.set()
     except ValueError:
         pass
+    finally:
+        settled.set()  # stderr closed: the process exited, and waiting longer would prove nothing
 
 
 def test_a_started_hub_prints_the_path_of_the_tool_server_it_pinned(tmp_path):
@@ -48,20 +63,18 @@ def test_a_started_hub_prints_the_path_of_the_tool_server_it_pinned(tmp_path):
         errors="replace",
     )
     lines: list = []
-    threading.Thread(target=_drain, args=(proc, lines), daemon=True).start()
-    deadline = time.monotonic() + 30
+    settled = threading.Event()
+    threading.Thread(target=_drain, args=(proc, lines, settled), daemon=True).start()
     try:
-        while time.monotonic() < deadline:
-            if any("Application startup complete" in ln for ln in lines):
-                break
-            if proc.poll() is not None:
-                pytest.fail("uvicorn exited before startup:\n" + "".join(lines))
-            time.sleep(0.05)
-        else:
-            pytest.fail("uvicorn did not finish starting within 30s:\n" + "".join(lines))
+        # Wait for the line itself, however long the migrations before it take on this machine.
+        if not settled.wait(timeout=STARTUP_HANG_GUARD_SECONDS):
+            pytest.fail(
+                f"uvicorn printed neither the pin nor startup in {STARTUP_HANG_GUARD_SECONDS}s:\n"
+                + "".join(lines)
+            )
     finally:
         proc.kill()
-        proc.wait(timeout=10)
+        proc.wait(timeout=60)
 
     pinned = [ln for ln in lines if "Tool server pinned at" in ln]
     assert pinned, "".join(lines)
