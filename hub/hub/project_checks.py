@@ -313,6 +313,16 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
 
     env, removed = check_environment()
     started = time.monotonic()
+    if owner is not None and owner in _superseded:
+        # Main moved while this run was still building its checkout: `supersede` found no process
+        # to end, and the caller discards this result as superseded. Nothing is started.
+        return {
+            "name": check["name"],
+            "exit_code": None,
+            "timed_out": False,
+            "duration_seconds": 0.0,
+            "output_tail": "",
+        }
     proc = subprocess.Popen(
         check["command"],
         shell=True,
@@ -326,6 +336,10 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
     )
     if owner is not None:
         _processes[owner] = proc
+        if owner in _superseded:
+            # `supersede` sets `_superseded` before it reads `_processes`: a move that landed
+            # between the check above and this registration found no process, so end it here.
+            terminate_process_tree(proc.pid)
     timed_out = False
     try:
         output, _ = proc.communicate(timeout=check["timeout_seconds"])
