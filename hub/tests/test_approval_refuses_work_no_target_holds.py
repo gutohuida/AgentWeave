@@ -139,3 +139,82 @@ def test_a_reviewer_meeting_the_refusal_is_told_to_send_it_back():
     refusal.for_operator = True
     assert "If you are reviewing" not in refusal.detail()
     assert "aaaaaaaaaaaa" in refusal.detail()
+
+
+async def _accepted_task_then_prerequisite_merge(app, auth_headers, run_headers, root):
+    """task-5cae616b4bd4's shape: evidence accepted at the task's commit, then main gains approved
+    prerequisite work and the Hub merges it into the task branch (`_catch_up_prerequisites`)."""
+    make_repo(root)
+    await make_document(app, auth_headers, run_headers)
+    await set_main_branch("main")
+    task = await linked_task(app, auth_headers)
+    branch = worktrees.task_branch_name(task)
+    work = commit_on_branch(root, branch, "README2.md", "the change\n")
+    await accept_evidence(app, auth_headers, run_headers, summary="from the task's checkout")
+    git(root, "checkout", "-q", "main")
+    prerequisite = commit_on_branch(root, "main", "other.py", "approved elsewhere\n", create=False)
+    git(root, "checkout", "-q", branch)
+    return task, branch, work, prerequisite
+
+
+@pytest.mark.asyncio
+async def test_a_hub_prerequisite_merge_does_not_invalidate_accepted_evidence(
+    app, auth_headers, builder, tmp_path  # noqa: F811
+):
+    task, branch, work, prerequisite = await _accepted_task_then_prerequisite_merge(
+        app, auth_headers, builder, tmp_path
+    )
+    merged = git(
+        tmp_path,
+        "merge",
+        "--no-ff",
+        "-q",
+        "-m",
+        f"Bring in approved prerequisite work {prerequisite[:12]} (task-prereq)",
+        prerequisite,
+    )
+    assert merged.returncode == 0, merged.stderr
+    git(tmp_path, "checkout", "-q", "main")
+
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+    assert work in commits_on(tmp_path, "main")
+
+
+@pytest.mark.asyncio
+async def test_a_merge_that_changes_the_tasks_own_files_still_refuses(
+    app, auth_headers, builder, tmp_path  # noqa: F811
+):
+    """The rule never lets the task's own changes slip through: a merge commit carrying an edit of
+    its own is work nothing merges, as is a commit made after the prerequisite merge (below)."""
+    task, branch, work, prerequisite = await _accepted_task_then_prerequisite_merge(
+        app, auth_headers, builder, tmp_path
+    )
+    started = git(tmp_path, "merge", "--no-ff", "--no-commit", prerequisite)
+    assert started.returncode == 0, started.stderr
+    (tmp_path / "README2.md").write_text("changed inside the merge\n", encoding="utf-8")
+    git(tmp_path, "add", "README2.md")
+    git(tmp_path, "commit", "-q", "-m", "Bring in approved prerequisite work, with an edit")
+    edited = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    git(tmp_path, "checkout", "-q", "main")
+
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    assert [e["commits"] for e in refused.json()["detail"]["unlanded"]] == [[edited]]
+
+
+@pytest.mark.asyncio
+async def test_a_commit_after_a_clean_prerequisite_merge_still_refuses(
+    app, auth_headers, builder, tmp_path  # noqa: F811
+):
+    task, branch, work, prerequisite = await _accepted_task_then_prerequisite_merge(
+        app, auth_headers, builder, tmp_path
+    )
+    merged = git(tmp_path, "merge", "--no-ff", "-q", "-m", "Bring in prerequisite", prerequisite)
+    assert merged.returncode == 0, merged.stderr
+    later = commit_on_branch(tmp_path, branch, "README2.md", "more\n", create=False)
+    git(tmp_path, "checkout", "-q", "main")
+
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    assert [e["commits"] for e in refused.json()["detail"]["unlanded"]] == [[later]]

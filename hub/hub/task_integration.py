@@ -440,16 +440,52 @@ def task_commits_nothing_merges(
     nor inside any of *merge_shas* -- work approving would leave behind (F681). Oldest first.
 
     No commits where the task has no branch or git cannot answer: an unknown is not a refusal.
+
+    **A clean merge commit carries no work of its own, so it is not work left behind**
+    (task-5cae616b4bd4). The Hub's own "Bring in approved prerequisite work" merge moves a task
+    branch past the commit its accepted evidence names; counting that merge here refused every
+    approval after it, so the author re-recorded and the reviewer re-accepted the same work -- three
+    times on one task. A two-parent merge whose tree is exactly what git's merge of its parents
+    produces adds nothing its parents do not hold, and each parent is still judged on its own: one
+    on main or inside a merge target is landed, and any other is listed here as before. A merge
+    with *any* change of its own (an edited or resolved file) is not that merge and stays listed,
+    as does anything git cannot verify.
     """
     tip = task_branch_tip(root, task_id)
     if tip is None:
         return None, []
     branch = worktrees.task_branch_name(task_id)
     excluded = [f"^{ref}" for ref in [main_branch, *merge_shas] if ref]
-    result = _git(root, "rev-list", "--reverse", tip, *excluded, "--")
+    result = _git(root, "rev-list", "--reverse", "--parents", tip, *excluded, "--")
     if result.returncode != 0:
         return branch, []
-    return branch, [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    commits: List[str] = []
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if not fields:
+            continue
+        sha, parents = fields[0], fields[1:]
+        if len(parents) == 2 and _is_clean_merge_of(root, sha, parents[0], parents[1]):
+            continue
+        commits.append(sha)
+    return branch, commits
+
+
+def _is_clean_merge_of(root: Path, commit: str, first: str, second: str) -> bool:
+    """Whether *commit*'s tree is exactly git's own clean merge of *first* and *second*.
+
+    `merge-tree --write-tree` is plumbing (see `would_conflict`): it writes only objects, so asking
+    changes no checkout. False for a conflicting merge, any difference, or a git that cannot
+    answer -- the caller then keeps the commit listed, which is the conservative reading.
+    """
+    merged = _git(root, "merge-tree", "--write-tree", first, second)
+    if merged.returncode != 0:
+        return False
+    lines = merged.stdout.split()
+    if not lines:
+        return False
+    own = _git(root, "rev-parse", "--verify", f"{commit}^{{tree}}")
+    return own.returncode == 0 and own.stdout.strip() == lines[0]
 
 
 async def task_has_requirement_links(session: AsyncSession, task: Task) -> bool:
