@@ -1282,13 +1282,24 @@ async def _roster_availability(session: AsyncSession, project_id: str) -> "list[
             holdings_by_agent.setdefault(agent, []).append(
                 Holding(task_id=task_id, status=row[3], loop_id=row[2], reachable=True)
             )
-    roster = (
-        await session.execute(
-            select(Agent.name, Agent.runner_id)
-            .where(Agent.project_id == project_id, Agent.lifecycle != "archived")
-            .order_by(Agent.name)
-        )
-    ).all()
+    # **The Hub's own mender is not on the roster** (loop-df5f74816122, 2026-10-25): it is the
+    # repair agent a stall briefs, never a flow's builder or reviewer. Read as an ordinary agent,
+    # a firing handed it a build task, it became that task's author, and nobody could then move
+    # the task on. Left out here, at the one read every staffing answer derives from, so the pool,
+    # the reviewer ladder and the "somebody else could build" test cannot disagree about it.
+    from .stalls import HUB_ROLE
+
+    roster = [
+        (name, runner_id)
+        for name, runner_id, config in (
+            await session.execute(
+                select(Agent.name, Agent.runner_id, Agent.config)
+                .where(Agent.project_id == project_id, Agent.lifecycle != "archived")
+                .order_by(Agent.name)
+            )
+        ).all()
+        if (config or {}).get("hub_role") != HUB_ROLE
+    ]
     return [
         AgentAvailability(
             name=name,
