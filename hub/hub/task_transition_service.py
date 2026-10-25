@@ -27,7 +27,7 @@ from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from . import traces
+from . import flow_advance, traces
 from .db.models import RequirementEvidence, Run, Task, TaskTransition
 from .task_transitions import (
     STATUS_BLOCKED,
@@ -869,6 +869,11 @@ async def apply_transition(
     # object this same call returns; nothing else looks for it, and nothing persists it.
     transition.reported_advisories = reported
     session.add(transition)
+
+    # A flow's work handed on: its firing is asked for once this commits, not at its next tick
+    # (`flow_advance`). Never for the job's own moves -- a firing does not re-fire itself.
+    if task.loop_id and to_status in flow_advance.HANDOFF_STATUSES and origin != ORIGIN_JOB:
+        flow_advance.advance_after_commit(session, task.loop_id)
 
     if origin != ORIGIN_RUNTIME:
         # A divergence is an open condition, not a verdict: work reaching the ledger closes it,
