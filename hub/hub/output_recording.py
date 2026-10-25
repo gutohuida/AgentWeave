@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import run_secrets, traces
+from .context_readings import IS_CONTEXT_READING
 from .conversations import latest_open_conversation, new_conversation
 from .db.models import AgentOutput, Conversation, EventLog, Run
 from .model_catalog import context_window_for_model
@@ -262,7 +263,8 @@ async def record_context_usage(
         select(EventLog)
         .where(
             EventLog.project_id == project_id,
-            EventLog.event_type == "context_warning",
+            # The literal form, so this seek uses `ix_event_logs_context_agent_ts` (migration 0144).
+            IS_CONTEXT_READING,
             EventLog.agent == agent,
         )
         .order_by(EventLog.timestamp.desc())

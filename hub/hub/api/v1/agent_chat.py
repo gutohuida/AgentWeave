@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agent_roster import require_known_agent
 from ...auth import get_project
 from ...checkpoint_cutover import handover_of
-from ...context_readings import usable_context_reading
+from ...context_readings import context_reading_by_conversation
 from ...conversations import (
     archivable,
     archive,
@@ -41,7 +41,6 @@ from ...db.models import (
     AgentOutput,
     AIJob,
     Conversation,
-    EventLog,
     InboundQueueEntry,
     JobRun,
     Loop,
@@ -397,46 +396,6 @@ async def _loops_by_conversation(
     return loops
 
 
-async def _context_by_conversation(
-    session: AsyncSession, project_id: str, conversation_ids: List[str]
-) -> Dict[str, Any]:
-    """The context reading belonging to each of these conversations — one query for the page.
-
-    `context_warning` rows carry `data["conversation_id"]`, resolved when the reading is recorded
-    (`output_recording.record_context_usage`). Nothing read it back per conversation until now: the
-    agent roster groups the same rows by agent alone, which is a correct answer to a different
-    question and the wrong one for a conversation-scoped surface.
-
-    Filtered in Python rather than by a JSON path predicate in SQL, because `EventLog.data` is a
-    plain JSON column and SQLite's JSON operators are not uniformly available across the versions
-    this ships against. The row set is already bounded to one project's readings for the
-    conversations on the page.
-    """
-    if not conversation_ids:
-        return {}
-    wanted = set(conversation_ids)
-    result = await session.execute(
-        select(EventLog)
-        .where(
-            EventLog.project_id == project_id,
-            EventLog.event_type == "context_warning",
-        )
-        .order_by(EventLog.timestamp.desc())
-    )
-    rows_by_conversation: Dict[str, List[Any]] = {}
-    for event in result.scalars().all():
-        data = event.data
-        if not isinstance(data, dict):
-            continue
-        conversation_id = data.get("conversation_id")
-        if conversation_id in wanted:
-            rows_by_conversation.setdefault(conversation_id, []).append(data)
-    return {
-        conversation_id: usable_context_reading(rows)
-        for conversation_id, rows in rows_by_conversation.items()
-    }
-
-
 async def _to_response(
     session: AsyncSession, conversations: List[Conversation]
 ) -> List[ConversationResponse]:
@@ -446,7 +405,9 @@ async def _to_response(
     attention = await conversation_attention(session, conversation_ids)
     loops = await _loops_by_conversation(session, conversation_ids)
     context = (
-        await _context_by_conversation(session, conversations[0].project_id, conversation_ids)
+        await context_reading_by_conversation(
+            session, conversations[0].project_id, conversation_ids
+        )
         if conversations
         else {}
     )
