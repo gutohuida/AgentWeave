@@ -214,24 +214,21 @@ def make_clone(source_repo: Path, clone: Path) -> None:
 
 MAIN_THREAD = threading.main_thread()
 GIT_CALLS: List[Dict[str, Any]] = []
-_real_run = subprocess.run
+class _CountedPopen(subprocess.Popen):
+    """Counts every git process, and which thread started it. Wraps `Popen`, not `run`, so
+    `subprocess.run` stays the genuine function: the Hub remembers git facts only when it is
+    (`hub/hub/git_facts.py`), and a drive that replaced it would measure a Hub that never does."""
 
-
-def _counted_run(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
-    argv = args[0] if args else kwargs.get("args")
-    started = time.perf_counter()
-    try:
-        return _real_run(*args, **kwargs)
-    finally:
-        if isinstance(argv, (list, tuple)) and argv and "git" in os.path.basename(str(argv[0])):
+    def __init__(self, args, *rest, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        if isinstance(args, (list, tuple)) and args and "git" in os.path.basename(str(args[0])):
             GIT_CALLS.append(
                 {
-                    "argv": [str(a) for a in argv[:4]],
-                    "start": started,
-                    "seconds": time.perf_counter() - started,
+                    "argv": [str(a) for a in args[:4]],
+                    "start": time.perf_counter(),
                     "on_loop": threading.current_thread() is MAIN_THREAD,
                 }
             )
+        super().__init__(args, *rest, **kwargs)
 
 
 class Probe:
@@ -429,6 +426,12 @@ class Drive:
     # -- FR-1 -----------------------------------------------------------------------------
     async def turn_starts(self) -> None:
         print("turn-start-no-stall", flush=True)
+        # The process's first turn imports a dozen modules on first use; a running Hub pays that
+        # once, not per turn. Reported, not judged: one untasked warm-up turn per runner kind.
+        for kind in ("claude", "copilot", "codex"):
+            async with Probe() as probe:
+                await self.start_turn(self.agents[kind], None)
+            print(f"    warm-up {kind} turn (cold imports): stall {probe.worst * 1000:.0f}ms")
         for kind in ("claude", "copilot", "codex"):
             agent = self.agents[kind]
             task_id = await self.new_task(agent, f"perf turn {kind}")
@@ -1209,7 +1212,7 @@ class Drive:
 
 
 async def main(args: argparse.Namespace, clone: Path, db_copy: Path) -> int:
-    subprocess.run = _counted_run  # counts every git, and which thread ran it
+    subprocess.Popen = _CountedPopen  # counts every git, and which thread started it
     drive = Drive(clone)
     if args.lifespan:
         context = drive.app.router.lifespan_context(drive.app)

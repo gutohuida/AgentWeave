@@ -26,6 +26,7 @@ from starlette.routing import Match
 from . import (
     __version__,
     bound_address,
+    git_facts,
     instance_identity,
     run_reconciliation,
     tool_server,
@@ -688,6 +689,10 @@ def create_app() -> FastAPI:
             if run_reconciliation.has_deferred_schedules():
                 asyncio.create_task(run_reconciliation.drain_deferred_schedules())
         return await call_next(request)
+
+    # A read request resolves each git ref name once (`git_facts`, D4 of
+    # `turn-starts-approvals-and-evidence-never-freeze-the-hub`).
+    app.add_middleware(git_facts.ReadScopeMiddleware)
 
     # Added last, so it is outermost: the span covers every layer's answer, the size limit's and the
     # scrubber's included (`everything-the-hub-does-is-in-a-trace`, D3).

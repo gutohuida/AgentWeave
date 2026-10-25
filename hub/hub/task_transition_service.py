@@ -27,7 +27,7 @@ from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from . import traces
+from . import blocking, traces
 from .db.models import RequirementEvidence, Run, Task, TaskTransition
 from .task_transitions import (
     STATUS_BLOCKED,
@@ -1066,7 +1066,10 @@ async def _release_task_workspace(session: AsyncSession, task: Task) -> None:
 
     try:
         workspace = await project_workspace.resolve_project_workspace(session, task.project_id)
-        result = worktrees.release_task_worktree(workspace.root, task.id)
+        # Off the loop, one at a time with every other worktree change (`blocking`, D1/D5).
+        result = await blocking.run_serialized(
+            worktrees.release_task_worktree, workspace.root, task.id
+        )
     except Exception as exc:  # noqa: BLE001 - any release failure is recorded, never a rollback
         logger.warning("Could not release task %s's checkout", task.id, exc_info=True)
         # `commit=False`: this runs inside `apply_transition`, whose caller commits. Committing
@@ -1154,15 +1157,21 @@ async def hub_written_documents(session: AsyncSession, workspace, project_id: st
         .scalars()
         .all()
     )
-    written = set()
-    for document in rows:
-        try:
-            content = spec_documents.read_document(workspace, document.path)
-        except Exception:  # noqa: BLE001 - an unreadable file is simply not exempt
-            continue
-        if content is not None and spec_lifecycle.digest(content) == document.content_digest:
-            written.add(document.path)
-    return written
+    recorded = [(document.path, document.content_digest) for document in rows]
+
+    def _still_written() -> set:
+        written = set()
+        for path, content_digest in recorded:
+            try:
+                content = spec_documents.read_document(workspace, path)
+            except Exception:  # noqa: BLE001 - an unreadable file is simply not exempt
+                continue
+            if content is not None and spec_lifecycle.digest(content) == content_digest:
+                written.add(path)
+        return written
+
+    # The files are read off the loop (`blocking`, D1); the rows were read on it, above.
+    return await blocking.run(_still_written)
 
 
 async def integrate_task(session: AsyncSession, task: Task, actor: Actor) -> list:
@@ -1275,7 +1284,7 @@ async def _integrate_task(
         )
 
     root = workspace.root
-    fault = task_integration.repository_fault(root)
+    fault = await blocking.run(task_integration.repository_fault, root)
     if fault is not None:
         if await task_integration.repository_proof(session, task, root):
             # F820: git failed for a project the Hub has worked in through git. A passing fault
@@ -1314,11 +1323,13 @@ async def _integrate_task(
         )
 
     if resolution is not None:
-        missing = [
-            target.commit_sha
-            for target in targets
-            if _is_ancestor(root, target.commit_sha, resolution) is not True
-        ]
+        missing = await blocking.run(
+            lambda: [
+                target.commit_sha
+                for target in targets
+                if _is_ancestor(root, target.commit_sha, resolution) is not True
+            ]
+        )
         if missing:
             raise ResolutionRefusedError(
                 f"{resolution[:12]} does not contain {', '.join(sha[:12] for sha in missing)}, "
@@ -1332,10 +1343,15 @@ async def _integrate_task(
         ]
 
     hub_written = await hub_written_documents(session, workspace, task.project_id)
-    results = [
-        task_integration.integrate(root, target, project.main_branch, hub_written=hub_written)
-        for target in targets
-    ]
+    # The merge into the main branch, off the loop and serialized with every other worktree change
+    # and merge, as it was while it ran on the loop (`blocking.run_serialized`, D5).
+    main_branch = project.main_branch
+    results = await blocking.run_serialized(
+        lambda: [
+            task_integration.integrate(root, target, main_branch, hub_written=hub_written)
+            for target in targets
+        ]
+    )
     newest = await task_integration.newest_per_target(session, task.id)
     for result in results:
         previous = newest.get((result.commit_sha, result.target_branch))
