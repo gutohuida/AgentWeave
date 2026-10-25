@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteJson, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
-import { onSseReconnect, useSSE, SSEEvent } from '@/hooks/useSSE'
+import { invalidateOncePerEvent, onSseReconnect, useSSE, SSEEvent } from '@/hooks/useSSE'
 import { hubDate } from '@/lib/hubTime'
 import { PERMISSION_MODE_CONTROL } from './modelCatalog'
 import type { ReachGrants } from './projects'
@@ -217,15 +217,10 @@ export type AgentLifecycleFilter = 'open' | 'archived' | 'all'
 
 export function useAgents(lifecycle: AgentLifecycleFilter = 'open') {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  const queryClient = useQueryClient()
 
   // Invalidate immediately when the CLI pushes a session_synced SSE event
-  useSSE((event) => {
-    const d = (event.data ?? {}) as { project_id?: string }
-    if (event.type === 'session_synced' && d.project_id === projectId) {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents'] })
-    }
-  })
+  // session_synced refreshes the roster from useSSE's one shared handler.
+  useSSE()
 
   // Invalidated by session_synced above and by agent_heartbeat/context_warning
   // in useSSE.ts's central switch; a lost connection is now visible (the
@@ -515,7 +510,7 @@ export function useAgentTimeline(name: string | null) {
   useSSE((event) => {
     const d = (event.data ?? {}) as { project_id?: string }
     if (name && d.project_id === projectId && eventBelongsToTimeline(event, name)) {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents', name, 'timeline'] })
+      invalidateOncePerEvent(queryClient, event, { queryKey: ['project', projectId, 'agents', name, 'timeline'] })
     }
   })
 

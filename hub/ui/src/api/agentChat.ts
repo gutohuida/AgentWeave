@@ -151,15 +151,9 @@ export function conversationLabel(conversation: AgentConversation): string {
 
 export function useAgentConversations(agent: string | null) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  const queryClient = useQueryClient()
 
-  useSSE((event) => {
-    const data = (event.data ?? {}) as Record<string, unknown>
-    if (data.project_id !== projectId) return
-    if (agent && data.agent === agent && data.conversation_id) {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agent', agent, 'conversations'] })
-    }
-  })
+  // The conversation lists refresh from useSSE's one shared handler.
+  useSSE()
 
   return useQuery<AgentConversation[]>({
     queryKey: ['project', projectId, 'agent', agent, 'conversations'],
@@ -179,15 +173,8 @@ export function useAgentConversations(agent: string | null) {
  * registered project, not only the selected one. */
 export function useProjectConversations(projectId: string | null, lifecycle: 'open' | 'archived' = 'open') {
   const { isConfigured } = useConfigStore()
-  const queryClient = useQueryClient()
 
-  useSSE((event) => {
-    const data = (event.data ?? {}) as Record<string, unknown>
-    if (data.project_id !== projectId) return
-    if (event.type === 'conversation_updated' || data.conversation_id) {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'conversations'] })
-    }
-  })
+  useSSE()
 
   return useQuery<ProjectConversations>({
     queryKey: ['project', projectId, 'conversations', lifecycle],

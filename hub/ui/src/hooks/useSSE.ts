@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useQueryClient, type Query, type QueryClient } from '@tanstack/react-query'
 import { useConfigStore } from '@/store/configStore'
 
 export interface SSEEvent {
@@ -109,7 +109,7 @@ const stateListeners = new Set<(state: SSEConnectionState) => void>()
 
 /** Refetch every open task story (`['project', pid, 'tasks', id, 'story']`) of project *pid*. */
 function invalidateTaskStories(queryClient: QueryClient, pid: string | undefined): void {
-  queryClient.invalidateQueries({
+  invalidateCoalesced(queryClient, {
     predicate: (query) => {
       const key = query.queryKey
       return key[0] === 'project' && key[1] === pid && key[2] === 'tasks' && key[4] === 'story'
@@ -190,6 +190,8 @@ export function cancelReconnect(): void {
  */
 export function __resetSSEStateForTest(): void {
   cancelReconnect()
+  invalidators.forEach((i) => i.unsubReconnect())
+  invalidators.clear()
   listeners.clear()
   reconnectListeners.clear()
   hasEverConnected = false
@@ -412,6 +414,345 @@ export function useSSEConnectionState(): SSEConnectionState {
   return state
 }
 
+/** Refresh the agent roster without its per-agent sub-resources (output seed, lines, timeline):
+ *  those keys sit under the same prefix but are fed by their own events. */
+function agentListFilter(pid: string | undefined) {
+  return {
+    queryKey: ['project', pid, 'agents'],
+    predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey.length <= 4,
+  }
+}
+
+/** Apply one stream event to *queryClient*'s cache. Called once per event per tab (see
+ *  `acquireInvalidator`), however many components subscribe. */
+function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
+  const inv = (filters?: InvalidateFilters) => invalidateOncePerEvent(queryClient, event, filters)
+  const pid = (event.data as { project_id?: string } | null)?.project_id
+  switch (event.type) {
+        case 'message_created':
+        case 'message_read':
+          inv({ queryKey: ['project', pid, 'messages'] })
+          inv({ queryKey: ['project', pid, 'status'] })
+          break
+        case 'task_created':
+        case 'spec_updated':
+          // Evidence recorded or decided, and a recording run's end, arrive here: each is part of a
+          // task's story. The spec page's own listener (`useSpecEvents`) covers the spec queries.
+          invalidateTaskStories(queryClient, pid)
+          break
+        case 'task_updated': {
+          // A delete broadcasts `{id, deleted: true}` as it commits, which can reach the page before
+          // the 204 does while the drawer still holds the task's story: refetching that key only
+          // collects 404s (F824). Everything else under `tasks` still refreshes.
+          const data = event.data as { id?: string; deleted?: boolean } | null
+          const goneId = data?.deleted === true ? data.id : undefined
+          inv({
+            queryKey: ['project', pid, 'tasks'],
+            ...(goneId ? { predicate: (q) => q.queryKey[3] !== goneId } : {}),
+          })
+          // An approval merges into main and moves the ledger's lanes (slice project-ledger).
+          inv({ queryKey: ['project', pid, 'ledger'] })
+          inv({ queryKey: ['project', pid, 'status'] })
+          // Neither payload carries `loop_id` (`tasks.py` broadcasts only `id`/`title`/`status`),
+          // and `Task.loop_id` is write-once (design D14) so there is no reassignment to track —
+          // but a claimed/completed/queued task changes its loop's queue counts and current item,
+          // so the loops list/detail refetch here rather than staying stale until something else
+          // invalidates them.
+          inv({ queryKey: ['project', pid, 'loops'] })
+          // Approving or rejecting a task releases its checkout (F250).
+          inv({ queryKey: ['project', pid, 'worktrees'] })
+          inv({ queryKey: ['project', pid, 'worktree-conflicts'] })
+          break
+        }
+        case 'queue_entry_abandoned': {
+          // The Hub stopped trying to deliver something. The queue card is where that shows, and
+          // the prefix covers both that agent's entries and its status without naming either.
+          const agent = (event.data as { agent?: string } | null)?.agent
+          inv({ queryKey: ['project', pid, 'queue', agent] })
+          inv({ queryKey: ['project', pid, 'status'] })
+          break
+        }
+        case 'task_integration_retried':
+          inv({ queryKey: ['project', pid, 'ledger'] })
+          // The note reads a per-task key, and a retry appends a row to exactly one of them.
+          inv({
+            queryKey: ['project', pid, 'task', (event.data as { task_id?: string } | null)?.task_id, 'integrations'],
+          })
+          inv({ queryKey: ['project', pid, 'tasks'] })
+          break
+        case 'stall_recorded':
+        case 'stall_ended':
+          inv({ queryKey: ['project', pid, 'stalls'] })
+          break
+        case 'question_asked':
+        case 'question_answered':
+          inv({ queryKey: ['project', pid, 'questions'] })
+          inv({ queryKey: ['project', pid, 'status'] })
+          break
+        case 'agent_created':
+          inv({ queryKey: ['project', pid, 'tasks'] })
+          inv(agentListFilter(pid))
+          inv({ queryKey: ['projects'] })
+          // A new agent can turn a stale delivery fresh (design D5,
+          // `a-document-says-how-it-will-be-built-and-approval-starts-it`): the strip is computed
+          // from the roster, not from the file, so `spec_updated` never fires for it.
+          inv({ queryKey: ['project', pid, 'spec'] })
+          break
+        case 'agent_heartbeat':
+          inv({ queryKey: ['project', pid, 'tasks'] })
+          inv(agentListFilter(pid))
+          inv({ queryKey: ['projects'] })
+          break
+        case 'run_started':
+        case 'run_completed':
+        case 'run_failed':
+        case 'run_stopped':
+        case 'run_interrupted':
+          if (event.type !== 'run_started') {
+            // A terminal run status is the moment a loop firing's own JobRun leaves
+            // "in_progress" (design D13, task A4.3: `finalize_job_run_for_conversation` runs
+            // before this broadcasts) — the loops list/detail's `firing_active` would otherwise
+            // stay stuck true until something else happened to refetch it.
+            inv({ queryKey: ['project', pid, 'loops'] })
+          }
+          // Run status is folded into the agents list response (agents.py's
+          // agents_with_active_run), and a Hub-triggered run never posts a
+          // heartbeat — without this, the running/idle badge would never
+          // update for a direct-spawn run.
+          inv(agentListFilter(pid))
+          inv({ queryKey: ['project', pid, 'accounting'] })
+          // A run's spend and divergence are ledger lanes.
+          inv({ queryKey: ['project', pid, 'ledger'] })
+          inv({ queryKey: ['projects'] })
+          // A run belongs to a task's story (its cost, its duration); an open drawer refetches it.
+          invalidateTaskStories(queryClient, pid)
+          // F250: a turn's checkout is provisioned before `run_started` is sent, and its snapshot
+          // commit lands before the terminal event, which is what moves a conflict. Only a mounted
+          // Worktrees panel refetches, so the merge-tree check costs nothing while it is closed.
+          inv({ queryKey: ['project', pid, 'worktrees'] })
+          inv({ queryKey: ['project', pid, 'worktree-conflicts'] })
+          break
+        case 'accounting_budget_updated':
+          inv({ queryKey: ['project', pid, 'accounting'] })
+          break
+        case 'queue_entry_queued':
+        case 'queue_entry_delivered':
+        case 'queue_entry_withdrawn':
+        case 'queue_entry_released':
+        case 'queue_chain_suspended': {
+          const d = event.data as { agent?: string }
+          inv(agentListFilter(pid))
+          if (d?.agent) {
+            inv({ queryKey: ['project', pid, 'queue', d.agent] })
+          }
+          break
+        }
+        case 'context_warning':
+          inv(agentListFilter(pid))
+          break
+        case 'agent_session_changed': {
+          const d = event.data as { agent?: string }
+          if (d?.agent) {
+            inv({ queryKey: ['project', pid, 'agent', d.agent, 'sessions'] })
+          }
+          break
+        }
+        case 'job_created':
+        case 'job_updated':
+        case 'job_deleted':
+        case 'job_fired': {
+          inv({ queryKey: ['project', pid, 'jobs'] })
+          const d = event.data as { id?: string }
+          if (d?.id) {
+            inv({ queryKey: ['project', pid, 'jobs', d.id] })
+          }
+          if (event.type !== 'job_fired') {
+            // An edit or a new flow from another window: the loops carry the job's settings.
+            inv({ queryKey: ['project', pid, 'loops'] })
+          }
+          if (event.type === 'job_fired') {
+            // A firing becoming "in_progress" (design D13, task A4.3) is committed before this
+            // broadcasts (`scheduler.py`), so the loops list/detail's `firing_active` is already
+            // true by the time a listener refetches.
+            inv({ queryKey: ['project', pid, 'loops'] })
+          }
+          break
+        }
+        // Task B6.4 (`2026-08-18-a-loop-writes-its-own-queue`): `loop_queue_exhausted` (design D6)
+        // is a loop event's first consumer here — none of the six were reaching a listener before
+        // this task, because they were absent from `SSE_EVENT_TYPES` above and silently dropped.
+        // `loop_stopped`/`loop_queue_exhausted` key their loop id as `loop_id`; the other four
+        // (staged/applied edits, control changes, archival) key it as `id` — both are read below
+        // rather than assumed to be one or the other.
+        case 'loop_stopped':
+        case 'loop_queue_exhausted':
+        case 'loop_archived':
+        case 'loop_control_changed':
+        case 'loop_edit_staged':
+        case 'loop_edit_applied': {
+          inv({ queryKey: ['project', pid, 'loops'] })
+          const d = event.data as { loop_id?: string; id?: string }
+          const loopId = d?.loop_id ?? d?.id
+          if (loopId) {
+            inv({ queryKey: ['project', pid, 'loops', loopId] })
+          }
+          if (event.type === 'loop_edit_applied') {
+            // Applying a staged agent writes `job.agent`; a busy-refused or skipped tick
+            // broadcasts no `job_fired`, so nothing else would refresh the jobs.
+            inv({ queryKey: ['project', pid, 'jobs'] })
+          }
+          break
+        }
+        case 'project_created':
+        case 'project_opened':
+        case 'project_relocated':
+          inv({ queryKey: ['projects'] })
+          break
+        case 'permission_requested':
+        case 'permission_decided':
+          // Here, not only in `usePendingPermissionRequests`: that hook is mounted by the run
+          // panel alone, and the Questions page's decision list (F231) is read with it unmounted.
+          inv({ queryKey: ['project', pid, 'permission-requests'] })
+          break
+        case 'session_synced':
+          // A sync that deletes an agent drops it from the rail, which reads the projects summary;
+          // `useAgents` refreshes only the roster. The deleted agent's conversations are archived
+          // in the same commit (F849), so the conversation lists follow too.
+          inv({ queryKey: ['projects'] })
+          inv({ queryKey: ['project', pid, 'conversations'] })
+          inv(agentListFilter(pid))
+          break
+        case 'agent_archived':
+        case 'agent_unarchived':
+          // The rail reads its agents from `['projects']` (F193: an archived agent's conversations
+          // are grouped and marked there), and the roster from the agents key.
+          inv({ queryKey: ['projects'] })
+          inv(agentListFilter(pid))
+          // The stale-delivery flag (design D5) follows the roster without a reload: archiving or
+          // unarchiving broadcasts this, not `spec_updated`, so the `spec/<path>` query would
+          // otherwise stay stale until something else invalidated it.
+          inv({ queryKey: ['project', pid, 'spec'] })
+          break
+        case 'journey_updated':
+          // The project's spec steps (`spec/journey.json`) were saved: the project page's list and
+          // every document's journey (the phase bar reads it from the documents view) follow.
+          // `useSpecEvents` is mounted only on the spec and conversation pages, so this cannot
+          // live there: the page that edits the steps is neither.
+          inv({ queryKey: ['project', pid, 'specJourney'] })
+          inv({ queryKey: ['project', pid, 'specDocuments'] })
+          break
+        case 'project_settings_updated':
+          // `PUT /settings` also writes `token_budget`, the field the accounting routes read, and
+          // tells listeners only this event (F237). Without the second key every budget display —
+          // the status bar's exhaustion notice among them — kept the old allowance.
+          inv({ queryKey: ['projects'] })
+          inv({ queryKey: ['project', pid, 'accounting'] })
+          // The stored settings, which the Overview's Collaboration block reads: a change made from
+          // any other surface would otherwise leave it showing the old value until a reload.
+          inv({ queryKey: ['project', pid, 'settings'] })
+          break
+      }
+  // An event naming a conversation moves the conversation lists (the rail's, and that agent's).
+  const named = (event.data ?? {}) as { conversation_id?: string; agent?: string }
+  if (named.conversation_id && pid) {
+    inv({ queryKey: ['project', pid, 'conversations'] })
+    if (named.agent) inv({ queryKey: ['project', pid, 'agent', named.agent, 'conversations'] })
+  }
+}
+
+type InvalidateFilters = Parameters<QueryClient['invalidateQueries']>[0]
+
+interface Coalescer {
+  /** Queries a refresh was asked for while their fetch was in flight: one follow-up each. */
+  pending: Set<Query>
+}
+const coalescers = new WeakMap<QueryClient, Coalescer>()
+
+function coalescerFor(queryClient: QueryClient): Coalescer {
+  let c = coalescers.get(queryClient)
+  if (c) return c
+  const created: Coalescer = { pending: new Set() }
+  coalescers.set(queryClient, c = created)
+  queryClient.getQueryCache().subscribe((e) => {
+    if (e.type !== 'updated' || !created.pending.has(e.query)) return
+    if (e.query.state.fetchStatus === 'fetching') return
+    created.pending.delete(e.query)
+    queryClient.invalidateQueries({ queryKey: e.query.queryKey, exact: true })
+  })
+  return c
+}
+
+/** `invalidateQueries`, except that a query whose request is already in flight is not cancelled
+ *  and resent: it gets one follow-up refetch after the first answers, however many asks arrive. */
+function invalidateCoalesced(queryClient: QueryClient, filters?: InvalidateFilters): void {
+  const inFlight = queryClient
+    .getQueryCache()
+    .findAll(filters ?? {})
+    .filter((q) => q.state.fetchStatus === 'fetching')
+  if (inFlight.length === 0) {
+    if (filters) queryClient.invalidateQueries(filters)
+    else queryClient.invalidateQueries()
+    return
+  }
+  const { pending } = coalescerFor(queryClient)
+  inFlight.forEach((q) => pending.add(q))
+  const own = filters?.predicate
+  queryClient.invalidateQueries({
+    ...filters,
+    predicate: (q) => !pending.has(q) && (own ? own(q) : true),
+  })
+}
+
+const handledKeys = new WeakMap<SSEEvent, Set<string>>()
+
+/** `invalidateCoalesced`, at most once per event per query key: hooks that react to an event
+ *  themselves (one instance per mounted component) share this, so N instances cost one refresh. */
+export function invalidateOncePerEvent(
+  queryClient: QueryClient,
+  event: SSEEvent,
+  filters?: InvalidateFilters,
+): void {
+  if (filters && !filters.predicate) {
+    let seen = handledKeys.get(event)
+    if (!seen) handledKeys.set(event, (seen = new Set()))
+    const id = JSON.stringify([filters.queryKey ?? null, filters.exact ?? false])
+    if (seen.has(id)) return
+    seen.add(id)
+  }
+  invalidateCoalesced(queryClient, filters)
+}
+
+interface Invalidator {
+  count: number
+  listener: SSEListener
+  unsubReconnect: () => void
+}
+const invalidators = new Map<QueryClient, Invalidator>()
+
+/** Install the tab's one event-to-cache handler for *queryClient* (reference-counted), plus the
+ *  one full refresh on reconnect. Every `useSSE()` call shares it, so N subscribers cost one
+ *  refresh per event, not N. Returns the release function. */
+function acquireInvalidator(queryClient: QueryClient): () => void {
+  let inv = invalidators.get(queryClient)
+  if (!inv) {
+    const listener: SSEListener = (event) => applyInvalidation(queryClient, event)
+    listeners.add(listener)
+    const unsubReconnect = onSseReconnect(() => invalidateCoalesced(queryClient))
+    inv = { count: 0, listener, unsubReconnect }
+    invalidators.set(queryClient, inv)
+  }
+  inv.count += 1
+  const owned = inv
+  return () => {
+    owned.count -= 1
+    if (owned.count <= 0 && invalidators.get(queryClient) === owned) {
+      listeners.delete(owned.listener)
+      owned.unsubReconnect()
+      invalidators.delete(queryClient)
+    }
+  }
+}
+
 export function useSSE(onEvent?: SSEListener) {
   const { hubUrl, apiKey, isConfigured } = useConfigStore()
   const queryClient = useQueryClient()
@@ -444,262 +785,18 @@ export function useSSE(onEvent?: SSEListener) {
     }
   }, [isConfigured])
 
-  // On every reconnect (not the initial connect), invalidate everything so
-  // views that only update via SSE catch up on whatever happened while the
-  // stream was down — rather than staying stale until their next poll, or
-  // forever for entities with no poll left after 2.3 removes the backstop.
   useEffect(() => {
-    return onSseReconnect(() => {
-      queryClient.invalidateQueries()
-    })
-  }, [queryClient])
+    if (!isConfigured) return
+    return acquireInvalidator(queryClient)
+  }, [queryClient, isConfigured])
 
   useEffect(() => {
-    const invalidateHandler: SSEListener = (event) => {
-      // The one stream is instance-wide — every project's events, each
-      // stamped server-side with its own project_id (hub/hub/sse.py). Every
-      // invalidation below targets THAT event's project, not necessarily the
-      // one currently selected, so an inactive project's cache is already
-      // fresh by the time the operator switches to it (design.md: "the rail
-      // summary updates without switching to it").
-      const pid = (event.data as { project_id?: string } | null)?.project_id
-      switch (event.type) {
-        case 'message_created':
-        case 'message_read':
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'messages'] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
-          break
-        case 'task_created':
-        case 'spec_updated':
-          // Evidence recorded or decided, and a recording run's end, arrive here: each is part of a
-          // task's story. The spec page's own listener (`useSpecEvents`) covers the spec queries.
-          invalidateTaskStories(queryClient, pid)
-          break
-        case 'task_updated': {
-          // A delete broadcasts `{id, deleted: true}` as it commits, which can reach the page before
-          // the 204 does while the drawer still holds the task's story: refetching that key only
-          // collects 404s (F824). Everything else under `tasks` still refreshes.
-          const data = event.data as { id?: string; deleted?: boolean } | null
-          const goneId = data?.deleted === true ? data.id : undefined
-          queryClient.invalidateQueries({
-            queryKey: ['project', pid, 'tasks'],
-            ...(goneId ? { predicate: (q) => q.queryKey[3] !== goneId } : {}),
-          })
-          // An approval merges into main and moves the ledger's lanes (slice project-ledger).
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'ledger'] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
-          // Neither payload carries `loop_id` (`tasks.py` broadcasts only `id`/`title`/`status`),
-          // and `Task.loop_id` is write-once (design D14) so there is no reassignment to track —
-          // but a claimed/completed/queued task changes its loop's queue counts and current item,
-          // so the loops list/detail refetch here rather than staying stale until something else
-          // invalidates them.
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops'] })
-          // Approving or rejecting a task releases its checkout (F250).
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'worktrees'] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'worktree-conflicts'] })
-          break
-        }
-        case 'queue_entry_abandoned': {
-          // The Hub stopped trying to deliver something. The queue card is where that shows, and
-          // the prefix covers both that agent's entries and its status without naming either.
-          const agent = (event.data as { agent?: string } | null)?.agent
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'queue', agent] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
-          break
-        }
-        case 'task_integration_retried':
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'ledger'] })
-          // The note reads a per-task key, and a retry appends a row to exactly one of them.
-          queryClient.invalidateQueries({
-            queryKey: ['project', pid, 'task', (event.data as { task_id?: string } | null)?.task_id, 'integrations'],
-          })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
-          break
-        case 'stall_recorded':
-        case 'stall_ended':
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'stalls'] })
-          break
-        case 'question_asked':
-        case 'question_answered':
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'questions'] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
-          break
-        case 'agent_created':
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
-          queryClient.invalidateQueries({ queryKey: ['projects'] })
-          // A new agent can turn a stale delivery fresh (design D5,
-          // `a-document-says-how-it-will-be-built-and-approval-starts-it`): the strip is computed
-          // from the roster, not from the file, so `spec_updated` never fires for it.
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'spec'] })
-          break
-        case 'agent_heartbeat':
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
-          queryClient.invalidateQueries({ queryKey: ['projects'] })
-          break
-        case 'run_started':
-        case 'run_completed':
-        case 'run_failed':
-        case 'run_stopped':
-        case 'run_interrupted':
-          if (event.type !== 'run_started') {
-            // A terminal run status is the moment a loop firing's own JobRun leaves
-            // "in_progress" (design D13, task A4.3: `finalize_job_run_for_conversation` runs
-            // before this broadcasts) — the loops list/detail's `firing_active` would otherwise
-            // stay stuck true until something else happened to refetch it.
-            queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops'] })
-          }
-          // Run status is folded into the agents list response (agents.py's
-          // agents_with_active_run), and a Hub-triggered run never posts a
-          // heartbeat — without this, the running/idle badge would never
-          // update for a direct-spawn run.
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'accounting'] })
-          // A run's spend and divergence are ledger lanes.
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'ledger'] })
-          queryClient.invalidateQueries({ queryKey: ['projects'] })
-          // A run belongs to a task's story (its cost, its duration); an open drawer refetches it.
-          invalidateTaskStories(queryClient, pid)
-          // F250: a turn's checkout is provisioned before `run_started` is sent, and its snapshot
-          // commit lands before the terminal event, which is what moves a conflict. Only a mounted
-          // Worktrees panel refetches, so the merge-tree check costs nothing while it is closed.
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'worktrees'] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'worktree-conflicts'] })
-          break
-        case 'accounting_budget_updated':
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'accounting'] })
-          break
-        case 'queue_entry_queued':
-        case 'queue_entry_delivered':
-        case 'queue_entry_withdrawn':
-        case 'queue_entry_released':
-        case 'queue_chain_suspended': {
-          const d = event.data as { agent?: string }
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
-          if (d?.agent) {
-            queryClient.invalidateQueries({ queryKey: ['project', pid, 'queue', d.agent] })
-          }
-          break
-        }
-        case 'context_warning':
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
-          break
-        case 'agent_session_changed': {
-          const d = event.data as { agent?: string }
-          if (d?.agent) {
-            queryClient.invalidateQueries({ queryKey: ['project', pid, 'agent', d.agent, 'sessions'] })
-          }
-          break
-        }
-        case 'job_created':
-        case 'job_updated':
-        case 'job_deleted':
-        case 'job_fired': {
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'jobs'] })
-          const d = event.data as { id?: string }
-          if (d?.id) {
-            queryClient.invalidateQueries({ queryKey: ['project', pid, 'jobs', d.id] })
-          }
-          if (event.type !== 'job_fired') {
-            // An edit or a new flow from another window: the loops carry the job's settings.
-            queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops'] })
-          }
-          if (event.type === 'job_fired') {
-            // A firing becoming "in_progress" (design D13, task A4.3) is committed before this
-            // broadcasts (`scheduler.py`), so the loops list/detail's `firing_active` is already
-            // true by the time a listener refetches.
-            queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops'] })
-          }
-          break
-        }
-        // Task B6.4 (`2026-08-18-a-loop-writes-its-own-queue`): `loop_queue_exhausted` (design D6)
-        // is a loop event's first consumer here — none of the six were reaching a listener before
-        // this task, because they were absent from `SSE_EVENT_TYPES` above and silently dropped.
-        // `loop_stopped`/`loop_queue_exhausted` key their loop id as `loop_id`; the other four
-        // (staged/applied edits, control changes, archival) key it as `id` — both are read below
-        // rather than assumed to be one or the other.
-        case 'loop_stopped':
-        case 'loop_queue_exhausted':
-        case 'loop_archived':
-        case 'loop_control_changed':
-        case 'loop_edit_staged':
-        case 'loop_edit_applied': {
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops'] })
-          const d = event.data as { loop_id?: string; id?: string }
-          const loopId = d?.loop_id ?? d?.id
-          if (loopId) {
-            queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops', loopId] })
-          }
-          if (event.type === 'loop_edit_applied') {
-            // Applying a staged agent writes `job.agent`; a busy-refused or skipped tick
-            // broadcasts no `job_fired`, so nothing else would refresh the jobs.
-            queryClient.invalidateQueries({ queryKey: ['project', pid, 'jobs'] })
-          }
-          break
-        }
-        case 'project_created':
-        case 'project_opened':
-        case 'project_relocated':
-          queryClient.invalidateQueries({ queryKey: ['projects'] })
-          break
-        case 'permission_requested':
-        case 'permission_decided':
-          // Here, not only in `usePendingPermissionRequests`: that hook is mounted by the run
-          // panel alone, and the Questions page's decision list (F231) is read with it unmounted.
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'permission-requests'] })
-          break
-        case 'session_synced':
-          // A sync that deletes an agent drops it from the rail, which reads the projects summary;
-          // `useAgents` refreshes only the roster. The deleted agent's conversations are archived
-          // in the same commit (F849), so the conversation lists follow too.
-          queryClient.invalidateQueries({ queryKey: ['projects'] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'conversations'] })
-          break
-        case 'agent_archived':
-        case 'agent_unarchived':
-          // The rail reads its agents from `['projects']` (F193: an archived agent's conversations
-          // are grouped and marked there), and the roster from the agents key.
-          queryClient.invalidateQueries({ queryKey: ['projects'] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
-          // The stale-delivery flag (design D5) follows the roster without a reload: archiving or
-          // unarchiving broadcasts this, not `spec_updated`, so the `spec/<path>` query would
-          // otherwise stay stale until something else invalidated it.
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'spec'] })
-          break
-        case 'journey_updated':
-          // The project's spec steps (`spec/journey.json`) were saved: the project page's list and
-          // every document's journey (the phase bar reads it from the documents view) follow.
-          // `useSpecEvents` is mounted only on the spec and conversation pages, so this cannot
-          // live there: the page that edits the steps is neither.
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'specJourney'] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'specDocuments'] })
-          break
-        case 'project_settings_updated':
-          // `PUT /settings` also writes `token_budget`, the field the accounting routes read, and
-          // tells listeners only this event (F237). Without the second key every budget display —
-          // the status bar's exhaustion notice among them — kept the old allowance.
-          queryClient.invalidateQueries({ queryKey: ['projects'] })
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'accounting'] })
-          // The stored settings, which the Overview's Collaboration block reads: a change made from
-          // any other surface would otherwise leave it showing the old value until a reload.
-          queryClient.invalidateQueries({ queryKey: ['project', pid, 'settings'] })
-          break
-      }
-      onEventRef.current?.(event)
-    }
-
-    if (listenerRef.current) {
-      listeners.delete(listenerRef.current)
-    }
-    listenerRef.current = invalidateHandler
-    listeners.add(invalidateHandler)
-
+    const handler: SSEListener = (event) => onEventRef.current?.(event)
+    listenerRef.current = handler
+    listeners.add(handler)
     return () => {
-      if (listenerRef.current) {
-        listeners.delete(listenerRef.current)
-        listenerRef.current = null
-      }
+      listeners.delete(handler)
+      listenerRef.current = null
     }
   }, [queryClient]) // onEvent intentionally omitted — use onEventRef instead
 }
