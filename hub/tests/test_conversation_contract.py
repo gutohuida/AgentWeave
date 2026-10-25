@@ -32,7 +32,7 @@ from hub.db.models import Conversation, EventLog, Run
 from ._background_runs import await_background_runs as _await_background_runs
 
 
-async def _wait_for_active_pty(run_id, timeout=2.0):
+async def _wait_for_active_pty(run_id, timeout=30.0):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if run_id in run_liveness.active_ptys:

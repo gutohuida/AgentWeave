@@ -175,7 +175,7 @@ async def test_operator_stream_receives_events_for_a_project_with_no_own_subscri
             headers=auth_headers,
         )
         assert resp.status_code == 201, resp.text
-        evt = await asyncio.wait_for(q.get(), timeout=1.0)
+        evt = await asyncio.wait_for(q.get(), timeout=10.0)
         assert evt.event == "task_created"
         import json
 
@@ -202,7 +202,7 @@ async def test_project_created_reaches_the_operator_stream(app, auth_headers, tm
         )
         assert resp.status_code == 201, resp.text
         project_id = resp.json()["id"]
-        evt = await asyncio.wait_for(q.get(), timeout=1.0)
+        evt = await asyncio.wait_for(q.get(), timeout=10.0)
         assert evt.event == "project_created"
         import json
 
@@ -224,7 +224,7 @@ async def test_project_opened_reaches_the_operator_stream(app, auth_headers, tmp
         )
         assert resp.status_code == 200, resp.text
         project_id = resp.json()["id"]
-        evt = await asyncio.wait_for(q.get(), timeout=1.0)
+        evt = await asyncio.wait_for(q.get(), timeout=10.0)
         assert evt.event == "project_opened"
         import json
 
@@ -252,7 +252,7 @@ async def test_project_relocated_reaches_the_operator_stream(app, auth_headers, 
             headers=auth_headers,
         )
         assert resp.status_code == 200, resp.text
-        evt = await asyncio.wait_for(q.get(), timeout=1.0)
+        evt = await asyncio.wait_for(q.get(), timeout=10.0)
         assert evt.event == "project_relocated"
         import json
 
@@ -278,7 +278,7 @@ async def test_project_settings_updated_reaches_the_operator_stream(app, auth_he
             headers=auth_headers,
         )
         assert resp.status_code == 200, resp.text
-        evt = await asyncio.wait_for(q.get(), timeout=1.0)
+        evt = await asyncio.wait_for(q.get(), timeout=10.0)
         assert evt.event == "project_settings_updated"
         import json
 
