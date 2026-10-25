@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
-from .db.engine import get_session
+from .db.engine import async_session_factory, get_session
 from .db.models import OperatorCredential, Project
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -178,7 +178,6 @@ async def get_project_for_sse(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
     token: Optional[str] = Query(None),
-    session: AsyncSession = Depends(get_session),
 ) -> Tuple[str, str]:
     """Authentication dependency for the SSE stream.
 
@@ -187,7 +186,22 @@ async def get_project_for_sse(
       - ?token=<aw_ticket_...> signed short-lived ticket from /events/ticket.
 
     Raw API keys in ?token= are rejected; tickets must be used for SSE.
+
+    It opens and closes its own session rather than taking `Depends(get_session)`: a request-scoped
+    session is closed only once the response has been sent, which for a stream is when the tab
+    goes away, so every open stream held a pooled connection. The pool holds 15, so the 16th
+    stream waited out the 30s pool timeout and answered 500, and every other request waited with it.
     """
+    async with async_session_factory() as session:
+        return await _project_for_sse(request, credentials, token, session)
+
+
+async def _project_for_sse(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials],
+    token: Optional[str],
+    session: AsyncSession,
+) -> Tuple[str, str]:
     explicit_project_id = request.path_params.get("project_id")
     if credentials and explicit_project_id:
         await _operator_from_credential(credentials.credentials, session)
@@ -233,7 +247,6 @@ async def get_project_for_sse(
 async def get_operator_for_sse(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
     token: Optional[str] = Query(None),
-    session: AsyncSession = Depends(get_session),
 ) -> OperatorCredential:
     """Authentication dependency for the one instance-level operator SSE stream.
 
@@ -241,14 +254,19 @@ async def get_operator_for_sse(
     or a short-lived operator ticket from `/events/ticket` (`?token=aw_optick_...`).
     A project-scoped ticket (`aw_ticket_...`) or a raw API key in `?token=` is
     rejected — those only unlock a project's own stream.
+
+    Its own short session, closed before the stream starts, for the reason given on
+    `get_project_for_sse`.
     """
     if credentials:
-        return await _operator_from_credential(credentials.credentials, session)
+        async with async_session_factory() as session:
+            return await _operator_from_credential(credentials.credentials, session)
 
     if token and _verify_operator_ticket(token):
-        credential = await session.scalar(
-            select(OperatorCredential).where(OperatorCredential.revoked.is_(False)).limit(1)
-        )
+        async with async_session_factory() as session:
+            credential = await session.scalar(
+                select(OperatorCredential).where(OperatorCredential.revoked.is_(False)).limit(1)
+            )
         if credential is not None:
             return credential
 
