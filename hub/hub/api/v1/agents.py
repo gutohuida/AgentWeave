@@ -1738,7 +1738,8 @@ def _operations() -> List[_Operation]:
             required=("status",),
             text=(
                 "the mender only: hand a stuck task back, `status` `assigned` (to `assignee`) or "
-                "`pending`, along the edges any run may take."
+                "`pending`, along the edges any run may take; or `under_review` with `assignee` "
+                "a reviewer, which queues that agent's review turn on finished work."
             ),
         ),
         _Operation(
