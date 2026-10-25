@@ -16,8 +16,8 @@ vi.mock('@/api/client', () => ({
 }))
 const sse = vi.hoisted(() => ({ handlers: [] as Array<(event: { type: string; data: unknown }) => void> }))
 vi.mock('@/hooks/useSSE', () => ({
-  useSSE: (handler: (event: { type: string; data: unknown }) => void) => {
-    sse.handlers.push(handler)
+  useSSE: (handler?: (event: { type: string; data: unknown }) => void) => {
+    if (handler) sse.handlers.push(handler)
   },
 }))
 const emit = (type: string, data: unknown) => sse.handlers.forEach((h) => h({ type, data }))
