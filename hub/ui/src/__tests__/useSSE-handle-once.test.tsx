@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { useConfigStore } from '@/store/configStore'
+import { useAgentConversations, useProjectConversations } from '@/api/agentChat'
 import { useSSE, cancelReconnect, __resetSSEStateForTest } from '@/hooks/useSSE'
 
 // The dashboard handles each stream event once per tab, however many components subscribe, and a
@@ -135,5 +136,44 @@ describe('stream events are handled once per tab', () => {
     })
     expect(list).toBe(2)
     expect(seed).toBe(1)
+  })
+
+  it('two mounted conversation hooks give one refetch per conversation list', async () => {
+    const hits: Record<string, number> = {}
+    ;(globalThis as unknown as { fetch: unknown }).fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (String(url).endsWith('/events')) {
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            push = (text) => controller.enqueue(enc.encode(text))
+          },
+        })
+        return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+      }
+      const path = new URL(String(url)).pathname
+      hits[path] = (hits[path] ?? 0) + 1
+      const body = path.endsWith('/conversations') && !path.includes('/agent/') ? { conversations: [], archived_count: 0 } : []
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    function Pane() {
+      useAgentConversations('a')
+      useProjectConversations('p')
+      return null
+    }
+    render(
+      <QueryClientProvider client={newClient()}>
+        <Pane />
+        <Pane />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(Object.keys(hits).length).toBe(2))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    for (const k of Object.keys(hits)) hits[k] = 0
+    await act(async () => {
+      push(frame('context_warning', { agent: 'a', conversation_id: 'c1' }))
+      await new Promise((r) => setTimeout(r, 200))
+    })
+    expect(Object.values(hits).sort()).toEqual([1, 1])
   })
 })

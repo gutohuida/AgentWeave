@@ -426,7 +426,7 @@ function agentListFilter(pid: string | undefined) {
 /** Apply one stream event to *queryClient*'s cache. Called once per event per tab (see
  *  `acquireInvalidator`), however many components subscribe. */
 function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
-  const inv = (filters?: InvalidateFilters) => invalidateCoalesced(queryClient, filters)
+  const inv = (filters?: InvalidateFilters) => invalidateOncePerEvent(queryClient, event, filters)
   const pid = (event.data as { project_id?: string } | null)?.project_id
   switch (event.type) {
         case 'message_created':
@@ -620,6 +620,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           // in the same commit (F849), so the conversation lists follow too.
           inv({ queryKey: ['projects'] })
           inv({ queryKey: ['project', pid, 'conversations'] })
+          inv(agentListFilter(pid))
           break
         case 'agent_archived':
         case 'agent_unarchived':
@@ -651,6 +652,12 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv({ queryKey: ['project', pid, 'settings'] })
           break
       }
+  // An event naming a conversation moves the conversation lists (the rail's, and that agent's).
+  const named = (event.data ?? {}) as { conversation_id?: string; agent?: string }
+  if (named.conversation_id && pid) {
+    inv({ queryKey: ['project', pid, 'conversations'] })
+    if (named.agent) inv({ queryKey: ['project', pid, 'agent', named.agent, 'conversations'] })
+  }
 }
 
 type InvalidateFilters = Parameters<QueryClient['invalidateQueries']>[0]
@@ -694,6 +701,25 @@ function invalidateCoalesced(queryClient: QueryClient, filters?: InvalidateFilte
     ...filters,
     predicate: (q) => !pending.has(q) && (own ? own(q) : true),
   })
+}
+
+const handledKeys = new WeakMap<SSEEvent, Set<string>>()
+
+/** `invalidateCoalesced`, at most once per event per query key: hooks that react to an event
+ *  themselves (one instance per mounted component) share this, so N instances cost one refresh. */
+export function invalidateOncePerEvent(
+  queryClient: QueryClient,
+  event: SSEEvent,
+  filters?: InvalidateFilters,
+): void {
+  if (filters && !filters.predicate) {
+    let seen = handledKeys.get(event)
+    if (!seen) handledKeys.set(event, (seen = new Set()))
+    const id = JSON.stringify([filters.queryKey ?? null, filters.exact ?? false])
+    if (seen.has(id)) return
+    seen.add(id)
+  }
+  invalidateCoalesced(queryClient, filters)
 }
 
 interface Invalidator {
