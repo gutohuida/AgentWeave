@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
+import { backstopAfterFailure } from '@/lib/backstopPoll'
 
 export interface QuestionOption {
   label: string
@@ -65,7 +66,7 @@ export function useQuestions(answered?: boolean) {
     enabled: isConfigured && !!projectId,
     // An agent blocks on a question it asked, so arriving late is close to not arriving. SSE
     // already invalidates this key; the interval is the backstop for a dropped event.
-    refetchInterval: 3000,
+    refetchInterval: backstopAfterFailure,
   })
 }
 
