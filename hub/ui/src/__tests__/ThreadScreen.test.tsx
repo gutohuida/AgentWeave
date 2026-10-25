@@ -367,6 +367,25 @@ describe('ThreadScreen: the loom', () => {
     expect(alert.textContent).toBe('The thread could not be read. Reload to try again.')
   })
 
+  it('says when the agents cannot be read and still draws the thread, chips uncoloured', async () => {
+    const { loose } = chaptered(3)
+    const base = getJson.getMockImplementation()!
+    getJson.mockImplementation(async (path: string) => {
+      if (new URL(path, 'http://hub').pathname.endsWith('/agents')) throw new Error('500 Internal Server Error')
+      return base(path)
+    })
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <ThreadScreen projectId="proj-a" knot={null} onAddress={() => undefined} onOpenLink={() => undefined} />
+      </QueryClientProvider>,
+    )
+    expect(
+      await screen.findByText('The agents could not be read, so they are shown without their colours.'),
+    ).toBeTruthy()
+    expect(screen.getAllByText(loose.title).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('offers Weave the thread only while the feed says the job is on, and presses it', async () => {
     chaptered(1, { can_weave: false })
     const off = mount()

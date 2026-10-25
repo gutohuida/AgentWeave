@@ -65,6 +65,7 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
   const [now] = React.useState(() => new Date())
 
   // Each agent's registered colour, as everywhere else in the app; people and the manager are neutral.
+  // A roster that cannot be read leaves every chip neutral and says so (the notice below).
   const agents = useAgents()
   const actorColor = React.useMemo(() => {
     const byName = new Map<string, number | null | undefined>()
@@ -304,10 +305,19 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
       atBeginning={!surface.hasBefore && path[0] === first?.key}
       atPresent={!surface.hasAfter && path[0] === last?.key}
       notice={
-        failed ? (
-          <p className="aw-thread-note" role="alert">
-            Part of the thread could not be read.
-          </p>
+        failed || agents.isError ? (
+          <>
+            {failed ? (
+              <p className="aw-thread-note" role="alert">
+                Part of the thread could not be read.
+              </p>
+            ) : null}
+            {agents.isError ? (
+              <p className="aw-thread-note" role="status">
+                The agents could not be read, so they are shown without their colours.
+              </p>
+            ) : null}
+          </>
         ) : null
       }
       actions={canWeave ? <WeaveButton /> : null}
