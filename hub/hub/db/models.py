@@ -1623,7 +1623,9 @@ class AgentOutput(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
-    agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # No index of its own (migration 0146): every agent filter on this table also names the
+    # project, which `ix_agent_outputs_project_agent_run_sequence` leads with.
+    agent: Mapped[str] = mapped_column(String(64), nullable=False)
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     conversation_id: Mapped[Optional[str]] = mapped_column(
         String(64), ForeignKey("conversations.id"), nullable=True
@@ -1640,7 +1642,8 @@ class AgentOutput(Base):
     )
 
     __table_args__ = (
-        Index("ix_agent_outputs_project_agent", "project_id", "agent"),
+        # `ix_agent_outputs_project_agent` (project_id, agent) was dropped by migration 0146: a
+        # leading prefix of the index below, it served nothing that one does not, at a write per line.
         Index("ix_agent_outputs_project_ts", "project_id", "timestamp"),
         Index("ix_agent_outputs_conversation", "conversation_id", "timestamp"),
         Index(
@@ -1741,7 +1744,7 @@ class TraceSettings(Base):
     record_reads: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
-    # How many days of spans the Hub keeps (migration 0144, `the-database-stays-fast-as-history-
+    # How many days of spans the Hub keeps (migration 0145, `the-database-stays-fast-as-history-
     # grows` D4). NULL: the Hub's default, `trace_retention.DEFAULT_RETENTION_DAYS`.
     retention_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(

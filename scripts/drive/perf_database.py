@@ -228,6 +228,7 @@ async def _child_reads(db: str, seconds: str) -> dict:
     from hub.db.engine import async_session_factory, engine
     from hub.main import create_app
 
+    await _migrate()
     key = _drive_key(db)
     app = create_app()
     transport = httpx.ASGITransport(app=app)
@@ -604,6 +605,16 @@ async def _child_indexes(db: str, how: str) -> dict:
         if m:
             used = m.group(1)
     used_columns = [r[2] for r in c.execute(f"PRAGMA index_info({used})")] if used else []
+    used_sql = (
+        c.execute("SELECT sql FROM sqlite_master WHERE name = ?", (used,)).fetchone()[0]
+        if used
+        else ""
+    )
+    # Covers project, event type and agent: as three leading columns, or as (project, agent, ...)
+    # in a partial index restricted to `context_warning` rows (`0144`, slice 1's).
+    covers = used_columns[:3] == ["project_id", "event_type", "agent"] or (
+        used_columns[:2] == ["project_id", "agent"] and "event_type = 'context_warning'" in used_sql
+    )
     outputs = {}
     for _, name, *_rest in c.execute("PRAGMA index_list(agent_outputs)"):
         outputs[name] = [r[2] for r in c.execute(f"PRAGMA index_info({name})")]
@@ -619,6 +630,8 @@ async def _child_indexes(db: str, how: str) -> dict:
         "plan": plan,
         "index": used,
         "index_columns": used_columns,
+        "index_sql": used_sql,
+        "covers": covers,
         "agent_outputs_indexes": outputs,
         "prefix_pairs": prefixes,
     }
@@ -977,7 +990,7 @@ def main() -> None:
             check(
                 "hot-read-indexes",
                 f"[{how}] the newest context reading is found through (project, event type, agent, ...)",
-                r.get("index_columns", [])[:3] == ["project_id", "event_type", "agent"],
+                bool(r.get("covers")),
                 f"head {r.get('version')}, index {r.get('index')} {r.get('index_columns')}, plan {r.get('plan') or r}",
             )
             check(

@@ -1,7 +1,7 @@
 """traces are kept for a bounded window -- trace_settings.retention_days
 
-Revision ID: 0144
-Revises: 0143
+Revision ID: 0145
+Revises: 0144
 Create Date: 2026-10-25 00:00:00.000000
 
 `the-database-stays-fast-as-history-grows` (Tier 2, task `retention`, D4). One nullable column; no
@@ -23,8 +23,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0144"
-down_revision = "0143"
+revision = "0145"
+down_revision = "0144"
 branch_labels = None
 depends_on = None
 
