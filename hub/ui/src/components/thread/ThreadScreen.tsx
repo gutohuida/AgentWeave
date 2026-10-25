@@ -296,6 +296,7 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
       actorColor={actorColor}
       onOpenLink={onOpenLink}
       surfaceTotal={surfaceTotal}
+      surfaceSummary={surface.summary}
       hasMore={hasMore}
       onMore={more}
       onBeginning={() => jump('beginning')}

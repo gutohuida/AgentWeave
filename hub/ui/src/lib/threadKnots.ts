@@ -45,8 +45,8 @@ export function joinPage(level: LoadedLevel, more: LoadedLevel, side: 'before' |
   const held = level.knots.filter((k) => !fresh.has(k.key))
   const knots = side === 'before' ? [...more.knots, ...held] : [...held, ...more.knots]
   return side === 'before'
-    ? { ...level, knots, hasBefore: more.hasBefore, beforeCursor: more.beforeCursor }
-    : { ...level, knots, hasAfter: more.hasAfter, afterCursor: more.afterCursor }
+    ? { ...level, knots, hasBefore: more.hasBefore, beforeCursor: more.beforeCursor, summary: more.summary ?? level.summary }
+    : { ...level, knots, hasAfter: more.hasAfter, afterCursor: more.afterCursor, summary: more.summary ?? level.summary }
 }
 
 /** The newest page folded into a level that already reaches the present end: what the page covers
@@ -62,6 +62,7 @@ export function refreshEnd(level: LoadedLevel, newest: LoadedLevel): LoadedLevel
     beforeCursor: level.beforeCursor,
     hasAfter: newest.hasAfter,
     afterCursor: newest.afterCursor,
+    summary: newest.summary ?? level.summary,
   }
 }
 

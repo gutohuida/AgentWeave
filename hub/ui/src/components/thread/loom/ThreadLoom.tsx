@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { KNOT_GLYPH, LINK_LABEL } from '@/lib/threadKnots'
 import { formatCount, formatDateTime, formatDay, formatDuration } from '@/lib/format'
 import type { AgentColorVars } from '@/lib/agentColors'
-import type { KnotLink, ThreadKnot } from '@/api/thread'
+import type { KnotLink, LevelSummary, ThreadKnot } from '@/api/thread'
 import { Loom, type LoomHow } from './Loom'
 import '@/styles/thread-loom.css'
 
@@ -22,6 +22,9 @@ export interface ThreadLoomProps {
   /** How many surface knots there are in all, loaded or not; the header counts them when the
    *  project has no chapters. Defaults to the loaded ones. */
   surfaceTotal?: number
+  /** The whole surface's figures, from the Hub: the header counts and spans these, not the loaded
+   *  page. Without them (the mock, an older Hub) it reads the loaded knots. */
+  surfaceSummary?: LevelSummary
   /** More knots lie beyond the loaded ones of a level (`SURFACE_LEVEL` for the surface). */
   hasMore?: (under: string, side: 'before' | 'after') => boolean
   onMore?: (under: string, side: 'before' | 'after') => void
@@ -102,6 +105,7 @@ export function ThreadLoom({
   actorColor,
   onOpenLink,
   surfaceTotal,
+  surfaceSummary,
   hasMore,
   onMore,
   onBeginning,
@@ -193,8 +197,12 @@ export function ThreadLoom({
     go(path.slice(0, -1), 'key')
   }
 
+  // The Hub counts what a knot holds over all of it; the loaded page is only a fallback.
+  const place = focus?.place ?? (index >= 0 && focus ? { n: ofKind.indexOf(focus) + 1, of: ofKind.length } : null)
   const kinds = React.useMemo(() => {
-    if (!holds || !inner) return []
+    if (!holds) return []
+    if (focus?.made_of) return focus.made_of.map((m) => ({ word: m.word, glyph: KNOT_GLYPH[m.kind], n: m.count }))
+    if (!inner) return []
     const counts = new Map<string, { word: string; glyph: string; n: number }>()
     for (const k of inner) {
       const word = k.kind === 'fold' ? 'group' : k.word
@@ -203,24 +211,36 @@ export function ThreadLoom({
       counts.set(word, entry)
     }
     return [...counts.values()].sort((a, b) => b.n - a.n)
-  }, [holds, inner])
+  }, [holds, inner, focus])
 
   const people = React.useMemo(() => {
+    if (focus?.people) return focus.people
     const names = new Set(focus?.actors ?? [])
     if (holds) for (const k of inner ?? []) for (const a of k.actors) names.add(a)
     return [...names]
   }, [focus, holds, inner])
 
   const surfaceSelected = path[0] ?? null
-  const chapters = surface.filter((k) => k.kind === 'chapter').length
-  const loose = surface.length - chapters
+  const loadedChapters = surface.filter((k) => k.kind === 'chapter')
   const total = surfaceTotal ?? surface.length
+  const chapters = surfaceSummary ? surfaceSummary.counts.chapter ?? 0 : loadedChapters.length
+  const loose = (surfaceSummary ? total : surface.length) - chapters
   const step = (by: 1 | -1) => {
     const next = siblings[index + by]
     if (next) go([...path.slice(0, -1), next.key])
   }
   const first = surface[0]
   const last = surface[surface.length - 1]
+  // The span the chapters cover (FR-3), as calendar days; every knot's when there are no chapters.
+  const spanEnds = surfaceSummary?.span
+    ? chapters > 0
+      ? { a: surfaceSummary.span.start.slice(0, 10), b: surfaceSummary.span.end.slice(0, 10) }
+      : { a: surfaceSummary.span.start, b: surfaceSummary.span.end }
+    : loadedChapters.length > 0
+      ? { a: dayOf(loadedChapters[0]!, 'start'), b: dayOf(loadedChapters[loadedChapters.length - 1]!, 'end') }
+      : first && last
+        ? { a: dayOf(first, 'start'), b: dayOf(last, 'end') }
+        : null
   const beginningOff = atBeginning ?? surfaceSelected === first?.key
   const presentOff = atPresent ?? surfaceSelected === last?.key
 
@@ -234,9 +254,9 @@ export function ThreadLoom({
               ? `${formatCount(chapters)} ${chapters === 1 ? 'chapter' : 'chapters'}`
               : `${formatCount(total)} ${total === 1 ? 'knot' : 'knots'}`}
           </span>
-          {first && last ? (
+          {spanEnds ? (
             <span className="aw-loom-bar-span">
-              {formatDay(dayOf(first, 'start'), now)} to {formatDay(dayOf(last, 'end'), now)}
+              {formatDay(spanEnds.a, now)} to {formatDay(spanEnds.b, now)}
               {chapters > 0 && loose > 0 ? ` · ${formatCount(loose)} newer ${loose === 1 ? 'knot' : 'knots'} not in a chapter yet` : ''}
             </span>
           ) : null}
@@ -295,9 +315,9 @@ export function ThreadLoom({
                 <span className="aw-loom-detail-kind">
                   <Icon name={KNOT_GLYPH[focus.kind]} size={14} />
                   {focus.word}
-                  {index >= 0 ? (
+                  {place ? (
                     <span className="aw-loom-detail-of">
-                      {formatCount(ofKind.indexOf(focus) + 1)} of {formatCount(ofKind.length)}
+                      {formatCount(place.n)} of {formatCount(place.of)}
                     </span>
                   ) : null}
                 </span>

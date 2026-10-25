@@ -136,6 +136,67 @@ describe('ThreadScreen: the loom', () => {
     })
   })
 
+  it('counts and places what a knot holds over all of it, not the 40 knots a page loads', async () => {
+    // QA, 134c767: the panel read 'Made of: 40 documents' and 'Document 3 of 40' for a knot holding
+    // 41, and the header counted loaded chapters. The route pages every level by 40, as the Hub does.
+    const chapters = Array.from({ length: 45 }, (_, i) => chapter(i + 1))
+    const loose = knot('conversation:loose', 'conversation', 'A newer conversation', '2026-10-25T09:00:00+00:00')
+    const surface = [...chapters, loose]
+    const held = [
+      ...Array.from({ length: 47 }, (_, i) =>
+        knot(`conversation:big-${i + 1}`, 'conversation', `Talk ${i + 1}`, `${day(90)}T00:${String(i).padStart(2, '0')}:00+00:00`, 0, {
+          actors: [i === 46 ? 'Reviewer' : 'Builder'],
+        }),
+      ),
+      knot('document:big', 'document', 'The design', `${day(90)}T01:00:00+00:00`),
+    ]
+    const levels: Record<string, ThreadKnot[]> = { surface, 'chapter:ch-45': held }
+    // What the Hub adds to every knot and page: figures over the whole level.
+    const placed = (all: ThreadKnot[]) =>
+      all.map((k) => ({ ...k, place: { n: all.filter((o) => o.kind === k.kind).indexOf(k) + 1, of: all.filter((o) => o.kind === k.kind).length } }))
+    const big = { ...chapters[44]!, child_count: 48, descendant_count: 48, made_of: [
+      { kind: 'conversation' as const, word: 'Conversation', count: 47 }, { kind: 'document' as const, word: 'Document', count: 1 },
+    ], people: ['manager', 'Builder', 'Reviewer'] }
+    levels.surface = surface.map((k) => (k.key === big.key ? big : k))
+    getJson.mockImplementation(async (path: string) => {
+      const url = new URL(path, 'http://hub')
+      if (url.pathname.endsWith('/agents')) return [{ name: 'Builder', color_index: 3 }]
+      const under = url.searchParams.get('under') ?? 'surface'
+      const all = placed(levels[under] ?? [])
+      const limit = Number(url.searchParams.get('limit'))
+      const after = url.searchParams.get('after')
+      const before = url.searchParams.get('before')
+      const at = (c: string) => all.findIndex((k) => cursor(k) === c)
+      const lo = url.searchParams.get('first') ? 0 : after ? at(after) + 1 : before ? Math.max(0, at(before) - limit) : Math.max(0, all.length - limit)
+      const hi = before ? at(before) : Math.min(all.length, lo + limit)
+      const counts: Record<string, number> = {}
+      for (const k of all) counts[k.kind] = (counts[k.kind] ?? 0) + 1
+      const spanned = all.filter((k) => k.kind === 'chapter')
+      return page(all.slice(lo, hi), {
+        under, total: all.length, has_before: lo > 0, has_after: hi < all.length, counts,
+        span: { start: spanned[0]?.start ?? all[0]!.start, end: spanned[spanned.length - 1]?.end ?? all[all.length - 1]!.end },
+      })
+    })
+    mount()
+    await waitFor(() => expect(surfaceBeads()).toHaveLength(40))
+    expect(screen.getByText('45 chapters')).toBeTruthy()
+    expect(screen.getByText(/1 newer knot not in a chapter yet/)).toBeTruthy()
+    // The span the chapters cover, not the loose knot after them (FR-3).
+    expect(document.querySelector('.aw-loom-bar-span')?.textContent).toMatch(/^Mar 9 to Jun 5/)
+
+    fireEvent.click(bead(big.key)!)
+    expect(position()).toBe('Chapter 45 of 45')
+    await waitFor(() => expect(document.querySelectorAll('.aw-loom-inner [data-slot="loom-bead"]')).toHaveLength(40))
+    const panel = document.querySelector('.aw-loom-detail')!.textContent ?? ''
+    expect(panel).toContain('48 knots')
+    expect(panel).toContain('47 conversations')
+    expect(panel).toContain('1 document')
+    expect(Array.from(document.querySelectorAll('.aw-loom-actor')).map((el) => el.textContent)).toEqual(['manager', 'Builder', 'Reviewer'])
+
+    fireEvent.click(document.querySelectorAll<HTMLElement>('.aw-loom-inner [data-slot="loom-bead"]')[2]!)
+    expect(position()).toBe('Conversation 3 of 47')
+  })
+
   it('the panel steps to the knot after, and has no after on the last knot', async () => {
     // FR-4: 'the knot before and after it' on its own thread. Here chapter 17 is the newest surface
     // knot; where a newer knot lies in no chapter, 'after' on chapter 17 goes on to it.

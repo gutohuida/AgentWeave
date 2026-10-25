@@ -878,23 +878,72 @@ def page(
     }
 
 
-def face(knot: Knot, thread: Thread) -> Dict[str, Any]:
-    """A knot as the route returns it, ready to draw: plain words, no way to read an event type."""
+def _word(knot: Knot) -> str:
+    if knot.kind == "fold":
+        return PLURAL.get(knot.fold_of or "", "items").capitalize()
+    return WORDS[knot.kind]
+
+
+def places(level: Sequence[Knot]) -> Dict[str, Dict[str, int]]:
+    """Each knot's place among the knots of its own kind on its level ("Chapter 17 of 17"), counted
+    over the whole level rather than the page a reader happens to have loaded."""
+    totals: Dict[str, int] = {}
+    seen: Dict[str, int] = {}
+    for k in level:
+        totals[k.kind] = totals.get(k.kind, 0) + 1
+    out: Dict[str, Dict[str, int]] = {}
+    for k in level:
+        seen[k.kind] = seen.get(k.kind, 0) + 1
+        out[k.key] = {"n": seen[k.kind], "of": totals[k.kind]}
+    return out
+
+
+def level_summary(level: Sequence[Knot]) -> Dict[str, Any]:
+    """What a whole level holds, whichever page of it is loaded: how many knots of each kind, and the
+    days it spans (the chapters' when it has chapters, every knot's otherwise)."""
+    counts: Dict[str, int] = {}
+    for k in level:
+        counts[k.kind] = counts.get(k.kind, 0) + 1
+    spanned = [k for k in level if k.kind == "chapter"] or list(level)
+    span = (
+        {
+            "start": min(k.start for k in spanned).isoformat(),
+            "end": max(k.end for k in spanned).isoformat(),
+        }
+        if spanned
+        else None
+    )
+    return {"counts": counts, "span": span}
+
+
+def face(knot: Knot, thread: Thread, place: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+    """A knot as the route returns it, ready to draw: plain words, no way to read an event type.
+    `made_of` and `people` count everything the knot holds directly, not a loaded page of it."""
+    held = thread.level(knot.key) or []
+    made: Dict[str, Dict[str, Any]] = {}
+    for child in held:
+        word = "Group" if child.kind == "fold" else _word(child)
+        entry = made.setdefault(word, {"kind": child.kind, "word": word, "count": 0})
+        entry["count"] += 1
+    people = list(knot.actors)
+    for child in held:
+        for name in child.actors:
+            if name not in people:
+                people.append(name)
     return {
         "key": knot.key,
         "address": knot.key,
         "kind": knot.kind,
         "fold_of": knot.fold_of,
-        "word": (
-            PLURAL.get(knot.fold_of or "", "items").capitalize()
-            if knot.kind == "fold"
-            else WORDS[knot.kind]
-        ),
+        "word": _word(knot),
         "title": knot.title,
         "start": knot.start.isoformat(),
         "end": knot.end.isoformat(),
         "actors": knot.actors,
-        "child_count": len(thread.level(knot.key) or []),
+        "child_count": len(held),
+        "made_of": sorted(made.values(), key=lambda e: -e["count"]),
+        "people": people,
+        "place": place,
         "descendant_count": knot.descendants,
         "link": knot.link,
         "records": knot.records[:RECORDS_SHOWN],
