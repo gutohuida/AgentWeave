@@ -27,6 +27,7 @@ from sqlalchemy import func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
+    blocking,
     deletion,
     loop_history,
     project_workspace,
@@ -126,7 +127,9 @@ async def list_specs(
     """
     project_id, _ = project
     workspace = await _workspace(session, project_id)
-    state = spec_documents.compute_state(workspace)
+    # The walk, the stats and the reads run off the loop (`blocking`, D1); a file unchanged since
+    # the last listing is not read again (`read_listed_document`, D4).
+    state = await blocking.run(spec_documents.listed_state, workspace)
 
     # Archiving is a phase transition (`POST .../documents/phase?to=archived`), and it does not
     # relocate the file — a document archived this way stays wherever it was filed. The index-based
@@ -623,6 +626,19 @@ async def list_documents(
     from ... import spec_amendments
 
     amended = await spec_amendments.counts(session, [document.id for document in documents])
+    # Every file is read off the loop in one hop (`blocking`, D1), and one unchanged since the last
+    # listing is not read again (`read_listed_document`, D4). A file that cannot be read is left
+    # out, which leaves its view without `diverged`, as before.
+    paths = [document.path for document in documents]
+
+    def _read_all() -> Dict[str, Optional[str]]:
+        found: Dict[str, Optional[str]] = {}
+        for path in paths:
+            with contextlib.suppress(OSError, SpecPathError, project_workspace.ProjectPathError):
+                found[path] = spec_documents.read_listed_document(workspace, path)
+        return found
+
+    on_disk = await blocking.run(_read_all) if workspace is not None else {}
     views = []
     for document in documents:
         view = _document_view(document, steps)
@@ -631,10 +647,9 @@ async def list_documents(
         if document.id in amended:
             # tester-amends: what a tester changed and how much the operator has yet to review.
             view["amendments"] = amended[document.id]
-        if workspace is not None:
-            with contextlib.suppress(OSError, SpecPathError, project_workspace.ProjectPathError):
-                on_disk = spec_documents.read_document(workspace, document.path)
-                view["diverged"] = spec_lifecycle.divergence(document, on_disk) is not None
+        if document.path in on_disk:
+            content = on_disk[document.path]
+            view["diverged"] = spec_lifecycle.divergence(document, content) is not None
         views.append(view)
     return {"documents": views}
 

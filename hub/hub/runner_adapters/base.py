@@ -18,7 +18,7 @@ checks that in a fresh interpreter.
 from __future__ import annotations
 
 import os
-import shutil
+import shutil  # noqa: F401 -- `hub.runner_adapters.base.shutil.which` is what tests patch
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -38,6 +38,7 @@ from typing import (
     TypedDict,
 )
 
+from .. import binaries
 from ..codex_appserver import TurnOutcome
 from ..runner_parsing import AccountingSample, ParsedLine
 from .one_shot import WorkerUsage
@@ -79,7 +80,8 @@ def probe_binary(
             None if present else f"Pinned runner CLI {cli_override!r} is not an executable file."
         )
     else:
-        present = shutil.which(cli) is not None
+        # Remembered per PATH (`binaries`, D4); a patched `shutil.which` is still asked directly.
+        present = binaries.which(cli) is not None
         reason = None if present else f"Runner CLI {cli!r} was not found in PATH."
     return cli, present, reason
 

@@ -28,7 +28,7 @@ from typing import List, Optional, Set, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import requirement_evidence, traces, worktrees
+from . import blocking, requirement_evidence, traces, worktrees
 from .db.models import Agent, Project, SpecDocument, Task
 from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 from .repo_hygiene import seed_repo_excludes
@@ -601,7 +601,7 @@ async def _merge_base_sha(
     if not main_branch:
         return None
     try:
-        result = _git(repo_root, "merge-base", commit_sha, main_branch)
+        result = await blocking.run(_git, repo_root, "merge-base", commit_sha, main_branch)
     except (subprocess.SubprocessError, OSError):
         return None
     if result.returncode != 0:
@@ -638,7 +638,8 @@ async def prepare_review_turn(
     if not target.resolved:
         raise ReviewTurnRefused(target.refusal or f"task {task_id} has no commit to review")
 
-    if not worktrees.is_git_repo(repo_root):
+    # Every git and file step of staffing runs off the loop (`blocking`, D1).
+    if not await blocking.run(worktrees.is_git_repo, repo_root):
         raise ReviewTurnRefused(
             "this project is not a git repository, so there is no commit to check out for "
             "review. Evidence recorded here names changed paths rather than a commit."
@@ -647,7 +648,7 @@ async def prepare_review_turn(
     # `resolve_agent_workspace` seeds these on every ordinary turn, and a review turn deliberately
     # does not go through it — so this is now a second funnel into the project, and skipping it
     # would leave a project whose only turns are reviews with no ignore rules at all.
-    seed_repo_excludes(repo_root)
+    await blocking.run(seed_repo_excludes, repo_root)
 
     # Computed before the checkout is provisioned (design D8, R3): the alternative order would let
     # an escaping `TimeoutExpired` leak a provisioned-but-unclaimed checkout, the F326 class. This
@@ -657,7 +658,10 @@ async def prepare_review_turn(
     )
 
     try:
-        workspace = worktrees.ensure_review_checkout(repo_root, reviewer, target.commit_sha)
+        # Serialized with every other worktree change, as it was on the loop (D5).
+        workspace = await blocking.run_serialized(
+            worktrees.ensure_review_checkout, repo_root, reviewer, target.commit_sha
+        )
     except worktrees.ReviewCommitUnavailableError as exc:
         # The evidence names a commit the repository does not contain — an author's branch pruned,
         # or evidence carried over from a different checkout. Stated, never worked around: putting

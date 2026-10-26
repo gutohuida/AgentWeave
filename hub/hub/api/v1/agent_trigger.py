@@ -39,6 +39,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
+    blocking,
     bound_address,
     flow_advance,
     instance_identity,
@@ -103,7 +104,12 @@ from ...model_catalog import (
     render_control_config,
     validate_overrides,
 )
-from ...output_recording import record_agent_output, record_context_usage
+from ...output_recording import (
+    flush_streamed,
+    record_agent_output,
+    record_context_usage,
+    stream_agent_output,
+)
 from ...outside_write_record import OutsideWriteRecorder
 from ...permission_requests import expire_pending_for_run
 from ...provider_allowance import (
@@ -1288,7 +1294,9 @@ async def _trigger_agent_directly(
     #
     # Only where there *is* isolation to override. A project directory that is not a git
     # repository has none, so refusing there would be a guard with no subject.
-    project_is_repo = worktrees.is_git_repo(repo_root)
+    # Off the loop (`blocking`, D1): every git call of a turn start runs in a thread, so the
+    # seconds a large checkout's `worktree add` takes freeze no other request.
+    project_is_repo = await blocking.run(worktrees.is_git_repo, repo_root)
     # A review turn's workspace is decided before anything else, because it replaces the ordinary
     # resolution rather than adjusting it (design D4: exactly one workspace per review turn).
     #
@@ -1495,7 +1503,12 @@ async def _trigger_agent_directly(
         # Below `resolve_turn_workspace_inputs` because that call is the grandfathering read and
         # reads only; above `resolve_turn_workspace` because that call is the first thing that
         # *provisions*. Nothing is on disk when this refuses.
-        if worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id):
+        # Asked once, off the loop: the refusal, the catch-up, the error's scope and the branch
+        # sentence below all ask this same predicate about the same inputs.
+        takes_task = await blocking.run(
+            worktrees.takes_task_workspace, repo_root, config, turn_workspace.task_id
+        )
+        if takes_task:
             # F668: taken before the read and held until this call ends, so a second agent's
             # read waits for the first turn's committed `Run` row instead of racing it.
             key = (project_id, turn_workspace.task_id)
@@ -1520,9 +1533,7 @@ async def _trigger_agent_directly(
         # base and catch-up; this is asked only for the agent arm.
         catch_up_to = (
             await task_workspace.integration_base(session, project_id, repo_root)
-            if not worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id)
-            and worktrees.is_writing_agent(config)
-            and worktrees.is_git_repo(repo_root)
+            if not takes_task and worktrees.is_writing_agent(config) and project_is_repo
             else None
         )
         try:
@@ -1531,7 +1542,10 @@ async def _trigger_agent_directly(
                 project_id,
                 **{"aw.agent": agent, "aw.task.id": turn_workspace.task_id},
             ):
-                resolved = worktrees.resolve_turn_workspace(
+                # Serialized with every other worktree creation, release and merge, as they
+                # were while they ran on the loop (`blocking.run_serialized`, D5).
+                resolved = await blocking.run_serialized(
+                    worktrees.resolve_turn_workspace,
                     repo_root,
                     agent,
                     config,
@@ -1549,7 +1563,7 @@ async def _trigger_agent_directly(
             # `a-blocked-agent-workspace-holds-its-input`), never the exception's type and never a
             # path parsed out of its message. A classification derived from a message is one that
             # breaks the next time the message improves, and phase 4 of that change improves these.
-            if worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id):
+            if takes_task:
                 raise TriggerAgentError(
                     status.HTTP_409_CONFLICT,
                     f"Could not prepare the checkout for task {turn_workspace.task_id}: {exc}",
@@ -1568,8 +1582,8 @@ async def _trigger_agent_directly(
         # Task 6.5. Same argument as `effective_work_dir` above: computed here, from the same
         # inputs `resolve_turn_workspace` was just given, so the sentence the agent reads cannot
         # disagree with the branch its process is standing on.
-        workspace_branch = worktrees.turn_branch_name(
-            repo_root, agent, config, task_id=turn_workspace.task_id
+        workspace_branch = await blocking.run(
+            worktrees.turn_branch_name, repo_root, agent, config, task_id=turn_workspace.task_id
         )
 
     # F737: the workspace's runner configuration is compared with what it held at its last
@@ -2034,7 +2048,7 @@ async def _trigger_agent_directly(
     # F603: where the turn started, so its commits can be carried onto a task it claims mid-turn.
     # Only an author's isolated checkout: a review turn's is not its work.
     if isolated_workspace is not None and review_context is None:
-        start_head = await asyncio.to_thread(worktrees.head_of, isolated_workspace)
+        start_head = await blocking.run(worktrees.head_of, isolated_workspace)
         if start_head is not None:
             _turn_start_heads[run_id] = start_head
     # Register execution immediately after the atomic Run + delivery commit. Event rows are
@@ -2822,6 +2836,12 @@ async def _broadcast_run_lifecycle(
 OBSERVATION_RETRY_DELAYS: Tuple[float, ...] = (0.5, 2.0)
 
 
+async def _record_streamed_line(db, project_id: str, agent: str, **kwargs: Any):  # noqa: ANN001
+    """What a streamed line is written through when its batch is (`stream_agent_output`):
+    `record_agent_output`, looked up when the line is written."""
+    return await record_agent_output(db, project_id, agent, **kwargs)
+
+
 async def _record_observation(write, *, run_id: str, what: str, drop: bool = True) -> None:
     """Run *write* (`async (db) -> None`) on a fresh session, surviving SQLite's write lock.
 
@@ -2869,13 +2889,24 @@ async def _close_open_calls(open_calls: OpenToolCalls, record, *, final_status: 
     """
     if final_status not in ("stopped", "failed"):
         return
-    for event in open_calls.closing_events():
+    closing = open_calls.closing_events()
+    if not closing:
+        return
+    # Streamed lines are written in batches (D3), so a closing row's write happens at the flush:
+    # the run's own lines are written first, as they would have been already, and the closing rows'
+    # flush is the write that is logged and skipped.
+    await flush_streamed(run_id)
+    for event in closing:
         try:
             await record(event)
         except Exception:  # noqa: BLE001 - see the docstring
             logger.warning(
                 "Could not close tool call %s of run %s", event.call_id, run_id, exc_info=True
             )
+    try:
+        await flush_streamed(run_id)
+    except Exception:  # noqa: BLE001 - see the docstring
+        logger.warning("Could not close the tool calls of run %s", run_id, exc_info=True)
 
 
 def _log_abnormal_run_end(exc: BaseException, *, run_id: str, agent: str, label: str) -> None:
@@ -2941,6 +2972,12 @@ async def _record_run_failure_tail(
     *exc* is typed `BaseException` rather than `Exception` because `CancelledError` is neither --
     see `_execute_run`'s handler for the measurement behind catching it at all.
     """
+    # Every line the run streamed is stored before it is reported failed (D3). Best-effort here:
+    # this path is already handling a failure, and the write must not replace it with another.
+    try:
+        await flush_streamed(run_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not store run %s's streamed output", run_id, exc_info=True)
     async with async_session_factory() as db:
         run = await db.get(Run, run_id)
         # A row that is gone, or one that had already reached a terminal status before this
@@ -3381,9 +3418,13 @@ async def _execute_run(
                 # F488: joined across the run's text, beside `sequence` and outside the retried
                 # write, so the carried text follows the timeline's order and takes each event once.
                 recorded = run_secrets.scrub_stream(run_id, event)
+                # Shown at once, written with the lines around it (`stream_agent_output`, D3 of
+                # `turn-starts-approvals-and-evidence-never-freeze-the-hub`): one session and one
+                # commit per burst, not per line. Written before this run is reported finished.
+                # Through `_record_observation` still, on the session it opens (which touches the
+                # database only for a session's first line), so a lock there is survived as before.
                 await _record_observation(
-                    lambda db, event=recorded, sequence=sequence: record_agent_output(
-                        db,
+                    lambda db, event=recorded, sequence=sequence: stream_agent_output(
                         project_id,
                         agent,
                         content=event.content,
@@ -3393,6 +3434,9 @@ async def _execute_run(
                         payload=event.payload,
                         run_id=run_id,
                         sequence=sequence,
+                        db=db,
+                        record=_record_streamed_line,
+                        retry_delays=OBSERVATION_RETRY_DELAYS,
                     ),
                     run_id=run_id,
                     what=f"output {sequence}",
@@ -3415,8 +3459,12 @@ async def _execute_run(
             if parsed.runner_version:
                 runner_version = parsed.runner_version
             # Resolve session_id from *this* line before writing its own events, so the row
-            # that establishes the session carries it too, not just subsequent rows.
-            if parsed.session_id:
+            # that establishes the session carries it too, not just subsequent rows. Once this run
+            # is bound to the session a line names, binding it again writes nothing and was a
+            # session, two reads and a commit on every line (D3): it is skipped.
+            if parsed.session_id and (
+                parsed.session_id != session_id or binding_conflict is not None
+            ):
                 prior_conflict, prior_session_id = binding_conflict, session_id
 
                 async def _bind(db) -> None:
@@ -3507,7 +3555,10 @@ async def _execute_run(
         await _record_events(setup_events)
 
         while True:
-            chunk = await loop.run_in_executor(None, pty.read)
+            # On the stream readers' own threads (`blocking.read_stream`, D2): this read blocks
+            # for the whole turn, and on the default executor it took a thread every
+            # `asyncio.to_thread` in the Hub shares.
+            chunk = await blocking.read_stream(pty.read)
             if not chunk:
                 break
             buffer += chunk
@@ -3517,7 +3568,7 @@ async def _execute_run(
         if buffer.strip():
             await _flush_line(buffer)
 
-        exit_code = await loop.run_in_executor(None, pty.wait)
+        exit_code = await blocking.read_stream(pty.wait)
 
         if session_id:
             post_run_accounting = await loop.run_in_executor(
@@ -3538,9 +3589,9 @@ async def _execute_run(
             # a conflict check has nothing to diff against. Best-effort: a git failure here
             # must not turn a completed/failed run into something worse than it already is.
             try:
-                # `to_thread`, not `run_in_executor`: it carries the run's trace into the thread,
-                # so the snapshot's git is in the run's trace (trace-hub-wide D2).
-                snapshot_sha = await asyncio.to_thread(worktrees.snapshot_worktree, worktree, agent)
+                # `blocking.run` carries the run's trace into the thread, as `to_thread` did, so
+                # the snapshot's git is in the run's trace (trace-hub-wide D2).
+                snapshot_sha = await blocking.run(worktrees.snapshot_worktree, worktree, agent)
             except worktrees.GitCommandError:
                 logger.warning(
                     "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True
@@ -3565,6 +3616,8 @@ async def _execute_run(
             final_status=final_status,
             run_id=run_id,
         )
+        # Every line this run streamed is stored before anything reports it finished (D3).
+        await flush_streamed(run_id)
 
         # The provider's refusal on usage grounds, when this run's recorded reading is one
         # (`a-spent-allowance-holds-the-queue`, D2 and D5). `held` is the hold that reading
@@ -4458,9 +4511,9 @@ async def _execute_rpc_run(
             # F488: in the same synchronous step as `sequence`, so two interleaved calls scrub in
             # the timeline's order; bound to the write, so a retry never scrubs again.
             recorded = run_secrets.scrub_stream(run_id, event)
+            # As `_execute_run`'s stream: shown at once, written in batches (D3).
             await _record_observation(
-                lambda db, event=recorded, sequence=sequence: record_agent_output(
-                    db,
+                lambda db, event=recorded, sequence=sequence: stream_agent_output(
                     project_id,
                     agent,
                     content=event.content,
@@ -4470,6 +4523,9 @@ async def _execute_rpc_run(
                     payload=event.payload,
                     run_id=run_id,
                     sequence=sequence,
+                    db=db,
+                    record=_record_streamed_line,
+                    retry_delays=OBSERVATION_RETRY_DELAYS,
                 ),
                 run_id=run_id,
                 what=f"output {sequence}",
@@ -4566,6 +4622,7 @@ async def _execute_rpc_run(
             # Mirrors `_execute_run`'s own early-spawn-failure handling: nothing was ever
             # delivered to the agent, so returned queue entries go back to "queued" rather
             # than being recorded against a run that never really started.
+            await flush_streamed(run_id)  # its pre-turn notices, before it reads as failed (D3)
             async with async_session_factory() as db:
                 run = await db.get(Run, run_id)
                 if run:
@@ -4613,9 +4670,9 @@ async def _execute_rpc_run(
             # Same best-effort snapshot as `_execute_run` — a git failure here must not turn
             # a completed/failed run into something worse than it already is.
             try:
-                # `to_thread`, not `run_in_executor`: it carries the run's trace into the thread,
-                # so the snapshot's git is in the run's trace (trace-hub-wide D2).
-                snapshot_sha = await asyncio.to_thread(worktrees.snapshot_worktree, worktree, agent)
+                # `blocking.run` carries the run's trace into the thread, as `to_thread` did, so
+                # the snapshot's git is in the run's trace (trace-hub-wide D2).
+                snapshot_sha = await blocking.run(worktrees.snapshot_worktree, worktree, agent)
             except worktrees.GitCommandError:
                 logger.warning(
                     "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True
@@ -4638,6 +4695,8 @@ async def _execute_rpc_run(
         # them for the exec path (AgentOutputPanel's handoff-detection, see below).
         exit_code = 0 if final_status == "completed" else 1
         await _close_open_calls(open_calls, _on_event, final_status=final_status, run_id=run_id)
+        # Every line this run streamed is stored before anything reports it finished (D3).
+        await flush_streamed(run_id)
 
         # `_execute_run`'s refusal branch, which slice 1 left out of this executor
         # (`a-copilot-run-shows-its-credits` D8, task 5.3). Inert for Codex: no Codex sample

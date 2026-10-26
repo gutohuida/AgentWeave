@@ -26,6 +26,7 @@ from starlette.routing import Match
 from . import (
     __version__,
     bound_address,
+    git_facts,
     instance_identity,
     run_reconciliation,
     tool_server,
@@ -627,6 +628,21 @@ async def lifespan(app: FastAPI):
     from .project_checks import watch_main_forever
 
     main_watch = asyncio.create_task(watch_main_forever())
+    # The first turn's context renders the tool surface from `mcp_server`, which loads fastmcp:
+    # 1.4 s of imports on the loop, measured, once per process. Imported in a thread at start
+    # instead (`turn-starts-approvals-and-evidence-never-freeze-the-hub`, D1). Best-effort.
+    import importlib
+
+    from . import blocking
+
+    tool_surface_warmup = asyncio.create_task(
+        blocking.run(importlib.import_module, f"{__package__}.mcp_server")
+    )
+    tool_surface_warmup.add_done_callback(
+        lambda task: task.cancelled()
+        or task.exception() is None
+        or logger.warning("warming the tool surface failed: %s", task.exception())
+    )
     # Trace retention and planner statistics, off every request's path
     # (`the-database-stays-fast-as-history-grows`, D4/D5).
     from .db_maintenance import maintain_forever
@@ -651,6 +667,13 @@ async def lifespan(app: FastAPI):
     await terminate_all_active_runs()
     await shutdown_scheduler()
     await _settle_background_runs()
+    # Streamed lines still waiting to be written are written before the Hub stops (D3).
+    from .output_recording import flush_streamed
+
+    try:
+        await flush_streamed()
+    except Exception:  # noqa: BLE001 -- shutting down regardless
+        logger.warning("Could not store streamed output at shutdown", exc_info=True)
     # Release the pool while the loop is still running, and only after the settle: disposing
     # first takes the connection away from a run that is still using it, which is the failure
     # `hub/tests/conftest.py` documents having already made. This step is safe to reach only
@@ -708,6 +731,10 @@ def create_app() -> FastAPI:
             if run_reconciliation.has_deferred_schedules():
                 asyncio.create_task(run_reconciliation.drain_deferred_schedules())
         return await call_next(request)
+
+    # A read request resolves each git ref name once (`git_facts`, D4 of
+    # `turn-starts-approvals-and-evidence-never-freeze-the-hub`).
+    app.add_middleware(git_facts.ReadScopeMiddleware)
 
     # Added last, so it is outermost: the span covers every layer's answer, the size limit's and the
     # scrubber's included (`everything-the-hub-does-is-in-a-trace`, D3).

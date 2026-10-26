@@ -8,11 +8,11 @@ rather than hand-rolling a `.gitignore` parser.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
 from typing import List
 
+from . import binaries
 from .subprocess_windows import no_console_kwargs
 
 _GIT_TIMEOUT_SECONDS = 10
@@ -25,7 +25,7 @@ def list_workspace_paths(repo_root: Path) -> List[str]:
     tree (no git binary on PATH, or `repo_root` isn't inside one) — a non-git project
     simply gets no `@path` matches rather than a broken composer.
     """
-    if shutil.which("git") is None:
+    if binaries.which("git") is None:
         return []
     try:
         result = subprocess.run(

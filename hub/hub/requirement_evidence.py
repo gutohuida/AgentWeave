@@ -38,7 +38,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import run_liveness, spec_index, traces, worktrees
+from . import blocking, git_facts, run_liveness, spec_index, traces, worktrees
 from .db.models import (
     Agent,
     EvidenceFootprint,
@@ -212,11 +212,14 @@ async def record(
     taken: Optional[Footprint] = None
     if workspace is not None:
         # Design D7: the directory this actor's run was actually given, when there was a run.
-        taken = _take_footprint(
+        # The footprint's git runs off the loop (`blocking`, D1) and returns a plain `Footprint`.
+        recorded_dir = await recorded_workspace_dir(session, actor.run_id)
+        taken = await blocking.run(
+            _take_footprint,
             workspace,
             actor,
             locator,
-            await recorded_workspace_dir(session, actor.run_id),
+            recorded_dir,
             task_id,
             main_branch=main_branch,
             commit=commit,
@@ -433,7 +436,7 @@ async def _checkout_will_be_snapshotted_dirty(
             resolved.relative_to(root.resolve(strict=False))
         except ValueError:
             continue
-        status = _git(directory, "status", "--porcelain")
+        status = await blocking.run(_git, directory, "status", "--porcelain")
         return bool(status and status.strip())
     return False
 
@@ -717,11 +720,13 @@ async def capture_footprint(
     if taken is None:
         # Resolved from the evidence row, keeping this function's stated principle: a later caller
         # gets the right answer without knowing the rule exists (design D7).
-        taken = read_evidence_footprint(
+        recorded_dir = await recorded_workspace_dir(session, evidence.run_id)
+        taken = await blocking.run(
+            read_evidence_footprint,
             workspace,
             evidence.actor_kind,
             evidence.actor,
-            await recorded_workspace_dir(session, evidence.run_id),
+            recorded_dir,
             evidence.task_id,
             locator=evidence.locator or "",
             main_branch=main_branch,
@@ -1097,20 +1102,36 @@ def is_reachable_from(root: Path, commit: str, branch: str) -> Optional[bool]:
     already in there?" would eventually answer differently, and the one that
     mattered would be whichever the merge consulted.
     """
-    if _git(root, "rev-parse", "--verify", branch) is None:
+    # The branch is resolved to a commit first, and the ancestry asked of the commit: for two commit
+    # ids the answer never changes, so it is remembered (`git_facts`, D4); a name never is.
+    tip = git_facts.resolved(root, branch, lambda: _git(root, "rev-parse", "--verify", branch))
+    if tip is None:
         return None
-    try:
-        result = traces.run(
-            ["git", "merge-base", "--is-ancestor", commit, branch],
-            cwd=str(root),
-            capture_output=True,
-            timeout=15,
-            check=False,
-            **no_console_kwargs(),
+
+    def _ask() -> Optional[int]:
+        try:
+            result = traces.run(
+                ["git", "merge-base", "--is-ancestor", commit, tip],
+                cwd=str(root),
+                capture_output=True,
+                timeout=15,
+                check=False,
+                **no_console_kwargs(),
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return result.returncode
+
+    if git_facts.is_full_sha(commit) and git_facts.is_full_sha(tip):
+        # 0 and 1 are git's answers; anything else (a commit it lacks, a crash) is not a fact.
+        code = git_facts.fact(
+            ("ancestor", git_facts.root_key(root), commit, tip), _ask, keep=lambda c: c in (0, 1)
         )
-    except (OSError, subprocess.SubprocessError):
+    else:
+        code = _ask()
+    if code is None:
         return None
-    return result.returncode == 0
+    return code == 0
 
 
 def is_reachable_from_main(root: Path, commit: str) -> Optional[bool]:
@@ -1634,7 +1655,8 @@ async def restamp_run_footprints(
     The footprint is read **once per run**, not once per row: a turn's evidence shares one checkout
     and one commit, and looping `capture_footprint` would spend three git calls per row.
     """
-    target = commit_sha or _git(root, "rev-parse", "HEAD")
+    # Every git read below runs off the loop (`blocking`, D1); the rows are read and written on it.
+    target = commit_sha or await blocking.run(_git, root, "rev-parse", "HEAD")
     if not target:
         return 0
 
@@ -1658,47 +1680,20 @@ async def restamp_run_footprints(
     # Deliberately a *fresh* answer, and free to be `False`. `refresh_reachability` is upgrade-only
     # because for a fixed commit the answer only travels one way — but this is a different commit,
     # and carrying over its predecessor's `True` is precisely the poison being removed here.
-    branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD") or ""
+    branch = await blocking.run(_git, root, "rev-parse", "--abbrev-ref", "HEAD") or ""
     if branch in ("", "HEAD"):
         task_id = await task_bound_to_run(session, run_id)
-        branch = line_of_work(root, target, task_branch=_task_branch_of(task_id))
-    reachable = (
-        is_reachable_from(root, target, main_branch)
-        if main_branch
-        else is_reachable_from_main(root, target)
-    )
-    # Read once per run: the tree and rule 3's branch changes are facts about the one commit. What
-    # each row watches still depends on its own locator, so that part is per row (task 2.3).
-    tree = tree_entries(root, target) or {}
-    changes = branch_paths(root, target, main_branch)
-
-    def taken_for(evidence: RequirementEvidence) -> Footprint:
-        entries, watched_from = watched_files(
-            root,
-            target,
-            tree,
-            locator=evidence.locator or "",
-            main_branch=main_branch,
-            branch_changes=changes,
-        )
-        return Footprint(
-            kind="git",
-            commit_sha=target,
-            branch=branch,
-            entries=entries,
-            watched_from=watched_from,
-            reachable_from_main=reachable,
-            commit_named=False,
+        branch = await blocking.run(
+            line_of_work, root, target, task_branch=_task_branch_of(task_id)
         )
 
-    # Read once per run, like the footprint above it, and for the same reason: it is one fact about
+    # Read once per run, like the footprint below it, and for the same reason: it is one fact about
     # one run. This is the *final* value — a turn goes on writing after its evidence is recorded, so
     # a row captured mid-turn can name fewer destinations than the run ended with (design D11).
     outside_writes = await outside_writes_for_run(session, run_id)
 
-    updated = 0
-    for evidence, footprint in rows:
-        if (
+    def _current(footprint: Optional[EvidenceFootprint]) -> bool:
+        return bool(
             footprint is not None
             and footprint.kind == "git"
             and footprint.commit_sha == target
@@ -1710,13 +1705,55 @@ async def restamp_run_footprints(
             # ...and it already records what it watches: a row from before that did not is the
             # whole-tree footprint this re-stamp now narrows.
             and footprint.watched_from is not None
-        ):
-            continue
+        )
+
+    stale = [(evidence, footprint) for evidence, footprint in rows if not _current(footprint)]
+    if not stale:
+        return 0
+    locators = list(dict.fromkeys(evidence.locator or "" for evidence, _ in stale))
+
+    def _read() -> Tuple[Optional[bool], Dict[str, Tuple[Dict[str, str], List[str]]]]:
+        reachable = (
+            is_reachable_from(root, target, main_branch)
+            if main_branch
+            else is_reachable_from_main(root, target)
+        )
+        # Read once per run: the tree and rule 3's branch changes are facts about the one commit.
+        # What each row watches still depends on its own locator, so that part is per locator.
+        tree = tree_entries(root, target) or {}
+        changes = branch_paths(root, target, main_branch)
+        watched = {
+            locator: watched_files(
+                root,
+                target,
+                tree,
+                locator=locator,
+                main_branch=main_branch,
+                branch_changes=changes,
+            )
+            for locator in locators
+        }
+        return reachable, watched
+
+    reachable, watched = await blocking.run(_read)
+
+    def taken_for(evidence: RequirementEvidence) -> Footprint:
+        entries, watched_from = watched[evidence.locator or ""]
+        return Footprint(
+            kind="git",
+            commit_sha=target,
+            branch=branch,
+            entries=dict(entries),
+            watched_from=list(watched_from),
+            reachable_from_main=reachable,
+            commit_named=False,
+        )
+
+    for evidence, footprint in stale:
         _apply_footprint(
             session, evidence, taken_for(evidence), footprint, outside_writes=outside_writes
         )
-        updated += 1
-    return updated
+    return len(stale)
 
 
 async def refresh_reachability(
@@ -1755,21 +1792,37 @@ async def refresh_reachability(
         .all()
     )
 
-    answers: Dict[str, Optional[bool]] = {}
-    updated = 0
+    # Which commits are asked, and which rows are reached, exactly as when each was asked in turn:
+    # distinct commits in row order, stopping at the row that would be the bound's first excess.
+    asked: List[str] = []
+    reached: List[EvidenceFootprint] = []
     for row in rows:
         commit = row.commit_sha or ""
         if not commit:
             continue
-        if commit not in answers:
-            if len(answers) >= MAX_REACHABILITY_CHECKS:
+        if commit not in asked:
+            if len(asked) >= MAX_REACHABILITY_CHECKS:
                 break
-            answers[commit] = (
+            asked.append(commit)
+        reached.append(row)
+    if not asked:
+        return 0
+
+    def _answer() -> Dict[str, Optional[bool]]:
+        return {
+            commit: (
                 is_reachable_from(root, commit, main_branch)
                 if main_branch
                 else is_reachable_from_main(root, commit)
             )
-        answer = answers[commit]
+            for commit in asked
+        }
+
+    # The git off the loop, in one hop (`blocking`, D1); the rows are updated on it.
+    answers = await blocking.run(_answer)
+    updated = 0
+    for row in reached:
+        answer = answers[row.commit_sha or ""]
         if answer is not None and answer != row.reachable_from_main:
             row.reachable_from_main = answer
             updated += 1
@@ -1809,14 +1862,9 @@ async def backfill_legacy_footprints(
     when a later merge may have brought it in. Called by Scan for drift, the operator's own act; a
     restart or a migration never rewrites a footprint.
     """
-    main = _main_ref(root, main_branch)
+    main = await blocking.run(_main_ref, root, main_branch)
     if main is None:
         return 0
-    # F525 (operator, option d): a row rebuilt from its merge watches from *today's* main, so the
-    # first scan does not ask about every file the merge brought in that anyone touched since -- on
-    # the trial Hub that was 19 of 28 rows, mostly ledgers and logs. A row rebuilt from its locator
-    # keeps the commit it was verified at: the file it names changing since is a real question.
-    main_tree = tree_entries(root, main) or {}
     rows = (
         await session.execute(
             select(RequirementEvidence, EvidenceFootprint)
@@ -1829,27 +1877,45 @@ async def backfill_legacy_footprints(
             )
         )
     ).all()
-    updated = 0
-    for evidence, footprint in rows:
-        # Filtered here, not in SQL: a JSON column holds "nothing" as SQL NULL (a row the migration
-        # added the column to) or as JSON `null` (an ORM write of None), and both load as None.
-        if footprint.watched_from is not None:
-            continue
-        commit = footprint.commit_sha or ""
-        tree = tree_entries(root, commit)
-        if not tree:
-            continue
-        chosen = _locator_paths(evidence.locator or "", tree)
-        if chosen:
-            entries = {path: tree[path] for path in chosen}
-            watched_from = ["locator"]
-        else:
+    # Filtered here, not in SQL: a JSON column holds "nothing" as SQL NULL (a row the migration
+    # added the column to) or as JSON `null` (an ORM write of None), and both load as None.
+    legacy = [
+        (evidence, footprint) for evidence, footprint in rows if footprint.watched_from is None
+    ]
+    asked = [(evidence.locator or "", footprint.commit_sha or "") for evidence, footprint in legacy]
+
+    def _rebuild() -> List[Optional[Tuple[Dict[str, str], List[str]]]]:
+        # F525 (operator, option d): a row rebuilt from its merge watches from *today's* main, so
+        # the first scan does not ask about every file the merge brought in that anyone touched
+        # since -- on the trial Hub that was 19 of 28 rows, mostly ledgers and logs. A row rebuilt
+        # from its locator keeps the commit it was verified at: the file it names changing since is
+        # a real question.
+        main_tree = tree_entries(root, main) or {}
+        answers: List[Optional[Tuple[Dict[str, str], List[str]]]] = []
+        for locator, commit in asked:
+            tree = tree_entries(root, commit)
+            if not tree:
+                answers.append(None)
+                continue
+            chosen = _locator_paths(locator, tree)
+            if chosen:
+                answers.append(({path: tree[path] for path in chosen}, ["locator"]))
+                continue
             merge = _merge_into(root, commit, main)
             if merge is None:
+                answers.append(None)
                 continue
             changed = [path for path in _commit_paths(root, merge) if path in main_tree]
-            entries = {path: main_tree[path] for path in changed}
-            watched_from = ["merge"]
+            answers.append(({path: main_tree[path] for path in changed}, ["merge"]))
+        return answers
+
+    # Every git read off the loop, in one hop (`blocking`, D1); the rows are written on it.
+    rebuilt = await blocking.run(_rebuild) if asked else []
+    updated = 0
+    for (_evidence, footprint), answer in zip(legacy, rebuilt, strict=True):
+        if answer is None:
+            continue
+        entries, watched_from = answer
         if not entries:
             continue
         footprint.entries = entries
@@ -1908,7 +1974,7 @@ async def detect_drift(
     # both footprint kinds, so a `paths` footprint in a project that later became a repository was
     # compared against git blob ids.
     trees: Dict[str, Optional[Dict[str, str]]] = {}
-    main_ref = _main_ref(workspace.root, main_branch)
+    main_ref = await blocking.run(_main_ref, workspace.root, main_branch)
 
     rows = (
         await session.execute(
@@ -1936,7 +2002,9 @@ async def detect_drift(
         .all()
     }
 
-    raised: List[RequirementDrift] = []
+    # Which rows are scanned, and against what, is decided here on the loop; every tree and hash
+    # they need is read in one hop off it (`blocking`, D1); the comparison runs below, as before.
+    scanned: List[Tuple[Any, Any, Any, Optional[str], Optional[Tuple[str, ...]]]] = []
     for evidence, footprint, requirement in rows:
         if evidence.id in open_candidates:
             continue
@@ -1962,16 +2030,38 @@ async def detect_drift(
                 # not drift, so it raises nothing rather than guessing at a branch.
                 if not ref or ref == "HEAD":
                     continue
-            if ref not in trees:
-                trees[ref] = tree_entries(workspace.root, ref)
+            scanned.append((evidence, footprint, requirement, ref, None))
+        else:
+            # Only the watched paths are hashed; a missing one is absent and so reads as moved.
+            scanned.append(
+                (evidence, footprint, requirement, None, tuple((footprint.entries or {}).keys()))
+            )
+
+    refs = list(dict.fromkeys(ref for _, _, _, ref, _ in scanned if ref is not None))
+    hashed = [paths for _, _, _, ref, paths in scanned if ref is None]
+
+    def _observe() -> Tuple[Dict[str, Optional[Dict[str, str]]], List[Dict[str, str]]]:
+        return (
+            {ref: tree_entries(workspace.root, ref) for ref in refs},
+            [hash_paths(workspace.root, paths) for paths in hashed],
+        )
+
+    if scanned:
+        trees, observed_paths = await blocking.run(_observe)
+    else:
+        observed_paths = []
+    hashes = iter(observed_paths)
+
+    raised: List[RequirementDrift] = []
+    for evidence, footprint, requirement, ref, _paths in scanned:
+        if ref is not None:
             observed = trees[ref]
             # The branch is gone — released, deleted, or never pushed anywhere this checkout can
             # see. Being unable to tell is not evidence that anything moved.
             if observed is None:
                 continue
         else:
-            # Only the watched paths are hashed; a missing one is absent and so reads as moved.
-            observed = hash_paths(workspace.root, (footprint.entries or {}).keys())
+            observed = next(hashes)
 
         moved = _changed(footprint.entries or {}, observed)
         if not moved:

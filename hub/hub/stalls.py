@@ -32,6 +32,7 @@ from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from . import blocking
 from .db.models import (
     STALL_CAUSES,
     Agent,
@@ -597,7 +598,7 @@ async def brief(db: AsyncSession, stall: Stall) -> str:
             "## The project's checkout",
             f"Path: {root}; main branch: {main}",
             "git status --short:",
-            _git(root, "status", "--short") or "(clean)",
+            await blocking.run(_git, root, "status", "--short") or "(clean)",
         ]
     lines += [
         "",
