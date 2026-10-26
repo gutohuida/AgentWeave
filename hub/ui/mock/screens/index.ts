@@ -28,7 +28,7 @@ export function screenFor(route: MockRoute): ScreenComponent {
     case 'agent-settings':
       return AgentSettings
     case 'tab':
-      return { overview: Overview, tasks: Tasks, spec: Spec, vault: Vault, jobs: Jobs, activity: Activity }[route.tab]
+      return { overview: Overview, tasks: Tasks, spec: Spec, vault: Vault, jobs: Jobs, activity: Activity, thread: Thread }[route.tab]
   }
 }
 
@@ -43,6 +43,8 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'activity', label: 'Activity', route: { kind: 'tab', tab: 'activity' } },
   { id: 'thread', label: 'Thread', route: { kind: 'thread' } },
   { id: 'conversation', label: 'Conversation', route: { kind: 'conversation', agent: 'Builder', conversationId: 'conv-e3aba2c5956a' } },
+  { id: 'conversation-spec', label: 'Conversation · Spec panel', route: { kind: 'conversation', agent: 'Architect', conversationId: 'conv-9cdda4865e0b', panel: 'spec' } },
+  { id: 'conversation-specs', label: 'Conversation · Open a spec', route: { kind: 'conversation', agent: 'Architect', conversationId: 'conv-9cdda4865e0b', panel: 'specs' } },
   { id: 'settings', label: 'Settings · General', route: { kind: 'settings', section: 'general' } },
   { id: 'settings-manager', label: 'Settings · Manager', route: { kind: 'settings', section: 'manager' } },
   { id: 'settings-charters', label: 'Settings · Charters', route: { kind: 'settings', section: 'charters' } },

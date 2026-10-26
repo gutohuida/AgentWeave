@@ -6,14 +6,16 @@ import { PROJECT_TABS, type ProjectTab } from '@/lib/navigation'
 import { MOCK_NOW, project, projects, tasks } from './fixtures'
 import { beforeKey, type MockRoute } from './routes'
 import { SCREENS, screenFor } from './screens'
+import { SPEC_MOCK_STATES, setSpecMockControls, useSpecMockControls } from './specMock'
 
 const BEFORE = import.meta.glob('./before/*.webp', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
 
 function parseHash(): MockRoute {
-  const raw = decodeURIComponent(window.location.hash.replace(/^#/, ''))
-  const [kind, a, b] = raw.split('/')
+  // A query after the route (`?state=…&layout=…&at=…`) presets a screen's mock controls.
+  const raw = decodeURIComponent(window.location.hash.replace(/^#/, '')).split('?')[0]!
+  const [kind, a, b, c] = raw.split('/')
   if (kind === 'tab' && (PROJECT_TABS as readonly string[]).includes(a ?? '')) return { kind: 'tab', tab: a as ProjectTab }
-  if (kind === 'conversation' && a) return { kind: 'conversation', agent: a, conversationId: b || null }
+  if (kind === 'conversation' && a) return { kind: 'conversation', agent: a, conversationId: b || null, ...(c === 'spec' || c === 'specs' ? { panel: c } : {}) }
   if (kind === 'settings') return { kind: 'settings', section: (a as never) || 'general' }
   if (kind === 'agent-settings' && a) return { kind: 'agent-settings', agent: a, section: (b as never) || 'execution' }
   if (kind === 'gallery') return { kind: 'gallery' }
@@ -26,7 +28,7 @@ function toHash(route: MockRoute): string {
     case 'tab':
       return `tab/${route.tab}`
     case 'conversation':
-      return `conversation/${route.agent}/${route.conversationId ?? ''}`
+      return `conversation/${route.agent}/${route.conversationId ?? ''}${route.panel ? `/${route.panel}` : ''}`
     case 'settings':
       return `settings/${route.section}`
     case 'agent-settings':
@@ -157,9 +159,34 @@ function MockBar({
           </option>
         ))}
       </select>
+      {(route.kind === 'tab' && route.tab === 'spec') || (route.kind === 'conversation' && Boolean(route.panel)) ? (
+        <SpecMockBar showLayout={route.kind === 'tab'} />
+      ) : null}
       <button type="button" className="mock-bar-button" disabled={!hasBefore} data-on={before ? 'true' : 'false'} onClick={onBefore}>
         {before ? 'Showing today' : 'Compare with today'}
       </button>
     </div>
+  )
+}
+
+/** The spec page's controls: which of the five document states to show, and (open question 2)
+ *  whether the document list is a left column or a switcher above a full-width document. */
+function SpecMockBar({ showLayout }: { showLayout: boolean }) {
+  const { state, layout } = useSpecMockControls()
+  return (
+    <>
+      <select className="mock-bar-select" aria-label="Document state" value={state} onChange={(e) => setSpecMockControls({ state: e.target.value as never })}>
+        {SPEC_MOCK_STATES.map((s) => (
+          <option key={s.value} value={s.value}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+      {showLayout ? (
+        <button type="button" className="mock-bar-button" data-on={layout === 'switcher' ? 'true' : 'false'} onClick={() => setSpecMockControls({ layout: layout === 'column' ? 'switcher' : 'column' })}>
+          {layout === 'column' ? 'List: left column' : 'List: top switcher'}
+        </button>
+      ) : null}
+    </>
   )
 }

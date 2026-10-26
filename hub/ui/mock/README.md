@@ -74,3 +74,25 @@ it renders ("it should look exactly like that"). The same screen is `#thread` in
 `mock/thread-fixture.json` (written by `py -3.11 mock/record_thread.py`) is the trial Hub's structural
 feed without chapters, kept for checks of a surface that pages. `py -3.11 mock/shoot.py`-style
 screenshots land in `mock/loom-shots/` (PNGs are ignored).
+
+## The Spec page, redesigned (mock, 2026-10-26)
+
+Spec `spec/changes/the-spec-page-redesigned`. The components are in `src/components/spec/page/`
+(`SpecWorkspace` for the tab, `SpecSidePanel` for the conversation's panel, both built from
+`SpecPageHeader`, `SpecDocumentBody`, `SpecOutline`, `SpecDocList` and `SpecBuilds`). Their view
+model and its pure rules (which actions each state offers, filters, build order, list grouping)
+are in `model.ts`; `src/styles/spec-page.css` styles them. The document is drawn from its structure
+(the payload the recording kept inside the rendered HTML), not a frame.
+
+`mock/specMock.ts` holds what a container would hold. The five document states, Check's findings
+and the builds are simulated (`// mock state`): the behaviour behind them is roadmap slices C and D.
+
+```
+http://localhost:5199/mock.html#tab/spec?state=building            # writing | ready | approved | building | archived
+http://localhost:5199/mock.html#tab/spec?state=approved&layout=switcher
+http://localhost:5199/mock.html#tab/spec?state=building&at=FR-9   # a copied link: opens at FR-9
+http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/spec?state=building
+```
+
+The mock bar switches the state and, on the tab, the list between a left column and a top switcher
+(the document's open question 2). The panel sits at its narrowest width (360px) below a 1200px window.
