@@ -535,3 +535,63 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
   /* A jump still shows where it landed, without moving. */
   [data-flash="true"] { box-shadow: 0 0 0 2px var(--ring); }
 }
+
+/* ── The panel's navigation (SpecPanelNav): switch documents, jump along a strip, filter from a tray ── */
+:root {
+  --sp-ev-verified: var(--green);
+  --sp-ev-awaiting: var(--amber);
+  --sp-ev-in_progress: var(--blue);
+  --sp-ev-not_started: var(--text-3);
+  --sp-ev-rejected: var(--red);
+}
+.aw-sp-pnav { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border-region); }
+.aw-sp-pnav-docs .aw-sp-switcher { width: 100%; }
+.aw-sp-pnav-docs .aw-sp-switcher-trigger { width: 100%; justify-content: flex-start; }
+.aw-sp-pnav-docs .aw-sp-switcher-chevron { margin-left: auto; }
+.aw-sp-pnav-sections { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.aw-sp-pnav-section {
+  flex: none; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  color: var(--text-2); background: transparent; border: 1px solid var(--border);
+  transition: color var(--dur-pop) var(--ease-out), background var(--dur-pop) var(--ease-out), border-color var(--dur-pop) var(--ease-out);
+}
+.aw-sp-pnav-section:hover { color: var(--text-1); background: var(--surface); }
+.aw-sp-pnav-section[data-active="true"] { color: var(--text-1); border-color: var(--sp-thread); background: color-mix(in srgb, var(--sp-thread) 12%, transparent); }
+.aw-sp-pnav-strip { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.aw-sp-pnav-dots { display: flex; gap: 3px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; padding: 2px 0; }
+.aw-sp-pnav-dot {
+  flex: none; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 6px;
+  font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-2);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 45%, transparent);
+  transition: transform var(--dur-pop) var(--ease-out), background var(--dur-pop) var(--ease-out);
+}
+.aw-sp-pnav-dot:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--tone) 26%, transparent); }
+.aw-sp-pnav-dot[data-active="true"] { color: var(--text-1); background: color-mix(in srgb, var(--tone) 34%, transparent); box-shadow: 0 0 0 1.5px var(--sp-thread); }
+.aw-sp-pnav-step { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; color: var(--text-2); background: transparent; border: 0; }
+.aw-sp-pnav-step:hover:not(:disabled) { color: var(--text-1); background: var(--surface); }
+.aw-sp-pnav-step:disabled { opacity: 0.35; }
+.aw-sp-pnav-pos { flex: none; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; padding-left: 2px; }
+.aw-sp-pnav-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.aw-sp-pnav-filter-btn {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; color: var(--text-2); background: transparent; border: 1px solid var(--border);
+}
+.aw-sp-pnav-filter-btn[data-on="true"] { color: var(--text-1); background: var(--surface); }
+.aw-sp-pnav-count { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; font-size: 10px; color: var(--bg); background: var(--sp-thread); }
+.aw-sp-pnav-chip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 180px; padding: 3px 6px 3px 9px; border-radius: 999px;
+  font-size: 11.5px; color: var(--text-1); background: color-mix(in srgb, var(--sp-thread) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sp-thread) 40%, transparent);
+  animation: aw-sp-pnav-in var(--dur-pop) var(--ease-out);
+}
+.aw-sp-pnav-chip:hover { background: color-mix(in srgb, var(--sp-thread) 20%, transparent); }
+.aw-sp-pnav-clear { font-size: 11.5px; color: var(--text-3); background: transparent; border: 0; padding: 3px 4px; }
+.aw-sp-pnav-clear:hover { color: var(--text-1); }
+.aw-sp-pnav-tray { animation: aw-sp-pnav-in var(--dur-pop) var(--ease-out); }
+.aw-sp-pnav-tray .aw-sp-filterbar { position: static; margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); backdrop-filter: none; }
+@keyframes aw-sp-pnav-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .aw-sp-pnav-chip, .aw-sp-pnav-tray { animation: none; }
+  .aw-sp-pnav-dot, .aw-sp-pnav-section { transition: none; }
+}
+.aw-sp-pnav-top { padding-bottom: 0; border-bottom: 0; }

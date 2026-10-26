@@ -38,6 +38,8 @@ export interface SpecDocumentBodyProps {
   /** The anchor just jumped to: it flashes once. */
   flash: string | null
   compact?: boolean
+  /** The panel draws its own filter tray (SpecPanelNav), so the body leaves its bar out. */
+  hideFilterBar?: boolean
   onJump: (anchor: string) => void
   onCopyLink: (anchor: string) => void
 }
@@ -54,7 +56,7 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
 
   return (
     <div className="aw-sp-body" data-compact={props.compact ? 'true' : 'false'}>
-      {show('document') || show('tasks') ? (
+      {(show('document') || show('tasks')) && !props.hideFilterBar ? (
         <DocumentFilterBar
           doc={doc}
           filters={filters}
@@ -464,7 +466,7 @@ function TaskList({
 
 /** Filters within the document (FR-5): requirements by evidence state and task, tasks by status and
  *  agent, and the order the tasks are listed in. Sticks to the top as the document scrolls. */
-function DocumentFilterBar({
+export function DocumentFilterBar({
   doc,
   filters,
   agents,

@@ -11,6 +11,7 @@ import { ConversationComposerDock } from '@/components/conversation/Conversation
 import { NewConversationIntro, type ConversationStarter } from '@/components/conversation/NewConversationIntro'
 import { StartBuildDialog } from '@/components/spec/page/SpecBuilds'
 import { SpecSidePanel } from '@/components/spec/page/SpecWorkspace'
+import { useListPreferences } from '@/components/spec/page/hooks'
 import { CONVERSATION_MIN_WIDTH, SPEC_DOC_MIN_WIDTH } from '@/components/spec/specPreferences'
 import { toast } from '@/lib/toast'
 import { setComposerDraft } from '@/lib/composerDrafts'
@@ -83,7 +84,8 @@ export default function Conversation(props: ScreenProps) {
 /** The conversation's spec panel, redesigned: the same components as the Spec tab in one column.
  *  At a window narrower than 1200px it sits at its narrowest width (the app's SPEC_DOC_MIN_WIDTH). */
 function SpecPanelMock() {
-  const { surface, startDialog } = useSpecMock('conversation/Architect/conv-9cdda4865e0b/spec')
+  const { surface, startDialog, entries } = useSpecMock('conversation/Architect/conv-9cdda4865e0b/spec')
+  const [listPrefs, setListPrefs] = useListPreferences(PROJECT_ID)
   const [width, setWidth] = React.useState(() => (window.innerWidth >= 1200 ? 440 : SPEC_DOC_MIN_WIDTH))
   React.useEffect(() => {
     const onResize = () => setWidth(window.innerWidth >= 1200 ? 440 : SPEC_DOC_MIN_WIDTH)
@@ -92,7 +94,15 @@ function SpecPanelMock() {
   }, [])
   return (
     <div className="h-full flex-none" style={{ width }} data-testid="spec-panel">
-      <SpecSidePanel {...surface} />
+      <SpecSidePanel
+        {...surface}
+        list={{
+          entries,
+          prefs: listPrefs,
+          onPrefsChange: setListPrefs,
+          onNew: () => toast({ title: 'Starts a new change', description: 'With an agent, in a conversation.' }),
+        }}
+      />
       <StartBuildDialog {...startDialog} />
     </div>
   )

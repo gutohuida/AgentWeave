@@ -6,6 +6,7 @@ import { SpecDocList, SpecDocSwitcher } from './SpecDocList'
 import { SpecDocumentBody, type BodyPart } from './SpecDocumentBody'
 import { SpecOutlineMenu, SpecOutlineRail } from './SpecOutline'
 import { SpecPageHeader } from './SpecPageHeader'
+import { SpecPanelDocSwitcher, SpecPanelNav, type PanelListProps } from './SpecPanelNav'
 import { Segmented } from '@/components/ui/segmented'
 import '@/styles/spec-page.css'
 
@@ -151,7 +152,7 @@ function tabFor(anchor: string): PanelTab {
 
 /** The conversation's spec panel (FR-8): the same header, actions, document, filters and builds, in
  *  one column. The outline is a menu, and the document, its tasks and its builds are tabs. */
-export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void }) {
+export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; list?: PanelListProps }) {
   const scroller = React.useRef<HTMLDivElement>(null)
   const [tab, setTab] = React.useState<PanelTab>(() => (props.initialAnchor ? tabFor(props.initialAnchor) : 'document'))
   const { nav, findings, running, findingAnchor, onAction } = useSurface(props, scroller)
@@ -194,6 +195,7 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void }
           onArchive={props.onArchive}
           onDelete={props.onDelete}
         />
+        {props.list ? <SpecPanelDocSwitcher doc={doc} list={props.list} onOpenDocument={props.onOpenDocument} now={props.now} /> : null}
         <div className="aw-sp-panel-tabs">
           <Segmented<PanelTab>
             label="Show"
@@ -213,6 +215,16 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void }
             ]}
           />
         </div>
+        <SpecPanelNav
+          doc={doc}
+          tab={tab}
+          filters={props.filters}
+          onFiltersChange={props.onFiltersChange}
+          active={active}
+          onJump={jump}
+          onOpenDocument={props.onOpenDocument}
+          now={props.now}
+        />
         <div className="aw-sp-scroll" ref={scroller}>
           <div className="aw-sp-content" key={`${doc.path}:${tab}`} ref={content}>
             <SpecDocumentBody
@@ -222,6 +234,7 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void }
               findings={findings}
               parts={parts}
               compact
+              hideFilterBar
               flash={nav.flash}
               onJump={jump}
               onCopyLink={props.onCopyLink}
