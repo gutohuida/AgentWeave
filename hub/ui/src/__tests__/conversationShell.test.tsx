@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi, beforeAll } from 'vitest'
+import { loadAllScreens } from '@/lib/lazyScreens'
 import { useConfigStore } from '@/store/configStore'
 
 vi.mock('@/hooks/useSSE', () => ({
@@ -86,6 +87,10 @@ function withClient(node: ReactNode) {
     </QueryClientProvider>
   )
 }
+
+// The screens App opens on demand (`lazyScreens`) are loaded first, as `prefetchScreens` does in
+// the app once it is idle, so a click renders its screen at once, as the assertions expect.
+beforeAll(() => loadAllScreens())
 
 describe('phase 1 conversation-first shell', () => {
   beforeEach(() => {

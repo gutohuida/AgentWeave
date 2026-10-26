@@ -1,14 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useAgents } from '@/api/agents'
 import { useProjects } from '@/api/projects'
-import { ConversationView } from '@/components/agents/ConversationView'
-import { AgentCreateDialog } from '@/components/agents/AgentCreateDialog'
-import { NewConversationSurface } from '@/components/agents/NewConversationSurface'
-import { JobsScreen } from '@/components/jobs/JobsScreen'
-import { ActivityScreen } from '@/components/activity/ActivityScreen'
-import { ThreadScreen } from '@/components/thread/ThreadScreen'
-import { ProjectSettingsScreen } from '@/components/settings/ProjectSettingsScreen'
-import { VaultScreen } from '@/components/vault/VaultScreen'
 import { PaneResizer } from '@/components/layout/PaneResizer'
 import { TopBar } from '@/components/layout/TopBar'
 import { SetupModal } from '@/components/layout/SetupModal'
@@ -23,13 +15,8 @@ import { openCommandPalette } from '@/lib/palette'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
 import { CommandPalette } from '@/components/palette/CommandPalette'
 import { ProjectManagerModal, type ProjectManagerMode } from '@/components/projects/ProjectManagerModal'
-import { QuestionsPanel } from '@/components/questions/QuestionsPanel'
 import { useSpecDocuments } from '@/api/spec'
-import { SpecPage } from '@/components/spec/SpecPage'
-import { EvidenceBrowser } from '@/components/evidence/EvidenceBrowser'
-import { RequirementStory } from '@/components/spec/RequirementStory'
 import { useTasks } from '@/api/tasks'
-import { TasksScreen } from '@/components/tasks/TasksScreen'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/common/Icon'
 import { useSSE } from '@/hooks/useSSE'
@@ -50,14 +37,30 @@ import {
   withDocument,
 } from '@/lib/navigation'
 import { linkTarget } from '@/lib/threadKnots'
-import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
-import { ArchivedAgentNotice } from '@/components/agents/ArchivedAgentNotice'
 import { useProjectConversations } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { usePanelTabsStore, loopTabId } from '@/store/panelTabsStore'
 import { CheckpointStatusBanner } from '@/components/checkpoints/CheckpointStatusBanner'
 import { LoadingThread } from '@/components/common/LoadingThread'
+import {
+  ActivityScreen,
+  AgentCreateDialog,
+  AgentSettingsPage,
+  ArchivedAgentNotice,
+  ConversationView,
+  EvidenceBrowser,
+  JobsScreen,
+  NewConversationSurface,
+  ProjectSettingsScreen,
+  QuestionsPanel,
+  RequirementStory,
+  SpecPage,
+  TasksScreen,
+  ThreadScreen,
+  VaultScreen,
+  prefetchScreens,
+} from '@/lib/lazyScreens'
 
 export function HubConnectionState({ state, onRetry }: { state: 'pending' | 'unreachable'; onRetry?: () => void }) {
   const pending = state === 'pending'
@@ -136,6 +139,13 @@ export default function App() {
       // Persistence is optional.
     }
   }, [sidebarCollapsed])
+
+  // Once the project list has drawn, the screens not in the first script load while the page is
+  // idle, so the first click on a tab or a conversation does not wait for its chunk.
+  const projectsLoaded = projects !== undefined
+  useEffect(() => {
+    if (projectsLoaded) prefetchScreens()
+  }, [projectsLoaded])
 
   useEffect(() => {
     useConfigStore.getState().bootstrap()
@@ -665,7 +675,10 @@ export default function App() {
                 onToggleMode={toggleMode}
               />
             )}
-            <div className="min-h-0 flex-1 overflow-hidden">{content}</div>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {/* A screen not yet loaded (`lazyScreens`) shows how AgentWeave shows loading. */}
+              <Suspense fallback={<LoadingThread label="Loading" minHeight={240} />}>{content}</Suspense>
+            </div>
           </main>
       </div>
       <SetupModal open={!isConfigured || setupOpen} onClose={() => setSetupOpen(false)} />
@@ -679,15 +692,17 @@ export default function App() {
         }}
       />
       {agentCreateProjectId && (
-        <AgentCreateDialog
-          open
-          onClose={() => setAgentCreateProjectId(null)}
-          onCreated={(name) => {
-            const createdProjectId = agentCreateProjectId
-            setAgentCreateProjectId(null)
-            navigateTo(agentDestination(createdProjectId, name, null, openDocument))
-          }}
-        />
+        <Suspense fallback={null}>
+          <AgentCreateDialog
+            open
+            onClose={() => setAgentCreateProjectId(null)}
+            onCreated={(name) => {
+              const createdProjectId = agentCreateProjectId
+              setAgentCreateProjectId(null)
+              navigateTo(agentDestination(createdProjectId, name, null, openDocument))
+            }}
+          />
+        </Suspense>
       )}
       <CommandPalette
         agents={agents}

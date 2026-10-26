@@ -39,26 +39,28 @@ async def _echo(scope, receive, send):
 
 @pytest.fixture
 def server_url():
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
+    # The socket is bound here and handed to the server, never closed and re-bound: between a probe
+    # closing a free port and uvicorn binding it, another process on a busy machine may take it.
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
     config = uvicorn.Config(
         ContentSizeLimitMiddleware(_echo, max_size=LIMIT),
-        host="127.0.0.1",
-        port=port,
         log_level="warning",
         lifespan="off",
     )
     server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
     thread.start()
-    deadline = time.monotonic() + 10
-    while not server.started and time.monotonic() < deadline:
+    # A hang guard that ends as soon as the server is up, not an expected start time.
+    deadline = time.monotonic() + 120
+    while not server.started and thread.is_alive() and time.monotonic() < deadline:
         time.sleep(0.02)
     assert server.started
     yield f"http://127.0.0.1:{port}"
     server.should_exit = True
-    thread.join(timeout=10)
+    thread.join(timeout=30)
+    listener.close()
 
 
 @pytest.mark.parametrize("size", [LIMIT + 1, 10 * 1024 * 1024 + 1, 40 * 1024 * 1024])

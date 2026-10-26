@@ -90,12 +90,20 @@ export interface TraceSettings {
   spans_by_operation: Record<string, number>
   /** Spans this Hub process could not write since it started. */
   dropped_spans: number
+  /** Days of spans the Hub keeps; older ones are deleted on their own. */
+  retention_days: number
+  /** The window a project that never chose one keeps. */
+  retention_days_default: number
+  /** Whether `retention_days` is this project's own choice rather than the default. */
+  retention_days_chosen: boolean
 }
 
 export interface TraceSettingsInput {
   otlp_endpoint?: string | null
   otlp_headers?: Record<string, string>
   export_enabled?: boolean
+  /** Null returns the project to the Hub's default window. */
+  retention_days?: number | null
 }
 
 export interface TraceFilters {

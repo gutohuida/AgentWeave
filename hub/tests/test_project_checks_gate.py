@@ -1,7 +1,5 @@
 """Approval reads the project's check result (`approval-runs-the-projects-checks`, groups 4.1/4.3)."""
 
-import time
-
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -78,21 +76,32 @@ async def test_a_passing_check_lets_approval_merge(app, auth_headers, tmp_path):
 
 @pytest.mark.asyncio
 async def test_asking_without_a_result_starts_a_run_and_answers_at_once(
-    app, auth_headers, tmp_path
+    app, auth_headers, tmp_path, tmp_path_factory
 ):
     task_id, work = await _task_with_work(tmp_path)
-    # A check that takes 8 s, so answering "at once" (< 5 s) cannot be the run finishing inline,
-    # and a loaded machine still has room.
-    await _project([{**PASS, "command": f'{PY} -c "import time; time.sleep(8)"'}])
+    # A check that cannot finish until the test releases it, after approval has answered: an
+    # approval that ran it inline could only answer once it gave up waiting, as a pass (200), so
+    # the 409 below is the proof, on any machine and under any load -- no wall-clock bound.
+    outside = tmp_path_factory.mktemp("release")
+    release = outside / "go"
+    script = outside / "wait_for_release.py"
+    script.write_text(
+        "import os, time\n"
+        "deadline = time.monotonic() + 300\n"
+        f"while not os.path.exists(r'{release}') and time.monotonic() < deadline:\n"
+        "    time.sleep(0.05)\n",
+        encoding="utf-8",
+    )
+    await _project([{**PASS, "command": f'{PY} "{script}"', "timeout_seconds": 600}])
     assert await _runs(task_id) == []
 
-    started = time.monotonic()
     refused = await _approve(app, auth_headers, task_id)
-    assert time.monotonic() - started < 5
     assert refused.status_code == 409, refused.text
     assert refused.json()["detail"]["checks"][0]["state"] == "running"
     assert "still running" in refused.json()["detail"]["message"]
+    assert project_checks.is_running(task_id), "the run is in the background, waiting"
 
+    release.write_text("go", encoding="utf-8")
     await project_checks.drain()
     assert [r.state for r in await _runs(task_id)] == ["passed"]
     assert (await _approve(app, auth_headers, task_id)).status_code == 200

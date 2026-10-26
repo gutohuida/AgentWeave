@@ -613,6 +613,8 @@ async def brief(db: AsyncSession, stall: Stall) -> str:
         "`mend_withdraw_input(entry_id)`.",
         "- Hand a stuck task back to the queue or to another agent: "
         "`mend_reset_task(task_id, status, assignee)` (status `assigned` or `pending`).",
+        "- Hand finished (`completed`) work nobody is moving to a reviewer who did not write it: "
+        '`mend_reset_task(task_id, "under_review", reviewer)` queues that reviewer\'s review turn.',
         "- Read anything: files, git log, the task, the spec.",
         "",
         "## What you must ask the operator first (ask_user, and wait for the answer)",

@@ -344,8 +344,11 @@ def clientless_routes(rows):
 def main():
     rows = route_rows()
     src = ui_sources()
-    bundle_file = sorted(BUNDLE_DIR.glob("index-*.js"))[0]
-    bundle = bundle_file.read_text(encoding="utf-8", errors="replace")
+    # Every chunk: the app's screens load as chunks of their own (perf slice 4), so the entry
+    # script alone no longer holds every reachable file's literals.
+    bundle_files = sorted(BUNDLE_DIR.glob("*.js"))
+    bundle_file = next(f for f in bundle_files if f.name.startswith("index-"))
+    bundle = "\n".join(f.read_text(encoding="utf-8", errors="replace") for f in bundle_files)
 
     unresolved = [r for r in rows if r["ui"] == "wildcard"]
     if unresolved:

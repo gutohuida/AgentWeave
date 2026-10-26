@@ -41,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import (
     blocking,
     bound_address,
+    flow_advance,
     instance_identity,
     mcp_announce,
     project_checks,
@@ -3738,6 +3739,9 @@ async def _execute_run(
                 else []
             )
             await db.commit()
+            # A flow whose task this run was bound to fires now rather than at its tick: the
+            # run's end is when its finished work becomes reviewable (`flow_advance`). Never raises.
+            flow_advance.after_run(project_id, run_id)
             # The run's work is committed now; a completed task it was bound to gets its checks
             # (approval-runs-the-projects-checks). Never raises, so it sits beside the wake.
             if await project_checks.configured_for(db, project_id):
@@ -4771,6 +4775,9 @@ async def _execute_rpc_run(
                 else []
             )
             await db.commit()
+            # A flow whose task this run was bound to fires now rather than at its tick: the
+            # run's end is when its finished work becomes reviewable (`flow_advance`). Never raises.
+            flow_advance.after_run(project_id, run_id)
             # The run's work is committed now; a completed task it was bound to gets its checks
             # (approval-runs-the-projects-checks). Never raises, so it sits beside the wake.
             if await project_checks.configured_for(db, project_id):

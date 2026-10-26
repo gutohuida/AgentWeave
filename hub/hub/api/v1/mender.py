@@ -259,10 +259,67 @@ async def mender_withdraw_input(
 
 
 class TaskReset(BaseModel):
-    status: Literal["assigned", "pending"]
+    status: Literal["assigned", "pending", "under_review"]
     assignee: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"extra": "forbid"}
+
+
+async def _hand_to_review(
+    session: AsyncSession, actor: AgentActor, task: Task, reviewer: str
+) -> dict:
+    """Queue a review turn of *task* for *reviewer*, the way the flow and the operator do.
+
+    Measured on loop-df5f74816122 (2026-10-25): a `completed` task held by its author can leave
+    `completed` only for `under_review`, its author may not take it there, and the reviewer may not
+    either while the author holds it -- so the mender, whose reset offered only `assigned` and
+    `pending`, could not unstick it, and side tasks no flow staffs waited for the operator.
+
+    Not a status write: the review **dispatch** stages `completed -> under_review` with the
+    reviewer as holder (`enter_selected_task`), so the review has a turn and a checkout, and a
+    refused dispatch leaves the task as it was. The dispatch's own read-only refusals are asked
+    first, so the mender is answered now rather than by a turn that never starts.
+    """
+    from ...conversations import inherit_runtime_overrides, name_conversation, new_conversation
+    from ...inbound_queue import new_entry
+    from ...task_integration import review_target
+    from ...turn_scheduler import schedule_accepted
+    from .agent_trigger import review_dispatch_refusal
+
+    refusal = await review_dispatch_refusal(session, task, reviewer=reviewer)
+    if refusal is not None:
+        raise HTTPException(status_code=refusal[0], detail=refusal[1])
+    target = await review_target(session, task)
+    if not target.resolved:
+        raise HTTPException(status_code=409, detail=target.refusal)
+    conversation = new_conversation(project_id=actor.project_id, agent=reviewer, origin="mender")
+    name_conversation(conversation, f"Review {task.id}: {task.title}"[:120])
+    session.add(conversation)
+    await inherit_runtime_overrides(session, conversation)
+    await session.flush()
+    entry = new_entry(
+        project_id=actor.project_id,
+        agent=reviewer,
+        origin_type="mender",
+        content=(
+            f"Review task {task.id} ('{task.title}'): its work is finished and waiting for a "
+            f"review. Judge it against its acceptance criteria and end with `approved` or "
+            f"`revision_needed`."
+        ),
+        hop_depth=0,
+        conversation_id=conversation.id,
+        review_task_id=task.id,
+    )
+    session.add(entry)
+    await session.commit()
+    await schedule_accepted(actor.project_id, reviewer)
+    return {
+        "task_id": task.id,
+        "status": task.status,
+        "assignee": task.assignee,
+        "review_queued_for": reviewer,
+        "queue_entry_id": entry.id,
+    }
 
 
 @mender_router.post("/tasks/{task_id}/reset")
@@ -272,7 +329,8 @@ async def mender_reset_task(
     actor: AgentActor = Depends(get_mender_actor),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Hand a stuck task back: to the queue (`pending`) or to an agent (`assigned`).
+    """Hand a stuck task back: to the queue (`pending`), to an agent (`assigned`), or finished work
+    to a reviewer (`under_review`, with `assignee` the reviewer -- `_hand_to_review`).
 
     Only the edges the transition map gives any run; a task the operator must move answers 409.
     """
@@ -293,6 +351,12 @@ async def mender_reset_task(
             raise HTTPException(
                 status_code=400, detail=f"'{body.assignee}' is not an open agent here."
             )
+    if body.status == "under_review":
+        if body.assignee is None:
+            raise HTTPException(
+                status_code=400, detail="Name the reviewer as `assignee` to hand work to review."
+            )
+        return await _hand_to_review(session, actor, task, body.assignee)
     try:
         if task.status == "in_progress" and body.status == "pending":
             await apply_transition(session, task, "assigned", run_actor(actor.run_id, actor.agent))

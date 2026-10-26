@@ -147,6 +147,58 @@ function RecentTraces() {
   )
 }
 
+/** How long this project's traces are kept. Saved on its own, apart from the export settings. */
+function RetentionRow({ settings }: { settings: TraceSettings }) {
+  const update = useUpdateTraceSettings()
+  const [days, setDays] = useState(String(settings.retention_days))
+  const parsed = Number(days)
+  const valid = /^\d+$/.test(days.trim()) && parsed >= 1 && parsed <= 3650
+  const changed = valid && parsed !== settings.retention_days
+  const save = (value: number | null) =>
+    update.mutate({ retention_days: value }, { onSuccess: (saved) => setDays(String(saved.retention_days)) })
+
+  return (
+    <SettingsRow
+      label="Keep traces for"
+      description={`Older spans are deleted by the Hub on its own. ${
+        settings.retention_days_chosen
+          ? `The Hub's default is ${settings.retention_days_default} days.`
+          : "This is the Hub's default."
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-2" data-testid="trace-retention">
+        <input
+          aria-label="Days of traces to keep"
+          type="number"
+          min={1}
+          max={3650}
+          value={days}
+          onChange={(event) => setDays(event.target.value)}
+          className="control-field block w-20 px-2 py-1.5 text-xs"
+        />
+        <span className="text-xs" style={{ color: 'var(--text-3)' }}>days</span>
+        <Button type="button" variant="outline" size="xs" disabled={!changed || update.isPending} onClick={() => save(parsed)}>
+          Save
+        </Button>
+        {settings.retention_days_chosen && (
+          <Button type="button" variant="ghost" size="xs" disabled={update.isPending} onClick={() => save(null)}>
+            Use the default
+          </Button>
+        )}
+      </div>
+      {!valid && (
+        <p className="mt-1 text-[11px]" style={{ color: 'var(--amber)' }}>A whole number of days from 1 to 3650.</p>
+      )}
+      {update.isSuccess && <p role="status" className="mt-1 text-[11px]" style={{ color: 'var(--green)' }}>Saved.</p>}
+      {update.error && (
+        <p role="alert" className="mt-1 text-[11px]" style={{ color: 'var(--red)' }}>
+          {readableApiError(update.error, 'The window could not be saved.')}
+        </p>
+      )}
+    </SettingsRow>
+  )
+}
+
 export function TracesSection() {
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { data: settings, error: loadError, isLoading } = useTraceSettings()
@@ -263,6 +315,7 @@ export function TracesSection() {
           )}
         </div>
       </SettingsRow>
+      <RetentionRow key={projectId} settings={settings} />
       <SettingsRow label="Recent traces" description="The newest traces of one kind. Open one to see its spans.">
         <RecentTraces />
       </SettingsRow>

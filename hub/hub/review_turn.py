@@ -537,7 +537,22 @@ async def _checks_sentence(session: AsyncSession, task: Task) -> Optional[str]:
     if view is None:
         return None
     if view.state == "passed":
-        return "**This task's checks passed** on the work approval would merge."
+        passed = "**This task's checks passed** on the work approval would merge."
+        results = view.reused
+        if results is None:
+            results = list(view.run.results or []) if view.run is not None else []
+        flaky = [r for r in results if isinstance(r, dict) and r.get("flaky")]
+        if flaky:
+            # A flake is recorded, never swallowed: the reviewer is told which check flaked.
+            names = ", ".join(f"`{r.get('name')}`" for r in flaky)
+            tests = ", ".join(
+                t for r in flaky for t in (r["flaky"].get("first") or {}).get("failed_tests") or []
+            )
+            passed += (
+                f" {names} failed once and passed when run again on the same tree (a flaky "
+                f"result{': ' + tests if tests else ''}), which does not hold approval."
+            )
+        return passed
     returns_it = (
         "Fixing it is not your work: end with `revision_needed` and notes quoting the failing "
         "output -- that returns the task to its author."

@@ -36,7 +36,7 @@ from .agent_action_scrub import AgentActionScrubMiddleware
 from .api.v1 import agent_trigger, v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
-from .db.engine import SQLITE_BUSY_TIMEOUT_SECONDS, engine, init_db
+from .db.engine import SQLITE_BUSY_TIMEOUT_SECONDS, describe_journal, engine, init_db
 from .provider_allowance import arm_held_queues
 from .run_reconciliation import reconcile_interrupted_runs, reconcile_stale_job_runs
 from .run_task_binding import TaskBindingError
@@ -569,10 +569,22 @@ def _log_database_before_opening() -> None:
         )
 
 
+async def log_journal_mode() -> None:
+    """The startup line naming the journal the database runs in (`the-database-stays-fast-as-
+    history-grows` D2). WARNING for the reason `_log_database_before_opening` gives: after
+    `init_db()`'s alembic `fileConfig` the root logger is WARN, and the operator's detached Hub
+    sends its output to DEVNULL, so this line is the one place a refused WAL is ever recorded."""
+    try:
+        logger.warning(await describe_journal())
+    except Exception as exc:  # noqa: BLE001 -- a line about the journal must not stop the Hub
+        logger.warning("Hub database: could not read the journal mode: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _log_database_before_opening()
     await init_db()
+    await log_journal_mode()
     instance_identity.load_or_create()
     await reconcile_interrupted_runs()
     await reconcile_stale_job_runs()
@@ -631,7 +643,15 @@ async def lifespan(app: FastAPI):
         or task.exception() is None
         or logger.warning("warming the tool surface failed: %s", task.exception())
     )
+    # Trace retention and planner statistics, off every request's path
+    # (`the-database-stays-fast-as-history-grows`, D4/D5).
+    from .db_maintenance import maintain_forever
+
+    maintenance = asyncio.create_task(maintain_forever())
     yield
+    maintenance.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await maintenance
     main_watch.cancel()
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await main_watch

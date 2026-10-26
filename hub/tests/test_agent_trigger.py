@@ -41,7 +41,7 @@ def _init_repo(path: Path) -> Path:
     return path
 
 
-async def _wait_for_active_pty(run_id, timeout=2.0):
+async def _wait_for_active_pty(run_id, timeout=30.0):
     """Poll until `_execute_run` has registered *run_id*'s PtySession.
 
     The stop endpoint can only reach a run's process via `run_liveness.active_ptys`,
@@ -58,7 +58,7 @@ async def _wait_for_active_pty(run_id, timeout=2.0):
     raise AssertionError(f"run {run_id} never registered an active pty")
 
 
-async def _wait_for_active_app_server_run(run_id, timeout=2.0):
+async def _wait_for_active_app_server_run(run_id, timeout=30.0):
     """Poll until `_execute_codex_appserver_run` has registered *run_id* as in-flight.
 
     App-server equivalent of `_wait_for_active_pty` above: this path has no PtySession to

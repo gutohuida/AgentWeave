@@ -404,8 +404,11 @@ def main() -> int:
 
     dead = sorted(set(all_files) - runtime)
     print(f"\n=== 2. the {len(dead)} unreachable files, checked against the shipped bundle ===")
-    bundle_file = sorted(BUNDLE_DIR.glob("index-*.js"))[0]
-    bundle = bundle_file.read_text(encoding="utf-8", errors="replace")
+    # Every chunk: the app's screens load as chunks of their own (perf slice 4), so the entry
+    # script alone no longer holds every reachable file's literals.
+    bundle_files = sorted(BUNDLE_DIR.glob("*.js"))
+    bundle_file = next(f for f in bundle_files if f.name.startswith("index-"))
+    bundle = "\n".join(f.read_text(encoding="utf-8", errors="replace") for f in bundle_files)
     print(f"bundle: {rel(bundle_file)}")
     # A dozen reachable files spread across the tree, not a hand-picked few: the probe rule is
     # only trustworthy if it survives files it was not tuned on.

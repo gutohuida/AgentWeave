@@ -16,14 +16,26 @@ only *reads* what is recorded (`view`), and still counts only a result for the c
 
 A check may name the paths it covers (`paths`): where no file the merged work changes matches one, it
 is not executed and is recorded skipped, which passes.
+
+A check's result is a function of the tree it ran on and the check itself, so a passing result is
+reused for the same merged *tree* and the same check (`check_digest`), whatever commits produced it:
+a prerequisite merged into the task branch, or a main move that leaves the merged tree as it was,
+re-runs nothing. A different tree is always checked again. A failure is never reused.
+
+A failure is confirmed before it is charged to the task: the failed tests (pytest node ids parsed
+from the output) or else the whole check are run once more on the same tree. Only a reproduced
+failure stands; one that passes the second time passes, and the result records the flake.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import time
@@ -61,6 +73,10 @@ AWAITING_REVIEW = ("completed", "under_review")
 #: How often each project's main tip is read, to notice a move made outside the Hub. Two looks fit
 #: inside the 120 seconds the refresh promises.
 WATCH_SECONDS = 30.0
+#: How many of a project's latest decided runs are searched for a passing result on the same tree.
+REUSE_LOOKBACK = 200
+#: A failing check's failed tests are re-run by node id only up to this many; more re-runs the check.
+MAX_RERUN_TESTS = 50
 
 #: The Hub's own configuration, never handed to a project's command: its credentials, its database,
 #: its address. A check runs the *project's* tests; the Hub's settings are not the project's.
@@ -284,7 +300,23 @@ def check_environment() -> Tuple[Dict[str, str], List[str]]:
             removed.append(value)
         else:
             env[name] = value
+    # `-n auto` sizes pytest-xdist to every CPU, and up to MAX_CONCURRENT_RUNS checks run at once
+    # beside the agents: on the operator's 20-CPU machine that was 40+ workers on 20 CPUs, the
+    # suite ran 5-12 min, and the timing-sensitive tests flaked (2026-10-25). Each run gets a share
+    # with room left for the agents. Only `-n auto` reads it; an explicit `-n 8` is the operator's,
+    # and so is a value already in the Hub's environment.
+    env.setdefault(XDIST_AUTO_WORKERS_VARIABLE, str(auto_workers()))
     return env, removed
+
+
+#: pytest-xdist reads this for `-n auto` (xdist/plugin.py, `auto_detect_cpus`).
+XDIST_AUTO_WORKERS_VARIABLE = "PYTEST_XDIST_AUTO_NUM_WORKERS"
+
+
+def auto_workers(cpus: Optional[int] = None) -> int:
+    """The xdist workers one check run gets for `-n auto`: the CPUs shared by the runs that may run
+    at once and one share kept for everything else (the agents, the Hub)."""
+    return max(1, (cpus or os.cpu_count() or 2) // (MAX_CONCURRENT_RUNS + 1))
 
 
 def scrub(text: str, removed: Sequence[str]) -> str:
@@ -357,13 +389,319 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
     text = scrub((output or b"").decode("utf-8", "replace"), removed)
     if timed_out:
         text += f"\n[the check ran past its {check['timeout_seconds']}s timeout and was ended]"
-    return {
+    result = {
         "name": check["name"],
         "exit_code": None if timed_out else proc.returncode,
         "timed_out": timed_out,
         "duration_seconds": round(time.monotonic() - started, 1),
         "output_tail": text[-OUTPUT_TAIL_CHARS:],
     }
+    if not timed_out and proc.returncode not in (0, None):
+        # Read from the whole output, not the stored tail: the summary may be longer than it.
+        node_ids = failed_test_ids(text)
+        if node_ids:
+            result["failed_tests"] = node_ids
+        excerpt = failure_excerpt(text)
+        if excerpt:
+            result["failure_excerpt"] = excerpt
+    return result
+
+
+_FAILURES_HEADER_RE = re.compile(r"^=+ (?:FAILURES|ERRORS) =+\s*$", re.MULTILINE)
+
+
+def failure_excerpt(output: str) -> str:
+    """The start of pytest's FAILURES (or ERRORS) section, where the tracebacks are, or `""`.
+
+    The stored tail of a long suite holds only the summary, so a failure's traceback was lost:
+    two gate runs on 2026-10-25 kept `FAILED <node id>` and nothing that said why."""
+    found = _FAILURES_HEADER_RE.search(output)
+    if found is None or len(output) - found.start() <= OUTPUT_TAIL_CHARS:
+        return ""  # none, or already inside the tail
+    return output[found.start() : found.start() + OUTPUT_TAIL_CHARS]
+
+
+# --- reuse and confirmation ----------------------------------------------------------------------
+
+
+def check_digest(check: Dict[str, Any]) -> str:
+    """What makes two runs of a check the same check: everything the operator configured."""
+    payload = json.dumps(
+        {key: check.get(key) for key in ("name", "command", "timeout_seconds", "paths")},
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def tree_of(root: Path, commit: str) -> Optional[str]:
+    result = _git(root, "rev-parse", "--verify", f"{commit}^{{tree}}")
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+async def passes_on_tree(session: AsyncSession, project_id: str, tree: str) -> Dict[str, Any]:
+    """Every check digest with a passing, executed result on *tree*, to the result to reuse.
+
+    Only rows that finished with a verdict are read (a `failed` run's checks before its failure
+    ran to completion and passed). A skipped result is not a pass of the tree: whether a check is
+    skipped depends on what changed against main, which is decided again for each run."""
+    rows = (
+        (
+            await session.execute(
+                select(TaskCheckRun)
+                .where(
+                    TaskCheckRun.project_id == project_id,
+                    TaskCheckRun.state.in_(("passed", "failed")),
+                )
+                .order_by(TaskCheckRun.started_at.desc(), TaskCheckRun.id.desc())
+                .limit(REUSE_LOOKBACK)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    found: Dict[str, Any] = {}
+    for run in rows:
+        for result in run.results or []:
+            digest = result.get("check_digest") if isinstance(result, dict) else None
+            if not digest or digest in found or result.get("tree") != tree:
+                continue
+            if result.get("skipped") or failed(result):
+                continue
+            found[digest] = {**result, "reused_from": result.get("reused_from") or run.id}
+    return found
+
+
+def planned_results(
+    checks: Sequence[Dict[str, Any]],
+    changed: Optional[List[str]],
+    tree: Optional[str],
+    passes: Dict[str, Any],
+) -> List[Optional[Dict[str, Any]]]:
+    """Per check, the result it already has without running -- skipped by its paths, or a pass on
+    the same tree reused -- or `None` where it must run."""
+    planned: List[Optional[Dict[str, Any]]] = []
+    for check in checks:
+        result = skipped(check, changed)
+        if result is None and tree is not None:
+            reused = passes.get(check_digest(check))
+            result = dict(reused) if reused is not None else None
+        if result is not None:
+            result.update(tree=tree, check_digest=check_digest(check))
+        planned.append(result)
+    return planned
+
+
+async def covering_results(
+    session: AsyncSession,
+    project_id: str,
+    root: Path,
+    main_sha: str,
+    target_shas: Sequence[str],
+    checks: Sequence[Dict[str, Any]],
+) -> Optional[Tuple[str, List[Dict[str, Any]]]]:
+    """`(merged commit, results)` where every check already passes on the tree approval would merge
+    now (skipped, or a reused pass of that exact tree), else `None`. Builds the merged commit with
+    plumbing only, as a run does; never raises."""
+    prepared = await _prepare(session, project_id, root, main_sha, list(target_shas), list(checks))
+    if prepared is None or prepared[1] is None or any(r is None for r in prepared[3]):
+        return None
+    return prepared[0], [result for result in prepared[3] if result is not None]
+
+
+#: A pytest short-summary line: `FAILED <node id>[@<xdist group>][ - <message>]`.
+_SUMMARY_LINE_RE = re.compile(r"^(?:FAILED|ERROR) (.+?)(?: - .*)?$", re.MULTILINE)
+_XDIST_GROUP_RE = re.compile(r"@[^\[\]@:]*$")
+_SAFE_NODE_ID_RE = re.compile(r"^[\w./\\:\-\[\]@ ,=+]+$")
+_COUNT_RE = re.compile(r"\b(\d+) (passed|failed|errors?|skipped|deselected|xfailed|xpassed)\b")
+#: pytest's final line: its counts, then ` in <seconds>s`.
+_FINAL_LINE_RE = re.compile(r"\bin \d+(?:\.\d+)?s\b")
+#: pytest options whose value is the next word; kept with it when a command is narrowed to node ids.
+_VALUE_OPTIONS = frozenset(
+    {
+        "-n",
+        "--numprocesses",
+        "--maxprocesses",
+        "--dist",
+        "--tx",
+        "-p",
+        "-c",
+        "-k",
+        "-m",
+        "-o",
+        "--override-ini",
+        "--rootdir",
+        "--confcutdir",
+        "--basetemp",
+        "--tb",
+        "-W",
+        "--pythonwarnings",
+        "--timeout",
+        "--timeout-method",
+        "--maxfail",
+        "--durations",
+        "-r",
+        "--import-mode",
+        "--capture",
+        "--color",
+        "--log-level",
+        "--log-cli-level",
+        "--junitxml",
+        "--junit-xml",
+        "--cov",
+        "--cov-report",
+        "--ignore",
+        "--ignore-glob",
+        "--deselect",
+        "--max-worker-restart",
+        "--asyncio-mode",
+    }
+)
+#: Options that would choose a different set of tests than the node ids given.
+_SELECTION_OPTIONS = frozenset(
+    {"--lf", "--last-failed", "--ff", "--failed-first", "--sw", "--stepwise", "--stepwise-skip"}
+)
+_PYTEST_RE = re.compile(r"(?:^|(?<=\s))(?:\S*[\\/])?(?:py\.test|pytest)(?:\.exe)?(?=\s|$)")
+
+
+def summary_counts(output: str) -> Optional[Dict[str, int]]:
+    """The counts on pytest's final line (`2 failed, 8903 passed, ... in 645.88s`), or `None` where
+    the output ends without one."""
+    for line in reversed(output.strip().splitlines()[-20:]):
+        found = _COUNT_RE.findall(line)
+        if found and _FINAL_LINE_RE.search(line):
+            counts: Dict[str, int] = {}
+            for number, kind in found:
+                kind = "error" if kind.startswith("error") else kind
+                counts[kind] = counts.get(kind, 0) + int(number)
+            return counts
+    return None
+
+
+def failed_test_ids(output: str) -> List[str]:
+    """The node ids pytest's short summary names as failed or erroring, or `[]` unless every failure
+    the final count reports is named (a truncated summary is not a list of the failures)."""
+    ids: List[str] = []
+    for match in _SUMMARY_LINE_RE.finditer(output):
+        node = _XDIST_GROUP_RE.sub("", match.group(1).strip())
+        if node and node not in ids:
+            ids.append(node)
+    counts = summary_counts(output)
+    if not ids or counts is None:
+        return []
+    if counts.get("failed", 0) + counts.get("error", 0) != len(ids) or len(ids) > MAX_RERUN_TESTS:
+        return []
+    if not all(_SAFE_NODE_ID_RE.match(node) for node in ids):
+        return []
+    return ids
+
+
+def narrowed_command(command: str, node_ids: Sequence[str]) -> Optional[str]:
+    """*command* run on *node_ids* alone, or `None` if it is not a plain pytest invocation that can
+    be narrowed safely: its options are kept, the paths it names are replaced by the node ids."""
+    found = _PYTEST_RE.search(command)
+    if found is None or not node_ids:
+        return None
+    prefix, rest = command[: found.end()], command[found.end() :]
+    if any(char in rest for char in "&|;<>^%!`$()"):
+        return None  # a pipeline or a second command after pytest: not narrowed
+    try:
+        words = shlex.split(rest, posix=False)
+    except ValueError:
+        return None
+    kept: List[str] = []
+    take_value = False
+    for word in words:
+        if take_value:
+            kept.append(word)
+            take_value = False
+        elif word.startswith("-"):
+            if word.split("=", 1)[0] in _SELECTION_OPTIONS:
+                continue
+            kept.append(word)
+            take_value = word in _VALUE_OPTIONS
+        # anything else is a path or node id the original run selected; the node ids replace it
+    if take_value:
+        return None
+    quoted = " ".join(f'"{node}"' for node in node_ids)
+    return " ".join(part for part in (prefix, *kept, "--", quoted) if part)
+
+
+def proves_the_tests_pass(result: Dict[str, Any], node_ids: Sequence[str]) -> bool:
+    """Whether a narrowed re-run passed and really ran the tests it named: exit 0, nothing failed,
+    and at least one passed test per node id (a node id that selects nothing would be no proof)."""
+    counts = summary_counts(str(result.get("output_tail") or ""))
+    return (
+        not failed(result)
+        and counts is not None
+        and not counts.get("failed")
+        and not counts.get("error")
+        and counts.get("passed", 0) >= len(node_ids)
+    )
+
+
+def reproduces_a_test_failure(result: Dict[str, Any]) -> bool:
+    """Whether a narrowed re-run failed *a test* (pytest's exit 1 with a failure counted), not on
+    its own invocation: a usage error (exit 4) or nothing collected (exit 5) proves nothing."""
+    counts = summary_counts(str(result.get("output_tail") or ""))
+    return (
+        result.get("exit_code") == 1
+        and counts is not None
+        and bool(counts.get("failed") or counts.get("error"))
+    )
+
+
+def confirm_failure(
+    check: Dict[str, Any], cwd: Path, result: Dict[str, Any], owner: Optional[str]
+) -> None:
+    """Run a failed check's failure once more on the same tree, and record what happened in
+    *result* (blocking; the caller runs it in a thread).
+
+    The failed tests alone where pytest named every one and the command can be narrowed to them,
+    else the whole check. Reproduced: *result* keeps its failure and gains `confirmed`. Passed:
+    *result* passes, and `flaky` keeps the first attempt -- a flake is recorded, never swallowed.
+    """
+    node_ids = list(result.get("failed_tests") or [])
+    narrowed = narrowed_command(check["command"], node_ids) if node_ids else None
+    how, again = "check", None
+    if narrowed is not None:
+        again = run_one({**check, "command": narrowed}, cwd, owner)
+        if proves_the_tests_pass(again, node_ids) or reproduces_a_test_failure(again):
+            how = "tests"
+        else:
+            again = None  # the narrowed command proved nothing either way: run the check
+    if again is None:
+        again = run_one(check, cwd, owner)
+    attempt = {
+        "how": how,
+        "tests": node_ids if how == "tests" else [],
+        "exit_code": again["exit_code"],
+        "timed_out": again["timed_out"],
+        "duration_seconds": again["duration_seconds"],
+    }
+    if failed(again):
+        result["confirmed"] = attempt
+        return
+    first = {
+        key: result.get(key)
+        for key in ("exit_code", "timed_out", "duration_seconds", "output_tail")
+    }
+    first["failed_tests"] = node_ids
+    result["flaky"] = {**attempt, "first": first}
+    result["exit_code"], result["timed_out"] = 0, False
+    result["duration_seconds"] = round(
+        float(result.get("duration_seconds") or 0) + float(again["duration_seconds"] or 0), 1
+    )
+    note = (
+        f"[flaky: the first run failed ({', '.join(node_ids) or 'exit ' + str(first['exit_code'])})"
+        f" and the {'failed tests' if how == 'tests' else 'check'} passed when run again]\n"
+    )
+    result["output_tail"] = (note + str(again.get("output_tail") or ""))[-OUTPUT_TAIL_CHARS:]
+    result.pop("failed_tests", None)
+    logger.warning(
+        "check %s failed once and passed when run again (%s): recorded as flaky",
+        check["name"],
+        ", ".join(node_ids) or how,
+    )
 
 
 def failed(result: Dict[str, Any]) -> bool:
@@ -376,6 +714,11 @@ def preexisting(result: Dict[str, Any]) -> bool:
     """A failure main shares (F605): the same check failed on the main tip the run was cut from.
     A run recorded before this field existed reads as not pre-existing, i.e. as before."""
     return failed(result) and bool(result.get("preexisting"))
+
+
+def own_failure(results: Optional[Sequence[Dict[str, Any]]]) -> bool:
+    """Whether a run's results hold a failure that is the task's (not one main shares)."""
+    return any(failed(result) and not preexisting(result) for result in results or [])
 
 
 def _record_main_result(result: Dict[str, Any], on_main: Dict[str, Any]) -> None:
@@ -439,6 +782,8 @@ class CheckView:
     #: `passed`, `failed`, `error`, `running`, `interrupted`, `stale` or `missing`.
     state: str
     run: Optional[TaskCheckRun] = None
+    #: For a `passed` read from passes of the same tree rather than from *run*: those results.
+    reused: Optional[List[Dict[str, Any]]] = None
 
 
 def unmerged(root: Path, tip: str, target_shas: Sequence[str]) -> List[str]:
@@ -466,16 +811,30 @@ async def view(
         return None
     run = await latest_run(session, task.id)
     if run is None:
-        return CheckView("missing")
-    if run.state in ("running", "interrupted"):
+        state = "missing"
+    elif run.state == "running":
+        # Not short-cut: a run that could reuse a pass records it at once (`request_run`), so one
+        # still running is checking work no pass covered when it started, or is a forced re-run.
         return CheckView(run.state, run)
-    if (
+    elif run.state == "interrupted":
+        state = run.state
+    elif (
         run.state == SUPERSEDED
         or run.main_sha != tip
         or list(run.target_shas or []) != list(target_shas)
     ):
-        return CheckView("stale", run)
-    return CheckView(run.state, run)
+        state = "stale"
+    else:
+        return CheckView(run.state, run)  # a verdict for exactly this work: it stands, as recorded
+    # No verdict for these commits, but the tree they merge to may already have passed every check
+    # (a prerequisite merged into the branch, an unrelated main move): identical tree, identical
+    # inputs, so that pass is this work's. Any other tree is checked again.
+    covered = await covering_results(
+        session, task.project_id, root, tip, target_shas, configured_checks(project)
+    )
+    if covered is not None:
+        return CheckView("passed", run, reused=covered[1])
+    return CheckView(state, run)
 
 
 async def _finish(run_id: str, **fields: Any) -> None:
@@ -580,6 +939,9 @@ async def request_run(
                 and list(latest.target_shas or []) == targets
             ):
                 return latest.id
+            prepared = (
+                None if force else await _prepare(session, project_id, root, tip, targets, checks)
+            )
             run = TaskCheckRun(
                 id=f"chk-{short_id()}",
                 project_id=project_id,
@@ -590,6 +952,16 @@ async def request_run(
                 results=[],
                 error="",
             )
+            if prepared is not None and all(result is not None for result in prepared[3]):
+                # Every check already passes on this exact tree: recorded at once, nothing runs,
+                # and nothing waits behind the runs that do (the semaphore is not taken).
+                run.state = "passed"
+                run.merged_sha = prepared[0]
+                run.results = [result for result in prepared[3] if result is not None]
+                run.ended_at = datetime.now(timezone.utc)
+                session.add(run)
+                await session.commit()
+                return run.id
             session.add(run)
             await session.commit()
             run_id = run.id
@@ -597,7 +969,7 @@ async def request_run(
             traces.within_work(
                 "check_run",
                 project_id,
-                _execute(run_id, task_id, root, tip, targets, checks),
+                _execute(run_id, task_id, root, tip, targets, checks, prepared),
                 **{"aw.task.id": task_id, "aw.check_run.id": run_id},
             )
         )
@@ -609,6 +981,34 @@ async def request_run(
         _starting.discard(task_id)
 
 
+#: What `request_run` hands a run: the merged commit, its tree, the changed paths, and each check's
+#: result where it already has one (skipped by its paths, or a pass of the same tree reused).
+Prepared = Tuple[str, Optional[str], Optional[List[str]], List[Optional[Dict[str, Any]]]]
+
+
+async def _prepare(
+    session: AsyncSession,
+    project_id: str,
+    root: Path,
+    tip: str,
+    targets: List[str],
+    checks: List[Dict[str, Any]],
+) -> Optional[Prepared]:
+    """The run's `Prepared`, or `None` where it cannot be had here (the run then builds the merged
+    commit itself, and records why it could not). Never raises."""
+    try:
+        merged, _ = await asyncio.to_thread(build_merged_commit, root, tip, targets)
+        if merged is None:
+            return None
+        tree = await asyncio.to_thread(tree_of, root, merged)
+        changed = await asyncio.to_thread(changed_paths, root, tip, merged)
+        passes = await passes_on_tree(session, project_id, tree) if tree else {}
+        return merged, tree, changed, planned_results(checks, changed, tree, passes)
+    except Exception:  # noqa: BLE001 -- not reusing is always safe: the checks run
+        logger.debug("could not prepare a check run", exc_info=True)
+        return None
+
+
 async def _execute(
     run_id: str,
     task_id: str,
@@ -616,7 +1016,9 @@ async def _execute(
     main_sha: str,
     targets: List[str],
     checks: List[Dict[str, Any]],
+    prepared: Optional[Prepared] = None,
 ) -> None:
+    """*prepared*: see `Prepared`; `None` builds it here, reusing nothing."""
     results: List[Dict[str, Any]] = []
 
     async def superseded() -> bool:
@@ -639,26 +1041,37 @@ async def _execute(
         async with _semaphore():
             if await superseded():
                 return
-            merged, why = await asyncio.to_thread(build_merged_commit, root, main_sha, targets)
-            if merged is None:
-                await _finish(run_id, state="error", error=why)
-                return
-            changed = await asyncio.to_thread(changed_paths, root, main_sha, merged)
+            if prepared is not None:
+                merged, tree, changed, planned = prepared
+            else:
+                built, why = await asyncio.to_thread(build_merged_commit, root, main_sha, targets)
+                if built is None:
+                    await _finish(run_id, state="error", error=why)
+                    return
+                merged = built
+                tree = await asyncio.to_thread(tree_of, root, merged)
+                changed = await asyncio.to_thread(changed_paths, root, main_sha, merged)
+                planned = [None] * len(checks)
             path: Optional[Path] = None
             baseline = _MainBaseline(root, task_id, main_sha)
             try:
-                for check in checks:
+                for check, already in zip(checks, planned, strict=True):
                     if await superseded():
                         return
-                    result = skipped(check, changed)
+                    result = already or skipped(check, changed)
                     if result is None:
                         if path is None:
                             path = await asyncio.to_thread(_checkout, root, task_id, merged)
                         result = await asyncio.to_thread(run_one, check, path, task_id)
                         if failed(result) and task_id not in _superseded:
+                            # Confirmed on the same tree before main is asked (a flake that passes
+                            # the second time needs no baseline); only a reproduced failure stands.
+                            await asyncio.to_thread(confirm_failure, check, path, result, task_id)
+                        if failed(result) and task_id not in _superseded:
                             await baseline.record(check, result)
                         if await superseded():
                             return  # its tree was ended for the move: not a result
+                        result.update(tree=tree, check_digest=check_digest(check))
                     results.append(result)
                     await _finish(run_id, merged_sha=merged, results=list(results))
                     if failed(result) and not preexisting(result):
@@ -806,12 +1219,22 @@ async def refresh(project_id: str) -> None:
             return
         _seen_tips[project_id] = tip
         waiting = await _awaiting_review_oldest_first(session, project_id)
+        failing: Set[str] = set()
+        for task_id in waiting:
+            latest = await latest_run(session, task_id)
+            if latest is not None and latest.state == "failed" and own_failure(latest.results):
+                failing.add(task_id)
     for task_id, (owner, _) in list(_inflight_tips.items()):
         if owner == project_id:
             await supersede(task_id, tip)
     for task_id in waiting:
         if is_running(task_id):
             continue  # current, or superseded and replaced when it ends
+        if task_id in failing:
+            # Its latest run found a failure of its own, confirmed on its tree: the task goes back
+            # to its author whatever main now holds, so checking it again on every main move is
+            # spent work. Approval still re-checks a stale result (`view`) before it can pass.
+            continue
         try:
             await request_run(project_id, task_id)
         except Exception:  # noqa: BLE001 -- one task's failure does not hold the others

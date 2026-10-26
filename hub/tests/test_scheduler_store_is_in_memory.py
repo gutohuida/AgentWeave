@@ -86,7 +86,10 @@ async def test_a_job_registers_while_another_session_holds_the_write_lock(live_s
     assert (
         live_scheduler.scheduler.get_job(job.id) is not None
     ), "the job never reached the scheduler"
-    assert elapsed < 1.0, f"registration waited {elapsed:.2f}s on a lock it should not need"
+    # A registration that needed the lock could only finish once the writer let go, which it does
+    # after this block -- i.e. never before the 30s busy timeout. Anything well under that tells
+    # the two apart; 1s was a wall-clock guess a loaded gate machine could miss.
+    assert elapsed < 10.0, f"registration waited {elapsed:.2f}s on a lock it should not need"
 
 
 async def test_the_scheduler_keeps_its_jobs_out_of_the_database(live_scheduler):

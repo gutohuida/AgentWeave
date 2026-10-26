@@ -199,8 +199,12 @@ export function normalizeContextUsage(value: unknown): ContextUsage | null {
   }
 }
 
+// One formatter, not one per call: building it is the costly part, and the conversation header
+// formats on every render, so a streamed line paid for a new one each time.
+const TOKENS = new Intl.NumberFormat('en-US')
+
 function formatTokens(value: number): string {
-  return new Intl.NumberFormat('en-US').format(value)
+  return TOKENS.format(value)
 }
 
 export function presentContextUsage(value: unknown): ContextPresentation | null {

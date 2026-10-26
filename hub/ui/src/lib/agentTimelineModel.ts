@@ -73,6 +73,35 @@ export function groupIntoTurns(entries: TimelineEntry[]): GroupedTimeline {
   return { turns, pending }
 }
 
+function turnIdentity(turn: TimelineTurn): string {
+  const first = turn.entries[0]?.id ?? ''
+  return turn.abandoned ? `abandoned-${first}` : turn.runId ?? `no-run-${first}`
+}
+
+/** `next`, with every turn whose entries are the same objects in the same order as a turn in
+ *  `previous` replaced by that earlier turn object.
+ *
+ *  `groupIntoTurns` builds fresh turns on every call, so a streamed line gave every turn of the
+ *  conversation a new identity and none of them could skip its render. Entries keep their identity
+ *  across a streamed line (`insertStreamedOutput` copies the array, not the rows) and across a
+ *  refetch (React Query's structural sharing), so equal entries mean an unchanged turn. */
+export function reuseTurns(previous: TimelineTurn[] | undefined, next: TimelineTurn[]): TimelineTurn[] {
+  if (!previous || previous.length === 0) return next
+  const byIdentity = new Map(previous.map((turn) => [turnIdentity(turn), turn]))
+  return next.map((turn) => {
+    const old = byIdentity.get(turnIdentity(turn))
+    if (
+      old &&
+      !!old.abandoned === !!turn.abandoned &&
+      old.entries.length === turn.entries.length &&
+      old.entries.every((entry, i) => entry === turn.entries[i])
+    ) {
+      return old
+    }
+    return turn
+  })
+}
+
 /** Which tool_result is drawn at which tool_use, resolved once for a whole turn. */
 export interface TurnPairing {
   /** tool_use id → the result drawn at it. */

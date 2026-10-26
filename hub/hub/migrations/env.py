@@ -8,6 +8,7 @@ from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from hub.config import settings
+from hub.db import sqlite_pragmas
 from hub.db.models import Base
 
 config = context.config
@@ -99,6 +100,9 @@ async def run_async_migrations() -> None:
             else {}
         ),
     )
+    # The same journal the Hub's own engine runs in (`hub/hub/db/sqlite_pragmas.py`): a database
+    # migrated before the Hub's engine first touches it is converted to WAL here.
+    sqlite_pragmas.install(connectable.sync_engine)
     try:
         async with connectable.connect() as connection:
             await connection.run_sync(do_run_migrations)

@@ -65,6 +65,25 @@ Never restart it, migrate it, or write to its database. Read-only (`mode=ro`) SQ
 been fine. The PyPI install in `C:\Users\huida\agentweave-live` still exists, but it is not what
 serves `:8000`; earlier revisions of `CLAUDE.md` said it was.
 
+## Backing up or copying a Hub's database — never a file copy
+
+Since `the-database-stays-fast-as-history-grows` (2026-10-25) the Hub runs SQLite in **WAL**
+(`hub/hub/db/sqlite_pragmas.py`): beside `agentweave.db` sit `agentweave.db-wal` and
+`agentweave.db-shm`, and the newest commits live in the `-wal` file until a checkpoint. **A copy of
+the `.db` file alone — `Copy-Item`, `cp`, `shutil.copy`, Explorer — silently omits them**, running Hub
+or not (an unclean stop leaves them in the `-wal`). The 10-21 `backup-before-0140` was such a copy;
+that pattern is retired. Copy a database only one of two ways, both safe while the Hub runs:
+
+```bash
+py -3.11 -c "import sqlite3; s=sqlite3.connect('file:C:/Users/huida/.agentweave/hub/data/agentweave.db?mode=ro', uri=True); d=sqlite3.connect('C:/path/to/copy.db'); s.backup(d)"
+py -3.11 -c "import sqlite3; sqlite3.connect('file:<db>?mode=ro', uri=True).execute(\"VACUUM INTO 'C:/path/to/copy.db'\")"
+```
+
+Deleting a database means deleting `agentweave.db`, `-wal` and `-shm` together, with no Hub running.
+Rollback to the old journal: with the Hub stopped, `PRAGMA journal_mode=DELETE` on the file.
+`hub/tests/test_database_backups.py` fails if a file copy of a database reappears in `hub/hub`, `src/`
+or `scripts/`.
+
 ## Startup traps
 
 **Do not use `agentweave --port 8010` here.** The console script is the *installed*

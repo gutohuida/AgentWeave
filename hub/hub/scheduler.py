@@ -4,6 +4,7 @@ Runs inside the FastAPI lifespan, loads enabled jobs from DB,
 and triggers agents when cron expressions match.
 """
 
+import asyncio
 import logging
 import re
 from dataclasses import dataclass
@@ -1604,10 +1605,17 @@ async def _read_roster_availability(
             holdings_by_agent.setdefault(agent, []).append(
                 Holding(task_id=task_id, status=row[3], loop_id=row[2], reachable=True)
             )
+    # **The Hub's own mender is not on the roster** (loop-df5f74816122, 2026-10-25): it is the
+    # repair agent a stall briefs, never a flow's builder or reviewer. Read as an ordinary agent,
+    # a firing handed it a build task, it became that task's author, and nobody could then move
+    # the task on. Left out here, at the one read every staffing answer derives from, so the pool,
+    # the reviewer ladder and the "somebody else could build" test cannot disagree about it.
+    from .stalls import HUB_ROLE
+
     roster = [
         (row.name, row.runner_id)
         for row in await facts.agents(project_id)
-        if row.lifecycle != "archived"
+        if row.lifecycle != "archived" and (row.config or {}).get("hub_role") != HUB_ROLE
     ]
     return [
         AgentAvailability(
@@ -3858,6 +3866,7 @@ class JobScheduler:
     def __init__(self) -> None:
         self.scheduler: Optional[Any] = None
         self._job_id_map: dict = {}  # job_id -> apscheduler_job_id
+        self._fire_locks: "Dict[str, asyncio.Lock]" = {}
 
     async def start(self) -> None:
         """Start the scheduler and load all enabled jobs from DB.
@@ -4003,8 +4012,16 @@ class JobScheduler:
             logger.warning(f"Failed to prune job history for {job_id}: {e}")
 
     async def _fire_job_by_id(self, job_id: str) -> None:
-        """Fire a job by ID (lookup from DB)."""
-        async with async_session_factory() as session:
+        """Fire a job by ID (lookup from DB).
+
+        One firing of a job at a time (`flow_advance`): a flow asks for its firing when its work
+        moves, as well as at its tick, and two firings deciding at once could both stage the same
+        task. Serialised, each reads what the one before it committed -- the idempotence every
+        tick already relies on. The job is read inside the lock, so a waiting firing acts on the
+        row as it stands when it runs.
+        """
+        lock = self._fire_locks.setdefault(job_id, asyncio.Lock())
+        async with lock, async_session_factory() as session:
             job = await session.get(AIJob, job_id)
             if job and job.enabled:
                 await self._fire_job_internal(job, trigger="scheduled", session=session)

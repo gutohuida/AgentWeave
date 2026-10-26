@@ -40,6 +40,13 @@ vi.stubGlobal(
       const body = deleted ? [project('proj-beta', 'Beta')] : [project('proj-alpha', 'Alpha'), project('proj-beta', 'Beta')]
       return { ok: true, status: 200, json: async () => body } as unknown as Response
     }
+    if (path.startsWith('/api/v1/conversations?')) {
+      // The rail's listings, read in one request (perf slice 4): each project's body is the `[]`
+      // its own route answers below.
+      const ids = new URLSearchParams(path.split('?')[1]).getAll('project_id')
+      const body = { projects: Object.fromEntries(ids.map((id) => [id, []])), missing: [] }
+      return { ok: true, status: 200, json: async () => body } as unknown as Response
+    }
     if (deleted && path.includes('/projects/proj-alpha')) {
       return { ok: false, status: 404, json: async () => ({}), text: async () => '{"detail":"Project not found"}' } as unknown as Response
     }
