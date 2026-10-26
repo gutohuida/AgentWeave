@@ -107,6 +107,17 @@ import {
   EyeOff,
   ChevronsDownUp,
   ChevronsUpDown,
+  // The spec page (spec-page-overhaul mock).
+  ArrowUpDown,
+  CircleDashed,
+  CircleDot,
+  Coins,
+  Compass,
+  GitMerge,
+  Hammer,
+  Hand,
+  ListTree,
+  Timer,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -240,6 +251,17 @@ const ICONS: Record<string, LucideIcon> = {
   unfold_less: ChevronsDownUp,
   lightbulb: Lightbulb,
   unfold_more: ChevronsUpDown,
+  sort: ArrowUpDown,
+  circle_dashed: CircleDashed,
+  circle_dot: CircleDot,
+  coins: Coins,
+  compass: Compass,
+  git_merge: GitMerge,
+  hammer: Hammer,
+  hand: Hand,
+  layers: Layers,
+  list_tree: ListTree,
+  timer: Timer,
 }
 
 

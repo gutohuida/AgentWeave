@@ -4,7 +4,7 @@ import type { ProjectTab } from '@/lib/navigation'
  *  screen's navigation calls map one to one when it is wired in. */
 export type MockRoute =
   | { kind: 'tab'; tab: ProjectTab }
-  | { kind: 'conversation'; agent: string; conversationId: string | null }
+  | { kind: 'conversation'; agent: string; conversationId: string | null; panel?: 'spec' }
   | { kind: 'settings'; section: SettingsSection }
   | { kind: 'agent-settings'; agent: string; section: AgentSettingsSection }
   | { kind: 'gallery' }

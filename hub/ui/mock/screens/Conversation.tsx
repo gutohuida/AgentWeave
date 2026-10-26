@@ -9,6 +9,9 @@ import { Icon } from '@/components/common/Icon'
 import { ConversationBar } from '@/components/conversation/ConversationBar'
 import { ConversationComposerDock } from '@/components/conversation/ConversationComposerDock'
 import { NewConversationIntro, type ConversationStarter } from '@/components/conversation/NewConversationIntro'
+import { StartBuildDialog } from '@/components/spec/page/SpecBuilds'
+import { SpecSidePanel } from '@/components/spec/page/SpecWorkspace'
+import { CONVERSATION_MIN_WIDTH, SPEC_DOC_MIN_WIDTH } from '@/components/spec/specPreferences'
 import { toast } from '@/lib/toast'
 import { setComposerDraft } from '@/lib/composerDrafts'
 import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
@@ -17,6 +20,7 @@ import builderChat from '../fixtures/chat_builder_e3aba2.json'
 import architectChat from '../fixtures/chat_architect_9cdda4.json'
 import modelCatalog from '../fixtures/model_catalog.json'
 import type { ScreenProps } from '../routes'
+import { useSpecMock } from '../specMock'
 
 const CHATS: Record<string, ChatHistoryResponse> = {
   'conv-e3aba2c5956a': builderChat as unknown as ChatHistoryResponse,
@@ -59,10 +63,38 @@ const STARTERS: ConversationStarter[] = [
 ]
 
 export default function Conversation(props: ScreenProps) {
+  const withSpec = props.route.kind === 'conversation' && props.route.panel === 'spec'
   return (
     <QueryClientProvider client={queryClient}>
-      <ConversationMock {...props} />
+      {withSpec ? (
+        <div className="flex h-full min-w-0 flex-row overflow-hidden">
+          <div className="flex h-full min-w-0 flex-1 flex-col" style={{ minWidth: CONVERSATION_MIN_WIDTH }}>
+            <ConversationMock {...props} />
+          </div>
+          <SpecPanelMock />
+        </div>
+      ) : (
+        <ConversationMock {...props} />
+      )}
     </QueryClientProvider>
+  )
+}
+
+/** The conversation's spec panel, redesigned: the same components as the Spec tab in one column.
+ *  At a window narrower than 1200px it sits at its narrowest width (the app's SPEC_DOC_MIN_WIDTH). */
+function SpecPanelMock() {
+  const { surface, startDialog } = useSpecMock('conversation/Architect/conv-9cdda4865e0b/spec')
+  const [width, setWidth] = React.useState(() => (window.innerWidth >= 1200 ? 440 : SPEC_DOC_MIN_WIDTH))
+  React.useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth >= 1200 ? 440 : SPEC_DOC_MIN_WIDTH)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return (
+    <div className="h-full flex-none" style={{ width }} data-testid="spec-panel">
+      <SpecSidePanel {...surface} />
+      <StartBuildDialog {...startDialog} />
+    </div>
   )
 }
 
