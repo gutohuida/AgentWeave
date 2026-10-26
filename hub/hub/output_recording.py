@@ -8,6 +8,7 @@ agent already produces — one path, not two that can drift.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import weakref
@@ -465,6 +466,7 @@ async def stream_agent_output(
     payload: Optional[Dict[str, Any]] = None,
     run_id: Optional[str] = None,
     sequence: Optional[int] = None,
+    db: Optional[AsyncSession] = None,
     record: Optional[Recorder] = None,
     retry_delays: Tuple[float, ...] = STREAM_RETRY_DELAYS,
 ) -> None:
@@ -498,7 +500,9 @@ async def stream_agent_output(
                 and line.project_id == project_id
                 for line in writer.pending
             ):
-                async with async_session_factory() as db:
+                async with contextlib.AsyncExitStack() as stack:
+                    if db is None:
+                        db = await stack.enter_async_context(async_session_factory())
                     is_new_session = (
                         await db.execute(
                             select(AgentOutput.id)

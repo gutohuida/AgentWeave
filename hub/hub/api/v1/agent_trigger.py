@@ -3409,18 +3409,25 @@ async def _execute_run(
                 # Shown at once, written with the lines around it (`stream_agent_output`, D3 of
                 # `turn-starts-approvals-and-evidence-never-freeze-the-hub`): one session and one
                 # commit per burst, not per line. Written before this run is reported finished.
-                await stream_agent_output(
-                    project_id,
-                    agent,
-                    content=recorded.content,
-                    session_id=session_id,
-                    conversation_id=conversation_id,
-                    kind=recorded.kind,
-                    payload=recorded.payload,
+                # Through `_record_observation` still, on the session it opens (which touches the
+                # database only for a session's first line), so a lock there is survived as before.
+                await _record_observation(
+                    lambda db, event=recorded, sequence=sequence: stream_agent_output(
+                        project_id,
+                        agent,
+                        content=event.content,
+                        session_id=session_id,
+                        conversation_id=conversation_id,
+                        kind=event.kind,
+                        payload=event.payload,
+                        run_id=run_id,
+                        sequence=sequence,
+                        db=db,
+                        record=_record_streamed_line,
+                        retry_delays=OBSERVATION_RETRY_DELAYS,
+                    ),
                     run_id=run_id,
-                    sequence=sequence,
-                    record=_record_streamed_line,
-                    retry_delays=OBSERVATION_RETRY_DELAYS,
+                    what=f"output {sequence}",
                 )
                 # Task 4.3a. After the output row, not before: the timeline entry is what the
                 # operator is shown, and this is observational bookkeeping about it.
@@ -4490,18 +4497,23 @@ async def _execute_rpc_run(
             # the timeline's order; bound to the write, so a retry never scrubs again.
             recorded = run_secrets.scrub_stream(run_id, event)
             # As `_execute_run`'s stream: shown at once, written in batches (D3).
-            await stream_agent_output(
-                project_id,
-                agent,
-                content=recorded.content,
-                session_id=session_id,
-                conversation_id=conversation_id,
-                kind=recorded.kind,
-                payload=recorded.payload,
+            await _record_observation(
+                lambda db, event=recorded, sequence=sequence: stream_agent_output(
+                    project_id,
+                    agent,
+                    content=event.content,
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    kind=event.kind,
+                    payload=event.payload,
+                    run_id=run_id,
+                    sequence=sequence,
+                    db=db,
+                    record=_record_streamed_line,
+                    retry_delays=OBSERVATION_RETRY_DELAYS,
+                ),
                 run_id=run_id,
-                sequence=sequence,
-                record=_record_streamed_line,
-                retry_delays=OBSERVATION_RETRY_DELAYS,
+                what=f"output {sequence}",
             )
             # Task 4.3b — the same call `_flush_line` makes, on the same recorder class, in the
             # same position relative to the output row.

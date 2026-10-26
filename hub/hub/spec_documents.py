@@ -20,6 +20,8 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -648,10 +650,74 @@ def build_corpus_context(manifest: Manifest, path: str, summaries: Dict[str, str
     return CorpusContext(path=path, home=manifest.home, parent=parent, children=children)
 
 
+#: Contents read for a listing, keyed by the file's resolved path and checked against its size and
+#: modification time on every read (D4 of `turn-starts-approvals-and-evidence-never-freeze-the-hub`).
+_LISTED_CONTENT: "OrderedDict[str, Tuple[int, int, str]]" = OrderedDict()
+_LISTED_LOCK = threading.Lock()
+MAX_LISTED_CONTENT = 2048
+
+
+def read_listed_document(workspace: ProjectWorkspace, path: str) -> Optional[str]:
+    """`read_document`, for a listing: a file unchanged since it was last listed is not read again.
+
+    Unchanged means the same size and modification time (`os.stat`); a file written since reads
+    afresh. Only the listings use it (`compute_state`, `GET /project/documents`): every path that
+    acts on a document's content still reads it with `read_document`."""
+    validate_spec_path(path)
+    resolved = workspace.resolve_relative(path)
+    try:
+        stat = resolved.stat()
+    except OSError:
+        return None
+    if not os.path.isfile(resolved):
+        return None
+    key = str(resolved)
+    stamp = (stat.st_mtime_ns, stat.st_size)
+    with _LISTED_LOCK:
+        held = _LISTED_CONTENT.get(key)
+        if held is not None and held[:2] == stamp:
+            _LISTED_CONTENT.move_to_end(key)
+            return held[2]
+    content = resolved.read_text(encoding="utf-8")
+    with _LISTED_LOCK:
+        _LISTED_CONTENT[key] = (*stamp, content)
+        _LISTED_CONTENT.move_to_end(key)
+        while len(_LISTED_CONTENT) > MAX_LISTED_CONTENT:
+            _LISTED_CONTENT.popitem(last=False)
+    return content
+
+
+class _ResolvingOnce:
+    """A workspace whose `resolve_relative` answers each path once (one listing's worth).
+
+    A listing resolved every document three times -- to discover it, to stamp its time and to read
+    what it declares -- and on Windows each resolution is two `GetFinalPathNameByHandle` calls:
+    504 of them per `GET /project/specs` on this repository."""
+
+    def __init__(self, workspace: ProjectWorkspace) -> None:
+        self._workspace = workspace
+        self._resolved: Dict[str, Any] = {}
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._workspace, name)
+
+    def resolve_relative(self, relative: Any) -> Path:
+        key = str(relative)
+        if key not in self._resolved:
+            try:
+                self._resolved[key] = self._workspace.resolve_relative(relative)
+            except ProjectPathError as exc:
+                self._resolved[key] = exc
+        answer = self._resolved[key]
+        if isinstance(answer, ProjectPathError):
+            raise answer
+        return answer
+
+
 def _read_declared(workspace: ProjectWorkspace, path: str) -> Optional[Dict[str, Optional[str]]]:
     """The title, kind and status a stored file declares, for the index conflict check."""
     try:
-        content = read_document(workspace, path)
+        content = read_listed_document(workspace, path)
     except (SpecPathError, ProjectPathError, OSError):
         return None
     stored = parse_stored(content)
@@ -700,8 +766,78 @@ def _select_home(
     return None, [_diag("home_ambiguous", actual=", ".join(sorted(available)))]
 
 
+def _tree_fingerprint(workspace: ProjectWorkspace) -> Optional[Tuple[Any, ...]]:
+    """What the tree under ``spec/`` looks like without reading or resolving anything in it: every
+    entry's path, kind, size, modification time and file id, as `lstat` gives them. Any change a
+    listing could show -- a file written, added, removed, renamed or replaced by a link -- changes
+    it. `None` where it cannot be taken; the listing is then computed afresh."""
+    try:
+        root = workspace.resolve_relative(SPEC_DIR)
+    except ProjectPathError:
+        return None
+    seen: List[Tuple[Any, ...]] = []
+    try:
+        root_stat = os.lstat(root)
+    except OSError:
+        return (str(root), None)
+    seen.append(("", root_stat.st_mtime_ns, root_stat.st_ino))
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    # The entry's own `lstat`, not the directory listing's copy of it: on NTFS the
+                    # listing's timestamps are updated lazily and moved between two identical reads.
+                    stat = os.lstat(entry.path)
+                    is_dir = entry.is_dir(follow_symlinks=False)
+                    seen.append(
+                        (
+                            entry.path,
+                            is_dir,
+                            stat.st_size,
+                            stat.st_mtime_ns,
+                            stat.st_ino,
+                            getattr(stat, "st_file_attributes", 0),
+                        )
+                    )
+                    if is_dir and not entry.name.startswith("."):
+                        pending.append(Path(entry.path))
+        except OSError:
+            return None
+    seen.sort()
+    return (str(root), tuple(seen))
+
+
+_LISTED_TREES: Dict[str, Tuple[Tuple[Any, ...], "DocumentTreeState"]] = {}
+
+
+def listed_state(workspace: ProjectWorkspace) -> "DocumentTreeState":
+    """`compute_state`, reused while the tree is unchanged (D4 of
+    `turn-starts-approvals-and-evidence-never-freeze-the-hub`): a warm `GET /project/specs` walks
+    the tree and compares, instead of resolving, reading and parsing every document again. A copy
+    is returned, so a caller's edits never reach the next listing. Blocking: run it off the loop."""
+    import copy
+
+    fingerprint = _tree_fingerprint(workspace)
+    key = str(workspace.root)
+    if fingerprint is not None:
+        with _LISTED_LOCK:
+            held = _LISTED_TREES.get(key)
+        if held is not None and held[0] == fingerprint:
+            return copy.deepcopy(held[1])
+    state = compute_state(workspace)
+    if fingerprint is not None:
+        with _LISTED_LOCK:
+            _LISTED_TREES[key] = (fingerprint, copy.deepcopy(state))
+    return state
+
+
 def compute_state(workspace: ProjectWorkspace) -> DocumentTreeState:
-    """The tree as it is on disk, with the index's own state reported alongside."""
+    """The tree as it is on disk, with the index's own state reported alongside.
+
+    Blocking (a walk, a stat and a read per document): async callers run it off the loop."""
+    workspace = _ResolvingOnce(workspace)  # type: ignore[assignment]
     on_disk, diagnostics = discover(workspace)
     manifest, index_state, index_diagnostics = read_index(workspace)
     diagnostics = list(diagnostics) + list(index_diagnostics)

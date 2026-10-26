@@ -616,6 +616,21 @@ async def lifespan(app: FastAPI):
     from .project_checks import watch_main_forever
 
     main_watch = asyncio.create_task(watch_main_forever())
+    # The first turn's context renders the tool surface from `mcp_server`, which loads fastmcp:
+    # 1.4 s of imports on the loop, measured, once per process. Imported in a thread at start
+    # instead (`turn-starts-approvals-and-evidence-never-freeze-the-hub`, D1). Best-effort.
+    import importlib
+
+    from . import blocking
+
+    tool_surface_warmup = asyncio.create_task(
+        blocking.run(importlib.import_module, f"{__package__}.mcp_server")
+    )
+    tool_surface_warmup.add_done_callback(
+        lambda task: task.cancelled()
+        or task.exception() is None
+        or logger.warning("warming the tool surface failed: %s", task.exception())
+    )
     yield
     main_watch.cancel()
     with contextlib.suppress(asyncio.CancelledError, Exception):
