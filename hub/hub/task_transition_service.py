@@ -430,6 +430,76 @@ async def agents_that_may_have_authored(session: AsyncSession, task: Task) -> "s
     return worked | bound | evidenced | ({task.assignee} if task.assignee else set())
 
 
+async def authorship_reason(
+    session: AsyncSession, task: Task, agent: Optional[str]
+) -> Optional[str]:
+    """Why *agent* may not review *task*, as one clause, or `None` where it may.
+
+    The one statement of the author rule every path that moves a task quotes: the transition
+    guards, the review dispatch the flow and the mender's hand-off share, and `decide_move`. The
+    agent recorded as completing it is its author; so is any agent that recorded evidence for it,
+    including a mender that re-recorded some (F505). Read alone, never the union
+    `agents_that_may_have_authored`, for the reason `agents_that_recorded_evidence_for` gives.
+    """
+    if not agent:
+        return None
+    if await agent_that_completed(session, task.id) == agent:
+        return f"{agent!r} is the agent recorded as completing it"
+    if agent in await agents_that_recorded_evidence_for(session, task.id):
+        return f"{agent!r} recorded evidence for this task, which claims the work as its own"
+    return None
+
+
+@dataclass(frozen=True)
+class MoveVerdict:
+    """The answer to "may this actor make this move?": allowed, or refused with the error to raise."""
+
+    allowed: bool
+    refusal: Optional[TransitionRefusedError] = None
+    #: Who holds the task afterwards, where the move changes that (a reviewer taking completed work).
+    holder: Optional[str] = None
+
+    @property
+    def reason(self) -> Optional[str]:
+        return str(self.refusal) if self.refusal is not None else None
+
+
+async def decide_move(
+    session: AsyncSession, task: Task, to_status: str, actor: Actor
+) -> MoveVerdict:
+    """The one decision of who may move a task where, consulted by every path that moves one.
+
+    The map's edge, then author/reviewer separation. Outside the flow's own staffing, an agent
+    other than the author may take a `completed` task into review and becomes its holder; the
+    author, and a mender that re-recorded its evidence, may not (`every-task-can-always-be-moved-on`).
+    Reads only; `apply_transition` makes the move this allows, and adds the checks that ask about
+    the state of the work rather than who is asking.
+    """
+    if to_status == task.status:
+        return MoveVerdict(allowed=True)
+    if not is_allowed(task.status, to_status, actor.kind):
+        return MoveVerdict(
+            allowed=False,
+            refusal=IllegalTransitionError(refusal_detail(task.status, to_status, actor.kind)),
+        )
+    holder: Optional[str] = None
+    if (
+        not actor.is_operator
+        and task.status == "completed"
+        and to_status == "under_review"
+        and actor.agent != task.assignee
+    ):
+        holder = actor.agent
+    try:
+        await _guard_author_is_not_reviewer(session, task, to_status, actor)
+        await _guard_reviewer_is_not_the_author(
+            session, task, to_status, actor, holder=holder or task.assignee
+        )
+    except TransitionRefusedError as refusal:
+        return MoveVerdict(allowed=False, refusal=refusal)
+    return MoveVerdict(allowed=True, holder=holder)
+
+
 async def _guard_author_is_not_reviewer(
     session: AsyncSession, task: Task, to_status: str, actor: Actor
 ) -> None:
@@ -460,34 +530,33 @@ async def _guard_author_is_not_reviewer(
     """
     if actor.is_operator or to_status not in _REVIEW_OUTCOMES:
         return
-    completing_agent = await agent_that_completed(session, task.id)
-    if completing_agent is not None and completing_agent == actor.agent:
-        raise ActorNotPermittedError(
-            f"Cannot move task {task.id} to {to_status!r}: agent {actor.agent!r} recorded the "
-            f"task's move to 'completed', and approving, rejecting or requesting revision of work "
-            f"requires a different actor. Another agent or the operator must review it. Starting a "
-            f"new run does not make you a different actor."
-        )
-    # F505 (operator, 2026-10-06): an evidence author is barred whether or not another agent
-    # completed the task. An agent that resolved a task's conflict in a work run and recorded
-    # evidence for it is a co-author, and approving its own resolution is a self-approval.
-    if actor.agent and actor.agent in await agents_that_recorded_evidence_for(session, task.id):
+    reason = await authorship_reason(session, task, actor.agent)
+    if reason is not None:
+        completing_agent = await agent_that_completed(session, task.id)
         whose = (
-            "No agent is recorded as completing it, so the evidence is the record of who wrote it."
-            if completing_agent is None
-            else f"{completing_agent!r} completed it, and an agent that recorded evidence for it "
-            f"wrote part of what is being judged."
+            ""
+            if completing_agent == actor.agent
+            else (
+                "No agent is recorded as completing it, so the evidence is the record of who "
+                "wrote it. "
+                if completing_agent is None
+                else f"{completing_agent!r} completed it, and an agent that recorded evidence for "
+                f"it wrote part of what is being judged. "
+            )
         )
         raise ActorNotPermittedError(
-            f"Cannot move task {task.id} to {to_status!r}: agent {actor.agent!r} recorded "
-            f"evidence for this task, which claims the work as its own, and approving, rejecting "
-            f"or requesting revision of work requires a different actor. {whose} Another agent or "
+            f"Cannot move task {task.id} to {to_status!r}: {reason}, and approving, rejecting "
+            f"or requesting revision of work requires a different actor. {whose}Another agent or "
             f"the operator must review it. Starting a new run does not make you a different actor."
         )
 
 
 async def _guard_reviewer_is_not_the_author(
-    session: AsyncSession, task: Task, to_status: str, actor: Actor
+    session: AsyncSession,
+    task: Task,
+    to_status: str,
+    actor: Actor,
+    holder: Optional[str] = None,
 ) -> None:
     """A task entering `under_review` may not still name its author as the one holding it.
 
@@ -544,7 +613,8 @@ async def _guard_reviewer_is_not_the_author(
     turn); an agent holds no tool that reassigns a task, so its remedy names the operator instead
     of a PATCH it cannot make.
     """
-    if to_status != "under_review" or not task.assignee:
+    holder = holder or task.assignee
+    if to_status != "under_review" or not holder:
         return
     remedy = (
         "Land it, on the task, to review it yourself, or dispatch a different agent's "
@@ -553,24 +623,12 @@ async def _guard_reviewer_is_not_the_author(
         else "None of the task tools you are offered reassigns a task; the operator can move "
         "it on."
     )
-    completing_agent = await agent_that_completed(session, task.id)
-    if completing_agent is not None and completing_agent == task.assignee:
+    reason = await authorship_reason(session, task, holder)
+    if reason is not None:
         raise ActorNotPermittedError(
-            f"Cannot move task {task.id} to 'under_review' with {task.assignee!r} as its "
-            f"holder: it is the agent recorded as completing this task, so the move would "
-            f"claim its own author is reviewing it. {remedy}"
-        )
-    if task.assignee in await agents_that_recorded_evidence_for(session, task.id):
-        # F505: whether or not another agent completed it -- `_guard_author_is_not_reviewer`.
-        whose = (
-            "with no completer recorded, the evidence is the record of who wrote it, and "
-            if completing_agent is None
-            else ""
-        )
-        raise ActorNotPermittedError(
-            f"Cannot move task {task.id} to 'under_review' with {task.assignee!r} as its "
-            f"holder: it recorded evidence for this task and claims the work as its own; "
-            f"{whose}an author may not review its own work. {remedy}"
+            f"Cannot move task {task.id} to 'under_review' with {holder!r} as its holder: "
+            f"{reason}, so the move would claim its own author is reviewing it; an author may "
+            f"not review its own work. {remedy}"
         )
 
 
@@ -771,16 +829,12 @@ async def apply_transition(
     if to_status == from_status:
         return None
 
-    if not is_allowed(from_status, to_status, actor.kind):
-        raise IllegalTransitionError(refusal_detail(from_status, to_status, actor.kind))
-
-    await _guard_author_is_not_reviewer(session, task, to_status, actor)
-
-    # Beside the author/reviewer guard for the same reason `_guard_run_holds_the_task` is: it asks
-    # whether this actor may make this move, not whether the work is ready. It runs on the other
-    # end of the review — the entry rather than the verdict — and F70 is what the missing half
-    # cost.
-    await _guard_reviewer_is_not_the_author(session, task, to_status, actor)
+    verdict = await decide_move(session, task, to_status, actor)
+    if verdict.refusal is not None:
+        raise verdict.refusal
+    if verdict.holder is not None:
+        # A reviewer taking completed work becomes its holder, in this same move.
+        task.assignee = verdict.holder
 
     # Who is doing the work, before anything about whether the work may proceed (F27). Beside the
     # author/reviewer guard because it answers the same kind of question — is this actor entitled to

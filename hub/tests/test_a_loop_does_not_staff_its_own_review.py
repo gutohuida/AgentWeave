@@ -40,7 +40,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, Loop, SpecDocument, Task
 from hub.scheduler import DECISION_CLAIM, DECISION_STALLED, decide_firing
 from hub.task_transition_service import apply_transition
-from hub.task_transitions import run_actor
+from hub.task_transitions import operator, run_actor
 
 from .review_evidence import record_review_evidence
 from .test_review_dispatch_staffs_the_task import _init_repo
@@ -348,7 +348,7 @@ async def test_a_loops_wedged_review_still_recovers(app, auth_headers, bind_runn
         await _completed_by(db, task)
         await record_review_evidence(db, task.id, suffix="f161-wedged", actor=AUTHOR)
         # Into review under its own author's name — the shape F70 left behind.
-        await apply_transition(db, task, "under_review", run_actor(run_id="run-op", agent=AUTHOR))
+        await apply_transition(db, task, "under_review", operator())
         task.assignee = AUTHOR
         await db.commit()
 

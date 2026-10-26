@@ -441,7 +441,7 @@ async def test_the_evidence_author_cannot_be_entered_as_the_reviewer(app, auth_h
     assert refused.status_code == 403, refused.text
     detail = refused.json()["detail"]
     assert "recorded evidence for this task" in detail, detail
-    assert "with no completer recorded" in detail, detail
+    assert "recorded evidence for this task" in detail, detail
     assert "completed" not in detail, detail
 
     async with async_session_factory() as db:

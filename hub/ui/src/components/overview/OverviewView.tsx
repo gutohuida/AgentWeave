@@ -14,7 +14,7 @@ import { LoadingThread } from '@/components/common/LoadingThread'
  *  and a "Navigate" block repeating the tabs. Spend is one line linking to the Ledger; the
  *  collaboration settings live in Settings. No page title: the active tab is the title. */
 
-export type NeedKind = 'question' | 'merge' | 'review' | 'permission' | 'stall' | 'flaky'
+export type NeedKind = 'question' | 'merge' | 'review' | 'permission' | 'stall' | 'flaky' | 'blocked'
 
 export interface NeedItem {
   id: string
@@ -77,6 +77,7 @@ const NEED_ICON: Record<NeedKind, { icon: string; tone: 'amber' | 'red' | 'blue'
   permission: { icon: 'lock', tone: 'amber' },
   stall: { icon: 'build', tone: 'red' },
   flaky: { icon: 'bug_report', tone: 'amber' },
+  blocked: { icon: 'hourglass_top', tone: 'amber' },
 }
 
 export function OverviewView({

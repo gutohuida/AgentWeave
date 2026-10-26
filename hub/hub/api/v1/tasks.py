@@ -2103,6 +2103,32 @@ async def task_story(
     return await story_module.story_for(session, task)
 
 
+@router.get("/{task_id}/moves")
+async def task_moves(
+    task_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The moves the mover decision allows the operator on this task, now.
+
+    `decide_move`'s own answer (`every-task-can-always-be-moved-on`, FR-8), so the board offers
+    exactly what the Hub would not refuse: the map's `/transitions/allowed` says what the edges are,
+    this says what this task, held as it is held, can actually do.
+    """
+    from ...task_transition_service import decide_move
+
+    project_id, _ = project
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    actor = Actor(kind=ACTOR_OPERATOR)
+    moves = []
+    for target in sorted(allowed_targets(task.status, ACTOR_OPERATOR)):
+        if (await decide_move(session, task, target, actor)).allowed:
+            moves.append(target)
+    return {"task_id": task.id, "status": task.status, "moves": moves}
+
+
 @router.get("/{task_id}/transitions")
 async def task_transitions(
     task_id: str,

@@ -74,7 +74,8 @@ async def test_the_refusal_is_whole_on_every_surface_at_the_longest_ids(
             Run(
                 id="run-f566-other",
                 project_id="proj-test",
-                agent=OTHER,
+                # The author's own run: another agent's run may now take the work into review.
+                agent=AUTHOR,
                 status="running",
                 turn_depth=0,
                 capability_token_hash=hash_run_token(token),

@@ -25,7 +25,7 @@ from hub.scheduler import (
     task_is_claimable_by,
 )
 from hub.task_transition_service import apply_transition
-from hub.task_transitions import run_actor
+from hub.task_transitions import operator, run_actor
 
 pytestmark = pytest.mark.asyncio
 
@@ -356,7 +356,10 @@ async def test_the_agent_the_queue_refuses_is_the_agent_the_guard_refuses(app):
     async with async_session_factory() as db:
         finished = await db.get(Task, task.id)
         author_actor = run_actor(run_id="run-author-2", agent=AUTHOR)
-        await apply_transition(db, finished, "under_review", author_actor)
+        # Entering review is refused the author too (`every-task-can-always-be-moved-on`, FR-4).
+        with pytest.raises(ActorNotPermittedError):
+            await apply_transition(db, finished, "under_review", author_actor)
+        await apply_transition(db, finished, "under_review", operator())
         with pytest.raises(ActorNotPermittedError):
             await apply_transition(db, finished, "approved", author_actor)
 

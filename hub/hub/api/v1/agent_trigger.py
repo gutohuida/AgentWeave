@@ -826,10 +826,7 @@ async def review_dispatch_refusal(
     """
     # Imported here, not at module scope: this module is imported back by `task_transitions`'s
     # neighbours, and the service imports nothing from the API layer.
-    from ...task_transition_service import (
-        agent_that_completed,
-        agents_that_recorded_evidence_for,
-    )
+    from ...task_transition_service import authorship_reason
 
     if task.status not in (REVIEWABLE_LOOP_TASK_STATUSES + WITH_REVIEWER_LOOP_TASK_STATUSES):
         return (
@@ -838,21 +835,14 @@ async def review_dispatch_refusal(
             f"A review begins from work that is awaiting one. Staffing a reviewer onto this task "
             f"would take it from whoever holds it and move it nowhere.",
         )
-    completing_agent = await agent_that_completed(session, task.id)
-    if completing_agent is not None and completing_agent == reviewer:
-        return (
-            status.HTTP_403_FORBIDDEN,
-            f"Cannot review task {task.id} as {reviewer!r}: that is the agent recorded as "
-            f"completing it, so the review would claim its own author is reviewing it. "
-            f"{own_review_remedy(task)}",
-        )
-    if reviewer in await agents_that_recorded_evidence_for(session, task.id):
+    reason = await authorship_reason(session, task, reviewer)
+    if reason is not None:
         # F505: whether or not another agent completed it -- the verdict guard's rule, read alike.
+        # One clause, `authorship_reason`, shared with the transition guards (FR-8).
         return (
             status.HTTP_403_FORBIDDEN,
-            f"Cannot review task {task.id} as {reviewer!r}: that agent recorded evidence for this "
-            f"task, which claims the work as its own. Its verdict would be refused, so the "
-            f"review could never end. {own_review_remedy(task)}",
+            f"Cannot review task {task.id} as {reviewer!r}: {reason}, so its verdict would be "
+            f"refused and the review could never end. {own_review_remedy(task)}",
         )
     # F654: after the author rules, so an author asking to review is told that, not who holds it.
     if (

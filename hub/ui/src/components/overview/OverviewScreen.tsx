@@ -8,7 +8,7 @@ import { useAnswerQuestion, useQuestions } from '@/api/questions'
 import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
 import { useFlakyTests, useHandleFlakyTests } from '@/api/flakyTests'
 import { isWaitedOn } from '@/lib/pendingQuestions'
-import { useTasks, type Task } from '@/api/tasks'
+import { useTasks, useUpdateTask, type Task } from '@/api/tasks'
 import { accountingDisplayLabel, formatAiCredits } from '@/components/accounting/accountingDisplay'
 import { BudgetExhaustionNotice } from '@/components/accounting/BudgetExhaustionNotice'
 import { QueryErrorNotice, type QueryFailure } from '@/components/common/QueryErrorNotice'
@@ -86,6 +86,7 @@ export function OverviewScreen({
     ? queueStatuses.reduce((n, s) => n + (/budget/i.test(s.waiting_reason ?? '') ? s.waiting_count : 0), 0)
     : 0
   const answer = useAnswerQuestion()
+  const updateTask = useUpdateTask()
   const now = new Date()
 
   const tasks = React.useMemo(() => (taskPage?.tasks ?? []) as TaskWithIntegration[], [taskPage])
@@ -119,6 +120,22 @@ export function OverviewScreen({
         primary: q.from_agent
           ? { label: 'Open conversation', onClick: () => onNavigate(`agent:${q.from_agent}`) }
           : { label: 'Answer', onClick: () => onNavigate('questions') },
+      })),
+    // A task whose only mover is the operator (`blocked`, `every-task-can-always-be-moved-on`): it
+    // waits on them whether or not a question sits beside it, so it is listed with its reason and
+    // the move that releases it.
+    ...tasks
+      .filter((t) => t.status === 'blocked')
+      .map<NeedItem>((t) => ({
+        id: `blocked-${t.id}`,
+        kind: 'blocked',
+        agent: t.assignee || null,
+        colorIndex: t.assignee ? colorOf(t.assignee) : null,
+        title: `“${t.title}” is waiting on you`,
+        detail: t.blocked_reason ? sentence(t.blocked_reason) : null,
+        at: t.updated,
+        primary: { label: 'Resume work', onClick: () => updateTask.mutate({ id: t.id, status: 'in_progress' }) },
+        secondary: { label: 'Open task', onClick: () => openTask(t.id) },
       })),
     ...tasks
       .filter((t) => t.status === 'approved' && t.latest_integration && t.latest_integration.outcome !== 'merged')
