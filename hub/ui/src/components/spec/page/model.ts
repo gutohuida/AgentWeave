@@ -1,0 +1,410 @@
+/** The redesigned spec page's view model (spec `the-spec-page-redesigned`).
+ *
+ *  Everything the page draws is one of these shapes, so the components never see a route payload:
+ *  the mock builds them from recorded fixtures, and wiring builds them from the Hub's hooks. The
+ *  helpers here are pure (filtering, ordering, which actions a state offers) so the same rules hold
+ *  in the Spec tab and the conversation's side panel. */
+
+export type SpecKind = 'change-spec' | 'roadmap' | 'capability' | 'baseline' | 'system-map'
+export type SpecPhase = 'exploring' | 'proposed' | 'approved' | 'archived' | 'current'
+
+/** Where a document is on its way, as the operator thinks of it. `writing` and `ready` are both
+ *  being written; `ready` is a writing document whose last check found nothing blocking. */
+export type DocState = 'writing' | 'ready' | 'approved' | 'building' | 'archived'
+
+export type EvidenceState = 'verified' | 'awaiting' | 'in_progress' | 'not_started' | 'rejected'
+
+export type TaskStatus =
+  | 'pending'
+  | 'assigned'
+  | 'in_progress'
+  | 'completed'
+  | 'under_review'
+  | 'revision_needed'
+  | 'approved'
+  | 'rejected'
+
+export interface SpecCriterion {
+  key: string
+  given: string
+  when: string
+  then: string
+  howToCheck?: string | null
+}
+
+export interface SpecRequirementView {
+  identifier: string
+  key: string
+  modal: string
+  statement: string
+  rationale?: string | null
+  criteria: SpecCriterion[]
+  evidence: EvidenceState
+  /** Keys of the document's tasks that serve it. */
+  taskKeys: string[]
+}
+
+export interface SpecTaskView {
+  key: string
+  title: string
+  description: string
+  dependsOn: string[]
+  requirementIds: string[]
+  /** Set once the plan is laid out as tasks (approved); a writing document's tasks are a plan only. */
+  taskId?: string | null
+  status?: TaskStatus | null
+  agent?: string | null
+}
+
+export interface SpecDocumentView {
+  id: string
+  path: string
+  title: string
+  kind: SpecKind
+  phase: SpecPhase
+  state: DocState
+  summary: string
+  problem: string
+  inScope: string[]
+  nonGoals: string[]
+  design: string
+  requirements: SpecRequirementView[]
+  tasks: SpecTaskView[]
+  openQuestions: Array<{ question: string; resolved: boolean }>
+  /** The roadmap this document is a slice of, and its neighbours in build order. */
+  roadmap?: {
+    path: string
+    title: string
+    sliceTitle: string
+    previous?: { path: string; title: string } | null
+    next?: { path: string; title: string } | null
+  } | null
+  updatedAt: string
+}
+
+/** What one press of Check found. `target` names what it concerns: a requirement's identifier, a
+ *  task's key, or a section id. */
+export interface CheckFinding {
+  id: string
+  severity: 'blocking' | 'warning'
+  target: { kind: 'requirement' | 'task' | 'section'; id: string }
+  message: string
+}
+
+export type CheckState =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'done'; findings: CheckFinding[]; at: string }
+
+// ── Builds ──────────────────────────────────────────────────────────────
+
+export type BuildDriver = 'flow' | 'lead' | 'hand'
+export type BuildLevel = 'fast' | 'reviewed' | 'gated'
+
+export const DRIVER_LABEL: Record<BuildDriver, string> = { flow: 'Hub flow', lead: 'Lead agent', hand: 'By hand' }
+export const DRIVER_ICON: Record<BuildDriver, string> = { flow: 'sync', lead: 'compass', hand: 'hand' }
+export const LEVEL_LABEL: Record<BuildLevel, string> = { fast: 'Fast', reviewed: 'Reviewed', gated: 'Gated' }
+export const LEVEL_MEANING: Record<BuildLevel, string> = {
+  fast: 'The builder or the lead approves its own work once the checks pass.',
+  reviewed: 'Anyone but the builder approves it; the checks still run.',
+  gated: 'A reviewer accepts evidence for every requirement before it merges.',
+}
+export const DRIVER_MEANING: Record<BuildDriver, string> = {
+  flow: 'The Hub hands out each task as soon as its prerequisites are met.',
+  lead: 'One agent decides who builds what, and when.',
+  hand: 'Nothing is handed out; you assign each task yourself.',
+}
+
+/** Wall time, in seconds, split by what the build was doing. */
+export interface BuildTime {
+  building: number
+  review: number
+  checks: number
+  waiting: number
+}
+
+export const TIME_PARTS: Array<{ key: keyof BuildTime; label: string; tone: string }> = [
+  { key: 'building', label: 'Building', tone: 'var(--blue)' },
+  { key: 'review', label: 'Waiting for review', tone: 'var(--amber)' },
+  { key: 'checks', label: 'Checks', tone: 'var(--ring)' },
+  { key: 'waiting', label: 'Waiting to be handed out', tone: 'var(--text-3)' },
+]
+
+/** Dollars, split by who spent them. */
+export interface BuildCost {
+  build: number
+  review: number
+  lead: number
+}
+
+export interface BuildView {
+  id: string
+  number: number
+  driver: BuildDriver
+  level: BuildLevel
+  builders: string[]
+  reviewers: string[]
+  lead: string | null
+  running: boolean
+  startedAt: string
+  finishedAt: string | null
+  landsOn: string
+  budget: number | null
+  tasks: Record<TaskStatus, number>
+  time: BuildTime
+  cost: BuildCost
+  runs: number
+}
+
+export interface StartBuildChoice {
+  driver: BuildDriver
+  level: BuildLevel
+  builders: string[]
+  reviewers: string[]
+  lead: string | null
+  budget: number | null
+  window: 'now' | 'tonight' | 'weekdays'
+  landsOn: 'main' | 'branch'
+  branch: string
+}
+
+// ── The header's actions ────────────────────────────────────────────────
+
+export type SpecAction = 'check' | 'approve' | 'approve-and-build' | 'build' | 'open-build' | 'reopen'
+
+export interface HeaderActions {
+  /** The one the document is waiting for: drawn as the primary button. */
+  primary: SpecAction | null
+  /** The others open to it, in display order. */
+  secondary: SpecAction[]
+}
+
+/** Exactly the actions open to a document in each state. Check is open while a document is being
+ *  written or is approved but not yet built, and never changes the phase. */
+export function actionsFor(state: DocState): HeaderActions {
+  switch (state) {
+    case 'writing':
+      return { primary: 'check', secondary: [] }
+    case 'ready':
+      return { primary: 'approve', secondary: ['check', 'approve-and-build'] }
+    case 'approved':
+      return { primary: 'build', secondary: ['check'] }
+    case 'building':
+      return { primary: 'open-build', secondary: ['build'] }
+    case 'archived':
+      return { primary: 'reopen', secondary: [] }
+  }
+}
+
+/** The journey ribbon's stops, and where each state sits on it. */
+export const JOURNEY: Array<{ key: string; label: string }> = [
+  { key: 'writing', label: 'Writing' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'building', label: 'Building' },
+  { key: 'done', label: 'Done' },
+]
+
+export function journeyIndex(state: DocState): number {
+  return { writing: 0, ready: 0, approved: 1, building: 2, archived: 3 }[state]
+}
+
+export const STATE_LABEL: Record<DocState, string> = {
+  writing: 'Being written',
+  ready: 'Ready to approve',
+  approved: 'Approved',
+  building: 'Building',
+  archived: 'Archived',
+}
+
+// ── Within a document ──────────────────────────────────────────────────
+
+export const EVIDENCE_LABEL: Record<EvidenceState, string> = {
+  verified: 'Verified',
+  awaiting: 'Awaiting review',
+  in_progress: 'No evidence yet',
+  not_started: 'Not started',
+  rejected: 'Evidence rejected',
+}
+
+export const EVIDENCE_TONE: Record<EvidenceState, string> = {
+  verified: 'var(--green)',
+  awaiting: 'var(--amber)',
+  in_progress: 'var(--blue)',
+  not_started: 'var(--text-3)',
+  rejected: 'var(--red)',
+}
+
+export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
+  pending: 'Waiting',
+  assigned: 'Assigned',
+  in_progress: 'Building',
+  completed: 'Built',
+  under_review: 'In review',
+  revision_needed: 'Sent back',
+  approved: 'Approved',
+  rejected: 'Rejected',
+}
+
+/** The order status sorts in: what needs attention first, what is done last. */
+const STATUS_RANK: Record<TaskStatus, number> = {
+  revision_needed: 0,
+  under_review: 1,
+  completed: 2,
+  in_progress: 3,
+  assigned: 4,
+  pending: 5,
+  approved: 6,
+  rejected: 7,
+}
+
+export interface DocumentFilters {
+  evidence: EvidenceState | 'any'
+  /** A task key: requirements that task serves. */
+  task: string | 'any'
+  status: TaskStatus | 'any'
+  agent: string | 'any'
+  order: 'build' | 'status'
+}
+
+export const NO_DOCUMENT_FILTERS: DocumentFilters = { evidence: 'any', task: 'any', status: 'any', agent: 'any', order: 'build' }
+
+export function filterRequirements(requirements: SpecRequirementView[], filters: DocumentFilters): SpecRequirementView[] {
+  return requirements.filter(
+    (r) => (filters.evidence === 'any' || r.evidence === filters.evidence) && (filters.task === 'any' || r.taskKeys.includes(filters.task)),
+  )
+}
+
+/** Each task's depth in its dependency graph: 0 for a task with no prerequisites. */
+export function buildLevels(tasks: SpecTaskView[]): Map<string, number> {
+  const byKey = new Map(tasks.map((t) => [t.key, t]))
+  const depth = new Map<string, number>()
+  const visit = (key: string, seen: Set<string>): number => {
+    const known = depth.get(key)
+    if (known !== undefined) return known
+    if (seen.has(key)) return 0
+    seen.add(key)
+    const task = byKey.get(key)
+    const d = task ? Math.max(-1, ...task.dependsOn.filter((k) => byKey.has(k)).map((k) => visit(k, seen))) + 1 : 0
+    depth.set(key, d)
+    return d
+  }
+  tasks.forEach((t) => visit(t.key, new Set()))
+  return depth
+}
+
+export function orderTasks(tasks: SpecTaskView[], filters: DocumentFilters): SpecTaskView[] {
+  const shown = tasks.filter(
+    (t) => (filters.status === 'any' || t.status === filters.status) && (filters.agent === 'any' || t.agent === filters.agent),
+  )
+  const declared = new Map(tasks.map((t, i) => [t.key, i]))
+  if (filters.order === 'status') {
+    return [...shown].sort(
+      (a, b) =>
+        (STATUS_RANK[a.status ?? 'pending'] - STATUS_RANK[b.status ?? 'pending']) || declared.get(a.key)! - declared.get(b.key)!,
+    )
+  }
+  const levels = buildLevels(tasks)
+  return [...shown].sort((a, b) => levels.get(a.key)! - levels.get(b.key)! || declared.get(a.key)! - declared.get(b.key)!)
+}
+
+export function countFilters(filters: DocumentFilters): number {
+  return (['evidence', 'task', 'status', 'agent'] as const).filter((k) => filters[k] !== 'any').length
+}
+
+// ── The document list ───────────────────────────────────────────────────
+
+export interface SpecListEntry {
+  id: string
+  path: string
+  title: string
+  kind: SpecKind
+  phase: SpecPhase
+  state: DocState
+  updatedAt: string
+  /** A slice: the roadmap's path and its position in the roadmap's build order. */
+  roadmap?: { path: string; order: number } | null
+  building: boolean
+}
+
+export type ListOrder = 'changed' | 'phase' | 'title' | 'roadmap'
+export type ListKindFilter = 'all' | 'change-spec' | 'roadmap' | 'capability'
+export type ListPhaseFilter = 'any' | 'writing' | 'approved' | 'archived'
+
+export interface ListPreferences {
+  query: string
+  kind: ListKindFilter
+  phase: ListPhaseFilter
+  buildingOnly: boolean
+  order: ListOrder
+}
+
+export const DEFAULT_LIST_PREFERENCES: ListPreferences = { query: '', kind: 'all', phase: 'any', buildingOnly: false, order: 'roadmap' }
+
+const PHASE_RANK: Record<DocState, number> = { building: 0, ready: 1, writing: 2, approved: 3, archived: 4 }
+
+function matchesPhase(state: DocState, filter: ListPhaseFilter): boolean {
+  if (filter === 'any') return true
+  if (filter === 'writing') return state === 'writing' || state === 'ready'
+  if (filter === 'approved') return state === 'approved' || state === 'building'
+  return state === 'archived'
+}
+
+export interface ListGroup {
+  /** The roadmap heading a group of slices sits under, or null for a plain run of documents. */
+  roadmap: SpecListEntry | null
+  label: string | null
+  entries: SpecListEntry[]
+}
+
+/** The list after the operator's filters and order. Ordering by roadmap groups each roadmap's
+ *  slices under it in build order; ordering by phase groups by phase; the others are one run. A
+ *  roadmap whose slices match stays as their heading even when it does not match itself. */
+export function arrangeList(entries: SpecListEntry[], prefs: ListPreferences): ListGroup[] {
+  const query = prefs.query.trim().toLowerCase()
+  const matches = (e: SpecListEntry) =>
+    (prefs.kind === 'all' || e.kind === prefs.kind) &&
+    matchesPhase(e.state, prefs.phase) &&
+    (!prefs.buildingOnly || e.building) &&
+    (!query || e.title.toLowerCase().includes(query) || e.path.toLowerCase().includes(query))
+  const shown = entries.filter(matches)
+  const byChanged = (a: SpecListEntry, b: SpecListEntry) => b.updatedAt.localeCompare(a.updatedAt)
+
+  switch (prefs.order) {
+    case 'changed':
+      return [{ roadmap: null, label: null, entries: [...shown].sort(byChanged) }]
+    case 'title':
+      return [{ roadmap: null, label: null, entries: [...shown].sort((a, b) => a.title.localeCompare(b.title)) }]
+    case 'phase': {
+      const groups: ListGroup[] = []
+      for (const [label, states] of [
+        ['Building', ['building']],
+        ['Being written', ['ready', 'writing']],
+        ['Approved', ['approved']],
+        ['Archived', ['archived']],
+      ] as Array<[string, DocState[]]>) {
+        const inGroup = shown.filter((e) => states.includes(e.state)).sort((a, b) => PHASE_RANK[a.state] - PHASE_RANK[b.state] || byChanged(a, b))
+        if (inGroup.length) groups.push({ roadmap: null, label, entries: inGroup })
+      }
+      return groups
+    }
+    case 'roadmap': {
+      const roadmaps = entries.filter((e) => e.kind === 'roadmap')
+      const groups: ListGroup[] = []
+      for (const roadmap of roadmaps.sort(byChanged)) {
+        const slices = shown.filter((e) => e.roadmap?.path === roadmap.path).sort((a, b) => a.roadmap!.order - b.roadmap!.order)
+        if (slices.length || shown.includes(roadmap)) groups.push({ roadmap, label: null, entries: slices })
+      }
+      const loose = shown.filter((e) => e.kind !== 'roadmap' && !roadmaps.some((r) => r.path === e.roadmap?.path)).sort(byChanged)
+      if (loose.length) groups.push({ roadmap: null, label: groups.length ? 'Not in a roadmap' : null, entries: loose })
+      return groups
+    }
+  }
+}
+
+/** An anchor id for a position in the document, used by the outline, links and history. */
+export const anchors = {
+  section: (id: string) => `section-${id}`,
+  requirement: (identifier: string) => identifier,
+  task: (key: string) => `task-${key}`,
+  build: (id: string) => `build-${id}`,
+}
