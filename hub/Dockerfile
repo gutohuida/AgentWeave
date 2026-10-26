@@ -21,6 +21,9 @@ COPY --from=ui-builder /app/ui/dist /app/hub/static/ui
 
 # Create data directory for SQLite
 RUN mkdir -p /app/data
+# The Hub refuses to start without being told which database to open; docker-compose.yml sets the
+# same file, and `-e DATABASE_URL=...` still overrides it.
+ENV DATABASE_URL=sqlite+aiosqlite:////app/data/agentweave.db
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${AW_PORT:-8000}/health')"

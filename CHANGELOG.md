@@ -6,6 +6,92 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [2.0.0] - 2026-10-26
+
+The first release since 1.1.0, and a large one: a spec-driven development loop that runs in the
+Hub, flows that staff, review and integrate work on their own, runners beyond Claude, a knowledge
+vault, and a performance overhaul for weaker machines.
+
+### Breaking
+
+- **A Hub that is not told which database to open refuses to start.** `agentweave-hub`, a bare
+  `uvicorn hub.main:app` or any launch that skips the CLI must set `DATABASE_URL`; 1.1.0 fell back
+  to a default file. Bare `agentweave` still resolves its profile and sets it, and the Docker image
+  now sets `DATABASE_URL=sqlite+aiosqlite:////app/data/agentweave.db` itself (`-e` overrides it).
+- **SQLite runs in WAL** (`synchronous=FULL`, a bounded WAL file). A running Hub's database now
+  lives in three files (`agentweave.db`, `-wal`, `-shm`): **copying the `.db` file alone is no longer
+  a backup.** Use SQLite's backup API or `VACUUM INTO`. If WAL cannot be set (a network share), the
+  Hub opens in the journal it has and says so in its startup line.
+- **Trace spans are kept for 14 days by default,** swept by the Hub off the request path. Set the
+  window per project in the trace settings. Agent outputs, events, messages, runs and tasks are
+  never pruned.
+- **No more guessing that an agent asked a question.** The detector that read a turn's trailing
+  prose as a question is gone (migration `0082`); an agent that needs an answer calls `ask_user`.
+- Upgrading runs migrations `0082` through `0146` on first start.
+
+### Specifications in the Hub
+
+- The `spec/` corpus is owned by the Hub: capability and change documents, requirements, tasks,
+  evidence and coverage, with the lifecycle `exploring → proposed → approved → archived`.
+- Requirements trace to tasks and evidence; approval asks that every requirement a task touches is
+  covered by accepted evidence.
+- Roadmaps split large work into slices, each with its own document.
+
+### Flows
+
+- A document says how it will be built (`delivery`): a flow fires on a schedule, staffs builders
+  from the project's agents, stages reviews, and stops when its queue is done.
+- Tasks have dependencies, a board, and governed transitions (`pending → … → approved`); work
+  happens in per-task worktrees and is merged into the main branch on approval.
+- Flows advance as soon as their work moves (completed, sent back, approved), not only on their tick.
+- A stall detector raises stuck work, and the Hub's mender agent can be briefed to unstick it. It is
+  never staffed as a builder or reviewer, and it can hand finished work to its reviewer.
+
+### Approval checks
+
+- The operator configures the project's checks; approval runs them on the merged result.
+- A passing result is reused when the merged tree is identical, so the Hub's own prerequisite
+  merges and unrelated main moves no longer force a re-run.
+- A failure is re-run once before it counts against the task. One that passes the second time is
+  recorded as flaky, approval goes on, and **the Overview lists the flaky tests** with "Create a fix
+  task" and "Dismiss".
+- `pytest -n auto` in a check is sized to a third of the CPUs; a failing suite keeps the start of its
+  tracebacks.
+- Accepted evidence survives a clean prerequisite merge into the task branch.
+
+### Runners and agents
+
+- Runners for Claude, GitHub Copilot (ACP) and Codex (app-server), one registry, model catalog and
+  provider allowance holds; usage and spend accounting per turn.
+- Charters, agent configuration, permissions with operator approval cards, sandboxed runs, quiet
+  hours, and conversations with checkpoints, hand-off and a workspace side panel.
+
+### Knowledge vault
+
+- Sources (notes, documents, transcripts, decisions) distilled into cited facts, with contradictions
+  tracked; tracked or private per entry.
+
+### Performance
+
+Measured on a copy of a real operator database:
+
+- **The Hub's event loop no longer waits on git, the filesystem or process spawns.** Turn start
+  froze every request for 4.1 s, now 14 ms; approval for 3.1 s, now 14 ms. Unchanged git facts are
+  cached by commit id, and streamed output lines are written in batches (6.2 ms of loop time per
+  line, now 0.9 ms).
+- **Reads under write load:** p90 2.4 s, now 90 ms.
+- **List routes:** `/agents`, `/conversations` 0.7–1.0 s, now about 20 ms; `GET /loops` 2.5 s, now
+  about 0.2 s; open event streams no longer hold a database connection each.
+- **The dashboard:** one live event refreshes each thing once; first open goes from 43 requests to
+  14, the first script from 1.5 MB to 565 KB, screens load as their own chunks, and a streaming
+  1,000-row conversation drops 9% of frames instead of 98% at a 6x-throttled CPU.
+
+### Fixed
+
+- Hundreds of defects found by driving the product end to end, recorded in
+  `scripts/drive/FINDINGS.md`, each with a test that failed before its fix.
+
+---
 ## [1.1.0] - 2026-08-19
 
 Two capabilities, and three bugs found by driving the product rather than reading it.
