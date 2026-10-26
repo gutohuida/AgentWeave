@@ -103,7 +103,12 @@ from ...model_catalog import (
     render_control_config,
     validate_overrides,
 )
-from ...output_recording import record_agent_output, record_context_usage
+from ...output_recording import (
+    flush_streamed,
+    record_agent_output,
+    record_context_usage,
+    stream_agent_output,
+)
 from ...outside_write_record import OutsideWriteRecorder
 from ...permission_requests import expire_pending_for_run
 from ...provider_allowance import (
@@ -2830,6 +2835,12 @@ async def _broadcast_run_lifecycle(
 OBSERVATION_RETRY_DELAYS: Tuple[float, ...] = (0.5, 2.0)
 
 
+async def _record_streamed_line(db, project_id: str, agent: str, **kwargs: Any):  # noqa: ANN001
+    """What a streamed line is written through when its batch is (`stream_agent_output`):
+    `record_agent_output`, looked up when the line is written."""
+    return await record_agent_output(db, project_id, agent, **kwargs)
+
+
 async def _record_observation(write, *, run_id: str, what: str, drop: bool = True) -> None:
     """Run *write* (`async (db) -> None`) on a fresh session, surviving SQLite's write lock.
 
@@ -2949,6 +2960,12 @@ async def _record_run_failure_tail(
     *exc* is typed `BaseException` rather than `Exception` because `CancelledError` is neither --
     see `_execute_run`'s handler for the measurement behind catching it at all.
     """
+    # Every line the run streamed is stored before it is reported failed (D3). Best-effort here:
+    # this path is already handling a failure, and the write must not replace it with another.
+    try:
+        await flush_streamed(run_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not store run %s's streamed output", run_id, exc_info=True)
     async with async_session_factory() as db:
         run = await db.get(Run, run_id)
         # A row that is gone, or one that had already reached a terminal status before this
@@ -3389,21 +3406,21 @@ async def _execute_run(
                 # F488: joined across the run's text, beside `sequence` and outside the retried
                 # write, so the carried text follows the timeline's order and takes each event once.
                 recorded = run_secrets.scrub_stream(run_id, event)
-                await _record_observation(
-                    lambda db, event=recorded, sequence=sequence: record_agent_output(
-                        db,
-                        project_id,
-                        agent,
-                        content=event.content,
-                        session_id=session_id,
-                        conversation_id=conversation_id,
-                        kind=event.kind,
-                        payload=event.payload,
-                        run_id=run_id,
-                        sequence=sequence,
-                    ),
+                # Shown at once, written with the lines around it (`stream_agent_output`, D3 of
+                # `turn-starts-approvals-and-evidence-never-freeze-the-hub`): one session and one
+                # commit per burst, not per line. Written before this run is reported finished.
+                await stream_agent_output(
+                    project_id,
+                    agent,
+                    content=recorded.content,
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    kind=recorded.kind,
+                    payload=recorded.payload,
                     run_id=run_id,
-                    what=f"output {sequence}",
+                    sequence=sequence,
+                    record=_record_streamed_line,
+                    retry_delays=OBSERVATION_RETRY_DELAYS,
                 )
                 # Task 4.3a. After the output row, not before: the timeline entry is what the
                 # operator is shown, and this is observational bookkeeping about it.
@@ -3423,8 +3440,12 @@ async def _execute_run(
             if parsed.runner_version:
                 runner_version = parsed.runner_version
             # Resolve session_id from *this* line before writing its own events, so the row
-            # that establishes the session carries it too, not just subsequent rows.
-            if parsed.session_id:
+            # that establishes the session carries it too, not just subsequent rows. Once this run
+            # is bound to the session a line names, binding it again writes nothing and was a
+            # session, two reads and a commit on every line (D3): it is skipped.
+            if parsed.session_id and (
+                parsed.session_id != session_id or binding_conflict is not None
+            ):
                 prior_conflict, prior_session_id = binding_conflict, session_id
 
                 async def _bind(db) -> None:
@@ -3576,6 +3597,8 @@ async def _execute_run(
             final_status=final_status,
             run_id=run_id,
         )
+        # Every line this run streamed is stored before anything reports it finished (D3).
+        await flush_streamed(run_id)
 
         # The provider's refusal on usage grounds, when this run's recorded reading is one
         # (`a-spent-allowance-holds-the-queue`, D2 and D5). `held` is the hold that reading
@@ -4466,21 +4489,19 @@ async def _execute_rpc_run(
             # F488: in the same synchronous step as `sequence`, so two interleaved calls scrub in
             # the timeline's order; bound to the write, so a retry never scrubs again.
             recorded = run_secrets.scrub_stream(run_id, event)
-            await _record_observation(
-                lambda db, event=recorded, sequence=sequence: record_agent_output(
-                    db,
-                    project_id,
-                    agent,
-                    content=event.content,
-                    session_id=session_id,
-                    conversation_id=conversation_id,
-                    kind=event.kind,
-                    payload=event.payload,
-                    run_id=run_id,
-                    sequence=sequence,
-                ),
+            # As `_execute_run`'s stream: shown at once, written in batches (D3).
+            await stream_agent_output(
+                project_id,
+                agent,
+                content=recorded.content,
+                session_id=session_id,
+                conversation_id=conversation_id,
+                kind=recorded.kind,
+                payload=recorded.payload,
                 run_id=run_id,
-                what=f"output {sequence}",
+                sequence=sequence,
+                record=_record_streamed_line,
+                retry_delays=OBSERVATION_RETRY_DELAYS,
             )
             # Task 4.3b — the same call `_flush_line` makes, on the same recorder class, in the
             # same position relative to the output row.
@@ -4574,6 +4595,7 @@ async def _execute_rpc_run(
             # Mirrors `_execute_run`'s own early-spawn-failure handling: nothing was ever
             # delivered to the agent, so returned queue entries go back to "queued" rather
             # than being recorded against a run that never really started.
+            await flush_streamed(run_id)  # its pre-turn notices, before it reads as failed (D3)
             async with async_session_factory() as db:
                 run = await db.get(Run, run_id)
                 if run:
@@ -4646,6 +4668,8 @@ async def _execute_rpc_run(
         # them for the exec path (AgentOutputPanel's handoff-detection, see below).
         exit_code = 0 if final_status == "completed" else 1
         await _close_open_calls(open_calls, _on_event, final_status=final_status, run_id=run_id)
+        # Every line this run streamed is stored before anything reports it finished (D3).
+        await flush_streamed(run_id)
 
         # `_execute_run`'s refusal branch, which slice 1 left out of this executor
         # (`a-copilot-run-shows-its-credits` D8, task 5.3). Inert for Codex: no Codex sample

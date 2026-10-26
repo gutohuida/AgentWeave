@@ -632,6 +632,13 @@ async def lifespan(app: FastAPI):
     await terminate_all_active_runs()
     await shutdown_scheduler()
     await _settle_background_runs()
+    # Streamed lines still waiting to be written are written before the Hub stops (D3).
+    from .output_recording import flush_streamed
+
+    try:
+        await flush_streamed()
+    except Exception:  # noqa: BLE001 -- shutting down regardless
+        logger.warning("Could not store streamed output at shutdown", exc_info=True)
     # Release the pool while the loop is still running, and only after the settle: disposing
     # first takes the connection away from a run that is still using it, which is the failure
     # `hub/tests/conftest.py` documents having already made. This step is safe to reach only

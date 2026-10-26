@@ -1065,40 +1065,49 @@ class Drive:
                 p.stop()
         return run_id
 
-    async def line_cost(self) -> None:
-        print("line-cost (90 lines a minute, each runner, concurrently)", flush=True)
-        # Idle baseline: the loop thread's CPU with nothing running, over the same window.
-        window = 60.0
-        idle0 = time.thread_time()
-        await asyncio.sleep(2.0)
-        idle_rate = (time.thread_time() - idle0) / 2.0
-        count = 90
+    async def _replay_cpu(self, count: int, interval: float) -> Any:
+        """Loop-thread CPU for one replay of *count* lines on each runner at once, and the lines
+        stored. Not less an idle baseline: an idle loop costs next to nothing, and on Windows
+        `thread_time` moves in 15.6 ms ticks, so a short idle sample scaled to a minute was mostly
+        that tick's error (measured: -1.8 to +1.6 ms per line between two identical runs)."""
         kinds = ("claude", "copilot", "codex")
-        # The turns start first, outside the measured window: only the recording is measured.
+        # The turns start first, outside the measured window.
         started = [await self.start_turn(self.agents[kind], None) for kind in kinds]
+        await asyncio.sleep(0.5)
         cpu0 = time.thread_time()
         wall0 = time.perf_counter()
         results = await asyncio.gather(
             *(
-                self._replay(kind, count, window / count, run_id=run_id)
+                self._replay(kind, count, interval, run_id=run_id)
                 for kind, run_id in zip(kinds, started)
             ),
             return_exceptions=True,
         )
         wall = time.perf_counter() - wall0
-        cpu = time.thread_time() - cpu0 - idle_rate * wall
+        cpu = time.thread_time() - cpu0
         errors = [r for r in results if isinstance(r, BaseException)]
         if errors:
-            fail("line-cost", "loop CPU per line", repr(errors[0])[:300])
+            raise errors[0]
+        return cpu, sum(await self._count_lines(results)), wall
+
+    async def line_cost(self) -> None:
+        """90 lines a minute on each runner at once. A run's own start and end (snapshot,
+        restamp, accounting) are not line recording, so a one-line replay of the same three runs
+        is measured too and subtracted: what is left is what the lines cost."""
+        print("line-cost (90 lines a minute, each runner, concurrently)", flush=True)
+        try:
+            base_cpu, base_lines, _ = await self._replay_cpu(1, 0.0)
+            cpu, lines, wall = await self._replay_cpu(90, 60.0 / 90)
+        except Exception as exc:  # noqa: BLE001
+            fail("line-cost", "loop CPU per line", repr(exc)[:300])
             return
-        lines = await self._count_lines(results)
         check(
             "line-cost",
             "loop CPU per line",
-            cpu / max(1, sum(lines)) * 1000,
+            (cpu - base_cpu) / max(1, lines - base_lines) * 1000,
             1.5,
             "ms",
-            f"({sum(lines)} lines in {wall:.0f}s)",
+            f"({lines - base_lines} lines in {wall:.0f}s; runs' own start/end {base_cpu * 1000:.0f}ms)",
         )
 
     async def _count_lines(self, run_ids: List[str]) -> List[int]:
@@ -1147,17 +1156,16 @@ class Drive:
         async def _count_at_finish(run_id: str) -> None:
             async with self.sessions() as db:
                 rows = (
-                    (
-                        await db.execute(
-                            select(AgentOutput.sequence)
-                            .where(AgentOutput.run_id == run_id)
-                            .order_by(AgentOutput.timestamp, AgentOutput.id)
-                        )
+                    await db.execute(
+                        select(AgentOutput.sequence, AgentOutput.timestamp)
+                        .where(AgentOutput.run_id == run_id)
+                        .order_by(AgentOutput.sequence)
                     )
-                    .scalars()
-                    .all()
-                )
-            finished_counts[run_id] = list(rows)
+                ).all()
+            # In order: by sequence, each stamped no earlier than the line before it.
+            stamps = [stamp for _, stamp in rows]
+            ordered = stamps == sorted(stamps)
+            finished_counts[run_id] = [seq for seq, _ in rows] if ordered else [-1]
 
         sse_manager.publish = _publish
         try:
@@ -1195,7 +1203,7 @@ class Drive:
                 if at_finish is None:
                     fail("line-visible-and-durable", f"{kind} 200 lines durable", "no finish event")
                     continue
-                in_order = at_finish == sorted(at_finish)
+                in_order = at_finish != [-1]
                 stored = len(at_finish)
                 # Claude's first stream line is `init`, which maps to no output row.
                 emitted = 199 if kind == "claude" else 200
