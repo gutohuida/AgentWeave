@@ -26,6 +26,7 @@ from starlette.routing import Match
 from . import (
     __version__,
     bound_address,
+    git_facts,
     instance_identity,
     run_reconciliation,
     tool_server,
@@ -35,7 +36,7 @@ from .agent_action_scrub import AgentActionScrubMiddleware
 from .api.v1 import agent_trigger, v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
-from .db.engine import SQLITE_BUSY_TIMEOUT_SECONDS, engine, init_db
+from .db.engine import SQLITE_BUSY_TIMEOUT_SECONDS, describe_journal, engine, init_db
 from .provider_allowance import arm_held_queues
 from .run_reconciliation import reconcile_interrupted_runs, reconcile_stale_job_runs
 from .run_task_binding import TaskBindingError
@@ -568,10 +569,22 @@ def _log_database_before_opening() -> None:
         )
 
 
+async def log_journal_mode() -> None:
+    """The startup line naming the journal the database runs in (`the-database-stays-fast-as-
+    history-grows` D2). WARNING for the reason `_log_database_before_opening` gives: after
+    `init_db()`'s alembic `fileConfig` the root logger is WARN, and the operator's detached Hub
+    sends its output to DEVNULL, so this line is the one place a refused WAL is ever recorded."""
+    try:
+        logger.warning(await describe_journal())
+    except Exception as exc:  # noqa: BLE001 -- a line about the journal must not stop the Hub
+        logger.warning("Hub database: could not read the journal mode: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _log_database_before_opening()
     await init_db()
+    await log_journal_mode()
     instance_identity.load_or_create()
     await reconcile_interrupted_runs()
     await reconcile_stale_job_runs()
@@ -615,7 +628,30 @@ async def lifespan(app: FastAPI):
     from .project_checks import watch_main_forever
 
     main_watch = asyncio.create_task(watch_main_forever())
+    # The first turn's context renders the tool surface from `mcp_server`, which loads fastmcp:
+    # 1.4 s of imports on the loop, measured, once per process. Imported in a thread at start
+    # instead (`turn-starts-approvals-and-evidence-never-freeze-the-hub`, D1). Best-effort.
+    import importlib
+
+    from . import blocking
+
+    tool_surface_warmup = asyncio.create_task(
+        blocking.run(importlib.import_module, f"{__package__}.mcp_server")
+    )
+    tool_surface_warmup.add_done_callback(
+        lambda task: task.cancelled()
+        or task.exception() is None
+        or logger.warning("warming the tool surface failed: %s", task.exception())
+    )
+    # Trace retention and planner statistics, off every request's path
+    # (`the-database-stays-fast-as-history-grows`, D4/D5).
+    from .db_maintenance import maintain_forever
+
+    maintenance = asyncio.create_task(maintain_forever())
     yield
+    maintenance.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await maintenance
     main_watch.cancel()
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await main_watch
@@ -631,6 +667,13 @@ async def lifespan(app: FastAPI):
     await terminate_all_active_runs()
     await shutdown_scheduler()
     await _settle_background_runs()
+    # Streamed lines still waiting to be written are written before the Hub stops (D3).
+    from .output_recording import flush_streamed
+
+    try:
+        await flush_streamed()
+    except Exception:  # noqa: BLE001 -- shutting down regardless
+        logger.warning("Could not store streamed output at shutdown", exc_info=True)
     # Release the pool while the loop is still running, and only after the settle: disposing
     # first takes the connection away from a run that is still using it, which is the failure
     # `hub/tests/conftest.py` documents having already made. This step is safe to reach only
@@ -688,6 +731,10 @@ def create_app() -> FastAPI:
             if run_reconciliation.has_deferred_schedules():
                 asyncio.create_task(run_reconciliation.drain_deferred_schedules())
         return await call_next(request)
+
+    # A read request resolves each git ref name once (`git_facts`, D4 of
+    # `turn-starts-approvals-and-evidence-never-freeze-the-hub`).
+    app.add_middleware(git_facts.ReadScopeMiddleware)
 
     # Added last, so it is outermost: the span covers every layer's answer, the size limit's and the
     # scrubber's included (`everything-the-hub-does-is-in-a-trace`, D3).

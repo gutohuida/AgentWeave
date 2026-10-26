@@ -30,7 +30,6 @@ import collections
 import json
 import os
 import re
-import shutil
 import socket
 import sqlite3
 import statistics
@@ -82,6 +81,18 @@ def _same_file(a: Path, b: Path) -> bool:
         return False
 
 
+def backup_copy(src: Path, dst: Path) -> None:
+    """Copy a database through SQLite's backup API, never as a file: under WAL (the Hub's journal
+    since `the-database-stays-fast-as-history-grows`) a copy of the `.db` alone can omit commits."""
+    s = sqlite3.connect("file:" + src.resolve().as_posix() + "?mode=ro", uri=True)
+    d = sqlite3.connect(str(dst))
+    try:
+        s.backup(d)
+    finally:
+        s.close()
+        d.close()
+
+
 def make_copy(src: Path, tmp: Path, name: str = "work.db") -> Path:
     """A scratch copy of `src`, read through `mode=ro`, with a drive credential added. `src` is never written."""
     if not src.exists():
@@ -103,7 +114,41 @@ def make_copy(src: Path, tmp: Path, name: str = "work.db") -> Path:
     )
     d.commit()
     d.close()
+    migrate_to_head(dst)
     return dst
+
+
+_MIGRATE = """
+import asyncio, sqlite3, sys
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+from hub.db.engine import _run_alembic_upgrade
+from pathlib import Path
+import hub.db.engine as e
+asyncio.run(_run_alembic_upgrade())
+head = ScriptDirectory.from_config(Config(str(Path(e.__file__).parent.parent / "alembic.ini"))).get_current_head()
+c = sqlite3.connect(sys.argv[1])
+have = c.execute("select version_num from alembic_version").fetchone()[0]
+print("MIGRATED", have, head)
+sys.exit(0 if have == head else 1)
+"""
+
+
+def migrate_to_head(db: Path) -> None:
+    """Upgrade the scratch copy to this checkout's head, as the Hub does when it starts.
+
+    The operator's database sits at whatever revision their Hub last started on; measuring this
+    checkout's queries against it without its migrations measures them without their indexes
+    (`0144` turned a 655 ms `/agents` into 21 ms on the 2026-10-25 copy).
+    """
+    env = dict(os.environ, DATABASE_URL="sqlite+aiosqlite:///" + db.resolve().as_posix())
+    r = subprocess.run(
+        [sys.executable, "-c", _MIGRATE, str(db)],
+        cwd=str(REPO / "hub"), env=env, capture_output=True, text=True,
+    )
+    if r.returncode:
+        raise CannotRun("could not migrate the scratch copy to head:\n" + r.stdout[-600:] + r.stderr[-600:])
+    p("  " + [ln for ln in r.stdout.splitlines() if ln.startswith("MIGRATED")][-1])
 
 
 def project_exists(db: Path) -> bool:
@@ -407,7 +452,7 @@ async def sc_lists(args: argparse.Namespace, db: Path) -> int:
 
 async def sc_lists_10x(args: argparse.Namespace, db: Path, tmp: Path) -> int:
     big = tmp / "big.db"
-    shutil.copy(db, big)
+    backup_copy(db, big)
     counts = multiply_tables(big)
     p("  rows (before -> after):", {k: f"{a}->{b}" for k, (a, b) in counts.items()})
     base = _subprocess_measure(db, args)
@@ -639,7 +684,7 @@ async def sc_same(args: argparse.Namespace, db: Path, tmp: Path) -> int:
         outs = {}
         for label, hub_dir in (("base", base_dir / "hub"), ("current", REPO / "hub")):
             dbcopy = tmp / f"same-{label}.db"
-            shutil.copy(db, dbcopy)
+            backup_copy(db, dbcopy)
             out = tmp / f"{label}.json"
             r = subprocess.run(
                 [sys.executable, str(Path(__file__).resolve()), "--scenario", "dump", "--db", str(dbcopy),

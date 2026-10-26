@@ -9,9 +9,15 @@ from typing import AsyncGenerator
 
 from sqlalchemy import event
 from sqlalchemy.exc import DisconnectionError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from ..config import settings
+from . import sqlite_pragmas
 
 # AIJob, JobRun and ProjectInstructions are imported for their side effect: importing
 # a model registers its mapper on Base.metadata, which is what `create_all` (below)
@@ -34,8 +40,9 @@ logger = logging.getLogger(__name__)
 _PLACEHOLDER_API_KEY = "aw_live_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
 
 #: How long a SQLite connection waits out another writer's lock before `database is locked` (F517).
-#: Production runs a rollback journal, so one writer's commit blocks every other connection; the
-#: driver's own 5s default failed a reviewer's spawn on `:8010`. The migration engine has waited 30s
+#: Production ran a rollback journal then, so one writer's commit blocked every other connection; the
+#: driver's own 5s default failed a reviewer's spawn on `:8010`. Under WAL (`sqlite_pragmas`) only
+#: writers wait on writers, and the wait still applies to them. The migration engine has waited 30s
 #: since F292 (`migrations/env.py`), and so does the suite (`hub/tests/conftest.py`).
 SQLITE_BUSY_TIMEOUT_SECONDS = 30.0
 
@@ -47,11 +54,44 @@ def connect_args_for(database_url: str) -> dict:
     return {"check_same_thread": False, "timeout": SQLITE_BUSY_TIMEOUT_SECONDS}
 
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=False,
-    connect_args=connect_args_for(settings.database_url),
-)
+def make_engine(database_url: str) -> AsyncEngine:
+    """An async engine opened the way the Hub opens its database: the driver arguments above, and on
+    SQLite the journal every connection runs in (WAL, full sync, a bounded WAL file;
+    `sqlite_pragmas`, `the-database-stays-fast-as-history-grows` D1/D2)."""
+    built = create_async_engine(
+        database_url,
+        echo=False,
+        connect_args=connect_args_for(database_url),
+    )
+    sqlite_pragmas.install(built.sync_engine)
+    return built
+
+
+engine = make_engine(settings.database_url)
+
+
+async def describe_journal(target: "AsyncEngine | None" = None) -> str:
+    """The startup line naming the journal the database actually runs in (D2), whichever it is.
+
+    Read from the database, not from what was asked for: a WAL request SQLite refused leaves the
+    journal the file had, and this is the one place a later reader can find that out.
+    """
+    target = target if target is not None else engine
+    if target.dialect.name != "sqlite":
+        return f"Hub database: {target.dialect.name}, no SQLite journal"
+    async with target.connect() as conn:
+        mode = str((await conn.exec_driver_sql("PRAGMA journal_mode")).scalar() or "").lower()
+        synchronous = (await conn.exec_driver_sql("PRAGMA synchronous")).scalar()
+    sync_name = {0: "off", 1: "normal", 2: "full", 3: "extra"}.get(synchronous, str(synchronous))
+    if mode == "wal":
+        return f"Hub database: journal mode wal, synchronous {sync_name}"
+    if mode == "memory":
+        return f"Hub database: journal mode memory (in-memory database), synchronous {sync_name}"
+    return (
+        f"Hub database: journal mode {mode}, synchronous {sync_name} -- WAL could not be set "
+        "(is the database on a network share?). The Hub runs, but readers wait on every write."
+    )
+
 
 # ---------------------------------------------------------------------------
 # The dead-worker guard (finding F295).

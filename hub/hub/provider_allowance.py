@@ -18,9 +18,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable, Optional, Set
+from typing import Any, Dict, Iterable, Optional, Set
 
-from sqlalchemy import literal_column, select
+from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import TurnUsage
@@ -112,7 +112,7 @@ def hold_for_reading(allowance: Any, observed_at: datetime, run_id: str) -> Opti
     )
 
 
-def _is_informative(row: TurnUsage) -> bool:
+def _is_informative(row: Any) -> bool:
     """Whether a row says anything about the provider (design D3).
 
     Four paths write a row with no sample at all — the transport-failure tail, a spawn that never
@@ -186,20 +186,47 @@ async def agents_held(
     db: AsyncSession, project_id: str, *, now: Optional[datetime] = None
 ) -> Set[str]:
     """Every agent in *project_id* that `provider_hold` holds, read at one `now` (design D6)."""
+    return set(await agent_holds(db, project_id, now=now))
+
+
+async def agent_holds(
+    db: AsyncSession, project_id: str, *, now: Optional[datetime] = None
+) -> Dict[str, ProviderHold]:
+    """`provider_hold` for every agent in *project_id* it holds, read at one `now`.
+
+    One statement in the ordinary case (`the-app-stays-responsive-while-agents-run`, FR-6): each
+    agent's newest row, which is its newest *informative* row almost always. Only an agent whose
+    newest row says nothing about the provider falls back to `provider_hold`'s paged walk, so the
+    answer is the one asking `provider_hold` per agent gives, without reading every agent's history
+    to find it.
+    """
     current = now if now is not None else _utcnow()
-    agents = (
-        (
-            await db.execute(
-                select(TurnUsage.agent).where(TurnUsage.project_id == project_id).distinct()
-            )
-        )
-        .scalars()
-        .all()
+    newest = (
+        select(func.max(literal_column("turn_usage.rowid")))
+        .where(TurnUsage.project_id == project_id)
+        .group_by(TurnUsage.agent)
     )
-    held: Set[str] = set()
-    for agent in agents:
-        if await provider_hold(db, project_id, agent, now=current) is not None:
-            held.add(agent)
+    rows = (
+        await db.execute(
+            select(
+                TurnUsage.agent,
+                TurnUsage.status,
+                TurnUsage.allowance,
+                TurnUsage.observed_at,
+                TurnUsage.run_id,
+            ).where(literal_column("turn_usage.rowid").in_(newest))
+        )
+    ).all()
+    held: Dict[str, ProviderHold] = {}
+    for row in rows:
+        if _is_informative(row):
+            hold = hold_for_reading(row.allowance, row.observed_at, row.run_id)
+            if hold is not None and current >= hold.hold_until:
+                hold = None
+        else:
+            hold = await provider_hold(db, project_id, row.agent, now=current)
+        if hold is not None:
+            held[row.agent] = hold
     return held
 
 

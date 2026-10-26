@@ -1,0 +1,360 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a scratch Hub on a trial-database copy, with a loop-lag probe sampling every 10ms",
+      "key": "ac-turn-claude",
+      "requirement": "turn-start-no-stall",
+      "then": "the probe records no stall over 100ms from the trigger until the runner process is spawned",
+      "when": "a real Claude (Haiku) turn is started on a task that has no checkout yet"
+    },
+    {
+      "given": "the same Hub and probe",
+      "key": "ac-turn-copilot",
+      "requirement": "turn-start-no-stall",
+      "then": "the probe records no stall over 100ms until the runner process is spawned",
+      "when": "a real Copilot turn is started on a task that has no checkout yet"
+    },
+    {
+      "given": "the same Hub and probe, with the Codex runner bound to an agent (spawn stubbed until a Codex account exists)",
+      "key": "ac-turn-codex",
+      "requirement": "turn-start-no-stall",
+      "then": "the probe records no stall over 100ms up to the point of spawning the runner",
+      "when": "a Codex turn is started on a task that has no checkout yet"
+    },
+    {
+      "given": "a completed task with accepted evidence and a checkout on its own branch",
+      "key": "ac-approve",
+      "requirement": "approval-no-stall",
+      "then": "the checkout is released and the work merged, and the probe records no stall over 100ms",
+      "when": "the task is approved while the probe samples"
+    },
+    {
+      "given": "a run on a task in a git checkout, with the probe sampling",
+      "key": "ac-evidence",
+      "requirement": "evidence-no-stall",
+      "then": "the probe records no stall over 100ms in any of them",
+      "when": "the run records evidence, the run ends, a review is staffed, the mender is briefed and drift detection is requested"
+    },
+    {
+      "given": "a recorded 90-lines-a-minute stream replayed through the Hub's recording path for each runner kind",
+      "key": "ac-line-cost",
+      "requirement": "line-cost",
+      "then": "the average per line is no more than 1.5ms",
+      "when": "the loop thread's CPU time is measured over the replay"
+    },
+    {
+      "given": "an open event stream on the run's project",
+      "key": "ac-line-visible",
+      "requirement": "line-visible-and-durable",
+      "then": "the stream delivers it within 250ms",
+      "when": "the runner emits one output line"
+    },
+    {
+      "given": "a run that emits 200 lines in under a second and then exits",
+      "key": "ac-line-durable",
+      "requirement": "line-visible-and-durable",
+      "then": "all 200 lines are in the database, in order",
+      "when": "the run is reported finished"
+    },
+    {
+      "given": "eight runs streaming at once, each holding a blocking read",
+      "key": "ac-starved",
+      "requirement": "blocking-work-not-starved",
+      "then": "it begins within 100ms",
+      "when": "a turn start's git work is sent off the loop"
+    },
+    {
+      "given": "this repository's spec/ tree and a warm Hub",
+      "key": "ac-specs",
+      "requirement": "spec-list-cost",
+      "then": "each median is under 100ms and the probe records no stall over 100ms",
+      "when": "GET /project/specs and GET /project/documents are each requested five times with no file changed"
+    },
+    {
+      "given": "a warm Hub",
+      "key": "ac-specs-fresh",
+      "requirement": "spec-list-cost",
+      "then": "the answer reflects the change",
+      "when": "one spec document's file is changed on disk and GET /project/specs is requested"
+    },
+    {
+      "given": "the existing hub tests for turn workspaces, approval, integration, evidence footprints, review staffing and stalls",
+      "key": "ac-same",
+      "requirement": "same-outcomes",
+      "then": "it passes with no test changed except to add stall or cost assertions",
+      "when": "the full hub suite runs"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "6a17330237307a0bb58cf1a494873706793f76f4d0734633d11c00e415d1106d",
+      "FR-2": "bf866851e90da7d32ecf52cd55ff8eb44588bd904c314674aacde439606437dd",
+      "FR-3": "b78caa83e0eeba438635dfe74992f16f566c6a328ad2a11a02976768e87e821b",
+      "FR-4": "c2cc8ad18f9053a2015c409140e5de7b2033d70010f0853ea003798ec57f31e5",
+      "FR-5": "b0ec13aa410803bad125dc57d5fea9de351a038bcbb4f198425d3a6939728874",
+      "FR-6": "0c35011a4bcb0a572156e37f23848d7575854d277a9ce48b9debcc52fba668f1",
+      "FR-7": "8e9ad75af92779ecb788f070e40dd98dca7619262f8d48468d2076246790bb16",
+      "FR-8": "b3e64a2b9faed8c498cd2dee8445b7b33e5dbc82527c25da81d14318de9ed41c"
+    },
+    "high_water": 8,
+    "requirements": {
+      "approval-no-stall": "FR-2",
+      "blocking-work-not-starved": "FR-6",
+      "evidence-no-stall": "FR-3",
+      "line-cost": "FR-4",
+      "line-visible-and-durable": "FR-5",
+      "same-outcomes": "FR-8",
+      "spec-list-cost": "FR-7",
+      "turn-start-no-stall": "FR-1"
+    },
+    "retired": {}
+  },
+  "design": "- D1 — The loop only awaits. Git, filesystem scans and process spawns that serve a request, a turn start, an approval or a background job run off the event loop. Their results are applied to the database on the loop. Why: a 4s freeze stops every agent and every screen, not only the caller.\n- D2 — Blocking work does not compete with streaming runs for threads. Git and file work waiting for a thread are never queued behind the blocking reads of live runs. Why: each live Claude run holds a pooled thread for its whole turn, and a weak VDI has fewer.\n- D3 — Streamed output lines are recorded in batches. A burst of lines is persisted together rather than with one session and commit per line. A line is still on screen as soon as the Hub receives it, and still persisted before the run is reported finished. Why: about 5ms per line on every runner, plus the per-line trace span rewrite.\n- D4 — Unchanged facts are not recomputed per request.\n  - Which runner binaries exist is cached for the process and re-checked when runners change.\n  - Whether a root is a git repository is cached per root.\n  - A parsed spec document is reused until its file changes.\n- D5 — Outcomes are unchanged. Every turn, approval, merge, evidence footprint, review staffing and mender brief produces the same records as before. Only where the work runs changes.\n- Runner-agnostic (roadmap): the drive starts real turns on Claude and Copilot, and replays a recorded Codex stream until a Codex account exists.\n- Hazard: turn start and approval are the paths that create and release worktrees and merge to the main branch. A race introduced here corrupts a checkout or a merge. Tier 2 by CLAUDE.md (cross-cutting contract); the acceptance drive is written and failing before the build.",
+  "evidence": {
+    "checked": [
+      "7,149 git spans in the operator's traces, grouped by the request or job that caused them (C-loop-blockers.md)",
+      "Transitive call graph: 187 call sites in 98 async functions reach a blocking call with no thread hop (lower bound: instance calls are not resolved)",
+      "Loop-lag sampler and loop-thread CPU on a database copy: evidence record 332ms, run-end restamp 345ms, per-line recording about 5ms",
+      "Streaming paths read: Claude via a pty thread (agent_trigger.py:3509), Copilot and Codex via asyncio streams; all record through output_recording",
+      "GET /project/specs profiled: 454ms, with 504 path resolutions, 850 stats and 162 parses per request (B-route-costs.md)"
+    ],
+    "limits": [
+      "Codex turns cannot be driven live until the operator's Codex account exists",
+      "Copilot path cost per line is inferred from the shared recording function, not measured separately",
+      "Thread-pool size on the work VDI is unknown (it depends on its CPU count)"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": "large",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 2 (cross-cutting: worktree creation, release and merge). The acceptance drive is written and failing before the build. The full hub suite is the same-outcomes guard. Merging to master stays the operator's call.",
+  "open_questions": [
+    {
+      "question": "Who builds and reviews this slice, and should it run alongside slice 1? Proposed: a flow, with DeveloperOpus building turn-start, approval, executor and line-batching (race-sensitive paths), Developer building evidence-review-mender and spec-list, and a second reviewer (QA2) if it runs at the same time as slice 1.",
+      "resolved": false
+    }
+  ],
+  "problem": "The Hub serves every request and background job on one event loop. Work that blocks that loop stops everything: every dashboard read, every agent's tool call and every stream. The figures come from the operator's traces (7,149 git spans, 2026-10-21 to 10-25), a call-graph scan and a loop-lag sampler on a copy of the database (`C:\\Users\\huida\\aw-perf\\C-loop-blockers.md`).\n\nBlocking git and file work found on the loop:\n\n| Path | Where | Fires | Freeze per occurrence | Total over 90 h |\n|---|---|---|---|---|\n| Turn start: workspace resolution and creation, plus about 4 rev-parse checks | `hub/hub/api/v1/agent_trigger.py:1290,1497,1522-1524,1533,1551,1570` | Every turn | 1.02s average, p95 4.2s, max 20.8s | 238s |\n| Approval releases the task checkout | `hub/hub/task_transition_service.py:1032` | Every approval | 4.2s average, p95 10.3s | 79s |\n| Approval merges the work | `task_transition_service.py:1241,1283,1299` | Every approval | 686ms average, max 2.1s | 23s |\n| Recording evidence (7 git calls) | `hub/hub/requirement_evidence.py:215,436,720` | Each record | 332ms | 58s |\n| Re-stamping footprints at run end | `agent_trigger.py:2664`, `requirement_evidence.py:1637-1673` | Each run end | 345ms | — |\n| Review staffing | `hub/hub/review_turn.py:582,619-638` | Each review | 665ms, max 2.9s | 21s |\n| Mender brief runs `git status` | `hub/hub/stalls.py:600` | Each mender wake | up to 2.9s | — |\n| Drift detection | `hub/hub/api/v1/spec.py:1965-1976` | Each run | 426ms | — |\n| Spec list re-reads and re-parses every document file | `hub/hub/spec_documents.py:703`, called from `api/v1/spec.py:129` | Every `GET /project/specs` | 454ms (504 path resolutions, 850 stats, 162 parses) | — |\n| `shutil.which` and `is_git_repo` | launchability, queue-status, worktree and workspace routes | Per request | 3-30ms | — |\n\nPer-line cost and thread capacity:\n- Each streamed output line costs about 5ms of loop time on every runner. That covers its own session and commit (`agent_trigger.py:3383`, `:2824`, `hub/hub/output_recording.py:135`) and a whole reload and rewrite of the run's chat trace span (`hub/hub/traces.py:266-307`).\n- Each live Claude run holds a thread of the default executor in a blocking read (`agent_trigger.py:3509`). That is the same pool `asyncio.to_thread` uses: 24 threads on this machine, and fewer on a smaller VDI. Moving git onto it naively would make git wait behind streaming runs.",
+  "requirements": [
+    {
+      "key": "turn-start-no-stall",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured today: 1.02s average, up to 20.8s per turn start, during which every request waits.",
+      "statement": "While a turn starts on any runner, including creating its task checkout, the Hub's event loop never stalls for more than 100ms at a time."
+    },
+    {
+      "key": "approval-no-stall",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured today: releasing a checkout averages 4.2s and a merge can take up to 2.1s, both on the loop.",
+      "statement": "While a task is approved, including releasing its checkout and merging its work, the Hub's event loop never stalls for more than 100ms at a time."
+    },
+    {
+      "key": "evidence-no-stall",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Each path runs git on the loop today: 332ms, 345ms, 665ms (max 2.9s), up to 2.9s and 426ms respectively.",
+      "statement": "Recording evidence, re-stamping footprints when a run ends, staffing a review, briefing the mender and detecting drift each leave no event-loop stall longer than 100ms."
+    },
+    {
+      "key": "line-cost",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured today: about 5ms per line, from a session and commit per line plus a full rewrite of the run's chat span.",
+      "statement": "While a run streams 90 output lines a minute on any runner, the Hub spends on average no more than 1.5ms of event-loop time per line recording it."
+    },
+    {
+      "key": "line-visible-and-durable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Batching must not delay what the operator sees, and must not lose lines when a run ends or the Hub stops.",
+      "statement": "A streamed output line reaches open dashboards within 250ms of the Hub receiving it. Every line a run produced is persisted before the run is reported finished."
+    },
+    {
+      "key": "blocking-work-not-starved",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Each live Claude run holds a thread in a blocking read, so blocking work moved off the loop must not queue behind them, least of all on a smaller VDI.",
+      "statement": "With eight runs streaming at once, git or file work the Hub sends off the event loop starts within 100ms of being requested."
+    },
+    {
+      "key": "spec-list-cost",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured today: 454ms and 173ms, re-reading and re-parsing every document file on the loop for each request.",
+      "statement": "GET /project/specs and GET /project/documents answer in under 100ms on this repository when no spec file changed since the previous request, without stalling the event loop for more than 100ms."
+    },
+    {
+      "key": "same-outcomes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This slice moves where work runs, not what it does. A worktree or merge that differs is a correctness defect, not a speed-up.",
+      "statement": "For the same inputs, turn starts, approvals, merges, evidence footprints, review staffing and mender briefs produce the same database records and git state as before this change."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/agentweave-performance-overhaul/spec.json",
+    "slice": "turns-and-approvals-never-freeze"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Git, filesystem and process work reached from async code on the turn-start, approval, merge, evidence, run-end, review-staffing, mender-brief, drift and spec-listing paths",
+      "How streamed output lines are persisted, on every runner",
+      "Thread capacity for blocking work alongside streaming runs",
+      "Per-request caching of runner binary lookups, git-repository checks and parsed spec documents"
+    ],
+    "non_goals": [
+      "Making git itself faster (worktree add still takes about 4s; it just stops freezing the Hub)",
+      "The routes that already run their git in a thread (worktrees/conflicts, the evidence diff): they are slow but do not block",
+      "Dashboard request volume (slice responsive-while-agents-run)",
+      "Journal mode and retention (slice database-stays-fast-as-history-grows)",
+      "Changing what any turn, approval, merge or evidence record contains"
+    ]
+  },
+  "summary": "Starting a turn, approving a task, recording evidence, staffing a review, briefing the mender and streaming output lines stop freezing every other request while git, the filesystem or the database works. This must hold on every runner path (Claude, Copilot, Codex). On the operator's Hub these freezes total about 400s over 90 hours, up to 20.8s each.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Write scripts/drive/perf_loop_lag.py: a loop-lag probe (10ms sampler) inside a scratch Hub on a trial-database copy, plus the turn-start (Claude, Copilot, Codex spawn stubbed), approval, evidence, run-end, review, mender, drift, spec-list, per-line cost, line-durability and starvation scenarios. Run it on master and record baseline stalls in the task notes. It must never contact :8000, and must refuse to start a Hub with the lifespan on against a copy whose jobs, loops and queued input are not disabled.",
+      "files": [
+        "scripts/drive/perf_loop_lag.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "turn-start-no-stall",
+        "approval-no-stall",
+        "evidence-no-stall",
+        "line-cost",
+        "line-visible-and-durable",
+        "blocking-work-not-starved",
+        "spec-list-cost",
+        "same-outcomes"
+      ],
+      "reviewer": null,
+      "title": "Loop-lag acceptance drive, written and failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Give the Hub's off-loop blocking work (git, filesystem scans, process spawns) a place to run that live runs' blocking reads cannot exhaust, and route traces.run's callers through it. Add a hub test, failing before the change, with eight blocking readers held, asserting that offloaded work starts within 100ms.",
+      "files": [
+        "hub/hub/traces.py",
+        "hub/hub/blocking.py",
+        "hub/hub/api/v1/agent_trigger.py"
+      ],
+      "from": null,
+      "key": "executor",
+      "requirements": [
+        "blocking-work-not-starved"
+      ],
+      "reviewer": null,
+      "title": "Blocking work gets threads that streaming runs cannot exhaust"
+    },
+    {
+      "depends_on": [
+        "executor"
+      ],
+      "description": "Move the pre-spawn workspace checks and creation in agent_trigger off the event loop in one hop, returning plain values and applying records on the loop. Add a hub test with a lag probe, failing before the change.",
+      "files": [
+        "hub/hub/api/v1/agent_trigger.py",
+        "hub/hub/worktrees.py"
+      ],
+      "from": null,
+      "key": "turn-start",
+      "requirements": [
+        "turn-start-no-stall",
+        "same-outcomes"
+      ],
+      "reviewer": null,
+      "title": "Turn start runs its git off the loop"
+    },
+    {
+      "depends_on": [
+        "executor"
+      ],
+      "description": "Move checkout release and the integration merge sequence in task_transition_service off the event loop, keeping the transition, its records and its failure handling exactly as they are. Add a hub test with a lag probe, failing before the change.",
+      "files": [
+        "hub/hub/task_transition_service.py",
+        "hub/hub/task_integration.py"
+      ],
+      "from": null,
+      "key": "approval",
+      "requirements": [
+        "approval-no-stall",
+        "same-outcomes"
+      ],
+      "reviewer": null,
+      "title": "Approval releases and merges off the loop"
+    },
+    {
+      "depends_on": [
+        "executor"
+      ],
+      "description": "Move git in requirement_evidence (capture, restamp, reachability, backfill, drift), review_turn staffing and the stalls brief off the event loop. Cache shutil.which and is_git_repo results. Add hub tests with a lag probe, failing before the change.",
+      "files": [
+        "hub/hub/requirement_evidence.py",
+        "hub/hub/review_turn.py",
+        "hub/hub/stalls.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/hub/api/v1/inbound_queue.py"
+      ],
+      "from": null,
+      "key": "evidence-review-mender",
+      "requirements": [
+        "evidence-no-stall",
+        "same-outcomes"
+      ],
+      "reviewer": null,
+      "title": "Evidence, run-end, review, mender and drift git off the loop"
+    },
+    {
+      "depends_on": [
+        "turn-start"
+      ],
+      "description": "Persist streamed output lines and their trace span updates in batches rather than one session and commit per line, on the Claude, Copilot and Codex paths. Keep broadcast immediate and flush before a run is reported finished. Add hub tests for per-line loop cost, visibility within 250ms and 200-line durability at run end, failing before the change.",
+      "files": [
+        "hub/hub/api/v1/agent_trigger.py",
+        "hub/hub/output_recording.py",
+        "hub/hub/traces.py",
+        "hub/hub/codex_appserver.py",
+        "hub/hub/copilot_acp.py"
+      ],
+      "from": null,
+      "key": "line-batching",
+      "requirements": [
+        "line-cost",
+        "line-visible-and-durable"
+      ],
+      "reviewer": null,
+      "title": "Streamed lines are recorded in batches on every runner"
+    },
+    {
+      "depends_on": [
+        "evidence-review-mender"
+      ],
+      "description": "Make the spec and document listings reuse parsed documents until their files change, resolve the spec root once per request, and run any remaining scan off the loop. Add hub tests for the warm median and for freshness after a file change, failing before the change.",
+      "files": [
+        "hub/hub/spec_documents.py",
+        "hub/hub/api/v1/spec.py"
+      ],
+      "from": null,
+      "key": "spec-list",
+      "requirements": [
+        "spec-list-cost"
+      ],
+      "reviewer": null,
+      "title": "Spec lists reuse parsed documents"
+    }
+  ],
+  "title": "Turn starts, approvals and evidence never freeze the Hub"
+}

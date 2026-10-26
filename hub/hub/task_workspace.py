@@ -22,7 +22,7 @@ from typing import List, NamedTuple, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import dependency_gate, task_integration, worktrees
+from . import blocking, dependency_gate, task_integration, worktrees
 from .db.models import Project, Task, TaskDependency
 
 logger = logging.getLogger(__name__)
@@ -186,7 +186,7 @@ async def integration_base(session: AsyncSession, project_id: str, repo_root: Pa
     """
     project = await session.get(Project, project_id)
     main_branch = project.main_branch if project is not None else None
-    if main_branch and task_integration.branch_exists(repo_root, main_branch):
+    if main_branch and await blocking.run(task_integration.branch_exists, repo_root, main_branch):
         return main_branch
     return "HEAD"
 

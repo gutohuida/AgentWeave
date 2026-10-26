@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import functools
 import hashlib
 import inspect
@@ -150,6 +151,16 @@ class _Cursor:
     boundary: datetime
     segment: int = 0
     chat_open: bool = False
+    #: The chat span already in the store (or this session), so a line appends to it without
+    #: reading it back (D3 of `turn-starts-approvals-and-evidence-never-freeze-the-hub`).
+    chat_stored: Optional[str] = None
+    #: The root's model and provider, which every chat span of the run is labelled with: read once
+    #: rather than loading the root (tens of kilobytes of attributes) for every model call.
+    chat_labels: Optional[Tuple[Optional[str], Optional[str]]] = None
+    #: Started by `start_run` in this process, so every span of the run is one this cursor made:
+    #: a span id it has not made does not exist yet, and need not be looked for before it is made.
+    fresh: bool = False
+    spans_made: set = field(default_factory=set)
 
 
 _cursors: Dict[str, _Cursor] = {}
@@ -200,7 +211,29 @@ def start_run(
             events=[],
         )
     )
-    _cursors[run.id] = _Cursor(trace_started_at=started, boundary=started)
+    _cursors[run.id] = _Cursor(trace_started_at=started, boundary=started, fresh=True)
+
+
+def cursor_snapshot(run_ids: Iterable[str]) -> Dict[str, Optional[_Cursor]]:
+    """Copies of *run_ids*' cursors, for a batch write to restore if its transaction rolls back
+    (`output_recording.flush_streamed`): the cursor moves as each line is traced, and a line traced
+    again after a rollback must start from where it did the first time."""
+    return {
+        run_id: (
+            dataclasses.replace(_cursors[run_id], spans_made=set(_cursors[run_id].spans_made))
+            if run_id in _cursors
+            else None
+        )
+        for run_id in run_ids
+    }
+
+
+def cursor_restore(snapshot: Dict[str, Optional[_Cursor]]) -> None:
+    for run_id, cursor in snapshot.items():
+        if cursor is None:
+            _cursors.pop(run_id, None)
+        else:
+            _cursors[run_id] = dataclasses.replace(cursor, spans_made=set(cursor.spans_made))
 
 
 async def _cursor(db: AsyncSession, run_id: str) -> Optional[_Cursor]:
@@ -269,11 +302,15 @@ async def _chat_span(
     if not cursor.chat_open:
         cursor.chat_open = True
     span_id = chat_span_id(run_id, cursor.segment)
-    span = await db.get(TraceSpan, span_id)
+    span = await _existing(db, cursor, span_id)
     if span is None:
-        root = await db.get(TraceSpan, root_span_id(run_id))
-        model = (root.attributes or {}).get("gen_ai.request.model") if root else None
-        provider = (root.attributes or {}).get("gen_ai.provider.name") if root else None
+        if cursor.chat_labels is None:
+            root = await db.get(TraceSpan, root_span_id(run_id))
+            cursor.chat_labels = (
+                (root.attributes or {}).get("gen_ai.request.model") if root else None,
+                (root.attributes or {}).get("gen_ai.provider.name") if root else None,
+            )
+        model, provider = cursor.chat_labels
         span = _child(
             span_id=span_id,
             run_id=run_id,
@@ -291,7 +328,168 @@ async def _chat_span(
             },
         )
         db.add(span)
+        cursor.spans_made.add(span_id)
     return span
+
+
+def _tool_result_attributes(data: Dict[str, Any]) -> Dict[str, Any]:
+    added: Dict[str, Any] = {"gen_ai.tool.call.result": data.get("output")}
+    if data.get("truncated"):
+        added["aw.tool.result_truncated"] = True
+    if data.get("status"):
+        added["aw.tool.status"] = data.get("status")
+    return added
+
+
+def _tool_failed(data: Dict[str, Any]) -> bool:
+    return bool(data.get("is_error") or data.get("status") == "interrupted")
+
+
+def _held(db: AsyncSession, span_id: str) -> Optional[TraceSpan]:
+    return db.sync_session.identity_map.get(db.sync_session.identity_key(TraceSpan, span_id))
+
+
+async def _end_tool_span(
+    db: AsyncSession,
+    cursor: _Cursor,
+    span_id: str,
+    data: Dict[str, Any],
+    content: str,
+    at: datetime,
+) -> bool:
+    """Set a tool call's result on its stored span in one statement (`json_set`); False where the
+    span is not known to be stored, or this session holds it, or the statement found no row."""
+    if not cursor.fresh or span_id not in cursor.spans_made or _held(db, span_id) is not None:
+        return False
+    arguments: List[Any] = []
+    for key, value in _tool_result_attributes(data).items():
+        arguments += [f'$."{key}"', func.json(json.dumps(value, default=str, ensure_ascii=False))]
+    failed = _tool_failed(data)
+    values: Dict[str, Any] = {
+        "attributes": func.json_set(TraceSpan.attributes, *arguments),
+        "end_time": at,
+        "ended": True,
+        "status": "error" if failed else "ok",
+    }
+    if failed:
+        values["status_message"] = content
+    result = await db.execute(
+        update(TraceSpan)
+        .where(TraceSpan.span_id == span_id)
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    return bool(result.rowcount)
+
+
+async def _existing(db: AsyncSession, cursor: _Cursor, span_id: str) -> Optional[TraceSpan]:
+    """The span, or None -- without a read where the run's own fresh cursor never made it."""
+    if cursor.fresh and span_id not in cursor.spans_made:
+        return None
+    return await db.get(TraceSpan, span_id)
+
+
+#: Where a chat span's parts are, as a JSON path into its attributes.
+_PARTS_PATH = '$."gen_ai.output.messages"[#-1].parts[#]'
+
+
+async def _append_to_chat(
+    db: AsyncSession,
+    project_id: str,
+    run_id: str,
+    cursor: _Cursor,
+    part: Dict[str, Any],
+    at: datetime,
+) -> None:
+    """Append *part* to the run's open chat span, in the database (SQLite's `json_insert`).
+
+    The span's attributes hold every part of the model call so far -- tens of kilobytes on a long
+    turn -- and reading them back and rewriting them whole for every streamed line was most of a
+    line's cost on the loop. The span is read once per model call, to create it if it is absent;
+    after that each part is one statement that appends in the store. Where that statement finds no
+    row (a transaction that created it rolled back), it falls back to the read-and-rewrite."""
+    span_id = chat_span_id(run_id, cursor.segment)
+    deferred = db.sync_session.info.get(_DEFERRED_PARTS)
+    if cursor.chat_stored == span_id and deferred is not None:
+        # A batch of streamed lines: the parts are appended in one statement per span when the
+        # batch is written (`write_deferred_parts`), not one statement per line.
+        entry = deferred.setdefault(span_id, ([], [at]))
+        entry[0].append(part)
+        entry[1][0] = at
+        return
+    if cursor.chat_stored == span_id:
+        result = await db.execute(
+            update(TraceSpan)
+            .where(TraceSpan.span_id == span_id)
+            .values(
+                attributes=func.json_insert(
+                    TraceSpan.attributes,
+                    _PARTS_PATH,
+                    func.json(json.dumps(part, default=str, ensure_ascii=False)),
+                ),
+                end_time=at,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount:
+            held = db.sync_session.identity_map.get(
+                db.sync_session.identity_key(TraceSpan, span_id)
+            )
+            if held is not None:
+                # Keeps a copy this session holds in step, without marking it changed.
+                attributes = dict(held.attributes or {})
+                messages = list(attributes.get("gen_ai.output.messages") or [])
+                if messages:
+                    last = dict(messages[-1])
+                    last["parts"] = [*last.get("parts", []), part]
+                    messages[-1] = last
+                    attributes["gen_ai.output.messages"] = messages
+                set_committed_value(held, "attributes", attributes)
+                set_committed_value(held, "end_time", at)
+            return
+    span = await _chat_span(db, project_id, run_id, cursor, at)
+    _append_part(span, part, at)
+    cursor.chat_stored = span_id
+
+
+_DEFERRED_PARTS = "aw_deferred_chat_parts"
+#: Parts per statement: two arguments each, under SQLite's default limit of 127 per function.
+_PARTS_PER_STATEMENT = 50
+
+
+def defer_chat_parts(db: AsyncSession) -> None:
+    """Collect the chat-span parts traced in *db* until `write_deferred_parts` (a batch)."""
+    db.sync_session.info[_DEFERRED_PARTS] = {}
+
+
+async def write_deferred_parts(db: AsyncSession, span_id: Optional[str] = None) -> None:
+    """Append every collected part (or *span_id*'s) to its span: one statement per span."""
+    deferred = db.sync_session.info.get(_DEFERRED_PARTS)
+    if not deferred:
+        return
+    for key in [span_id] if span_id is not None else list(deferred):
+        entry = deferred.pop(key, None)
+        if entry is None:
+            continue
+        parts, (at,) = entry
+        for start in range(0, len(parts), _PARTS_PER_STATEMENT):
+            arguments: List[Any] = []
+            for part in parts[start : start + _PARTS_PER_STATEMENT]:
+                arguments += [
+                    _PARTS_PATH,
+                    func.json(json.dumps(part, default=str, ensure_ascii=False)),
+                ]
+            result = await db.execute(
+                update(TraceSpan)
+                .where(TraceSpan.span_id == key)
+                .values(attributes=func.json_insert(TraceSpan.attributes, *arguments), end_time=at)
+                .execution_options(synchronize_session=False)
+            )
+            if not result.rowcount:
+                logger.warning(
+                    "chat span %s was not found; %d trace parts not kept", key, len(parts)
+                )
+                break
 
 
 def _append_part(span: TraceSpan, part: Dict[str, Any], at: datetime) -> None:
@@ -362,20 +560,26 @@ async def observe_output(
         return
     data = payload if isinstance(payload, dict) else {}
     if kind in ("text", "thinking"):
-        span = await _chat_span(db, project_id, run_id, cursor, at)
+        cursor.chat_open = True
         part_type = "text" if kind == "text" else "reasoning"
-        _append_part(span, {"type": part_type, "content": content}, at)
+        await _append_to_chat(
+            db, project_id, run_id, cursor, {"type": part_type, "content": content}, at
+        )
     elif kind == "tool_use":
         call_id = data.get("call_id") or f"seq-{at.timestamp()}"
         tool = data.get("tool") or "tool"
-        span = await _chat_span(db, project_id, run_id, cursor, at)
-        _append_part(
-            span,
+        cursor.chat_open = True
+        await _append_to_chat(
+            db,
+            project_id,
+            run_id,
+            cursor,
             {"type": "tool_call", "id": call_id, "name": tool, "arguments": data.get("input")},
             at,
         )
-        tool_span = await db.get(TraceSpan, tool_span_id(run_id, call_id))
+        tool_span = await _existing(db, cursor, tool_span_id(run_id, call_id))
         if tool_span is None:
+            cursor.spans_made.add(tool_span_id(run_id, call_id))
             db.add(
                 _child(
                     span_id=tool_span_id(run_id, call_id),
@@ -401,8 +605,12 @@ async def observe_output(
         call_id = data.get("call_id")
         if call_id:
             span_id = tool_span_id(run_id, call_id)
-            tool_span = await db.get(TraceSpan, span_id)
-            if tool_span is None:
+            # A call this run's cursor made in an earlier batch: its result is set in one statement
+            # rather than a read of the span first (D3); a span this session holds is set on it.
+            ended_in_store = await _end_tool_span(db, cursor, span_id, data, content, at)
+            tool_span = None if ended_in_store else await _existing(db, cursor, span_id)
+            if tool_span is None and not ended_in_store:
+                cursor.spans_made.add(span_id)
                 tool = data.get("tool") or "tool"
                 tool_span = _child(
                     span_id=span_id,
@@ -420,28 +628,42 @@ async def observe_output(
                     },
                 )
                 db.add(tool_span)
-            attributes = dict(tool_span.attributes or {})
-            attributes["gen_ai.tool.call.result"] = data.get("output")
-            if data.get("truncated"):
-                attributes["aw.tool.result_truncated"] = True
-            if data.get("status"):
-                attributes["aw.tool.status"] = data.get("status")
-            tool_span.attributes = attributes
-            tool_span.end_time = at
-            tool_span.ended = True
-            if data.get("is_error") or data.get("status") == "interrupted":
-                tool_span.status = "error"
-                tool_span.status_message = content
-            else:
-                tool_span.status = "ok"
+            if tool_span is not None:
+                attributes = dict(tool_span.attributes or {})
+                attributes.update(_tool_result_attributes(data))
+                tool_span.attributes = attributes
+                tool_span.end_time = at
+                tool_span.ended = True
+                if _tool_failed(data):
+                    tool_span.status = "error"
+                    tool_span.status_message = content
+                else:
+                    tool_span.status = "ok"
         # A tool's result goes back to the model, so the model call that asked for it is over and
         # the next one starts here.
-        chat = await db.get(TraceSpan, chat_span_id(run_id, cursor.segment))
-        if chat is not None and cursor.chat_open:
-            chat.ended = True
-            chat.end_time = chat.end_time or at
-            chat.status = "ok"
-            cursor.segment += 1
+        if cursor.chat_open:
+            # Its parts first, so the call's end follows them, as when each was written at once.
+            await write_deferred_parts(db, chat_span_id(run_id, cursor.segment))
+            # One statement, not a read of the span's whole attributes to set three columns.
+            ended = await db.execute(
+                update(TraceSpan)
+                .where(TraceSpan.span_id == chat_span_id(run_id, cursor.segment))
+                .values(
+                    ended=True,
+                    end_time=func.coalesce(TraceSpan.end_time, at),
+                    status="ok",
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if ended.rowcount:
+                held = db.sync_session.identity_map.get(
+                    db.sync_session.identity_key(TraceSpan, chat_span_id(run_id, cursor.segment))
+                )
+                if held is not None:
+                    set_committed_value(held, "ended", True)
+                    set_committed_value(held, "end_time", held.end_time or at)
+                    set_committed_value(held, "status", "ok")
+                cursor.segment += 1
         cursor.chat_open = False
         cursor.boundary = at
     elif kind == "status":
@@ -1546,6 +1768,14 @@ async def flush_spans() -> int:
     raised."""
     if not _queue:
         return 0
+    # A command span nests under the run's tool call by that call's row, which is written with the
+    # stream's line (`output_recording.stream_agent_output`, batched): write the lines first.
+    from .output_recording import flush_streamed
+
+    try:
+        await flush_streamed()
+    except Exception:  # noqa: BLE001 -- the spans are written either way
+        logger.warning("writing streamed output before the spans failed", exc_info=True)
     batch = list(_queue)
     _queue.clear()
     try:

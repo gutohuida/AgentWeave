@@ -21,13 +21,13 @@ import asyncio
 import logging
 import subprocess
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from . import traces
+from . import blocking, flow_advance, traces
 from .db.models import RequirementEvidence, Run, Task, TaskTransition
 from .task_transitions import (
     STATUS_BLOCKED,
@@ -194,21 +194,33 @@ async def completion_attribution(session: AsyncSession, task_id: str) -> Complet
     field which the approving write overwrites, and it being unable to answer this question is the
     whole reason this table exists.
     """
-    result = await session.execute(
-        select(TaskTransition.actor_kind, TaskTransition.actor_agent)
-        .where(TaskTransition.task_id == task_id)
-        .where(TaskTransition.to_status == "completed")
-        # By `sequence`, not `created_at`: transitions staged in one flush share a timestamp, and
-        # "most recent completion" must mean the last one that happened, not an arbitrary pick
-        # among ties. This matters after a revision cycle, where an earlier completion by another
-        # run is exactly what must not be chosen.
-        .order_by(TaskTransition.sequence.desc())
-        .limit(1)
-    )
-    row = result.first()
-    if row is None:
-        return CompletionAttribution(recorded=False, actor_kind=None, agent=None)
-    return CompletionAttribution(recorded=True, actor_kind=row[0], agent=row[1])
+    return (await completion_attributions(session, [task_id]))[task_id]
+
+
+async def completion_attributions(
+    session: AsyncSession, task_ids: Iterable[str]
+) -> "dict[str, CompletionAttribution]":
+    """`completion_attribution` for several tasks in one statement, keyed by every id asked."""
+    ids = sorted(set(task_ids))
+    found: "dict[str, CompletionAttribution]" = {}
+    if ids:
+        result = await session.execute(
+            select(TaskTransition.task_id, TaskTransition.actor_kind, TaskTransition.actor_agent)
+            .where(TaskTransition.task_id.in_(ids))
+            .where(TaskTransition.to_status == "completed")
+            # By `sequence`, not `created_at`: transitions staged in one flush share a timestamp,
+            # and "most recent completion" must mean the last one that happened, not an arbitrary
+            # pick among ties. This matters after a revision cycle, where an earlier completion by
+            # another run is exactly what must not be chosen.
+            .order_by(TaskTransition.task_id, TaskTransition.sequence.desc())
+        )
+        for task_id, actor_kind, actor_agent in result.all():
+            found.setdefault(
+                task_id,
+                CompletionAttribution(recorded=True, actor_kind=actor_kind, agent=actor_agent),
+            )
+    nothing = CompletionAttribution(recorded=False, actor_kind=None, agent=None)
+    return {task_id: found.get(task_id, nothing) for task_id in ids}
 
 
 async def agent_that_completed(session: AsyncSession, task_id: str) -> Optional[str]:
@@ -321,17 +333,37 @@ async def agents_that_recorded_evidence_for(session: AsyncSession, task_id: str)
     manufacture. That is why this is a function and not an expression inlined in the union: do not
     fold it back in.
     """
-    rows = await session.execute(
-        select(RequirementEvidence.actor)
-        .where(RequirementEvidence.task_id == task_id)
-        .where(RequirementEvidence.actor_kind == "agent")
-        .where(RequirementEvidence.actor != "")
-        .distinct()
-    )
-    return {agent for agent in rows.scalars().all() if agent}
+    return (await evidence_authors_by_task(session, [task_id]))[task_id]
 
 
-async def assignee_produced_the_work(session: AsyncSession, task: Task) -> bool:
+async def evidence_authors_by_task(
+    session: AsyncSession, task_ids: Iterable[str]
+) -> "dict[str, set[str]]":
+    """`agents_that_recorded_evidence_for` for several tasks in one statement, keyed by every id
+    asked."""
+    ids = sorted(set(task_ids))
+    authors: "dict[str, set[str]]" = {task_id: set() for task_id in ids}
+    if ids:
+        rows = await session.execute(
+            select(RequirementEvidence.task_id, RequirementEvidence.actor)
+            .where(RequirementEvidence.task_id.in_(ids))
+            .where(RequirementEvidence.actor_kind == "agent")
+            .where(RequirementEvidence.actor != "")
+            .distinct()
+        )
+        for task_id, agent in rows.all():
+            if agent:
+                authors[task_id].add(agent)
+    return authors
+
+
+async def assignee_produced_the_work(
+    session: AsyncSession,
+    task: Task,
+    *,
+    completion: Optional[CompletionAttribution] = None,
+    authors: Optional[set[str]] = None,
+) -> bool:
     """*"Is the agent holding this task one of the agents that produced its work?"*
 
     The wedged-review predicate (F70, F142, F167, F505), stated once for its two readers
@@ -351,8 +383,13 @@ async def assignee_produced_the_work(session: AsyncSession, task: Task) -> bool:
     """
     if not task.assignee:
         return False
-    completer = (await completion_attribution(session, task.id)).agent
-    authors = await agents_that_recorded_evidence_for(session, task.id)
+    # *completion* and *authors* are `completion_attribution` and `agents_that_recorded_evidence_for`
+    # for this task, where the caller has already read them (the scheduler's `FiringFacts`).
+    if completion is None:
+        completion = await completion_attribution(session, task.id)
+    completer = completion.agent
+    if authors is None:
+        authors = await agents_that_recorded_evidence_for(session, task.id)
     if completer is not None:
         return completer == task.assignee or task.assignee in authors
     return task.assignee in (await agents_that_worked(session, task.id) | authors)
@@ -870,6 +907,11 @@ async def apply_transition(
     transition.reported_advisories = reported
     session.add(transition)
 
+    # A flow's work handed on: its firing is asked for once this commits, not at its next tick
+    # (`flow_advance`). Never for the job's own moves -- a firing does not re-fire itself.
+    if task.loop_id and to_status in flow_advance.HANDOFF_STATUSES and origin != ORIGIN_JOB:
+        flow_advance.advance_after_commit(session, task.loop_id)
+
     if origin != ORIGIN_RUNTIME:
         # A divergence is an open condition, not a verdict: work reaching the ledger closes it,
         # whoever brought it there. Resolved here, inside the one function every accepted
@@ -1029,7 +1071,10 @@ async def _release_task_workspace(session: AsyncSession, task: Task) -> None:
 
     try:
         workspace = await project_workspace.resolve_project_workspace(session, task.project_id)
-        result = worktrees.release_task_worktree(workspace.root, task.id)
+        # Off the loop, one at a time with every other worktree change (`blocking`, D1/D5).
+        result = await blocking.run_serialized(
+            worktrees.release_task_worktree, workspace.root, task.id
+        )
     except Exception as exc:  # noqa: BLE001 - any release failure is recorded, never a rollback
         logger.warning("Could not release task %s's checkout", task.id, exc_info=True)
         # `commit=False`: this runs inside `apply_transition`, whose caller commits. Committing
@@ -1117,15 +1162,21 @@ async def hub_written_documents(session: AsyncSession, workspace, project_id: st
         .scalars()
         .all()
     )
-    written = set()
-    for document in rows:
-        try:
-            content = spec_documents.read_document(workspace, document.path)
-        except Exception:  # noqa: BLE001 - an unreadable file is simply not exempt
-            continue
-        if content is not None and spec_lifecycle.digest(content) == document.content_digest:
-            written.add(document.path)
-    return written
+    recorded = [(document.path, document.content_digest) for document in rows]
+
+    def _still_written() -> set:
+        written = set()
+        for path, content_digest in recorded:
+            try:
+                content = spec_documents.read_document(workspace, path)
+            except Exception:  # noqa: BLE001 - an unreadable file is simply not exempt
+                continue
+            if content is not None and spec_lifecycle.digest(content) == content_digest:
+                written.add(path)
+        return written
+
+    # The files are read off the loop (`blocking`, D1); the rows were read on it, above.
+    return await blocking.run(_still_written)
 
 
 async def integrate_task(session: AsyncSession, task: Task, actor: Actor) -> list:
@@ -1238,7 +1289,7 @@ async def _integrate_task(
         )
 
     root = workspace.root
-    fault = task_integration.repository_fault(root)
+    fault = await blocking.run(task_integration.repository_fault, root)
     if fault is not None:
         if await task_integration.repository_proof(session, task, root):
             # F820: git failed for a project the Hub has worked in through git. A passing fault
@@ -1277,11 +1328,13 @@ async def _integrate_task(
         )
 
     if resolution is not None:
-        missing = [
-            target.commit_sha
-            for target in targets
-            if _is_ancestor(root, target.commit_sha, resolution) is not True
-        ]
+        missing = await blocking.run(
+            lambda: [
+                target.commit_sha
+                for target in targets
+                if _is_ancestor(root, target.commit_sha, resolution) is not True
+            ]
+        )
         if missing:
             raise ResolutionRefusedError(
                 f"{resolution[:12]} does not contain {', '.join(sha[:12] for sha in missing)}, "
@@ -1295,10 +1348,15 @@ async def _integrate_task(
         ]
 
     hub_written = await hub_written_documents(session, workspace, task.project_id)
-    results = [
-        task_integration.integrate(root, target, project.main_branch, hub_written=hub_written)
-        for target in targets
-    ]
+    # The merge into the main branch, off the loop and serialized with every other worktree change
+    # and merge, as it was while it ran on the loop (`blocking.run_serialized`, D5).
+    main_branch = project.main_branch
+    results = await blocking.run_serialized(
+        lambda: [
+            task_integration.integrate(root, target, main_branch, hub_written=hub_written)
+            for target in targets
+        ]
+    )
     newest = await task_integration.newest_per_target(session, task.id)
     for result in results:
         previous = newest.get((result.commit_sha, result.target_branch))

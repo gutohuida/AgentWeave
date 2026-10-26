@@ -208,7 +208,10 @@ async def test_close_ends_the_process_tree_through_terminate_process_tree(monkey
         "recv()\n",
         on_notification=on_notification,
     )
-    await session.request("session/new", {}, timeout=15)
+    # Both waits below are hang guards that end as soon as their event happens: this test failed in
+    # a gate run on the operator's Hub (chk-f039b1c5b13b, 2026-10-25) and passed on main, on a
+    # machine running two Hub suites at once, where 15s and 10s were wall-clock guesses.
+    await session.request("session/new", {}, timeout=120)
     assert grandchild and _alive(grandchild[0]), "the stand-in's grandchild must be running"
     pid = session.pid
 
@@ -216,7 +219,7 @@ async def test_close_ends_the_process_tree_through_terminate_process_tree(monkey
 
     assert calls == [(pid, True)], "close() must end the tree through terminate_process_tree"
     assert session.returncode is not None
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + 60
     while _alive(grandchild[0]) and time.monotonic() < deadline:
         await asyncio.sleep(0.1)
     assert not _alive(grandchild[0]), "the grandchild must not survive its parent's close()"

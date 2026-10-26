@@ -1,0 +1,35 @@
+{
+  "id": "fct-e9c9fff97fba",
+  "kind": "fact",
+  "claim": "Finding F1045 is that some notifications in the Overview cannot be dismissed and offer the operator no action, so they stay there indefinitely.",
+  "citations": [
+    {
+      "source": "src-f03f0eb99589",
+      "quote": "## Overview notifications with no action and no dismiss (F1045)",
+      "line_start": 14,
+      "line_end": 14
+    },
+    {
+      "source": "src-f03f0eb99589",
+      "quote": "The operator: \"there are some notifications in overview that are not dismissable and I have no",
+      "line_start": 16,
+      "line_end": 16
+    },
+    {
+      "source": "src-f03f0eb99589",
+      "quote": "action to take on them they are just living there.\"",
+      "line_start": 17,
+      "line_end": 17
+    }
+  ],
+  "sources": [
+    "src-f03f0eb99589"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-24T23:20:32.236018Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

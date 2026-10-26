@@ -31,6 +31,7 @@ const SSE_EVENT_TYPES = [
   'question_answered',
   'stall_recorded',
   'stall_ended',
+  'checks_flaky',
   'agent_heartbeat',
   'agent_created',
   'agent_output',
@@ -535,6 +536,9 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'stall_recorded':
         case 'stall_ended':
           inv({ queryKey: ['project', pid, 'stalls'] })
+          break
+        case 'checks_flaky':
+          inv({ queryKey: ['project', pid, 'checks', 'flaky'] })
           break
         case 'question_asked':
         case 'question_answered':

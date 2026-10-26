@@ -430,7 +430,9 @@ def _is_refused(entry: InboundQueueEntry) -> bool:
     return bool(entry.delivery_attempts and entry.delivery_attempts > 0 and entry.waiting_reason)
 
 
-async def task_attendance(session: AsyncSession, project_id: str) -> TaskAttendance:
+async def task_attendance(
+    session: AsyncSession, project_id: str, *, running: Optional[Dict[str, str]] = None
+) -> TaskAttendance:
     """Who is on which task, as `(task_id, agent)` pairs and how (design D1).
 
     Replaces two helpers that answered one question two ways: a `task -> one agent` map built with
@@ -448,6 +450,9 @@ async def task_attendance(session: AsyncSession, project_id: str) -> TaskAttenda
       up, so where the head is refused every queued pair of that agent is refused, carrying the
       head's words. A head is refused when `delivery_attempts > 0` and `waiting_reason` is set.
     - The strongest statement wins per pair: running, then queued, then refused.
+
+    *running* is `tasks_held_by_a_running_turn`'s answer when the caller already holds it (the
+    scheduler's `FiringFacts`), so one request does not read it twice.
     """
     hop_budget, cap = await project_limits(session, project_id)
     rows = await session.execute(
@@ -500,7 +505,8 @@ async def task_attendance(session: AsyncSession, project_id: str) -> TaskAttenda
             else:
                 pairs[(task_id, agent)] = Attending(how=ATTENDING_QUEUED, review=review)
 
-    running = await tasks_held_by_a_running_turn(session, project_id)
+    if running is None:
+        running = await tasks_held_by_a_running_turn(session, project_id)
     for task_id, agent in running.items():
         previous = pairs.get((task_id, agent))
         pairs[(task_id, agent)] = Attending(

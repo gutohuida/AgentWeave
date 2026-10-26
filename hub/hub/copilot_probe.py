@@ -29,7 +29,7 @@ import json
 import logging
 import os
 import platform
-import shutil
+import shutil  # noqa: F401 -- `copilot_probe.shutil.which` is what tests patch
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -173,7 +173,9 @@ def resolve_copilot_executable(cli_override: Optional[str]) -> Path:
             )
         return pinned.resolve()
 
-    which = shutil.which("copilot")
+    from . import binaries
+
+    which = binaries.which("copilot")  # remembered per PATH (D4); a patched `which` is asked
     if which is None:
         raise CopilotExecutableNotFound(NOT_FOUND_REASON)
     found = Path(which)

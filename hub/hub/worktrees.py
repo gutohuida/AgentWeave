@@ -129,20 +129,30 @@ def is_git_repo(path: Path) -> bool:
     Read-only agents do not need this check. A writing agent fails closed when it is
     false because sharing the primary directory would violate workspace isolation.
     """
-    if shutil.which("git") is None or not path.exists():
+    from . import binaries, git_facts
+
+    if binaries.which("git") is None or not path.exists():
         return False
-    try:
-        result = traces.run(
-            ["git", "rev-parse", "--is-inside-work-tree"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            timeout=_GIT_TIMEOUT_SECONDS,
-            **no_console_kwargs(),
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return result.returncode == 0 and result.stdout.strip() == "true"
+
+    def _ask() -> bool:
+        try:
+            result = traces.run(
+                ["git", "rev-parse", "--is-inside-work-tree"],
+                cwd=path,
+                capture_output=True,
+                text=True,
+                timeout=_GIT_TIMEOUT_SECONDS,
+                **no_console_kwargs(),
+            )
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return result.returncode == 0 and result.stdout.strip() == "true"
+
+    # A directory found to be a work tree is remembered while it exists (D4); "not a repository"
+    # never is, so a project that becomes one is seen at once.
+    return git_facts.fact(
+        ("git-repo", git_facts.root_key(path)), _ask, keep=lambda answer: answer is True
+    )
 
 
 def is_reserved_agent_name(name: str) -> bool:
@@ -772,17 +782,51 @@ def unmerged_prerequisites(
     the catch-up refuses the turn over it with its own remedy, and approval cannot be held on work
     nobody can merge. One `merge-base` per approved commit, and a `merge-tree` only for a missing one.
     """
+    from . import git_facts
+
+    # *ref* is resolved to a commit id first; for commit ids every answer below is a fact, so it
+    # is remembered (`git_facts`, D4). A *ref* that does not resolve is asked as before.
+    def _tip() -> Optional[str]:
+        result = _run_git(checkout, "rev-parse", "--verify", "--quiet", ref, check=False)
+        return (result.stdout.strip() or None) if result.returncode == 0 else None
+
+    tip = git_facts.resolved(checkout, ref, _tip) or ref
+    where = git_facts.root_key(checkout)
+    remember = git_facts.is_full_sha(tip)
     found: List[UnmergedPrerequisite] = []
     for prerequisite_id, sha in approved:
-        known = _run_git(
-            checkout, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}", check=False
-        )
-        if known.returncode != 0:
-            continue
-        contained = _run_git(checkout, "merge-base", "--is-ancestor", sha, ref, check=False)
-        if contained.returncode == 0:
-            continue
-        paths = tuple(_merge_tree_conflicts(checkout, ref, sha))
+
+        def _known(sha: str = sha) -> int:
+            return _run_git(
+                checkout, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}", check=False
+            ).returncode
+
+        def _contained(sha: str = sha) -> int:
+            return _run_git(
+                checkout, "merge-base", "--is-ancestor", sha, tip, check=False
+            ).returncode
+
+        if remember and git_facts.is_full_sha(sha):
+            known = git_facts.fact(("commit", where, sha), _known, keep=lambda code: code == 0)
+            if known != 0:
+                continue
+            contained = git_facts.fact(
+                ("ancestor", where, sha, tip), _contained, keep=lambda code: code in (0, 1)
+            )
+            if contained == 0:
+                continue
+            paths = tuple(
+                git_facts.fact(
+                    ("conflicts", where, tip, sha),
+                    lambda sha=sha: _merge_tree_conflicts(checkout, tip, sha),
+                )
+            )
+        else:
+            if _known() != 0:
+                continue
+            if _contained() == 0:
+                continue
+            paths = tuple(_merge_tree_conflicts(checkout, tip, sha))
         found.append(UnmergedPrerequisite(prerequisite_id, sha, paths))
     return found
 

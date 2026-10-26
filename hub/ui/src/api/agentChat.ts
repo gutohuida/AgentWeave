@@ -5,6 +5,7 @@ import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
 import { NEW_SESSION_ID } from '@/lib/constants'
 import { hubDate } from '@/lib/hubTime'
+import { coalescedReads, coalescedReadsByGroup } from '@/lib/coalescedReads'
 
 export type TimelineEntryKind = 'operator_input' | 'agent_output' | 'inbound_peer' | 'outbound_peer'
 
@@ -179,13 +180,27 @@ export function useProjectConversations(projectId: string | null, lifecycle: 'op
 
   return useQuery<ProjectConversations>({
     queryKey: ['project', projectId, 'conversations', lifecycle],
-    queryFn: () =>
-      getJson<ProjectConversations>(
-        `/api/v1/projects/${projectId}/conversations?lifecycle=${lifecycle}`,
-      ),
+    // The rail mounts one of these per registered project: the reads one render starts travel
+    // together (`coalescedReads`), and a read on its own is the per-project route as before.
+    queryFn: () => readProjectConversations(lifecycle, projectId as string),
     enabled: isConfigured && !!projectId,
   })
 }
+
+const readProjectConversations = coalescedReadsByGroup<ProjectConversations>((lifecycle) =>
+  coalescedReads(
+    (projectId) =>
+      getJson<ProjectConversations>(`/api/v1/projects/${projectId}/conversations?lifecycle=${lifecycle}`),
+    async (projectIds) => {
+      const query = projectIds.map((id) => `project_id=${encodeURIComponent(id)}`).join('&')
+      const body = await getJson<{ projects: Record<string, ProjectConversations>; missing: string[] }>(
+        `/api/v1/conversations?${query}&lifecycle=${lifecycle}`,
+      )
+      return { found: body.projects, missing: body.missing }
+    },
+    () => 'Project not found',
+  ),
+)
 
 /** What the Hub said when it refused, rather than the raw response body.
  *

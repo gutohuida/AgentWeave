@@ -4,6 +4,7 @@ Runs inside the FastAPI lifespan, loads enabled jobs from DB,
 and triggers agents when cron expressions match.
 """
 
+import asyncio
 import logging
 import re
 from dataclasses import dataclass
@@ -43,15 +44,18 @@ from .db.models import (
     TaskTransition,
     fit_error_summary,
 )
-from .launchability import is_read_only_agent
 from .loop_ending import QUEUE_DRAINED_REASON, end_loop
-from .provider_allowance import agents_held, hold_busy_reason, hold_coalesce_reason, provider_hold
+from .provider_allowance import (
+    agent_holds,
+    hold_busy_reason,
+    hold_coalesce_reason,
+    provider_hold,
+)
 from .run_task_binding import (
     ATTENDING_REFUSED,
     TERMINAL_FOR_BINDING,
     TaskAttendance,
     task_attendance,
-    tasks_held_by_a_running_turn,
 )
 from .runner_events import redact_secrets
 from .sse import sse_manager
@@ -239,7 +243,7 @@ def cron_day_ambiguity_reason(cron: str) -> Optional[str]:
 
 
 async def _loop_agent_busy_reason(
-    session: AsyncSession, project_id: str, agent: str
+    session: AsyncSession, project_id: str, agent: str, facts: "Optional[FiringFacts]" = None
 ) -> Optional[str]:
     """Return why *agent*'s loop should not fire right now, or `None` if it should.
 
@@ -266,6 +270,15 @@ async def _loop_agent_busy_reason(
     refuses a turn on usage grounds, `schedule_agent` holds every autonomous input until the reset,
     and a loop briefing is autonomous input. So the hold is the second fact the two must agree on.
     """
+    if facts is not None:
+        # The same two facts, from the reads a board request already holds (`FiringFacts`).
+        if agent in await facts.running_agents(project_id):
+            return f"{agent} is already running a turn"
+        hold = (await facts.holds(project_id)).get(agent)
+        if hold is not None:
+            return hold_busy_reason(agent, hold)
+        return None
+
     from sqlalchemy import select
 
     running = await session.execute(
@@ -301,7 +314,9 @@ async def _agents_running_a_turn(session: AsyncSession, project_id: str) -> "Set
     )
 
 
-async def _loop_has_open_task(session: AsyncSession, loop: Loop) -> bool:
+async def _loop_has_open_task(
+    session: AsyncSession, loop: Loop, facts: "Optional[FiringFacts]" = None
+) -> bool:
     """Whether any task carrying *loop*'s id is in a non-terminal status.
 
     **This is the question that decides `DECISION_PROCEED_EMPTY`**: `_stall_reason_from_walk`
@@ -310,6 +325,9 @@ async def _loop_has_open_task(session: AsyncSession, loop: Loop) -> bool:
     busy guard and the walk cannot come to different answers about whether the queue is empty
     (`a-task-nothing-will-move-holds-nobody`, design D8).
     """
+    if facts is not None:
+        counts = await facts.status_counts(loop)
+        return any(status not in TERMINAL_FOR_BINDING for status in counts)
     found = await session.execute(
         select(Task.id)
         .where(Task.loop_id == loop.id, Task.status.not_in(TERMINAL_FOR_BINDING))
@@ -332,14 +350,16 @@ class LoopBusyRefusal(NamedTuple):
     condition: str
 
 
-async def _loop_flow_busy_reason(session: AsyncSession, loop: Loop, agent: str) -> Optional[str]:
+async def _loop_flow_busy_reason(
+    session: AsyncSession, loop: Loop, agent: str, facts: "Optional[FiringFacts]" = None
+) -> Optional[str]:
     """`_loop_flow_busy_refusal`'s sentence alone, for the callers that want only that."""
-    refusal = await _loop_flow_busy_refusal(session, loop, agent)
+    refusal = await _loop_flow_busy_refusal(session, loop, agent, facts)
     return refusal.reason if refusal is not None else None
 
 
 async def _loop_flow_busy_refusal(
-    session: AsyncSession, loop: Loop, agent: str
+    session: AsyncSession, loop: Loop, agent: str, facts: "Optional[FiringFacts]" = None
 ) -> Optional[LoopBusyRefusal]:
     """Why a firing should be refused outright, recording nothing — or `None` to proceed.
 
@@ -373,12 +393,12 @@ async def _loop_flow_busy_refusal(
     for it: something was staffable in principle and was not staffed, and that is a fact about the
     queue.
     """
-    busy_reason = await _loop_agent_busy_reason(session, loop.project_id, agent)
+    busy_reason = await _loop_agent_busy_reason(session, loop.project_id, agent, facts)
     if busy_reason is None:
         return None
-    if not await _loop_has_open_task(session, loop):
+    if not await _loop_has_open_task(session, loop, facts):
         return LoopBusyRefusal(busy_reason, BUSY_EMPTY_QUEUE)
-    if await _agents_a_loop_may_staff(session, loop):
+    if await _agents_a_loop_may_staff(session, loop, facts):
         return None
     # The same predicate `_agents_a_loop_may_staff` uses for its own empty answer.
     condition = BUSY_LOOP_SCOPE if loop.spec_document_id is None else BUSY_NO_FREE_AGENT
@@ -765,7 +785,7 @@ async def task_is_claimable_by(session: AsyncSession, task: Task, agent: str) ->
 
 
 async def candidate_is_startable(
-    session: AsyncSession, task: Task
+    session: AsyncSession, task: Task, facts: "Optional[FiringFacts]" = None
 ) -> "tuple[bool, Optional[dependency_gate.DependencyRefusal]]":
     """Whether one claimable-status candidate may actually be started, and the refusal if not.
 
@@ -816,7 +836,10 @@ async def candidate_is_startable(
         or task.status in WITH_REVIEWER_LOOP_TASK_STATUSES
     ):
         return True, None
-    refusal = await dependency_gate.evaluate(session, task)
+    if facts is not None:
+        refusal = await facts.dependency_refusal(task)
+    else:
+        refusal = await dependency_gate.evaluate(session, task)
     return (not refusal.refuses), refusal
 
 
@@ -1198,7 +1221,327 @@ class AgentAvailability:
     holdings: "tuple[Holding, ...]" = ()
 
 
-async def _roster_availability(session: AsyncSession, project_id: str) -> "list[AgentAvailability]":
+class FiringFacts:
+    """The project-wide facts a firing decision reads, each read at most once per holder.
+
+    `the-app-stays-responsive-while-agents-run`, design D6: `GET /loops` and `GET /jobs` decide
+    every loop's firing to label it, and each decision used to re-read the roster, the provider
+    holds, the running turns, the queued attendance, its documents and its agents' configs --
+    several times over, since the pool, the withheld judges and the walk each asked for themselves:
+    266 statements for four loops. A board request holds one of these for all its loops; a decision
+    given none makes its own, so its own several askers still share one read.
+
+    Each fact is the same query, or the same rows filtered the same way, as the reader it replaces,
+    so a decision answers the same with or without a shared holder. Per-loop reads (a loop's
+    candidates and its status counts) are read for every loop of the project in one statement.
+
+    **Rows are also kept, not only answers.** SQLAlchemy's identity map holds rows weakly, so a
+    `session.get` for the project, a document or a runner re-reads it once nobody refers to it any
+    more -- which is why `project_limits`, `resolve_project_workspace` and every document read each
+    cost a statement. Holding them here lets those `get`s answer from the map.
+
+    **Only for reads that nothing writes between.** `decide_firing` writes nothing, so one holder
+    may span the decisions of a whole board request. A firing that acts on its decision -- claims,
+    queues, schedules -- must not carry a holder past that write into the next decision.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._memo: "Dict[tuple, Any]" = {}
+
+    async def _once(self, key: tuple, compute: Any) -> Any:
+        if key not in self._memo:
+            self._memo[key] = await compute()
+        return self._memo[key]
+
+    async def roster(self, project_id: str) -> "list[AgentAvailability]":
+        """`_roster_availability`'s answer, read once."""
+        return await self._once(
+            ("roster", project_id),
+            lambda: _read_roster_availability(self._session, project_id, self),
+        )
+
+    async def project(self, project_id: str) -> Any:
+        from .db.models import Project
+
+        return await self._once(
+            ("project", project_id), lambda: self._session.get(Project, project_id)
+        )
+
+    async def loops(self, project_id: str) -> "list[Loop]":
+        async def read() -> "list[Loop]":
+            await self.project(project_id)
+            return list(
+                (await self._session.execute(select(Loop).where(Loop.project_id == project_id)))
+                .scalars()
+                .all()
+            )
+
+        return await self._once(("loops", project_id), read)
+
+    async def live_loop_ids(self, project_id: str) -> "Set[str]":
+        """Loops that have not ended: `ending_state IS NULL` and `archived_at IS NULL` (design D2
+        of `a-task-nothing-will-move-holds-nobody`)."""
+        return {
+            loop.id
+            for loop in await self.loops(project_id)
+            if loop.ending_state is None and loop.archived_at is None
+        }
+
+    async def open_tasks(self, loop: Loop) -> "list[Task]":
+        """*loop*'s tasks in `CURRENT_ITEM_TASK_STATUSES`, in `_loop_queue_order` -- the board's
+        current-item candidates. One statement for every loop of the project."""
+        return list((await self._open_tasks_by_loop(loop.project_id)).get(loop.id, ()))
+
+    async def _open_tasks_by_loop(self, project_id: str) -> "Dict[str, list[Task]]":
+        async def read() -> "Dict[str, list[Task]]":
+            ids = [row.id for row in await self.loops(project_id)]
+            by_loop: "Dict[str, list[Task]]" = {}
+            rows = (
+                await self._session.execute(
+                    select(Task)
+                    .where(Task.loop_id.in_(ids), Task.status.in_(CURRENT_ITEM_TASK_STATUSES))
+                    .order_by(Task.loop_id, *_loop_queue_order())
+                )
+            ).scalars()
+            for task in rows:
+                by_loop.setdefault(task.loop_id, []).append(task)
+            return by_loop
+
+        return await self._once(("open_tasks", project_id), read)
+
+    async def loop_candidates(self, loop: Loop) -> "list[Task]":
+        """`_loop_candidates`'s answer: the same order, less the board-only `blocked` status."""
+        statuses = set(
+            CLAIMABLE_LOOP_TASK_STATUSES
+            + REVIEWABLE_LOOP_TASK_STATUSES
+            + WITH_REVIEWER_LOOP_TASK_STATUSES
+        )
+        return [task for task in await self.open_tasks(loop) if task.status in statuses]
+
+    async def status_counts(self, loop: Loop) -> "Dict[str, int]":
+        """*loop*'s task count per status, every status. One statement for every loop."""
+
+        async def read() -> "Dict[str, Dict[str, int]]":
+            ids = [row.id for row in await self.loops(loop.project_id)]
+            counts: "Dict[str, Dict[str, int]]" = {}
+            rows = await self._session.execute(
+                select(Task.loop_id, Task.status, func.count())
+                .where(Task.loop_id.in_(ids))
+                .group_by(Task.loop_id, Task.status)
+            )
+            for loop_id, task_status, count in rows.all():
+                counts.setdefault(loop_id, {})[task_status] = count
+            return counts
+
+        return dict((await self._once(("counts", loop.project_id), read)).get(loop.id, {}))
+
+    async def _running_runs(self, project_id: str) -> "list[tuple]":
+        async def read() -> "list[tuple]":
+            return list(
+                (
+                    await self._session.execute(
+                        select(Run.agent, Run.task_id).where(
+                            Run.project_id == project_id, Run.status == "running"
+                        )
+                    )
+                ).all()
+            )
+
+        return await self._once(("runs", project_id), read)
+
+    async def running_agents(self, project_id: str) -> "Set[str]":
+        """`_agents_running_a_turn`'s answer."""
+        return {agent for agent, _ in await self._running_runs(project_id)}
+
+    async def running_tasks(self, project_id: str) -> "Dict[str, str]":
+        """`tasks_held_by_a_running_turn`'s answer."""
+        return {
+            task_id: agent
+            for agent, task_id in await self._running_runs(project_id)
+            if task_id and agent
+        }
+
+    async def running_task_ids(self, project_id: str) -> "frozenset":
+        """`task_attribution.live_runs`'s task ids, for this project."""
+        return frozenset(task_id for _, task_id in await self._running_runs(project_id) if task_id)
+
+    async def agent_running_on(self, project_id: str, task_id: str) -> Optional[str]:
+        """The agent of a running turn bound to *task_id*, if any."""
+        return next(
+            (agent for agent, bound in await self._running_runs(project_id) if bound == task_id),
+            None,
+        )
+
+    async def dependency_refusal(self, task: Task) -> "dependency_gate.DependencyRefusal":
+        """`dependency_gate.evaluate`'s answer for *task*, read in one statement for every
+        candidate of the project's loops that reaches the gate."""
+        key = ("gate", task.id)
+        if key not in self._memo:
+            gated = [
+                row
+                for rows in (await self._open_tasks_by_loop(task.project_id)).values()
+                for row in rows
+                if row.status in CLAIMABLE_LOOP_TASK_STATUSES and row.status != "in_progress"
+            ]
+            batch = await dependency_gate.evaluate_many(self._session, [*gated, task])
+            for task_id, refusal in batch.items():
+                self._memo.setdefault(("gate", task_id), refusal)
+        return self._memo[key]
+
+    async def _review_task_ids(self, task: Task) -> "list[str]":
+        """Every task of the project's loops a walk may ask authorship of -- the reviewable and
+        with-reviewer candidates -- so those reads are taken once for all of them. *task* is
+        included in case it is not among them."""
+        statuses = set(REVIEWABLE_LOOP_TASK_STATUSES + WITH_REVIEWER_LOOP_TASK_STATUSES)
+        by_loop = await self._open_tasks_by_loop(task.project_id)
+        ids = {row.id for rows in by_loop.values() for row in rows if row.status in statuses}
+        return sorted(ids | {task.id})
+
+    async def completion(self, task: Task) -> Any:
+        """`completion_attribution`'s answer for *task*."""
+        from .task_transition_service import completion_attributions
+
+        key = ("completion", task.id)
+        if key not in self._memo:
+            ids = await self._review_task_ids(task)
+            for task_id, answer in (await completion_attributions(self._session, ids)).items():
+                self._memo.setdefault(("completion", task_id), answer)
+        return self._memo[key]
+
+    async def evidence_authors(self, task: Task) -> "Set[str]":
+        """`agents_that_recorded_evidence_for`'s answer for *task*."""
+        from .task_transition_service import evidence_authors_by_task
+
+        key = ("evidence_authors", task.id)
+        if key not in self._memo:
+            ids = await self._review_task_ids(task)
+            for task_id, answer in (await evidence_authors_by_task(self._session, ids)).items():
+                self._memo.setdefault(("evidence_authors", task_id), answer)
+        return self._memo[key]
+
+    async def holds(self, project_id: str) -> "Dict[str, Any]":
+        """`provider_hold` for every held agent of the project, read at one `now`."""
+        return await self._once(
+            ("holds", project_id), lambda: agent_holds(self._session, project_id)
+        )
+
+    async def held_agents(self, project_id: str) -> "Set[str]":
+        """`agents_held`'s answer."""
+        return set(await self.holds(project_id))
+
+    async def attendance(self, project_id: str) -> Any:
+        async def read() -> Any:
+            await self.project(project_id)
+            running = await self.running_tasks(project_id)
+            return await task_attendance(self._session, project_id, running=running)
+
+        return await self._once(("attendance", project_id), read)
+
+    async def agents(self, project_id: str) -> "list[Agent]":
+        """Every agent of the project, archived ones too, in name order, with their runners."""
+
+        async def read() -> "list[Agent]":
+            from .db.models import Runner
+
+            pairs = (
+                await self._session.execute(
+                    select(Agent, Runner)
+                    .outerjoin(Runner, Runner.id == Agent.runner_id)
+                    .where(Agent.project_id == project_id)
+                    .order_by(Agent.name)
+                )
+            ).all()
+            self._memo[("runners", project_id)] = {
+                runner.id: runner for _, runner in pairs if runner is not None
+            }
+            return [agent for agent, _ in pairs]
+
+        return await self._once(("agents", project_id), read)
+
+    async def archived_agents(self, project_id: str) -> "Set[str]":
+        return {row.name for row in await self.agents(project_id) if row.lifecycle == "archived"}
+
+    async def named_reviewers(self, project_id: str, document_id: str) -> "Set[str]":
+        from . import review_turn
+
+        await self.documents(project_id)
+        return await self._once(
+            ("judges", project_id, document_id),
+            lambda: review_turn.named_reviewers(self._session, project_id, document_id),
+        )
+
+    async def documents(self, project_id: str) -> "list[Any]":
+        """The documents the project's loops declare, kept so `_document_payload`'s `get`, and
+        its workspace's project `get`, are answered from the identity map."""
+
+        async def read() -> "list[Any]":
+            from .db.models import SpecDocument
+
+            await self.project(project_id)
+            ids = sorted(
+                {
+                    loop.spec_document_id
+                    for loop in await self.loops(project_id)
+                    if loop.spec_document_id
+                }
+            )
+            if not ids:
+                return []
+            return list(
+                (await self._session.execute(select(SpecDocument).where(SpecDocument.id.in_(ids))))
+                .scalars()
+                .all()
+            )
+
+        return await self._once(("documents", project_id), read)
+
+    async def is_read_only(self, project_id: str, agent: str) -> bool:
+        """`is_read_only_agent`'s answer, merged from rows read once for the whole project."""
+        from .launchability import agent_config_from_rows, is_read_only_config
+
+        async def read() -> bool:
+            agent_row = next(
+                (row for row in await self.agents(project_id) if row.name == agent), None
+            )
+            runner_row = None
+            if agent_row is not None and agent_row.runner_id:
+                runner_row = self._memo[("runners", project_id)].get(agent_row.runner_id)
+            session_data = await self._session_data(project_id)
+            return is_read_only_config(
+                agent_config_from_rows(session_data, agent, agent_row, runner_row)
+            )
+
+        return await self._once(("read_only", project_id, agent), read)
+
+    async def _session_data(self, project_id: str) -> "Dict[str, Any]":
+        async def read() -> "Dict[str, Any]":
+            from .db.models import ProjectSession
+
+            row = (
+                (
+                    await self._session.execute(
+                        select(ProjectSession).where(ProjectSession.project_id == project_id)
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            return row.data if row else {}
+
+        return await self._once(("session_data", project_id), read)
+
+
+async def _roster_availability(
+    session: AsyncSession, project_id: str, facts: "Optional[FiringFacts]" = None
+) -> "list[AgentAvailability]":
+    """The roster read below, through *facts* when the caller holds one (design D6)."""
+    return await (facts or FiringFacts(session)).roster(project_id)
+
+
+async def _read_roster_availability(
+    session: AsyncSession, project_id: str, facts: FiringFacts
+) -> "list[AgentAvailability]":
     """One record per non-archived agent, in name order -- the single read `_agents_that_are_free`
     and `resolve_reviewer` both derive their answers from (design D1, re-derived against (f) at
     R5-R7).
@@ -1209,30 +1552,10 @@ async def _roster_availability(session: AsyncSession, project_id: str) -> "list[
     """
     from .task_transitions import LIVE_STATUSES
 
-    running_agents = set(
-        (
-            await session.execute(
-                select(Run.agent).where(Run.project_id == project_id, Run.status == "running")
-            )
-        )
-        .scalars()
-        .all()
-    )
-    held_agents = await agents_held(session, project_id)
-    live = set(
-        (
-            await session.execute(
-                select(Loop.id).where(
-                    Loop.project_id == project_id,
-                    Loop.ending_state.is_(None),
-                    Loop.archived_at.is_(None),
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    attendance = await task_attendance(session, project_id)
+    running_agents = await facts.running_agents(project_id)
+    held_agents = await facts.held_agents(project_id)
+    live = await facts.live_loop_ids(project_id)
+    attendance = await facts.attendance(project_id)
     holdings = (
         await session.execute(
             select(Task.id, Task.assignee, Task.loop_id, Task.status).where(
@@ -1282,13 +1605,18 @@ async def _roster_availability(session: AsyncSession, project_id: str) -> "list[
             holdings_by_agent.setdefault(agent, []).append(
                 Holding(task_id=task_id, status=row[3], loop_id=row[2], reachable=True)
             )
-    roster = (
-        await session.execute(
-            select(Agent.name, Agent.runner_id)
-            .where(Agent.project_id == project_id, Agent.lifecycle != "archived")
-            .order_by(Agent.name)
-        )
-    ).all()
+    # **The Hub's own mender is not on the roster** (loop-df5f74816122, 2026-10-25): it is the
+    # repair agent a stall briefs, never a flow's builder or reviewer. Read as an ordinary agent,
+    # a firing handed it a build task, it became that task's author, and nobody could then move
+    # the task on. Left out here, at the one read every staffing answer derives from, so the pool,
+    # the reviewer ladder and the "somebody else could build" test cannot disagree about it.
+    from .stalls import HUB_ROLE
+
+    roster = [
+        (row.name, row.runner_id)
+        for row in await facts.agents(project_id)
+        if row.lifecycle != "archived" and (row.config or {}).get("hub_role") != HUB_ROLE
+    ]
     return [
         AgentAvailability(
             name=name,
@@ -1301,7 +1629,9 @@ async def _roster_availability(session: AsyncSession, project_id: str) -> "list[
     ]
 
 
-async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list[str]":
+async def _agents_that_are_free(
+    session: AsyncSession, project_id: str, facts: "Optional[FiringFacts]" = None
+) -> "list[str]":
     """Design D4 rung 2's "free": **not running** *and* **holding no work anything will move**, in
     queue-stable order.
 
@@ -1355,7 +1685,7 @@ async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list
     """
     return [
         record.name
-        for record in await _roster_availability(session, project_id)
+        for record in await _roster_availability(session, project_id, facts)
         if record.has_runner
         and not record.running
         and not record.held
@@ -1363,7 +1693,9 @@ async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list
     ]
 
 
-async def _agents_a_loop_may_staff(session: AsyncSession, loop: Loop) -> "list[str]":
+async def _agents_a_loop_may_staff(
+    session: AsyncSession, loop: Loop, facts: "Optional[FiringFacts]" = None
+) -> "list[str]":
     """Which of `_agents_that_are_free`'s pool a loop's firing may draw *fresh* work from
     (design D1, D2). A narrowing over availability, computed here and nowhere else, so the rule
     cannot drift between the busy guard and the walk that reads it.
@@ -1387,12 +1719,15 @@ async def _agents_a_loop_may_staff(session: AsyncSession, loop: Loop) -> "list[s
     """
     if loop.spec_document_id is None:
         return []
-    free = await _agents_that_are_free(session, loop.project_id)
-    withheld = await _agents_withheld_from_fresh_work(session, loop)
+    facts = facts or FiringFacts(session)
+    free = await _agents_that_are_free(session, loop.project_id, facts)
+    withheld = await _agents_withheld_from_fresh_work(session, loop, facts)
     return [name for name in free if name not in withheld]
 
 
-async def _agents_withheld_from_fresh_work(session: AsyncSession, loop: Loop) -> "set[str]":
+async def _agents_withheld_from_fresh_work(
+    session: AsyncSession, loop: Loop, facts: "Optional[FiringFacts]" = None
+) -> "set[str]":
     """The agents a flow's document names to judge work, while somebody else could build (F767).
 
     Asked by both ways fresh work reaches an agent -- the recruitment pool above and
@@ -1403,12 +1738,11 @@ async def _agents_withheld_from_fresh_work(session: AsyncSession, loop: Loop) ->
     """
     if loop.spec_document_id is None:
         return set()
-    from . import review_turn
-
-    judges = set(await review_turn.named_reviewers(session, loop.project_id, loop.spec_document_id))
+    facts = facts or FiringFacts(session)
+    judges = set(await facts.named_reviewers(loop.project_id, loop.spec_document_id))
     if not judges:
         return set()
-    roster = await _roster_availability(session, loop.project_id)
+    roster = await facts.roster(loop.project_id)
     if not any(record.has_runner and record.name not in judges for record in roster):
         return set()
     return judges
@@ -1558,6 +1892,7 @@ async def resolve_reviewer(
     project_id: str,
     exclude: "Mapping[str, str]",
     unavailable: "Optional[set[str]]" = None,
+    facts: "Optional[FiringFacts]" = None,
 ) -> ReviewerChoice:
     """Who should take *task*, walking design D4's ladder. `exclude` is who may not (the author).
 
@@ -1619,7 +1954,10 @@ async def resolve_reviewer(
     unavailable = unavailable or set()
 
     resolution = await review_turn.resolve_declared_reviewer(
-        session, project_id=project_id, task=task
+        session,
+        project_id=project_id,
+        task=task,
+        roster=await facts.agents(project_id) if facts is not None else None,
     )
     if resolution.declared:
         if resolution.agent and resolution.agent in unavailable and resolution.agent not in exclude:
@@ -1648,7 +1986,7 @@ async def resolve_reviewer(
     # One read for both rung 2's pool and rung 3's naming below (design D1, group 1's whole
     # point) -- never `_agents_that_are_free` here, which would take its own, independent read of
     # the same tables and let the two drift.
-    availability = await _roster_availability(session, project_id)
+    availability = await _roster_availability(session, project_id, facts)
 
     only_taken = False
     for record in availability:
@@ -1745,8 +2083,18 @@ class FiringDecision:
     deferred: "tuple[tuple[str, str], ...]" = ()
 
 
-async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str) -> FiringDecision:
+async def decide_firing(
+    session: AsyncSession,
+    loop: Loop,
+    *,
+    default_agent: str,
+    facts: "Optional[FiringFacts]" = None,
+) -> FiringDecision:
     """Decide what this firing does, in one walk of the queue.
+
+    *facts* is the project-wide reads this decision shares with others (`FiringFacts`, design D6
+    of `the-app-stays-responsive-while-agents-run`): the board passes one holder for every loop it
+    labels. Given none, the decision makes its own, so its several askers still read each once.
 
     **Set-valued as of `loop-becomes-a-flow` group 5 (design D5).** The walk used to return on its
     first staffable candidate; it now runs to the end of the queue and accumulates, so a firing
@@ -1780,9 +2128,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     """
     from .task_transition_service import (
         agents_that_may_have_authored,
-        agents_that_recorded_evidence_for,
         assignee_produced_the_work,
-        completion_attribution,
     )
 
     gated: "list[tuple[Task, dependency_gate.DependencyRefusal]]" = []
@@ -1815,10 +2161,11 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     # (design D12 step 1) and only fresh work draws from `free`. `_agents_a_loop_may_staff`
     # narrows that pool to empty for a documentless loop (design D1, D2) — resumption is untouched
     # because it never reads `free` at all.
-    free = await _agents_a_loop_may_staff(session, loop)
+    facts = facts or FiringFacts(session)
+    free = await _agents_a_loop_may_staff(session, loop, facts)
     # The default agent is a judge the flow names (F864): the pool withholds judges, and so must
     # the arm that offers the job's own agent first, or one agent builds what it must then review.
-    default_withheld = default_agent in await _agents_withheld_from_fresh_work(session, loop)
+    default_withheld = default_agent in await _agents_withheld_from_fresh_work(session, loop, facts)
     # Agents that hold no task's work (F425): the dispatch refuses a read-only agent's work turn,
     # so staffing one would stage a step that cannot start. Narrows only fresh work below -- the
     # pool and the job's own default -- never the reviewer ladder, because reviewing is what a
@@ -1826,13 +2173,13 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     read_only = {
         name
         for name in {*free, default_agent}
-        if name and await is_read_only_agent(loop.project_id, name, session)
+        if name and await facts.is_read_only(loop.project_id, name)
     }
-    running = await _agents_running_a_turn(session, loop.project_id)
+    running = await facts.running_agents(loop.project_id)
     # The per-task counterpart of `running`, for design D8's refusal. Asked once before the walk
     # for the same two reasons the line above is: a wide firing asks it about several candidates,
     # and asking it per candidate would make this a third place the question is asked.
-    held = await tasks_held_by_a_running_turn(session, loop.project_id)
+    held = await facts.running_tasks(loop.project_id)
     # The same question one band wider, and asked for the opposite purpose (finding F154). `held`
     # answers *may a turn start on this checkout*, so it counts only running turns; this answers
     # *is this agent on this task*, by pair, so it also counts a turn that is staffed and still
@@ -1840,31 +2187,23 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     # already in `under_review` cannot be staffed onto anybody, so its assignee is the only thing
     # left to check -- and an assignee is a record of who holds a task, never evidence that a turn
     # exists (F370, F371, F368).
-    attendance = await task_attendance(session, loop.project_id)
+    attendance = await facts.attendance(loop.project_id)
     # Agents whose provider refused their last turn on usage grounds (`a-spent-allowance-holds-the-
     # queue`, D6). `schedule_agent` will start nothing for them before the reset, so briefing them
     # again only piles up queued input. Kept apart from `running` on purpose: a held agent has no
     # run, so the running arm's agent-level exception (a run carrying no `task_id`) does not reach
     # it, and its assigned task is in flight only where input naming it is queued for it.
-    held_agents = await agents_held(session, loop.project_id)
+    held_agents = await facts.held_agents(loop.project_id)
     # Design D7: the complement of the roster filter, which drops archived agents and so cannot
     # say which of a task's holders are among them.
-    archived_agents = set(
-        (
-            await session.execute(
-                select(Agent.name).where(
-                    Agent.project_id == loop.project_id, Agent.lifecycle == "archived"
-                )
-            )
-        ).scalars()
-    )
+    archived_agents = await facts.archived_agents(loop.project_id)
     default_taken = False
 
-    for task in await _loop_candidates(session, loop):
+    for task in await facts.loop_candidates(loop):
         # Set by the `WITH_REVIEWER` branch only; declared here so the arms below can read it
         # unconditionally rather than each guarding on which branch ran.
         wedged_review = False
-        startable, refusal = await candidate_is_startable(session, task)
+        startable, refusal = await candidate_is_startable(session, task, facts)
         if not startable:
             assert refusal is not None  # only the gated branch reports not-startable
             gated.append((task, refusal))
@@ -1949,7 +2288,12 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                 # F505: an evidence author holding the review cannot finish it either. One
                 # predicate with the dispatch's holder check, which must let the reviewer this
                 # recovery staffs replace that author (D5).
-                wedged_review = await assignee_produced_the_work(session, task)
+                wedged_review = await assignee_produced_the_work(
+                    session,
+                    task,
+                    completion=await facts.completion(task),
+                    authors=await facts.evidence_authors(task),
+                )
                 # **Never while a turn is on the task.** A wedge is a row nobody is working; one with
                 # a turn running or queued on it is attended, whoever holds it, and restaffing it
                 # would put a second review beside a live one. The evidence term above makes that
@@ -2191,7 +2535,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         # every firing, forever, while the actual cause was a property of that one task and had a
         # remedy. `completed` has no exit that returns the work to an agent, so the operator could
         # not resolve it either.
-        attribution = await completion_attribution(session, task.id)
+        attribution = await facts.completion(task)
         if not attribution.recorded:
             # **Nothing completed it.** The row was written straight into the status or predates
             # the transition table. No record rules any agent out, so nothing rules out the author
@@ -2214,13 +2558,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         # fired 23:00:00, the author's snapshot landed 23:00:08 -- and the reviewer was handed the
         # branch's base commit, master's previous integrate, and reviewed nothing. Deferred, so the
         # next firing offers it once the work is on the branch.
-        from .db.models import Run as _Run
-
-        still_running = (
-            await session.execute(
-                select(_Run.agent).where(_Run.task_id == task.id, _Run.status == "running").limit(1)
-            )
-        ).scalar_one_or_none()
+        still_running = await facts.agent_running_on(loop.project_id, task.id)
         if still_running is not None and not wedged_review:
             deferred.append(
                 (
@@ -2266,7 +2604,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             exclude = {attribution.agent: "is the one that completed this task"}
             # F505: plus every agent that recorded evidence for it, which the verdict guard refuses
             # whether or not another agent completed the task.
-            for author in await agents_that_recorded_evidence_for(session, task.id):
+            for author in await facts.evidence_authors(task):
                 exclude.setdefault(author, "recorded evidence for this task")
         else:
             # **The operator completed it**, which is provenance -- a person did it -- and not an
@@ -2296,6 +2634,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             project_id=loop.project_id,
             exclude=exclude,
             unavailable=taken,
+            facts=facts,
         )
         if choice.agent is not None:
             selections.append(LoopSelection(task=task, agent=choice.agent, is_review=True))
@@ -2343,7 +2682,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             deferred=tuple(deferred),
         )
 
-    stall_reason = await _stall_reason_from_walk(session, loop, gated)
+    stall_reason = await _stall_reason_from_walk(session, loop, gated, facts)
     if stall_reason is None:
         return FiringDecision(
             kind=DECISION_PROCEED_EMPTY, unstaffed=tuple(unstaffed), deferred=tuple(deferred)
@@ -2648,6 +2987,7 @@ async def _stall_reason_from_walk(
     session: AsyncSession,
     loop: Loop,
     gated: "list[tuple[Task, dependency_gate.DependencyRefusal]]",
+    facts: "Optional[FiringFacts]" = None,
 ) -> Optional[str]:
     """`_loop_stall_reason`'s body, taking the walk's result instead of repeating it.
 
@@ -2656,13 +2996,12 @@ async def _stall_reason_from_walk(
     the entire dependency-gate walk a second time on exactly the firings that were doing no work.
     `_loop_stall_reason` is kept as the one-call form for callers that have not walked.
     """
-    rows = (
-        await session.execute(
-            select(Task.status, func.count(Task.id))
-            .where(Task.loop_id == loop.id, Task.status.not_in(TERMINAL_FOR_BINDING))
-            .group_by(Task.status)
-        )
-    ).all()
+    counts = await (facts or FiringFacts(session)).status_counts(loop)
+    rows = [
+        (task_status, count)
+        for task_status, count in counts.items()
+        if task_status not in TERMINAL_FOR_BINDING
+    ]
     if not rows:
         return None
 
@@ -3527,6 +3866,7 @@ class JobScheduler:
     def __init__(self) -> None:
         self.scheduler: Optional[Any] = None
         self._job_id_map: dict = {}  # job_id -> apscheduler_job_id
+        self._fire_locks: "Dict[str, asyncio.Lock]" = {}
 
     async def start(self) -> None:
         """Start the scheduler and load all enabled jobs from DB.
@@ -3672,8 +4012,16 @@ class JobScheduler:
             logger.warning(f"Failed to prune job history for {job_id}: {e}")
 
     async def _fire_job_by_id(self, job_id: str) -> None:
-        """Fire a job by ID (lookup from DB)."""
-        async with async_session_factory() as session:
+        """Fire a job by ID (lookup from DB).
+
+        One firing of a job at a time (`flow_advance`): a flow asks for its firing when its work
+        moves, as well as at its tick, and two firings deciding at once could both stage the same
+        task. Serialised, each reads what the one before it committed -- the idempotence every
+        tick already relies on. The job is read inside the lock, so a waiting firing acts on the
+        row as it stands when it runs.
+        """
+        lock = self._fire_locks.setdefault(job_id, asyncio.Lock())
+        async with lock, async_session_factory() as session:
             job = await session.get(AIJob, job_id)
             if job and job.enabled:
                 await self._fire_job_internal(job, trigger="scheduled", session=session)

@@ -493,8 +493,10 @@ def mend_reset_task(task_id: str, status: str, assignee: str = "") -> Dict[str, 
 
     Args:
         task_id: The task.
-        status: "assigned" (to `assignee`) or "pending" (back to the queue).
-        assignee: The open agent to give it to, with status "assigned".
+        status: "assigned" (to `assignee`), "pending" (back to the queue), or "under_review"
+            (finished work: queues `assignee`'s review turn on it).
+        assignee: The open agent to give it to, with status "assigned"; the reviewer, with
+            "under_review".
     """
     return _hub_request(
         "POST", f"/mender/tasks/{task_id}/reset", {"status": status, "assignee": assignee or None}

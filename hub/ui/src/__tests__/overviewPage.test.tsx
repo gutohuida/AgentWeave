@@ -29,6 +29,7 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
 vi.mock('@/api/ledger', () => ({ useProjectLedger: () => ({ data: undefined }) }))
 vi.mock('@/api/queue', () => ({ useQueueStatuses: () => [] }))
 vi.mock('@/api/stalls', () => ({ useOpenStalls: () => ({ data: [] }), useEndStall: () => ({ mutate: vi.fn() }) }))
+vi.mock('@/api/flakyTests', () => ({ useFlakyTests: () => ({ data: null }), useHandleFlakyTests: () => ({ mutate: vi.fn() }) }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: undefined }) }))
 vi.mock('@/components/overview/AgentPostureChips', () => ({
   AgentPostureChips: ({ agent }: { agent: AgentSummary }) => <div data-testid={`posture-${agent.name}`} />,

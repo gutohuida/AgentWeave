@@ -23,7 +23,6 @@ feature unable to damage anything shared, and it is asserted by test as well as 
 
 from __future__ import annotations
 
-import asyncio
 import contextvars
 import logging
 import subprocess
@@ -35,7 +34,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from . import requirement_evidence, traces, worktrees
+from . import blocking, git_facts, requirement_evidence, traces, worktrees
 from .db.models import (
     EvidenceFootprint,
     RequirementEvidence,
@@ -168,11 +167,33 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
 
 
 def repository_fault(root: Path) -> Optional[str]:
-    """None when *root* is a work tree; otherwise what git said, for a row that must quote it."""
-    result = _git(root, "rev-parse", "--is-inside-work-tree")
-    if result.returncode == 0 and result.stdout.strip() == "true":
-        return None
-    return (result.stderr or result.stdout).strip()[:2000] or "git did not answer"
+    """None when *root* is a work tree; otherwise what git said, for a row that must quote it.
+
+    A root once found to be a work tree is remembered while its directory exists (`git_facts`,
+    D4); a fault never is, so a passing one (F820) is asked again next time."""
+
+    def _ask() -> Optional[str]:
+        result = _git(root, "rev-parse", "--is-inside-work-tree")
+        if result.returncode == 0 and result.stdout.strip() == "true":
+            return None
+        return (result.stderr or result.stdout).strip()[:2000] or "git did not answer"
+
+    if not Path(root).is_dir():
+        return _ask()
+    return git_facts.fact(
+        ("work-tree", git_facts.root_key(root)), _ask, keep=lambda fault: fault is None
+    )
+
+
+def _verified(root: Path, ref: str) -> Optional[str]:
+    """`git rev-parse --verify <ref>`: the commit id *ref* names, or None."""
+    result = _git(root, "rev-parse", "--verify", ref)
+    return (result.stdout.strip() or None) if result.returncode == 0 else None
+
+
+def resolve(root: Path, ref: str) -> Optional[str]:
+    """*ref* as a commit id, resolved once per read request (`git_facts.resolved`)."""
+    return git_facts.resolved(root, ref, lambda: _verified(root, ref))
 
 
 def is_repository(root: Path) -> bool:
@@ -218,7 +239,7 @@ def detect_main_branch(root: Path) -> Optional[str]:
 
 
 def branch_exists(root: Path, branch: str) -> bool:
-    return _git(root, "rev-parse", "--verify", branch).returncode == 0
+    return resolve(root, branch) is not None
 
 
 def current_branch(root: Path) -> Optional[str]:
@@ -427,10 +448,7 @@ def task_branch_tip(root: Path, task_id: str) -> Optional[str]:
         branch = worktrees.task_branch_name(task_id)
     except ValueError:
         return None
-    result = _git(root, "rev-parse", "--verify", f"refs/heads/{branch}")
-    if result.returncode != 0:
-        return None
-    return result.stdout.strip() or None
+    return resolve(root, f"refs/heads/{branch}")
 
 
 def task_commits_nothing_merges(
@@ -440,16 +458,64 @@ def task_commits_nothing_merges(
     nor inside any of *merge_shas* -- work approving would leave behind (F681). Oldest first.
 
     No commits where the task has no branch or git cannot answer: an unknown is not a refusal.
+
+    **A clean merge commit carries no work of its own, so it is not work left behind**
+    (task-5cae616b4bd4). The Hub's own "Bring in approved prerequisite work" merge moves a task
+    branch past the commit its accepted evidence names; counting that merge here refused every
+    approval after it, so the author re-recorded and the reviewer re-accepted the same work -- three
+    times on one task. A two-parent merge whose tree is exactly what git's merge of its parents
+    produces adds nothing its parents do not hold, and each parent is still judged on its own: one
+    on main or inside a merge target is landed, and any other is listed here as before. A merge
+    with *any* change of its own (an edited or resolved file) is not that merge and stays listed,
+    as does anything git cannot verify.
     """
     tip = task_branch_tip(root, task_id)
     if tip is None:
         return None, []
     branch = worktrees.task_branch_name(task_id)
-    excluded = [f"^{ref}" for ref in [main_branch, *merge_shas] if ref]
-    result = _git(root, "rev-list", "--reverse", tip, *excluded, "--")
-    if result.returncode != 0:
-        return branch, []
-    return branch, [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    # For commit ids the answer is a fact (`git_facts`, D4); the main branch is resolved first.
+    main_sha = resolve(root, main_branch) if main_branch else None
+    refs = [ref for ref in [main_sha or main_branch, *merge_shas] if ref]
+
+    def _ask() -> Optional[List[str]]:
+        excluded = [f"^{ref}" for ref in refs]
+        result = _git(root, "rev-list", "--reverse", "--parents", tip, *excluded, "--")
+        if result.returncode != 0:
+            return None
+        commits: List[str] = []
+        for line in result.stdout.splitlines():
+            fields = line.split()
+            if not fields:
+                continue
+            sha, parents = fields[0], fields[1:]
+            if len(parents) == 2 and _is_clean_merge_of(root, sha, parents[0], parents[1]):
+                continue
+            commits.append(sha)
+        return commits
+
+    if all(git_facts.is_full_sha(ref) for ref in [tip, *refs]):
+        key = ("left-behind", git_facts.root_key(root), tip, tuple(refs))
+        commits = git_facts.fact(key, _ask, keep=lambda answer: answer is not None)
+    else:
+        commits = _ask()
+    return branch, list(commits or [])
+
+
+def _is_clean_merge_of(root: Path, commit: str, first: str, second: str) -> bool:
+    """Whether *commit*'s tree is exactly git's own clean merge of *first* and *second*.
+
+    `merge-tree --write-tree` is plumbing (see `would_conflict`): it writes only objects, so asking
+    changes no checkout. False for a conflicting merge, any difference, or a git that cannot
+    answer -- the caller then keeps the commit listed, which is the conservative reading.
+    """
+    merged = _git(root, "merge-tree", "--write-tree", first, second)
+    if merged.returncode != 0:
+        return False
+    lines = merged.stdout.split()
+    if not lines:
+        return False
+    own = _git(root, "rev-parse", "--verify", f"{commit}^{{tree}}")
+    return own.returncode == 0 and own.stdout.strip() == lines[0]
 
 
 async def task_has_requirement_links(session: AsyncSession, task: Task) -> bool:
@@ -548,8 +614,8 @@ async def merge_targets(session: AsyncSession, task: Task, root: Path) -> List[T
     """
     if await evidence_governs(session, task) and not await review_alone_gates(session, task):
         accepted = await _targets(session, task, requirement_evidence.ACCEPTED)
-        return await asyncio.to_thread(reduce_by_ancestry, root, accepted)
-    tip = await asyncio.to_thread(task_branch_tip, root, task.id)
+        return await blocking.run(reduce_by_ancestry, root, accepted)
+    tip = await blocking.run(task_branch_tip, root, task.id)
     if tip is None:
         return []
     # The three evidence fields stay None: there is no evidence row to point at, and `Target`'s
@@ -584,7 +650,7 @@ async def review_target(
                 refusal=f"task {task.id} has no branch to review: the project's repository "
                 f"could not be located ({getattr(exc, 'detail', None) or exc})"
             )
-    tip = await asyncio.to_thread(task_branch_tip, root, task.id)
+    tip = await blocking.run(task_branch_tip, root, task.id)
     if tip is None:
         return requirement_evidence.ReviewTarget(
             refusal=f"task {task.id} has no branch to review. Its work was never committed to a "
@@ -619,19 +685,35 @@ def would_conflict(root: Path, commit: str, main_branch: str) -> List[str]:
     safe to ask *before* approving rather than discovering the answer mid-merge, with a transition
     already recorded and a repository half-changed.
     """
-    result = _git(root, "merge-tree", "--write-tree", "--name-only", main_branch, commit)
-    if result.returncode == 0:
-        return []
-    paths: List[str] = []
-    # First stdout line is the (conflicted) tree OID; conflicted paths follow, one per line, until
-    # the blank line before git's human-readable messages.
-    for line in result.stdout.splitlines()[1:]:
-        if not line.strip():
-            break
-        paths.append(line.strip())
-    # A non-zero exit with no parsed paths still means "would not merge cleanly"; saying so without
-    # naming a file is worse than saying nothing, so the caller gets a marker it can render.
-    return paths or ["(unknown path)"]
+    # Asked of commit ids, whose merge never changes (`git_facts`, D4); names are resolved first.
+    base = resolve(root, main_branch) or main_branch
+    head = commit if git_facts.is_full_sha(commit) else (resolve(root, commit) or commit)
+
+    def _ask() -> Tuple[int, List[str]]:
+        result = _git(root, "merge-tree", "--write-tree", "--name-only", base, head)
+        if result.returncode == 0:
+            return 0, []
+        paths: List[str] = []
+        # First stdout line is the (conflicted) tree OID; conflicted paths follow, one per line,
+        # until the blank line before git's human-readable messages.
+        for line in result.stdout.splitlines()[1:]:
+            if not line.strip():
+                break
+            paths.append(line.strip())
+        # A non-zero exit with no parsed paths still means "would not merge cleanly"; saying so
+        # without naming a file is worse than saying nothing, so the caller gets a marker.
+        return result.returncode, paths or ["(unknown path)"]
+
+    if git_facts.is_full_sha(base) and git_facts.is_full_sha(head):
+        # 0 (clean) and 1 (conflicts) are answers; any other exit is git failing, not a fact.
+        _code, paths = git_facts.fact(
+            ("merge-tree", git_facts.root_key(root), base, head),
+            _ask,
+            keep=lambda answer: answer[0] in (0, 1),
+        )
+    else:
+        _code, paths = _ask()
+    return list(paths)
 
 
 @dataclass

@@ -10,6 +10,7 @@ from sqlalchemy import literal_column, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import binaries
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, ManagerJob, Project, Runner
@@ -80,6 +81,7 @@ async def create_runner(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    binaries.forget()  # D4: which CLIs exist is looked up again when runners change
     # F599: refused before anything else is judged, so the answer names the flag.
     _refuse(posture_flags_problem(body.cli, body.flags))
     provider_config = None
@@ -176,6 +178,7 @@ async def update_runner(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    binaries.forget()  # D4: which CLIs exist is looked up again when runners change
     runner = await session.get(Runner, runner_id)
     if runner is None or runner.project_id != project_id:
         raise HTTPException(status_code=404, detail="Runner not found")
@@ -243,6 +246,7 @@ async def delete_runner(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    binaries.forget()  # D4: which CLIs exist is looked up again when runners change
     runner = await session.get(Runner, runner_id)
     if runner is None or runner.project_id != project_id:
         raise HTTPException(status_code=404, detail="Runner not found")

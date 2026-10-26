@@ -1,0 +1,111 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "Slices are vertical by felt outcome, not by layer. Each one is demonstrable by the operator using the app. Each carries its own measured acceptance drive against a copy of the operator's database, never `:8000`. They are ordered by how much of the measured slowness each removes, and by hazard. Slice 1 has no migration hazard beyond one additive index, and it removes the request storm that causes most of the queueing. The database journal change is a Tier 2 hazard on live data, so it goes in its own slice.\n\n**Runner-agnostic (operator, 2026-10-25).** AgentWeave stays agnostic of the agent tool. Every slice's outcome must hold whichever runner drives the run. Each acceptance drive that involves a real turn runs it on Claude and on Copilot, the operator's two runners now. Each also runs it on Codex once the operator's Codex account exists. Until then, the Codex path is covered by the drive's in-process part plus a recorded Codex stream replayed through the Hub, and the slice says which. A fix must not land in one runner's path only when the same cost exists in another's.\n\n**Approval keeps running the full Hub test suite (operator, 2026-10-25).** This roadmap makes the suite cheaper to run but does not shrink it.\n\n**Measurement basis.** The harnesses and investigation reports behind every number are in `C:\\Users\\huida\\aw-perf\\`:\n- A-client-fanout.md\n- B-route-costs.md\n- C-loop-blockers.md\n- D-database.md\n- E-startup-ui-machine.md\n\n**Hazard.** A Hub started on a copy of real data must run with its lifespan off. With it on, the copy's queued input spawned a real agent run during this investigation. It was cancelled within 2s and nothing was written outside the copy.\n\n**Budgets are provisional.** They are kept as first set until the operator has used the build on the work VDI; then they are tightened or loosened (operator, 2026-10-25).",
+  "evidence": {
+    "checked": [
+      "Operator traces on :8000, read with sqlite mode=ro: 6,944 aw.request spans and 7,149 aw.command spans, 2026-10-21 to 10-25, grouped by route and hour",
+      "In-process load test of the dashboard's poll mix on a copy of the operator database: 24 concurrent requests take 2.16s wall, the sum of their solo costs",
+      "71 dashboard GET routes measured solo for wall time, SQL statements, rows decoded and bytes (B-route-costs.md), plus a 10x-history synthetic copy",
+      "Transitive call-graph scan: 187 blocking call sites in 98 async functions; git calls on the loop confirmed by a thread counter and a loop-lag sampler (C-loop-blockers.md)",
+      "Commit and read latency in rollback journal vs WAL on the 97MB copy; one connection held per open stream, and the 16th stream fails (D-database.md)",
+      "TanStack Query cancelRefetch behaviour reproduced with the repo's own query-core: 18 invalidations start 18 fetches, and all complete (A-client-fanout.md)",
+      "Headless page load against the trial Hub with 1x/4x/6x CPU throttling: 40 requests on open, one 1.5MB chunk (E-startup-ui-machine.md)",
+      "Runner stream paths read: Claude via a pty thread, Codex and Copilot via asyncio streams, all recorded through one per-line function (C-loop-blockers.md)"
+    ],
+    "limits": [
+      "The work VDI has not been measured. Its known facts are 24GB RAM and about 30GB of disk; CPU count, disk latency and antivirus behaviour are unknown, and weak-machine figures are browser CPU throttling on this machine",
+      "Requests per run are estimated from code and persisted event rates, not counted in a live browser during a run",
+      "GET requests under 1s are not kept by the trace middleware, so production frequencies are counts of slow calls, a lower bound",
+      "No Codex account yet: Codex turns cannot be driven live until the operator arranges one",
+      "Windows CPU timing ticks at 15.6ms; solo medians varied about 30% between runs"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Work machine: what is it, and which runners matter? Answer (operator, 2026-10-25): a VDI with 24GB RAM and about 30GB of disk free (more on request). Claude and Copilot first; Codex once an account is arranged; the product stays runner-agnostic.",
+      "resolved": true
+    },
+    {
+      "question": "Is WAL in scope? Answer (operator, 2026-10-25): in scope, as slice database-stays-fast-as-history-grows.",
+      "resolved": true
+    },
+    {
+      "question": "What should approval checks do on the work PC? Answer (operator, 2026-10-25): keep the full Hub suite; the former checks slice is dropped.",
+      "resolved": true
+    }
+  ],
+  "problem": "The operator notices AgentWeave being slow, with many API calls taking too long. From Monday 2026-10-26 they will use it exclusively on a work VDI (24GB RAM, about 30GB of virtual disk free, corporate network) that is much weaker than this machine. Everything below was measured on this machine. A weaker CPU and shared VDI storage make every number worse, because the Hub serves requests on one event loop, most of the cost is CPU, and every commit and git call waits on the disk.\n\n**What the operator's traces show.** Source: `:8000`, 6,944 recorded requests, 2026-10-21 to 10-25, read read-only.\n\n| Route | Calls over 1s | Median | p95 | Max | Cost alone, on a copy of the same database |\n|---|---|---|---|---|---|\n| `GET /agents` | 2,063 | 3.6s | 6.9s | 21.8s | 80ms |\n| `GET /loops` | 1,205 | 1.8s | 8.2s | 27s | 170-410ms |\n| `GET /conversations` | 625 | 2.7s | | | 50-140ms |\n| `GET /agents/{name}/output` | 444 | 1.6s | | | 20ms |\n\nA route that costs 6ms alone (`/accounting`) took 1.8s live. The time is queueing, not work, and it concentrates in the hours the operator spends talking to an agent.\n\n**Why it queues.** Each cause was measured on a copy of the operator's database.\n\n- **The dashboard turns one live event into tens of requests.**\n  - Every panel that subscribes to the event stream re-runs the whole invalidation switch: about 20 subscribers on the chat screen.\n  - Each re-request of a key cancels the one in flight on the client, while the Hub still serves it.\n  - A list refresh also refetches each agent's last 200 output lines (about 250KB), only to discard them.\n  - Estimated about 1,300 requests per agent run (about 350 a minute), and about 52 a minute with the app idle.\n- **Hot routes scale with history.**\n  - `/agents` and both conversation lists decode every context-usage reading ever recorded (3,000+ rows) to use the newest.\n  - `/loops` issues 220 SQL statements for 3 loops.\n  - At 10x history, `/agents` costs 1.8s on its own.\n- **Synchronous git on the event loop freezes every request.**\n  - Turn start: 1.0s average, max 20.8s.\n  - Task approval: 4.2s average, max 10.3s.\n  - Each evidence record: 0.33s.\n  - About 400s of whole-Hub freeze over 90 hours.\n- **Every open event stream holds a database connection for its life.** The 16th stream fails, and every read then waits 30s.\n- **The rollback journal makes a commit 14x slower than WAL.**\n  - Under write bursts, read p50 rises to 1.07s (WAL: 0.28s).\n  - The database is 97MB and nothing is pruned. Traces alone grow about 10MB a day, which matters on a 30GB VDI disk.\n- **Opening the app is expensive.**\n  - First open fires 40 requests, 25 of them one per sidebar project.\n  - The app is a single 1.5MB script: 2s of script time at a 6x-throttled CPU.\n  - The chat timeline re-renders whole on every output line.\n\n**Runner paths differ.** Claude output is read line by line through a pty thread. Codex and Copilot output arrives through asyncio streams. All three record each line through the same function, with one commit per line.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Request volume the dashboard generates, idle and during runs",
+      "Per-request cost of the routes the dashboard calls, and how it grows with history",
+      "Work that blocks the Hub's event loop (git, file scans, per-line commits), on every runner path: Claude, Copilot and Codex",
+      "Database journal mode (WAL), connection use by event streams, indexes, retention of traces and history",
+      "First-open cost of the app and rendering cost of long timelines on a weak CPU"
+    ],
+    "non_goals": [
+      "Changing what any screen shows or any workflow does: every slice keeps behaviour and only changes cost",
+      "Shrinking the approval checks: approval keeps running the full Hub suite (operator, 2026-10-25)",
+      "Moving off SQLite or adding an external service (cache, queue, database server)",
+      "Agent model latency and runner CLI startup time, which the Hub does not control",
+      "Federated or multi-machine deployment",
+      "The Thread route's own 3.3s, already tracked as task-592232cf2f5c (it runs off the event loop, so it does not slow other requests)"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "A streamed agent turn is replayed against a copy of the operator's database, on Claude and on Copilot. The open dashboard stays within its request budget per minute, and every read answers within the stated budget.",
+      "intent": "While an agent streams a turn on any runner, every screen answers as fast as when nothing runs. The dashboard requests each changed thing once, the hot list routes no longer scale with history, and open event streams cannot exhaust the database.",
+      "key": "responsive-while-agents-run",
+      "title": "The app stays responsive while agents run"
+    },
+    {
+      "builds_after": [
+        "responsive-while-agents-run"
+      ],
+      "done": "A loop-lag probe shows no stall over 100ms on the event loop while a turn starts on each runner, a task is approved and evidence is recorded.",
+      "intent": "Starting a turn, approving a task, recording evidence, staffing a review and streaming output lines no longer stop every other request while git or the database works, on every runner path.",
+      "key": "turns-and-approvals-never-freeze",
+      "title": "Turn starts, approvals and evidence never freeze the Hub"
+    },
+    {
+      "builds_after": [
+        "responsive-while-agents-run"
+      ],
+      "done": "With ten times today's history and a run writing at peak rate, the hot reads answer within the budget slice 1 set. The database file stops growing without bound, and a backup taken while the Hub runs restores to a consistent database.",
+      "intent": "Reads stay fast under write bursts and after months of history. Writers no longer starve readers (WAL), traces and other growing history are retained only for a bounded time, the hot reads have indexes, and every backup the product or its scripts take stays safe under the new journal.",
+      "key": "database-stays-fast-as-history-grows",
+      "title": "The database stays fast as history grows"
+    },
+    {
+      "builds_after": [
+        "responsive-while-agents-run"
+      ],
+      "done": "At a 6x-throttled CPU the project screen is usable within a stated time. A 1,000-row conversation streaming 90 lines a minute does not drop frames beyond a stated bound.",
+      "intent": "Opening a project takes a few requests and a small first script. A long conversation stays smooth while it streams.",
+      "key": "opens-fast-on-a-weak-machine",
+      "title": "The app opens fast and stays smooth on a weak machine"
+    }
+  ],
+  "summary": "Make AgentWeave fast enough to be the operator's only tool from Monday 2026-10-26, on a work VDI that is much weaker than this machine, whichever runner drives the agents (Claude and Copilot first, Codex as soon as an account exists). On the operator's real Hub, ordinary reads during agent runs take 1.6-3.6s at the median and up to 27s. The causes: the dashboard multiplies each live event into dozens of duplicate requests, a handful of routes do work that grows with history, git runs on the event loop, and SQLite runs a rollback journal that starves readers. Four slices, ordered by how much of the felt slowness each removes.",
+  "tasks": [],
+  "title": "AgentWeave performance overhaul"
+}

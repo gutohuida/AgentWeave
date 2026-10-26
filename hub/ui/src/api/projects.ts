@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchWithAuth, getJson, postJson, putJson } from './client'
+import { ApiError, fetchWithAuth, getJson, postJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
 export interface ProjectAgentSummary {
@@ -33,7 +33,10 @@ export function useProjects() {
   const { isConfigured } = useConfigStore()
   return useQuery<ProjectSummary[]>({
     queryKey: ['projects'],
-    queryFn: () => getJson<ProjectSummary[]>('/api/v1/projects'),
+    queryFn: () => {
+      const { hubUrl, apiKey } = useConfigStore.getState()
+      return readProjectCollection(hubUrl, apiKey, () => getJson<ProjectSummary[]>('/api/v1/projects'))
+    },
     enabled: isConfigured,
   })
 }
@@ -247,9 +250,39 @@ export async function fetchProjectSummaries(
   hubUrl: string,
   apiKey: string,
 ): Promise<ProjectSummary[]> {
-  const res = await fetch(`${hubUrl}/api/v1/projects`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  })
-  if (!res.ok) return []
-  return (await res.json()) as ProjectSummary[]
+  try {
+    return await readProjectCollection(hubUrl, apiKey, async () => {
+      const res = await fetch(`${hubUrl}/api/v1/projects`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      })
+      if (!res.ok) throw new ApiError(res.status, await res.text())
+      return (await res.json()) as ProjectSummary[]
+    })
+  } catch {
+    return []
+  }
+}
+
+let projectCollectionRead: { key: string; read: Promise<ProjectSummary[]> } | null = null
+
+/** The project collection, joining a read of it that is already under way with the same
+ *  credential. Bootstrap's auto-selection and `useProjects` both read it as the app opens, and
+ *  they used to send two requests for one answer. Only an in-flight read is shared: once it
+ *  settles, the next read goes to the Hub, so nothing is served stale. */
+function readProjectCollection(
+  hubUrl: string,
+  apiKey: string,
+  read: () => Promise<ProjectSummary[]>,
+): Promise<ProjectSummary[]> {
+  const key = `${hubUrl}
+${apiKey}`
+  if (projectCollectionRead && projectCollectionRead.key === key) return projectCollectionRead.read
+  const pending = read()
+  const entry = { key, read: pending }
+  projectCollectionRead = entry
+  const clear = () => {
+    if (projectCollectionRead === entry) projectCollectionRead = null
+  }
+  pending.then(clear, clear)
+  return pending
 }
