@@ -2889,13 +2889,24 @@ async def _close_open_calls(open_calls: OpenToolCalls, record, *, final_status: 
     """
     if final_status not in ("stopped", "failed"):
         return
-    for event in open_calls.closing_events():
+    closing = open_calls.closing_events()
+    if not closing:
+        return
+    # Streamed lines are written in batches (D3), so a closing row's write happens at the flush:
+    # the run's own lines are written first, as they would have been already, and the closing rows'
+    # flush is the write that is logged and skipped.
+    await flush_streamed(run_id)
+    for event in closing:
         try:
             await record(event)
         except Exception:  # noqa: BLE001 - see the docstring
             logger.warning(
                 "Could not close tool call %s of run %s", event.call_id, run_id, exc_info=True
             )
+    try:
+        await flush_streamed(run_id)
+    except Exception:  # noqa: BLE001 - see the docstring
+        logger.warning("Could not close the tool calls of run %s", run_id, exc_info=True)
 
 
 def _log_abnormal_run_end(exc: BaseException, *, run_id: str, agent: str, label: str) -> None:
