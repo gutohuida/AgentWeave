@@ -10,6 +10,7 @@ import {
   Task,
   useAddTaskDependency,
   useAllowedTransitions,
+  useTaskMoves,
   useDeleteTask,
   useLandTask,
   useRemoveTaskDependency,
@@ -308,6 +309,9 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const editingTitle = titleDraft !== null
 
   const { data: allowed } = useAllowedTransitions()
+  // The mover decision's answer for this task as it is held (FR-8); the map is only the fallback
+  // while that answer is unread.
+  const { data: taskMoves } = useTaskMoves(task?.id ?? null)
   const updateTask = useUpdateTask()
   const landTask = useLandTask()
   const deleteTask = useDeleteTask()
@@ -396,7 +400,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
 
   if (!task) return null
 
-  const moves = allowed?.transitions?.[task.status] ?? []
+  const moves = taskMoves?.moves ?? allowed?.transitions?.[task.status] ?? []
   const policy = task.divergence_policy ?? 'surface'
   const blockedAccent = 'var(--purple)'
 

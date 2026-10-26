@@ -35,6 +35,7 @@ vi.mock('@/api/tasks', async (importOriginal) => {
   return {
     ...actual,
     useAllowedTransitions: () => ({ data: { actor_kind: 'operator', transitions: transitionsMap } }),
+    useTaskMoves: () => ({ data: undefined }),
     useUpdateTask: () => ({ mutate: vi.fn() }),
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),
     // F9's note. Stubbed here for the same reason the three hooks above are: this file is about the

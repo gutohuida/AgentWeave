@@ -253,3 +253,38 @@ async def test_the_board_is_offered_exactly_the_moves_the_decision_allows(app, a
             assert "under_review" not in expected
         if (status, holder) == ("completed", "other"):
             assert "under_review" in expected
+
+
+@pytest.mark.parametrize("holder", HOLDERS)
+@pytest.mark.parametrize("reviewer", [AUTHOR, OTHER])
+@pytest.mark.parametrize(
+    "status", [s for s in NON_TERMINAL if s not in ("completed", "under_review")]
+)
+async def test_entering_review_from_any_other_status_is_refused_on_every_path(
+    app, status, holder, reviewer
+):
+    """FR-8 for the rest of the enumeration: review is entered from `completed` only, so from any
+    other status all three paths must refuse. The reasons legitimately differ -- the review claim
+    and the reset refuse it as not an edge, `update_task` for its own reason -- so what is
+    compared is the verdict, not the wording (the wording is compared on `completed` above)."""
+    if (status, "under_review") in {(s, t) for s, ts in TRANSITIONS.items() for t in ts}:
+        pytest.skip("review is an edge from this status; covered by the completed comparison")
+    await _agents()
+    task_id = await _task(status, holder)
+    mender = await mender_run()
+
+    refusal, _ = await _move(task_id, "under_review", reviewer)
+    async with async_session_factory() as session:
+        dispatch = await review_dispatch_refusal(
+            session, await session.get(Task, task_id), reviewer=reviewer
+        )
+    with patch("hub.turn_scheduler.schedule_accepted", AsyncMock()):
+        reset = await app.post(
+            RESET.format(task_id),
+            json={"status": "under_review", "assignee": reviewer},
+            headers=mender,
+        )
+
+    assert refusal is not None, (status, holder, reviewer)
+    assert dispatch is not None, (status, holder, reviewer)
+    assert reset.status_code in (400, 403, 409), (status, holder, reviewer, reset.text)

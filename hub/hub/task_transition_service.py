@@ -469,9 +469,10 @@ async def decide_move(
 ) -> MoveVerdict:
     """The one decision of who may move a task where, consulted by every path that moves one.
 
-    The map's edge, then author/reviewer separation. Outside the flow's own staffing, an agent
-    other than the author may take a `completed` task into review and becomes its holder; the
+    The map's edge, then author/reviewer separation. An agent other than the author may take a `completed` task into review and becomes its holder; the
     author, and a mender that re-recorded its evidence, may not (`every-task-can-always-be-moved-on`).
+    This does not check for a flow: inside one, an agent other than the author may take completed
+    work the same way, which the spec's FR-3 does not forbid.
     Reads only; `apply_transition` makes the move this allows, and adds the checks that ask about
     the state of the work rather than who is asking.
     """

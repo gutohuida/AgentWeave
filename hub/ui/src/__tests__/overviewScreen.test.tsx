@@ -15,6 +15,7 @@ let accountingData: Record<string, unknown> = { budget: { exhausted: false } }
 let queueStatuses: Array<Record<string, unknown>> = []
 let openStalls: Stall[] = []
 const answerMutate = vi.fn()
+const updateTaskMutate = vi.fn()
 
 vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: [{ name: 'builder', status: 'idle', message_count: 0, active_task_count: 0, runner_id: 'r1' }], isLoading: false }),
@@ -33,11 +34,22 @@ vi.mock('@/api/tasks', () => ({
           status: 'approved',
           latest_integration: { outcome: 'failed', reason: 'the project folder has uncommitted changes', target_branch: 'master', created_at: '2026-10-20T09:00:00Z' },
         },
+        // The shape the tasks route returns for a task the operator alone can move on.
+        {
+          id: 'task-11',
+          title: 'Wire the exporter',
+          status: 'blocked',
+          assignee: 'builder',
+          blocked_reason: 'needs the staging credentials',
+          updated: '2026-10-20T09:30:00Z',
+          latest_integration: null,
+        },
       ],
-      total: 1,
+      total: 2,
       has_more: false,
     },
   }),
+  useUpdateTask: () => ({ mutate: updateTaskMutate }),
 }))
 vi.mock('@/api/agentChat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agentChat')>()
@@ -161,9 +173,18 @@ describe('the wired Overview', () => {
     const onNavigate = vi.fn()
     render(<OverviewScreen onNavigate={onNavigate} />)
     expect(screen.getByText('“Rename the parser” was approved but not merged')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Open task' }))
+    const mergeRow = screen.getByText('“Rename the parser” was approved but not merged').closest('li') as HTMLElement
+    fireEvent.click(within(mergeRow).getByRole('button', { name: 'Open task' }))
     expect(useTaskFilterStore.getState().pendingOpenTaskId).toBe('task-9')
     expect(onNavigate).toHaveBeenCalledWith('tasks')
+  })
+
+  it('lists a blocked task as waiting on the operator, with its reason and the move that releases it (FR-2)', () => {
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    const row = screen.getByText('“Wire the exporter” is waiting on you').closest('li') as HTMLElement
+    expect(within(row).getByText(/needs the staging credentials/)).toBeInTheDocument()
+    fireEvent.click(within(row).getByRole('button', { name: 'Resume work' }))
+    expect(updateTaskMutate).toHaveBeenCalledWith({ id: 'task-11', status: 'in_progress' })
   })
 
   it('shows a running conversation and opens that conversation', () => {
