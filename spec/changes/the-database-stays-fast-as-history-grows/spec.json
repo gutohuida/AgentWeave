@@ -1,0 +1,341 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a Hub started on a scratch database on a local disk",
+      "key": "ac-wal",
+      "requirement": "wal-on",
+      "then": "each reads wal, full (2), and a positive size limit",
+      "when": "PRAGMA journal_mode, synchronous and journal_size_limit are read through the Hub's engine on several pooled connections"
+    },
+    {
+      "given": "a copy of the operator's database in rollback-journal mode",
+      "key": "ac-wal-existing",
+      "requirement": "wal-on",
+      "then": "the database runs in WAL afterwards",
+      "when": "the Hub opens it"
+    },
+    {
+      "given": "an engine whose connect-time WAL request is refused",
+      "key": "ac-fallback",
+      "requirement": "wal-fallback",
+      "then": "it serves requests, and its startup line names the journal mode it runs in",
+      "when": "the Hub starts"
+    },
+    {
+      "given": "a copy of the operator's database opened the way the Hub opens it",
+      "key": "ac-reads",
+      "requirement": "reads-under-writes",
+      "then": "read latency p90 is under 500ms",
+      "when": "one writer commits output rows continuously while four readers replay the /agents queries for 30s"
+    },
+    {
+      "given": "a Hub on a scratch database",
+      "key": "ac-durable",
+      "requirement": "durable",
+      "then": "the task is present",
+      "when": "a task is created, the request answers 201, and the process is killed without shutdown and restarted"
+    },
+    {
+      "given": "a running Hub in WAL, with a writer committing",
+      "key": "ac-backups",
+      "requirement": "backups-consistent",
+      "then": "each backup passes PRAGMA integrity_check and contains every row committed before the backup started",
+      "when": "each backup path found in hub/, src/ and scripts/ is run against it"
+    },
+    {
+      "given": "a copy of the operator's database with the retention window set",
+      "key": "ac-retention",
+      "requirement": "trace-retention",
+      "then": "no span older than the window remains, and every span newer than it is still present",
+      "when": "the Hub's retention sweep runs to completion"
+    },
+    {
+      "given": "the project's trace settings",
+      "key": "ac-retention-setting",
+      "requirement": "trace-retention",
+      "then": "the next sweep honours the new window",
+      "when": "the operator changes the retention window"
+    },
+    {
+      "given": "a copy of the operator's database with all of its spans expired",
+      "key": "ac-retention-stall",
+      "requirement": "retention-no-stall",
+      "then": "no GET /agents takes longer than its idle time plus 100ms",
+      "when": "the first retention sweep runs while GET /agents is requested every 100ms"
+    },
+    {
+      "given": "a Hub on a copy that has never had statistics",
+      "key": "ac-stats",
+      "requirement": "stats-current",
+      "then": "sqlite_stat1 exists and holds rows for agent_outputs and event_logs",
+      "when": "the Hub has run past its first statistics refresh"
+    },
+    {
+      "given": "a database migrated to head",
+      "key": "ac-indexes",
+      "requirement": "hot-read-indexes",
+      "then": "the plan uses an index on event_logs covering project, event type and agent, and no agent_outputs index's columns are a leading prefix of another's",
+      "when": "EXPLAIN QUERY PLAN is read for the newest-context-reading query, and the agent_outputs index list is read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "e5fd62fa3e9237dd0075bb55f3d838b0c2a2a2039fd12ecdd42befd669f6dd69",
+      "FR-2": "1aced4fbaafd1044660ee9033f55ba3f120f72b8d291dc342ae12804b01217d7",
+      "FR-3": "7970cca9bac729b39547357a907767e5b2e8cca6fa0ec49ec3819241e7840f0d",
+      "FR-4": "c12a0aa576426b30b14570d52fb0a2bd4d463d95e2c7d70a637c814a336ae58b",
+      "FR-5": "e50bbfb29200e4fa183e5eb693cbbd119a0ba574cadc6c7b5e2749a70f94ba1e",
+      "FR-6": "5f709b57c65481346b7cbcd274a88c25bfde013fdbf098a9f9d7990313f8ee97",
+      "FR-7": "3430920eb9007533a9cd9cc2377a8732a11337d8a4aa86b59108b8af7fe8d713",
+      "FR-8": "9c16d9ec0d177daee26d0b81c1c5d16870de3752046426463aa8d04a19c48070",
+      "FR-9": "fedb35c7702f3928f80aa74c7a35824fd76a3baa09200114855668d04746225f"
+    },
+    "high_water": 9,
+    "requirements": {
+      "backups-consistent": "FR-5",
+      "durable": "FR-4",
+      "hot-read-indexes": "FR-9",
+      "reads-under-writes": "FR-3",
+      "retention-no-stall": "FR-7",
+      "stats-current": "FR-8",
+      "trace-retention": "FR-6",
+      "wal-fallback": "FR-2",
+      "wal-on": "FR-1"
+    },
+    "retired": {}
+  },
+  "design": "**D1 — WAL with full sync.** The Hub opens its SQLite database in WAL with `synchronous=FULL` and a bounded WAL file. Why: it gives most of the read win, and an acknowledged commit stays durable across power loss. `NORMAL` was faster but showed a 1.2s checkpoint stall, and it can lose the last commits.\n\n**D2 — If WAL cannot be set, the Hub still opens.** For example, the database sits on a network share. The Hub opens in the journal it has, and its startup line says which journal it runs. Why: an unusable Hub is worse than a slower one.\n\n**D3 — Every backup is consistent.** Any backup the product, its CLI or this repo's scripts take of a running Hub's database uses SQLite's own backup, or `VACUUM INTO`, never a file copy. Why: under WAL a file copy silently omits committed data.\n\n**D4 — Traces have a retention window.**\n- Trace spans older than the project's retention window are deleted by the Hub on its own, in small batches off the request path.\n- The operator can change the window in the project's trace settings.\n- What the default window is remains an open question.\n- Agent outputs, events, messages and runs are the operator's history and are not pruned by this slice.\n\n**D5 — The Hub keeps the database's statistics current, and space is reclaimed.** It refreshes query-planner statistics periodically. Freed space is reused, and reclaiming it is the operator's act. Why: it needs the Hub stopped, or it locks the file.\n\n**D6 — Indexes for the hot reads.** Add an index for the `context_warning` reads and drop the two redundant `agent_outputs` prefix indexes, both as migrations.\n\n**Hazard: Tier 2.**\n- This changes the operator's live database at their next `:8000` restart: journal mode, migrations and a first retention sweep that deletes old trace rows.\n- Rollback: with the Hub stopped, `PRAGMA journal_mode=DELETE`, then remove the index migration with downgrade. Deleted traces are not recoverable, so the first sweep must honour the window exactly.\n- The acceptance drive is written and failing before the build.",
+  "evidence": {
+    "checked": [
+      "Commit and read latency on the 97MB copy in delete, WAL+FULL and WAL+NORMAL, through both the sqlite3 module and the Hub's aiosqlite stack (D-database.md)",
+      "Write rates per run and per minute from trace_spans and agent_outputs on the copy",
+      "Table sizes with dbstat, free pages, and the file growth across the 09-24, 09-26, 10-18 and 10-25 copies",
+      "EXPLAIN QUERY PLAN for the hot reads; the index list on agent_outputs",
+      "Backup paths: the restart runbook and drive scripts use sqlite backup; copilot-test-setup removes -wal/-shm; docker-compose uses a named volume"
+    ],
+    "limits": [
+      "Disk sync cost on the work VDI is unmeasured; shared storage is usually slower, which favours WAL more, but this is inferred",
+      "The backup-path inventory was a grep; the backups task re-derives it",
+      "The test suite does not run production's journal settings, so CI cannot catch a regression in locking behaviour"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": "large",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 2: journal mode, migrations and the first retention sweep all act on the operator's live database at their next :8000 restart. The acceptance drive is written and failing before the build. Rollback is PRAGMA journal_mode=DELETE with the Hub stopped plus migration downgrade; deleted traces are not recoverable. Merging to master and restarting :8000 stay the operator's calls.",
+  "open_questions": [
+    {
+      "question": "What is the default trace retention window: 7, 14 or 30 days? At about 10.8MB a day that is roughly 75MB, 150MB or 325MB of traces kept.",
+      "resolved": false
+    },
+    {
+      "question": "The operator's database file is 97MB with about 20MB free and most of its growth in traces. Should the first build ship a one-time, operator-run compaction (Hub stopped) to return the space retention frees, or leave freed pages for reuse?",
+      "resolved": false
+    },
+    {
+      "question": "Who builds and reviews this slice? Proposed: a flow, with DeveloperOpus building wal and retention (live-data hazard) and Developer building backups and stats-indexes.",
+      "resolved": false
+    }
+  ],
+  "problem": "Measured on a 97MB copy of the operator's database (`C:\\Users\\huida\\aw-perf\\D-database.md`).\n\n**The journal multiplies disk syncs.**\n- The operator's database runs `journal_mode=delete`. The engine sets only a 30s busy timeout (`hub/hub/db/engine.py:36-49`).\n- A single insert and commit costs 10.8ms at p50 and 23.1ms at p99. In WAL with `synchronous=FULL` it costs 0.76ms and 7.2ms.\n- With a writer committing flat out and 4 readers replaying the `/agents` queries, read latency was p50 1,074ms, p90 3,493ms, max 4,375ms. In WAL it was 278, 398 and 480ms.\n- The Hub writes in bursts: one commit per streamed line, about 50 output rows, 22 events and 55 spans per run, and peaks of 124 spans a minute and 5 outputs a second.\n- The test suite runs WAL with `synchronous=OFF` (`hub/tests/conftest.py:126-139`), so CI never exercises production's locking.\n- The WAL snapshot trap recorded in DEAD-ENDS does not apply here: the driver sends no BEGIN before a SELECT, and `hub/hub` issues no explicit BEGIN. This was measured with zero errors through the Hub's own aiosqlite stack.\n\n**Nothing is pruned.**\n- `trace_spans` takes 41MB after 3.8 days, about 10.8MB a day, which is more than `agent_outputs` (23MB).\n- Only `job_runs` is pruned (`hub/hub/scheduler.py:3648`). Traces can be cleared only by hand.\n- Live data grew from 6MB to 78MB since 10-18. About 20MB of free pages remain, after which the file grows again.\n- `ANALYZE` has never run (there is no `sqlite_stat1`).\n\n**Indexes.**\n- The `context_warning` reads have no index matching `(project_id, event_type, agent, timestamp)`.\n- Two `agent_outputs` indexes are redundant prefixes of `ix_agent_outputs_project_agent_run_sequence`.\n\n**WAL changes what a backup is.**\n- WAL adds `-wal` and `-shm` files beside the `.db`. A raw copy of the `.db` file alone then misses committed data.\n- The restart runbook and the drive scripts already use sqlite's backup. The `backup-before-0140` copy kept its source's timestamp, so it looks like a raw file copy.\n- Docker mode stores the database on a named volume (`docker-compose.yml:23`), which is fine. WAL must not run on a network share.",
+  "requirements": [
+    {
+      "key": "wal-on",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured: with WAL, commits are 14x cheaper and reads under write load are about 4x faster at the median; full sync keeps acknowledged commits durable.",
+      "statement": "When the Hub opens a SQLite database on a local disk, every connection it uses runs in WAL with full sync, and the WAL file is bounded in size between checkpoints."
+    },
+    {
+      "key": "wal-fallback",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A network-share database cannot run WAL, and the operator's Hub logs to DEVNULL, so the startup line is the one place a later reader can find it.",
+      "statement": "When WAL cannot be set, the Hub still starts. Its startup line names the journal mode the database runs in, whichever it is."
+    },
+    {
+      "key": "reads-under-writes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured: 3,493ms p90 in the rollback journal and 398ms in WAL.",
+      "statement": "On a copy of the operator's database, with one writer committing output rows continuously and four readers replaying the /agents route's queries, read latency is p90 under 500ms."
+    },
+    {
+      "key": "durable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Moving to WAL must not trade durability for speed: full sync, not NORMAL.",
+      "statement": "A write the Hub has committed is present after the Hub process is killed and restarted."
+    },
+    {
+      "key": "backups-consistent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Under WAL a copy of the .db file alone silently omits committed data that is still in the -wal file.",
+      "statement": "Every backup of a running Hub's database taken by the product, its CLI or this repository's scripts restores to a database that passes an integrity check and holds every write committed before the backup began."
+    },
+    {
+      "key": "trace-retention",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Traces grow about 10.8MB a day and are already the largest table. On a 30GB VDI disk that is unbounded growth.",
+      "statement": "Trace spans older than the project's trace retention window are removed by the Hub without operator action, and newer spans are never removed. The operator can set the window in the project's trace settings."
+    },
+    {
+      "key": "retention-no-stall",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The first sweep on the operator's database deletes tens of megabytes; one large delete would lock the file for every reader.",
+      "statement": "Removing expired trace spans never blocks a dashboard read for more than 100ms, including the first sweep on a database holding a backlog of expired spans."
+    },
+    {
+      "key": "stats-current",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "ANALYZE has never run on the operator's database, so the planner chooses indexes without statistics.",
+      "statement": "The database's query-planner statistics are refreshed by the Hub at least once a day while it runs."
+    },
+    {
+      "key": "hot-read-indexes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "context_warning is 61% of event_logs. Redundant prefix indexes cost a write on every streamed line.",
+      "statement": "The newest context-usage reading for an agent is found through an index, and agent_outputs carries no index that is a prefix of another of its indexes."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/agentweave-performance-overhaul/spec.json",
+    "slice": "database-stays-fast-as-history-grows"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The journal mode, sync level and WAL size bound the Hub opens SQLite with",
+      "The Hub's startup line naming its journal mode",
+      "Every backup path in the product, CLI and this repo's scripts that copies a live database",
+      "Automatic retention of trace spans, with an operator-set window",
+      "Periodic planner statistics and reuse of freed space",
+      "Index changes for the context_warning reads and redundant agent_outputs indexes"
+    ],
+    "non_goals": [
+      "Pruning agent outputs, events, messages, runs or tasks: that is the operator's history",
+      "Moving off SQLite",
+      "A VACUUM that runs on its own while the Hub serves (it rewrites the whole file under an exclusive lock)",
+      "Making the test suite run production's journal settings (recorded as a finding, not built here)",
+      "Dashboard request volume and event-loop blocking (slices 1 and 2)"
+    ]
+  },
+  "summary": "Reads stay fast while agents write, and after months of history. The Hub runs SQLite in WAL so writers stop starving readers. Every backup the product and its scripts take stays consistent under it. Traces are kept for a bounded time, and the hot reads get the indexes they lack. VDI shared storage makes every disk sync slower, which is exactly what the rollback journal multiplies.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Write scripts/drive/perf_database.py covering journal settings, fallback, reads under writes, kill-and-restart durability, every backup path, retention correctness and stall, statistics and index plans, all against copies or scratch databases. Run it on master and record the baseline in the task notes. It must never contact :8000 or open the operator's database for writing.",
+      "files": [
+        "scripts/drive/perf_database.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "wal-on",
+        "wal-fallback",
+        "reads-under-writes",
+        "durable",
+        "backups-consistent",
+        "trace-retention",
+        "retention-no-stall",
+        "stats-current",
+        "hot-read-indexes"
+      ],
+      "reviewer": null,
+      "title": "Database acceptance drive, written and failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Set WAL, full sync and a WAL size bound on every connection the Hub's engines open, the migration engine included, and fall back with a startup-line statement when WAL is refused. Add hub tests for the pragmas on pooled connections, the fallback, and kill-and-restart durability, failing before the change.",
+      "files": [
+        "hub/hub/db/engine.py",
+        "hub/hub/migrations/env.py",
+        "hub/hub/main.py"
+      ],
+      "from": null,
+      "key": "wal",
+      "requirements": [
+        "wal-on",
+        "wal-fallback",
+        "durable",
+        "reads-under-writes"
+      ],
+      "reviewer": null,
+      "title": "The Hub opens SQLite in WAL with full sync"
+    },
+    {
+      "depends_on": [
+        "wal"
+      ],
+      "description": "Find every place in hub/, src/ and scripts/ that copies a live database file, and make each use SQLite's backup or VACUUM INTO. Update the runbooks that describe a file copy (.claude/reference/hubs.md). Add a test that backs up a WAL database mid-write and restores it, failing before the change where a file copy was used.",
+      "files": [
+        "src/agentweave",
+        "scripts",
+        ".claude/reference/hubs.md",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "backups",
+      "requirements": [
+        "backups-consistent"
+      ],
+      "reviewer": null,
+      "title": "Every backup of a live database is consistent"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Add a project trace retention window to the trace settings and its route, and a Hub-run sweep that deletes expired spans in small batches without blocking reads. Add hub tests for the boundary (older removed, newer kept), the setting, and the no-stall bound on a large backlog, failing before the change.",
+      "files": [
+        "hub/hub/traces.py",
+        "hub/hub/api/v1/traces.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions",
+        "hub/ui/src/api/traces.ts",
+        "hub/ui/src/components",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "retention",
+      "requirements": [
+        "trace-retention",
+        "retention-no-stall"
+      ],
+      "reviewer": null,
+      "title": "Trace spans are kept for a bounded window"
+    },
+    {
+      "depends_on": [
+        "retention"
+      ],
+      "description": "Have the Hub refresh planner statistics at least daily, add the context_warning index and drop the two redundant agent_outputs prefix indexes by migration, with a downgrade that restores them. Add hub tests for the plan and for the index list, failing before the change.",
+      "files": [
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions",
+        "hub/hub/main.py"
+      ],
+      "from": null,
+      "key": "stats-indexes",
+      "requirements": [
+        "stats-current",
+        "hot-read-indexes"
+      ],
+      "reviewer": null,
+      "title": "Planner statistics refresh and the hot-read indexes"
+    }
+  ],
+  "title": "The database stays fast as history grows"
+}

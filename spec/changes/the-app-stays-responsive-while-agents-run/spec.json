@@ -1,0 +1,409 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the built dashboard is open on the chat screen with an agent's output panel expanded, against a Hub whose stream the drive controls",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario one-event (headless page, request log); also the hub/ui unit test that one event with N subscribers gives one refresh",
+      "key": "ac-one-event",
+      "requirement": "one-request-per-event",
+      "then": "the tab's network log shows at most one GET for each route it re-reads, and no GET of /agents/{name}/output",
+      "when": "the Hub emits exactly one context_warning event for that agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dashboard is open against a Hub that delays GET /agents by 2s",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario no-overlap; also the hub/ui unit test that five rapid invalidations of an in-flight key give at most two fetches",
+      "key": "ac-no-overlap",
+      "requirement": "no-duplicate-in-flight",
+      "then": "the network log never shows two GET /agents in flight at once, and shows no more than two GET /agents in total",
+      "when": "five events that affect the agent list arrive within 500ms"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation is open with its history loaded",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario line-appears (asserts the line's text in the DOM and reads the request log)",
+      "key": "ac-line-appears",
+      "requirement": "streamed-line-without-refetch",
+      "then": "the line is visible in the conversation, and the network log shows no GET of that conversation's chat history, no GET of /agents/{name}/output and no GET /agents",
+      "when": "the Hub streams one agent output line for that conversation"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub runs on a copy of the trial database, and a real Claude (Haiku) turn is streaming on the open conversation",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario run-budget --runner claude --model haiku (prints requests per rolling minute)",
+      "key": "ac-run-budget-claude",
+      "requirement": "run-request-budget",
+      "then": "no one-minute window of the tab's network log holds more than 40 requests to the Hub",
+      "when": "the turn streams for at least two minutes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub runs on a copy of the trial database, and a real Copilot turn is streaming on the open conversation",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario run-budget --runner copilot",
+      "key": "ac-run-budget-copilot",
+      "requirement": "run-request-budget",
+      "then": "no one-minute window of the tab's network log holds more than 40 requests to the Hub",
+      "when": "the turn streams for at least two minutes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub replays a recorded Codex turn's event stream onto the open conversation at its recorded pace (live Codex once the operator's account exists)",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario run-budget --runner codex-replay (live: --runner codex once an account exists)",
+      "key": "ac-run-budget-codex",
+      "requirement": "run-request-budget",
+      "then": "no one-minute window of the tab's network log holds more than 40 requests to the Hub",
+      "when": "the replay streams for at least two minutes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dashboard is open on the chat screen with nothing running",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario idle-budget (five minutes, prints the total)",
+      "key": "ac-idle-budget",
+      "requirement": "run-request-budget",
+      "then": "the tab sends no more than 30 requests to the Hub in total",
+      "when": "five minutes pass with no operator input"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of the operator's database",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario lists --db <copy of the operator database> (in process, lifespan off)",
+      "key": "ac-lists-now",
+      "requirement": "lists-flat-in-history",
+      "then": "each route's median answer time is under 60ms",
+      "when": "each of the three routes is requested five times in turn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy with agent_outputs, event_logs and trace_spans each multiplied ten times",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario lists-10x --db <copy> (the drive builds the 10x copy itself)",
+      "key": "ac-lists-10x",
+      "requirement": "lists-flat-in-history",
+      "then": "each route's median is under 1.5 times its median on the original copy",
+      "when": "each of the three routes is requested five times in turn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of the operator's database with a statement counter on the engine",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario loops --db <copy>; also the hub test bounding the statement count on a multi-loop fixture",
+      "key": "ac-loops",
+      "requirement": "loops-route-cost",
+      "then": "each request issues no more than 25 statements, and each route's median answer time is under 80ms",
+      "when": "GET /loops and GET /jobs are each requested five times"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of the operator's database, and the master revision this slice starts from",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario same-answers --db <copy> --base <master sha> (diffs bodies from a checkout of the base revision); also the hub tests asserting unchanged bodies",
+      "key": "ac-same",
+      "requirement": "same-answers",
+      "then": "the response bodies are equal, apart from fields that state the current time",
+      "when": "each listed route is requested on both revisions against the same copy"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub on a scratch database",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario streams; also the hub test that opens more streams than the pool holds",
+      "key": "ac-streams",
+      "requirement": "streams-hold-no-connection",
+      "then": "the 51st stream receives its first frame, and GET /agents answers 200 in under 1 second",
+      "when": "50 project event streams are opened and held, then one more is opened and GET /agents is requested"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of the operator's database served in process with the lifespan off",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario burst --db <copy>",
+      "key": "ac-burst",
+      "requirement": "burst-drains",
+      "then": "every one answers within 600ms",
+      "when": "24 concurrent requests of the poll mix are sent at once"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "6303ee3fbb8aa6c696b3b30858570e2239d59f1353e40ee35afcb95b7e87a156",
+      "FR-2": "cb3f128964f8d755b390ceece0e93ef15f390fcca8b50da1d70adc43aab7d856",
+      "FR-3": "729fa05068ac7bd700106f45590b6f1c223dea113c852b2cebb4aa8f561fb076",
+      "FR-4": "10765639e0700f576ef890321211a4d9c0524d9ca599ebdfce7cde4e86771623",
+      "FR-5": "bfb2dd6690821cb622a1db3333c1e86fdffc8aca890d95f7b5fde91645dc9aa2",
+      "FR-6": "36d0c0180cd7337b54dc0216636b2311017ebaf97ae292c1f5522f45e82c2e72",
+      "FR-7": "d7189b066b7a07ad67342a3a3dd2fae3763a6dfb38668f0d641f1c13be7875f1",
+      "FR-8": "251e5e5caf786ca172556beeea24c63f5bf4cea924bb80b5c034c9cf64acf330",
+      "FR-9": "34e2cd74ad81bb1c2fac8f727c9fbaf36da1cb5fa327ad207cd7ebea9ef559de"
+    },
+    "high_water": 9,
+    "requirements": {
+      "burst-drains": "FR-9",
+      "lists-flat-in-history": "FR-5",
+      "loops-route-cost": "FR-6",
+      "no-duplicate-in-flight": "FR-2",
+      "one-request-per-event": "FR-1",
+      "run-request-budget": "FR-4",
+      "same-answers": "FR-7",
+      "streamed-line-without-refetch": "FR-3",
+      "streams-hold-no-connection": "FR-8"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reviewer": "QA",
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decisions, each with its why. HOW is left to the build except where a decision fixes a contract.\n\n- D1 — One event, one refresh per resource. A tab handles each stream event once, however many panels show the affected data. Why: the subscriber count, not the event count, is the multiplier.\n- D2 — Coalesce rather than cancel. A refresh asked for while the same request is in flight becomes at most one follow-up request, sent when the first answers. Why: a client-side cancel does not stop the Hub serving the request.\n- D3 — Apply what the event already carries without a request. That covers an output line, a context-usage reading, and the fields of a run or queue change. Why: refetching the full history on every line is the largest bytes cost, and it grows with the conversation.\n- D4 — Polls are backstops, not the freshness mechanism. Anything the stream already reports is polled at most every 30s. Why: the 3s and 5s polls make up most of the idle traffic.\n- D5 — A list route's cost does not depend on how much history the project has. Each agent's and conversation's newest context-usage reading and newest output are found without reading the older ones. Why: these are the costs that grow 10-20x at 10x history.\n- D6 — A request computes shared facts once. Roster availability and provider holds are computed once per `/loops` and `/jobs` request, not once per loop and check.\n- D7 — An event stream holds no database connection while it streams. Authentication finishes its database work before streaming starts.\n- D8 — Runner-agnostic (operator, 2026-10-25). Nothing in this slice may depend on which runner produced an event. The run-budget drive streams a real turn on Claude (Haiku) and on Copilot, the operator's two runners now. The Codex path is covered by replaying a recorded Codex event stream through the Hub until the operator's Codex account exists; then it is driven live.\n- D9 — Every criterion is checked by one scenario of the slice's drive. The drive is `scripts/drive/perf_responsive.py`, and each criterion's `how_to_check` names its scenario (`--scenario <name>`). An agent runs them unaided; the browser scenarios use a headless page with a request log.\n- Budgets are provisional (operator, 2026-10-25). The numbers stand as set until the operator has used the build on the work VDI, then they are tightened or loosened.\n- Hazard (Tier 2 by CLAUDE.md):\n  - The index is a migration that runs on the operator's real database at their next `:8000` restart. It is additive only; rollback drops it.\n  - A committed UI bundle reaches the operator's live app on their next reload, so the bundle ships only with the slice's drive green.",
+  "evidence": {
+    "checked": [
+      "Operator traces (:8000, read-only): route latency distributions and hourly bursts during interactive agent sessions",
+      "Solo route cost, statement counts and 10x growth on copies of the operator database (B-route-costs.md)",
+      "Client fan-out from the code, plus a TanStack query-core reproduction: 18 invalidations start 18 fetches, and all complete (A-client-fanout.md)",
+      "Connection held per open stream, measured: the 16th stream fails and GET /agents waits 30.06s (D-database.md)",
+      "24-request burst: 2.16s wall, in process on the copy",
+      "Runner stream paths: Claude via a pty thread, Codex and Copilot via asyncio streams, all through one recording function (C-loop-blockers.md)"
+    ],
+    "limits": [
+      "Requests per run are estimated from the code and persisted event rates, not yet counted in a live browser; the drive task's baseline measures them",
+      "Budgets are provisional until the operator has used the build on the work VDI",
+      "Measured on this 20-thread machine; the work VDI is unmeasured",
+      "Codex cannot be driven live until the operator's Codex account exists; until then its path is covered by a recorded replay"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": "large",
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 2, because of the additive index migration and because the UI bundle reaches the operator's live app. The acceptance drive is written and failing before the build. The build ships with the drive green on copies of the operator's and trial databases. Merging to master stays the operator's call.",
+  "open_questions": [
+    {
+      "question": "Are the proposed budgets right? Answer (operator, 2026-10-25): keep them as set, then tighten or loosen after trying the build on the work VDI.",
+      "resolved": true
+    },
+    {
+      "question": "How is the slice delivered? Answer (operator, 2026-10-25): as a flow. Default builder Developer, with DeveloperOpus building independent tasks in parallel and QA reviewing; it stops when the queue empties.",
+      "resolved": true
+    }
+  ],
+  "problem": "Measured on the operator's Hub and on a copy of its database (roadmap `agentweave-performance-overhaul`; reports in `C:\\Users\\huida\\aw-perf\\`).\n\n1. The dashboard multiplies each live event.\n   - Each of about 20 stream subscribers on the chat screen re-runs the full invalidation switch (`hub/ui/src/hooks/useSSE.ts:415-455`, `:458-690`, added at `:696`).\n   - A new request for a key cancels the one in flight. Nothing reaches the Hub, because no fetch carries an abort signal (`hub/ui/src/api/client.ts:10-20`), so the Hub serves both.\n   - An agent-list refresh also refetches each agent's last 200 output lines, about 250KB, which are then discarded (`hub/ui/src/api/agents.ts:554,567`).\n   - Each output line refetches the conversation's full history: 1.28MB for a 764-line conversation (`hub/ui/src/api/agentChat.ts:360`).\n   - That is an estimated 1,300 requests per run, about 350 a minute.\n   - Idle, it is about 52 a minute, from 3-second polls of questions and permission requests and a 5-second output poll that never stops.\n2. Hot routes do work that grows with history.\n   - `/agents` (`hub/hub/api/v1/agents.py:418-433`) and both conversation lists (`hub/hub/api/v1/agent_chat.py:400-438`) load every context-usage reading ever recorded. That is 3,034 rows, 61% of `event_logs`, only to use the newest.\n   - At 10x history `/agents` costs 1.8s alone.\n   - `/loops` issues 220 SQL statements for 3 loops, because availability and holds are recomputed per loop and per check (`hub/hub/api/v1/jobs.py:506`, `hub/hub/scheduler.py:1201,1358,1411,1849`, `hub/hub/provider_allowance.py:129-157`).\n   - The latest-output-per-agent reads scan every output row (`agents.py:437-455`, `agent_activity.py:101`): 19.5ms, against 1.9ms with an index.\n3. Event streams hold the database.\n   - Every open event stream holds a database connection until it disconnects (`hub/hub/auth.py:177,233`).\n   - With a pool of 5 plus 10 overflow, the 16th open stream fails with 500, and every read then waits 30s.\n   - Two windows with several tabs and reconnects reach that.\n\nThe Hub serves requests on one event loop, so this volume queues even where each request is cheap. In production `/accounting`, which costs 6ms alone, took 1.8s. The events that drive the storm are emitted the same way whichever runner streams the turn. Claude, Copilot and Codex output all go through one recording function and one broadcast.",
+  "requirements": [
+    {
+      "key": "one-request-per-event",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "About 20 subscribers each re-run the whole invalidation today, so one context_warning costs about 44 requests on the chat screen.",
+      "statement": "For any single stream event, an open dashboard tab sends at most one request per distinct resource the event affects, however many panels on screen show that resource."
+    },
+    {
+      "key": "no-duplicate-in-flight",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "A client-side cancel does not stop the Hub serving the cancelled request, so cancelling and resending doubles the Hub's work.",
+      "statement": "A dashboard tab never has two identical GET requests to the Hub in flight at the same time. A refresh asked for while one is in flight results in at most one further request, sent after the first answers."
+    },
+    {
+      "key": "streamed-line-without-refetch",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "Today each output line refetches the full conversation (1.28MB for 764 lines). Each agent-list refresh refetches 200 output lines per agent, only to discard them.",
+      "statement": "An agent output line or context-usage reading delivered on the stream appears on screen without the tab re-requesting the conversation's history, an agent's recent output, or the agent list."
+    },
+    {
+      "key": "run-request-budget",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Estimated today: about 350 a minute during a run and 52 a minute idle. The budget bounds the queue a weak CPU must drain. The numbers are provisional until the operator has tried the build on the work VDI.",
+      "statement": "With the chat screen open on a conversation whose agent is streaming a turn, on any runner, a dashboard tab sends no more than 40 requests to the Hub in any minute. With nothing running and the app idle, it sends no more than 6 a minute."
+    },
+    {
+      "key": "lists-flat-in-history",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured today: 80-93ms, 49-138ms and 40-107ms, growing at 10x to 1,784ms, 960ms and 962ms. Almost all of that is decoding every context reading.",
+      "statement": "GET /agents, GET /conversations and GET /agent/{agent}/conversations each answer in under 60ms on a copy of the operator's database. On a copy with ten times its agent_outputs, event_logs and trace_spans, each answers in under 1.5 times its time on the original copy."
+    },
+    {
+      "key": "loops-route-cost",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured today: 220 statements and 192-410ms, because availability and holds are recomputed per loop and per check.",
+      "statement": "GET /loops and GET /jobs each issue no more than 25 SQL statements and answer in under 80ms on a copy of the operator's database (3 loops, 5 agents)."
+    },
+    {
+      "key": "same-answers",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This slice changes cost only. A cheaper route that answers differently is a behaviour change nobody asked for.",
+      "statement": "For the same database state, GET /agents, GET /conversations, GET /agent/{agent}/conversations, GET /loops and GET /jobs return the same response bodies after this change as before it."
+    },
+    {
+      "key": "streams-hold-no-connection",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured today: each open stream holds a pooled database connection. The 16th stream fails with 500, and reads then wait 30s.",
+      "statement": "With 50 event streams open against one Hub, opening another stream succeeds, and GET /agents answers in under 1 second."
+    },
+    {
+      "key": "burst-drains",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured today: the same burst takes 2.16s wall, the sum of the solo costs, because the loop serves them one after another.",
+      "statement": "On a copy of the operator's database, a burst of 24 concurrent requests made of the dashboard's poll mix (agents, loops, conversations, an agent's output, accounting, an agent's conversations, tasks, questions) completes with every request answered within 600ms."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/agentweave-performance-overhaul/spec.json",
+    "slice": "responsive-while-agents-run"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "How the dashboard reacts to stream events: which requests it sends, how many, and whether event payloads are applied in place",
+      "Dashboard polling intervals for data the stream already reports",
+      "Server cost of /agents, /conversations, /agent/{agent}/conversations, /loops, /jobs and the latest-output reads behind /agents and /tasks",
+      "Database connection use by the two event-stream routes",
+      "An additive index on agent_outputs for the latest-output reads",
+      "The run-budget behaviour on every runner: Claude, Copilot and Codex"
+    ],
+    "non_goals": [
+      "Changing what any screen shows: counts, statuses, context readings and output must read the same as today",
+      "Git or other blocking work on the event loop (slice turns-and-approvals-never-freeze)",
+      "Journal mode, retention and vacuum (slice database-stays-fast-as-history-grows)",
+      "Bundle splitting, timeline virtualization and first-open request count (slice opens-fast-on-a-weak-machine)",
+      "Paginating chat history or the task list (slice opens-fast-on-a-weak-machine)",
+      "The Thread route (task-592232cf2f5c)",
+      "Wiring abort signals into fetches: that saves bytes, not Hub work"
+    ]
+  },
+  "summary": "While an agent streams a turn on any runner, the dashboard asks the Hub for each changed thing once instead of tens of times. The hot list routes stop scaling with history, and open event streams stop holding database connections. Together these remove the request storm that makes ordinary reads take 1.6-3.6s, and up to 27s, on the operator's Hub.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Write the slice's acceptance drive as scripts/drive/perf_responsive.py, with one `--scenario` per criterion: one-event, no-overlap, line-appears, run-budget (`--runner claude|copilot|codex-replay|codex`), idle-budget, lists, lists-10x, loops, same-answers (`--base <sha>`), streams and burst. Each scenario prints its measurement and exits non-zero on failure. Run every scenario on master and record the baseline numbers in the task notes.\n\nThe in-process scenarios run against copies of a database (`--db`) with the Hub lifespan off.\n\nThe browser scenarios use a scratch Hub on a trial-database copy and a headless page with a request log.\n\nThe drive must never contact :8000 or write the operator's database. It must refuse to start a Hub on a copy with the lifespan on unless jobs, loops and queued input in that copy are disabled first, because doing so spawned a real agent run during the investigation.",
+      "files": [
+        "scripts/drive/perf_responsive.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "one-request-per-event",
+        "no-duplicate-in-flight",
+        "streamed-line-without-refetch",
+        "run-request-budget",
+        "lists-flat-in-history",
+        "loops-route-cost",
+        "same-answers",
+        "streams-hold-no-connection",
+        "burst-drains"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, written and failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Make a tab handle each stream event once, however many components subscribe. Coalesce refreshes of a request already in flight into one follow-up instead of cancelling and resending. Keep the full refresh on reconnect, but run it once per tab. Refresh the agent list without refetching each agent's output seed.\n\nAdd hub/ui unit tests that fail before the change: one event with N subscribers gives one refresh, and five rapid invalidations of an in-flight key give at most two fetches. Rebuild and commit the UI bundle together with the source.",
+      "files": [
+        "hub/ui/src/hooks/useSSE.ts",
+        "hub/ui/src/main.tsx",
+        "hub/ui/src/api",
+        "hub/ui/src/components",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "stream-handling",
+      "requirements": [
+        "one-request-per-event",
+        "no-duplicate-in-flight",
+        "run-request-budget"
+      ],
+      "reviewer": null,
+      "title": "The dashboard handles each stream event once"
+    },
+    {
+      "depends_on": [
+        "stream-handling"
+      ],
+      "description": "Apply agent output lines, context-usage readings and run or queue changes from the stream payload to the screens that show them. Do this without re-requesting conversation history, recent output or the agent list, whichever runner produced the event. Turn the questions and permission-request polls and the output fallback poll into backstops of at most every 30s, re-armed only after a failure.\n\nAdd unit tests that fail before the change, then rebuild and commit the bundle.",
+      "files": [
+        "hub/ui/src/hooks/useSSE.ts",
+        "hub/ui/src/api",
+        "hub/ui/src/components",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "apply-payloads",
+      "requirements": [
+        "streamed-line-without-refetch",
+        "run-request-budget"
+      ],
+      "reviewer": null,
+      "title": "Streamed lines and readings apply without refetching"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Make GET /agents, GET /conversations and GET /agent/{agent}/conversations find each agent's and each conversation's newest context-usage reading and newest output without reading older rows. Add the agent_outputs index the latest-output reads need, as a migration that only adds.\n\nAdd hub tests that fail before the change: one asserting the same bodies as before on a fixture with many readings, and one bounding the statement count or rows read.",
+      "files": [
+        "hub/hub/api/v1/agents.py",
+        "hub/hub/api/v1/agent_chat.py",
+        "hub/hub/agent_activity.py",
+        "hub/hub/output_recording.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions"
+      ],
+      "from": null,
+      "key": "lists-flat",
+      "requirements": [
+        "lists-flat-in-history",
+        "same-answers"
+      ],
+      "reviewer": null,
+      "title": "Agent and conversation lists stop scaling with history"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Make GET /loops and GET /jobs compute roster availability and provider holds once per request and reuse them for every loop. Read only the usage rows the newest-informative check needs.\n\nAdd a hub test bounding the statement count for a multi-loop fixture, failing before the change, and one asserting unchanged bodies.",
+      "files": [
+        "hub/hub/api/v1/jobs.py",
+        "hub/hub/api/v1/loops.py",
+        "hub/hub/scheduler.py",
+        "hub/hub/provider_allowance.py"
+      ],
+      "from": null,
+      "key": "loops-once",
+      "requirements": [
+        "loops-route-cost",
+        "same-answers"
+      ],
+      "reviewer": null,
+      "title": "Loops and jobs compute availability once per request"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Make both event-stream routes finish their authentication database work before streaming, so an open stream holds no pooled connection.\n\nAdd a hub test, failing before the change, that opens more streams than the pool holds and asserts that a further stream and GET /agents both succeed.",
+      "files": [
+        "hub/hub/auth.py",
+        "hub/hub/api/v1/events.py"
+      ],
+      "from": null,
+      "key": "streams-release",
+      "requirements": [
+        "streams-hold-no-connection",
+        "burst-drains"
+      ],
+      "reviewer": null,
+      "title": "Event streams release their database connection"
+    }
+  ],
+  "title": "The app stays responsive while agents run"
+}
