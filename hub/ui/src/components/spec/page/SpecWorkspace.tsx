@@ -222,8 +222,6 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
           onFiltersChange={props.onFiltersChange}
           active={active}
           onJump={jump}
-          onOpenDocument={props.onOpenDocument}
-          now={props.now}
         />
         <div className="aw-sp-scroll" ref={scroller}>
           <div className="aw-sp-content" key={`${doc.path}:${tab}`} ref={content}>

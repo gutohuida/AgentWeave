@@ -11,6 +11,7 @@ import { ConversationComposerDock } from '@/components/conversation/Conversation
 import { NewConversationIntro, type ConversationStarter } from '@/components/conversation/NewConversationIntro'
 import { StartBuildDialog } from '@/components/spec/page/SpecBuilds'
 import { SpecSidePanel } from '@/components/spec/page/SpecWorkspace'
+import { SpecOpenPicker } from '@/components/spec/page/SpecOpenPicker'
 import { useListPreferences } from '@/components/spec/page/hooks'
 import { CONVERSATION_MIN_WIDTH, SPEC_DOC_MIN_WIDTH } from '@/components/spec/specPreferences'
 import { toast } from '@/lib/toast'
@@ -64,15 +65,15 @@ const STARTERS: ConversationStarter[] = [
 ]
 
 export default function Conversation(props: ScreenProps) {
-  const withSpec = props.route.kind === 'conversation' && props.route.panel === 'spec'
+  const panel = props.route.kind === 'conversation' ? props.route.panel : undefined
   return (
     <QueryClientProvider client={queryClient}>
-      {withSpec ? (
+      {panel ? (
         <div className="flex h-full min-w-0 flex-row overflow-hidden">
           <div className="flex h-full min-w-0 flex-1 flex-col" style={{ minWidth: CONVERSATION_MIN_WIDTH }}>
             <ConversationMock {...props} />
           </div>
-          <SpecPanelMock />
+          <SpecPanelMock picking={panel === 'specs'} go={props.go} route={props.route} />
         </div>
       ) : (
         <ConversationMock {...props} />
@@ -83,9 +84,26 @@ export default function Conversation(props: ScreenProps) {
 
 /** The conversation's spec panel, redesigned: the same components as the Spec tab in one column.
  *  At a window narrower than 1200px it sits at its narrowest width (the app's SPEC_DOC_MIN_WIDTH). */
-function SpecPanelMock() {
+function SpecPanelMock({ picking, go, route }: { picking: boolean; go: ScreenProps['go']; route: ScreenProps['route'] }) {
   const { surface, startDialog, entries } = useSpecMock('conversation/Architect/conv-9cdda4865e0b/spec')
   const [listPrefs, setListPrefs] = useListPreferences(PROJECT_ID)
+  // mock state: the conversation's attached document, what was opened lately, and the running builds' progress.
+  const attachedPath = surface.doc.path
+  const recent = entries.filter((e) => !e.building && e.path !== attachedPath).slice(0, 3).map((e) => e.path)
+  const progress = Object.fromEntries(entries.filter((e) => e.building).map((e, i) => [e.path, i === 0 ? { done: 1, total: 5 } : { done: 2, total: 6 }]))
+  const list = {
+    entries,
+    prefs: listPrefs,
+    onPrefsChange: setListPrefs,
+    onNew: () => toast({ title: 'Starts a new change', description: 'With an agent, in a conversation.' }),
+    attachedPath,
+    recent,
+    progress,
+  }
+  const openDoc = (path: string) => {
+    if (route.kind === 'conversation') go({ ...route, panel: 'spec' })
+    if (path !== attachedPath) toast({ title: 'Opens that document', description: 'The mock holds one full document.' })
+  }
   const [width, setWidth] = React.useState(() => (window.innerWidth >= 1200 ? 440 : SPEC_DOC_MIN_WIDTH))
   React.useEffect(() => {
     const onResize = () => setWidth(window.innerWidth >= 1200 ? 440 : SPEC_DOC_MIN_WIDTH)
@@ -94,15 +112,24 @@ function SpecPanelMock() {
   }, [])
   return (
     <div className="h-full flex-none" style={{ width }} data-testid="spec-panel">
-      <SpecSidePanel
-        {...surface}
-        list={{
-          entries,
-          prefs: listPrefs,
-          onPrefsChange: setListPrefs,
-          onNew: () => toast({ title: 'Starts a new change', description: 'With an agent, in a conversation.' }),
-        }}
-      />
+      {picking ? (
+        <div className="aw-sp aw-sp-panel" data-layout="panel">
+          <SpecOpenPicker
+            entries={entries}
+            prefs={listPrefs}
+            onPrefsChange={setListPrefs}
+            onOpen={openDoc}
+            onNew={list.onNew}
+            now={surface.now}
+            attachedPath={attachedPath}
+            recent={recent}
+            progress={progress}
+            autoFocus
+          />
+        </div>
+      ) : (
+        <SpecSidePanel {...surface} onOpenDocument={openDoc} list={list} />
+      )}
       <StartBuildDialog {...startDialog} />
     </div>
   )

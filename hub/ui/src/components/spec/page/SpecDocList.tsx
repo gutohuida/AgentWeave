@@ -26,6 +26,8 @@ export function SpecDocList({
   onNew,
   now,
   variant = 'column',
+  hideSearch = false,
+  hideHead = false,
 }: {
   entries: SpecListEntry[]
   active: string | null
@@ -36,6 +38,10 @@ export function SpecDocList({
   now: Date
   /** A left column, or the body of the top switcher's popover. */
   variant?: 'column' | 'popover'
+  /** The picker searches from its own field; the list then leaves its own out. */
+  hideSearch?: boolean
+  /** The picker titles itself; the list then leaves its heading out and its order menu joins the filters. */
+  hideHead?: boolean
 }) {
   const groups = arrangeList(entries, prefs)
   const shown = groups.reduce((n, g) => n + g.entries.length + (g.roadmap ? 1 : 0), 0)
@@ -45,18 +51,22 @@ export function SpecDocList({
 
   return (
     <aside className="aw-sp-list" data-variant={variant} aria-label="Specification documents">
-      <div className="aw-sp-list-head">
+      {hideHead ? null : (
+        <div className="aw-sp-list-head">
         <span className="aw-sp-list-title">Specs</span>
         <span className="aw-sp-list-count">{entries.length}</span>
         <OrderMenu value={prefs.order} onChange={(order) => set({ order })} />
         <button data-slot="icon-button" type="button" className="aw-icon-button" onClick={onNew} aria-label="New change" title="New change">
           <Icon name="add" size={15} />
         </button>
-      </div>
-      <div className="aw-sp-list-search">
+        </div>
+      )}
+      {hideSearch ? null : (
+        <div className="aw-sp-list-search">
         <Icon name="search" size={13} className="aw-sp-list-search-icon" />
         <Input value={prefs.query} onChange={(e) => set({ query: e.target.value })} placeholder="Search specs" aria-label="Search specs" className="aw-sp-list-input" />
-      </div>
+        </div>
+      )}
       <div className="aw-sp-list-filters" role="group" aria-label="Filter specs">
         {(
           [
@@ -75,6 +85,7 @@ export function SpecDocList({
           Building now
           {building ? <span className="aw-sp-chip-count">{building}</span> : null}
         </button>
+        {hideHead ? <OrderMenu value={prefs.order} onChange={(order) => set({ order })} /> : null}
         <span className="aw-sp-list-phase">
           <MenuSelect
             label="Phase"

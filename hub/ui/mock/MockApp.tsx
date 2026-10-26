@@ -15,7 +15,7 @@ function parseHash(): MockRoute {
   const raw = decodeURIComponent(window.location.hash.replace(/^#/, '')).split('?')[0]!
   const [kind, a, b, c] = raw.split('/')
   if (kind === 'tab' && (PROJECT_TABS as readonly string[]).includes(a ?? '')) return { kind: 'tab', tab: a as ProjectTab }
-  if (kind === 'conversation' && a) return { kind: 'conversation', agent: a, conversationId: b || null, ...(c === 'spec' ? { panel: 'spec' as const } : {}) }
+  if (kind === 'conversation' && a) return { kind: 'conversation', agent: a, conversationId: b || null, ...(c === 'spec' || c === 'specs' ? { panel: c } : {}) }
   if (kind === 'settings') return { kind: 'settings', section: (a as never) || 'general' }
   if (kind === 'agent-settings' && a) return { kind: 'agent-settings', agent: a, section: (b as never) || 'execution' }
   if (kind === 'gallery') return { kind: 'gallery' }
@@ -159,7 +159,7 @@ function MockBar({
           </option>
         ))}
       </select>
-      {(route.kind === 'tab' && route.tab === 'spec') || (route.kind === 'conversation' && route.panel === 'spec') ? (
+      {(route.kind === 'tab' && route.tab === 'spec') || (route.kind === 'conversation' && Boolean(route.panel)) ? (
         <SpecMockBar showLayout={route.kind === 'tab'} />
       ) : null}
       <button type="button" className="mock-bar-button" disabled={!hasBefore} data-on={before ? 'true' : 'false'} onClick={onBefore}>
