@@ -11,6 +11,7 @@ from .agent_trigger import router as agent_trigger_router
 from .agents import router as agents_router
 from .charters import router as charters_router
 from .checkpoints import router as checkpoints_router
+from .checks import checks_router
 from .events import instance_router as instance_events_router
 from .events import router as events_router
 from .fs_browse import router as fs_browse_router
@@ -55,6 +56,7 @@ project_resources_router.include_router(ledger_router)
 project_resources_router.include_router(thread_router)
 project_resources_router.include_router(messages_router)
 project_resources_router.include_router(tasks_router)
+project_resources_router.include_router(checks_router)
 project_resources_router.include_router(questions_router)
 project_resources_router.include_router(permissions_router)
 project_resources_router.include_router(status_router)

@@ -63,6 +63,12 @@ vi.mock('@/api/ledger', () => ({
 vi.mock('@/api/queue', () => ({ useQueueStatuses: () => queueStatuses }))
 const endStallMutate = vi.fn()
 vi.mock('@/api/stalls', () => ({ useOpenStalls: () => ({ data: openStalls }), useEndStall: () => ({ mutate: endStallMutate }) }))
+let flakyReport: Record<string, unknown> | null = null
+const handleFlakyMutate = vi.fn()
+vi.mock('@/api/flakyTests', () => ({
+  useFlakyTests: () => ({ data: flakyReport }),
+  useHandleFlakyTests: () => ({ mutate: handleFlakyMutate }),
+}))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: accountingData }) }))
 vi.mock('@/components/overview/AgentPostureChips', () => ({ AgentPostureChips: () => null }))
 
@@ -90,10 +96,36 @@ beforeEach(() => {
   accountingData = { budget: { exhausted: false } }
   queueStatuses = []
   openStalls = []
+  flakyReport = null
+  handleFlakyMutate.mockClear()
   answerMutate.mockClear()
 })
 
 describe('the wired Overview', () => {
+  it('raises the flaky tests the checks found and hands them to a fix task', () => {
+    flakyReport = {
+      window_days: 30,
+      handled: null,
+      flaky: [
+        { check: 'hub-tests', test: 'tests/test_a.py::test_x', occurrences: 3, first_seen: '2026-10-20T08:00:00Z', last_seen: '2026-10-20T09:00:00Z', task_ids: ['task-1'], run_ids: [] },
+        { check: 'lint', test: null, occurrences: 1, first_seen: '2026-10-20T07:00:00Z', last_seen: '2026-10-20T07:00:00Z', task_ids: ['task-2'], run_ids: [] },
+      ],
+    }
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    const row = screen.getByText('2 flaky tests in the approval checks').closest('li') as HTMLElement
+    expect(row).toHaveTextContent('tests/test_a.py::test_x (3×), the lint check (1×).')
+    fireEvent.click(within(row).getByRole('button', { name: 'Create a fix task' }))
+    expect(handleFlakyMutate.mock.calls[0][0]).toBe(true)
+    fireEvent.click(within(row).getByRole('button', { name: 'Dismiss' }))
+    expect(handleFlakyMutate.mock.calls[1][0]).toBe(false)
+  })
+
+  it('shows no flaky row when none are open', () => {
+    flakyReport = { window_days: 30, handled: null, flaky: [] }
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    expect(screen.queryByText(/flaky test/)).not.toBeInTheDocument()
+  })
+
   it('lists an open question and answers it inline with the chosen option', () => {
     questions = [question()]
     render(<OverviewScreen onNavigate={vi.fn()} />)

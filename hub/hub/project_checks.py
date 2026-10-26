@@ -47,7 +47,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import traces
+from . import flaky_tests, traces
 from .db.engine import async_session_factory
 from .db.models import Project, Run, Task, TaskCheckRun, TaskTransition
 from .subprocess_windows import no_console_kwargs
@@ -1067,6 +1067,9 @@ async def _execute(
                             # Confirmed on the same tree before main is asked (a flake that passes
                             # the second time needs no baseline); only a reproduced failure stands.
                             await asyncio.to_thread(confirm_failure, check, path, result, task_id)
+                            if result.get("flaky"):
+                                # Raised to the operator, not only to the reviewer (`flaky_tests`).
+                                await flaky_tests.record_flake(run_id, result)
                         if failed(result) and task_id not in _superseded:
                             await baseline.record(check, result)
                         if await superseded():

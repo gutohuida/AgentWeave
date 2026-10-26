@@ -6,6 +6,7 @@ import { useProjectLedger } from '@/api/ledger'
 import { useQueueStatuses } from '@/api/queue'
 import { useAnswerQuestion, useQuestions } from '@/api/questions'
 import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
+import { useFlakyTests, useHandleFlakyTests } from '@/api/flakyTests'
 import { isWaitedOn } from '@/lib/pendingQuestions'
 import { useTasks, type Task } from '@/api/tasks'
 import { accountingDisplayLabel, formatAiCredits } from '@/components/accounting/accountingDisplay'
@@ -62,6 +63,9 @@ export function OverviewScreen({
   const { data: questions = [], error: questionsError } = useQuestions(false)
   const { data: openStalls = [], error: stallsError } = useOpenStalls()
   const endStall = useEndStall()
+  const { data: flakyReport, error: flakyError } = useFlakyTests()
+  const handleFlaky = useHandleFlakyTests()
+  const flaky = flakyReport?.flaky ?? []
   const { data: taskPage, error: tasksError } = useTasks()
   const { data: conversationPage, error: conversationsError } = useProjectConversations(projectId || null)
   const { data: ledger, error: ledgerError } = useProjectLedger()
@@ -70,6 +74,7 @@ export function OverviewScreen({
     ['the agents', agentsError],
     ['the questions', questionsError],
     ['the stalls', stallsError],
+    ['the flaky tests', flakyError],
     ['the tasks', tasksError],
     ['the conversations', conversationsError],
     ['the ledger', ledgerError],
@@ -149,6 +154,37 @@ export function OverviewScreen({
         // Ended by hand: what the operator says when they have dealt with it themselves.
         secondary: { label: 'Dismiss', onClick: () => endStall.mutate(st.id) },
       })),
+    // Tests the approval checks saw fail and then pass when re-run (`hub/hub/flaky_tests.py`):
+    // approval went on, so nothing else asks anyone to fix them. One row for the whole list,
+    // handed to a task as a round of fixing.
+    ...(flaky.length
+      ? [
+          {
+            id: 'flaky-tests',
+            kind: 'flaky' as const,
+            agent: null,
+            title: `${flaky.length} flaky test${flaky.length === 1 ? '' : 's'} in the approval checks`,
+            detail: sentence(
+              flaky
+                .slice(0, 3)
+                .map((f) => `${f.test ?? `the ${f.check} check`} (${f.occurrences}×)`)
+                .join(', ') + (flaky.length > 3 ? `, and ${flaky.length - 3} more` : ''),
+            ),
+            at: flaky[0].last_seen ?? new Date().toISOString(),
+            primary: {
+              label: 'Create a fix task',
+              onClick: () =>
+                handleFlaky.mutate(true, {
+                  onSuccess: (r) => {
+                    toast({ title: 'Made a task to fix the flaky tests', tone: 'success' })
+                    if (r.task_id) openTask(r.task_id)
+                  },
+                }),
+            },
+            secondary: { label: 'Dismiss', onClick: () => handleFlaky.mutate(false) },
+          } satisfies NeedItem,
+        ]
+      : []),
   ]
 
   const running: RunningItem[] = conversations
