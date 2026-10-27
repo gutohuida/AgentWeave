@@ -47,7 +47,6 @@ from ... import (
     spec_journey,
     spec_lifecycle,
     spec_naming,
-    spec_rigor,
     spec_service,
     spec_tasks,
     task_integration,
@@ -72,7 +71,6 @@ from ...db.models import (
     SpecDocument,
     SpecDocumentEvent,
     SpecDocumentMerge,
-    SpecEditProposal,
     SpecRequirement,
     SpecRequirementRevision,
     Task,
@@ -447,9 +445,9 @@ def _recommended_build(document, payload: Optional[Dict[str, Any]]) -> Optional[
         "stop_when_queue_empties": delivery.stop_when_queue_empties,
         "stop_at": delivery.stop_at,
         # The build's settings (slice D), each resolved the way Build resolves it when left out:
-        # `mode` flow/none reads as driver flow/hand, and no level as the document's rigor's.
+        # `mode` flow/none reads as driver flow/hand, and no level as Reviewed.
         "driver": delivery.driver or ("flow" if delivery.mode == "flow" else "hand"),
-        "level": delivery.level or builds.level_for_rigor(document.rigor),
+        "level": delivery.level or builds.REVIEWED,
         "builders": list(delivery.builders),
         "reviewers": list(delivery.reviewers),
         "lead": delivery.lead,
@@ -611,7 +609,6 @@ def _document_view(document, steps: Optional[spec_journey.ProjectSteps] = None) 
         "phase": document.phase,
         # What happens to work that ignores this document. Reported everywhere the phase is, because
         # they answer different questions and an operator reading one will assume the other.
-        "rigor": document.rigor or spec_rigor.SKETCH,
         "content_digest": document.content_digest,
         "explore_closed": document.explore_closed_at is not None,
         # Where a change's authoring stands (`spec_journey`): null on any other document.
@@ -853,69 +850,6 @@ class DocumentContent(RequestModel):
     document: Any
 
 
-class RigorRequest(RequestModel):
-    """The operator setting how strictly a document is enforced.
-
-    `expected_digest` is compare-and-swap: a rigor change must not land on a
-    document somebody edited underneath it, or what was promoted is not what was
-    read. Optional so a caller that has not read the document can still act, and
-    supplied by every UI path that has.
-    """
-
-    rigor: str = Field(max_length=16)
-    reason: str = Field(default="", max_length=2000)
-    expected_digest: Optional[str] = Field(default=None, max_length=64)
-
-
-@router.post("/documents/{path:path}/rigor")
-async def set_document_rigor(
-    path: str,
-    body: RigorRequest,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Raise or lower a document's rigor.
-
-    There is deliberately no agent equivalent of this route, and adding one would
-    undo the change: an agent blocked by a gate that can lower the document has
-    not been gated, it has been inconvenienced.
-    """
-    project_id, _ = project
-    document = await _require_document(session, project_id, path)
-    workspace = await _workspace(session, project_id)
-    content = spec_documents.read_document(workspace, document.path)
-
-    try:
-        await spec_rigor.set_rigor(
-            session,
-            document,
-            body.rigor,
-            actor=_operator(),
-            reason=body.reason,
-            expected_digest=body.expected_digest,
-            content=content,
-        )
-    except spec_rigor.RigorRefusedError as exc:
-        raise HTTPException(
-            # A rigor that does not exist is a malformed value, not a conflict (F657).
-            status_code=(
-                status.HTTP_422_UNPROCESSABLE_ENTITY
-                if exc.code == "unknown_rigor"
-                else status.HTTP_409_CONFLICT
-            ),
-            detail={"message": str(exc), "code": exc.code, "blocking": exc.blocking},
-        ) from exc
-
-    # The file states the rigor for whoever opens it, so it is rewritten to agree with the row.
-    # If this fails the row is still what governs — the copy in the document was never the gate.
-    await spec_service.rerender_phase(session, workspace, document)
-    await session.commit()
-    await sse_manager.broadcast(
-        project_id, "spec_updated", {"path": document.path, "rigor": document.rigor}
-    )
-    return await _project_document_view(session, project_id, document)
-
-
 @router.put("/documents/{path:path}/content")
 async def write_document_content(
     path: str,
@@ -936,8 +870,7 @@ async def write_document_content(
 
     No rule is relaxed for the operator. Every refusal comes from the service, unchanged: an
     invalid payload names its field, a mismatched `kind` is refused, an approved document is
-    refused until reopened, and a document at `contract` or `gate` rigor records a pending proposal
-    instead of being written — the operator accepts their own proposal, which is not a bypass.
+    refused until reopened.
     """
     project_id, _ = project
     document = await _require_document(session, project_id, path)
@@ -970,16 +903,6 @@ async def write_document_content(
         project_id, "spec_updated", {"path": result.path, "phase": result.phase}
     )
 
-    if isinstance(result, spec_service.ProposeResult):
-        # Same shape the agent route returns at `contract`/`gate` rigor, and different from a write
-        # on purpose, so a caller cannot mistake "pending" for "live".
-        return {
-            "path": result.path,
-            "phase": result.phase,
-            "proposals": result.proposals,
-            "unchanged": result.unchanged,
-            "already_pending": result.already_pending,
-        }
     return {
         "path": result.path,
         "phase": result.phase,
@@ -1034,32 +957,6 @@ async def link_roadmap_slice(
         "path": document.path,
         "roadmap": {"document": roadmap_path, "slice": body.slice},
         "changed": changed,
-    }
-
-
-@router.get("/documents/{path:path}/rigor-history")
-async def rigor_history(
-    path: str,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Every rigor change, with who made it. Demotion is legitimate *because* this exists."""
-    project_id, _ = project
-    document = await _require_document(session, project_id, path)
-    events = await spec_rigor.history_for(session, document.id)
-    return {
-        "events": [
-            {
-                "id": event.id,
-                "from": event.from_rigor,
-                "to": event.to_rigor,
-                "actor_kind": event.actor_kind,
-                "actor": event.actor,
-                "reason": event.reason,
-                "created_at": event.created_at.isoformat(),
-            }
-            for event in events
-        ]
     }
 
 
@@ -1427,192 +1324,6 @@ async def decline_amendment(
             for amendment in await spec_amendments.list_amendments(session, document)
         ],
     }
-
-
-def _proposal_view(proposal: SpecEditProposal) -> dict:
-    return {
-        "id": proposal.id,
-        "unit_kind": proposal.unit_kind,
-        "unit_key": proposal.unit_key,
-        "change_kind": proposal.change_kind,
-        "position_after_key": proposal.position_after_key,
-        "proposed_payload": proposal.proposed_payload,
-        "previous_payload": proposal.previous_payload,
-        "status": proposal.status,
-        # The document version it was made against: two identical proposals on different versions
-        # are not duplicates, and the older one is refused as stale on accept (design D4).
-        "expected_digest": proposal.expected_digest,
-        "proposer_actor_kind": proposal.proposer_actor_kind,
-        "proposer_actor_name": proposal.proposer_actor_name,
-        "created_at": proposal.created_at.isoformat(),
-        "resolved_at": proposal.resolved_at.isoformat() if proposal.resolved_at else None,
-        "resolved_by_actor_name": proposal.resolved_by_actor_name,
-        "resolution_reason": proposal.resolution_reason,
-    }
-
-
-async def _require_proposal(
-    session: AsyncSession, document_id: str, proposal_id: str
-) -> SpecEditProposal:
-    proposal = await session.get(SpecEditProposal, proposal_id)
-    if proposal is None or proposal.document_id != document_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="proposal not found")
-    return proposal
-
-
-@router.get("/documents/{path:path}/proposals")
-async def list_proposals(
-    path: str,
-    status_filter: str = Query("pending", alias="status", pattern="^(pending|resolved|all)$"),
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Proposals for one document, pending by default — F2's in-position render reads this per
-    document. `resolved` lists every decided one (accepted, rejected, withdrawn, stale) with who
-    resolved it, when and why, newest decision first (slice remaining-hidden-data)."""
-    project_id, _ = project
-    document = await _require_document(session, project_id, path)
-    query = select(SpecEditProposal).where(SpecEditProposal.document_id == document.id)
-    if status_filter == "pending":
-        query = query.where(SpecEditProposal.status == "pending").order_by(
-            SpecEditProposal.created_at
-        )
-    elif status_filter == "resolved":
-        query = query.where(SpecEditProposal.status != "pending").order_by(
-            SpecEditProposal.resolved_at.desc(), SpecEditProposal.created_at.desc()
-        )
-    else:
-        query = query.order_by(SpecEditProposal.created_at)
-    result = await session.execute(query)
-    return {"proposals": [_proposal_view(row) for row in result.scalars().all()]}
-
-
-class ProposalDecision(RequestModel):
-    reason: str = Field(default="", max_length=2000)
-    # The operator's own last-seen digest — a second, independent check from the proposal's own
-    # `expected_digest` (design D4, round-3 clarification). Optional so a caller that has not read
-    # the document can still act.
-    expected_digest: Optional[str] = Field(default=None, max_length=64)
-
-
-@router.post("/documents/{path:path}/proposals/{proposal_id}/accept")
-async def accept_proposal_route(
-    path: str,
-    proposal_id: str,
-    body: Optional[ProposalDecision] = None,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Apply one pending proposal's unit, or refuse and say why. There is no agent equivalent."""
-    # F204/F210: every field of the body is optional, so a call with no body at all is a complete
-    # request; without the default FastAPI refused it as malformed before the route could run.
-    body = body or ProposalDecision()
-    project_id, _ = project
-    document = await _require_document(session, project_id, path)
-    proposal = await _require_proposal(session, document.id, proposal_id)
-    workspace = await _workspace(session, project_id)
-
-    try:
-        result = await spec_service.accept_proposal(
-            session,
-            workspace,
-            document,
-            proposal,
-            actor=_operator(),
-            expected_digest=body.expected_digest,
-            reason=body.reason,
-        )
-    except spec_service.ProposalRefusedError as exc:
-        # `accept_proposal` may have marked the row `stale` before raising — that mutation must
-        # survive this response, not be rolled back with everything else an exception discards.
-        # And it leaves the pending list, so every view is told (F431).
-        await session.commit()
-        if exc.code == "proposal_stale":
-            await sse_manager.broadcast(project_id, "spec_updated", {"path": document.path})
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"message": str(exc), "code": exc.code},
-        ) from exc
-    except spec_service.SaveRefusedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
-        ) from exc
-
-    await session.commit()
-    await sse_manager.broadcast(
-        project_id, "spec_updated", {"path": result.path, "phase": result.phase}
-    )
-    return {
-        "path": result.path,
-        "phase": result.phase,
-        "identifiers": result.identifiers,
-        "blocking": result.blocking,
-        "warnings": result.warnings,
-        "proposal": _proposal_view(proposal),
-    }
-
-
-@router.post("/documents/{path:path}/proposals/{proposal_id}/reject")
-async def reject_proposal_route(
-    path: str,
-    proposal_id: str,
-    body: Optional[ProposalDecision] = None,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Refuse a pending proposal. The live document is untouched — nothing to clean up."""
-    # F204/F210: every field of the body is optional, so a call with no body at all is a complete
-    # request; without the default FastAPI refused it as malformed before the route could run.
-    body = body or ProposalDecision()
-    project_id, _ = project
-    document = await _require_document(session, project_id, path)
-    proposal = await _require_proposal(session, document.id, proposal_id)
-
-    try:
-        await spec_service.reject_proposal(session, proposal, actor=_operator(), reason=body.reason)
-    except spec_service.ProposalRefusedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"message": str(exc), "code": exc.code},
-        ) from exc
-
-    await session.commit()
-    # A rejected row leaves the pending list; every view is told, as accept tells them (F428).
-    await sse_manager.broadcast(project_id, "spec_updated", {"path": document.path})
-    return {"proposal": _proposal_view(proposal)}
-
-
-class ProposalWithdrawal(RequestModel):
-    note: str = Field(default="", max_length=2000)
-
-
-@router.post("/documents/{path:path}/proposals/{proposal_id}/withdraw")
-async def withdraw_proposal_route(
-    path: str,
-    proposal_id: str,
-    body: Optional[ProposalWithdrawal] = None,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Take a pending proposal off the list without judging it -- for duplicates and proposals
-    nobody is pursuing (`a-pending-proposal-can-be-withdrawn`, D3). The document is untouched."""
-    body = body or ProposalWithdrawal()
-    project_id, _ = project
-    document = await _require_document(session, project_id, path)
-    proposal = await _require_proposal(session, document.id, proposal_id)
-
-    try:
-        await spec_service.withdraw_proposal(session, proposal, actor=_operator(), note=body.note)
-    except spec_service.ProposalRefusedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"message": str(exc), "code": exc.code},
-        ) from exc
-
-    await session.commit()
-    await sse_manager.broadcast(project_id, "spec_updated", {"path": document.path})
-    return {"proposal": _proposal_view(proposal)}
 
 
 @router.get("/spec/coverage")
@@ -3630,7 +3341,7 @@ async def _build_settings(
     if driver is None:
         flows = delivery is not None and delivery.mode == "flow" and body.delivery_agent != ""
         driver = builds.DRIVER_FLOW if flows else builds.DRIVER_HAND
-    level = body.level or recommended("level") or builds.level_for_rigor(document.rigor)
+    level = body.level or recommended("level") or builds.REVIEWED
     chosen_builders = body.builders if body.builders is not None else recommended("builders", [])
     chosen_reviewers = (
         body.reviewers if body.reviewers is not None else recommended("reviewers", [])
@@ -4566,29 +4277,18 @@ async def merge_document(
             detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
         ) from exc
 
-    # `document.rigor` decides which shape `save_document` returned (spec_service.py:148); build
-    # the response for whichever it was BEFORE committing, so a shape this handler forgets to
-    # support fails loudly here instead of 500ing after the write is already durable.
-    if isinstance(result, spec_service.ProposeResult):
-        response = {
-            **await _project_document_view(session, project_id, document),
-            "proposals": result.proposals,
-            "unchanged": result.unchanged,
-            "already_pending": result.already_pending,
-            "applied": False,
-            "merged": 0,
-        }
-    else:
-        response = {
-            **await _project_document_view(session, project_id, document),
-            "blocking": result.blocking,
-            "warnings": result.warnings,
-            "divergence": result.divergence,
-            # F730: whether the payload was written. `merged` counts the changes folded, so an
-            # operator edit naming none answered `merged: 0` and read as nothing having happened.
-            "applied": True,
-            "merged": len(sources),
-        }
+    # Built BEFORE committing, so a failure here fails loudly instead of 500ing after the write is
+    # already durable.
+    response = {
+        **await _project_document_view(session, project_id, document),
+        "blocking": result.blocking,
+        "warnings": result.warnings,
+        "divergence": result.divergence,
+        # F730: whether the payload was written. `merged` counts the changes folded, so an
+        # operator edit naming none answered `merged: 0` and read as nothing having happened.
+        "applied": True,
+        "merged": len(sources),
+    }
 
     await session.commit()
     await sse_manager.broadcast(
@@ -4759,15 +4459,12 @@ async def fold_document(
         "archived": archived,
         "fold_state": await _fold_state(session, change),
     }
-    if isinstance(result, spec_service.ProposeResult):
-        response.update(merged=0, proposals=result.proposals)
-    else:
-        response.update(
-            merged=1,
-            blocking=result.blocking,
-            warnings=result.warnings,
-            standing_warnings=result.standing_warnings,
-        )
+    response.update(
+        merged=1,
+        blocking=result.blocking,
+        warnings=result.warnings,
+        standing_warnings=result.standing_warnings,
+    )
     await session.commit()
     for document in (capability, change):
         await sse_manager.broadcast(

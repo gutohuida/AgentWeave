@@ -177,30 +177,6 @@ def test_payload_to_dict_keeps_a_present_delivery():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_an_unchanged_resubmission_with_no_delivery_key_proposes_nothing(
-    app, auth_headers, run_headers
-):
-    path = "spec/changes/delivery-demo/spec.json"
-    document = _payload(
-        requirements=[{"key": "alpha", "statement": "It responds within 200ms", "modal": "MUST"}]
-    )
-    await app.post(f"{BASE}/documents", json={"path": path, "title": "Demo"}, headers=auth_headers)
-    write = await app.post(AGENT, json={"path": path, "document": document}, headers=run_headers)
-    assert write.status_code == 200, write.text
-    rigor = await app.post(
-        f"{BASE}/documents/{path}/rigor", json={"rigor": "gate"}, headers=auth_headers
-    )
-    assert rigor.status_code == 200, rigor.text
-
-    response = await app.post(AGENT, json={"path": path, "document": document}, headers=run_headers)
-
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["proposals"] == []
-    assert "metadata" in body["unchanged"]
-
-
 # ---------------------------------------------------------------------------
 # 1.2 — a change-spec whose `delivery` is unanswered or an incomplete flow is told so (D4): a
 # gap the operator's Check lists, never a refusal. `_document()` (test_spec_documents_api) already

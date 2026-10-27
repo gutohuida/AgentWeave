@@ -11,12 +11,11 @@ outcomes.
 """
 
 import pytest
-from sqlalchemy import literal_column, select, update
+from sqlalchemy import select, update
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, Run, SpecDocument, SpecRigorEvent, TaskTransition
-from hub.spec_documents import parse_hub, parse_stored
+from hub.db.models import Agent, Run, Task, TaskTransition
 from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -68,10 +67,34 @@ async def _document(app, auth_headers, run_headers, requirements=(ALPHA,)):
     assert saved.status_code == 200, saved.text
 
 
+#: Document rigor retired (`amendments-main-watch-and-the-next-slice`, D3): the evidence rule a
+#: task is judged by is its level. These tests ask for a rule by its old name; `_set_rigor` gives
+#: every task of the project, and every task `_linked_task` creates afterwards, the level that
+#: implies it.
+_LEVEL_FOR = {"sketch": None, "contract": "reviewed", "gate": "gated"}
+_RULE: dict = {}
+
+
+@pytest.fixture(autouse=True)
+def _no_rule():
+    _RULE.clear()
+    yield
+    _RULE.clear()
+
+
+class _Done:
+    status_code = 200
+    text = ""
+
+
 async def _set_rigor(app, auth_headers, rigor, **body):
-    return await app.post(
-        f"{BASE}/documents/{PATH}/rigor", json={"rigor": rigor, **body}, headers=auth_headers
-    )
+    _RULE["level"] = _LEVEL_FOR[rigor]
+    async with async_session_factory() as session:
+        await session.execute(
+            update(Task).where(Task.project_id == "proj-test").values(level=_RULE["level"])
+        )
+        await session.commit()
+    return _Done()
 
 
 async def _task_to(app, auth_headers, task_id, *statuses):
@@ -92,7 +115,12 @@ async def _linked_task(app, auth_headers, identifiers=("FR-1",)):
         headers=auth_headers,
     )
     assert created.status_code == 201, created.text
-    return created.json()["id"]
+    task_id = created.json()["id"]
+    if _RULE.get("level"):
+        async with async_session_factory() as session:
+            (await session.get(Task, task_id)).level = _RULE["level"]
+            await session.commit()
+    return task_id
 
 
 # ---------------------------------------------------------------------------
@@ -403,8 +431,8 @@ async def test_a_sketch_refuses_a_rejected_requirement(app, auth_headers, builde
     # F701: a rejection blocks at every rigor, and `sketch` is already the lowest, so the refusal
     # must not offer lowering the rigor as a way out.
     message = response.json()["detail"]["message"]
-    assert "or lower the document's rigor" not in message, message
-    assert "every rigor" in message, message
+    assert "a level that does not gate them" not in message, message
+    assert "every level" in message, message
 
 
 @pytest.mark.asyncio
@@ -725,333 +753,6 @@ def test_no_tool_advertises_a_rigor_argument():
         tool.name for tool in tools if "rigor" in (tool.parameters or {}).get("properties", {})
     ]
     assert offering == [], f"these tools advertise a rigor argument: {offering}"
-
-
-@pytest.mark.asyncio
-async def test_the_function_itself_refuses_a_non_operator(app, auth_headers, builder, tmp_path):
-    """So the rule survives a second caller being added later."""
-    from hub import spec_rigor
-    from hub.spec_lifecycle import Actor
-
-    await _document(app, auth_headers, builder)
-
-    async with async_session_factory() as session:
-        document = (
-            (await session.execute(select(SpecDocument).where(SpecDocument.path == PATH)))
-            .scalars()
-            .first()
-        )
-        with pytest.raises(spec_rigor.RigorRefusedError) as refusal:
-            await spec_rigor.set_rigor(
-                session,
-                document,
-                "gate",
-                actor=Actor(kind="agent", name="gate-builder", run_id="run-gate"),
-            )
-        assert document.rigor == "sketch"
-
-    assert refusal.value.code == "rigor_is_the_operators"
-
-
-@pytest.mark.asyncio
-async def test_a_blocked_agent_cannot_demote(app, auth_headers, builder, tmp_path):
-    """The dangerous direction. If the party a gate blocks can lower it, the gate is a speed bump
-    the blocked party removes."""
-    from hub import spec_rigor
-    from hub.spec_lifecycle import Actor
-
-    await _document(app, auth_headers, builder)
-    await _set_rigor(app, auth_headers, "gate")
-
-    async with async_session_factory() as session:
-        document = (
-            (await session.execute(select(SpecDocument).where(SpecDocument.path == PATH)))
-            .scalars()
-            .first()
-        )
-        with pytest.raises(spec_rigor.RigorRefusedError):
-            await spec_rigor.set_rigor(
-                session,
-                document,
-                "sketch",
-                actor=Actor(kind="agent", name="gate-builder", run_id="run-gate"),
-            )
-        assert document.rigor == "gate"
-
-
-# ---------------------------------------------------------------------------
-# Promotion, demotion, and the record
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_promotion_is_refused_on_a_document_with_no_requirements(
-    app, auth_headers, builder, tmp_path
-):
-    """Rigor is a claim about enforceability. A document with nothing to enforce cannot make it."""
-    created = await app.post(
-        f"{BASE}/documents", json={"path": PATH, "title": "Empty"}, headers=auth_headers
-    )
-    assert created.status_code == 201
-    await app.post(
-        SUBMIT,
-        json={
-            "path": PATH,
-            "document": {
-                "schema_version": SCHEMA_VERSION,
-                "kind": "change-spec",
-                "title": "Empty",
-                "requirements": [],
-            },
-        },
-        headers=builder,
-    )
-
-    response = await _set_rigor(app, auth_headers, "gate")
-
-    assert response.status_code == 409
-    assert "nothing to enforce" in response.text
-
-
-@pytest.mark.asyncio
-async def test_promotion_is_refused_on_a_document_that_does_not_parse(
-    app, auth_headers, builder, tmp_path
-):
-    await _document(app, auth_headers, builder)
-    (tmp_path / PATH).write_text("this is not a stored document", encoding="utf-8")
-
-    response = await _set_rigor(app, auth_headers, "gate")
-
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "document_not_enforceable"
-
-
-@pytest.mark.asyncio
-async def test_demotion_works_on_a_document_that_does_not_parse(
-    app, auth_headers, builder, tmp_path
-):
-    """The document an operator most needs to stop enforcing is exactly the one that has stopped
-    parsing."""
-    await _document(app, auth_headers, builder)
-    await _set_rigor(app, auth_headers, "gate")
-    (tmp_path / PATH).write_text("this is not a stored document", encoding="utf-8")
-
-    response = await _set_rigor(app, auth_headers, "sketch")
-
-    assert response.status_code == 200, response.text
-    assert response.json()["rigor"] == "sketch"
-
-
-@pytest.mark.asyncio
-async def test_demotion_keeps_the_links_evidence_and_reviews(app, auth_headers, builder, tmp_path):
-    """Otherwise lowering rigor to unblock something urgent is a laundering step."""
-    from hub.db.models import EvidenceReview, RequirementEvidence, TaskRequirementLink
-
-    await _document(app, auth_headers, builder)
-    task_id = await _linked_task(app, auth_headers)
-    recorded = await app.post(AGENT_EVIDENCE, json={"identifier": "FR-1"}, headers=builder)
-    await app.post(
-        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
-        json={"decision": "accepted"},
-        headers=auth_headers,
-    )
-    await _set_rigor(app, auth_headers, "gate")
-
-    await _set_rigor(app, auth_headers, "sketch", reason="shipping today")
-
-    async with async_session_factory() as session:
-        links = (
-            (
-                await session.execute(
-                    select(TaskRequirementLink).where(TaskRequirementLink.task_id == task_id)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        evidence = (await session.execute(select(RequirementEvidence))).scalars().all()
-        reviews = (await session.execute(select(EvidenceReview))).scalars().all()
-
-    assert len(links) == 1
-    assert len(evidence) == 1
-    assert len(reviews) == 1
-
-
-@pytest.mark.asyncio
-async def test_every_rigor_change_is_recorded_and_attributed(app, auth_headers, builder, tmp_path):
-    """There is no unrecorded override. Demotion is a legitimate decision *because* of this row."""
-    await _document(app, auth_headers, builder)
-
-    await _set_rigor(app, auth_headers, "gate", reason="ready to enforce")
-    await _set_rigor(app, auth_headers, "sketch", reason="shipping today")
-
-    async with async_session_factory() as session:
-        events = (
-            (
-                await session.execute(
-                    select(SpecRigorEvent).order_by(
-                        SpecRigorEvent.created_at, literal_column("spec_rigor_events.rowid")
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-
-    assert [(e.from_rigor, e.to_rigor) for e in events] == [
-        ("sketch", "gate"),
-        ("gate", "sketch"),
-    ]
-    assert all(event.actor_kind == "operator" for event in events)
-    assert events[1].reason == "shipping today"
-
-
-@pytest.mark.asyncio
-async def test_the_rigor_history_route_answers_oldest_first(app, auth_headers, builder, tmp_path):
-    """The order the app's history list is built on. The UI reverses it to show newest first, and
-    its test fixture is in this order (F190: a fixture in an order the route never emits is not
-    evidence), so this pins the route rather than the table."""
-    await _document(app, auth_headers, builder)
-    await _set_rigor(app, auth_headers, "contract", reason="")
-    await _set_rigor(app, auth_headers, "gate", reason="ready to enforce")
-
-    response = await app.get(f"{BASE}/documents/{PATH}/rigor-history", headers=auth_headers)
-
-    assert response.status_code == 200, response.text
-    events = response.json()["events"]
-    assert [(e["from"], e["to"]) for e in events] == [("sketch", "contract"), ("contract", "gate")]
-    assert [e["reason"] for e in events] == ["", "ready to enforce"]
-    assert events[0]["created_at"] <= events[1]["created_at"]
-    assert all(e["actor_kind"] == "operator" for e in events)
-
-
-@pytest.mark.asyncio
-async def test_rigor_changes_that_tie_on_the_clock_keep_the_order_they_were_made_in(
-    app, auth_headers, builder, tmp_path
-):
-    """`created_at` ties on a coarse Windows clock; the random id must not decide the order."""
-    await _document(app, auth_headers, builder)
-    await _set_rigor(app, auth_headers, "contract", reason="")
-    await _set_rigor(app, auth_headers, "gate", reason="ready to enforce")
-    async with async_session_factory() as session:
-        rows = (
-            (
-                await session.execute(
-                    select(SpecRigorEvent).order_by(literal_column("spec_rigor_events.rowid"))
-                )
-            )
-            .scalars()
-            .all()
-        )
-        tied = rows[0].created_at
-        # The first change gets the id that sorts last, so an id tie-break reverses the pair.
-        await session.execute(
-            update(SpecRigorEvent)
-            .where(SpecRigorEvent.id == rows[0].id)
-            .values(id="zzz", created_at=tied)
-        )
-        await session.execute(
-            update(SpecRigorEvent)
-            .where(SpecRigorEvent.id == rows[1].id)
-            .values(id="aaa", created_at=tied)
-        )
-        await session.commit()
-
-    response = await app.get(f"{BASE}/documents/{PATH}/rigor-history", headers=auth_headers)
-
-    assert [(e["from"], e["to"]) for e in response.json()["events"]] == [
-        ("sketch", "contract"),
-        ("contract", "gate"),
-    ]
-
-
-@pytest.mark.asyncio
-async def test_a_rigor_change_against_a_stale_digest_is_refused(
-    app, auth_headers, builder, tmp_path
-):
-    """What was promoted must be what was read."""
-    await _document(app, auth_headers, builder)
-
-    response = await _set_rigor(app, auth_headers, "gate", expected_digest="0" * 64)
-
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "stale_digest"
-
-
-@pytest.mark.asyncio
-async def test_the_document_itself_states_its_rigor(app, auth_headers, builder, tmp_path):
-    await _document(app, auth_headers, builder)
-
-    await _set_rigor(app, auth_headers, "gate")
-
-    content = (tmp_path / PATH).read_text(encoding="utf-8")
-    assert parse_hub(content)["rigor"] == "gate"
-    # And a save afterwards does not silently reset it — the row is what the file's block copies.
-    await app.post(
-        SUBMIT,
-        json={
-            "path": PATH,
-            "document": {
-                "schema_version": SCHEMA_VERSION,
-                "kind": "change-spec",
-                "title": "Gate demo",
-                "requirements": [ALPHA],
-            },
-        },
-        headers=builder,
-    )
-    assert parse_hub((tmp_path / PATH).read_text(encoding="utf-8"))["rigor"] == "gate"
-
-
-@pytest.mark.asyncio
-async def test_an_agent_cannot_set_rigor_through_the_payload(app, auth_headers, builder, tmp_path):
-    """The stored file's rigor is the row's copy. A payload field would be an agent lowering its own gate.
-
-    At `gate` rigor a submission is only proposed, not applied
-    (`openspec/changes/2026-08-17-authoring-rigor-and-scope` F1) — accept the resulting metadata
-    proposal to reach the write this test is actually about, then check what got stored.
-    """
-    await _document(app, auth_headers, builder)
-    await _set_rigor(app, auth_headers, "gate")
-
-    await app.post(
-        SUBMIT,
-        json={
-            "path": PATH,
-            "document": {
-                "schema_version": SCHEMA_VERSION,
-                "kind": "change-spec",
-                "title": "Gate demo",
-                "requirements": [ALPHA],
-                "rigor": "sketch",
-                "gate_policy": "sketch",
-            },
-        },
-        headers=builder,
-    )
-    proposals = (await app.get(f"{BASE}/documents/{PATH}/proposals", headers=auth_headers)).json()[
-        "proposals"
-    ]
-    metadata_proposal = next(p for p in proposals if p["unit_kind"] == "metadata")
-    accepted = await app.post(
-        f"{BASE}/documents/{PATH}/proposals/{metadata_proposal['id']}/accept",
-        json={},
-        headers=auth_headers,
-    )
-    assert accepted.status_code == 200, accepted.text
-
-    async with async_session_factory() as session:
-        document = (
-            (await session.execute(select(SpecDocument).where(SpecDocument.path == PATH)))
-            .scalars()
-            .first()
-        )
-    assert document.rigor == "gate"
-    text = (tmp_path / PATH).read_text(encoding="utf-8")
-    stored = parse_stored(text)
-    # The submitted field survives as data — unknown fields round-trip — and governs nothing.
-    assert stored.get("rigor") == "sketch"
-    assert parse_hub(text)["rigor"] == "gate"
 
 
 # ---------------------------------------------------------------------------

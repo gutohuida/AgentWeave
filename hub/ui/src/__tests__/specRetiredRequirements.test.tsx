@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, renderHook, screen, waitFor, within, act } from '@testing-library/react'
+import { render, renderHook, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
 import { ApiError } from '@/api/client'
@@ -57,7 +57,7 @@ vi.mock('@/api/spec', async (importOriginal) => {
 })
 
 import { SpecRetiredRequirements } from '@/components/spec/SpecRetiredRequirements'
-import { useSetSpecRigor, useSpecEvents } from '@/api/spec'
+import { useSpecEvents } from '@/api/spec'
 
 const PATH = 'spec/changes/demo/spec.json'
 
@@ -274,50 +274,18 @@ describe('the new keys refresh', () => {
     )
   }
 
-  // 1.9 (D4). The rigor route and a save that retires a requirement both broadcast `spec_updated`.
-  it('invalidates the history, the requirement list and a requirement on spec_updated', () => {
+  // 1.9 (D4). A save that retires a requirement broadcasts `spec_updated`.
+  it('invalidates the requirement list and a requirement on spec_updated', () => {
     const client = new QueryClient()
     const spy = vi.spyOn(client, 'invalidateQueries')
     renderHook(() => useSpecEvents(), { wrapper: wrapperFor(client) })
 
-    handler!({ type: 'spec_updated', data: { path: PATH, rigor: 'gate', project_id: 'proj-a' } })
+    handler!({ type: 'spec_updated', data: { path: PATH, project_id: 'proj-a' } })
 
     const keys = spy.mock.calls.map((c) =>
       JSON.stringify((c[0] as { queryKey: unknown[] }).queryKey),
     )
-    expect(keys).toContain(JSON.stringify(['project', 'proj-a', 'specRigorHistory']))
     expect(keys).toContain(JSON.stringify(['project', 'proj-a', 'specRequirements']))
     expect(keys).toContain(JSON.stringify(['project', 'proj-a', 'specRequirement']))
-  })
-
-  // 1.10 (D4, operator review LOW). The tab that pressed Confirm does not wait for the broadcast:
-  // no SSE event is dispatched here, and the history query still refetches.
-  it('refetches the history of the path it changed once a rigor change succeeds', async () => {
-    const historyUrl = `/api/v1/projects/proj-a/project/documents/${PATH}/rigor-history`
-    getJson.mockImplementation(async () => ({ events: [] }))
-    postJson.mockResolvedValue({ path: PATH, rigor: 'gate' })
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-
-    const { result } = renderHook(
-      () => {
-        // The history query as the app keys it, read straight from the route.
-        useQuery({
-          queryKey: ['project', 'proj-a', 'specRigorHistory', PATH],
-          queryFn: () => getJson(historyUrl),
-        })
-        return useSetSpecRigor()
-      },
-      { wrapper: wrapperFor(client) },
-    )
-
-    await waitFor(() => expect(getJson).toHaveBeenCalledTimes(1))
-
-    await act(async () => {
-      await result.current.mutateAsync({ path: PATH, rigor: 'gate', reason: 'ready', expectedDigest: 'abc' })
-    })
-
-    // Nothing dispatched a `spec_updated`: only the mutation itself can have caused a refetch.
-    await waitFor(() => expect(getJson).toHaveBeenCalledTimes(2))
-    expect(getJson).toHaveBeenLastCalledWith(historyUrl)
   })
 })

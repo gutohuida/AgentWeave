@@ -1,5 +1,4 @@
 import * as React from 'react'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu'
@@ -35,20 +34,12 @@ export interface SpecPrimaryAction {
   reasonState?: string
 }
 
-export type Rigor = 'sketch' | 'contract' | 'gate'
-
-const RIGOR_OPTIONS: Array<{ value: Rigor; label: string; detail: string }> = [
-  { value: 'sketch', label: 'Sketch', detail: 'Blocks nothing' },
-  { value: 'contract', label: 'Contract', detail: 'Stated, not enforced' },
-  { value: 'gate', label: 'Gate', detail: 'Unverified work cannot be approved' },
-]
-
 /** The document's header: where it sits, what it is, what it is waiting for.
  *
  *  Replaces eight stacked strips (a banner, an action row mixing a pill with plain-text actions, a
  *  "Created …" log, vault warnings, coverage, drift, a tasks link and a manifest-drift row), each
  *  in its own style, that pushed the document 380px down. Now: a breadcrumb and the actions on
- *  one row, the title with its phase and rigor, and `health` (SpecHealthLine) for every fact. One
+ *  one row, the title with its phase, and `health` (SpecHealthLine) for every fact. One
  *  action is the primary button (Approve, Build…, Fold…); `beforePrimary` carries the controls that
  *  sit beside it (Check, Approve and build…); the rest are in the overflow menu, named for what
  *  they do.
@@ -56,22 +47,19 @@ const RIGOR_OPTIONS: Array<{ value: Rigor; label: string; detail: string }> = [
  *  Hosts with more to say pass it in: `menu` (more overflow items), `badges` (beside the phase, such
  *  as the flow the document runs), `tools` (icon buttons after the menu), `beforePrimary` (a control
  *  that qualifies the primary action) and `messages` (what the document's controls produced: a
- *  refusal, the gaps approval found, a rigor change waiting for its reason). `onOpenLocation` makes
+ *  refusal, the gaps approval found). `onOpenLocation` makes
  *  the breadcrumb open the document search. */
 export function SpecDocumentHeader({
   path,
   title,
   kind,
   phase,
-  rigor,
   primary,
   health,
   onArchive,
   onReopen,
   onDelete,
   onCopyPath,
-  onRigorChange,
-  rigorChoice,
   menu,
   badges,
   tools,
@@ -84,18 +72,12 @@ export function SpecDocumentHeader({
   kind: string
   /** Absent for a document the Hub keeps no record of (no phase is known). */
   phase?: SpecPhase | null
-  /** Absent for a document the Hub keeps no record of (nothing enforces it). */
-  rigor?: string | null
   primary?: SpecPrimaryAction | null
   health: React.ReactNode
   onArchive?: () => void
   onReopen?: () => void
   onDelete?: () => void
   onCopyPath: () => void
-  /** A rigor menu with nothing behind it (the mock); `rigorChoice` is the working control. */
-  onRigorChange?: () => void
-  /** The rigor chip as a choice of the three rigors. */
-  rigorChoice?: { value: Rigor; onChange: (rigor: Rigor) => void; disabled?: boolean }
   menu?: React.ReactNode
   badges?: React.ReactNode
   tools?: React.ReactNode
@@ -110,7 +92,6 @@ export function SpecDocumentHeader({
       <span className={i === crumbs.length - 1 ? 'aw-spec-crumb-current' : 'aw-spec-crumb'}>{part}</span>
     </React.Fragment>
   ))
-  const rigorLabel = rigor ? `${rigor[0]!.toUpperCase() + rigor.slice(1)} rigor` : ''
   return (
     <header className="aw-spec-head" data-testid="spec-document-header">
       <div className="aw-spec-head-bar">
@@ -151,11 +132,6 @@ export function SpecDocumentHeader({
               </Button>
             </MenuTrigger>
             <MenuContent>
-              {onRigorChange && !rigorChoice ? (
-                <MenuItem icon="tag" onSelect={onRigorChange}>
-                  Change rigor…
-                </MenuItem>
-              ) : null}
               <MenuItem icon="content_copy" onSelect={onCopyPath}>
                 Copy file path
               </MenuItem>
@@ -188,44 +164,6 @@ export function SpecDocumentHeader({
             {PHASE_LABEL[phase] ?? phase}
           </span>
         ) : null}
-        {!rigor ? null : rigorChoice ? (
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger
-              data-slot="spec-chip"
-              className="aw-spec-chip"
-              data-testid="spec-rigor"
-              data-value={rigorChoice.value}
-              disabled={rigorChoice.disabled}
-              aria-label={`Enforcement: ${rigorLabel}`}
-              title="How strictly approval checks this document"
-            >
-              {rigorLabel}
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content align="start" sideOffset={6} collisionPadding={12} className="aw-menu aw-pop" style={{ minWidth: 260 }}>
-                <DropdownMenu.Label className="aw-menu-label">Enforcement</DropdownMenu.Label>
-                <DropdownMenu.RadioGroup value={rigorChoice.value} onValueChange={(next) => rigorChoice.onChange(next as Rigor)}>
-                  {RIGOR_OPTIONS.map((option) => (
-                    <DropdownMenu.RadioItem key={option.value} value={option.value} className="aw-menu-item" data-two-line="true">
-                      <span className="aw-menu-item-icon" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">{option.label}</span>
-                        <span className="aw-menu-item-detail">{option.detail}</span>
-                      </span>
-                      <DropdownMenu.ItemIndicator className="aw-menu-check">
-                        <Icon name="check" size={14} />
-                      </DropdownMenu.ItemIndicator>
-                    </DropdownMenu.RadioItem>
-                  ))}
-                </DropdownMenu.RadioGroup>
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
-        ) : (
-          <button type="button" data-slot="spec-chip" className="aw-spec-chip" onClick={onRigorChange} title="How strictly approval checks this document">
-            {rigorLabel}
-          </button>
-        )}
         <span className="aw-spec-kind">{KIND_LABEL[kind] ?? kind}</span>
         {badges}
       </div>

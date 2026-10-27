@@ -15,11 +15,10 @@ import { useDocumentFlow, type LoopSummary } from '@/api/loops'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { MenuItem, MenuSeparator } from '@/components/ui/menu'
 import { Segmented } from '@/components/ui/segmented'
 import { Switch } from '@/components/ui/switch'
-import { formatAgoLong, formatDateTime } from '@/lib/format'
+import { formatAgoLong } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import type { SpecPrimaryAction } from './SpecDocumentHeader'
 import { GapLines, ReviewerLine } from './SpecPhaseParts'
@@ -30,10 +29,8 @@ import {
   useDeleteSpecDocument,
   useSetSpecJourney,
   useSetSpecPhase,
-  useSetSpecRigor,
   useSpec,
   useSpecDocuments,
-  useSpecRigorHistory,
   type BuildChoices,
   type SpecBlockingFinding,
   type SpecBuildOutcome,
@@ -41,13 +38,6 @@ import {
   type SpecNextSliceOutcome,
   type SpecSize,
 } from '@/api/spec'
-
-type Rigor = SpecDocumentRecord['rigor']
-
-/** Lowest to highest. A move down this list is a demotion, and a demotion made in the app needs a
- *  reason: the record is what makes lowering a gate legitimate (F429). */
-const RIGOR_ORDER: Rigor[] = ['sketch', 'contract', 'gate']
-const RIGOR_LABEL: Record<Rigor, string> = { sketch: 'Sketch', contract: 'Contract', gate: 'Gate' }
 
 
 /** What a Build said: the flow's messages, then each declared builder no open agent answers to
@@ -156,10 +146,9 @@ export interface SpecPhaseControls {
   reopen?: () => void
   archive?: () => void
   remove?: () => void
-  rigorChoice: { value: Rigor; onChange: (rigor: Rigor) => void; disabled: boolean }
   /** Beside the phase: the flow the document runs. */
   badges: React.ReactNode
-  /** What the controls produced: refusals, gaps, the journey, a rigor change waiting for its reason. */
+  /** What the controls produced: refusals, gaps, and the journey. */
   messages: React.ReactNode
   dialogs: React.ReactNode
 }
@@ -191,7 +180,6 @@ export function useSpecPhaseControls(
   const build = useBuildSpecDocument()
   const approveAndBuild = useApproveAndBuildSpecDocument()
   const setPhase = useSetSpecPhase()
-  const setRigor = useSetSpecRigor()
   const [blocking, setBlocking] = useState<SpecBlockingFinding[]>([])
   // Gaps the Hub listed at Check or approve (`approve-lists-what-is-missing-and-can-approve-
   // anyway`). Only an `approval_warnings` refusal makes them overridable: the one Approve anyway answers.
@@ -199,7 +187,6 @@ export function useSpecPhaseControls(
   const [gapsOverridable, setGapsOverridable] = useState(false)
   // What an approval told and did not gate on (F704: an unclaimed roadmap slice).
   const [approvalNotes, setApprovalNotes] = useState<SpecBlockingFinding[]>([])
-  const [rigorRefusal, setRigorRefusal] = useState<string[]>([])
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [archiveRefusal, setArchiveRefusal] = useState<string | null>(null)
   const [startingFlow, setStartingFlow] = useState(false)
@@ -219,12 +206,6 @@ export function useSpecPhaseControls(
   // On by default (C1a D4): approving a slice usually means "and now the next one".
   const [draftNextSlice, setDraftNextSlice] = useState(true)
   const [nextSliceOutcome, setNextSliceOutcome] = useState<SpecNextSliceOutcome | null>(null)
-  // A rigor chosen and not yet confirmed. Choosing no longer posts: the change waits here for its
-  // reason (design D2).
-  const [pendingRigor, setPendingRigor] = useState<Rigor | null>(null)
-  const [rigorReason, setRigorReason] = useState('')
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const { data: historyData, error: historyError } = useSpecRigorHistory(path)
 
   const document = data?.documents.find((entry) => entry.path === path)
   const flow = useDocumentFlow(document?.id)
@@ -447,60 +428,6 @@ export function useSpecPhaseControls(
     ? (data?.documents.find((entry) => entry.path === retirement.absorbed_by)?.title ?? retirement.absorbed_by)
     : null
 
-  // The route answers oldest first; the history reads newest first, reversed here and only here.
-  const history = [...(historyData?.events ?? [])].reverse()
-  const demoting =
-    pendingRigor !== null && RIGOR_ORDER.indexOf(pendingRigor) < RIGOR_ORDER.indexOf(document.rigor)
-  const reasonMissing = demoting && rigorReason.trim() === ''
-
-  function onChooseRigor(rigor: Rigor) {
-    setRigorRefusal([])
-    setRigorReason('')
-    setPendingRigor(rigor === document?.rigor ? null : rigor)
-  }
-
-  function onCancelRigor() {
-    setPendingRigor(null)
-    setRigorReason('')
-  }
-
-  async function onConfirmRigor() {
-    if (pendingRigor === null || reasonMissing) return
-    setRigorRefusal([])
-    try {
-      await setRigor.mutateAsync({
-        path,
-        rigor: pendingRigor,
-        reason: rigorReason.trim(),
-        // Compare-and-swap: what is being enforced has to be what the operator read.
-        expectedDigest: document?.content_digest ?? null,
-      })
-      setPendingRigor(null)
-      setRigorReason('')
-    } catch (error) {
-      // The row stays open with its reason, so a refusal the operator can fix is one retry away.
-      // `ApiError.message` is the response body verbatim, so the structured refusal has to be
-      // parsed back out of it. Falling through to the raw text is deliberate: an unparseable
-      // failure the operator can still read beats a generic sentence that hides it.
-      const raw = error instanceof Error ? error.message : String(error)
-      let detail: { message?: string; blocking?: string[] } | string | undefined
-      try {
-        detail = (JSON.parse(raw) as { detail?: typeof detail }).detail
-      } catch {
-        detail = raw
-      }
-      if (typeof detail === 'string' || detail === undefined) {
-        setRigorRefusal([detail || 'That change was refused.'])
-      } else {
-        setRigorRefusal(
-          detail.blocking?.length
-            ? detail.blocking
-            : [detail.message ?? 'That change was refused.'],
-        )
-      }
-    }
-  }
-
   // ── The one primary action ─────────────────────────────────────────────────────────────────
   // A finished change on its way into the corpus (`a-finished-change-is-folded-into-its-
   // capability`): every task decided and no merge names it yet. Folding is the close-out.
@@ -595,11 +522,6 @@ export function useSpecPhaseControls(
       {canStartFlow && primary?.testId !== 'spec-start-flow' ? (
         <MenuItem icon="play_arrow" data-testid="spec-start-flow" onSelect={() => setStartingFlow(true)}>
           Start a flow…
-        </MenuItem>
-      ) : null}
-      {history.length > 0 ? (
-        <MenuItem icon="schedule" data-testid="spec-rigor-history-toggle" onSelect={() => setHistoryOpen((open) => !open)}>
-          {historyOpen ? 'Hide rigor history' : `Rigor history (${history.length})`}
         </MenuItem>
       ) : null}
       {document.kind === 'capability' && document.phase === 'current' ? (
@@ -777,73 +699,6 @@ export function useSpecPhaseControls(
         </p>
       )}
 
-      {/* A rigor change, waiting for its reason (design D2). A promotion may go without one; a
-          demotion may not, because the reason is the record. */}
-      {pendingRigor !== null && (
-        <div className="aw-spec-message" data-testid="spec-rigor-confirm">
-          <span className="aw-spec-message-text">
-            Change enforcement from {RIGOR_LABEL[document.rigor]} to {RIGOR_LABEL[pendingRigor]}?
-          </span>
-          <Input
-            type="text"
-            aria-label="Reason for the change"
-            value={rigorReason}
-            onChange={(event) => setRigorReason(event.target.value)}
-            placeholder={demoting ? 'Why lower it?' : 'Why? (optional)'}
-            maxLength={2000}
-            className="min-w-0 flex-1"
-          />
-          <Button variant="primary" size="xs" disabled={reasonMissing || setRigor.isPending} onClick={onConfirmRigor}>
-            Confirm
-          </Button>
-          <Button variant="ghost" size="xs" disabled={setRigor.isPending} onClick={onCancelRigor}>
-            Cancel
-          </Button>
-          {reasonMissing && (
-            <span className="w-full" style={{ color: 'var(--text-3)' }}>
-              Say why — this is the record that makes lowering a gate legitimate.
-            </span>
-          )}
-        </div>
-      )}
-
-      {historyOpen && history.length > 0 && (
-        <ul className="aw-spec-message" data-testid="spec-rigor-history">
-          {history.map((event) => (
-            <li key={event.id} className="flex w-full flex-wrap items-baseline gap-x-1.5">
-              <span style={{ color: 'var(--text)' }}>
-                {RIGOR_LABEL[event.from as Rigor] ?? event.from} → {RIGOR_LABEL[event.to as Rigor] ?? event.to}
-              </span>
-              <span>· {event.actor}</span>
-              <span>· {event.reason ? event.reason : <em>no reason given</em>}</span>
-              <span title={formatDateTime(event.created_at)}>· {formatAgoLong(event.created_at)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {/* A failed read is said, not shown as "no changes yet" — the absent menu item means exactly
-          that, so an error must not reach it (F197's shape). */}
-      {historyError && (
-        <p className="aw-spec-message" data-tone="warn" data-testid="spec-rigor-history-error">
-          <span className="aw-spec-message-text">
-            Could not load the rigor history: {readableApiError(historyError, 'the Hub did not answer.')}
-          </span>
-        </p>
-      )}
-
-      {/* Why a promotion was refused. A document that cannot be read cannot be enforced, and
-          saying only "refused" leaves the operator guessing at which of several things is wrong. */}
-      {rigorRefusal.length > 0 && (
-        <ul className="aw-spec-message" data-tone="warn" data-testid="spec-rigor-refusal">
-          {rigorRefusal.map((reason) => (
-            <li key={reason} className="flex items-start gap-1.5">
-              <Icon name="warning" size={13} />
-              <span>{reason}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-
       {gaps.length > 0 && (
         <div className="aw-spec-message" data-tone="warn" data-testid="approval-warnings">
           <span className="aw-spec-message-text">
@@ -979,7 +834,6 @@ export function useSpecPhaseControls(
     reopen,
     archive,
     remove,
-    rigorChoice: { value: pendingRigor ?? document.rigor, onChange: onChooseRigor, disabled: busy || setRigor.isPending },
     badges,
     messages,
     dialogs,

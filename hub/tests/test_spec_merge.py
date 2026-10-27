@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Run, SpecDocumentEvent, SpecDocumentMerge, SpecEditProposal
+from hub.db.models import Run, SpecDocumentEvent, SpecDocumentMerge
 from hub.spec_payload import SCHEMA_VERSION
 
 from ._spec_versions import content_version
@@ -227,99 +227,6 @@ async def test_two_merges_from_different_changes_accumulate_two_rows(
         rows = (await session.execute(select(SpecDocumentMerge))).scalars().all()
         assert len(rows) == 2
         assert len({row.change_document_id for row in rows}) == 2
-
-
-@pytest.mark.asyncio
-async def test_an_operator_merge_into_a_gated_capability_document_writes(
-    app, auth_headers, run_headers, tmp_path
-):
-    """F611, fix-D8: the operator's own edit applies at any rigor, and a merge is the operator's.
-
-    It used to become a pending proposal at `contract`/`gate` (after the 500 of
-    `2026-08-18-the-first-real-capability-merge.md` Finding 2 was fixed), which left the fold
-    unarchived and the merged content waiting on a proposal no screen listed.
-    """
-    await _capability(app, auth_headers)
-    await _approve(app, auth_headers, run_headers, CHANGE_PATH)
-    await _approve(app, auth_headers, run_headers, CHANGE2_PATH)
-    # A document must hold enforceable content before rigor can be raised
-    # (spec_rigor.py's promotion_blockers) — merge once at the default `sketch`
-    # rigor first, matching the reproduction in the exploration this test guards.
-    first = await app.post(
-        f"{BASE}/documents/{CAP_PATH}/merge",
-        json={"payload": _capability_payload(), "from_changes": [CHANGE_PATH]},
-        headers=auth_headers,
-    )
-    assert first.status_code == 200, first.text
-    raised = await app.post(
-        f"{BASE}/documents/{CAP_PATH}/rigor", json={"rigor": "gate"}, headers=auth_headers
-    )
-    assert raised.status_code == 200, raised.text
-
-    response = await app.post(
-        f"{BASE}/documents/{CAP_PATH}/merge",
-        json={
-            "payload": _capability_payload(title="Demo capability, revised"),
-            "from_changes": [CHANGE2_PATH],
-        },
-        headers=auth_headers,
-    )
-
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert not body.get("proposals")
-    assert body["merged"] == 1
-    assert "Demo capability, revised" in (tmp_path / CAP_PATH).read_text(encoding="utf-8")
-
-    async with async_session_factory() as session:
-        proposals = (await session.execute(select(SpecEditProposal))).scalars().all()
-        assert proposals == []
-
-
-@pytest.mark.asyncio
-async def test_a_merge_into_a_gated_capability_document_records_its_merge_row(
-    app, auth_headers, run_headers, tmp_path
-):
-    """Finding 3's audit: `spec_document_merges` records folds that happened, one row each.
-
-    Since fix-D8 (F611) the operator's merge at `gate` writes, so it is recorded like any other;
-    before, it only proposed and rightly recorded nothing.
-    """
-    await _capability(app, auth_headers)
-    await _approve(app, auth_headers, run_headers, CHANGE_PATH)
-    await _approve(app, auth_headers, run_headers, CHANGE2_PATH)
-    first = await app.post(
-        f"{BASE}/documents/{CAP_PATH}/merge",
-        json={"payload": _capability_payload(), "from_changes": [CHANGE_PATH]},
-        headers=auth_headers,
-    )
-    assert first.status_code == 200, first.text
-    raised = await app.post(
-        f"{BASE}/documents/{CAP_PATH}/rigor", json={"rigor": "gate"}, headers=auth_headers
-    )
-    assert raised.status_code == 200, raised.text
-
-    response = await app.post(
-        f"{BASE}/documents/{CAP_PATH}/merge",
-        json={"payload": _capability_payload(), "from_changes": [CHANGE2_PATH]},
-        headers=auth_headers,
-    )
-    assert response.status_code == 200, response.text
-
-    async with async_session_factory() as session:
-        rows = (await session.execute(select(SpecDocumentMerge))).scalars().all()
-        assert len(rows) == 2
-
-        events = (
-            (
-                await session.execute(
-                    select(SpecDocumentEvent).where(SpecDocumentEvent.kind == "merged")
-                )
-            )
-            .scalars()
-            .all()
-        )
-        assert len(events) == 2
 
 
 @pytest.mark.asyncio

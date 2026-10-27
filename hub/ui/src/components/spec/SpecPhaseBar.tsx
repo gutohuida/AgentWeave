@@ -52,8 +52,6 @@ export function SpecPhaseHeader({
         title={document.title}
         kind={document.kind}
         phase={document.phase}
-        rigor={controls.rigorChoice.value}
-        rigorChoice={controls.rigorChoice}
         primary={controls.primary}
         beforePrimary={controls.beforePrimary}
         menu={controls.menu}

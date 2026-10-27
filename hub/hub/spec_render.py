@@ -105,8 +105,6 @@ a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
 .aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
 .aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
 .aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
-.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
-.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
 /* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
    capability's `current` are settled and take the done tone; `exploring` and `archived` are quiet
    for opposite reasons — one has not arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
@@ -225,20 +223,11 @@ def _requirements(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
     return "".join(parts)
 
 
-# The one spelling of the rigor metadata name. Stated once so the renderer and anything reading a
-# document back cannot drift apart on it.
-RIGOR_META = "aw-spec-rigor"
-
-# Values are SPEC_RIGORS in hub/hub/db/models.py ("sketch", "contract", "gate"). "sketch" is the
-# default and blocks nothing, so it stays the plain neutral chip — only the two rigor levels that
-# mean something (a stated intent, a refusal) get a tone, mirroring the modal treatment above:
-# `gate` is the strongest (it can block a task's approval) and takes the accent; `contract` takes
-# the warn tone. Any value not in this mapping (should not occur; spec_rigor.set_rigor validates
-# on the way in) renders as the plain neutral chip rather than raising here.
-_RIGOR_TONE = {"gate": "gate", "contract": "contract"}
+# Document rigor retired (`amendments-main-watch-and-the-next-slice`, D3): a document no longer
+# states one; how strictly evidence is judged is the build's level.
 
 # Values are the phases in hub/hub/spec_lifecycle.py. A phase not in this mapping renders as the
-# plain neutral chip rather than raising, the same way an unknown rigor does.
+# plain neutral chip rather than raising.
 _PHASE_TONE = {
     "approved": "done",
     "current": "done",
@@ -644,7 +633,6 @@ def render_document(
     *,
     phase: str,
     stored_payload: Dict[str, Any],
-    rigor: str = "sketch",
     corpus: Optional[CorpusContext] = None,
     slice_of: Optional[SliceOf] = None,
     slice_states: Optional[Dict[str, SliceState]] = None,
@@ -654,12 +642,6 @@ def render_document(
     `stored_payload` is embedded verbatim so a read of this file recovers
     everything that was submitted, including fields this schema version does not
     define.
-
-    `rigor` is stated in the head and shown beside the phase, so anyone opening
-    the file can see what happens to work that ignores it. Like the phase, the
-    copy in the file is for whoever reads it and the database row is the
-    authority — a gate whose value lives where the gated party can write it is
-    not a gate.
 
     `corpus` is optional. Omitted (still true of every caller until corpus-aware-documents §4
     wires reindex up), the document is byte-identical to before this parameter existed (§1.3).
@@ -699,8 +681,6 @@ def render_document(
         ]
     )
 
-    rigor_tone = _RIGOR_TONE.get(rigor, "")
-    rigor_chip_class = f"aw-chip aw-chip-rigor-{rigor_tone}" if rigor_tone else "aw-chip"
     phase_tone = _PHASE_TONE.get(phase, "")
     phase_chip_class = f"aw-chip aw-chip-phase-{phase_tone}" if phase_tone else "aw-chip"
 
@@ -712,14 +692,12 @@ def render_document(
         f"<title>{_e(payload.title)}</title>\n"
         f'<meta name="aw-spec-kind" content="{_e(payload.kind)}">\n'
         f'<meta name="aw-spec-status" content="{_e(phase)}">\n'
-        f'<meta name="{RIGOR_META}" content="{_e(rigor)}">\n'
         f'<meta name="aw-spec-schema-version" content="{_e(payload.schema_version)}">\n'
         f"<style>\n{_STYLE}\n</style>\n"
         "</head>\n<body>\n"
         f"<h1>{_e(payload.title)}</h1>\n"
         f'<p class="aw-meta"><span class="aw-chip">{_e(payload.kind)}</span>'
-        f'<span class="{phase_chip_class}">{_e(phase)}</span>'
-        f'<span class="{rigor_chip_class}">{_e(rigor)}</span></p>\n'
+        f'<span class="{phase_chip_class}">{_e(phase)}</span></p>\n'
         f"{_navigation(corpus)}"
         f"{_slice_of(slice_of)}"
         f"{_summary(payload)}\n"

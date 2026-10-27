@@ -424,7 +424,7 @@ def render_read(view: Dict[str, Any]) -> str:
     characters plus its indentation, so no tool cuts one.
     """
     lines: List[str] = [f"# {view.get('title') or view.get('path')}", ""]
-    for name in ("id", "path", "kind", "phase", "rigor", "diverged", "updated_at"):
+    for name in ("id", "path", "kind", "phase", "diverged", "updated_at"):
         if name in view:
             lines.append(f"{name}: {view[name]}")
     if view.get("divergence"):
@@ -537,7 +537,6 @@ _ANSWER_FIELDS = (
     "title",
     "kind",
     "phase",
-    "rigor",
     "explore_closed",
     "updated_at",
     "diverged",

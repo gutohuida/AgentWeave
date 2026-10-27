@@ -279,25 +279,25 @@ class GateRefusal:
             sentence = (
                 "This task serves requirements a gate is enforcing, and they are not verified: "
                 + "; ".join(parts)
-                + ". Satisfy them, or lower the document's rigor — which is recorded"
+                + ". Satisfy them, or build the task at a level that does not gate them"
                 + (
-                    ", though a rejected requirement blocks approval at every rigor."
+                    ", though a rejected requirement blocks approval at every level."
                     if rejected
-                    else ", though held evidence blocks approval at every rigor." if held else "."
+                    else ", though held evidence blocks approval at every level." if held else "."
                 )
             )
         elif not held:
             sentence = (
                 "This task serves requirements that were rejected: "
                 + "; ".join(parts)
-                + ". A rejected requirement blocks approval at every rigor, so lowering the "
-                "document's rigor does not clear it."
+                + ". A rejected requirement blocks approval at every level, so a lower "
+                "level does not clear it."
             )
         else:
             sentence = (
                 "This task serves requirements whose evidence was rejected or held: "
                 + "; ".join(parts)
-                + ". Both block approval at every rigor, so lowering the document's rigor does "
+                + ". Both block approval at every level, so a lower level does "
                 "not clear them."
             )
         if rejected:
@@ -664,15 +664,16 @@ async def _enforced_requirements(
     """
     if rows is None:
         rows = await _linked_requirements(session, task)
-    # A task in a build is governed by its level's rule, not its documents' rigor
-    # (`a-build-has-a-driver-a-level-and-its-people`, D1): Fast as `sketch`, Reviewed as `contract`,
-    # Gated as `gate`. A task outside any build keeps its documents' rigor, exactly as before.
+    # A task is governed by its level's rule (`a-build-has-a-driver-a-level-and-its-people`, D1):
+    # Fast as `sketch`, Reviewed as `contract`, Gated as `gate`. Document rigor retired
+    # (`amendments-main-watch-and-the-next-slice`, D3): a task with no level -- outside any build,
+    # unless the retirement's migration recorded one for it -- is judged by `sketch`'s rule.
     from .builds import rigor_for_level
 
-    by_level = rigor_for_level(task.level) if task.build_id else None
+    by_level = rigor_for_level(task.level)
 
     def rule(document) -> str:
-        return by_level or document.rigor or spec_rigor.SKETCH
+        return by_level or spec_rigor.SKETCH
 
     enforced = [
         requirement for requirement, document in rows if rule(document) != spec_rigor.SKETCH

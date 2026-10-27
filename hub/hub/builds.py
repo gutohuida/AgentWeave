@@ -7,11 +7,11 @@ anyone but the builder; Gated: as today, evidence accepted per requirement), the
 work may go to, a **reviewer pool**, a **lead**, a **budget cap**, a **window** and where the work
 **lands**. This module owns that record and the level policy (design D1). It decides no move:
 `task_transition_service.decide_move` stays the one decision and reads the level from here, and
-`requirement_gate` keeps the evidence decision, reading the level's rule (`rigor_for_level`) where
-it reads a document's rigor for a task outside any build.
+`requirement_gate` keeps the evidence decision, reading the level's rule (`rigor_for_level`).
 
-A task outside any build (`build_id` null) records no level and is governed exactly as before, so
-nothing built before this change, and no task created by hand, behaves differently.
+A task outside any build (`build_id` null) records no level and is judged by `sketch`'s rule since
+document rigor retired (`amendments-main-watch-and-the-next-slice`, D3), unless that retirement's
+migration recorded a level for it (an open task of a `contract`/`gate` document).
 """
 
 from __future__ import annotations
@@ -57,12 +57,6 @@ LANDS_NOWHERE = "the build lands nowhere, so its approved work is not merged int
 #: The evidence rule each level implies (design D1): Fast as `sketch` (silent), Reviewed as
 #: `contract` (reported, never refused), Gated as `gate` (refused until accepted).
 _RIGOR = {FAST: spec_rigor.SKETCH, REVIEWED: spec_rigor.CONTRACT, GATED: spec_rigor.GATE}
-#: A build that names no level is built at the level nearest its document's rigor.
-_LEVEL_FOR_RIGOR = {
-    spec_rigor.SKETCH: REVIEWED,
-    spec_rigor.CONTRACT: REVIEWED,
-    spec_rigor.GATE: GATED,
-}
 
 MICROS = 1_000_000
 
@@ -73,12 +67,8 @@ def now() -> datetime:
 
 
 def rigor_for_level(level: Optional[str]) -> Optional[str]:
-    """The evidence rule *level* implies, or None for a task outside any build."""
+    """The evidence rule *level* implies, or None for a task that records no level."""
     return _RIGOR.get(level or "")
-
-
-def level_for_rigor(rigor: Optional[str]) -> str:
-    return _LEVEL_FOR_RIGOR.get(rigor or spec_rigor.SKETCH, REVIEWED)
 
 
 def allows_automatic_override(level: Optional[str]) -> bool:

@@ -8,8 +8,6 @@ import { SpecCoverageBar } from './SpecCoverageBar'
 import { SpecDriftPanel } from './SpecDriftPanel'
 import { SpecVaultWarnings } from './SpecVaultWarnings'
 import { SpecRetiredRequirements } from './SpecRetiredRequirements'
-import { SpecResolvedProposals } from './SpecResolvedProposals'
-import { SpecProposalsPanel } from './SpecProposalsPanel'
 import { SpecPlaceUnder } from './SpecPlaceUnder'
 import { SpecDocumentHeader } from './SpecDocumentHeader'
 import { SpecHealthLine, type HealthFactKey } from './SpecHealthLine'
@@ -110,8 +108,8 @@ function approvalHistory(outcome: SpecApprovalOutcome | undefined): string[] {
  * The header replaces eight stacked strips — the phase bar, approval report, vault warnings,
  * coverage, drift, the tasks link and the manifest-drift row — that pushed the document 380px
  * down. Every one of them is still a click away: each fact on the health line opens its detail,
- * and "Show details" opens the old panel, with all its actions, under the header. Amendments and
- * proposals waiting on the operator are panels of their own under the header, because they are
+ * and "Show details" opens the old panel, with all its actions, under the header. Amendments,
+ * proposed ones included, waiting on the operator are panels of their own under the header, because they are
  * decisions rather than facts, and appear only when there is one.
  *
  * `SpecFrame`'s contract is carried across untouched — `sandbox="allow-scripts"` without
@@ -331,7 +329,6 @@ export function SpecDocumentPanel({
           title={node?.title ?? path}
           kind={node?.kind ?? ''}
           phase={null}
-          rigor={null}
           health={health}
           tools={tools}
           badges={extraBadges}
@@ -383,8 +380,6 @@ export function SpecDocumentPanel({
           proposed edits (design F1-F3) and what was resolved, and retired requirements with work
           still pointing at them (F211). */}
       <SpecAmendmentsPanel path={path} />
-      <SpecProposalsPanel path={path} />
-      <SpecResolvedProposals path={path} />
       <SpecRetiredRequirements path={path} onOpenTasks={onOpenTasks} />
 
       {/* An unresolved link must never block reading the current document. */}

@@ -5207,14 +5207,8 @@ def submit_spec_document(
     You cannot approve a document, build it, or set its phase. There is no argument here that
     does so. Approval is the operator's decision and is taken elsewhere.
 
-    At `sketch` rigor (the default) this writes the document immediately, as above. At `contract`
-    or `gate` rigor it does not: your submission is diffed against what is stored and recorded as
-    one pending proposal per changed requirement plus one for everything else, for an operator to
-    accept or reject. The response then carries `proposals`/`unchanged`/`already_pending` instead
-    of `identifiers`/`divergence` — check which shape came back rather than assuming a write
-    happened. A unit you submit again unchanged is recorded once: it is named in `already_pending`,
-    not recorded twice. A different edit to a unit replaces your earlier pending proposal for it,
-    and a unit you put back as stored withdraws yours.
+    Before approval every save is written at once. After approval a document is not saved: an
+    author or the lead of its running build makes a proposal with `amend_spec_document`.
 
     `requirements` — objects with:
       `key`      stable handle, lowercase and hyphenated, unique in this document. Keep it across
@@ -5441,7 +5435,7 @@ def read_spec_document(
     marked `section_truncated` is refused, because resubmitting it would delete what the read cut:
     read it whole first.
 
-    Also returns `phase` and `rigor`, which say how settled this document is. Readable at any phase
+    Also returns `phase`, which says how settled this document is. Readable at any phase
     — an unapproved document is still worth reading, and its phase tells you not to build on it yet.
 
     A `diagnostics` entry appears where the document and the Hub's index disagree, or where the
@@ -5537,9 +5531,9 @@ def amend_spec_document(
 
     A turn testing a task of this document amends it at once: recorded with you as its author and
     this run, **not reviewed** until the operator reviews it. The builder never amends.
-    An agent that wrote the document before approval, or the lead of its running build, **proposes**
-    instead: nothing changes until the operator accepts (applied then, or refused as stale) or
-    declines it with a reason, and you are told either way. Anyone else is refused.
+    An agent that wrote the document before approval, or the lead of its running build, makes a
+    **proposal** instead: nothing changes until the operator accepts (applied then, or refused as
+    stale) or declines it with a reason, and you are told either way. Anyone else is refused.
 
     Stay within the document's requirements. A defect the work under review introduces sends that
     task back (`revision_needed`), never into the spec; an older problem is a side finding
@@ -5563,7 +5557,7 @@ def amend_spec_document(
         criterion, requirement, task, change: As the op needs them.
 
     Returns the amendment's `id`, `op`, `target`, and `task_created` for an applied `add_task`
-    or `state: proposed` for a proposal.
+    or the `state` of a proposal, which waits for the operator.
     """
     return _hub_request(
         "POST",

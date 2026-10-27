@@ -94,7 +94,6 @@ async def test_an_agent_reads_the_document_with_its_identifiers(app, auth_header
 
     assert body["path"] == PATH
     assert body["phase"] == "exploring"
-    assert body["rigor"] == "sketch"
     assert body["summary"] == "A watering tracker"
     assert body["diagnostics"] == []
 

@@ -33,7 +33,6 @@ const documentFixture: SpecDocumentRecord = {
   title: 'Example Document',
   kind: 'baseline',
   phase: 'approved',
-  rigor: 'sketch',
   content_digest: null,
   explore_closed: false,
   updated_at: '2026-08-16T00:00:00Z',

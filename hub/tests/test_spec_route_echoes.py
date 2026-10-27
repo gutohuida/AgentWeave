@@ -17,18 +17,6 @@ BASE = "/api/v1/projects/proj-test/project"
 
 
 @pytest.mark.asyncio
-async def test_an_unknown_rigor_is_a_malformed_value(app, auth_headers):
-    created = await app.post(f"{BASE}/documents", json={"title": "R"}, headers=auth_headers)
-    assert created.status_code == 201, created.text
-    path = created.json()["path"]
-    resp = await app.post(
-        f"{BASE}/documents/{path}/rigor", json={"rigor": "bogus"}, headers=auth_headers
-    )
-    assert resp.status_code == 422, resp.text
-    assert resp.json()["detail"]["code"] == "unknown_rigor"
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "tasks, expected, absent",
     [

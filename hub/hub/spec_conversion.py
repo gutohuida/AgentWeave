@@ -228,7 +228,6 @@ def _plan_to_html(
             identifiers,
             phase=row.phase if row is not None else hub.get("phase") or spec_lifecycle.EXPLORING,
             stored_payload=legacy_stored,
-            rigor=(row.rigor if row is not None else hub.get("rigor")) or "sketch",
             corpus=corpus,
             slice_of=slice_of,
         )
@@ -263,7 +262,6 @@ def _hub_from_head(content: str) -> Dict[str, Any]:
     status = parse_html_head(content).get("status")
     return {
         "phase": status or spec_lifecycle.EXPLORING,
-        "rigor": "sketch",
         "step": None,
         "size": None,
     }

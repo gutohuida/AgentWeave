@@ -746,14 +746,8 @@ export function useSpecEvents() {
       // A piece an agent records while a row is open, and a recording run's end (`{run_ended}`,
       // which un-greys a piece held as still being recorded), both arrive here with no path.
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specEvidence'] })
-      // An accepted/rejected proposal, or a fresh one from a gated submission, changes what this
-      // document's pending list looks like — the same broadcast covers all three (accept/reject
-      // routes and submit_spec_document all emit `spec_updated`).
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specProposals'] })
-      // A rigor change arrives here (`set_document_rigor` broadcasts `{path, rigor}`), and so does
-      // a save that retires a requirement — the history, the requirement list and an open
-      // requirement's detail all move with them.
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRigorHistory'] })
+      // A save that retires a requirement arrives here: the requirement list and an open
+      // requirement's detail move with it.
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRequirements'] })
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRequirement'] })
       // A scan or an answer (`{path: null, drift: true}`) moves this document's drift strip.
@@ -804,12 +798,7 @@ export interface SpecDocumentRecord {
   /** The authority on where the document stands. The `aw-spec-status` metadata
    *  inside the file is a copy for whoever reads it, never the source. */
   phase: 'exploring' | 'approved' | 'archived' | 'current'
-  /** What happens to work that ignores this document. **Not phase.** Phase asks whether the
-   *  operator agreed to it; rigor asks what the system does about work that does not satisfy it.
-   *  A `gate` document can still be exploring, and an approved one can still be a sketch. */
-  rigor: 'sketch' | 'contract' | 'gate'
-  /** The document as the Hub last wrote it. Sent back on a rigor change so it cannot land on a
-   *  document edited underneath the operator who read it. */
+  /** The document as the Hub last wrote it. */
   content_digest: string | null
   explore_closed: boolean
   /** Where a change being explored stands on its journey, and how big the work is
@@ -1042,68 +1031,6 @@ function invalidateAfterPhase(queryClient: ReturnType<typeof useQueryClient>, pr
   queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
   queryClient.invalidateQueries({ queryKey: ['project', projectId, 'loops'] })
   queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] })
-}
-
-/** Approving, or reopening. There is no agent-facing equivalent of this call. */
-/** Raise or lower how strictly a document is enforced.
- *
- *  There is deliberately no agent-facing equivalent anywhere in this codebase. An agent blocked by
- *  a gate that could lower the document has not been gated. */
-export function useSetSpecRigor() {
-  const queryClient = useQueryClient()
-  const { selectedProjectId: projectId } = useConfigStore()
-  return useMutation({
-    mutationFn: ({
-      path,
-      rigor,
-      reason,
-      expectedDigest,
-    }: {
-      path: string
-      rigor: string
-      reason?: string
-      expectedDigest?: string | null
-    }) =>
-      postJson<SpecDocumentRecord>(`/api/v1/projects/${projectId}/project/documents/${path}/rigor`, {
-        rigor,
-        reason: reason ?? '',
-        expected_digest: expectedDigest ?? null,
-      }),
-    // What `useSpecMutation` invalidates, plus the history of the path just changed — so the tab
-    // that pressed Confirm does not wait for the `spec_updated` round-trip to see its own change.
-    // Its own `onSuccess`, the way `useSetSpecPhase` has one, so the shared helper and every other
-    // mutation built on it are unchanged.
-    onSuccess: (_record, { path }) => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRigorHistory', path] })
-    },
-  })
-}
-
-/** One recorded rigor change. `reason` is `''` where none was given — every change the app made
- *  before it asked for one (F429). */
-export interface SpecRigorEvent {
-  id: string
-  from: SpecDocumentRecord['rigor']
-  to: SpecDocumentRecord['rigor']
-  actor_kind: string
-  actor: string
-  reason: string
-  created_at: string
-}
-
-/** Oldest first — the order the route returns (`spec_rigor.history_for`: `created_at, id`). */
-export function useSpecRigorHistory(path: string | null) {
-  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  return useQuery<{ events: SpecRigorEvent[] }>({
-    queryKey: ['project', projectId, 'specRigorHistory', path],
-    queryFn: () =>
-      getJson<{ events: SpecRigorEvent[] }>(
-        `/api/v1/projects/${projectId}/project/documents/${path}/rigor-history`,
-      ),
-    enabled: isConfigured && !!projectId && !!path,
-  })
 }
 
 /** One amendment to an approved document, oldest first from the route: a tester's, applied at
@@ -1357,120 +1284,6 @@ export function useSetSpecPhase() {
       ),
     onSuccess: () => invalidateAfterPhase(queryClient, projectId),
   })
-}
-
-// ---------------------------------------------------------------------------
-// Edit proposals — `contract`/`gate` rigor gates a submission behind one of
-// these instead of writing it (openspec/changes/2026-08-17-authoring-rigor-and-scope).
-// ---------------------------------------------------------------------------
-
-export interface SpecEditProposal {
-  id: string
-  unit_kind: 'requirement' | 'metadata'
-  unit_key: string
-  change_kind: 'add' | 'modify' | 'remove'
-  /** `add` proposals only — the key of the requirement it was submitted immediately after, or
-   *  null for "first". The in-position anchor a brand-new requirement has no existing row to
-   *  carry otherwise. */
-  position_after_key: string | null
-  proposed_payload: Record<string, unknown>
-  previous_payload: Record<string, unknown> | null
-  status: 'pending' | 'accepted' | 'rejected' | 'stale' | 'withdrawn' | 'superseded'
-  /** The document version this was made against. Two identical proposals on different versions
-   *  are not duplicates: the older is refused as stale on accept (`a-pending-proposal-can-be-
-   *  withdrawn`, D4). Absent from a Hub older than the field. */
-  expected_digest?: string | null
-  proposer_actor_kind: string | null
-  proposer_actor_name: string | null
-  created_at: string
-  resolved_at: string | null
-  resolved_by_actor_name: string | null
-  resolution_reason: string
-}
-
-export function useSpecProposals(path: string | null) {
-  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  return useQuery<{ proposals: SpecEditProposal[] }>({
-    queryKey: ['project', projectId, 'specProposals', path],
-    queryFn: () =>
-      getJson<{ proposals: SpecEditProposal[] }>(
-        `/api/v1/projects/${projectId}/project/documents/${path}/proposals`,
-      ),
-    enabled: isConfigured && !!projectId && !!path,
-  })
-}
-
-/** Every decided proposal for a document, newest decision first (slice remaining-hidden-data).
- *  Under the same key prefix as the pending list, so every decision refreshes it too. A Hub older
- *  than `?status=` ignores it and answers pending ones; those are filtered out here, never shown
- *  as decided. */
-export function useSpecResolvedProposals(path: string | null) {
-  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  return useQuery<{ proposals: SpecEditProposal[] }>({
-    queryKey: ['project', projectId, 'specProposals', path, 'resolved'],
-    queryFn: async () => {
-      const body = await getJson<{ proposals: SpecEditProposal[] }>(
-        `/api/v1/projects/${projectId}/project/documents/${path}/proposals?status=resolved`,
-      )
-      return { proposals: body.proposals.filter((proposal) => proposal.status !== 'pending') }
-    },
-    enabled: isConfigured && !!projectId && !!path,
-  })
-}
-
-/** A decision on one proposal. Invalidates the document's proposals **on settled**, not only on
- *  success: an accept refused as stale still moves the row out of `pending`, and the pressing tab
- *  must not wait for the broadcast to drop it (F428, F431; `a-pending-proposal-can-be-withdrawn`
- *  D5). Everything else `useSpecMutation` invalidates, on success, as before. */
-function useProposalDecision<TArgs extends { path: string }, TResult>(
-  call: (projectId: string, args: TArgs) => Promise<TResult>,
-) {
-  const queryClient = useQueryClient()
-  const { selectedProjectId: projectId } = useConfigStore()
-  return useMutation({
-    mutationFn: (args: TArgs) => call(projectId ?? '', args),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
-    },
-    onSettled: (_data, _error, args) => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specProposals', args.path] })
-    },
-  })
-}
-
-export function useAcceptSpecProposal() {
-  return useProposalDecision<
-    { path: string; proposalId: string; expectedDigest?: string | null },
-    SpecDocumentRecord
-  >((projectId, { path, proposalId, expectedDigest }) =>
-    postJson(
-      `/api/v1/projects/${projectId}/project/documents/${path}/proposals/${proposalId}/accept`,
-      { expected_digest: expectedDigest ?? null },
-    ),
-  )
-}
-
-export function useRejectSpecProposal() {
-  return useProposalDecision<{ path: string; proposalId: string; reason?: string }, unknown>(
-    (projectId, { path, proposalId, reason }) =>
-      postJson(
-        `/api/v1/projects/${projectId}/project/documents/${path}/proposals/${proposalId}/reject`,
-        { reason: reason ?? '' },
-      ),
-  )
-}
-
-/** Take a pending proposal off the list without judging it (D3): for duplicates and proposals
- *  nobody is pursuing. The document is untouched. */
-export function useWithdrawSpecProposal() {
-  return useProposalDecision<{ path: string; proposalId: string; note?: string }, unknown>(
-    (projectId, { path, proposalId, note }) =>
-      postJson(
-        `/api/v1/projects/${projectId}/project/documents/${path}/proposals/${proposalId}/withdraw`,
-        { note: note ?? '' },
-      ),
-  )
 }
 
 // --------------------------------------------------------------------------- the corpus, from the app

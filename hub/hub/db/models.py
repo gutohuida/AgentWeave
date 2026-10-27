@@ -2437,9 +2437,8 @@ class SpecDocument(Base):
     # evidence accepted against the old wording. Kept in the database rather than the file for the
     # same reason as `phase`.
     requirement_digests: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
-    # What happens to work that ignores this document. Stated in the file as `aw-spec-rigor` for
-    # anyone reading it, and held here because it is a gate and a gate whose value lives where the
-    # gated party can write it is not a gate — the same reasoning as `phase`.
+    # Retired, unread (`amendments-main-watch-and-the-next-slice`, D3, migration 0153): approval's
+    # evidence rule is the task's level. Kept because dropping it is an SQLite table rebuild.
     rigor: Mapped[str] = mapped_column(
         String(16), default="sketch", server_default="sketch", nullable=False
     )

@@ -2067,7 +2067,6 @@ async def read_spec_document(
         # Returned rather than enforced, so an agent can judge how settled this is instead of
         # guessing — or being refused and concluding the capability is absent.
         "phase": document.phase,
-        "rigor": document.rigor,
         "explore_closed": document.explore_closed_at is not None,
         "step": document.step,
         "size": document.size,
@@ -2660,17 +2659,6 @@ async def submit_spec_document(
     await sse_manager.broadcast(
         actor.project_id, "spec_updated", {"path": result.path, "phase": result.phase}
     )
-    if isinstance(result, spec_service.ProposeResult):
-        # `contract`/`gate` rigor (design D1): nothing was written. `proposals`/`unchanged` tell
-        # the caller what was recorded instead — a different shape from `SaveResult` on purpose,
-        # so a client cannot mistake "your edit is now pending" for "your edit is live".
-        return {
-            "path": result.path,
-            "phase": result.phase,
-            "proposals": result.proposals,
-            "unchanged": result.unchanged,
-            "already_pending": result.already_pending,
-        }
     return {
         "path": result.path,
         "phase": result.phase,
