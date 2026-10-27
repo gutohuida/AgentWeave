@@ -1092,7 +1092,11 @@ async def apply_transition(
             session, task, actor, to_status, verdict_reason, failing_pieces
         )
     if decided:
-        note = f"{note} {decided}" if note else decided
+        # Its own sentence after the caller's note, which may not end in one (L's check return).
+        lead = (note or "").rstrip()
+        if lead and not lead.endswith((".", "!", "?")):
+            lead += "."
+        note = f"{lead} {decided}" if lead else decided
 
     task.status = to_status
     transition = TaskTransition(

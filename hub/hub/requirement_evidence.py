@@ -1282,6 +1282,10 @@ async def decide(
     **A decided piece is the operator's to overturn, with a reason** (F692): an agent decides only
     `awaiting` evidence, the same decision twice is refused, and **evidence recorded for an earlier
     wording is never accepted** (its digest no longer matches the requirement's).
+
+    A `held` piece (K: a send-back did not name it as failing) is no decision to overturn: the
+    operator decides it as an awaiting one, accepting with no reason and rejecting with one; an
+    agent leaves it to be recorded again at the next commit.
     """
     if decision not in (ACCEPTED, REJECTED):
         # Names what would work, the way `model_catalog.validate_overrides` names the permitted
@@ -1315,7 +1319,15 @@ async def decide(
         )
 
     previous = evidence.review_state
-    if previous != AWAITING:
+    if previous == HELD and actor.kind != "operator":
+        raise EvidenceRefusedError(
+            f"{evidence.id} is held: its task was sent back without naming it as failing, and its "
+            "author records it again at the next commit, where the next verdict judges it. Only "
+            "the operator decides a held piece.",
+            code="held_evidence",
+            http_status=409,
+        )
+    if previous not in (AWAITING, HELD):
         # F692: a decided piece is decided. Only the operator reverses a decision, and only by
         # saying why -- the sweep's granted tester flipped a rejection to accepted in silence.
         if actor.kind != "operator":

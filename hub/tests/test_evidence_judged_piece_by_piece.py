@@ -384,3 +384,140 @@ async def test_the_reviewer_is_told_how(app, auth_headers, builder, reviewer, tm
     assert "failing_pieces" in sentence and "held" in sentence, sentence
     described = mcp_server.update_task.__doc__ or ""
     assert "failing_pieces" in described and "held" in described, described
+
+
+# ---------------------------------------------------------------------------------------------
+# Review of K (2026-10-27): what regressed, each red before its fix.
+# ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_brief_names_requirements_whose_evidence_is_only_held(
+    app, auth_headers, builder, reviewer, tmp_path
+):
+    """The reviewer's probe: a send-back names only FR-3; the builder re-records FR-3 and
+    completes. Approval is refused for FR-1 and FR-2 (held only), so the brief must say so, as it
+    said "only rejected evidence" before K. FAILED before: the brief named only FR-3's piece."""
+    from hub import review_turn
+
+    three = ["FR-1", "FR-2", "FR-3"]
+    task, _old = await a_completed_task(app, auth_headers, builder, tmp_path, three)
+    sent = await send_back(app, reviewer, task, notes=S, failing=[{"piece": "FR-3", "reason": R3}])
+    assert sent.status_code == 200, sent.text
+    commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('due, sorted')\n", create=False)
+    await record_evidence_for(app, builder, "FR-3", task_id=task)
+    git(tmp_path, "checkout", "-q", "main")
+    walked = await drive_to(app, auth_headers, task, "in_progress", "completed")
+    assert walked.status_code == 200, walked.text
+    reviewing = await app.patch(
+        f"{TASKS}/{task}", json={"status": "under_review", "assignee": None}, headers=auth_headers
+    )
+    assert reviewing.status_code == 200, reviewing.text
+
+    async with async_session_factory() as session:
+        sentence = await review_turn.verdict_evidence_sentence(
+            session, await session.get(Task, task), may_decide=False
+        )
+
+    assert sentence is not None
+    assert "`FR-1`, `FR-2`" in sentence and "only held evidence" in sentence, sentence
+    assert "next commit" in sentence, sentence
+
+
+@pytest.mark.asyncio
+async def test_the_operator_accepts_or_rejects_a_held_piece(
+    app, auth_headers, builder, reviewer, tmp_path
+):
+    """The operator acts on a held piece as on an awaiting one: accept with no reason, reject
+    with one. FAILED before: accepting needed a reason, refused as 'overturning a decision'."""
+    task, pieces = await a_completed_task(app, auth_headers, builder, tmp_path, ["FR-1", "FR-2"])
+    sent = await send_back(app, reviewer, task, notes="lint fails")
+    assert sent.status_code == 200, sent.text
+
+    overturn = await app.post(
+        f"{BASE}/spec/evidence/{pieces['FR-1']}/overturn",
+        json={"reason": "it was right"},
+        headers=auth_headers,
+    )
+    assert overturn.status_code == 409, overturn.text
+    said = overturn.json()["detail"]["message"]
+    assert "held" in said and "accept it" in said and "overturn" not in said.lower(), said
+
+    # Even an agent granted acceptance leaves a held piece to its next commit.
+    async with async_session_factory() as session:
+        (await session.get(Agent, "ag-piece-r")).can_accept_evidence = True
+        await session.commit()
+    agent = await app.post(
+        f"{AGENT_EVIDENCE}/{pieces['FR-1']}/decision",
+        json={"decision": "accepted", "reason": ""},
+        headers=reviewer,
+    )
+    assert agent.status_code in (403, 409), agent.text
+    assert "held" in str(agent.json()["detail"]), agent.text
+
+    accepted = await app.post(
+        f"{BASE}/spec/evidence/{pieces['FR-1']}/decision",
+        json={"decision": "accepted"},
+        headers=auth_headers,
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert (await outcome(pieces["FR-1"]))[:2] == ("accepted", "accepted")
+
+    blank = await app.post(
+        f"{BASE}/spec/evidence/{pieces['FR-2']}/decision",
+        json={"decision": "rejected", "reason": ""},
+        headers=auth_headers,
+    )
+    assert blank.status_code == 422, blank.text
+    assert "overturn" not in str(blank.json()["detail"]).lower(), blank.text
+    rejected = await app.post(
+        f"{BASE}/spec/evidence/{pieces['FR-2']}/decision",
+        json={"decision": "rejected", "reason": "it never ran"},
+        headers=auth_headers,
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert await outcome(pieces["FR-2"]) == ("rejected", "rejected", "it never ran", "operator")
+
+
+@pytest.mark.asyncio
+async def test_an_author_naming_failing_pieces_is_refused_as_the_author_first(
+    app, auth_headers, builder, reviewer, tmp_path
+):
+    """K introduced this: failing_pieces was resolved before the author-is-not-the-reviewer
+    refusal, so the author was told its piece was unknown (its own pieces are not the verdict's
+    to decide). FAILED before: 422 unknown_failing_piece."""
+    task, pieces = await a_completed_task(app, auth_headers, builder, tmp_path, ["FR-1"])
+
+    refused = await send_back(
+        app, builder, task, notes=S, failing=[{"piece": "FR-1", "reason": "mine is wrong"}]
+    )
+
+    assert refused.status_code == 403, refused.text
+    assert "different actor" in refused.text, refused.text
+    assert await outcome(pieces["FR-1"]) == ("awaiting", None, None, None)
+
+
+@pytest.mark.asyncio
+async def test_the_evidence_note_follows_a_note_as_its_own_sentence(
+    app, auth_headers, builder, reviewer, tmp_path
+):
+    """L's return writes a note with no full stop, and the evidence account followed it as
+    "...check run chk-1 Evidence: ...". FAILED before."""
+    from hub.task_transition_service import apply_transition
+    from hub.task_transitions import operator
+
+    task, _pieces = await a_completed_task(app, auth_headers, builder, tmp_path, ["FR-1"])
+    async with async_session_factory() as session:
+        row = await session.get(Task, task)
+        transition = await apply_transition(
+            session,
+            row,
+            "revision_needed",
+            operator(),
+            verdict_reason="the checks failed",
+            note="the project's checks failed on check run chk-1",
+        )
+        note = transition.note
+        await session.commit()
+
+    assert note.startswith("the project's checks failed on check run chk-1. Evidence: "), note

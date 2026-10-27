@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, cleanup, within } from '@testing-library/react'
+import { render, screen, cleanup, within, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useConfigStore } from '@/store/configStore'
 
@@ -61,16 +61,27 @@ const PAYLOAD = {
   ],
 }
 
+let calls: Array<{ url: string; method: string; body: string }> = []
+
+function posts() {
+  return calls.filter((call) => call.method === 'POST')
+}
+
 function stubHub() {
+  calls = []
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => PAYLOAD,
-      text: async () => JSON.stringify(PAYLOAD),
-      headers: new Headers({ 'content-type': 'application/json' }),
-    })),
+    vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, method: init?.method ?? 'GET', body: (init?.body as string) ?? '' })
+      const payload = (init?.method ?? 'GET') === 'POST' ? PAYLOAD.evidence[1] : PAYLOAD
+      return {
+        ok: true,
+        status: 200,
+        json: async () => payload,
+        text: async () => JSON.stringify(payload),
+        headers: new Headers({ 'content-type': 'application/json' }),
+      }
+    }),
   )
 }
 
@@ -112,6 +123,31 @@ describe('a held piece of evidence', () => {
     // A held piece is not a decision to overturn; the rejected one is.
     expect(within(held).queryByText('Overturn…')).toBeNull()
     expect(within(rejected).getByText('Overturn…')).toBeInTheDocument()
+  })
+
+  it('offers the operator Accept, and Reject with a reason, on a held piece', async () => {
+    stubHub()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <EvidencePieces path={PATH} identifier="FR-3" />
+      </QueryClientProvider>,
+    )
+    const held = await screen.findByTestId('evidence-piece-ev-second')
+    expect(within(held).getByText('Accept')).toBeInTheDocument()
+    fireEvent.click(within(held).getByText('Reject…'))
+    const reject = within(held).getByText('Reject')
+    expect(reject).toBeDisabled()
+    fireEvent.change(within(held).getByLabelText('Reason for rejecting'), {
+      target: { value: 'it never ran' },
+    })
+    fireEvent.click(reject)
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    expect(posts()[0].url).toContain('/spec/evidence/ev-second/decision')
+    expect(JSON.parse(posts()[0].body)).toEqual({ decision: 'rejected', reason: 'it never ran' })
+    // The rejected piece is a decision: it still offers Overturn, not Accept.
+    const rejected = screen.getByTestId('evidence-piece-ev-first')
+    expect(within(rejected).queryByText('Accept')).toBeNull()
   })
 
   it('is never shown as a rejection in a piece’s review history', () => {

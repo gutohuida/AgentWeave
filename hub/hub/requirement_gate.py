@@ -1111,6 +1111,17 @@ async def rejected_identifiers(session: AsyncSession, task: Task) -> List[str]:
     return [entry.identifier or "a requirement" for entry in entries]
 
 
+async def held_identifiers(session: AsyncSession, task: Task) -> List[str]:
+    """The requirements this task serves whose only current evidence a send-back held (K): each
+    refuses `approved` at every rigor too, until its author records it again. Beside
+    `rejected_identifiers`, so the review briefing names everything `evaluate` will refuse."""
+    rows = await _linked_requirements(session, task)
+    if not rows:
+        return []
+    entries = _rejected_entries(*await _coverage_by_document(session, task, rows), held=True)
+    return [entry.identifier or "a requirement" for entry in entries]
+
+
 async def _check_checks(
     session: AsyncSession,
     task: Task,

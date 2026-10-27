@@ -59,6 +59,8 @@ function Piece({
   const [overturnReason, setOverturnReason] = useState('')
 
   const awaiting = piece.review_state === 'awaiting'
+  // K: a held piece is no decision to overturn; the operator decides it as an awaiting one.
+  const undecided = awaiting || piece.review_state === 'held'
   const decided = piece.review_state === 'accepted' || piece.review_state === 'rejected'
   const reverse = piece.review_state === 'accepted' ? 'Reject' : 'Accept'
   // What the last decision here did to an approved task (F730 item 8), said rather than implied.
@@ -96,7 +98,8 @@ function Piece({
       {piece.review_state === 'held' && (
         <div data-testid={`evidence-held-at-commit-${piece.id}`} style={{ color: 'var(--text-3)' }}>
           not rejected: its task was sent back without naming this piece as failing, so it counts
-          for nothing until its author records it again at the next commit
+          for nothing until its author records it again at the next commit, or until you decide it
+          here
         </div>
       )}
       {awaiting && recording && (
@@ -104,7 +107,7 @@ function Piece({
           still being recorded by run {piece.run_id}; decide once it ends
         </div>
       )}
-      {awaiting && (
+      {undecided && (
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"

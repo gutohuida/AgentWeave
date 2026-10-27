@@ -1918,6 +1918,19 @@ async def overturn_evidence(
     project_id, _ = project
     evidence = await _operator_evidence(session, project_id, evidence_id)
     current = evidence.review_state
+    if current == requirement_evidence.HELD:
+        # K: a held piece is decided like an awaiting one, on the piece's own Accept / Reject.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": (
+                    f"{evidence.id} is held: its task was sent back without naming it as failing, "
+                    "so there is no decision to reverse. Decide it as it stands: accept it, or "
+                    "reject it with a reason."
+                ),
+                "code": "not_decided",
+            },
+        )
     if current not in (requirement_evidence.ACCEPTED, requirement_evidence.REJECTED):
         raise HTTPException(
             status_code=409,

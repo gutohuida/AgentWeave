@@ -1581,12 +1581,19 @@ async def _failing_pieces_for(
     a held piece then says nothing about why, and its author has nothing to fix. The operator is not
     refused that last: the app's status menu sends a status alone, and the hold records that the
     operator sent it back. The reason checks wait until the move is legal, so an impossible move is
-    answered by the transition map rather than by a request for a reason (F201).
+    answered by the transition map rather than by a request for a reason (F201). Who may make the
+    move at all is asked first: an author naming its own pieces is told it cannot judge its own
+    work, not that its pieces are unknown (they are not the verdict's to decide).
     """
     from ... import requirement_evidence
-    from ...task_transition_service import evidence_actor
+    from ...task_transition_service import decide_move, evidence_actor
 
     named = [(piece.piece, piece.reason) for piece in body.failing_pieces or []]
+    if (named or body.status in _SEND_BACK_STATUSES) and body.status and body.status != task.status:
+        # The same read `apply_transition` makes first; it writes nothing.
+        verdict = await decide_move(session, task, body.status, actor)
+        if verdict.refusal is not None:
+            raise verdict.refusal
     if named and body.status == "approved":
         raise HTTPException(
             status_code=422,
