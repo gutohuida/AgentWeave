@@ -21,6 +21,7 @@ const decide = vi.fn()
 const link = vi.fn()
 let moves: { moves: string[]; reviewers?: string[] } = { moves: [] }
 let checks: TaskChecks = { configured: true, running: false, runs: [] }
+let checksError: Error | null = null
 
 vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
@@ -32,7 +33,7 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     useLandTask: () => ({ mutate: land, isPending: false }),
     useDecideEvidencePiece: () => ({ mutate: decide, isPending: false }),
     useLinkTaskRequirements: () => ({ mutate: link, isPending: false }),
-    useTaskChecks: () => ({ data: checks }),
+    useTaskChecks: () => ({ data: checks, error: checksError }),
     useRerunTaskChecks: () => ({ mutate: vi.fn(), isPending: false }),
     useTaskIntegrationPreview: () => ({ data: null }),
   }
@@ -75,6 +76,7 @@ beforeEach(() => {
   link.mockReset()
   moves = { moves: [] }
   checks = { configured: true, running: false, runs: [] }
+  checksError = null
 })
 afterEach(() => {
   cleanup()
@@ -232,6 +234,12 @@ describe('the wait for checks is visible beside Land', () => {
     expect(wait).toHaveTextContent('Waiting for checks · running 8 minutes of about 14')
     // Beside Land: the same row of the drawer.
     expect(wait.parentElement).toBe(screen.getByTestId('task-land-task-1').parentElement)
+  })
+
+  it('says a failed read of the checks instead of showing no run', async () => {
+    checksError = new Error('boom')
+    await openDrawer()
+    expect(await screen.findByTestId('task-land-wait-error-task-1')).toHaveAttribute('role', 'alert')
   })
 
   it('shows nothing once no run is going', async () => {

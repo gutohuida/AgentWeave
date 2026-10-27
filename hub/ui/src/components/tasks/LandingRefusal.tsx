@@ -184,9 +184,17 @@ const minutes = (seconds: number) => Math.max(1, Math.round(seconds / 60))
  * it clears by itself when the run ends.
  */
 export function LandWait({ taskId }: { taskId: string }) {
-  const { data } = useTaskChecks(taskId, true)
-  const wait = data ? checksWait(data.runs, data.running) : null
+  const { data, error } = useTaskChecks(taskId, true)
+  const wait = data?.configured ? checksWait(data.runs, data.running) : null
   const elapsed = useElapsedSeconds(wait !== null, wait?.run.started_at)
+  // A failed read is said, not shown as "no run going": the landing may be waiting on one.
+  if (error) {
+    return (
+      <span data-testid={`task-land-wait-error-${taskId}`} role="alert" className="text-[11px]" style={{ color: 'var(--red)' }}>
+        {readableApiError(error, "This task's checks could not be read.")}
+      </span>
+    )
+  }
   if (!wait) return null
   const running = elapsed ?? 0
   const unit = (seconds: number) => `${minutes(seconds)} ${minutes(seconds) === 1 ? 'minute' : 'minutes'}`
