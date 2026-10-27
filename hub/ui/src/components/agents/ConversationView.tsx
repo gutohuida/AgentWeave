@@ -18,7 +18,7 @@ import { LoopTab } from '@/components/spec/LoopTab'
 import { LoopsIndexTab } from '@/components/spec/LoopsIndexTab'
 import { runningLoopCount } from '@/components/spec/loopCounts'
 import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShell'
-import { SpecDocumentPanel } from '@/components/spec/SpecDocumentPanel'
+import { SpecPanelContainer } from '@/components/spec/page/SpecPanelContainer'
 import { SpecDocumentPicker } from '@/components/spec/SpecDocumentPicker'
 import { SpecIndexTab } from '@/components/spec/SpecIndexTab'
 import { fileIconFor } from '@/components/spec/fileIcons'
@@ -47,6 +47,7 @@ import {
   tabKind,
   usePanelTabsStore,
   type PanelTab,
+  type SpecTabId,
   type TabId,
 } from '@/store/panelTabsStore'
 import { AgentOutputPanel } from './AgentOutputPanel'
@@ -104,7 +105,7 @@ export function ConversationView({
 }: ConversationViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const measuredWidth = useWorkspaceWidth(containerRef)
-  const { data: specList, isLoading: listLoading, refetch: refetchList } = useSpecList()
+  const { data: specList } = useSpecList()
   const createDocument = useCreateSpecDocument()
   /* What to call the document. The Hub titles a conversation from its first message, so by the
    * time an operator wants to explore there is already a name that means something to them —
@@ -178,6 +179,26 @@ export function ConversationView({
   // attached document — the `loops` index tab this run adds is exactly that — was unreachable,
   // because nothing rendered `PanelShell` for it to be reachable *from*.
   const shellIsOpen = usePanelTabsStore((state) => selectProjectPanel(state, projectId).isOpen)
+  /** The key a reading tab opens under for a path (its Hub document id where it has one). */
+  const keyForPath = useCallback(
+    (path: string) => {
+      const node = inventory.byPath.get(path)
+      return node ? tabKeyForNode(node) : path
+    },
+    [inventory],
+  )
+  const startExplorationRef = useRef<(title?: string) => void>(() => undefined)
+  const panelTabs = usePanelTabsStore((state) => selectProjectPanel(state, projectId).tabs)
+  /* The documents opened lately are the panel's open reading tabs, most recently opened first:
+   * the picker's "recently opened" shortcuts. */
+  const recentPaths = useMemo(
+    () =>
+      panelTabs
+        .filter((tab) => isSpecTabId(tab.id))
+        .map((tab) => resolveTabPath(inventory, specDocumentId(tab.id as SpecTabId)))
+        .reverse(),
+    [panelTabs, inventory],
+  )
 
   /* Section 3's tenant, id-keyed (design D4): the attached document's reading tab is keyed by its
    * Hub document id where one exists, else its path — `tabKeyForNode` and `resolveTabPath` are the
@@ -271,9 +292,6 @@ export function ConversationView({
   const overlayTriggerRef = useRef<HTMLButtonElement>(null)
 
   const documentNode = document ? inventory.byPath.get(document) : undefined
-  const handleRefresh = useCallback(() => {
-    void refetchList()
-  }, [refetchList])
 
   // Section 3's first index tenant: the plus affordance can always offer the specs browser,
   // whether or not anything is attached yet. Section 5 adds the files tab beside it.
@@ -339,9 +357,10 @@ export function ConversationView({
         return (
           <SpecIndexTab
             projectId={projectId}
-            inventory={inventory}
             attachedPath={document}
-            specList={specList}
+            recent={recentPaths}
+            keyFor={keyForPath}
+            onNew={() => startExplorationRef.current()}
           />
         )
       }
@@ -385,22 +404,20 @@ export function ConversationView({
       if (!isSpecTabId(tab.id)) return null
       // `tab.id`'s key is a document id where the node has one, else the path itself
       // (`tabKeyForNode`/`resolveTabPath`, design D4) — resolved back to a path here because
-      // `SpecDocumentPanel` only ever knew a path.
+      // the panel only ever knows a path.
       const path = resolveTabPath(inventory, specDocumentId(tab.id))
       return (
-        <SpecDocumentPanel
+        <SpecPanelContainer
           path={path}
-          inventory={inventory}
-          specList={specList}
-          listLoading={listLoading}
-          onSelectPath={(nextPath) => onOpenDocument(nextPath)}
-          onOpenPicker={openPicker}
+          attachedPath={document}
+          recent={recentPaths}
+          onNew={() => startExplorationRef.current()}
+          onOpenDocument={(nextPath) => openTab(projectId, specTabId(keyForPath(nextPath)))}
           /* Closing this tab is reading-pane tidying, not an edit to what the agent is attached
            * to (design D9) — it closes *this* tab, and only this tab, the same as the tab strip's
            * own close button (`PanelShell`'s `panel-tab-close-*`) a few pixels to its left. Only
            * `ComposerSpecControl`'s `onStopExploring`, wired below, still calls `onOpenDocument(null)`. */
           onClose={() => closeTab(projectId, tab.id)}
-          onRefresh={handleRefresh}
           onOpenLoop={(loop) => openTab(projectId, loopTabId(loop.id))}
         />
       )
@@ -408,12 +425,9 @@ export function ConversationView({
     [
       projectId,
       inventory,
-      specList,
-      listLoading,
-      onOpenDocument,
-      openPicker,
+      keyForPath,
+      recentPaths,
       closeTab,
-      handleRefresh,
       document,
       workspacePaths,
       workspacePathsLoading,
@@ -452,6 +466,7 @@ export function ConversationView({
     },
     [conversationTitle, createDocument, onOpenDocument],
   )
+  startExplorationRef.current = startExploration
 
   /* fix-D15 (F652): in a conversation, Explore arms and the document is created at send, as in a
    * new conversation. Creating on the press left an empty `exploring` document behind whenever
@@ -613,15 +628,15 @@ export function ConversationView({
       <SpecDocumentPicker
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        inventory={inventory}
         restoreFocusTo={() => searchOriginRef.current}
         currentPath={document}
-        specList={specList}
-        onSelect={(node) => onOpenDocument(node.path)}
+        attachedPath={document}
+        recent={recentPaths}
+        onSelect={(path) => onOpenDocument(path)}
         /* Starting an exploration opens the document it just created: the point of creating
          * it here is that the conversation now has a subject, and leaving the operator to go
          * find it would put the step back that this removes. */
-        onCreate={(title) => startExploration(title)}
+        onNew={() => startExploration()}
       />
     </div>
   )

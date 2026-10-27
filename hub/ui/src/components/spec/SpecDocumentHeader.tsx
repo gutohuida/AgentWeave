@@ -43,6 +43,45 @@ const RIGOR_OPTIONS: Array<{ value: Rigor; label: string; detail: string }> = [
   { value: 'gate', label: 'Gate', detail: 'Unverified work cannot be approved' },
 ]
 
+/** The rigor chip as a choice of the three rigors: what the Hub does about work that ignores the document. */
+export function RigorChip({ rigor, rigorChoice }: { rigor: string; rigorChoice: { value: Rigor; onChange: (rigor: Rigor) => void; disabled?: boolean } }) {
+  const rigorLabel = `${rigor[0]!.toUpperCase() + rigor.slice(1)} rigor`
+  return (
+    <DropdownMenu.Root>
+            <DropdownMenu.Trigger
+              data-slot="spec-chip"
+              className="aw-spec-chip"
+              data-testid="spec-rigor"
+              data-value={rigorChoice.value}
+              disabled={rigorChoice.disabled}
+              aria-label={`Enforcement: ${rigorLabel}`}
+              title="How strictly approval checks this document"
+            >
+              {rigorLabel}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content align="start" sideOffset={6} collisionPadding={12} className="aw-menu aw-pop" style={{ minWidth: 260 }}>
+                <DropdownMenu.Label className="aw-menu-label">Enforcement</DropdownMenu.Label>
+                <DropdownMenu.RadioGroup value={rigorChoice.value} onValueChange={(next) => rigorChoice.onChange(next as Rigor)}>
+                  {RIGOR_OPTIONS.map((option) => (
+                    <DropdownMenu.RadioItem key={option.value} value={option.value} className="aw-menu-item" data-two-line="true">
+                      <span className="aw-menu-item-icon" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{option.label}</span>
+                        <span className="aw-menu-item-detail">{option.detail}</span>
+                      </span>
+                      <DropdownMenu.ItemIndicator className="aw-menu-check">
+                        <Icon name="check" size={14} />
+                      </DropdownMenu.ItemIndicator>
+                    </DropdownMenu.RadioItem>
+                  ))}
+                </DropdownMenu.RadioGroup>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+  )
+}
+
 /** The document's header: where it sits, what it is, what it is waiting for.
  *
  *  Replaces eight stacked strips (a banner, an action row mixing a pill with plain-text actions, a
@@ -189,38 +228,7 @@ export function SpecDocumentHeader({
           </span>
         ) : null}
         {!rigor ? null : rigorChoice ? (
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger
-              data-slot="spec-chip"
-              className="aw-spec-chip"
-              data-testid="spec-rigor"
-              data-value={rigorChoice.value}
-              disabled={rigorChoice.disabled}
-              aria-label={`Enforcement: ${rigorLabel}`}
-              title="How strictly approval checks this document"
-            >
-              {rigorLabel}
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content align="start" sideOffset={6} collisionPadding={12} className="aw-menu aw-pop" style={{ minWidth: 260 }}>
-                <DropdownMenu.Label className="aw-menu-label">Enforcement</DropdownMenu.Label>
-                <DropdownMenu.RadioGroup value={rigorChoice.value} onValueChange={(next) => rigorChoice.onChange(next as Rigor)}>
-                  {RIGOR_OPTIONS.map((option) => (
-                    <DropdownMenu.RadioItem key={option.value} value={option.value} className="aw-menu-item" data-two-line="true">
-                      <span className="aw-menu-item-icon" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">{option.label}</span>
-                        <span className="aw-menu-item-detail">{option.detail}</span>
-                      </span>
-                      <DropdownMenu.ItemIndicator className="aw-menu-check">
-                        <Icon name="check" size={14} />
-                      </DropdownMenu.ItemIndicator>
-                    </DropdownMenu.RadioItem>
-                  ))}
-                </DropdownMenu.RadioGroup>
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
+          <RigorChip rigor={rigor} rigorChoice={rigorChoice} />
         ) : (
           <button type="button" data-slot="spec-chip" className="aw-spec-chip" onClick={onRigorChange} title="How strictly approval checks this document">
             {rigorLabel}

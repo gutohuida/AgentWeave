@@ -178,4 +178,5 @@ async def test_the_ledger_lanes_and_their_order(app, auth_headers):
 async def test_an_empty_project_has_an_empty_ledger(app, auth_headers):
     body = (await app.get(LEDGER, headers=auth_headers)).json()
     assert body["merges"] == [] and body["notices"] == []
-    assert body["spend"]["total_usd"] == 0 and body["spend"]["by_day"] == []
+    # No record reports a cost: unknown, not $0 (`project-stats-come-from-the-same-records`).
+    assert body["spend"]["total_usd"] is None and body["spend"]["by_day"] == []

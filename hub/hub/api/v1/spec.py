@@ -53,6 +53,7 @@ from ... import (
     task_integration,
     task_transitions,
     vault_spec_check,
+    work_tally,
 )
 from ... import (
     spec_payload as spec_payload_module,
@@ -420,6 +421,11 @@ async def get_spec(
                 "document": link.get("document"),
                 "slice": link.get("slice"),
             }
+        if document.kind == "roadmap":
+            # Which change document specifies each slice (the slice's own page, `roadmap.slice`).
+            payload["slice_documents"] = await _slice_documents(
+                session, workspace, project_id, document
+            )
         if document.phase == "approved":
             outcome = await _approval_outcome(session, document)
             if outcome is not None:
@@ -428,6 +434,23 @@ async def get_spec(
             if built is not None:
                 payload["build_outcome"] = built
     return payload
+
+
+async def _slice_documents(
+    session: AsyncSession, workspace, project_id: str, roadmap
+) -> Dict[str, str]:
+    """`{slice key: path}` of the change documents that name a slice of this roadmap."""
+    found: Dict[str, str] = {}
+    for other in await spec_lifecycle.list_documents(session, project_id):
+        if other.kind != "change-spec" or other.id == roadmap.id:
+            continue
+        try:
+            link = (_read_payload(workspace, other.path) or {}).get("roadmap")
+        except (OSError, SpecPathError, project_workspace.ProjectPathError):
+            continue
+        if isinstance(link, dict) and link.get("document") == roadmap.path and link.get("slice"):
+            found.setdefault(str(link["slice"]), other.path)
+    return found
 
 
 def _recommended_build(document, payload: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -742,6 +765,8 @@ async def list_documents(
         return found
 
     on_disk = await blocking.run(_read_all) if workspace is not None else {}
+    # The page's list marks a document with a build running and says how far it has got.
+    running = await work_tally.running_progress(session, project_id)
     views = []
     for document in documents:
         view = _document_view(document, steps)
@@ -750,6 +775,8 @@ async def list_documents(
         if document.id in amended:
             # tester-amends: what a tester changed and how much the operator has yet to review.
             view["amendments"] = amended[document.id]
+        if document.id in running:
+            view["build"] = running[document.id]
         if document.path in on_disk:
             content = on_disk[document.path]
             view["diverged"] = spec_lifecycle.divergence(document, content) is not None
@@ -4149,6 +4176,22 @@ async def update_build(
                 )
             job = await builds.resume(session, build)
     return await _after_build_change(session, project_id, build, job)
+
+
+@router.get("/builds/{build_id}/figures")
+async def build_figures_of(
+    build_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """What the build has taken so far: its runs, its wall time split by what it was doing, and its
+    cost split by who spent it (`build-progress-on-the-document`). Computed per read."""
+    project_id, _ = project
+    build = await _project_build(session, project_id, build_id)
+    # Scoped to the build: the card is polled every few seconds and must not read the whole history.
+    return work_tally.build_figures(
+        await work_tally.tally(session, project_id, build_id=build.id), build
+    )
 
 
 @router.post("/builds/{build_id}/stop")
