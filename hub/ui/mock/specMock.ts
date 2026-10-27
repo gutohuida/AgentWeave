@@ -151,9 +151,11 @@ function finishedBuild(): BuildView {
     landsOn: 'a branch',
     budget: null,
     tasks: counts({ approved: 5 }),
-    time: { building: 2 * 3600 + 14 * 60, review: 3 * 3600 + 18 * 60, checks: 52 * 60, waiting: 62 * 60 },
-    cost: { build: 31.4, review: 20.6, lead: 0 },
-    runs: 23,
+    time: { building: 2 * 3600 + 14 * 60, reviewing: 40 * 60, checks: 52 * 60, held: 2 * 3600 + 40 * 60, review: 38 * 60, waiting: 62 * 60 },
+    cost: { build: 14.66, review: 11.28, lead: 0, mend: 15.86 },
+    runs: 62,
+    unpriced: 0,
+    checks: { runs: 10, passed: 6, failed: 4, seconds: 108 * 60 },
   }
 }
 
@@ -172,9 +174,13 @@ function runningBuild(choice?: StartBuildChoice, number = 2): BuildView {
     landsOn: choice ? (choice.landsOn === 'main' ? 'main' : choice.branch) : 'main',
     budget: choice ? choice.budget : 25,
     tasks: counts({}),
-    time: choice ? { building: 0, review: 0, checks: 0, waiting: 0 } : { building: 31 * 60, review: 4 * 60, checks: 6 * 60, waiting: 2 * 60 },
-    cost: choice ? { build: 0, review: 0, lead: 0 } : { build: 6.2, review: 0, lead: 1.1 },
+    time: choice
+      ? { building: 0, reviewing: 0, checks: 0, held: 0, review: 0, waiting: 0 }
+      : { building: 31 * 60, reviewing: 0, checks: 6 * 60, held: 0, review: 4 * 60, waiting: 2 * 60 },
+    cost: choice ? { build: 0, review: 0, lead: 0, mend: 0 } : { build: 6.2, review: 0, lead: 1.1, mend: 0 },
     runs: choice ? 0 : 7,
+    unpriced: 0,
+    checks: choice ? { runs: 0, passed: 0, failed: 0, seconds: 0 } : { runs: 2, passed: 2, failed: 0, seconds: 6 * 60 },
   }
 }
 
@@ -346,8 +352,8 @@ export function useSpecMock(routeHash: string) {
           const reviewing = b.tasks.under_review > 0
           return {
             ...b,
-            time: { ...b.time, building: b.time.building + 40, review: b.time.review + (reviewing ? 25 : 0), checks: b.time.checks + (tick % 4 === 0 ? 30 : 0), waiting: b.time.waiting + (b.tasks.pending ? 6 : 0) },
-            cost: { ...b.cost, build: +(b.cost.build + 0.18).toFixed(2), review: +(b.cost.review + (reviewing && b.level !== 'fast' ? 0.07 : 0)).toFixed(2), lead: +(b.cost.lead + (b.lead ? 0.03 : 0)).toFixed(2) },
+            time: { ...b.time, building: b.time.building + 40, reviewing: b.time.reviewing + (reviewing ? 25 : 0), checks: b.time.checks + (tick % 4 === 0 ? 30 : 0), waiting: b.time.waiting + (b.tasks.pending ? 6 : 0) },
+            cost: { ...b.cost, build: +((b.cost.build ?? 0) + 0.18).toFixed(2), review: +((b.cost.review ?? 0) + (reviewing && b.level !== 'fast' ? 0.07 : 0)).toFixed(2), lead: +((b.cost.lead ?? 0) + (b.lead ? 0.03 : 0)).toFixed(2) },
             runs: b.runs + (tick % 3 === 0 ? 1 : 0),
           }
         }),

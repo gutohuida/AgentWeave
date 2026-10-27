@@ -323,7 +323,7 @@ export function OverviewScreen({
   const unpriced = project?.unpriced_turns ?? 0
   const display = accounting?.preferred_display
   const spend = {
-    usd: project ? (project.api_equivalent_usd_micros != null ? project.api_equivalent_usd_micros / 1_000_000 : null) : (ledger?.spend.total_usd ?? 0),
+    usd: project ? (project.api_equivalent_usd_micros != null ? project.api_equivalent_usd_micros / 1_000_000 : null) : (ledger?.spend.total_usd ?? null),
     tokens: ledger?.spend.total_tokens ?? 0,
     period: project && project.api_equivalent_usd_micros != null ? 'API-equivalent so far' : 'so far',
     credits: formatAiCredits(project?.ai_nano_aiu ?? null),

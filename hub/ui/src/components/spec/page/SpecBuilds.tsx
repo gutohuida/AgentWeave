@@ -87,7 +87,11 @@ function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildV
   const anchor = anchors.build(b.id)
   const totalTasks = STATUS_ORDER.reduce((n, s) => n + (b.tasks[s] ?? 0), 0)
   const totalTime = TIME_PARTS.reduce((n, p) => n + b.time[p.key], 0)
-  const totalCost = b.cost.build + b.cost.review + b.cost.lead
+  // A role no run reported a cost for is unknown (null), never $0; the figure is unknown only when
+  // runs ran and none of them reported one.
+  const known = [b.cost.build, b.cost.review, b.cost.lead, b.cost.mend].filter((v): v is number => v !== null)
+  const totalCost = known.reduce((n, v) => n + v, 0)
+  const costFigure = !known.length && b.runs > 0 ? 'unknown' : formatMoney(totalCost)
   const approved = b.tasks.approved ?? 0
   const people: Array<{ name: string; role: string }> = [
     ...(b.lead ? [{ name: b.lead, role: 'Lead' }] : []),
@@ -156,11 +160,12 @@ function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildV
         />
         <Meter
           title="Cost"
-          figure={`${formatMoney(totalCost)}${b.budget ? ` of ${formatMoney(b.budget)}` : ''}`}
+          figure={`${costFigure}${b.budget ? ` of ${formatMoney(b.budget)}` : ''}${b.unpriced ? ` · ${b.unpriced} unpriced` : ''}`}
           parts={[
-            { key: 'build', label: 'Building', value: b.cost.build, tone: 'var(--blue)', figure: formatMoney(b.cost.build) },
-            { key: 'review', label: 'Reviewing', value: b.cost.review, tone: 'var(--amber)', figure: formatMoney(b.cost.review) },
-            { key: 'lead', label: 'Leading', value: b.cost.lead, tone: 'var(--purple)', figure: formatMoney(b.cost.lead) },
+            { key: 'build', label: 'Building', value: b.cost.build ?? 0, tone: 'var(--blue)', figure: formatMoney(b.cost.build ?? 0) },
+            { key: 'review', label: 'Reviewing', value: b.cost.review ?? 0, tone: 'var(--amber)', figure: formatMoney(b.cost.review ?? 0) },
+            { key: 'lead', label: 'Leading', value: b.cost.lead ?? 0, tone: 'var(--purple)', figure: formatMoney(b.cost.lead ?? 0) },
+            { key: 'mend', label: 'Mending', value: b.cost.mend ?? 0, tone: 'var(--red)', figure: formatMoney(b.cost.mend ?? 0) },
           ].filter((p) => p.value > 0)}
           total={b.budget ?? totalCost}
           running={b.running}
@@ -173,6 +178,11 @@ function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildV
           {b.runs} runs
           <Icon name="arrow_forward" size={11} />
         </button>
+        {b.checks.runs ? (
+          <span className="aw-sp-checks" data-testid="build-checks">
+            {b.checks.runs} check run{b.checks.runs === 1 ? '' : 's'} · {b.checks.passed} passed · {b.checks.failed} failed · {formatDuration(b.checks.seconds)}
+          </span>
+        ) : null}
       </div>
     </li>
   )

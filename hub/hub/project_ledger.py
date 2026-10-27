@@ -11,23 +11,14 @@ right. Nothing here writes.
 
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import (
-    EventLog,
-    Message,
-    Run,
-    RunDivergence,
-    Task,
-    TaskIntegration,
-    TurnUsage,
-    WorkerInvocation,
-)
+from . import work_tally
+from .db.models import EventLog, Message, RunDivergence, Task, TaskIntegration
 
 #: The notice kinds folded into one counted row each rather than listed (roadmap decision 4).
 FOLDED_NOTICES = ("context_warning",)
@@ -43,8 +34,9 @@ def _iso(value: Optional[datetime]) -> Optional[str]:
     return value.isoformat() if value else None
 
 
-def _usd(micros: int) -> float:
-    return round(micros / 1_000_000, 4)
+def _usd(micros: Optional[int]) -> Optional[float]:
+    """Dollars, or None when no record reports a cost: unknown is never $0."""
+    return None if micros is None else round(micros / 1_000_000, 4)
 
 
 def _origin(task: Task) -> str:
@@ -99,96 +91,41 @@ async def ledger(session: AsyncSession, project_id: str) -> Dict[str, Any]:
         for row in integrations
     ]
 
-    # Spend: turns by their run's agent and task, plus the Hub's own workers, by day.
-    runs = {
-        row.id: row
-        for row in (await session.execute(select(Run).where(Run.project_id == project_id)))
-        .scalars()
-        .all()
-    }
-    usage = (
-        (await session.execute(select(TurnUsage).where(TurnUsage.project_id == project_id)))
-        .scalars()
-        .all()
-    )
-    workers = (
-        (
-            await session.execute(
-                select(WorkerInvocation).where(WorkerInvocation.project_id == project_id)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    by_day: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    by_agent: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    by_task: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    total_micros = 0
-    total_tokens = 0
-    for row in usage:
-        micros = row.api_equivalent_usd_micros or 0
-        tokens = row.total_tokens or 0
-        total_micros += micros
-        total_tokens += tokens
-        day = row.observed_at.date().isoformat() if row.observed_at else "unknown"
-        by_day[day]["usd_micros"] += micros
-        by_day[day]["tokens"] += tokens
-        by_agent[row.agent]["usd_micros"] += micros
-        by_agent[row.agent]["tokens"] += tokens
-        by_agent[row.agent]["turns"] += 1
-        run = runs.get(row.run_id)
-        if run is not None and run.task_id:
-            by_task[run.task_id]["usd_micros"] += micros
-            by_task[run.task_id]["tokens"] += tokens
-            by_task[run.task_id]["turns"] += 1
-    worker_micros = 0
-    for row in workers:
-        micros = row.cost_usd_micros or 0
-        tokens = row.total_tokens or 0
-        worker_micros += micros
-        total_micros += micros
-        total_tokens += tokens
-        day = row.created_at.date().isoformat() if row.created_at else "unknown"
-        by_day[day]["usd_micros"] += micros
-        by_day[day]["worker_usd_micros"] += micros
-        by_day[day]["tokens"] += tokens
+    # Spend: every figure comes from the work tally (`work_tally.py`), the one place that sums them.
+    whole = await work_tally.tally(session, project_id)
+    project_row = whole["project"]
     spend = {
-        "total_usd": _usd(total_micros),
-        "total_tokens": total_tokens,
-        "worker_usd": _usd(worker_micros),
-        "by_day": [
-            {
-                "day": day,
-                "usd": _usd(values["usd_micros"]),
-                "worker_usd": _usd(values["worker_usd_micros"]),
-                "tokens": values["tokens"],
-            }
-            for day, values in sorted(by_day.items())
-        ],
+        "total_usd": _usd(project_row["cost_micros"]["total"]),
+        "total_tokens": project_row["tokens"] or 0,
+        "worker_usd": _usd(whole["workers"]["cost_micros"]["total"]) or 0.0,
+        "unpriced": project_row["unpriced"],
+        "by_day": work_tally.spend_by_day(whole),
         "by_agent": sorted(
             (
                 {
-                    "agent": agent,
-                    "usd": _usd(values["usd_micros"]),
-                    "tokens": values["tokens"],
-                    "turns": values["turns"],
+                    "agent": group["key"],
+                    "usd": _usd(group["row"]["cost_micros"]["total"]),
+                    "tokens": group["row"]["tokens"] or 0,
+                    "turns": group["row"]["turns"],
+                    "unpriced": group["row"]["unpriced"],
                 }
-                for agent, values in by_agent.items()
+                for group in whole["groups"]["agent"]
+                if group["key"] is not None and group["row"]["turns"]
             ),
-            key=lambda entry: (-entry["usd"], -entry["tokens"], entry["agent"]),
+            key=lambda entry: (-(entry["usd"] or 0), -entry["tokens"], entry["agent"]),
         ),
         "by_task": sorted(
             (
                 {
                     "task_id": task_id,
                     "task_title": title(task_id),
-                    "usd": _usd(values["usd_micros"]),
-                    "tokens": values["tokens"],
-                    "turns": values["turns"],
+                    "usd": _usd(figures.get("usd")),
+                    "tokens": figures.get("tokens", 0),
+                    "turns": figures.get("turns", 0),
                 }
-                for task_id, values in by_task.items()
+                for task_id, figures in whole["spend"]["by_task"].items()
             ),
-            key=lambda entry: (-entry["usd"], -entry["tokens"], entry["task_id"]),
+            key=lambda entry: (-(entry["usd"] or 0), -entry["tokens"], entry["task_id"]),
         ),
     }
 

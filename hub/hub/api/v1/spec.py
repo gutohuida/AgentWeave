@@ -30,7 +30,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import (
     already_built,
     blocking,
-    build_figures,
     builds,
     deletion,
     loop_history,
@@ -54,6 +53,7 @@ from ... import (
     task_integration,
     task_transitions,
     vault_spec_check,
+    work_tally,
 )
 from ... import (
     spec_payload as spec_payload_module,
@@ -766,7 +766,7 @@ async def list_documents(
 
     on_disk = await blocking.run(_read_all) if workspace is not None else {}
     # The page's list marks a document with a build running and says how far it has got.
-    running = await build_figures.running_progress(session, project_id)
+    running = await work_tally.running_progress(session, project_id)
     views = []
     for document in documents:
         view = _document_view(document, steps)
@@ -4184,7 +4184,10 @@ async def build_figures_of(
     cost split by who spent it (`build-progress-on-the-document`). Computed per read."""
     project_id, _ = project
     build = await _project_build(session, project_id, build_id)
-    return await build_figures.figures(session, build)
+    # Scoped to the build: the card is polled every few seconds and must not read the whole history.
+    return work_tally.build_figures(
+        await work_tally.tally(session, project_id, build_id=build.id), build
+    )
 
 
 @router.post("/builds/{build_id}/stop")

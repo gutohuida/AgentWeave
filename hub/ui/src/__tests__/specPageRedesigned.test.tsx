@@ -107,14 +107,18 @@ const FIGURES: Record<string, unknown> = {
   'build-1': {
     id: 'build-1',
     runs: 23,
-    time: { building: 8040, review: 11880, checks: 3120, waiting: 3720 },
-    cost: { build: 31.4, review: 20.6, lead: 0 },
+    time: { building: 8040, reviewing: 2400, checks: 3120, held: 9600, review: 9480, waiting: 3720 },
+    cost: { build: 31.4, review: 20.6, lead: 0, mend: 15.86 },
+    unpriced: 2,
+    checks: { runs: 10, passed: 6, failed: 4, seconds: 6480 },
   },
   'build-2': {
     id: 'build-2',
     runs: 7,
-    time: { building: 1860, review: 240, checks: 360, waiting: 120 },
-    cost: { build: 6.2, review: 0, lead: 1.1 },
+    time: { building: 1860, reviewing: 0, checks: 360, held: 0, review: 240, waiting: 120 },
+    cost: { build: 6.2, review: 0, lead: 1.1, mend: 0 },
+    unpriced: 0,
+    checks: { runs: 0, passed: 0, failed: 0, seconds: 0 },
   },
 }
 
@@ -433,7 +437,14 @@ describe('build-progress-on-the-document (FR-7)', () => {
     expect(within(finished).getByText('Finished')).toBeInTheDocument()
     expect(within(finished).getByText('Gated')).toBeInTheDocument()
     await waitFor(() => expect(within(finished).getByText(/23 runs/)).toBeInTheDocument())
-    expect(within(finished).getByText('Reviewing')).toBeInTheDocument()
+    expect(within(finished).getAllByText('Reviewing').length).toBeGreaterThan(0)
+    // The mender's cost has a line of its own, the failed-check wait is a time part, an unpriced run
+    // is counted beside the cost and the check runs are shown apart from any agent's time.
+    expect(within(finished).getByText('Mending')).toBeInTheDocument()
+    expect(within(finished).getByText('$15.86')).toBeInTheDocument()
+    expect(within(finished).getByText('Held by a failed check')).toBeInTheDocument()
+    expect(within(finished).getByText(/2 unpriced/)).toBeInTheDocument()
+    expect(within(finished).getByTestId('build-checks').textContent).toContain('10 check runs · 6 passed · 4 failed')
   })
 })
 
