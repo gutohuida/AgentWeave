@@ -34,8 +34,10 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import re
 import shutil
+import stat
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -280,12 +282,14 @@ def shared_dependency_link_failures(
         return []
     remembered = {f.name: f.reason for f in _link_failures.get(str(workspace), ())}
     failures: List[DependencyLinkFailure] = []
-    for name in SHARED_DEPENDENCY_DIRS:
+    for name in shared_dependency_directories(repo_root):
         source = repo_root / name
         if not source.is_dir() or source.is_symlink():
             continue
         target = workspace / name
-        if target.exists() or target.is_symlink():
+        if not target.parent.is_dir():
+            continue  # the checkout has no such directory, so it has nowhere to want one
+        if os.path.lexists(target):
             continue
         failures.append(
             DependencyLinkFailure(
@@ -308,31 +312,181 @@ def dependency_link_failure_sentence(failures: Sequence[DependencyLinkFailure]) 
     )
 
 
+_NESTED_DEPENDENCY_DEPTH = 3
+
+
+def shared_dependency_directories(repo_root: Path) -> List[str]:
+    """The dependency directories worth linking, relative to the project root, POSIX-spelled.
+
+    `SHARED_DEPENDENCY_DIRS` at the root, and `node_modules` beside each tracked `package.json` up
+    to three directories deep (`hub/ui/node_modules`): the root list alone never linked a nested
+    one, and agents made their own links by hand. Whether a directory exists is for the caller.
+    """
+    names = list(SHARED_DEPENDENCY_DIRS)
+    try:
+        listed = _run_git(repo_root, "ls-files", "-z", "--", "*package.json", check=False)
+    except (OSError, subprocess.SubprocessError):
+        return names
+    if listed.returncode != 0:
+        return names
+    for tracked in sorted(listed.stdout.split("\0")):
+        parts = tracked.split("/")
+        if parts[-1] != "package.json" or not 1 < len(parts) <= _NESTED_DEPENDENCY_DEPTH + 1:
+            continue
+        if "node_modules" in parts:
+            continue
+        names.append("/".join([*parts[:-1], "node_modules"]))
+    return names
+
+
+def _make_junction(source: Path, link: Path) -> None:
+    """A directory junction at *link* to *source*. Needs no privilege on NTFS; Windows only.
+
+    Raises `OSError` where it cannot be made, including everywhere that is not Windows.
+    """
+    if os.name != "nt":
+        raise OSError("directory junctions exist only on Windows")
+    try:
+        import _winapi
+
+        _winapi.CreateJunction(str(source), str(link))
+        return
+    except (ImportError, AttributeError, OSError) as exc:
+        failure = exc
+    result = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(source)],
+        capture_output=True,
+        text=True,
+        timeout=_GIT_TIMEOUT_SECONDS,
+        **no_console_kwargs(),
+    )
+    if result.returncode != 0:
+        raise OSError(f"{failure}; mklink /J: {(result.stdout + result.stderr).strip()}")
+
+
+#: Windows reparse tags that name a directory link: a symbolic link and a junction (mount point).
+_LINK_REPARSE_TAGS = frozenset({0xA000000C, 0xA0000003})
+
+
+def is_link(path: Path | str) -> bool:
+    """Whether *path* is itself a symbolic link or a Windows junction, without following it.
+
+    `os.path.islink` is false for a junction on Python 3.11, which is how `shutil.rmtree` and git
+    both walked into one (F1038).
+    """
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return False
+    return stat.S_ISLNK(info.st_mode) or getattr(info, "st_reparse_tag", 0) in _LINK_REPARSE_TAGS
+
+
+def _unlink(path: Path | str) -> None:
+    """Remove a link and nothing it points at: `rmdir` for a directory link on Windows."""
+    try:
+        os.unlink(path)
+    except OSError:
+        os.rmdir(path)
+
+
+def remove_links_in(root: Path) -> List[Path]:
+    """Remove every symbolic link and junction in the tree at *root*, following none of them.
+
+    Run before any removal of a worktree: git (and `shutil.rmtree` on a junction) delete through a
+    link, so a link an agent made to a shared `node_modules`, a `.venv` or anything else empties
+    what it points at (F1038). A link may point anywhere, whoever made it. If *root* is itself a
+    link it is the one thing removed. Returns the links that **could not** be removed -- the caller
+    must not remove the tree while any remain.
+    """
+    stuck: List[Path] = []
+    if is_link(root):
+        try:
+            _unlink(root)
+        except OSError:
+            stuck.append(Path(root))
+        return stuck
+    pending = [os.fspath(root)]
+    while pending:
+        directory = pending.pop()
+        try:
+            with os.scandir(directory) as scanned:
+                entries = list(scanned)
+        except OSError:
+            continue
+        for entry in entries:
+            if is_link(entry.path):
+                try:
+                    _unlink(entry.path)
+                except OSError:
+                    logger.warning("could not remove the link %s", entry.path, exc_info=True)
+                    stuck.append(Path(entry.path))
+            elif entry.is_dir(follow_symlinks=False):
+                pending.append(entry.path)
+    return stuck
+
+
+class LinkRemovalError(OSError):
+    """A link inside a worktree could not be removed, so the worktree was not."""
+
+
+def remove_worktree(
+    repo_root: Path, path: Path, *, check: bool = True, fallback: bool = False
+) -> subprocess.CompletedProcess:
+    """Remove a worktree the Hub created, leaving whatever its links point at untouched (D1).
+
+    Links first, then `git worktree remove --force`; with *fallback*, a directory git left behind
+    is deleted by hand, after the links are gone again (a link can appear while git works). With
+    *check*, git's failure raises `GitCommandError`, as the callers always did. A link that cannot
+    be removed stops the removal with `LinkRemovalError`: leaving the worktree is the safe outcome.
+    """
+    stuck = remove_links_in(path)
+    if stuck:
+        raise LinkRemovalError(
+            f"not removing {path}: the link {stuck[0]} inside it could not be removed, and "
+            "removing the worktree would follow it"
+        )
+    result = _run_git(repo_root, "worktree", "remove", "--force", str(path), check=check)
+    if fallback and path.exists():
+        if remove_links_in(path):
+            raise LinkRemovalError(f"not deleting {path}: a link inside it could not be removed")
+        shutil.rmtree(path, ignore_errors=True)
+    return result
+
+
 def _symlink_shared_dependencies(repo_root: Path, worktree: Path) -> List[DependencyLinkFailure]:
     """Link the project's expensive dependency directories into *worktree*.
 
     A failed link does not fail provisioning (a Windows account without Developer Mode or
     administrator rights cannot create symlinks, and refusing every turn there was a total outage),
-    but it is returned, so the run and the agent can be told (F567).
+    but it is returned, so the run and the agent can be told (F567). Where a symbolic link is
+    refused a directory junction is made instead, which needs no privilege; only a failure of both
+    is reported.
     """
     failures: List[DependencyLinkFailure] = []
-    for name in SHARED_DEPENDENCY_DIRS:
+    for name in shared_dependency_directories(repo_root):
         source = repo_root / name
         if not source.is_dir() or source.is_symlink():
             continue
         target = worktree / name
-        if target.exists() or target.is_symlink():
+        if not target.parent.is_dir() or os.path.lexists(target):
             continue
         try:
             target.symlink_to(source, target_is_directory=True)
         except OSError as exc:
-            logger.info(
-                "Could not symlink %s into %s's worktree: %s",
-                name,
-                worktree,
-                exc,
-            )
-            failures.append(DependencyLinkFailure(name=name, reason=str(exc)))
+            # An account without the symlink privilege (F567) can still make a directory junction.
+            # The Hub makes the link itself so it is a link the Hub knows to remove without
+            # following (`remove_links_in`); an agent left to make its own is how F1038 happened.
+            try:
+                _make_junction(source, target)
+            except OSError as junction_exc:
+                logger.info(
+                    "Could not link %s into %s's worktree: %s (junction: %s)",
+                    name,
+                    worktree,
+                    exc,
+                    junction_exc,
+                )
+                failures.append(DependencyLinkFailure(name=name, reason=str(exc)))
     if failures:
         _link_failures[str(worktree)] = failures
     else:
@@ -1029,7 +1183,10 @@ def _unwind_task_worktree(repo_root: Path, path: Path, branch: str) -> None:
     if path.is_dir():
         with contextlib.suppress(OSError, subprocess.SubprocessError):
             _run_git(path, "merge", "--abort", check=False)
-    _run_git(repo_root, "worktree", "remove", "--force", str(path), check=False)
+    try:
+        remove_worktree(repo_root, path, check=False)
+    except LinkRemovalError:
+        logger.warning("left %s in place: a link inside it could not be removed", path)
     _run_git(repo_root, "branch", "-D", branch, check=False)
     _run_git(repo_root, "worktree", "prune", check=False)
 
@@ -1234,9 +1391,7 @@ def release_review_checkout(repo_root: Path, agent: str) -> bool:
         return False
     if not path.exists():
         return False
-    _run_git(repo_root, "worktree", "remove", "--force", str(path), check=False)
-    if path.exists():
-        shutil.rmtree(path, ignore_errors=True)
+    remove_worktree(repo_root, path, check=False, fallback=True)
     _run_git(repo_root, "worktree", "prune", check=False)
     return True
 
@@ -1554,7 +1709,7 @@ def release_worktree(repo_root: Path, agent: str) -> ReleaseResult:
     had_uncommitted = _has_uncommitted_changes(path)
     snapshot_commit = snapshot_worktree(path, agent) if had_uncommitted else None
 
-    _run_git(repo_root, "worktree", "remove", "--force", str(path))
+    remove_worktree(repo_root, path)
 
     unmerged = _commits_not_on_head(repo_root, branch)
     return ReleaseResult(
@@ -1608,7 +1763,7 @@ def release_task_worktree(repo_root: Path, task_id: str) -> ReleaseResult:
         else None
     )
 
-    _run_git(repo_root, "worktree", "remove", "--force", str(path))
+    remove_worktree(repo_root, path)
 
     return ReleaseResult(
         released=True,
@@ -1668,7 +1823,7 @@ def discard_task_checkout(repo_root: Path, task_id: str) -> DiscardResult:
             ),
         )
     if path.exists():
-        _run_git(repo_root, "worktree", "remove", "--force", str(path))
+        remove_worktree(repo_root, path)
     if _resolves(repo_root, branch):
         _run_git(repo_root, "branch", "-D", branch)
     return DiscardResult(task_id=task_id, branch=branch, discarded=True)
