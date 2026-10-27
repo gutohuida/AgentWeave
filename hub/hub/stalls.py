@@ -197,10 +197,26 @@ async def record(
     task_id: Optional[str] = None,
     loop_id: Optional[str] = None,
 ) -> "tuple[Stall, bool]":
-    """The open stall for this cause and subject, counted again, or a new one. Commits."""
+    """The open stall for this cause and subject, counted again, or a new one. Commits.
+
+    A stall the mender gave up on is the operator's while its reason holds, so the same reason is
+    counted on it rather than opening a new stall that wakes the mender to give up again (F1047:
+    30 turns and 27 copies of one question in a night). A changed reason is a new situation.
+    """
     key = stall_key(cause, subject)
     now = datetime.now(timezone.utc)
     stall = await open_stall(db, project_id, key)
+    if stall is None:
+        latest = (
+            await db.execute(
+                select(Stall)
+                .where(Stall.project_id == project_id, Stall.key == key)
+                .order_by(Stall.first_seen_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if latest is not None and latest.outcome == "gave_up" and latest.reason == text[:4000]:
+            stall = latest
     if stall is not None:
         stall.last_seen_at = now
         stall.seen_count += 1
@@ -680,6 +696,7 @@ async def _sweep(db: AsyncSession, now: datetime) -> int:
     live = live_run_ids()
     here = instance_identity.get()
     await _end_dead_run_stalls_that_recovered(db, live)
+    await _end_stuck_task_stalls_that_moved(db)
     for run in running:
         started = _aware(run.started_at)
         if run.id in live or started is None or started > now - DEAD_RUN_GRACE:
@@ -786,6 +803,29 @@ async def _end_dead_run_stalls_that_recovered(db: AsyncSession, live: set) -> No
             await end(db, stall, "resolved", "The run is alive: this Hub is executing it.")
         elif run is None or run.status != "running":
             await end(db, stall, "resolved", "The run has ended.")
+
+
+async def _end_stuck_task_stalls_that_moved(db: AsyncSession) -> None:
+    """End each open `stuck_task` stall whose task is gone or no longer in progress (F1049).
+
+    A transition ends it through `resolve_task`; a deleted task goes through none, and its stall
+    stayed open for days on :8000.
+    """
+    open_stalls = (
+        (
+            await db.execute(
+                select(Stall).where(Stall.cause == "stuck_task", Stall.ended_at.is_(None))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for stall in open_stalls:
+        task = await db.get(Task, stall.key.split(":", 1)[-1])
+        if task is None:
+            await end(db, stall, "resolved", "The task no longer exists.")
+        elif task.status != "in_progress":
+            await end(db, stall, "resolved", f"The task moved to {task.status}.")
 
 
 async def sweep_forever() -> None:

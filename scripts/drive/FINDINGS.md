@@ -40518,7 +40518,7 @@ On `:8000`, 2026-10-27: approving slice B of the "Flows that do not stall" roadm
 
 ## F1047 (A) -- a stall the mender gave up on is raised again on the next firing, and the mender is woken again: 30 turns overnight on one unchanged situation
 
-**Status:** open 2026-10-27. Found reading `:8000` read-only after the operator said "it seems that the mender had a lot of problems this night".
+**Status:** fixed 2026-10-27 (Tier 0): `stalls.record` counts a report on the latest stall of its key when that one ended `gave_up` with the same reason, and wakes no one; a changed reason opens a new stall. Tests: `test_a_stall_given_up_on_is_not_raised_again_while_its_reason_holds` and `…_raised_again_once_its_reason_changes` (`hub/tests/test_a_stalled_project_wakes_the_mender.py`). Found reading `:8000` read-only after the operator said "it seems that the mender had a lot of problems this night".
 **Source:** drive
 **Theme:** Mender
 **Ready:** yes
@@ -40538,7 +40538,7 @@ All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's 
 
 ## F1049 (C) -- a `stuck_task` stall for a task that no longer exists stays open forever
 
-**Status:** open 2026-10-27. Same read of `:8000`.
+**Status:** fixed 2026-10-27 (Tier 0): each sweep ends an open `stuck_task` stall whose task is gone or no longer `in_progress` (`stalls._end_stuck_task_stalls_that_moved`). Test: `test_a_stuck_task_stall_ends_once_its_task_is_gone_or_moved`. Same read of `:8000`.
 **Source:** drive
 **Theme:** Mender
 **Ready:** yes
