@@ -23,5 +23,7 @@ export function statusTone(status: string): Tone {
 export function evidenceTone(state: string): Tone {
   if (state === 'accepted') return 'green'
   if (state === 'rejected') return 'red'
+  // K: held at its commit when the task was sent back -- not wrong, and not waiting on anyone.
+  if (state === 'held') return 'neutral'
   return 'amber'
 }
