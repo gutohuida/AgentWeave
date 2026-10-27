@@ -435,7 +435,9 @@ def _plus(*values: Any) -> Any:
     return sum(known) if known else None
 
 
-async def _worker_lines(db: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+async def _worker_lines(
+    db: AsyncSession, project_id: str, *, since: Optional[datetime] = None
+) -> List[Dict[str, Any]]:
     """One line per worker kind, ordered by kind (F240): what the Hub spent outside the turns.
 
     `input_tokens` is normalised as a turn's is (the total less the output, so a Claude worker's
@@ -477,7 +479,10 @@ async def _worker_lines(db: AsyncSession, project_id: str) -> List[Dict[str, Any
             func.sum(WorkerInvocation.ai_nano_aiu).label("ai_nano_aiu"),
             func.sum(WorkerInvocation.premium_requests).label("premium_requests"),
         )
-        .where(WorkerInvocation.project_id == project_id)
+        .where(
+            WorkerInvocation.project_id == project_id,
+            *([WorkerInvocation.created_at >= since] if since is not None else []),
+        )
         .group_by(WorkerInvocation.kind)
         .order_by(WorkerInvocation.kind)
     )

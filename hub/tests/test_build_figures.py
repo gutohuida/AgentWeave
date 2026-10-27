@@ -1,8 +1,7 @@
 """`the-spec-page-redesigned` (`build-progress-on-the-document`): what a build has taken so far.
 
 The page draws each build's runs, its wall time split by what it was doing and its cost by who spent
-it. The figures come from `hub/build_figures.py` (one module, so roadmap slice G can swap it for the
-shared tally) over what the build already records: the runs bound to its tasks, their turn usage,
+it. The figures come from `hub/work_tally.py` (slice G's one tally, which replaced `build_figures.py`) over what the build already records: the runs bound to its tasks, their turn usage,
 the tasks' transitions and their check runs. The timeline here is written by hand so the expected
 split is arithmetic, not a measurement.
 """
@@ -35,9 +34,19 @@ def _at(seconds: int) -> datetime:
     return T0 + timedelta(seconds=seconds)
 
 
-async def _usage(run_id: str, agent: str, task_id, micros: int) -> None:
+async def _usage(run_id: str, agent: str, task_id, micros: int, began=0, ended=0) -> None:
     async with async_session_factory() as db:
-        db.add(Run(id=run_id, project_id=P, agent=agent, task_id=task_id, status="completed"))
+        db.add(
+            Run(
+                id=run_id,
+                project_id=P,
+                agent=agent,
+                task_id=task_id,
+                status="completed",
+                started_at=_at(began),
+                ended_at=_at(ended),
+            )
+        )
         await db.flush()
         db.add(
             TurnUsage(
@@ -58,9 +67,12 @@ async def _usage(run_id: str, agent: str, task_id, micros: int) -> None:
 async def test_a_builds_figures_split_its_time_cost_and_runs(
     app, auth_headers, author_headers  # noqa: F811
 ):
-    """t1 is built (100-300 s), then waits for review (300-700 s) with the checks running 500-600 s,
-    while t2 is never handed out: 400 s waiting to be handed out (0-100 s and 700-1000 s), 200 s
-    building, 100 s of checks, 300 s of review (t1 is decided at 700 s; t2 still waits). The builder's turn costs 3, the reviewer's 1.
+    """t1 is built (100-300 s) by a run, then reviewed by another (300-700 s) with the checks running
+    500-600 s, while t2 is never handed out. The build's span is 100-1000 s (its first task leaving
+    pending to when it stopped, t2 being open): 200 s building, 400 s reviewing (a reviewer working
+    outranks the checks beside it), 300 s waiting to be handed out (700-1000 s). The builder's turn
+    costs 3, the reviewer's 1. Slice G's partition (`work_tally._partition`) replaced slice F's
+    four-part split, which read task states rather than runs and began at the build's creation.
     """
     await _roster_rows("dev", "qa")
     await _approved(app, auth_headers, author_headers, _document())
@@ -106,8 +118,8 @@ async def test_a_builds_figures_split_its_time_cost_and_runs(
             )
         )
         await db.commit()
-    await _usage("run-dev-fig-1", "dev", t1.id, 3_000_000)
-    await _usage("run-qa-fig-1", "qa", t1.id, 1_000_000)
+    await _usage("run-dev-fig-1", "dev", t1.id, 3_000_000, 100, 300)
+    await _usage("run-qa-fig-1", "qa", t1.id, 1_000_000, 300, 700)
     await _usage("run-elsewhere", "dev", None, 9_000_000)  # not this build's: ignored
 
     read = await app.get(f"{BASE}/builds/{build_id}/figures", headers=auth_headers)
@@ -116,8 +128,17 @@ async def test_a_builds_figures_split_its_time_cost_and_runs(
     assert read.json() == {
         "id": build_id,
         "runs": 2,
-        "time": {"building": 200, "checks": 100, "review": 300, "waiting": 400},
-        "cost": {"build": 3.0, "review": 1.0, "lead": 0.0},
+        "time": {
+            "building": 200,
+            "reviewing": 400,
+            "checks": 0,
+            "held": 0,
+            "review": 0,
+            "waiting": 300,
+        },
+        "cost": {"build": 3.0, "review": 1.0, "lead": 0.0, "mend": 0.0},
+        "unpriced": 0,
+        "checks": {"runs": 1, "passed": 1, "failed": 0, "seconds": 100},
     }
 
 
