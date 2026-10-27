@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, deleteJson, getJson, postJson, putJson } from './client'
+import { ApiError, deleteJson, getJson, patchJson, postJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
 import type { KeptWork } from '@/store/specDeletionStore'
@@ -142,10 +142,58 @@ export interface SpecBuildOutcome {
   flow: ApprovalFlowOutcome
   delivery_agent?: string | null
   reviewer?: string | null
+  /** The build it recorded (`a-build-has-a-driver-a-level-and-its-people`); absent from an older
+   *  Hub. `unresolved_builders` names each declared builder that is no open agent. */
+  build?: SpecBuild & {
+    unresolved_builders?: Array<{ task: string; builder: string }>
+    joined?: boolean
+    message?: string
+  }
+}
+
+export type BuildDriver = 'flow' | 'lead' | 'hand'
+export type BuildLevel = 'fast' | 'reviewed' | 'gated'
+export type BuildLanding = 'main' | 'nowhere'
+
+/** One build of a document, as `GET /project/spec` lists them (`builds`, newest first). */
+export interface SpecBuild {
+  id: string
+  state: 'running' | 'stopped' | 'finished'
+  driver: BuildDriver
+  level: BuildLevel
+  builders: string[]
+  reviewers: string[]
+  lead: string | null
+  budget_cap_usd: number | null
+  spent_usd: number | null
+  unpriced_turns: number
+  window_start: string | null
+  window_end: string | null
+  landing: BuildLanding
+  loop_id: string | null
+  stop_reason: string | null
+  created_at: string | null
+  stopped_at: string | null
+}
+
+/** What the operator chooses when they press Build: each left out takes the recommendation. */
+export interface BuildChoices {
+  delivery_agent?: string
+  driver?: BuildDriver
+  level?: BuildLevel
+  builders?: string[]
+  reviewers?: string[]
+  lead?: string
+  budget_cap_usd?: number
+  window_start?: string
+  window_end?: string
+  landing?: BuildLanding
+  task_builders?: Record<string, string>
 }
 
 /** The build the document recommends, with a reason per choice (`recommend-a-build`): what Build
- *  and Approve and build open with. Absent on a document that declares no delivery. */
+ *  and Approve and build open with. Absent on a document that declares no delivery. The build's
+ *  settings (driver to task_builders) are absent from an older Hub. */
 export interface SpecRecommendedBuild {
   mode: 'flow' | 'none'
   agent: string | null
@@ -154,7 +202,33 @@ export interface SpecRecommendedBuild {
   cron: string
   stop_when_queue_empties: boolean
   stop_at: string | null
-  reasons: Partial<Record<'mode' | 'agent' | 'reviewer' | 'tester' | 'stop' | 'cron', string>>
+  driver?: BuildDriver
+  level?: BuildLevel
+  builders?: string[]
+  reviewers?: string[]
+  lead?: string | null
+  budget_cap_usd?: number | null
+  landing?: BuildLanding
+  /** Each declared task's builder by key, as the document names it (F1046). */
+  task_builders?: Record<string, string | null>
+  reasons: Partial<
+    Record<
+      | 'mode'
+      | 'agent'
+      | 'reviewer'
+      | 'tester'
+      | 'stop'
+      | 'cron'
+      | 'driver'
+      | 'level'
+      | 'builders'
+      | 'reviewers'
+      | 'lead'
+      | 'cap'
+      | 'landing',
+      string
+    >
+  >
 }
 
 /** The roadmap slice a change document specifies (`a-spec-is-written-one-slice-at-a-time`, D7).
@@ -312,6 +386,8 @@ export interface SpecDocument {
   approval_outcome?: SpecApprovalOutcome
   build_outcome?: SpecBuildOutcome
   recommended_build?: SpecRecommendedBuild
+  /** Every build of this document, newest first (absent from an older Hub). */
+  builds?: SpecBuild[]
   /** The version of the content this read shows. An approval names it, and is refused when the
    *  document changed since (`approve-what-was-seen`). */
   content_version?: string
@@ -880,11 +956,40 @@ export function useBuildSpecDocument() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: ({ path, delivery_agent }: { path: string; delivery_agent?: string }) =>
+    mutationFn: ({ path, ...choices }: { path: string } & BuildChoices) =>
       postJson<SpecBuildResult>(
         `/api/v1/projects/${projectId}/project/documents/build?path=${encodeURIComponent(path)}`,
-        delivery_agent !== undefined ? { delivery_agent } : {},
+        choices,
       ),
+    onSuccess: () => invalidateAfterPhase(queryClient, projectId),
+  })
+}
+
+/** Raise a build's cap or move its window; a build its cap or window stopped resumes. */
+export function useUpdateBuild() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...change
+    }: {
+      id: string
+      budget_cap_usd?: number
+      window_start?: string
+      window_end?: string
+    }) => patchJson<SpecBuild>(`/api/v1/projects/${projectId}/project/builds/${id}`, change),
+    onSuccess: () => invalidateAfterPhase(queryClient, projectId),
+  })
+}
+
+/** Stop a running build: nothing new is handed out, running turns finish. */
+export function useStopBuild() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      postJson<SpecBuild>(`/api/v1/projects/${projectId}/project/builds/${id}/stop`),
     onSuccess: () => invalidateAfterPhase(queryClient, projectId),
   })
 }
@@ -900,13 +1005,13 @@ export function useApproveAndBuildSpecDocument() {
       delivery_agent,
       draft_next_slice,
       approve_anyway,
+      ...choices
     }: {
       path: string
       content_version: string
-      delivery_agent?: string
       draft_next_slice?: boolean
       approve_anyway?: boolean
-    }) =>
+    } & BuildChoices) =>
       postJson<
         SpecDocumentRecord & {
           approval_outcome?: SpecApprovalOutcome
@@ -922,6 +1027,7 @@ export function useApproveAndBuildSpecDocument() {
           ...(delivery_agent !== undefined ? { delivery_agent } : {}),
           ...(draft_next_slice !== undefined ? { draft_next_slice } : {}),
           ...(approve_anyway ? { approve_anyway } : {}),
+          ...choices,
         },
       ),
     onSuccess: () => invalidateAfterPhase(queryClient, projectId),

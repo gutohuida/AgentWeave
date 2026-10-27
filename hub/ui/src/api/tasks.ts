@@ -74,6 +74,11 @@ export interface Task {
    *  the key it was declared under. */
   spec_document_id?: string | null
   spec_task_key?: string | null
+  /** The build covering this task, the level it is built at, and the builder it was declared
+   *  with (`a-build-has-a-driver-a-level-and-its-people`). All null outside a build. */
+  build_id?: string | null
+  level?: 'fast' | 'reviewed' | 'gated' | null
+  builder?: string | null
   /**
    * The requirement identifiers this task serves, in the form they are submitted in.
    *

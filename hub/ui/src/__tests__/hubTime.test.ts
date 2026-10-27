@@ -27,6 +27,7 @@ const EXEMPT = new Set([
   'components/jobs/JobForm.tsx',
   'components/spec/LoopSettings.tsx',
   'components/spec/StartFlowDialog.tsx',
+  'components/spec/BuildDialog.tsx',
   // React Query's own epoch milliseconds, measured in this browser.
   'components/logs/LogsView.tsx',
   // Epoch milliseconds this module computed itself while walking a cron expression forward —

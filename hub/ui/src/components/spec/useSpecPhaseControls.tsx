@@ -8,6 +8,7 @@ import { FoldIntoCapabilityDialog } from '@/components/spec/FoldIntoCapabilityDi
 import { RetireCapabilityDialog } from '@/components/spec/RetireCapabilityDialog'
 import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
 import { BuildDialog } from '@/components/spec/BuildDialog'
+import { BuildStatusStrip } from '@/components/spec/BuildStatusStrip'
 import { ReconcileSummary } from '@/components/spec/ReconcileSummary'
 import { CloseAlreadyBuilt } from '@/components/spec/CloseAlreadyBuilt'
 import { useDocumentFlow, type LoopSummary } from '@/api/loops'
@@ -33,7 +34,9 @@ import {
   useSpec,
   useSpecDocuments,
   useSpecRigorHistory,
+  type BuildChoices,
   type SpecBlockingFinding,
+  type SpecBuildOutcome,
   type SpecDocumentRecord,
   type SpecNextSliceOutcome,
   type SpecSize,
@@ -46,6 +49,19 @@ type Rigor = SpecDocumentRecord['rigor']
 const RIGOR_ORDER: Rigor[] = ['sketch', 'contract', 'gate']
 const RIGOR_LABEL: Record<Rigor, string> = { sketch: 'Sketch', contract: 'Contract', gate: 'Gate' }
 
+
+/** What a Build said: the flow's messages, then each declared builder no open agent answers to
+ *  (`a-task-names-its-builder`) and, where a build was already running, that the tasks joined it. */
+function buildOutcomeMessages(outcome: SpecBuildOutcome | undefined): string[] {
+  const messages = [...(outcome?.flow?.messages ?? [])]
+  for (const entry of outcome?.build?.unresolved_builders ?? []) {
+    messages.push(
+      `${entry.task}'s builder @${entry.builder} is not an open agent here; the task waits for the driver.`,
+    )
+  }
+  if (outcome?.build?.message) messages.push(outcome.build.message)
+  return messages
+}
 
 /** What an approval asked to draft the next slice did (`a-spec-is-written-one-slice-at-a-time` D4, D4a). */
 function nextSliceMessage(outcome: SpecNextSliceOutcome): string {
@@ -83,7 +99,7 @@ interface Refusal {
 /** The approval the operator asked for, kept so Approve anyway resends the same one. */
 interface PendingApproval {
   build: boolean
-  deliveryAgent?: string
+  choices?: BuildChoices
 }
 
 /**
@@ -321,16 +337,16 @@ export function useSpecPhaseControls(
     )
   }
 
-  function onApproveAndBuild(deliveryAgent: string | undefined, anyway = false) {
+  function onApproveAndBuild(choices: BuildChoices, anyway = false) {
     clearFindings()
     setNextSliceOutcome(null)
     setBuildRefusal(null)
-    setPendingApproval({ build: true, deliveryAgent })
+    setPendingApproval({ build: true, choices })
     approveAndBuild.mutate(
       {
         path,
         content_version: loadedVersion,
-        ...(deliveryAgent !== undefined ? { delivery_agent: deliveryAgent } : {}),
+        ...choices,
         ...(roadmapSlice ? { draft_next_slice: draftNextSlice } : {}),
         ...(anyway ? { approve_anyway: true } : {}),
       },
@@ -339,7 +355,7 @@ export function useSpecPhaseControls(
           setBuilding(null)
           setNextSliceOutcome(result.next_slice ?? null)
           setApprovalNotes(result.approval_notes ?? [])
-          setBuildMessages(result.build_outcome?.flow?.messages ?? [])
+          setBuildMessages(buildOutcomeMessages(result.build_outcome))
         },
         // Refused exactly as Approve is (FR-7): the gaps and Approve anyway show in the header.
         onError: (error: unknown) => {
@@ -350,14 +366,14 @@ export function useSpecPhaseControls(
     )
   }
 
-  function onBuild(deliveryAgent: string | undefined) {
+  function onBuild(choices: BuildChoices) {
     setBuildRefusal(null)
     build.mutate(
-      { path, ...(deliveryAgent !== undefined ? { delivery_agent: deliveryAgent } : {}) },
+      { path, ...choices },
       {
         onSuccess: (result) => {
           setBuilding(null)
-          setBuildMessages(result.build_outcome?.flow?.messages ?? [])
+          setBuildMessages(buildOutcomeMessages(result.build_outcome))
         },
         onError: (error: unknown) =>
           setBuildRefusal(readableApiError(error, 'The Hub refused to build this document.')),
@@ -366,7 +382,7 @@ export function useSpecPhaseControls(
   }
 
   function onApproveAnyway() {
-    if (pendingApproval.build) onApproveAndBuild(pendingApproval.deliveryAgent, true)
+    if (pendingApproval.build) onApproveAndBuild(pendingApproval.choices ?? {}, true)
     else onApprove(true)
   }
 
@@ -684,6 +700,10 @@ export function useSpecPhaseControls(
         </div>
       )}
 
+      {/* The build running now (or the last one stopped): driver, level, spend of cap, window,
+          with Stop and Raise cap (`a-build-has-a-driver-a-level-and-its-people`). */}
+      {!specDocError && specDoc?.builds?.length ? <BuildStatusStrip build={specDoc.builds[0]!} /> : null}
+
       {/* reconcile-and-measure: what reconciling the change with its code found, while it is
           approved. Its full form, and the ask, are in the fold dialog. */}
       {document.phase === 'approved' && (
@@ -903,8 +923,8 @@ export function useSpecPhaseControls(
           isPending={build.isPending || approveAndBuild.isPending}
           error={buildRefusal}
           onCancel={() => setBuilding(null)}
-          onConfirm={(deliveryAgent) =>
-            building === 'approve' ? onApproveAndBuild(deliveryAgent) : onBuild(deliveryAgent)
+          onConfirm={(choices) =>
+            building === 'approve' ? onApproveAndBuild(choices) : onBuild(choices)
           }
         />
       )}
