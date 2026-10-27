@@ -484,7 +484,7 @@ export function DocumentFilterBar({
   const evidenceCounts = (state: EvidenceState) => doc.requirements.filter((r) => r.evidence === state).length
   const evidenceOptions: SelectOption<EvidenceState | 'any'>[] = [
     { value: 'any', label: 'Any evidence' },
-    ...(['verified', 'awaiting', 'in_progress', 'rejected', 'not_started'] as EvidenceState[])
+    ...(['verified', 'awaiting', 'in_progress', 'held', 'rejected', 'not_started'] as EvidenceState[])
       .filter((s) => evidenceCounts(s) > 0)
       .map((s) => ({ value: s, label: `${EVIDENCE_LABEL[s]} · ${evidenceCounts(s)}` })),
   ]

@@ -93,7 +93,7 @@ export function useSpecMockControls(): SpecMockControls {
 }
 
 export const SPEC_MOCK_STATES: Array<{ value: DocState; label: string }> = [
-  { value: 'writing', label: 'Being written' },
+  { value: 'writing', label: 'Writing' },
   { value: 'ready', label: 'Ready (checked clean)' },
   { value: 'approved', label: 'Approved, no build' },
   { value: 'building', label: 'Building' },

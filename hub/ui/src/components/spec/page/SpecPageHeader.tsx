@@ -39,17 +39,19 @@ export interface SpecPageHeaderProps {
   onOpenDocument: (path: string) => void
   onCopyLink: () => void
   onCopyPath: () => void
-  onArchive: () => void
-  onDelete: () => void
+  /** Left out when the document cannot be archived (a capability, a document already archived). */
+  onArchive?: () => void
+  /** Left out when the document must not be deleted (the corpus depends on it). */
+  onDelete?: () => void
 }
 
 /** The document's header: where it sits (roadmap › slice, previous and next slice), its title and
  *  phase, the journey ribbon, and the actions open to it as buttons, one primary (FR-1). */
 export function SpecPageHeader(props: SpecPageHeaderProps) {
   const { doc, check, compact, now } = props
-  const actions = actionsFor(doc.state)
+  const actions = actionsFor(doc.state, doc.kind)
   return (
-    <header className="aw-sp-head" data-compact={compact ? 'true' : 'false'}>
+    <header className="aw-sp-head" data-testid="spec-document-header" data-compact={compact ? 'true' : 'false'}>
       <div className="aw-sp-head-bar">
         {props.leading}
         <div className="aw-sp-history" role="group" aria-label="History">
@@ -124,7 +126,6 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
             check={check}
             runningBuild={props.runningBuild ?? null}
             offersApproveAndBuild={actions.secondary.includes('approve-and-build')}
-            offersAnotherBuild={doc.state === 'building'}
             onAction={props.onAction}
           />
           <Menu>
@@ -140,20 +141,22 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
               <MenuItem icon="content_copy" onSelect={props.onCopyPath}>
                 Copy its path
               </MenuItem>
-              {doc.state === 'approved' || doc.state === 'building' ? (
+              {(doc.state === 'approved' || doc.state === 'building') && doc.phase !== 'current' ? (
                 <MenuItem icon="edit" onSelect={() => props.onAction('reopen')}>
                   Reopen for changes
                 </MenuItem>
               ) : null}
-              <MenuSeparator />
-              {doc.state !== 'archived' ? (
+              {props.onArchive || props.onDelete ? <MenuSeparator /> : null}
+              {props.onArchive ? (
                 <MenuItem icon="archive" onSelect={props.onArchive}>
                   Archive
                 </MenuItem>
               ) : null}
-              <MenuItem icon="delete" destructive onSelect={props.onDelete}>
-                Delete…
-              </MenuItem>
+              {props.onDelete ? (
+                <MenuItem icon="delete" destructive onSelect={props.onDelete}>
+                  Delete…
+                </MenuItem>
+              ) : null}
             </MenuContent>
           </Menu>
           {props.trailing}
@@ -228,14 +231,12 @@ function PrimaryAction({
   check,
   runningBuild,
   offersApproveAndBuild,
-  offersAnotherBuild,
   onAction,
 }: {
   action: SpecAction | null
   check: CheckState
   runningBuild: number | null
   offersApproveAndBuild: boolean
-  offersAnotherBuild: boolean
   onAction: (action: SpecAction) => void
 }) {
   switch (action) {
@@ -258,7 +259,7 @@ function PrimaryAction({
           label="Build…"
           title="Choose who builds it, at which level, and start."
           onClick={() => onAction('build')}
-          menu={[{ icon: 'restart_alt', label: 'Build with the last settings', detail: 'Lead agent, Fast, Builder and QA2.', onSelect: () => onAction('build') }]}
+          menu={[]}
         />
       )
     case 'open-build':
@@ -268,7 +269,7 @@ function PrimaryAction({
           label={runningBuild ? `Build ${runningBuild} running` : 'Build running'}
           title="Show the running build"
           onClick={() => onAction('open-build')}
-          menu={offersAnotherBuild ? [{ icon: 'add', label: 'Start another build…', detail: 'Builds run side by side on their own branches.', onSelect: () => onAction('build') }] : []}
+          menu={[]}
         />
       )
     case 'reopen':

@@ -541,6 +541,7 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
   --sp-ev-verified: var(--green);
   --sp-ev-awaiting: var(--amber);
   --sp-ev-in_progress: var(--blue);
+  --sp-ev-held: var(--text-2);
   --sp-ev-not_started: var(--text-3);
   --sp-ev-rejected: var(--red);
 }
@@ -650,3 +651,15 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 @media (prefers-reduced-motion: reduce) {
   .aw-sp-open-card, .aw-sp-open-search, .aw-sp-open-card-bar > span { animation: none; transition: none; }
 }
+
+/* ── Wired page: what sits between the header and the document ───────────── */
+.aw-sp-list-footer { flex: none; padding: 8px 10px 10px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.aw-sp-override { overflow: auto; }
+.aw-sp-banner { display: flex; flex-direction: column; gap: 8px; padding: 8px 20px 0; min-width: 0; }
+.aw-sp-panel .aw-sp-banner { padding: 8px 12px 0; }
+.aw-sp-list-rowwrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.aw-sp-list-rowwrap > .aw-sp-list-row { flex: 1; min-width: 0; }
+.aw-sp-list-rowaction { flex: none; }
+.aw-sp-page { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; height: 100%; }
+.aw-sp-page > .aw-sp { flex: 1; min-height: 0; }
+.aw-sp-empty-page { display: flex; flex: 1; align-items: center; justify-content: center; }

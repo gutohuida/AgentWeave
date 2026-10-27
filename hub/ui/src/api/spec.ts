@@ -825,6 +825,9 @@ export interface SpecDocumentRecord {
   /** A tester's amendments to the approved document, and how many the operator has not reviewed
    *  (`a-tester-drives-the-built-product-and-keeps-the-spec-true`). Absent when there are none. */
   amendments?: { total: number; unreviewed: number }
+  /** Present while a build of this document is running: how many of the tasks it covers are
+   *  approved (`the-spec-page-redesigned`: the list's 'building now' mark and the picker's progress). */
+  build?: { id: string; done: number; total: number }
   updated_at: string
 }
 

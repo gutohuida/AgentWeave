@@ -157,6 +157,19 @@ export interface SpecPhaseControls {
   archive?: () => void
   remove?: () => void
   rigorChoice: { value: Rigor; onChange: (rigor: Rigor) => void; disabled: boolean }
+  /** The decisions as plain calls, for a header that draws its own buttons (the redesigned page).
+   *  `build` and `approveAndBuild` open the Build dialog in `dialogs`. */
+  actions: {
+    check: () => void
+    approve: () => void
+    approveAndBuild: () => void
+    build: () => void
+    reopen: () => void
+    busy: boolean
+  }
+  /** What the last Check or refused approval found, as the Hub reported it. `checked` is true once
+   *  a Check has answered, `clean` when it found nothing to block or warn about. */
+  findings: { blocking: SpecBlockingFinding[]; gaps: SpecBlockingFinding[]; checking: boolean; checked: boolean; clean: boolean }
   /** Beside the phase: the flow the document runs. */
   badges: React.ReactNode
   /** What the controls produced: refusals, gaps, the journey, a rigor change waiting for its reason. */
@@ -179,6 +192,11 @@ export function useSpecPhaseControls(
   onOpenLoop?: (loop: LoopSummary) => void,
   /** Called once the Hub has deleted this document (F829): the host leaves it. */
   onDeleted?: () => void,
+  options: {
+    /** The page draws Check's findings beside what they concern: leave them out of `messages`
+     *  (a gap list Approve anyway answers stays). */
+    inlineFindings?: boolean
+  } = {},
 ): SpecPhaseControls | null {
   const { data } = useSpecDocuments()
   // `delivery_status` (design D5) rides the same `spec/<path>` query `SpecDocumentPanel` and
@@ -211,6 +229,7 @@ export function useSpecPhaseControls(
   const deleteDocument = useDeleteSpecDocument()
   // Check's answer when nothing blocks (FR-1): said, so a clean check is not silence.
   const [checkedClean, setCheckedClean] = useState(false)
+  const [checkedOnce, setCheckedOnce] = useState(false)
   // The Build dialog, for Build (an approved document) or Approve and build (FR-6, FR-7).
   const [building, setBuilding] = useState<null | 'build' | 'approve'>(null)
   const [buildRefusal, setBuildRefusal] = useState<string | null>(null)
@@ -226,6 +245,7 @@ export function useSpecPhaseControls(
   const [historyOpen, setHistoryOpen] = useState(false)
   const { data: historyData, error: historyError } = useSpecRigorHistory(path)
 
+  const inline = options.inlineFindings === true
   const document = data?.documents.find((entry) => entry.path === path)
   const flow = useDocumentFlow(document?.id)
   if (!document) return null
@@ -287,6 +307,7 @@ export function useSpecPhaseControls(
     setGapsOverridable(false)
     setApprovalNotes([])
     setCheckedClean(false)
+    setCheckedOnce(false)
     setBuildMessages([])
   }
 
@@ -297,6 +318,7 @@ export function useSpecPhaseControls(
       // Exactly what the agent's own save reported, and nothing moved: the agent keeps writing
       // while the operator looks (`check-never-moves`). Every finding at once: one per attempt
       // turns five problems into five round trips.
+      setCheckedOnce(true)
       setBlocking(result.blocking ?? [])
       setGaps(result.warnings ?? [])
       setCheckedClean((result.blocking ?? []).length === 0 && (result.warnings ?? []).length === 0)
@@ -684,7 +706,7 @@ export function useSpecPhaseControls(
         </div>
       )}
 
-      {checkedClean && (
+      {checkedClean && !inline && (
         <p className="aw-spec-message" data-testid="spec-check-clean">
           <span className="aw-spec-message-text">Checked: nothing blocks approval, and nothing moved.</span>
         </p>
@@ -844,7 +866,7 @@ export function useSpecPhaseControls(
         </ul>
       )}
 
-      {gaps.length > 0 && (
+      {gaps.length > 0 && (!inline || gapsOverridable) && (
         <div className="aw-spec-message" data-tone="warn" data-testid="approval-warnings">
           <span className="aw-spec-message-text">
             {gapsOverridable
@@ -882,7 +904,7 @@ export function useSpecPhaseControls(
         </div>
       )}
 
-      {blocking.length > 0 && (
+      {blocking.length > 0 && !inline && (
         <ul className="aw-spec-message" data-tone="warn" data-testid="spec-blocking">
           {blocking.map((finding) => (
             <li key={`${finding.code}:${finding.where}`} className="flex items-start gap-1.5">
@@ -980,6 +1002,21 @@ export function useSpecPhaseControls(
     archive,
     remove,
     rigorChoice: { value: pendingRigor ?? document.rigor, onChange: onChooseRigor, disabled: busy || setRigor.isPending },
+    actions: {
+      check: () => void onCheck(),
+      approve: () => onApprove(),
+      approveAndBuild: () => {
+        setBuildRefusal(null)
+        setBuilding('approve')
+      },
+      build: () => {
+        setBuildRefusal(null)
+        setBuilding('build')
+      },
+      reopen: onReopen,
+      busy,
+    },
+    findings: { blocking, gaps, checking: check.isPending, checked: checkedOnce, clean: checkedClean },
     badges,
     messages,
     dialogs,

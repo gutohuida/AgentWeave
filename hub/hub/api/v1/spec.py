@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import (
     already_built,
     blocking,
+    build_figures,
     builds,
     deletion,
     loop_history,
@@ -742,6 +743,8 @@ async def list_documents(
         return found
 
     on_disk = await blocking.run(_read_all) if workspace is not None else {}
+    # The page's list marks a document with a build running and says how far it has got.
+    running = await build_figures.running_progress(session, project_id)
     views = []
     for document in documents:
         view = _document_view(document, steps)
@@ -750,6 +753,8 @@ async def list_documents(
         if document.id in amended:
             # tester-amends: what a tester changed and how much the operator has yet to review.
             view["amendments"] = amended[document.id]
+        if document.id in running:
+            view["build"] = running[document.id]
         if document.path in on_disk:
             content = on_disk[document.path]
             view["diverged"] = spec_lifecycle.divergence(document, content) is not None
@@ -4145,6 +4150,19 @@ async def update_build(
                 )
             job = await builds.resume(session, build)
     return await _after_build_change(session, project_id, build, job)
+
+
+@router.get("/builds/{build_id}/figures")
+async def build_figures_of(
+    build_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """What the build has taken so far: its runs, its wall time split by what it was doing, and its
+    cost split by who spent it (`build-progress-on-the-document`). Computed per read."""
+    project_id, _ = project
+    build = await _project_build(session, project_id, build_id)
+    return await build_figures.figures(session, build)
 
 
 @router.post("/builds/{build_id}/stop")
