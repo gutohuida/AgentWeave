@@ -40568,7 +40568,7 @@ All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's 
 
 ## F1053 (C) -- every press of Check starts the vault's spec check, a model run, even for unchanged or blocked content
 
-**Status:** open 2026-10-27. Found by the review of slice C (`exploring-ends-at-an-approved-plan`).
+**Status:** fixed 2026-10-27 (Tier 0): the route starts the check only for a document with no blocking gap whose content version the newest firing (not a failed one) has not recorded in its subject; the firing now records `content_version` (`hub/tests/test_check_starts_the_vault_check_once_per_version.py`).
 **Source:** code
 **Theme:** Spec flow
 **Ready:** yes

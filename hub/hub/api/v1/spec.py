@@ -3179,18 +3179,25 @@ async def check_document(
             detail={"message": str(exc), "code": exc.code},
         ) from exc
     content = spec_documents.read_document(workspace, document.path)
-    background.add_task(
-        vault_spec_check.check_in_background,
-        project_id,
-        document.path,
-        trigger=vault_spec_check.TRIGGER,
-    )
+    version = spec_documents.content_version(content)
+    # A model run per press would be a cost the operator cannot see (F1053): only a document with
+    # no blocking gap, and only a content version the newest firing has not already checked.
+    if not found_blocking and not await vault_spec_check.already_checked(
+        session, project_id, document.path, version
+    ):
+        background.add_task(
+            vault_spec_check.check_in_background,
+            project_id,
+            document.path,
+            trigger=vault_spec_check.TRIGGER,
+            content_version=version,
+        )
     return {
         **await _project_document_view(session, project_id, document),
         "blocking": found_blocking,
         "warnings": warnings,
         "ready": not found_blocking,
-        "content_version": spec_documents.content_version(content),
+        "content_version": version,
     }
 
 
