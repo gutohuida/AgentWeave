@@ -9,6 +9,7 @@ import type { SpecDocumentRecord } from '@/api/spec'
 import type { Task } from '@/api/tasks'
 import { agentColorVars } from '@/lib/agentColors'
 import { hubDate } from '@/lib/hubTime'
+import type { AppSettingsSection } from '@/lib/navigation'
 
 export interface CommandPaletteAgent {
   name: string
@@ -26,7 +27,20 @@ interface CommandPaletteProps {
   onOpenAgent: (agent: string) => void
   onOpenDocument: (path: string) => void
   onOpenTask: (taskId: string) => void
+  /** App settings (the operator's own); it works with no project open. */
+  onOpenAppSettings?: (section: AppSettingsSection) => void
+  /** Without an open project there are no project or agent settings to offer. */
+  onOpenProjectSettings?: () => void
+  onOpenAgentSettings?: (agent: string) => void
 }
+
+/** What 'settings' is searched by: each page's own words, so 'sound', 'notif', 'dark' and 'hub'
+ *  all find the page they mean. cmdk matches `value` and `keywords` together. */
+const APP_SETTINGS_ENTRIES: ReadonlyArray<{ section: AppSettingsSection; label: string; sub: string; keywords: string[] }> = [
+  { section: 'notifications', label: 'Sound and notifications', sub: 'App settings', keywords: ['sound', 'notifications', 'notify', 'volume', 'alerts', 'bell'] },
+  { section: 'appearance', label: 'Appearance', sub: 'App settings', keywords: ['theme', 'dark', 'light', 'mode'] },
+  { section: 'connection', label: 'Hub connection', sub: 'App settings', keywords: ['hub', 'address', 'key', 'url', 'server'] },
+]
 
 /**
  * Cmd+K / Ctrl+K quick navigation (D3). Reads data the app already loaded elsewhere — no fetch
@@ -47,6 +61,9 @@ export function CommandPalette({
   onOpenAgent,
   onOpenDocument,
   onOpenTask,
+  onOpenAppSettings,
+  onOpenProjectSettings,
+  onOpenAgentSettings,
 }: CommandPaletteProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -227,6 +244,65 @@ export function CommandPalette({
                 <span className="palette-row-main"><span className="palette-row-title">{highlight(label)}</span><span className="palette-row-sub">Conversation · updated {formatDistanceToNow(hubDate(conversation.updated_at), { addSuffix: true })}</span></span>
               </Command.Item>
             ))}
+          </Command.Group>
+        )}
+
+        {(onOpenAppSettings || onOpenProjectSettings || (onOpenAgentSettings && agents.length > 0)) && (
+          <Command.Group heading="Settings">
+            {onOpenAppSettings
+              ? APP_SETTINGS_ENTRIES.map((entry) => (
+                  <Command.Item
+                    key={entry.section}
+                    value={`settings-app-${entry.section} ${entry.label}`}
+                    keywords={['settings', 'app settings', ...entry.keywords]}
+                    onSelect={() => {
+                      onOpenAppSettings(entry.section)
+                      close()
+                    }}
+                  >
+                    <Icon name={entry.section === 'notifications' ? 'notifications' : entry.section === 'appearance' ? 'palette' : 'link'} size={14} className="palette-row-icon" style={{ color: 'var(--text-3)' }} />
+                    <span className="palette-row-main">
+                      <span className="palette-row-title">{highlight(entry.label)}</span>
+                      <span className="palette-row-sub">{entry.sub} · yours, on this Hub</span>
+                    </span>
+                  </Command.Item>
+                ))
+              : null}
+            {onOpenProjectSettings ? (
+              <Command.Item
+                value="settings-project Project settings"
+                keywords={['settings', 'project', 'hop budget', 'runners', 'charters']}
+                onSelect={() => {
+                  onOpenProjectSettings()
+                  close()
+                }}
+              >
+                <Icon name="settings" size={14} className="palette-row-icon" style={{ color: 'var(--text-3)' }} />
+                <span className="palette-row-main">
+                  <span className="palette-row-title">{highlight('Project settings')}</span>
+                  <span className="palette-row-sub">This project’s</span>
+                </span>
+              </Command.Item>
+            ) : null}
+            {onOpenAgentSettings && query.trim()
+              ? agents.map((agent) => (
+                  <Command.Item
+                    key={`settings-agent-${agent.name}`}
+                    value={`settings-agent-${agent.name} ${agent.name} settings`}
+                    keywords={['settings', 'agent settings']}
+                    onSelect={() => {
+                      onOpenAgentSettings(agent.name)
+                      close()
+                    }}
+                  >
+                    <Icon name="settings" size={14} className="palette-row-icon" style={{ color: 'var(--text-3)' }} />
+                    <span className="palette-row-main">
+                      <span className="palette-row-title">{highlight(`${agent.name} settings`)}</span>
+                      <span className="palette-row-sub">This agent’s</span>
+                    </span>
+                  </Command.Item>
+                ))
+              : null}
           </Command.Group>
         )}
 

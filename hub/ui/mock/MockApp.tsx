@@ -2,7 +2,7 @@ import * as React from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 import { Toaster } from '@/components/ui/toast'
-import { PROJECT_TABS, type ProjectTab } from '@/lib/navigation'
+import { APP_SETTINGS_SECTIONS, PROJECT_TABS, type AppSettingsSection, type ProjectTab } from '@/lib/navigation'
 import { MOCK_NOW, project, projects, tasks } from './fixtures'
 import { beforeKey, type MockRoute } from './routes'
 import { SCREENS, screenFor } from './screens'
@@ -18,6 +18,10 @@ function parseHash(): MockRoute {
   if (kind === 'conversation' && a) return { kind: 'conversation', agent: a, conversationId: b || null, ...(c === 'spec' || c === 'specs' ? { panel: c } : {}) }
   if (kind === 'settings') return { kind: 'settings', section: (a as never) || 'general' }
   if (kind === 'agent-settings' && a) return { kind: 'agent-settings', agent: a, section: (b as never) || 'execution' }
+  if (kind === 'app-settings') {
+    const section = (APP_SETTINGS_SECTIONS as readonly string[]).includes(a ?? '') ? (a as AppSettingsSection) : 'notifications'
+    return { kind: 'app-settings', section }
+  }
   if (kind === 'gallery') return { kind: 'gallery' }
   if (kind === 'thread') return { kind: 'thread' }
   return { kind: 'tab', tab: 'overview' }
@@ -33,6 +37,8 @@ function toHash(route: MockRoute): string {
       return `settings/${route.section}`
     case 'agent-settings':
       return `agent-settings/${route.agent}/${route.section}`
+    case 'app-settings':
+      return `app-settings/${route.section}`
     case 'gallery':
       return 'gallery'
     case 'thread':
@@ -89,6 +95,8 @@ export function MockApp() {
         onOpenAgentSettings={(_, agent) => go({ kind: 'agent-settings', agent, section: 'execution' })}
         onAddAgent={() => undefined}
         onAddProject={() => undefined}
+        onOpenAppSettings={() => go({ kind: 'app-settings', section: 'notifications' })}
+        appSettingsActive={route.kind === 'app-settings'}
       />
       <div className="aw-main">
         <TopBar

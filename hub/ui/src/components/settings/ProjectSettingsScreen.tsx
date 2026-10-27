@@ -44,11 +44,14 @@ export function ProjectSettingsScreen({
   section,
   onSelectSection,
   onNavigate,
+  onOpenAppSettings,
 }: {
   section: EnvironmentSection
   onSelectSection: (section: EnvironmentSection) => void
   /** A section pointing elsewhere (General's token limit → Budgets). */
   onNavigate?: (value: string) => void
+  /** Where sound, notifications, appearance and the Hub connection are: the operator's own. */
+  onOpenAppSettings?: () => void
 }) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { data: projects = [] } = useProjects()
@@ -108,6 +111,7 @@ export function ProjectSettingsScreen({
         items={SECTIONS.map((item) => ({ ...item, meta: meta[item.id] }))}
         active={section}
         onSelect={onSelectSection}
+        footer={onOpenAppSettings ? { label: 'App settings', icon: 'settings', onClick: onOpenAppSettings } : undefined}
       >
         {body}
       </SettingsNavLayout>

@@ -12,7 +12,6 @@ import { describeThreshold } from '@/components/environment/describeThreshold'
 import { CommittedInput } from './CommittedInput'
 import { PROJECT_DEFAULTS, permissionOptions, wholeNumber } from './settingsOptions'
 import { ReachGrantsChips } from './ReachGrantsChips'
-import { NotificationSettings } from './NotificationSettings'
 
 /** Project settings → General. Every row applies on change (numbers when you leave the field);
  *  the container saves the patch and confirms with a toast. Rows that differ from the Hub's
@@ -435,8 +434,6 @@ export function GeneralSettings({
           }
         />
       </SettingsGroup>
-
-      <NotificationSettings />
 
       <SettingsGroup title="Project">
         <SettingsRow
