@@ -35,6 +35,17 @@ def _refuse_symlinks(self, target, target_is_directory=False):  # noqa: ANN001, 
     raise OSError(_PRIVILEGE)
 
 
+@pytest.fixture(autouse=True)
+def _no_junctions_either(monkeypatch):
+    """The Hub falls back to a directory junction where a symlink is refused
+    (`test_dependency_links_fall_back_to_junctions.py`); a link is reported only when both fail."""
+
+    def refuse(source, link):  # noqa: ANN001, ANN202
+        raise OSError("no junction either")
+
+    monkeypatch.setattr(worktrees, "_make_junction", refuse)
+
+
 def test_a_failed_link_is_returned_with_its_reason(tmp_path):
     repo = _init_repo(tmp_path / "repo")
     (repo / "node_modules").mkdir()

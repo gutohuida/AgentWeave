@@ -246,6 +246,13 @@ def _remove_checkout(root: Path, path: Path) -> None:
     # F521: a run killed mid-`add` leaves the registration `locked`. One `--force` does not remove a
     # locked worktree, `prune` skips it, and every later `add` is refused; unlock it first.
     _git(root, "worktree", "unlock", str(path))
+    # Links inside it first (F1038): the dependency links `_checkout` makes are junctions where
+    # symlinks are refused, and git and `rmtree` both delete through a junction. A link that
+    # cannot be removed leaves the checkout in place rather than emptying what it points at.
+    from .worktrees import remove_links_in
+
+    if remove_links_in(path):
+        return
     _git(
         root,
         "worktree",
@@ -255,7 +262,7 @@ def _remove_checkout(root: Path, path: Path) -> None:
         str(path),
         timeout=CHECKOUT_TIMEOUT_SECONDS,
     )
-    if path.exists():
+    if path.exists() and not remove_links_in(path):
         shutil.rmtree(path, ignore_errors=True)
     _git(root, "worktree", "prune")
 
