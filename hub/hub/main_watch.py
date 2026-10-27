@@ -69,6 +69,8 @@ class Move:
     rewrite: bool
     #: First-parent commits from `old_tip` to `new_tip`, newest first: `{"sha", "subject", "author"}`.
     commits: List[Dict[str, str]] = field(default_factory=list)
+    #: How many further commits the stretch held beyond `MAX_COMMITS`.
+    more: int = 0
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
@@ -96,7 +98,7 @@ def read_move(root: Path, old_tip: str, new_tip: str) -> Move:
         root,
         "log",
         "--first-parent",
-        f"--max-count={MAX_COMMITS}",
+        f"--max-count={MAX_COMMITS + 1}",
         f"--format=%H{_SEP}%s{_SEP}%an",
         new_tip,
         f"^{old_tip}",
@@ -109,7 +111,30 @@ def read_move(root: Path, old_tip: str, new_tip: str) -> Move:
         parts = line.split(_SEP)
         if len(parts) == 3:
             commits.append({"sha": parts[0], "subject": parts[1], "author": parts[2]})
-    return Move(old_tip=old_tip, new_tip=new_tip, rewrite=rewrite, commits=commits)
+    more = 0
+    if len(commits) > MAX_COMMITS:
+        counted = _git(root, "rev-list", "--first-parent", "--count", new_tip, f"^{old_tip}")
+        try:
+            total = int((counted.stdout or "").strip())
+        except ValueError:
+            total = len(commits)
+        more = max(total - MAX_COMMITS, 1)
+        commits = commits[:MAX_COMMITS]
+    return Move(old_tip=old_tip, new_tip=new_tip, rewrite=rewrite, commits=commits, more=more)
+
+
+def _with_overflow(
+    listed: List[Dict[str, str]], prior: List[Dict[str, Any]], more: int
+) -> List[Dict[str, Any]]:
+    """The notice's commits: *listed* first, then what *prior* held, cut at `MAX_COMMITS`, with one
+    trailing entry saying how many more there were (`more`) rather than dropping them silently."""
+    carried = sum(int(c.get("more", 0)) for c in prior)
+    combined = listed + [c for c in prior if "more" not in c]
+    overflow = more + carried + max(len(combined) - MAX_COMMITS, 0)
+    kept: List[Dict[str, Any]] = list(combined[:MAX_COMMITS])
+    if overflow:
+        kept.append({"sha": "", "subject": f"and {overflow} more", "author": "", "more": overflow})
+    return kept
 
 
 async def _recorded_merges(session: AsyncSession, project_id: str, shas: List[str]) -> Set[str]:
@@ -152,6 +177,7 @@ def view(notice: MainNotice) -> Dict[str, Any]:
         "old_tip": notice.old_tip,
         "new_tip": notice.new_tip,
         "rewrite": bool(notice.rewrite),
+        "more": sum(int(c.get("more", 0)) for c in (notice.commits or [])),
         "commits": [
             {
                 "sha": c.get("sha", "")[:12],
@@ -209,7 +235,7 @@ async def observe(project_id: str, tip: str, root: Path) -> Optional[Dict[str, A
             session.add(notice)
         notice.new_tip = tip
         notice.rewrite = bool(notice.rewrite) or move.rewrite
-        notice.commits = (foreign + list(notice.commits or []))[:MAX_COMMITS]
+        notice.commits = _with_overflow(foreign, list(notice.commits or []), move.more)
         notice.updated_at = now
         await session.flush()
         payload = {

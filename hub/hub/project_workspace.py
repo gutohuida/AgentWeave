@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import ntpath
 import os
@@ -214,8 +215,11 @@ async def resolve_project_workspace(
             directory_state="unbound",
         )
 
+    # Off the loop: both touch the project's filesystem, which on an unreachable share blocks (the
+    # main watch resolves every project's workspace every 30 s).
     try:
-        canonical = canonicalize_project_directory(
+        canonical = await asyncio.to_thread(
+            canonicalize_project_directory,
             project.working_directory,
             hub_data_directory=hub_data_directory,
             workspace_root=workspace_root,
@@ -227,7 +231,7 @@ async def resolve_project_workspace(
         project.directory_state = "identity_conflict"
         raise ProjectIdentityConflict("project directory resolves to a different canonical path")
 
-    _validate_marker(canonical.path, project.id)
+    await asyncio.to_thread(_validate_marker, canonical.path, project.id)
     # Unchanged on every call but the first after a repair, and an unchanged attribute flushes
     # nothing. `last_seen_at` is deliberately not stamped here (F349): it changed on every call, so
     # every route that resolves a workspace autoflushed an `UPDATE projects` at its next query and
