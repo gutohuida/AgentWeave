@@ -6,6 +6,7 @@ import { hubDate } from '@/lib/hubTime'
 import { ApiError } from '@/api/client'
 import { ActivityLog } from './ActivityLog'
 import { LoadingThread } from '@/components/common/LoadingThread'
+import { ProjectWork } from './ProjectWork'
 
 /**
  * The project's ledger (slice project-ledger): what merged into main, what was spent and on what,
@@ -21,7 +22,9 @@ const NOTICE_LABEL: Record<string, string> = { context_warning: 'Context reading
 const NOTICE_TONE: Record<string, 'neutral' | 'amber'> = { context_warning: 'neutral' }
 const LANE_PREVIEW = 8
 
-function money(value: number): string {
+/** Dollars; null is a cost no record reports, which is unknown and never $0. */
+function money(value: number | null): string {
+  if (value === null) return 'unknown'
   if (value > 0 && value < 0.01) return '<$0.01'
   return `$${value.toFixed(2)}`
 }
@@ -58,7 +61,7 @@ function dayLabel(day: string): string {
 /** Spend by day: one series, so no legend; each bar names its day and amount on hover. */
 function SpendByDay({ days }: { days: Ledger['spend']['by_day'] }) {
   const [hover, setHover] = useState<number | null>(null)
-  const max = Math.max(...days.map((d) => d.usd), 0)
+  const max = Math.max(...days.map((d) => d.usd ?? 0), 0)
   if (days.length === 0 || max === 0) return <p className="aw-tl-meta">Nothing was spent yet.</p>
   const shown = hover != null ? days[hover] : null
   return (
@@ -79,7 +82,7 @@ function SpendByDay({ days }: { days: Ledger['spend']['by_day'] }) {
             type="button"
             className="aw-ledger-bar"
             data-active={hover === index ? 'true' : undefined}
-            style={{ '--h': `${Math.max(2, (day.usd / max) * 100)}%`, '--i': index } as CSSProperties}
+            style={{ '--h': `${Math.max(2, ((day.usd ?? 0) / max) * 100)}%`, '--i': index } as CSSProperties}
             onMouseEnter={() => setHover(index)}
             onFocus={() => setHover(index)}
             onBlur={() => setHover(null)}
@@ -103,12 +106,12 @@ function Ranked({
   testId,
   onOpen,
 }: {
-  rows: Array<{ key: string; label: string; usd: number; detail: string }>
+  rows: Array<{ key: string; label: string; usd: number | null; detail: string }>
   testId: string
   onOpen?: (key: string) => void
 }) {
   const [all, setAll] = useState(false)
-  const max = Math.max(...rows.map((r) => r.usd), 0)
+  const max = Math.max(...rows.map((r) => r.usd ?? 0), 0)
   if (rows.length === 0) return <p className="aw-tl-meta">None yet.</p>
   return (
     <div className="grid gap-1" data-testid={testId}>
@@ -122,7 +125,7 @@ function Ranked({
             <span className="aw-ledger-rank-label">{row.label}</span>
           )}
           <span className="aw-ledger-rank-track">
-            <span style={{ width: `${max ? Math.max(1.5, (row.usd / max) * 100) : 0}%` }} />
+            <span style={{ width: `${max ? Math.max(1.5, ((row.usd ?? 0) / max) * 100) : 0}%` }} />
           </span>
           <span className="aw-ledger-rank-value">{money(row.usd)}</span>
         </div>
@@ -248,6 +251,7 @@ export function ProjectLedger({ onOpenTask }: { onOpenTask: (taskId: string) => 
           <small className="aw-tl-meta">
             {tokens(spend.total_tokens)}
             {spend.worker_usd ? ` · ${money(spend.worker_usd)} by the Hub` : ''}
+            {spend.unpriced ? ` · ${spend.unpriced} unpriced` : ''}
           </small>
         </div>
         <div>
@@ -269,24 +273,16 @@ export function ProjectLedger({ onOpenTask }: { onOpenTask: (taskId: string) => 
         </div>
       </div>
 
+      {/* The Work section is the agent grouping's home: one figure per agent, from the same tally
+          as the spec page (the ledger's own spend-by-agent lane gave way to it). */}
+      <ProjectWork />
+
       <section className="aw-req-section">
         <h2 className="aw-req-heading">Spend by day</h2>
         <SpendByDay days={spend.by_day} />
       </section>
 
       <div className="aw-ledger-columns">
-        <section className="aw-req-section">
-          <h2 className="aw-req-heading">By agent</h2>
-          <Ranked
-            testId="ledger-spend-by-agent"
-            rows={spend.by_agent.map((a) => ({
-              key: a.agent,
-              label: a.agent,
-              usd: a.usd,
-              detail: `${a.turns} turns · ${tokens(a.tokens)}`,
-            }))}
-          />
-        </section>
         <section className="aw-req-section">
           <h2 className="aw-req-heading">By task</h2>
           <Ranked

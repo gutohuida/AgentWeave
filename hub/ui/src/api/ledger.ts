@@ -19,12 +19,15 @@ export interface ProjectLedger {
     at: string | null
   }>
   spend: {
-    total_usd: number
+    /** From the work tally. Null: no record reports a cost, which is unknown and never $0. */
+    total_usd: number | null
     total_tokens: number
     worker_usd: number
-    by_day: Array<{ day: string; usd: number; worker_usd: number; tokens: number }>
-    by_agent: Array<{ agent: string; usd: number; tokens: number; turns: number }>
-    by_task: Array<{ task_id: string; task_title: string | null; usd: number; tokens: number; turns: number }>
+    /** Runs counted beside the cost because no cost was reported for them. */
+    unpriced?: number
+    by_day: Array<{ day: string; usd: number | null; worker_usd: number; tokens: number }>
+    by_agent: Array<{ agent: string; usd: number | null; tokens: number; turns: number; unpriced?: number }>
+    by_task: Array<{ task_id: string; task_title: string | null; usd: number | null; tokens: number; turns: number }>
   }
   divergences: Array<{
     id: string

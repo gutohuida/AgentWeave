@@ -237,10 +237,12 @@ export function listEntries(specs: SpecEntry[], records: SpecDocumentRecord[]): 
 
 // ── Builds ──────────────────────────────────────────────────────────────
 
-const NO_FIGURES: Pick<BuildFigures, 'runs' | 'time' | 'cost'> = {
+const NO_FIGURES: Pick<BuildFigures, 'runs' | 'time' | 'cost' | 'unpriced' | 'checks'> = {
   runs: 0,
-  time: { building: 0, checks: 0, review: 0, waiting: 0 },
-  cost: { build: 0, review: 0, lead: 0 },
+  time: { building: 0, reviewing: 0, checks: 0, held: 0, review: 0, waiting: 0 },
+  cost: { build: 0, review: 0, lead: 0, mend: 0 },
+  unpriced: 0,
+  checks: { runs: 0, passed: 0, failed: 0, seconds: 0 },
 }
 
 /** The document's builds, newest first as the Hub lists them, numbered from the oldest. */
@@ -263,9 +265,11 @@ export function buildViews(builds: SpecBuild[], tasks: Task[], figures: Record<s
       landsOn: build.landing === 'main' ? 'main' : 'nowhere',
       budget: build.budget_cap_usd,
       tasks: countTasks(tasks.filter((t) => t.build_id === build.id)),
-      time: { building: mine.time.building, review: mine.time.review, checks: mine.time.checks, waiting: mine.time.waiting },
+      time: { ...mine.time },
       cost: mine.cost,
       runs: mine.runs,
+      unpriced: mine.unpriced,
+      checks: mine.checks,
     }
   })
 }

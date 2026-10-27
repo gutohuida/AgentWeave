@@ -426,7 +426,8 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 .aw-sp-legend-dot { width: 7px; height: 7px; flex: none; border-radius: 2px; }
 .aw-sp-legend-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aw-sp-legend-figure { color: var(--text); font-variant-numeric: tabular-nums; }
-.aw-sp-build-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+.aw-sp-build-foot { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 8px; }
+.aw-sp-checks { font-size: 11.5px; color: var(--text-3); }
 .aw-sp-empty-builds { border-style: dashed; }
 .aw-sp-empty-builds svg { color: var(--text-3); flex: none; }
 

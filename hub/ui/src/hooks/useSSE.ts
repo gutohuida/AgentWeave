@@ -506,6 +506,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           })
           // An approval merges into main and moves the ledger's lanes (slice project-ledger).
           inv({ queryKey: ['project', pid, 'ledger'] })
+          inv({ queryKey: ['project', pid, 'stats'] })
           inv({ queryKey: ['project', pid, 'status'] })
           // Neither payload carries `loop_id` (`tasks.py` broadcasts only `id`/`title`/`status`),
           // and `Task.loop_id` is write-once (design D14) so there is no reassignment to track —
@@ -528,6 +529,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         }
         case 'task_integration_retried':
           inv({ queryKey: ['project', pid, 'ledger'] })
+          inv({ queryKey: ['project', pid, 'stats'] })
           // The note reads a per-task key, and a retry appends a row to exactly one of them.
           inv({
             queryKey: ['project', pid, 'task', (event.data as { task_id?: string } | null)?.task_id, 'integrations'],
@@ -596,6 +598,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv({ queryKey: ['project', pid, 'accounting'] })
           // A run's spend and divergence are ledger lanes.
           inv({ queryKey: ['project', pid, 'ledger'] })
+          inv({ queryKey: ['project', pid, 'stats'] })
           inv({ queryKey: ['projects'] })
           // A run belongs to a task's story (its cost, its duration); an open drawer refetches it.
           invalidateTaskStories(queryClient, pid)

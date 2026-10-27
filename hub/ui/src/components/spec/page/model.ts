@@ -133,23 +133,33 @@ export const DRIVER_MEANING: Record<BuildDriver, string> = {
 /** Wall time, in seconds, split by what the build was doing. */
 export interface BuildTime {
   building: number
-  review: number
+  reviewing: number
   checks: number
+  /** Done and waiting, with the newest check on it failed (`work_tally`: held by a failed check). */
+  held: number
+  /** Done and waiting for a reviewer. */
+  review: number
   waiting: number
 }
 
+/** In the order the Hub gives an instant to the first part that applies, so the bar reads left to
+ *  right as the work moves: a part's seconds never overlap another's. */
 export const TIME_PARTS: Array<{ key: keyof BuildTime; label: string; tone: string }> = [
   { key: 'building', label: 'Building', tone: 'var(--blue)' },
-  { key: 'review', label: 'Waiting for review', tone: 'var(--amber)' },
+  { key: 'reviewing', label: 'Reviewing', tone: 'var(--purple)' },
   { key: 'checks', label: 'Checks', tone: 'var(--ring)' },
+  { key: 'held', label: 'Held by a failed check', tone: 'var(--red)' },
+  { key: 'review', label: 'Waiting for review', tone: 'var(--amber)' },
   { key: 'waiting', label: 'Waiting to be handed out', tone: 'var(--text-3)' },
 ]
 
-/** Dollars, split by who spent them. */
+/** Dollars, split by who spent them (mending: the Hub's mender, on a line of its own). A role whose
+ *  runs reported no cost is null: unknown, not $0. */
 export interface BuildCost {
-  build: number
-  review: number
-  lead: number
+  build: number | null
+  review: number | null
+  lead: number | null
+  mend: number | null
 }
 
 export interface BuildView {
@@ -171,6 +181,10 @@ export interface BuildView {
   time: BuildTime
   cost: BuildCost
   runs: number
+  /** Runs counted beside the cost: none reported one. */
+  unpriced: number
+  /** The build's check runs, on a line of their own. */
+  checks: { runs: number; passed: number; failed: number; seconds: number }
 }
 
 export interface StartBuildChoice {

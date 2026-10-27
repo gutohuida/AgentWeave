@@ -45,7 +45,24 @@ vi.mock('@/api/ledger', async (importOriginal) => {
   return { ...actual, useProjectLedger: () => ({ data: LEDGER, isLoading: false, isError: false }) }
 })
 
+// The Work section has its own test (projectWork.test.tsx); here it is the agent grouping's home.
+vi.mock('@/components/activity/ProjectWork', () => ({ ProjectWork: () => <div data-testid="work-stub" /> }))
+
 describe('ProjectLedger', () => {
+  it('leaves per-agent spend to the Work section, one figure per agent', () => {
+    render(<ProjectLedger onOpenTask={vi.fn()} />)
+    expect(screen.getByTestId('work-stub')).toBeInTheDocument()
+    expect(screen.queryByTestId('ledger-spend-by-agent')).toBeNull()
+    expect(screen.getByTestId('ledger-spend-by-task')).toBeInTheDocument()
+  })
+
+  it('shows a total no record reports as unknown, never $0', () => {
+    LEDGER.spend.total_usd = null
+    render(<ProjectLedger onOpenTask={vi.fn()} />)
+    expect(screen.getByTestId('ledger-total-spend').textContent).toBe('unknown')
+    LEDGER.spend.total_usd = 2.6
+  })
+
   it('shows the route’s totals', () => {
     render(<ProjectLedger onOpenTask={vi.fn()} />)
     expect(screen.getByTestId('ledger-total-spend').textContent).toBe('$2.60')
