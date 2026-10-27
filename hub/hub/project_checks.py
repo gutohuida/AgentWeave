@@ -847,6 +847,28 @@ async def _finish(run_id: str, **fields: Any) -> None:
         if fields.get("state") in (*DECIDED, SUPERSEDED):
             run.ended_at = datetime.now(timezone.utc)
         await session.commit()
+        if fields.get("state") in DECIDED:
+            await _announce_finished(session, run)
+
+
+async def _announce_finished(session: AsyncSession, run: TaskCheckRun) -> None:
+    """Tell the operator's app a task's checks have decided, so a landing that waited can be pressed
+    and the operator is called (`every-task-can-always-be-moved-on`, FR-12). Never fails the run."""
+    from .sse import sse_manager
+
+    try:
+        task = await session.get(Task, run.task_id)
+        await sse_manager.broadcast(
+            run.project_id,
+            "task_checks_finished",
+            {
+                "task_id": run.task_id,
+                "task_title": task.title if task is not None else run.task_id,
+                "state": run.state,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("checks-finished broadcast failed", exc_info=True)
 
 
 # --- the queue -----------------------------------------------------------------------------------

@@ -43,6 +43,13 @@ function textFor(type: string, d: Payload): { kind: NotifyKind; text: string; co
       const tool = str(d, 'tool_name')
       return { kind: 'ask', text: `${str(d, 'agent') || 'An agent'} wants permission${tool ? ` for ${tool}` : ''}` }
     }
+    case 'task_checks_finished': {
+      // The checks a landing waited on have decided: the operator can press Land, or must act.
+      const task = str(d, 'task_title') || str(d, 'task_id') || 'A task'
+      return str(d, 'state') === 'passed'
+        ? { kind: 'done', text: `Checks passed for ${task}: it can be landed` }
+        : { kind: 'fail', text: `Checks did not pass for ${task}` }
+    }
     case 'stall_recorded':
       return { kind: 'fail', text: str(d, 'reason') ? `Work stalled: ${str(d, 'reason')}` : 'Work stalled' }
     case 'run_failed':

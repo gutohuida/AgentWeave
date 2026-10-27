@@ -131,7 +131,8 @@ describe('the landing action', () => {
         detail: {
           code: 'gate_unsatisfied',
           message: "This task's checks failed on the work approval would merge.",
-          checks: [{ name: 'pytest', status: 'failed', on_main: true }],
+          // The shape `GateRefusal.checks` really carries: a `state`, and the failing results.
+          checks: [{ state: 'failed', failing: [{ name: 'pytest', exit_code: 1, preexisting: true }] }],
           blocking: [], diagnostics: [], unmergeable: [], unaccepted: [], unfinished: [], reported: [],
         },
       }),

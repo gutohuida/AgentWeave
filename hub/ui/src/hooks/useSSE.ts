@@ -53,6 +53,7 @@ const SSE_EVENT_TYPES = [
   'loop_control_changed',
   'loop_edit_staged',
   'loop_edit_applied',
+  'task_checks_finished',
   'run_started',
   'run_completed',
   'run_failed',
@@ -559,6 +560,17 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv(agentListFilter(pid))
           inv({ queryKey: ['projects'] })
           break
+        case 'task_checks_finished': {
+          // The drawer's Land wait clears on this, without a reload, and the board's cards follow.
+          const data = event.data as { task_id?: string } | null
+          inv({
+            queryKey: data?.task_id
+              ? ['project', pid, 'task', data.task_id, 'checks']
+              : ['project', pid, 'task'],
+          })
+          inv({ queryKey: ['project', pid, 'tasks'] })
+          break
+        }
         case 'run_started':
         case 'run_completed':
         case 'run_failed':

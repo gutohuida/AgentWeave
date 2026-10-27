@@ -230,8 +230,12 @@ async def test_every_path_gives_the_same_answer_for_entering_review(app, holder,
 
 
 async def test_the_board_is_offered_exactly_the_moves_the_decision_allows(app, auth_headers):
-    """The operator's moves for a task are `decide_move`'s answer, not the map's: a completed task
-    its author holds is not offered 'under_review', which the Hub would refuse."""
+    """The operator's moves for a task are `decide_move`'s answer, not the map's.
+
+    Review is entered by naming who reviews (`reviewers`), so `under_review` is offered from a
+    completed task exactly when some agent the decision allows as its holder exists: a task its
+    author holds is not offered the move that keeps the author, and is offered the hand-off.
+    """
     from hub.task_transition_service import decide_move
     from hub.task_transitions import allowed_targets, operator
 
@@ -248,11 +252,44 @@ async def test_the_board_is_offered_exactly_the_moves_the_decision_allows(app, a
             for t in sorted(allowed_targets(status, "operator")):
                 if (await decide_move(session, task, t, operator())).allowed:
                     expected.append(t)
+            reviewers = []
+            if status == "completed":
+                for name in (AUTHOR, OTHER, MENDER):
+                    task.assignee = name
+                    if (await decide_move(session, task, "under_review", operator())).allowed:
+                        reviewers.append(name)
+                task.assignee = {"none": None, "author": AUTHOR, "other": OTHER, "mender": MENDER}[
+                    holder
+                ]
+                if reviewers and "under_review" not in expected:
+                    expected = sorted([*expected, "under_review"])
         assert routed.json()["moves"] == expected, (status, holder)
-        if (status, holder) == ("completed", "author"):
-            assert "under_review" not in expected
-        if (status, holder) == ("completed", "other"):
+        if status == "completed":
+            # Agents known to the project are AUTHOR and OTHER; the mender is not a roster agent here.
+            assert routed.json()["reviewers"] == [r for r in reviewers if r in (AUTHOR, OTHER)]
+            assert AUTHOR not in routed.json()["reviewers"]
             assert "under_review" in expected
+
+
+async def test_the_operator_hands_a_completed_task_to_a_reviewer_who_becomes_its_holder(
+    app, auth_headers
+):
+    await _agents()
+    task_id = await _task("completed", "author")
+    kept = await app.patch(
+        f"/api/v1/projects/proj-test/tasks/{task_id}",
+        json={"status": "under_review"},
+        headers=auth_headers,
+    )
+    assert kept.status_code == 403, kept.text
+    handed = await app.patch(
+        f"/api/v1/projects/proj-test/tasks/{task_id}",
+        json={"status": "under_review", "assignee": OTHER},
+        headers=auth_headers,
+    )
+    assert handed.status_code == 200, handed.text
+    assert handed.json()["status"] == "under_review"
+    assert handed.json()["assignee"] == OTHER
 
 
 @pytest.mark.parametrize("holder", HOLDERS)

@@ -183,6 +183,10 @@ class GateRefusal:
     # would merge. A seventh kind of claim: "approving records this work as good and lands none of
     # it". One entry, naming the branch and the commits.
     unlanded: List[Dict[str, Any]] = field(default_factory=list)
+    # Accepted evidence this task recorded for a requirement it is not linked to, naming a commit
+    # that is among the `unlanded` ones: approval merges only what a linked requirement's evidence
+    # names, so the remedy is the link, not new evidence (`every-task-can-always-be-moved-on` FR-11).
+    unlinked: List[Dict[str, Any]] = field(default_factory=list)
     # Set when the operator's stated reason cleared a failed or errored check result; the caller
     # records the reason on the transition.
     checks_overridden: bool = False
@@ -224,6 +228,7 @@ class GateRefusal:
                 self._unverified_detail(),
                 self._merge_detail(),
                 self._unaccepted_detail(),
+                self._unlinked_detail(),
                 self._unlanded_detail(),
                 self._unfinished_detail(),
                 self._checks_detail(),
@@ -417,6 +422,22 @@ class GateRefusal:
             f"only accepted evidence is merged. To land it, {ACCEPT_OR_GRANT}."
         )
 
+    def _unlinked_detail(self) -> str:
+        """Each unserved requirement by name, and the link that clears it."""
+        if not self.unlinked:
+            return ""
+        pieces = [
+            f"{entry.get('identifier') or 'a requirement'} at "
+            f"{str(entry.get('commit_sha') or '')[:12] or 'an unnamed commit'}"
+            for entry in self.unlinked
+        ]
+        return (
+            "This task has accepted evidence that approving would not merge, because the task is "
+            "not linked to the requirement it demonstrates: "
+            + "; ".join(pieces)
+            + ". Link the requirement to the task and approve again."
+        )
+
     def _unlanded_detail(self) -> str:
         """Name the branch and its commits, say why approving would leave them, and what clears it.
 
@@ -431,7 +452,9 @@ class GateRefusal:
         # F772: where every one of these commits is named by a piece awaiting judgement, the author
         # has recorded exactly what is asked for here, and accepting it (the `unaccepted` sentence)
         # is the whole remedy. Asking them to record it again sends them after what exists.
-        awaiting = {str(piece.get("commit_sha") or "") for piece in self.unaccepted} - {""}
+        awaiting = {
+            str(piece.get("commit_sha") or "") for piece in [*self.unaccepted, *self.unlinked]
+        } - {""}
         commits = [str(sha) for sha in entry.get("commits") or [] if sha]
         if commits and all(sha in awaiting for sha in commits):
             return ""
@@ -576,6 +599,7 @@ class GateRefusal:
             "unmergeable": list(self.unmergeable),
             "unaccepted": list(self.unaccepted),
             "unlanded": list(self.unlanded),
+            "unlinked": list(self.unlinked),
             "unfinished": list(self.unfinished),
             "reported": list(self.reported),
             "unmerged_prerequisites": list(self.unmerged_prerequisites),
@@ -854,7 +878,9 @@ def _merges_something_new(situation: _MergeSituation) -> bool:
     )
 
 
-async def _check_unlanded(task: Task, refusal: GateRefusal, situation: _MergeSituation) -> None:
+async def _check_unlanded(
+    session: AsyncSession, task: Task, refusal: GateRefusal, situation: _MergeSituation
+) -> None:
     """Refuse where the task's own branch holds commits approval would leave behind (F681).
 
     Rigor-independent, as `_check_mergeable` is: this is not a claim that the work is unproven but
@@ -876,6 +902,49 @@ async def _check_unlanded(task: Task, refusal: GateRefusal, situation: _MergeSit
     refusal.unlanded.append(
         {"branch": branch, "target_branch": situation.main_branch, "commits": commits}
     )
+    await _check_unlinked(session, task, refusal, commits)
+
+
+async def _check_unlinked(
+    session: AsyncSession, task: Task, refusal: GateRefusal, commits: List[str]
+) -> None:
+    """Name the accepted evidence this task recorded for a requirement it does not serve.
+
+    Asked only once commits are left behind: it is the cause of that, where the evidence naming
+    them exists and is accepted but reaches no link. Evidence recorded since
+    `_serve_requirement_of_own_document` is linked as it is recorded; this is for what predates it.
+    """
+    from .db.models import EvidenceFootprint, RequirementEvidence
+
+    rows = (
+        await session.execute(
+            select(RequirementEvidence, EvidenceFootprint.commit_sha, SpecRequirement.identifier)
+            .join(EvidenceFootprint, EvidenceFootprint.evidence_id == RequirementEvidence.id)
+            .join(SpecRequirement, SpecRequirement.id == RequirementEvidence.requirement_id)
+            .where(
+                RequirementEvidence.task_id == task.id,
+                RequirementEvidence.review_state == "accepted",
+                EvidenceFootprint.kind == "git",
+                EvidenceFootprint.commit_sha.in_(commits),
+                ~RequirementEvidence.requirement_id.in_(
+                    select(TaskRequirementLink.requirement_id).where(
+                        TaskRequirementLink.task_id == task.id
+                    )
+                ),
+            )
+            .order_by(EvidenceFootprint.observed_at.asc())
+        )
+    ).all()
+    for evidence, commit_sha, identifier in rows:
+        refusal.unlinked.append(
+            {
+                "evidence_id": evidence.id,
+                "requirement_id": evidence.requirement_id,
+                "identifier": identifier,
+                "commit_sha": commit_sha,
+                "remedy": f"link {identifier} to the task",
+            }
+        )
 
 
 async def _check_prerequisites_merged(
@@ -1102,7 +1171,7 @@ async def evaluate(
     if situation is not None:
         await _check_mergeable(session, task, refusal, situation)
         await _check_unaccepted(session, task, refusal, situation)
-        await _check_unlanded(task, refusal, situation)
+        await _check_unlanded(session, task, refusal, situation)
         await _check_checks(
             session,
             task,

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { PriorityBadge, StatusBadge } from '@/components/common/Badge'
-import { ApiError, readableApiError } from '@/api/client'
+import { readableApiError } from '@/api/client'
 import {
   ApprovalReportEntry,
   DIVERGENCE_POLICY_LABELS,
@@ -25,6 +25,8 @@ import { useAgents } from '@/api/agents'
 import { useSpecDocuments } from '@/api/spec'
 import { TaskTransitionHistory } from '@/components/tasks/TaskTransitionHistory'
 import { TaskChecksRow } from '@/components/tasks/TaskChecksRow'
+import { LandingRemedies, LandWait } from '@/components/tasks/LandingRefusal'
+import { gateBodyOf, overrideOffered, type GateBody } from '@/components/tasks/gateRefusal'
 import { TaskIntegrationNote } from '@/components/tasks/TaskIntegrationNote'
 import { TaskStory } from '@/components/tasks/TaskStory'
 import { EvidenceLink } from '@/components/evidence/EvidenceLink'
@@ -44,25 +46,8 @@ import { hubDate } from '@/lib/hubTime'
  * Rendered only where approval is actually reachable from here, so a pending card carries no
  * warning about a merge that is several transitions away.
  */
-/** True when a refused landing was refused by failing checks and nothing else: the one refusal the
- *  operator may override, with a reason (F605). A live turn, an unmergeable commit or unverified
- *  requirements still stand, so no override is offered for them. */
-function onlyChecksRefuse(error: unknown): boolean {
-  if (!(error instanceof ApiError) || error.status !== 409) return false
-  let detail: Record<string, unknown> | undefined
-  try {
-    detail = (JSON.parse(error.message) as { detail?: Record<string, unknown> }).detail
-  } catch {
-    return false
-  }
-  if (!detail || detail.code !== 'gate_unsatisfied') return false
-  const filled = (key: string) => Array.isArray(detail?.[key]) && (detail?.[key] as unknown[]).length > 0
-  return (
-    filled('checks') &&
-    // F681: `unlanded` (work on the task's branch approval would not merge) is no checks failure.
-    !['blocking', 'diagnostics', 'unmergeable', 'unaccepted', 'unlanded', 'unfinished'].some(filled)
-  )
-}
+/** A control that cannot act looks it: dimmed and not-allowed, never only inert. */
+const DISABLED_LOOK = { opacity: 0.45, cursor: 'not-allowed' } as const
 
 function ApprovalWritesNote({ taskId, canApprove }: { taskId: string; canApprove: boolean }) {
   const { data } = useTaskIntegrationPreview(taskId, canApprove)
@@ -288,6 +273,10 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const [refusal, setRefusal] = useState<string | null>(null)
   // Set when Land was refused by failing checks alone: the operator may land anyway, saying why.
   const [checksOverride, setChecksOverride] = useState(false)
+  // The gate's structured refusal behind a refused landing, so each cause is shown with its remedy.
+  const [refusalBody, setRefusalBody] = useState<GateBody | null>(null)
+  // Open while the operator is choosing who reviews a completed task.
+  const [pickingReviewer, setPickingReviewer] = useState(false)
   const [overrideReason, setOverrideReason] = useState('')
   // F169: what the Hub reported instead of refusing when this task was approved. It arrives on the
   // approving response and nowhere else — a refetch answers `[]` — so it is held here for as long
@@ -571,13 +560,23 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
               persistent
               items={moves.map((next) => ({
                 id: next,
-                label: `Move to ${statusLabel(next)}`,
+                label:
+                  next === 'under_review' && task.status === 'completed'
+                    ? 'Hand to a reviewer…'
+                    : `Move to ${statusLabel(next)}`,
                 // Only this one leaves a control on screen asking for something. Every other move
                 // fires a mutation and leaves nothing to hold the keyboard, so every other move
                 // keeps Radix's default and returns focus to the trigger the operator opened.
-                takesFocus: next === 'blocked',
+                takesFocus: next === 'blocked' || (next === 'under_review' && task.status === 'completed'),
                 onSelect: () => {
                   setRefusal(null)
+                  setRefusalBody(null)
+                  if (next === 'under_review' && task.status === 'completed') {
+                    // Review is handed to someone: moving it while its author holds it is the move
+                    // the Hub refuses, so the operator is asked who reviews instead.
+                    setPickingReviewer(true)
+                    return
+                  }
                   if (next === 'blocked') {
                     // Ask what it is waiting for first. An unexplained block leaves the operator
                     // working out what they are holding up — which is the position they were in
@@ -635,17 +634,21 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                     color: 'var(--green)',
                     background: 'color-mix(in srgb, var(--green) 12%, transparent)',
                     border: '1px solid color-mix(in srgb, var(--green) 30%, transparent)',
+                    ...(landTask.isPending ? DISABLED_LOOK : {}),
                   }}
                   onClick={() => {
                     setRefusal(null)
+                    setRefusalBody(null)
                     setChecksOverride(false)
                     landTask.mutate(
                       { id: task.id },
                       {
                         onSuccess: (landed) => setApprovalReport(landed.approval_report ?? []),
                         onError: (error: unknown) => {
+                          const body = gateBodyOf(error)
                           setRefusal(readableApiError(error, 'The Hub refused this landing.'))
-                          setChecksOverride(onlyChecksRefuse(error))
+                          setRefusalBody(body)
+                          setChecksOverride(body ? overrideOffered(body) : false)
                         },
                       },
                     )
@@ -654,6 +657,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                   {landTask.isPending ? 'Landing…' : 'Land it'}
                 </button>
               )}
+              {/* Beside Land, in the first viewport: what the landing is waiting for. */}
+              {task.status === 'completed' && <LandWait taskId={task.id} />}
               {/* F532: the operator's way to take a task off the board for good, rather than
                   rejecting it and leaving it counted. Refused by the Hub while a run is on it. */}
               <button
@@ -861,6 +866,47 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             {refusal}
           </p>
         )}
+        {refusal && refusalBody && task.status === 'completed' && (
+          <LandingRemedies taskId={task.id} body={refusalBody} />
+        )}
+        {pickingReviewer && task.status === 'completed' && (
+          <div
+            data-testid={`task-review-picker-${task.id}`}
+            className="flex flex-wrap items-center gap-2 text-[11px]"
+          >
+            <span style={{ color: 'var(--text-2)' }}>Who reviews it?</span>
+            {(taskMoves?.reviewers ?? []).map((name) => (
+              <button
+                key={name}
+                type="button"
+                data-testid={`task-review-pick-${name}`}
+                disabled={updateTask.isPending}
+                className="px-2 py-0.5 rounded"
+                style={{ border: '1px solid var(--border)' }}
+                onClick={() =>
+                  updateTask.mutate(
+                    { id: task.id, status: 'under_review', assignee: name },
+                    {
+                      onSuccess: () => setPickingReviewer(false),
+                      onError: (error: unknown) =>
+                        setRefusal(readableApiError(error, 'The Hub refused this change.')),
+                    },
+                  )
+                }
+              >
+                {name}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="text-[11px]"
+              style={{ color: 'var(--text-3)' }}
+              onClick={() => setPickingReviewer(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
         {refusal && checksOverride && task.status === 'completed' && (
           <div className="flex items-center gap-2 text-[11px]">
             <input
@@ -874,8 +920,13 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
               type="button"
               data-testid={`task-land-anyway-${task.id}`}
               disabled={!overrideReason.trim() || landTask.isPending}
+              title={overrideReason.trim() ? undefined : 'Say why you are landing over the failing checks first'}
               className="px-2 py-0.5 rounded"
-              style={{ color: 'var(--amber)', border: '1px solid color-mix(in srgb, var(--amber) 35%, transparent)' }}
+              style={{
+                color: 'var(--amber)',
+                border: '1px solid color-mix(in srgb, var(--amber) 35%, transparent)',
+                ...(!overrideReason.trim() || landTask.isPending ? DISABLED_LOOK : {}),
+              }}
               onClick={() =>
                 landTask.mutate(
                   { id: task.id, override_checks_reason: overrideReason.trim() },
@@ -886,8 +937,10 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                       setApprovalReport(landed.approval_report ?? [])
                     },
                     onError: (error: unknown) => {
+                      const body = gateBodyOf(error)
                       setRefusal(readableApiError(error, 'The Hub refused this landing.'))
-                      setChecksOverride(onlyChecksRefuse(error))
+                      setRefusalBody(body)
+                      setChecksOverride(body ? overrideOffered(body) : false)
                     },
                   },
                 )
