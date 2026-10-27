@@ -117,8 +117,10 @@ JOBS = (
             "When the project's work stalls -- a merge skipped or failed, a loop with nothing it "
             "can start, a refused turn, a dead run, or no progress for 30 minutes -- the mender "
             "reads the cause and unblocks the agents on its own: it resolves conflicts and lands "
-            "the work without review. It asks you under Needs you before anything hardcore, such "
-            "as touching changes it did not make. Needs a runner. Off: stalls are only recorded."
+            "the work without review. Before anything hardcore, such as touching changes it did "
+            "not make, it leaves you a note under Needs you and does not do it; your answer wakes "
+            "it later. Runs on the runner's CLI default model unless you choose one. Needs a "
+            "runner. Off: stalls are only recorded."
         ),
         trigger="stall_recorded",
     ),

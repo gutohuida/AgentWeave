@@ -241,7 +241,7 @@ async def test_a_stall_wakes_the_mender_once(app, auth_headers, builder, tmp_pat
     assert [entry.origin_type for entry in entries] == ["mender"]
     brief = entries[0].content
     assert stall.id in brief and "uncommitted" in brief and "notes.txt" in brief
-    assert "ask the operator first" in brief.lower()
+    assert "leave the operator a note" in brief.lower()
     assert (conversation.origin, conversation.agent) == ("mender", stalls.MENDER)
 
 
