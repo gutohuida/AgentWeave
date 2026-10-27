@@ -2592,3 +2592,12 @@ When `hub/hub/mcp_server.py` changes, its tool-server digest is new, and several
 - **App windows that share a storage folder share one WebView2 browser process, and a second window's browser arguments are ignored.** With the operator's app open (`~/.agentweave/hub/app-window`), a scratch launch's `--remote-debugging-port` and autoplay flag never applied. A drive that needs its own arguments runs the CLI with `USERPROFILE`/`HOME` pointed at a testbed folder. The operator's own app takes a new argument only on a launch with no app window already open. (2026-10-23)
 - **`git worktree remove --force` (git 2.49.0.windows.1) follows a directory junction inside the worktree and deletes the target's contents.** The `:8000` Hub's task-worktree cleanup emptied the main checkout's `hub/ui/node_modules` twice in one evening through an agent's `node_modules` junction (F1038). Until that is fixed, expect `npm ci` in `hub/ui` after the Hub's flow tasks run; never junction a task worktree's `node_modules`. (2026-10-23)
 - **pywebview's `js_api` survives `window.load_url`**: the object passed to `create_window(js_api=...)` with the splash's HTML is still `window.pywebview.api` on the app's URL. Public methods are exposed; names starting with `_` are not. `window.set_title` works from a js_api call's thread. (2026-10-23)
+
+## 2026-10-27 — restarting :8000 from a PowerShell one-liner
+
+- **A `py -3.11 -c "..."` with nested quotes inside a PowerShell command line breaks on `*`,
+  `\"` and `$`, and the rest of the line still runs.** A backup written that way failed with
+  "The term '*' is not recognized" and the same line then stopped and restarted `:8000` with no
+  fresh backup (migration 0149 ran fine, but unprotected). Put the backup in a script file that
+  exits non-zero unless `pragma integrity_check` is `ok` and no run is `running`, and make the
+  restart script stop on that exit code (`$LASTEXITCODE`), never chain it with `;`. *(2026-10-27)*
