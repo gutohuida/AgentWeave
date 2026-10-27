@@ -105,6 +105,9 @@ function short(sha: string | null | undefined): string {
 function Summary({ story }: { story: Story }) {
   const { summary, task } = story
   const { accepted, rejected, awaiting } = summary.evidence
+  // K: held at its commit by a send-back that did not name it as failing; counted apart from
+  // rejected, which it is not.
+  const held = summary.evidence.held ?? 0
   const merged = summary.merged[summary.merged.length - 1]
   const cost = costCell(summary)
   return (
@@ -135,17 +138,22 @@ function Summary({ story }: { story: Story }) {
       <div>
         <span className="aw-story-label aw-story-label-row">
           Evidence
-          {accepted + awaiting + rejected > 0 ? (
+          {accepted + awaiting + rejected + held > 0 ? (
             <EvidenceLink focus={task.id} testId={`task-story-evidence-open-${task.id}`}>
               See all
             </EvidenceLink>
           ) : null}
         </span>
         <span className="aw-counts">
-          {accepted + awaiting + rejected === 0 ? <small className="aw-tl-meta">none yet</small> : null}
+          {accepted + awaiting + rejected + held === 0 ? <small className="aw-tl-meta">none yet</small> : null}
           {accepted ? <span className="tone-green">{accepted} accepted</span> : null}
           {awaiting ? <span className="tone-amber">{awaiting} waiting</span> : null}
           {rejected ? <span className="tone-red">{rejected} rejected</span> : null}
+          {held ? (
+            <span className="tone-neutral" title="Not named as failing when the task was sent back; recorded again at the next commit">
+              {held} held
+            </span>
+          ) : null}
         </span>
       </div>
       <div>

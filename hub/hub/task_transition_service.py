@@ -21,7 +21,7 @@ import asyncio
 import logging
 import subprocess
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Dict, Iterable, Optional
 
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -911,6 +911,7 @@ async def apply_transition(
     holder_named: bool = False,
     note: Optional[str] = None,
     closing_with: frozenset = frozenset(),
+    failing_pieces: Optional[Dict[str, str]] = None,
 ) -> Optional[TaskTransition]:
     """Move `task` to `to_status` as `actor`, recording it. Returns None when nothing changed.
 
@@ -923,9 +924,11 @@ async def apply_transition(
     (the same PATCH that sends the work back, F743), so the send-back does not return it to its
     author over the top of that.
 
-    A verdict decides the task's evidence (`the-reviewers-verdict-decides-the-tasks-evidence`):
-    `approved` accepts the pieces recorded for it, `revision_needed` and `rejected` reject them, with
-    *verdict_reason* (the verdict's notes) as the review's reason.
+    A verdict decides the task's evidence (`the-reviewers-verdict-decides-the-tasks-evidence`),
+    piece by piece (`each-piece-of-evidence-is-judged-on-its-own`): `approved` accepts the pieces
+    recorded for it with *verdict_reason* (the verdict's notes); `revision_needed` and `rejected`
+    reject only *failing_pieces* (evidence id to its own reason, `failing_pieces_of`) and hold every
+    other piece with *verdict_reason*. What it decided is written on the history row's note.
 
     Raises `TransitionRefusedError` (or a subclass) instead of mutating when the move is not permitted.
     The caller commits; this function stages the change and the history row together so a refusal
@@ -1033,6 +1036,7 @@ async def apply_transition(
     policy = ""
     reported: list = []
     overridden: Optional[str] = None
+    decided: Optional[str] = None
     if to_status == "approved":
         # The acting run, excluded from the gate's liveness check: a turn is never blocked by
         # itself (design D10). `None` for the operator, which excludes nothing.
@@ -1049,7 +1053,9 @@ async def apply_transition(
         # reason -- a conflict, failing checks -- rolls the acceptances back with it, so nothing is
         # recorded as accepted by an approval that did not happen.
         async with session.begin_nested():
-            await _decide_evidence_with_verdict(session, task, actor, "approved", verdict_reason)
+            decided = await _decide_evidence_with_verdict(
+                session, task, actor, "approved", verdict_reason
+            )
             refusal, policy = await evaluate_approval(
                 session,
                 task,
@@ -1082,7 +1088,15 @@ async def apply_transition(
     if to_status == "revision_needed" and not (holder_named and actor.is_operator):
         task.assignee = await _holder_of_sent_back_work(session, task, actor)
     if to_status in ("revision_needed", "rejected"):
-        await _decide_evidence_with_verdict(session, task, actor, to_status, verdict_reason)
+        decided = await _decide_evidence_with_verdict(
+            session, task, actor, to_status, verdict_reason, failing_pieces
+        )
+    if decided:
+        # Its own sentence after the caller's note, which may not end in one (L's check return).
+        lead = (note or "").rstrip()
+        if lead and not lead.endswith((".", "!", "?")):
+            lead += "."
+        note = f"{lead} {decided}" if lead else decided
 
     task.status = to_status
     transition = TaskTransition(
@@ -1210,27 +1224,35 @@ async def _decide_evidence_with_verdict(
     actor: Actor,
     to_status: str,
     verdict_reason: Optional[str],
-) -> None:
-    """The verdict on *task* decides the evidence recorded for it (vis-D4)."""
+    failing_pieces: Optional[Dict[str, str]] = None,
+) -> Optional[str]:
+    """The verdict on *task* decides the evidence recorded for it (vis-D4), piece by piece: a
+    send-back rejects only *failing_pieces* and holds the rest. Returns the history's account of
+    what it decided, or None when it decided nothing."""
     from . import requirement_evidence
-    from .spec_lifecycle import Actor as EvidenceActor
 
-    deciding = (
-        EvidenceActor(kind="operator", name="operator")
-        if actor.is_operator
-        else EvidenceActor(kind="agent", name=actor.agent or "", run_id=actor.run_id)
-    )
-    await requirement_evidence.decide_with_verdict(
+    reviews = await requirement_evidence.decide_with_verdict(
         session,
         task,
-        actor=deciding,
+        actor=evidence_actor(actor),
         decision=(
             requirement_evidence.ACCEPTED
             if to_status == "approved"
             else requirement_evidence.REJECTED
         ),
         reason=verdict_reason or "",
+        failing=failing_pieces,
     )
+    return await requirement_evidence.verdict_note(session, reviews)
+
+
+def evidence_actor(actor: Actor):
+    """*actor* as the evidence record names a decider (`spec_lifecycle.Actor`)."""
+    from .spec_lifecycle import Actor as EvidenceActor
+
+    if actor.is_operator:
+        return EvidenceActor(kind="operator", name="operator")
+    return EvidenceActor(kind="agent", name=actor.agent or "", run_id=actor.run_id)
 
 
 #: The statuses at which a task stops being worked, and so stops needing a checkout on disk. Neither

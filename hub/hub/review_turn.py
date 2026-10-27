@@ -339,7 +339,7 @@ async def verdict_evidence_sentence(
     *may_decide* is the reviewer's `can_accept_evidence` grant.
     """
     from . import task_integration
-    from .requirement_gate import _identifiers_for, rejected_identifiers
+    from .requirement_gate import _identifiers_for, held_identifiers, rejected_identifiers
 
     rejected = " ".join(
         part
@@ -347,6 +347,7 @@ async def verdict_evidence_sentence(
             await _dependencies_sentence(session, task),
             await _other_requirements_sentence(session, task),
             _rejected_sentence(await rejected_identifiers(session, task)),
+            _held_sentence(await held_identifiers(session, task)),
             await _checks_sentence(session, task),
         )
         if part
@@ -370,9 +371,12 @@ async def verdict_evidence_sentence(
     if own:
         parts.append(
             f"**Your verdict decides this task's evidence** ({'; '.join(named(r) for r in own)}). "
-            "Approving accepts it and merges the work; sending the task back with "
-            "`revision_needed` rejects it. Judge what each piece claims as part of the review, and "
-            "say in `notes` what you checked: your notes are the reason recorded on each piece."
+            "Approving accepts it and merges the work. Sending the task back with "
+            "`revision_needed` rejects only the pieces you name in `failing_pieces`, each with its "
+            'own reason (`[{"piece": "FR-3", "reason": "..."}]`); every piece you do not name is '
+            "held, not rejected, and its author records it again at the next commit. Judge what "
+            "each piece claims as part of the review, and say in `notes` what you checked: your "
+            "notes are the reason recorded on each piece you approve or hold."
         )
     if foreign:
         recorded = "; ".join(
@@ -509,6 +513,21 @@ def _rejected_sentence(identifiers: List[str]) -> Optional[str]:
         "records evidence that satisfies it. Replacing it is not your work: if that is still true "
         "when you decide, end with `revision_needed` and notes naming what was rejected and why "
         "-- that returns the task to its author."
+    )
+
+
+def _held_sentence(identifiers: List[str]) -> Optional[str]:
+    """K: a served requirement whose only current evidence a send-back held refuses `approved` at
+    every rigor, as a rejection does, until its author records it again at the next commit."""
+    if not identifiers:
+        return None
+    named = ", ".join(f"`{identifier}`" for identifier in identifiers)
+    return (
+        f"**{named} {'has' if len(identifiers) == 1 else 'have'} only held evidence**: an earlier "
+        "send-back held it without naming it as failing, and a held piece is not accepted, so "
+        "`approved` will be refused until its author records it again at the next commit. "
+        "Recording it is not your work: if that is still missing when you decide, end with "
+        "`revision_needed` and notes naming it -- that returns the task to its author."
     )
 
 

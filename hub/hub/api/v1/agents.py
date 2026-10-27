@@ -1126,17 +1126,22 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="update_task",
-            args="task_id, status=None, notes=None, requirement_ids=None, spec_document=None",
+            args=(
+                "task_id, status=None, notes=None, requirement_ids=None, spec_document=None, "
+                "failing_pieces=None"
+            ),
             method="PATCH",
             path="/tasks/{task_id}",
-            fields=("status", "notes", "requirement_ids", "spec_document"),
+            fields=("status", "notes", "requirement_ids", "spec_document", "failing_pieces"),
             required=(),
             text=(
                 f"move status (one of {values(TaskStatus)}), leave notes for whoever looks at "
                 "this task next, and link it to the requirements it serves with requirement_ids "
                 "(spec_document names which document to resolve them in, when that is "
-                "ambiguous). Omit a field to leave it alone. Who holds a task, its priority and "
-                "its description are the operator's."
+                "ambiguous). A send-back names the evidence that fails in failing_pieces "
+                '([{"piece": "FR-3", "reason": "..."}]): only those pieces are rejected, and the '
+                "rest are held for their author to record again. Omit a field to leave it alone. "
+                "Who holds a task, its priority and its description are the operator's."
             ),
         ),
         _Operation(

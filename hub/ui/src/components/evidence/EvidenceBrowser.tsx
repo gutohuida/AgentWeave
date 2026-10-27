@@ -24,7 +24,7 @@ import { LoadingThread } from '@/components/common/LoadingThread'
  * requirement identifier, from the URL) narrows it to what a link elsewhere meant.
  */
 
-type StateFilter = 'all' | 'awaiting' | 'accepted' | 'rejected' | 'earlier'
+type StateFilter = 'all' | 'awaiting' | 'accepted' | 'rejected' | 'held' | 'earlier'
 
 /** Which chip a piece counts under. One recorded for an earlier wording is its own state (F691):
  *  its verdict is about words the requirement no longer says, so it is not "accepted" evidence. */
@@ -50,6 +50,8 @@ const STATE_LABEL: Record<StateFilter, string> = {
   awaiting: 'Waiting',
   accepted: 'Accepted',
   rejected: 'Rejected',
+  // K: not named as failing when its task was sent back; recorded again at the next commit.
+  held: 'Held',
   earlier: 'Earlier wording',
 }
 
@@ -143,7 +145,7 @@ function PieceRow({
         {!open && latest ? (
           <>
             {' · '}
-            {latest.decision === 'accepted' ? 'accepted' : 'rejected'} by{' '}
+            {latest.decision === 'accepted' || latest.decision === 'held' ? latest.decision : 'rejected'} by{' '}
             {latest.actor_kind === 'operator' ? 'you' : latest.actor}
           </>
         ) : null}
@@ -199,6 +201,7 @@ export function EvidenceBrowser({
       awaiting: 0,
       accepted: 0,
       rejected: 0,
+      held: 0,
       earlier: 0,
     }
     for (const piece of focused) {

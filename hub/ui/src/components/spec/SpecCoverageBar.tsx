@@ -65,6 +65,13 @@ const STATES: Array<{ key: CoverageEntry['state']; label: string; tone: string; 
   },
 ]
 
+/** K: coverage's reason for a requirement whose only current evidence a send-back held
+ *  (`requirement_coverage.HELD_ONLY`). Its state is `in_progress`; this says why, without calling
+ *  the evidence rejected. */
+const HELD_ONLY = 'held evidence only'
+const HELD_WHY =
+  'Its evidence was held when its task was sent back: not named as failing, so not rejected, and not accepted either. Its author records it again at the next commit, and approval waits for that.'
+
 const INTEGRATION_LABEL: Record<CoverageEntry['integration'], string> = {
   integrated: 'in the main line',
   not_integrated: 'not in the main line',
@@ -244,7 +251,13 @@ export function SpecCoverageBar({ path, onOpenTasks, defaultOpen = false }: Spec
                     </EvidenceLink>
                   </>
                 )}
-                {state ? <div style={{ paddingLeft: 12 }}>{state.why}</div> : null}
+                {entry.reason === HELD_ONLY ? (
+                  <div style={{ paddingLeft: 12 }} data-testid={`coverage-held-${entry.identifier}`}>
+                    {HELD_WHY}
+                  </div>
+                ) : state ? (
+                  <div style={{ paddingLeft: 12 }}>{state.why}</div>
+                ) : null}
                 {evidenceOpen === entry.requirement_id && (
                   <div style={{ paddingLeft: 12 }}>
                     {/* A served row's evidence is the serving change's, recorded against it. */}

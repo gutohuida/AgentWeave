@@ -2898,8 +2898,14 @@ EVIDENCE_KINDS = (
     "external_reference",
 )
 
-EVIDENCE_REVIEW_STATES = ("awaiting", "accepted", "rejected")
+# `held` (`each-piece-of-evidence-is-judged-on-its-own`, migration 0149): a send-back that did not
+# name the piece as failing keeps it at its commit, neither accepted nor rejected.
+EVIDENCE_REVIEW_STATES = ("awaiting", "accepted", "rejected", "held")
+#: What one piece's own decision may be (`decide`, the `decide_evidence` tool). `held` is not one of
+#: them: only a send-back holds a piece, so it is recorded on a review but never asked for.
 EVIDENCE_DECISIONS = ("accepted", "rejected")
+#: What an `evidence_reviews` row may record.
+EVIDENCE_REVIEW_DECISIONS = (*EVIDENCE_DECISIONS, "held")
 
 # `superseded`: the requirement was reworded or retired while the candidate was open
 # (`spec_index._supersede_drift`, F435).
@@ -3005,7 +3011,7 @@ class EvidenceReview(Base):
         PrimaryKeyConstraint("sequence", name="pk_evidence_reviews"),
         UniqueConstraint("id", name="uq_evidence_reviews_id"),
         CheckConstraint(
-            "decision IN ('" + "', '".join(EVIDENCE_DECISIONS) + "')",
+            "decision IN ('" + "', '".join(EVIDENCE_REVIEW_DECISIONS) + "')",
             name="ck_evidence_reviews_decision",
         ),
         CheckConstraint(

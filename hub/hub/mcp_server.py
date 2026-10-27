@@ -437,6 +437,7 @@ def update_task(
     notes: Optional[str] = None,
     requirement_ids: Optional[List[str]] = None,
     spec_document: Optional[str] = None,
+    failing_pieces: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     """Update a task's lifecycle status, notes, or the requirements it serves.
 
@@ -458,6 +459,12 @@ def update_task(
             prior round that still matters.
         requirement_ids: Requirement IDs this task serves, added to whatever it already serves.
         spec_document: Which spec document to resolve requirement_ids in, when it is ambiguous.
+        failing_pieces: With "revision_needed" (or "rejected"), the evidence that fails, each as
+            {"piece": "FR-3" (or an evidence id), "reason": "what fails"}. Only those pieces are
+            rejected, each with its own reason; every other awaiting piece is held (not rejected)
+            with your notes as its reason, and its author records it again at the next commit.
+            Name none when nothing in the evidence fails (a lint error, a failing check), and say
+            why in notes. Refused with "approved", which accepts every piece.
     """
     body: Dict[str, Any] = {}
     if status is not None:
@@ -468,6 +475,8 @@ def update_task(
         body["requirement_ids"] = requirement_ids
     if spec_document is not None:
         body["spec_document"] = spec_document
+    if failing_pieces is not None:
+        body["failing_pieces"] = failing_pieces
     if status == "completed":
         # The Hub waits for the project's fast checks before it records a completion.
         return _hub_request(
@@ -5610,8 +5619,9 @@ def list_evidence(
     Args:
         identifier: Narrow to one requirement, as `FR-1`.
         document: Only needed when the same identifier exists in more than one document.
-        review_state: Narrow to `awaiting`, `accepted` or `rejected`. `awaiting` is what is waiting
-            on somebody.
+        review_state: Narrow to `awaiting`, `accepted`, `rejected` or `held`. `awaiting` is what is
+            waiting on somebody; `held` is a piece a send-back did not name as failing, which counts
+            for nothing until it is recorded again.
 
     Returns `{"evidence": [...]}`.
     """
