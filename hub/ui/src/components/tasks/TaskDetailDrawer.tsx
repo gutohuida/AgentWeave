@@ -311,7 +311,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const { data: allowed } = useAllowedTransitions()
   // The mover decision's answer for this task as it is held (FR-8); the map is only the fallback
   // while that answer is unread.
-  const { data: taskMoves } = useTaskMoves(task?.id ?? null)
+  const { data: taskMoves, error: taskMovesError } = useTaskMoves(task?.id ?? null)
   const updateTask = useUpdateTask()
   const landTask = useLandTask()
   const deleteTask = useDeleteTask()
@@ -599,6 +599,19 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                 },
                   }))}
                 />
+              )}
+              {taskMovesError && (
+                <span
+                  role="alert"
+                  className="text-[11px]"
+                  style={{ color: 'var(--red)' }}
+                  data-testid={`task-moves-error-${task.id}`}
+                >
+                  {readableApiError(
+                    taskMovesError,
+                    'The moves this task is allowed could not be read, so the menu falls back to the general map.',
+                  )}
+                </span>
               )}
               {/* F163. Completed work is the operator's to land, and the route to it was three
                   calls of which two begin as refusals: the task is still held by the agent that
