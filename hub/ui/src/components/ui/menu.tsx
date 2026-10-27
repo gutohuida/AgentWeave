@@ -65,6 +65,8 @@ export interface SelectOption<T extends string> {
   detail?: string
   /** Leading mark (an icon name, or a node such as a ProviderMark). */
   icon?: React.ReactNode
+  /** Listed, but not choosable (a provider whose CLI is not installed); `detail` says why. */
+  disabled?: boolean
 }
 
 /** A select that opens a themed menu. The trigger shows the full label of the choice (it sizes
@@ -78,6 +80,7 @@ export function MenuSelect<T extends string>({
   maxWidth = 280,
   disabled,
   testId,
+  placeholder = 'Choose…',
 }: {
   value: T
   onChange: (value: T) => void
@@ -89,6 +92,8 @@ export function MenuSelect<T extends string>({
   disabled?: boolean
   /** `data-testid` on the trigger. */
   testId?: string
+  /** What the trigger reads while `value` matches no option. */
+  placeholder?: string
 }) {
   const current = options.find((o) => o.value === value)
   return (
@@ -103,14 +108,14 @@ export function MenuSelect<T extends string>({
         title={current?.label}
       >
         {current?.icon ? <span className="aw-select-icon">{typeof current.icon === 'string' ? <Icon name={current.icon} size={14} /> : current.icon}</span> : null}
-        <span className="min-w-0 flex-1 truncate text-left">{current?.label ?? 'Choose…'}</span>
+        <span className="min-w-0 flex-1 truncate text-left">{current?.label ?? placeholder}</span>
         <Icon name="expand_more" size={14} className="aw-select-chevron" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content align="end" sideOffset={6} collisionPadding={12} className="aw-menu aw-pop" style={{ minWidth: 'var(--radix-dropdown-menu-trigger-width)' }}>
           <DropdownMenu.RadioGroup value={value} onValueChange={(next) => onChange(next as T)}>
             {options.map((option) => (
-              <DropdownMenu.RadioItem key={option.value} value={option.value} className="aw-menu-item" data-two-line={option.detail ? 'true' : undefined}>
+              <DropdownMenu.RadioItem key={option.value} value={option.value} disabled={option.disabled} className="aw-menu-item" data-two-line={option.detail ? 'true' : undefined}>
                 <span className="aw-menu-item-icon">
                   {option.icon ? (typeof option.icon === 'string' ? <Icon name={option.icon} size={14} /> : option.icon) : null}
                 </span>

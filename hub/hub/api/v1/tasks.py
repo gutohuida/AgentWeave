@@ -2,11 +2,11 @@
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
-from sqlalchemy import func, select
+from sqlalchemy import case, func, literal_column, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -562,16 +562,32 @@ async def _latest_integrations_by_task(
 
     Same shape as `_latest_heartbeats_by_agent`: one query for the whole page rather than one per
     task, ordered newest-first so the first row seen per task is the one kept.
+
+    One approval of a task with several commits writes several rows in one transaction, so they
+    share a `created_at` (F1051). The tie is broken by what the approval did, not by whichever row
+    SQLite returns first: a failure is what the operator must see, a merge means work landed, and a
+    skip ("already in master") is the least informative; rows still tied are ordered by insertion
+    (`task_integrations` has a String key, so it is a rowid table).
     """
     if not task_ids:
         return {}
+    outcome_rank = case(
+        (TaskIntegration.outcome == "failed", 0),
+        (TaskIntegration.outcome == "merged", 1),
+        else_=2,
+    )
     result = await session.execute(
         select(TaskIntegration)
         .where(
             TaskIntegration.project_id == project_id,
             TaskIntegration.task_id.in_(task_ids),
         )
-        .order_by(TaskIntegration.task_id, TaskIntegration.created_at.desc())
+        .order_by(
+            TaskIntegration.task_id,
+            TaskIntegration.created_at.desc(),
+            outcome_rank,
+            literal_column("task_integrations.rowid").desc(),
+        )
     )
     latest: dict[str, TaskIntegration] = {}
     for row in result.scalars().all():
@@ -794,7 +810,12 @@ async def create_task_for_actor(
     actor: Actor,
     session: AsyncSession,
     record_addition: bool = True,
+    before_commit: Optional[Callable[[Task], Awaitable[None]]] = None,
 ) -> TaskResponse:
+    """Create a task as *actor*. *before_commit*, a Hub-internal caller's own staging (never a
+    request's), runs on the new task before the task's commit, so what it writes lands in the same
+    commit: the Hub's fix task records `merges_branch_tip` and its dedup event this way
+    (`a-red-main-does-not-hold-the-night`)."""
     # Honor a client-supplied id when present so the MCP `create_task` tool
     # can return the same id the Hub stored. Falls back to a fresh short id
     # for clients that don't supply one (e.g. direct API users).
@@ -866,6 +887,8 @@ async def create_task_for_actor(
             ),
             source=loop_history.SOURCE_CREATE_TASK,
         )
+    if before_commit is not None:
+        await before_commit(task)
     try:
         await session.commit()
     except IntegrityError as e:
@@ -891,6 +914,12 @@ async def create_task_for_actor(
     await session.commit()
 
     await sse_manager.broadcast(project_id, "task_created", {"id": task.id, "title": body.title})
+    if task.status == "assigned" and task.loop_id is None:
+        # Created `assigned` outside any flow: started for its assignee now
+        # (`a-red-main-does-not-hold-the-night`, FR-9). The rule decides; this only asks.
+        from ... import assigned_task_start
+
+        assigned_task_start.request(task.id, created_by_run_id)
     await persist_event(
         session,
         project_id,
@@ -1565,6 +1594,102 @@ def _verdict_text(notes) -> Optional[str]:
     return json.dumps(notes, ensure_ascii=False)[:2000]
 
 
+#: The verdicts that send work back, and so decide its evidence piece by piece.
+_SEND_BACK_STATUSES = ("revision_needed", "rejected")
+
+
+async def _failing_pieces_for(
+    session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor
+) -> Optional[Dict[str, str]]:
+    """The evidence a send-back names as failing, as `{evidence_id: reason}`; None for any other move.
+
+    `each-piece-of-evidence-is-judged-on-its-own`. Refused, with nothing written: naming failing
+    pieces while approving (approval accepts every awaiting piece, so the two contradict), naming
+    them with any move but a send-back, a name that matches none of the pieces the verdict decides,
+    and an agent's send-back that names none and gives no reason while it would hold evidence --
+    a held piece then says nothing about why, and its author has nothing to fix. The operator is not
+    refused that last: the app's status menu sends a status alone, and the hold records that the
+    operator sent it back. The reason checks wait until the move is legal, so an impossible move is
+    answered by the transition map rather than by a request for a reason (F201). Who may make the
+    move at all is asked first: an author naming its own pieces is told it cannot judge its own
+    work, not that its pieces are unknown (they are not the verdict's to decide).
+    """
+    from ... import requirement_evidence
+    from ...task_transition_service import decide_move, evidence_actor
+
+    named = [(piece.piece, piece.reason) for piece in body.failing_pieces or []]
+    if (named or body.status in _SEND_BACK_STATUSES) and body.status and body.status != task.status:
+        # The same read `apply_transition` makes first; it writes nothing.
+        verdict = await decide_move(session, task, body.status, actor)
+        if verdict.refusal is not None:
+            raise verdict.refusal
+    if named and body.status == "approved":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"Approving {task.id} accepts every piece of its evidence awaiting a decision, "
+                    f"so naming {', '.join(piece for piece, _ in named)} as failing contradicts "
+                    "it. Send it back with revision_needed to reject those pieces, or approve "
+                    "without failing_pieces."
+                ),
+                "code": "approval_names_failing_pieces",
+            },
+        )
+    sending_back = (
+        body.status in _SEND_BACK_STATUSES
+        and body.status != task.status
+        and body.status in allowed_targets(task.status, actor.kind)
+    )
+    if named and body.status not in _SEND_BACK_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    "failing_pieces goes with a send-back (status revision_needed or rejected): "
+                    "it names the evidence that verdict rejects."
+                ),
+                "code": "failing_pieces_without_send_back",
+            },
+        )
+    if not sending_back:
+        return None
+    deciding = evidence_actor(actor)
+    failing: Dict[str, str] = {}
+    if named:
+        try:
+            failing = await requirement_evidence.failing_pieces_of(
+                session, task, actor=deciding, named=named
+            )
+        except requirement_evidence.EvidenceRefusedError as exc:
+            raise HTTPException(
+                status_code=exc.http_status or 422,
+                detail={"message": str(exc), "code": exc.code},
+            ) from exc
+    if (
+        body.status == "revision_needed"
+        and not failing
+        and not actor.is_operator
+        and not _verdict_text(body.notes)
+        and await requirement_evidence.verdict_pieces(
+            session, task, actor=deciding, decision=requirement_evidence.REJECTED
+        )
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"Sending {task.id} back names no failing piece and gives no reason, so its "
+                    "evidence would be held with nothing to say why. Name the pieces that fail in "
+                    "failing_pieces, each with its reason, or say in notes what must change (a "
+                    "defect outside any requirement, a failing check)."
+                ),
+                "code": "send_back_needs_a_reason",
+            },
+        )
+    return failing
+
+
 async def _run_may_write_notes(
     session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor
 ) -> bool:
@@ -1660,6 +1785,9 @@ async def update_task_for_actor(
                     f"notes on the task it holds; to tell the holder something, send it a message."
                 ),
             )
+    # The verdict's failing pieces, resolved and refused before any write
+    # (`each-piece-of-evidence-is-judged-on-its-own`).
+    failing_pieces = await _failing_pieces_for(session, task, body, actor)
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.
@@ -1778,8 +1906,10 @@ async def update_task_for_actor(
             body.status,
             actor,
             override_checks_reason=body.override_checks_reason,
-            # The verdict's notes are the reason its evidence decision records (vis-D4).
+            # The verdict's notes are the reason its evidence decision records (vis-D4); a
+            # send-back rejects only its failing pieces, each with its own reason, and holds the rest.
             verdict_reason=_verdict_text(body.notes),
+            failing_pieces=failing_pieces,
             # An assignee the operator wrote in this same PATCH is who holds the rework (F743).
             holder_named="assignee" in body.model_fields_set,
         )
@@ -1856,6 +1986,12 @@ async def update_task_for_actor(
                 run_id=actor.run_id,
             ),
         )
+    if "assignee" in body.model_fields_set and task.status == "assigned" and not task.loop_id:
+        # A new holder of a task already `assigned` outside a flow is started too (FR-9); the rule
+        # finds nothing to do where its turn is already queued.
+        from ... import assigned_task_start
+
+        assigned_task_start.start_after_commit(session, task.id, actor.run_id)
     task.updated = datetime.now(timezone.utc)
     # Kept as the materialised latest writer (D4 of the proposal's impact notes). The rules read the
     # append-only history instead; this stays for existing consumers and is not what governs.
@@ -2098,6 +2234,8 @@ def _transition_view(
         "level": row.level,
         # Why the operator approved over failing checks (`approval-runs-the-projects-checks`).
         "override_reason": row.override_reason,
+        # Who overrode: the operator, or the Hub over failures not the task's (slice M).
+        "override_by": row.override_by,
         # The operator action behind a move it made, and its commits (closing as already built).
         "note": row.note,
         "created_at": row.created_at.isoformat() if row.created_at else None,

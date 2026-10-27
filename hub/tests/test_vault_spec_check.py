@@ -446,7 +446,7 @@ async def test_a_check_fires_one_vault_check_keeping_only_conflicts_that_name_re
     assert len(firings) == 1
     fired = firings[0]
     assert fired["trigger"] == "document_proposed" and fired["outcome"] == "written"
-    assert fired["subject"] == {"document": PATH}
+    assert fired["subject"] == {"document": PATH, "content_version": checked["content_version"]}
     assert fired["conflicts"] == [
         {
             "requirement": "r2",

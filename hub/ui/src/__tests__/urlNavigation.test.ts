@@ -3,6 +3,7 @@ import {
   agentDestination,
   agentSettingsBackDestination,
   agentSettingsDestination,
+  appSettingsDestination,
   environmentDestination,
   isAgentSettingsDestination,
   isSectionedDestination,
@@ -361,5 +362,27 @@ describe('a cross-tab click can carry a requirement anchor onto the Spec tab', (
   it('does not serialize an anchor with no document', () => {
     const destination = projectDestination('proj-1', 'spec')
     expect(serializeDestination(destination)).not.toContain('anchor')
+  })
+})
+
+describe('App settings destination', () => {
+  it('round-trips with and without a project, and needs no project in the address', () => {
+    for (const destination of [appSettingsDestination('proj-1', 'appearance'), appSettingsDestination(null)]) {
+      expect(parseDestination(serializeDestination(destination))).toEqual(destination)
+    }
+    expect(serializeDestination(appSettingsDestination(null, 'connection'))).toBe('?appSettings=connection')
+  })
+
+  it('reads an unknown section as the first', () => {
+    expect(parseDestination('?project=proj-1&appSettings=nope')).toEqual(appSettingsDestination('proj-1', 'notifications'))
+  })
+
+  it('survives resolution with no projects, and keeps or restores the project otherwise', () => {
+    const none = { availableProjectIds: [], lastOpenedProjectId: null }
+    expect(resolveDestination(appSettingsDestination(null), none)).toEqual(appSettingsDestination(null))
+    const some = { availableProjectIds: ['proj-1'], lastOpenedProjectId: 'proj-1' }
+    expect(resolveDestination(appSettingsDestination('proj-1', 'appearance'), some)).toEqual(appSettingsDestination('proj-1', 'appearance'))
+    expect(resolveDestination(appSettingsDestination('gone'), some)).toEqual(appSettingsDestination('proj-1'))
+    expect(resolveDestination(appSettingsDestination(null), some)).toEqual(appSettingsDestination('proj-1'))
   })
 })

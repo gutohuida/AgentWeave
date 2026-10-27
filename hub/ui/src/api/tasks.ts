@@ -300,7 +300,8 @@ export function useTaskTransitions(taskId: string, enabled: boolean) {
 }
 
 export interface StoryReview {
-  decision: 'accepted' | 'rejected'
+  // `held` (K): a send-back did not name the piece as failing.
+  decision: 'accepted' | 'rejected' | 'held'
   actor_kind: string
   actor: string
   reason: string | null
@@ -324,6 +325,9 @@ export type StoryEvent =
       job_kind?: 'flow' | 'loop' | null
       run_id: string | null
       override_reason: string | null
+      /** Who overrode: the operator with a reason, or the Hub over failures that were not the
+       *  task's (`a-red-main-does-not-hold-the-night`). Absent from an older Hub: the operator. */
+      override_by?: 'operator' | 'hub' | null
     }
   | {
       kind: 'run'
@@ -416,7 +420,8 @@ export interface TaskStory {
     tokens: number | null
     premium_requests: number | null
     ai_nano_aiu: number | null
-    evidence: { accepted: number; rejected: number; awaiting: number }
+    // `held` (K): a send-back kept the piece at its commit without naming it as failing.
+    evidence: { accepted: number; rejected: number; awaiting: number; held?: number }
     merged: string[]
     overrides: number
   }

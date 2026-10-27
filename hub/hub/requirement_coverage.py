@@ -46,7 +46,7 @@ from .db.models import (
     Task,
     TaskRequirementLink,
 )
-from .requirement_evidence import ACCEPTED, AWAITING, REJECTED, open_drift_for
+from .requirement_evidence import ACCEPTED, AWAITING, HELD, REJECTED, open_drift_for
 from .spec_identity import natural_key
 
 DRIFTING = "drifting"
@@ -92,6 +92,10 @@ NOT_STARTED_STATUSES = {"pending", "assigned"}
 PARTIAL = "partial"
 #: The reason an `in_progress` requirement carries when its accepted evidence is all partial (F706).
 PARTIAL_ONLY = "partial evidence only"
+#: The reason an `in_progress` requirement carries when its only current evidence was held by a
+#: send-back (`each-piece-of-evidence-is-judged-on-its-own`): it needs a new piece at the next
+#: commit, and approval is refused until it has one, at every rigor, as a rejection is.
+HELD_ONLY = "held evidence only"
 
 INTEGRATED = "integrated"
 NOT_INTEGRATED = "not_integrated"
@@ -204,6 +208,26 @@ def partial_only(accepted: List[RequirementEvidence]) -> bool:
     """Whether every accepted piece says `covers: partial` (F706). A piece that says `full`, or says
     nothing (every piece recorded before `covers` existed), covers the requirement."""
     return bool(accepted) and all((item.covers or "") == PARTIAL for item in accepted)
+
+
+def _in_progress_reason(
+    state: str,
+    accepted: List[RequirementEvidence],
+    evidence: List[RequirementEvidence],
+    digest: str,
+) -> Optional[str]:
+    """Why an `in_progress` requirement is not demonstrated, where its evidence says: every accepted
+    piece is partial (F706), or nothing current was accepted and a send-back held some of it.
+    `_state` has already returned for any current piece awaiting or rejected."""
+    if state != IN_PROGRESS:
+        return None
+    if partial_only(accepted):
+        return PARTIAL_ONLY
+    if not accepted and any(
+        item.digest == digest and item.review_state == HELD for item in evidence
+    ):
+        return HELD_ONLY
+    return None
 
 
 def _state(
@@ -405,7 +429,7 @@ async def requirement_coverage(
                 accepted_count=len(accepted),
                 linked_task_ids=[task.id for task in linked],
                 served_by=served_by,
-                reason=PARTIAL_ONLY if state == IN_PROGRESS and partial_only(accepted) else None,
+                reason=_in_progress_reason(state, accepted, evidence, requirement.digest),
             )
         )
 

@@ -1,7 +1,8 @@
 import { Icon } from '@/components/common/Icon'
 
-/** One part of a screen and the error its query failed with (`null` when it did not fail). */
-export type QueryFailure = readonly [label: string, error: unknown]
+/** One part of a screen and the error its query failed with (`null` when it did not fail), and
+ *  optionally how to ask for it again (its query's `refetch`). */
+export type QueryFailure = readonly [label: string, error: unknown, retry?: () => unknown]
 
 /**
  * Says, in one line, which parts of a screen the Hub did not answer for.
@@ -17,6 +18,7 @@ export function QueryErrorNotice({ failures, className }: { failures: readonly Q
   const labels = failed.map(([label]) => label)
   const list = labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
   const first = failed[0][1]
+  const retries = failed.map(([, , retry]) => retry).filter((retry): retry is () => unknown => typeof retry === 'function')
   return (
     <div
       role="alert"
@@ -28,6 +30,18 @@ export function QueryErrorNotice({ failures, className }: { failures: readonly Q
       <span>
         Couldn’t read {list} from the Hub. What is shown here may be incomplete.
       </span>
+      {retries.length ? (
+        <button
+          type="button"
+          data-slot="query-error-retry"
+          className="aw-query-error-retry"
+          onClick={() => {
+            for (const retry of retries) retry()
+          }}
+        >
+          Retry
+        </button>
+      ) : null}
     </div>
   )
 }

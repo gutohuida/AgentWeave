@@ -125,6 +125,13 @@ class Project(Base):
     # `{"name", "command", "timeout_seconds"}` the Hub runs on the work a task's approval would
     # merge. Set only by the operator. Null or empty means no checks, and approval is unchanged.
     checks: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Whether the Hub lands an approval over check failures that are provably not the task's --
+    # the same test ids fail on main too, or passed when rerun on their own -- recording its own
+    # override, and files their fix task (`a-red-main-does-not-hold-the-night`, FR-5, migration
+    # 0151). On by default for new and existing projects; off is the behaviour before that change.
+    checks_auto_override: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
 
     # --- Reach (reach-1019, `hub/hub/reach.py`) ---
     # The posture every agent's run gets when neither its conversation nor the agent states one;
@@ -769,6 +776,14 @@ class Task(Base):
     # in SQLite, and this column sits on an already-live table, so an `ADD COLUMN` migration (`0075`)
     # is the only thing that ever touches it directly.
     loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # Whether this task's approved review is its whole gate and approval merges its branch tip,
+    # whatever its loop declares: set on a fix task the Hub files for failures that were not the
+    # held task's (`a-red-main-does-not-hold-the-night`, migration 0151). Such a task serves no
+    # requirement, so in a flow whose document makes evidence govern it could record no evidence,
+    # had no review target and merged nothing. Never set by an agent.
+    merges_branch_tip: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     # What happens when a run bound to this task ends without the task moving.
     #
     # Per task rather than per project because the operator's stated use — a cheap model doing the
@@ -919,6 +934,10 @@ class TaskTransition(Base):
     # Why the operator approved over failing checks (`approval-runs-the-projects-checks` D7). Null
     # on every transition that overrode nothing; only the operator can set it.
     override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Who overrode, where `override_reason` is set: `operator` (their typed reason) or `hub` (the Hub
+    # over failures that were not the task's, `a-red-main-does-not-hold-the-night` D3, migration
+    # 0151). A column of its own, not an actor: the actor stays the approver.
+    override_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     # Which operator action made this move and against what, where one action makes moves the
     # operator did not make one by one: closing a document's tasks as already built names itself
     # and its commits here (`every-task-can-always-be-moved-on` FR-6, migration 0147). Null on every
@@ -2911,8 +2930,14 @@ EVIDENCE_KINDS = (
     "external_reference",
 )
 
-EVIDENCE_REVIEW_STATES = ("awaiting", "accepted", "rejected")
+# `held` (`each-piece-of-evidence-is-judged-on-its-own`, migration 0149): a send-back that did not
+# name the piece as failing keeps it at its commit, neither accepted nor rejected.
+EVIDENCE_REVIEW_STATES = ("awaiting", "accepted", "rejected", "held")
+#: What one piece's own decision may be (`decide`, the `decide_evidence` tool). `held` is not one of
+#: them: only a send-back holds a piece, so it is recorded on a review but never asked for.
 EVIDENCE_DECISIONS = ("accepted", "rejected")
+#: What an `evidence_reviews` row may record.
+EVIDENCE_REVIEW_DECISIONS = (*EVIDENCE_DECISIONS, "held")
 
 # `superseded`: the requirement was reworded or retired while the candidate was open
 # (`spec_index._supersede_drift`, F435).
@@ -3018,7 +3043,7 @@ class EvidenceReview(Base):
         PrimaryKeyConstraint("sequence", name="pk_evidence_reviews"),
         UniqueConstraint("id", name="uq_evidence_reviews_id"),
         CheckConstraint(
-            "decision IN ('" + "', '".join(EVIDENCE_DECISIONS) + "')",
+            "decision IN ('" + "', '".join(EVIDENCE_REVIEW_DECISIONS) + "')",
             name="ck_evidence_reviews_decision",
         ),
         CheckConstraint(

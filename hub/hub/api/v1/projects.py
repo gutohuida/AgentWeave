@@ -178,6 +178,11 @@ class ProjectSettings(BaseModel):
     # Run on main plus a task's would-merge commit when the task completes; approval reads the
     # result. Null means no checks, and approval is unchanged.
     checks: Optional[List[ProjectCheck]] = Field(default=None, max_length=20)
+    # Whether the Hub lands an approval over failures that are provably not the task's (the same
+    # test ids fail on main too, or passed when rerun on their own), recording its own override,
+    # and files their fix task (`a-red-main-does-not-hold-the-night`, FR-5). On by default; off is
+    # the behaviour before that change: such an approval waits for the operator's reason.
+    checks_auto_override: bool = True
 
     # --- Reach (reach-1019, `hub/hub/reach.py`) ---
     # The posture every agent's run gets when neither its conversation nor the agent states one.

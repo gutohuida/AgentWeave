@@ -1824,6 +1824,7 @@ _REVIEW_STATES = (
     requirement_evidence.AWAITING,
     requirement_evidence.ACCEPTED,
     requirement_evidence.REJECTED,
+    requirement_evidence.HELD,
 )
 
 
@@ -1966,6 +1967,19 @@ async def overturn_evidence(
     project_id, _ = project
     evidence = await _operator_evidence(session, project_id, evidence_id)
     current = evidence.review_state
+    if current == requirement_evidence.HELD:
+        # K: a held piece is decided like an awaiting one, on the piece's own Accept / Reject.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": (
+                    f"{evidence.id} is held: its task was sent back without naming it as failing, "
+                    "so there is no decision to reverse. Decide it as it stands: accept it, or "
+                    "reject it with a reason."
+                ),
+                "code": "not_decided",
+            },
+        )
     if current not in (requirement_evidence.ACCEPTED, requirement_evidence.REJECTED):
         raise HTTPException(
             status_code=409,
@@ -3228,18 +3242,25 @@ async def check_document(
             detail={"message": str(exc), "code": exc.code},
         ) from exc
     content = spec_documents.read_document(workspace, document.path)
-    background.add_task(
-        vault_spec_check.check_in_background,
-        project_id,
-        document.path,
-        trigger=vault_spec_check.TRIGGER,
-    )
+    version = spec_documents.content_version(content)
+    # A model run per press would be a cost the operator cannot see (F1053): only a document with
+    # no blocking gap, and only a content version the newest firing has not already checked.
+    if not found_blocking and not await vault_spec_check.already_checked(
+        session, project_id, document.path, version
+    ):
+        background.add_task(
+            vault_spec_check.check_in_background,
+            project_id,
+            document.path,
+            trigger=vault_spec_check.TRIGGER,
+            content_version=version,
+        )
     return {
         **await _project_document_view(session, project_id, document),
         "blocking": found_blocking,
         "warnings": warnings,
         "ready": not found_blocking,
-        "content_version": spec_documents.content_version(content),
+        "content_version": version,
     }
 
 

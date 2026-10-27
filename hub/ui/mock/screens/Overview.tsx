@@ -45,6 +45,7 @@ export default function Overview({ go, now }: ScreenProps) {
         { label: 'Keep results live', description: 'Always current; slower under load.' },
       ],
       primary: { label: 'Open conversation', onClick: () => go({ kind: 'conversation', agent: 'QA1', conversationId: 'conv-e92920dba933' }) },
+      secondary: { label: 'Decline', onClick: () => setAnswered((a) => [...a, 'q-mock']) },
     },
     ...(unmerged && unmergedIntegration
       ? [
@@ -56,7 +57,8 @@ export default function Overview({ go, now }: ScreenProps) {
             detail: 'The project folder has uncommitted changes to tracked files. Commit or stash them, then try the merge again.',
             at: unmergedIntegration.created_at,
             primary: { label: 'Try again', onClick: () => toast({ title: 'Merging into master…', description: 'You will see the result here and on the task.' }) },
-            secondary: { label: 'Open task', onClick: () => go({ kind: 'tab', tab: 'tasks' }) },
+            secondary: { label: 'Dismiss', onClick: () => setAnswered((a) => [...a, `merge-${unmerged.id}`]) },
+            more: [{ label: 'Open task', onClick: () => go({ kind: 'tab', tab: 'tasks' }) }],
           },
         ]
       : []),

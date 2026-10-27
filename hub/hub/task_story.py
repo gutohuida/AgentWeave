@@ -185,6 +185,8 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
                 "job_kind": job_kinds.get(row.job_id or "") if row.job_id else None,
                 "run_id": row.run_id,
                 "override_reason": row.override_reason,
+                # Who overrode: `operator` or `hub` (`a-red-main-does-not-hold-the-night`, FR-11).
+                "override_by": row.override_by,
             }
         )
 

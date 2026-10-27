@@ -39,7 +39,7 @@ def test_0152_adds_builds_and_levels_and_round_trips(tmp_path) -> None:
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0152')")
         conn.commit()
-    _downgrade_to(db_url, "0149")
+    _downgrade_to(db_url, "0151")
     with sqlite3.connect(db_file) as conn:
         assert "builds" not in _tables(conn)
         assert not {"build_id", "level", "builder"} & _columns(conn, "tasks")
@@ -72,7 +72,7 @@ def test_0152_adds_builds_and_levels_and_round_trips(tmp_path) -> None:
         indexes = {row[1] for row in conn.execute("PRAGMA index_list('builds')")}
         assert "ux_builds_document_running" in indexes
 
-    _downgrade_to(db_url, "0149")
+    _downgrade_to(db_url, "0151")
 
     with sqlite3.connect(db_file) as conn:
         assert "builds" not in _tables(conn)

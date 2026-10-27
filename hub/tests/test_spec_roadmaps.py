@@ -956,7 +956,7 @@ async def test_the_spec_read_names_the_roadmap_slice_for_the_app(app, auth_heade
 
 
 @pytest.mark.asyncio
-async def test_a_submission_says_whether_it_is_ready_to_propose(app, auth_headers, planner):
+async def test_a_submission_says_whether_it_is_ready_to_approve(app, auth_headers, planner):
     """F502. A real agent read `ok: true` beside eight blocking findings and told the operator the
     document was ready. The answer to that question is now a field, not an inference."""
     path = await _agent_create(app, planner, title="Slice one")
@@ -970,7 +970,7 @@ async def test_a_submission_says_whether_it_is_ready_to_propose(app, auth_header
 async def test_a_submission_warns_of_unordered_overlap_without_blocking_it(
     app, auth_headers, planner
 ):
-    """The warning rides the submit response; `ready_to_propose` is decided by `blocking` alone."""
+    """The warning rides the submit response; `ready_to_approve` is decided by `blocking` alone."""
     path = await _agent_create(app, planner, title="Slice one")
     tasks = [
         {

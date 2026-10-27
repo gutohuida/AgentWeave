@@ -153,8 +153,20 @@ class TaskCreate(RequestModel):
         return v
 
 
+class FailingPiece(RequestModel):
+    """One piece of evidence a send-back names as failing, with its own reason
+    (`each-piece-of-evidence-is-judged-on-its-own`). `piece` is the requirement's identifier
+    (`FR-3`) or the evidence id; a blank `reason` is refused by name, after the move is known."""
+
+    piece: str = Field(min_length=1, max_length=128)
+    reason: str = Field(default="", max_length=2000)
+
+
 class TaskUpdate(RequestModel):
     status: Optional[str] = Field(default=None, max_length=64)
+    # A send-back's failing pieces: only these are rejected, each with its own reason, and every
+    # other awaiting piece of the task is held. Refused with any move but a send-back.
+    failing_pieces: Optional[List[FailingPiece]] = Field(default=None, max_length=200)
     # The operator's reason for approving over failing checks (`approval-runs-the-projects-checks`
     # D7). Refused from any agent; ignored unless the move is to `approved`.
     override_checks_reason: Optional[str] = Field(default=None, max_length=2000)

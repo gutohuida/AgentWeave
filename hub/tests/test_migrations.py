@@ -1298,6 +1298,8 @@ def test_task_transitions_lands_on_the_real_startup_path(tmp_path) -> None:
             "policy_digest",
             # Why the operator approved over failing checks, added by 0119.
             "override_reason",
+            # Who overrode: the operator or the Hub, 0151.
+            "override_by",
             # The operator action behind a move and its commits (closing as already built), 0147.
             "note",
             # The build level that governed the move, 0152 (slice D).
@@ -6049,3 +6051,71 @@ def test_migration_0148_is_a_no_op_without_the_table(tmp_path) -> None:
 
     _upgrade_to(db_url, "0148")
     _downgrade_to(db_url, "0147")
+
+
+# ---------------------------------------------------------------------------------------------
+# 0150 -- a piece of evidence may be held (`each-piece-of-evidence-is-judged-on-its-own`, K).
+# `held` joins requirement_evidence.review_state and evidence_reviews.decision; the downgrade maps a
+# held piece back to `awaiting` and removes the held reviews before narrowing both CHECKs.
+# ---------------------------------------------------------------------------------------------
+
+
+def _evidence_row(conn, evidence_id: str, state: str) -> None:
+    conn.execute(
+        "INSERT INTO requirement_evidence (id, project_id, requirement_id, digest, digest_version, "
+        "kind, locator, summary, actor_kind, actor, review_state, produced_at) VALUES "
+        "(?, 'p', 'spreq-x', 'd', 1, 'test_result', '', 's', 'agent', 'builder', ?, "
+        "'2026-01-01T00:00:00Z')",
+        (evidence_id, state),
+    )
+
+
+def _review_row(conn, review_id: str, evidence_id: str, decision: str) -> None:
+    conn.execute(
+        "INSERT INTO evidence_reviews (id, project_id, evidence_id, decision, actor_kind, actor, "
+        "reason, created_at) VALUES (?, 'p', ?, ?, 'agent', 'reviewer', 'r', "
+        "'2026-01-01T00:00:00Z')",
+        (review_id, evidence_id, decision),
+    )
+
+
+def test_migration_0150_lets_a_piece_be_held_and_downgrades_it_to_awaiting(tmp_path) -> None:
+    db_file = tmp_path / "held.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _upgrade_to(db_url, "head")
+    _downgrade_to(db_url, "0149")
+
+    with sqlite3.connect(db_file) as conn:
+        assert "'held'" not in _table_sql(conn, "requirement_evidence")
+        assert "'held'" not in _table_sql(conn, "evidence_reviews")
+        with pytest.raises(sqlite3.IntegrityError):
+            _evidence_row(conn, "ev-narrow", "held")
+        _evidence_row(conn, "ev-rejected", "rejected")
+        _review_row(conn, "evr-rejected", "ev-rejected", "rejected")
+        conn.commit()
+
+    _upgrade_to(db_url, "0150")
+
+    with sqlite3.connect(db_file) as conn:
+        assert "'held'" in _table_sql(conn, "requirement_evidence")
+        assert "'held'" in _table_sql(conn, "evidence_reviews")
+        # Nothing rewritten on the way up: a bulk rejection from before stays a rejection.
+        assert conn.execute(
+            "SELECT review_state FROM requirement_evidence WHERE id = 'ev-rejected'"
+        ).fetchone() == ("rejected",)
+        _evidence_row(conn, "ev-held", "held")
+        _review_row(conn, "evr-held", "ev-held", "held")
+        _review_row(conn, "evr-held-other", "ev-rejected", "held")
+        conn.commit()
+
+    _downgrade_to(db_url, "0149")
+
+    with sqlite3.connect(db_file) as conn:
+        states = dict(conn.execute("SELECT id, review_state FROM requirement_evidence"))
+        assert states == {"ev-rejected": "rejected", "ev-held": "awaiting"}
+        decisions = dict(conn.execute("SELECT id, decision FROM evidence_reviews"))
+        assert decisions == {"evr-rejected": "rejected"}
+        assert "'held'" not in _table_sql(conn, "requirement_evidence")
+        with pytest.raises(sqlite3.IntegrityError):
+            _review_row(conn, "evr-narrow", "ev-held", "held")

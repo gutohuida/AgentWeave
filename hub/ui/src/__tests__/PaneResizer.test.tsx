@@ -105,4 +105,18 @@ describe('PaneResizer', () => {
     await user.keyboard('{Home}')
     expect(onChange).toHaveBeenLastCalledWith(220)
   })
+
+  // F1032: an inline `background` beats the line's `group-focus-visible` and `group-hover` classes
+  // in a browser, so the line stayed at its resting colour while the resizer held the keyboard.
+  // jsdom computes no cascade, so this asserts the cause: nothing inline pins the colour, and the
+  // resting, hover and focus colours are all classes.
+  it('draws its line from classes, so the ring colour wins on focus and hover (F1032)', () => {
+    const { resizer } = setup(220)
+    const line = resizer.querySelector('span') as HTMLElement
+    expect(line.style.background).toBe('')
+    expect(line.style.backgroundColor).toBe('')
+    expect(line.className).toContain('bg-[var(--border-region)]')
+    expect(line.className).toContain('group-focus-visible:bg-[var(--ring)]')
+    expect(line.className).toContain('group-hover:bg-[var(--ring)]')
+  })
 })

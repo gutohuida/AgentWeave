@@ -789,6 +789,11 @@ async def sweep(*, now: Optional[datetime] = None) -> int:
         logger.warning("stall sweep failed", exc_info=True)
         return 0
     await drain()
+    # The backstop for a task left `assigned` outside a flow with nothing queued for its assignee
+    # (`a-red-main-does-not-hold-the-night`, FR-10): not a stall to report, a turn to start.
+    from . import assigned_task_start
+
+    await assigned_task_start.sweep()
     return reported
 
 

@@ -354,3 +354,10 @@
   background: color-mix(in oklab, var(--amber) 10%, transparent);
   border: 1px solid color-mix(in oklab, var(--amber) 28%, transparent);
 }
+.aw-query-error-retry {
+  margin-left: auto; padding: 0 8px; height: 24px; border-radius: var(--radius-md);
+  border: 1px solid color-mix(in oklab, var(--amber) 40%, transparent);
+  color: inherit; font-size: 12px; font-weight: 500;
+}
+.aw-query-error-retry:hover { background: color-mix(in oklab, var(--amber) 14%, transparent); }
+.aw-query-error-retry:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }

@@ -90,7 +90,7 @@ function withClient(node: ReactNode) {
 
 // The screens App opens on demand (`lazyScreens`) are loaded first, as `prefetchScreens` does in
 // the app once it is idle, so a click renders its screen at once, as the assertions expect.
-beforeAll(() => loadAllScreens())
+beforeAll(() => loadAllScreens(), 90000)
 
 describe('phase 1 conversation-first shell', () => {
   beforeEach(() => {

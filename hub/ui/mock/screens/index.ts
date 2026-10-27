@@ -13,6 +13,7 @@ const Activity = React.lazy(() => import('./Activity'))
 const Conversation = React.lazy(() => import('./Conversation'))
 const Settings = React.lazy(() => import('./Settings'))
 const AgentSettings = React.lazy(() => import('./AgentSettings'))
+const AppSettings = React.lazy(() => import('./AppSettings'))
 const Thread = React.lazy(() => import('./Thread'))
 
 export function screenFor(route: MockRoute): ScreenComponent {
@@ -27,6 +28,8 @@ export function screenFor(route: MockRoute): ScreenComponent {
       return Settings
     case 'agent-settings':
       return AgentSettings
+    case 'app-settings':
+      return AppSettings
     case 'tab':
       return { overview: Overview, tasks: Tasks, spec: Spec, vault: Vault, jobs: Jobs, activity: Activity, thread: Thread }[route.tab]
   }
@@ -50,6 +53,8 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'settings-charters', label: 'Settings · Charters', route: { kind: 'settings', section: 'charters' } },
   { id: 'settings-runners', label: 'Settings · Runners', route: { kind: 'settings', section: 'runners' } },
   { id: 'settings-budgets', label: 'Settings · Budgets', route: { kind: 'settings', section: 'budgets' } },
+  { id: 'app-settings', label: 'App settings · Sound and notifications', route: { kind: 'app-settings', section: 'notifications' } },
+  { id: 'app-settings-appearance', label: 'App settings · Appearance', route: { kind: 'app-settings', section: 'appearance' } },
   { id: 'agent-execution', label: 'Agent · Execution', route: { kind: 'agent-settings', agent: 'Builder', section: 'execution' } },
   { id: 'agent-access', label: 'Agent · Access', route: { kind: 'agent-settings', agent: 'Builder', section: 'access' } },
 ]

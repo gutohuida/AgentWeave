@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TaskStory } from '@/components/tasks/TaskStory'
 import type { TaskStory as Story } from '@/api/tasks'
@@ -49,6 +49,7 @@ const STORY: Story = {
       kind: 'transition', id: 'ttr-1', at: '2026-10-16T14:30:00Z', from: 'under_review',
       to: 'approved', actor_kind: 'run', actor: 'QA2', origin: 'actor', job: null, run_id: 'run-2',
       override_reason: 'the flaky suite fails on main too',
+      override_by: 'operator',
     },
     {
       kind: 'evidence', id: 'ev-new', at: '2026-10-16T14:31:00Z',
@@ -179,6 +180,29 @@ describe('the task story', () => {
     expect(screen.getByTestId('story-override-ttr-1').textContent).toContain(
       'the flaky suite fails on main too',
     )
+  })
+
+  it('says an operator override is the operator’s and the Hub’s own override is the Hub’s', () => {
+    render(<TaskStory taskId="task-1" />)
+    expect(screen.getByTestId('story-override-ttr-1').textContent).toContain('Approved over failing checks.')
+    cleanup()
+    const reason =
+      'The Hub approved over failures that were not this task\'s: `pytest` test_ledger.py::test_a fails on main at 91b59b5aaaaa too (check run chk-1, main 91b59b5aaaaa; fix task task-fix).'
+    storyOverride.current = {
+      ...STORY,
+      events: STORY.events.map((event) =>
+        event.kind === 'transition' ? { ...event, override_reason: reason, override_by: 'hub' } : event,
+      ),
+    }
+    try {
+      render(<TaskStory taskId="task-1" />)
+      const override = screen.getByTestId('story-override-ttr-1')
+      expect(override.textContent).toContain("Approved by the Hub over failures that were not this task's")
+      expect(override.textContent).toContain('task-fix')
+      expect(override.textContent).not.toContain('Approved over failing checks.')
+    } finally {
+      storyOverride.current = null
+    }
   })
 
   it('marks a replaced piece and shows each review with its reason', () => {

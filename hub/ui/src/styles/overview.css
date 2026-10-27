@@ -53,7 +53,7 @@
 .aw-ov-need-detail { margin-top: 3px; max-width: 72ch; font-size: 13px; line-height: 1.5; color: var(--text-2); }
 .aw-ov-need-meta { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; color: var(--text-3); }
 .aw-ov-agent { display: inline-flex; align-items: center; gap: 5px; color: var(--text-2); }
-.aw-ov-need-actions { display: flex; align-items: center; gap: 6px; padding-top: 1px; }
+.aw-ov-need-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 6px; padding-top: 1px; }
 .aw-ov-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .aw-ov-option {
   height: 28px; padding: 0 12px;
@@ -119,6 +119,7 @@
 /* Applied (ui-finesse wiring). */
 .aw-ov-row-detail[data-state="stalled"] { color: var(--amber); }
 .aw-ov-heading-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.aw-ov-heading-links { display: flex; align-items: baseline; flex-wrap: wrap; justify-content: flex-end; gap: 4px 16px; }
 .aw-overview-link { font-size: 12px; color: var(--text-3); border-radius: 4px; }
 .aw-overview-link:hover { color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; }
 .aw-overview-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }

@@ -1,9 +1,16 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentCreateDialog } from '@/components/agents/AgentCreateDialog'
 import { TopBar } from '@/components/layout/TopBar'
 
 const mutate = vi.fn()
+
+/** The Provider list is a menu (`MenuSelect`): open it, then choose a row. */
+async function pickProvider(name: RegExp) {
+  await userEvent.click(screen.getByRole('button', { name: 'Provider' }))
+  await userEvent.click(screen.getByRole('menuitemradio', { name }))
+}
 let mutationError: Error | null = null
 
 vi.mock('@/api/agents', () => ({
@@ -69,13 +76,13 @@ describe('operator agent creation dialog', () => {
     expect(screen.queryByRole('button', { name: 'Add agent' })).not.toBeInTheDocument()
   })
 
-  it('collects a name, launchable provider and model, and optional charter', () => {
+  it('collects a name, launchable provider and model, and optional charter', async () => {
     const onCreated = vi.fn()
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={onCreated} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
-    expect(screen.getByRole('option', { name: /Claude Code/ })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Provider' }))
+    expect(screen.getByRole('menuitemradio', { name: /Claude Code/ })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByText(/CLI unavailable/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('option', { name: /Codex CLI/ }))
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /Codex CLI/ }))
 
     fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'codex-gamma' } })
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'gpt-5.6-sol' } })
@@ -105,12 +112,11 @@ describe('operator agent creation dialog', () => {
     }
   })
 
-  it('never requires a charter', () => {
+  it('never requires a charter', async () => {
     // `operator-agent-creation` states a charter "MAY be selected but MUST NOT be required" and
     // defines a no-charter contract. The configuration page must not tighten that.
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
-    fireEvent.click(screen.getByRole('option', { name: /Codex CLI/ }))
+    await pickProvider(/Codex CLI/)
     fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'no-charter' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
 
@@ -123,35 +129,32 @@ describe('operator agent creation dialog', () => {
     expect(mutate.mock.calls[0][0]).not.toHaveProperty('charter_id')
   })
 
-  it('selects the catalog default model when the provider changes', () => {
+  it('selects the catalog default model when the provider changes', async () => {
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
-    fireEvent.click(screen.getByRole('option', { name: /Codex CLI/ }))
+    await pickProvider(/Codex CLI/)
     expect(screen.getByLabelText('Model')).toHaveValue('gpt-5.6-sol')
   })
 
-  it('shows the selected provider as the trigger label and closes the picker on choice', () => {
+  it('shows the selected provider as the trigger label and closes the picker on choice', async () => {
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
-    fireEvent.click(screen.getByRole('option', { name: /Codex CLI/ }))
+    await pickProvider(/Codex CLI/)
     expect(screen.getByRole('button', { name: 'Provider' })).toHaveTextContent('Codex CLI')
-    expect(screen.queryByRole('listbox', { name: 'Provider' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
-  it('a launchable provider with no brand mark is still selectable', () => {
+  it('a launchable provider with no brand mark is still selectable', async () => {
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
-    const option = screen.getByRole('option', { name: /Future CLI/ })
-    expect(option).not.toBeDisabled()
-    fireEvent.click(option)
+    await userEvent.click(screen.getByRole('button', { name: 'Provider' }))
+    const option = screen.getByRole('menuitemradio', { name: /Future CLI/ })
+    expect(option).not.toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(option)
     expect(screen.getByRole('button', { name: 'Provider' })).toHaveTextContent('Future CLI')
     expect(screen.getByLabelText('Model')).toHaveValue('future-1')
   })
 
-  it('offers a declared alias as its own "Latest" choice, labelled with its current target (a-model-alias-is-a-model-choice)', () => {
+  it('offers a declared alias as its own "Latest" choice, labelled with its current target (a-model-alias-is-a-model-choice)', async () => {
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
-    fireEvent.click(screen.getByRole('option', { name: /Future CLI/ }))
+    await pickProvider(/Future CLI/)
 
     const modelSelect = screen.getByLabelText('Model') as HTMLSelectElement
     const optionTexts = [...modelSelect.querySelectorAll('option')].map((o) => o.textContent)

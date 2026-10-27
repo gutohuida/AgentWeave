@@ -1,1 +1,0 @@
-function r(e){switch(e){case"approved":return"green";case"rejected":case"revision_needed":return"red";case"under_review":return"amber";case"in_progress":return"blue";case"blocked":return"purple";default:return"neutral"}}function n(e){return e==="accepted"?"green":e==="rejected"?"red":"amber"}export{n as e,r as s};

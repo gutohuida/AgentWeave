@@ -92,8 +92,11 @@ export function AgentPostureChips({ agent, onNavigate }: { agent: AgentSummary; 
         {queueError && (
           <span className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} title="This agent's queue could not be read, so a hold would not show">queue not read</span>
         )}
+        {/* The hop budget is a Project settings > General setting: the chip opens it. */}
         {queue?.waiting_reason === HOP_HELD_REASON && (
-          <span className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag}>held by hop budget</span>
+          <button type="button" className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} title="Open the hop budget in Project settings" onClick={() => onNavigate('settings')}>
+            held by hop budget
+          </button>
         )}
       </div>
       {cannotRun && launch?.reason && (

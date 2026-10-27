@@ -2,7 +2,7 @@
 task_transitions.level
 
 Revision ID: 0152
-Revises: 0149
+Revises: 0151
 Create Date: 2026-10-27 00:00:00.000000
 
 `a-build-has-a-driver-a-level-and-its-people` (slice D, Tier 2). A `builds` table records how an
@@ -16,8 +16,7 @@ outside any build and governed by the document's rigor exactly as before, which 
 operator's database today (read-only, 2026-10-27: 0 open spec tasks, one live flow loop with no
 build).
 
-Numbered 0152 on a base whose head is 0149 (slices K and M take 0150 and 0151 beside it); the
-orchestrator relinks `down_revision` at merge.
+Follows slice M's 0151 (relinked from 0149 when master brought K's 0150 and M's 0151 in).
 
 Downgrade drops the index, the four columns and the table (plain `DROP COLUMN`, SQLite 3.35+, as
 `0147`'s downgrade does); it loses the build records and the levels written since, and nothing else.
@@ -32,7 +31,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0152"
-down_revision = "0149"
+down_revision = "0151"
 branch_labels = None
 depends_on = None
 
