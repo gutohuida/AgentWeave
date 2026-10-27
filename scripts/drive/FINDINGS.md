@@ -40548,7 +40548,7 @@ All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's 
 
 ## F1051 (B) -- the newest integration row is chosen by timestamp alone, and one approval writes several rows with the same timestamp
 
-**Status:** open 2026-10-27. Found while drafting slice I (`the-apps-other-surfaces-make-sense`), confirmed on `:8000` read-only.
+**Status:** fixed 2026-10-27 (Tier 0, built with slice I): `_latest_integrations_by_task` orders by `created_at` desc, then the outcome that matters (`failed`, then `merged`, then `skipped`), then insertion (`task_integrations.rowid`), so a tie cannot be left to SQLite. Tests: `hub/tests/test_the_newest_integration_is_decided_without_a_tie.py` (merged before or after skipped both report `merged`; a failure is not hidden by a merge; equal rows resolve to the last inserted). Found while drafting slice I (`the-apps-other-surfaces-make-sense`), confirmed on `:8000` read-only.
 **Source:** code
 **Theme:** Integration
 **Ready:** yes
