@@ -12,46 +12,58 @@ export const Dialog = RadixDialog.Root
 export const DialogTrigger = RadixDialog.Trigger
 export const DialogClose = RadixDialog.Close
 
-interface DialogContentProps {
+/** The control to give focus back to, given what has it as the dialog opens.
+ *
+ *  A dialog opened from a menu item is opened by an element that is unmounted as the menu closes
+ *  (the Jobs archive confirm), so it can never be returned to; the menu's own trigger can. Radix
+ *  labels a menu by its trigger (`aria-labelledby`) and the trigger controls it (`aria-controls`). */
+function openerOf(active: Element | null): HTMLElement | null {
+  if (!(active instanceof HTMLElement) || active === document.body) return null
+  const menu = active.closest('[role="menu"]')
+  if (!menu) return active
+  const labelledBy = menu.getAttribute('aria-labelledby')
+  const trigger =
+    (labelledBy ? document.getElementById(labelledBy) : null) ??
+    (menu.id ? document.querySelector(`[aria-controls="${CSS.escape(menu.id)}"]`) : null)
+  return trigger instanceof HTMLElement ? trigger : null
+}
+
+export function DialogContent({
+  title,
+  description,
+  width = 520,
+  footer,
+  children,
+}: {
   title: string
   description?: React.ReactNode
   width?: number
   footer?: React.ReactNode
   children?: React.ReactNode
-}
-
-export function DialogContent(props: DialogContentProps) {
+}) {
+  // Radix returns focus to the dialog's Trigger on close. A dialog opened from a button that is not
+  // wrapped in one (every controlled dialog: the Vault's Add and Vault storage, the Jobs archive
+  // confirm) has none, and focus fell to <body> (F1029). Whatever had focus as the dialog opens is
+  // the opener, whether a button was pressed or a shortcut used, so no caller says where focus goes
+  // back to. It is read in `onOpenAutoFocus`, which runs before Radix moves focus into the dialog.
+  // Overlay and Content stay direct children of the Portal: Radix hands each a ref for its exit
+  // animation, which a wrapper component cannot take.
+  const opener = React.useRef<HTMLElement | null>(null)
   return (
     <RadixDialog.Portal>
-      <DialogPanel {...props} />
-    </RadixDialog.Portal>
-  )
-}
-
-/** Mounted only while the dialog is open (inside the Portal), which is what lets it read, once,
- *  what had focus when it opened.
- *
- *  Radix returns focus to the dialog's Trigger on close. A dialog opened from a button that is not
- *  wrapped in one (every controlled dialog: the Vault's Add and Vault storage, the Jobs archive
- *  confirm) has none, and focus fell to <body> (F1029). The element focused at open is the opener
- *  whether a button was pressed or a shortcut used, so no caller has to say where focus goes back
- *  to. Opened with nothing focused (a file dropped on the Vault), there is nothing to return to. */
-function DialogPanel({ title, description, width = 520, footer, children }: DialogContentProps) {
-  const [opener] = React.useState<HTMLElement | null>(() =>
-    typeof document !== 'undefined' && document.activeElement instanceof HTMLElement && document.activeElement !== document.body
-      ? document.activeElement
-      : null,
-  )
-  return (
-    <>
       <RadixDialog.Overlay className="aw-dialog-overlay" />
       <RadixDialog.Content
         className="aw-dialog"
         style={{ width: `min(${width}px, calc(100vw - 32px))` }}
+        onOpenAutoFocus={() => {
+          opener.current = openerOf(document.activeElement)
+        }}
         onCloseAutoFocus={(event) => {
-          if (opener?.isConnected) {
+          const target = opener.current
+          opener.current = null
+          if (target?.isConnected) {
             event.preventDefault()
-            opener.focus()
+            target.focus()
           }
         }}
       >
@@ -67,6 +79,6 @@ function DialogPanel({ title, description, width = 520, footer, children }: Dial
         {children ? <div className="aw-dialog-body">{children}</div> : null}
         {footer ? <footer className="aw-dialog-foot">{footer}</footer> : null}
       </RadixDialog.Content>
-    </>
+    </RadixDialog.Portal>
   )
 }

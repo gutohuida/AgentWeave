@@ -406,7 +406,7 @@ export function OverviewScreen({
     {confirmingDeclineAll ? (
       <DeleteConfirmDialog
         heading={`Decline ${unwaited.length} ${unwaited.length === 1 ? 'question' : 'questions'}?`}
-        body={`No agent is waiting on any of these ${unwaited.length}; the turns that asked them have ended. Declining closes each one without an answer.`}
+        body={`Nobody is waiting on the answers to these ${unwaited.length}. Declining closes each one without an answer.`}
         confirmLabel={`Decline ${unwaited.length} ${unwaited.length === 1 ? 'question' : 'questions'}`}
         isPending={decliningAll}
         pendingLabel="Declining…"
