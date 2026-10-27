@@ -1546,14 +1546,30 @@ class EvidenceDecision(RequestModel):
     reason: str = Field(default="", max_length=10000)
 
 
+async def _find_document(session, project_id: str, ref: str):
+    """A document by path, or by its `spdoc-…` id as `read_spec_document` takes it."""
+    from ... import spec_lifecycle
+    from ...db.models import SpecDocument
+
+    if _DOCUMENT_ID_RE.fullmatch(ref):
+        return (
+            await session.execute(
+                select(SpecDocument).where(
+                    SpecDocument.id == ref, SpecDocument.project_id == project_id
+                )
+            )
+        ).scalar_one_or_none()
+    return await spec_lifecycle.get_document(session, project_id, ref)
+
+
 async def _resolve_requirement(
     session, project_id: str, identifier: str, document: str, task_id: Optional[str] = None
 ):
-    from ... import spec_index, spec_lifecycle
+    from ... import spec_index
 
     document_row = None
     if document:
-        document_row = await spec_lifecycle.get_document(session, project_id, document)
+        document_row = await _find_document(session, project_id, document)
         if document_row is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1681,7 +1697,6 @@ async def list_evidence_for_agent(
     **Who produced each row is part of the answer.** An agent may not decide evidence it produced
     itself, so one that cannot see the producer learns that rule by being refused once per row.
     """
-    from ... import spec_lifecycle
     from ...db.models import RequirementEvidence, SpecRequirement
     from .spec import _evidence_views
 
@@ -1697,7 +1712,7 @@ async def list_evidence_for_agent(
         # document read the whole project's evidence and still answered 200 — it "succeeded" by
         # not doing what it was asked. Resolved the same way `_resolve_requirement` resolves a
         # document (by path, project-scoped) and scoped to that document's own requirements.
-        document_row = await spec_lifecycle.get_document(session, actor.project_id, document)
+        document_row = await _find_document(session, actor.project_id, document)
         if document_row is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
