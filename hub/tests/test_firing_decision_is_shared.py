@@ -96,6 +96,34 @@ async def test_the_board_and_the_firing_name_the_same_task_when_there_is_one(app
     assert [t["id"] for t in current] == ["task-dec-a"]
 
 
+async def test_a_critical_pending_task_is_staffed_before_older_ones_and_named_by_the_board(app):
+    """`a-red-main-does-not-hold-the-night` FR-7: pending tasks by priority before age, in the one
+    order the firing and the board share. The critical task is the newest, so oldest-first would
+    pick another."""
+    async with async_session_factory() as db:
+        job, _loop = await _loop_with(
+            db, "priority", [("task-dec-old1", "pending"), ("task-dec-old2", "pending")]
+        )
+        db.add(
+            Task(
+                id="task-dec-fix",
+                project_id="proj-test",
+                title="Fix main",
+                status="pending",
+                priority="critical",
+                loop_id=_loop.id,
+            )
+        )
+        await db.commit()
+
+    async with async_session_factory() as db:
+        decision = await decide_firing(db, await _fresh_loop(db, job.id), default_agent="dec-agent")
+        current = (await _batch_loop_summaries(db, [job.id]))[job.id].current_tasks
+
+    assert [s.task.id for s in decision.selections] == ["task-dec-fix"]
+    assert [t["id"] for t in current] == ["task-dec-fix"]
+
+
 async def test_a_stalled_queue_claims_nothing_and_the_board_offers_no_claimable_item(app):
     """4.1's own case. A queue of `completed` work is stalled: the firing refuses with a reason,
     and the board shows no current item — `completed` is in neither set, which is the gap both

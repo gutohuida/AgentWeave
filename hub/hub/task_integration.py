@@ -542,7 +542,8 @@ async def task_has_requirement_links(session: AsyncSession, task: Task) -> bool:
 async def evidence_governs(session: AsyncSession, task: Task) -> bool:
     """Does accepted evidence decide what *task*'s approval merges (design D5, D10, D11)?
 
-    Five answers, in this order, and the order is the design:
+    Five answers, in this order, and the order is the design (after step 0 below: a fix task the
+    Hub filed merges its branch tip):
 
     1. **No loop** → yes. An ordinary task is untouched by any of this.
     2. **The loop id does not resolve** → yes. A dangling id decides nothing.
@@ -563,6 +564,12 @@ async def evidence_governs(session: AsyncSession, task: Task) -> bool:
     ask this within one approval and one session, so the PK get is answered from the identity map
     the second time and a `select` would not be.
     """
+    if getattr(task, "merges_branch_tip", False):
+        # 0. **A fix task the Hub filed** (`a-red-main-does-not-hold-the-night`): it serves no
+        # requirement, so in a flow whose document makes evidence govern it could record nothing,
+        # had no review target and merged nothing. Recorded on the task, and asked before the
+        # loop, so the Hub's own task is reviewed and landed at its branch tip in any loop.
+        return False
     if task.loop_id is None:
         return True
     from .db.models import Loop
@@ -586,7 +593,12 @@ async def review_alone_gates(session: AsyncSession, task: Task) -> bool:
     was refused as missing evidence, and its work never reached main. It merges, and is reviewed
     at, its own branch tip instead. A task with evidence keeps evidence governing (D10: the source
     is not switched once evidence exists).
+
+    A fix task the Hub filed (`merges_branch_tip`) is gated by its review alone in any loop
+    (`a-red-main-does-not-hold-the-night`).
     """
+    if getattr(task, "merges_branch_tip", False):
+        return True
     if task.loop_id is not None or await task_has_requirement_links(session, task):
         return False
     return (

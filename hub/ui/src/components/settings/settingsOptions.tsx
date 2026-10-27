@@ -9,7 +9,13 @@ import type { ControlValue, ModelDescriptor } from '@/api/modelCatalog'
 
 export const PROJECT_DEFAULTS: Pick<
   ProjectSettings,
-  'hop_budget' | 'turn_delivery_cap' | 'agent_budget' | 'allow_agent_jobs' | 'checkpoint_mode' | 'checkpoint_auto_continue'
+  | 'hop_budget'
+  | 'turn_delivery_cap'
+  | 'agent_budget'
+  | 'allow_agent_jobs'
+  | 'checkpoint_mode'
+  | 'checkpoint_auto_continue'
+  | 'checks_auto_override'
 > = {
   hop_budget: 6,
   turn_delivery_cap: 10,
@@ -17,6 +23,7 @@ export const PROJECT_DEFAULTS: Pick<
   allow_agent_jobs: true,
   checkpoint_mode: 'offered',
   checkpoint_auto_continue: false,
+  checks_auto_override: true,
 }
 
 /** What each posture lets an agent do, in a sentence: the menu's second line. */

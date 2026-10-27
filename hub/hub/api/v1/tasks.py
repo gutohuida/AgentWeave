@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
@@ -810,7 +810,12 @@ async def create_task_for_actor(
     actor: Actor,
     session: AsyncSession,
     record_addition: bool = True,
+    before_commit: Optional[Callable[[Task], Awaitable[None]]] = None,
 ) -> TaskResponse:
+    """Create a task as *actor*. *before_commit*, a Hub-internal caller's own staging (never a
+    request's), runs on the new task before the task's commit, so what it writes lands in the same
+    commit: the Hub's fix task records `merges_branch_tip` and its dedup event this way
+    (`a-red-main-does-not-hold-the-night`)."""
     # Honor a client-supplied id when present so the MCP `create_task` tool
     # can return the same id the Hub stored. Falls back to a fresh short id
     # for clients that don't supply one (e.g. direct API users).
@@ -882,6 +887,8 @@ async def create_task_for_actor(
             ),
             source=loop_history.SOURCE_CREATE_TASK,
         )
+    if before_commit is not None:
+        await before_commit(task)
     try:
         await session.commit()
     except IntegrityError as e:
@@ -907,6 +914,12 @@ async def create_task_for_actor(
     await session.commit()
 
     await sse_manager.broadcast(project_id, "task_created", {"id": task.id, "title": body.title})
+    if task.status == "assigned" and task.loop_id is None:
+        # Created `assigned` outside any flow: started for its assignee now
+        # (`a-red-main-does-not-hold-the-night`, FR-9). The rule decides; this only asks.
+        from ... import assigned_task_start
+
+        assigned_task_start.request(task.id, created_by_run_id)
     await persist_event(
         session,
         project_id,
@@ -1973,6 +1986,12 @@ async def update_task_for_actor(
                 run_id=actor.run_id,
             ),
         )
+    if "assignee" in body.model_fields_set and task.status == "assigned" and not task.loop_id:
+        # A new holder of a task already `assigned` outside a flow is started too (FR-9); the rule
+        # finds nothing to do where its turn is already queued.
+        from ... import assigned_task_start
+
+        assigned_task_start.start_after_commit(session, task.id, actor.run_id)
     task.updated = datetime.now(timezone.utc)
     # Kept as the materialised latest writer (D4 of the proposal's impact notes). The rules read the
     # append-only history instead; this stays for existing consumers and is not what governs.
@@ -2213,6 +2232,8 @@ def _transition_view(
         "policy_digest": row.policy_digest,
         # Why the operator approved over failing checks (`approval-runs-the-projects-checks`).
         "override_reason": row.override_reason,
+        # Who overrode: the operator, or the Hub over failures not the task's (slice M).
+        "override_by": row.override_by,
         # The operator action behind a move it made, and its commits (closing as already built).
         "note": row.note,
         "created_at": row.created_at.isoformat() if row.created_at else None,

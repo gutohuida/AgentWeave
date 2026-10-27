@@ -106,6 +106,11 @@ export interface ProjectSettings {
   /** Commands the Hub runs on the work a task's approval would merge; approval is refused until
    *  they pass. Null means no checks, and approval is unchanged. Only the operator sets these. */
   checks: ProjectCheck[] | null
+  /** Whether the Hub lands an approval over check failures that are provably not the task's (the
+   *  same test ids fail on main too, or passed when rerun on their own), recording its own
+   *  override, and files their fix task (`a-red-main-does-not-hold-the-night`). On by default;
+   *  absent from a Hub older than that change, which never overrides. */
+  checks_auto_override?: boolean
   /** The posture every agent's run gets when neither its conversation nor the agent states one
    *  (reach-1019). Null is the runner's built-in posture; an agent's own default wins either way. */
   default_permission_mode?: string | null

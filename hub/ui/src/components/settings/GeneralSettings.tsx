@@ -306,6 +306,25 @@ export function GeneralSettings({
             </div>
           }
         />
+        <SettingsRow
+          label="Land over failures that are not the task's"
+          description="When every failing test also fails on main, or passed when rerun on its own, approving lands the work with an override the Hub records, and the Hub files a task to fix those tests. Off: such an approval waits for you to land it with a reason."
+          changed={(settings.checks_auto_override ?? true) !== PROJECT_DEFAULTS.checks_auto_override}
+          onReset={() => onChange({ checks_auto_override: true }, 'The Hub lands over failures that are not the task’s again')}
+          control={
+            <Switch
+              aria-label="Land over failures that are not the task's"
+              data-testid="project-checks-auto-override"
+              checked={settings.checks_auto_override ?? true}
+              onCheckedChange={(v) =>
+                onChange(
+                  { checks_auto_override: v },
+                  v ? 'The Hub lands over failures that are not the task’s' : 'Failures that are not the task’s wait for you',
+                )
+              }
+            />
+          }
+        />
       </SettingsGroup>
 
       <SettingsGroup title="Checkpointing" description="When a conversation's context fills, the Hub writes a checkpoint so a fresh conversation can continue the work.">
