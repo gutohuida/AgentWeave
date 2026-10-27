@@ -40328,7 +40328,7 @@ Cause (verified): the sentence is a constant (`hub/hub/api/v1/agents.py:3449-345
 
 ## F1027 (C) -- one Escape on the Add-agent dialog's open Provider list closes the whole dialog and throws away the typed name; the list takes no arrow keys
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_layers.py popover`, shot `testbed/ui-judge/s1023-kb/layers_add_agent_provider_open.png`).
+**Status:** fixed in code 2026-10-27 (Tier 0, built with slice I): the Provider list is the `MenuSelect` the Vault dialogs use (arrows and Enter pick; Escape closes only the list and focus stays on Provider). Test: `the Provider list is one layer (F1027)` in `agentCreateDialogFocusRestore.test.tsx`. The browser re-drive (`scripts/drive/s1023_kb_*.py`) is still to be run against the rebuilt bundle. Found 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_layers.py popover`, shot `testbed/ui-judge/s1023-kb/layers_add_agent_provider_open.png`).
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
@@ -40344,7 +40344,7 @@ Cause (verified): `ProviderPicker` (`hub/ui/src/components/agents/AgentCreateDia
 
 ## F1028 (C) -- Ctrl+K over an open dialog or the task drawer: the palette opens on top, but the first Tab moves focus into the dialog behind it, and typing goes into a field the operator cannot see
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_palette_over.py`, shots `testbed/ui-judge/s1023-kb/palette_over_add_agent.png`, `palette_over_task_drawer.png`).
+**Status:** fixed in code 2026-10-27 (Tier 0, built with slice I): `useDialogFocus` stands down on Tab when focus is inside a dialog that does not contain its panel, and `useModalLayer` lets the command palette take a place in the layer stack. Tests: `useDialogFocus.test.tsx` (`F1028`). The browser re-drive (`scripts/drive/s1023_kb_*.py`) is still to be run against the rebuilt bundle. Found 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_palette_over.py`, shots `testbed/ui-judge/s1023-kb/palette_over_add_agent.png`, `palette_over_task_drawer.png`).
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
@@ -40362,7 +40362,7 @@ Cause (verified): `CommandPalette` (`hub/ui/src/components/palette/CommandPalett
 
 ## F1029 (C) -- the Vault's Add and Vault storage dialogs drop keyboard focus to `<body>` on every close: Escape, Cancel and the X alike
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_dialogs.py vault`, shots `testbed/ui-judge/s1023-kb/dlg_vault-add_open.png`, `dlg_vault-storage_open.png`).
+**Status:** fixed in code 2026-10-27 (Tier 0, built with slice I): the shared `DialogContent` reads what had focus when it opened and restores it on close (Radix had no Trigger to restore to). Test: `returns focus to %s after closing its dialog` in `vaultTab.test.tsx`. The browser re-drive (`scripts/drive/s1023_kb_*.py`) is still to be run against the rebuilt bundle. Found 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_dialogs.py vault`, shots `testbed/ui-judge/s1023-kb/dlg_vault-add_open.png`, `dlg_vault-storage_open.png`).
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
@@ -40378,7 +40378,7 @@ Cause (verified): both are controlled Radix dialogs with no `DialogTrigger`: `Va
 
 ## F1030 (C) -- in the task drawer, Escape on the inline "Delete this task?" confirm closes the whole drawer, not just the confirm
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle at 1440 and 760 px, `scripts/drive/s1023_kb_tasks.py`, shot `testbed/ui-judge/s1023-kb/task_delete_confirm_1440.png`).
+**Status:** fixed in code 2026-10-27 (Tier 0, built with slice I): the delete confirm claims Escape with `preventDefault`, cancels itself and returns focus to Delete; the second Escape closes the drawer. Test: `one Escape closes one layer of the drawer (F1030)` in `taskDetailDrawer.test.tsx`. The browser re-drive (`scripts/drive/s1023_kb_*.py`) is still to be run against the rebuilt bundle. Found 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle at 1440 and 760 px, `scripts/drive/s1023_kb_tasks.py`, shot `testbed/ui-judge/s1023-kb/task_delete_confirm_1440.png`).
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
@@ -40394,7 +40394,7 @@ Cause (verified): the confirm (`hub/ui/src/components/tasks/TaskDetailDrawer.tsx
 
 ## F1031 (C) -- a task can be renamed only with a mouse: the drawer's title is a click-only heading, and after Enter or Escape in the title field focus falls to `<body>`
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_tasks.py`).
+**Status:** fixed in code 2026-10-27 (Tier 0, built with slice I): the drawer title is a heading holding a `Rename` button (a Tab stop, Enter opens the input), and focus returns to it after save or Escape. Tests: `renaming a task from the keyboard (F1031)` in `taskDetailDrawer.test.tsx`. The browser re-drive (`scripts/drive/s1023_kb_*.py`) is still to be run against the rebuilt bundle. Found 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_tasks.py`).
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
@@ -40410,7 +40410,7 @@ Cause (verified): `TaskDetailDrawer.tsx:491-502` is `<h2 ... title="Click to ren
 
 ## F1032 (C) -- the pane resizers are tab stops with no visible focus: the line meant to light up on focus is pinned to its resting colour by an inline style
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_tabwalk.py`, `s1023_kb_rings.py`, shots `testbed/ui-judge/s1023-kb/ring_light_pane-resizer.png`, `ring_dark_pane-resizer.png`).
+**Status:** fixed in code 2026-10-27 (Tier 0, built with slice I): the resizer line's resting colour is a class (`bg-[var(--border-region)]`), so the `--ring` focus and hover colours win. Test: `draws its line from classes` in `PaneResizer.test.tsx`. The browser re-drive (`scripts/drive/s1023_kb_*.py`) is still to be run against the rebuilt bundle. Found 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_tabwalk.py`, `s1023_kb_rings.py`, shots `testbed/ui-judge/s1023-kb/ring_light_pane-resizer.png`, `ring_dark_pane-resizer.png`).
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
@@ -40548,7 +40548,7 @@ All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's 
 
 ## F1051 (B) -- the newest integration row is chosen by timestamp alone, and one approval writes several rows with the same timestamp
 
-**Status:** open 2026-10-27. Found while drafting slice I (`the-apps-other-surfaces-make-sense`), confirmed on `:8000` read-only.
+**Status:** fixed 2026-10-27 (Tier 0, built with slice I): `_latest_integrations_by_task` orders by `created_at` desc, then the outcome that matters (`failed`, then `merged`, then `skipped`), then insertion (`task_integrations.rowid`), so a tie cannot be left to SQLite. Tests: `hub/tests/test_the_newest_integration_is_decided_without_a_tie.py` (merged before or after skipped both report `merged`; a failure is not hidden by a merge; equal rows resolve to the last inserted). Found while drafting slice I (`the-apps-other-surfaces-make-sense`), confirmed on `:8000` read-only.
 **Source:** code
 **Theme:** Integration
 **Ready:** yes

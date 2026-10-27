@@ -27,6 +27,8 @@ import {
   agentDestination,
   agentSettingsBackDestination,
   agentSettingsDestination,
+  appSettingsDestination,
+  destinationProjectId,
   environmentDestination,
   isNewConversationDestination,
   newConversationDestination,
@@ -36,6 +38,7 @@ import {
   threadDestination,
   withDocument,
 } from '@/lib/navigation'
+import { applyColorMode } from '@/lib/colorMode'
 import { linkTarget } from '@/lib/threadKnots'
 import { useProjectConversations } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
@@ -47,6 +50,7 @@ import {
   ActivityScreen,
   AgentCreateDialog,
   AgentSettingsPage,
+  AppSettingsScreen,
   ArchivedAgentNotice,
   ConversationView,
   EvidenceBrowser,
@@ -156,14 +160,14 @@ export default function App() {
   }, [mode])
 
   useEffect(() => {
-    const destinationProjectId = destination.kind === 'zero' ? null : destination.projectId
-    if (destinationProjectId !== projectId) {
-      useConfigStore.getState().setSelectedProject(destinationProjectId)
+    const openProjectId = destinationProjectId(destination)
+    if (openProjectId !== projectId) {
+      useConfigStore.getState().setSelectedProject(openProjectId)
     }
   }, [destination, projectId])
 
   // The same query the rail draws from, so resolving a destination costs no extra request.
-  const currentProjectId = destination.kind === 'zero' ? projectId || '' : destination.projectId
+  const currentProjectId = destinationProjectId(destination) ?? (projectId || '')
   const { data: projectConversations } = useProjectConversations(currentProjectId || null)
   // Read by the command palette (D3) — the same queries `SpecPage`/`TasksBoard` already use, not
   // a fetch the palette introduces of its own.
@@ -284,14 +288,7 @@ export default function App() {
 
   /** A theme flip repaints every surface at once; transitions are suspended for that frame so it
    *  is one change rather than a hundred staggered fades. */
-  const toggleMode = () => {
-    const next = mode === 'light' ? 'dark' : 'light'
-    const root = document.documentElement
-    root.classList.add('no-transitions')
-    useConfigStore.getState().setMode(next)
-    root.dataset.mode = next
-    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('no-transitions')))
-  }
+  const toggleMode = () => applyColorMode(mode === 'light' ? 'dark' : 'light')
 
   const navigate = (value: string) => {
     // `agent-settings:<name>:<section>` -- the Overview's agent cards link a flag to the section that
@@ -438,6 +435,24 @@ export default function App() {
             ),
           )
         }
+        onOpenAppSettings={() => navigateTo(appSettingsDestination(settingsDestination.projectId))}
+      />
+    )
+  } else if (destination.kind === 'app-settings') {
+    const appSettingsDest = destination
+    content = (
+      <AppSettingsScreen
+        section={appSettingsDest.section}
+        onSelectSection={(section) => navigateTo(appSettingsDestination(appSettingsDest.projectId, section))}
+        onOpenSetup={() => setSetupOpen(true)}
+        back={
+          appSettingsDest.projectId && currentProject
+            ? {
+                label: `Back to ${currentProject.name}`,
+                onClick: () => navigateTo(projectDestination(appSettingsDest.projectId!)),
+              }
+            : undefined
+        }
       />
     )
   } else if (destination.kind === 'project') {
@@ -567,6 +582,7 @@ export default function App() {
           section={destination.environmentSection}
           onSelectSection={(section) => navigateTo(environmentDestination(destination.projectId, section))}
           onNavigate={navigate}
+          onOpenAppSettings={() => navigateTo(appSettingsDestination(destination.projectId))}
         />
       )
     }
@@ -635,6 +651,8 @@ export default function App() {
             // One action. `open_existing` resolves a known path, a marked directory, or a plain
             // folder it initialises, so "create" never needed a separate entry point.
             onAddProject={() => setProjectManagerMode('open')}
+            onOpenAppSettings={() => navigateTo(appSettingsDestination(currentProjectId || null))}
+            appSettingsActive={destination.kind === 'app-settings'}
             compact={sidebarCollapsed}
             onCompactChange={setSidebarCollapsed}
             width={sidebarWidth}
@@ -722,6 +740,13 @@ export default function App() {
           useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
           navigateTo(projectDestination(currentProjectId, 'tasks'))
         }}
+        onOpenAppSettings={(section) => navigateTo(appSettingsDestination(currentProjectId || null, section))}
+        onOpenProjectSettings={
+          currentProject ? () => navigateTo(environmentDestination(currentProject.id, 'settings')) : undefined
+        }
+        onOpenAgentSettings={
+          currentProject ? (agent) => navigateTo(agentSettingsDestination(currentProject.id, agent)) : undefined
+        }
       />
       <CheckpointStatusBanner />
       <Toaster />

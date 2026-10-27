@@ -295,6 +295,10 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const [titleDraft, setTitleDraft] = useState<string | null>(null)
   const [titleError, setTitleError] = useState<string | null>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
+  const titleButtonRef = useRef<HTMLButtonElement>(null)
+  // Set when the rename ended by the keyboard (saved or cancelled): the title control takes focus
+  // back, since the input that had it is gone (F1031). A blur from clicking elsewhere does not.
+  const refocusTitle = useRef(false)
   const editingTitle = titleDraft !== null
 
   const { data: allowed } = useAllowedTransitions()
@@ -306,6 +310,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const deleteTask = useDeleteTask()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const cancelDeleteRef = useRef<HTMLButtonElement>(null)
+  const deleteButtonRef = useRef<HTMLButtonElement>(null)
   const renameTask = useRenameTask()
   const setHandling = useSetDivergenceHandling()
   const { data: agents } = useAgents()
@@ -343,6 +348,13 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   useEffect(() => {
     if (confirmingDelete) cancelDeleteRef.current?.focus()
   }, [confirmingDelete])
+
+  useEffect(() => {
+    if (!editingTitle && refocusTitle.current) {
+      refocusTitle.current = false
+      titleButtonRef.current?.focus()
+    }
+  }, [editingTitle])
 
   // Same reasoning as the blocking-reason field just below: focus is applied here, once, rather
   // than via `autoFocus`, which would race the drawer's own mount/focus handling.
@@ -459,6 +471,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                     { id: task.id, title: nextTitle },
                     {
                       onSuccess: () => {
+                        refocusTitle.current = true
                         setTitleDraft(null)
                         setTitleError(null)
                       },
@@ -471,6 +484,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                   )
                 } else if (event.key === 'Escape') {
                   event.preventDefault()
+                  refocusTitle.current = true
                   setTitleDraft(null)
                   setTitleError(null)
                 }
@@ -481,17 +495,24 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
               }}
             />
           ) : (
-            <h2
-              data-testid={`task-drawer-title-${task.id}`}
-              className="text-base font-semibold leading-snug cursor-text"
-              style={{ color: 'var(--text)' }}
-              title="Click to rename"
-              onClick={() => {
-                setTitleError(null)
-                setTitleDraft(task.title)
-              }}
-            >
-              {task.title}
+            // A heading holding a button: the title stays a heading, and renaming is reachable with
+            // Tab and Enter, not only a click (F1031).
+            <h2 className="text-base font-semibold leading-snug" style={{ color: 'var(--text)' }}>
+              <button
+                ref={titleButtonRef}
+                type="button"
+                data-slot="drawer-title"
+                data-testid={`task-drawer-title-${task.id}`}
+                aria-label={`Rename “${task.title}”`}
+                className="cursor-text rounded text-left font-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                title="Rename"
+                onClick={() => {
+                  setTitleError(null)
+                  setTitleDraft(task.title)
+                }}
+              >
+                {task.title}
+              </button>
             </h2>
           )}
           {titleError && (
@@ -663,6 +684,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                   rejecting it and leaving it counted. Refused by the Hub while a run is on it. */}
               <button
                 type="button"
+                ref={deleteButtonRef}
                 data-testid={`task-delete-${task.id}`}
                 className="text-[11px] px-2 py-0.5 rounded hover:bg-[var(--row-hover)]"
                 style={{ color: 'var(--text-3)' }}
@@ -727,6 +749,15 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             data-testid={`task-delete-confirm-${task.id}`}
             className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded px-2 py-1.5 text-[11px]"
             style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+            // Escape cancels the confirm and only the confirm: it says it answered the key, so the
+            // drawer's own handler (a bubble-phase listener on `document`) stands down, as the
+            // blocking-reason field does. Focus goes back to Delete (F1030).
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape') return
+              event.preventDefault()
+              setConfirmingDelete(false)
+              deleteButtonRef.current?.focus()
+            }}
           >
             <span className="flex-1">
               Delete this task? Its own prerequisites, links, transitions and evidence go with it.

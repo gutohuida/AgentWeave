@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
-from sqlalchemy import func, select
+from sqlalchemy import case, func, literal_column, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -562,16 +562,32 @@ async def _latest_integrations_by_task(
 
     Same shape as `_latest_heartbeats_by_agent`: one query for the whole page rather than one per
     task, ordered newest-first so the first row seen per task is the one kept.
+
+    One approval of a task with several commits writes several rows in one transaction, so they
+    share a `created_at` (F1051). The tie is broken by what the approval did, not by whichever row
+    SQLite returns first: a failure is what the operator must see, a merge means work landed, and a
+    skip ("already in master") is the least informative; rows still tied are ordered by insertion
+    (`task_integrations` has a String key, so it is a rowid table).
     """
     if not task_ids:
         return {}
+    outcome_rank = case(
+        (TaskIntegration.outcome == "failed", 0),
+        (TaskIntegration.outcome == "merged", 1),
+        else_=2,
+    )
     result = await session.execute(
         select(TaskIntegration)
         .where(
             TaskIntegration.project_id == project_id,
             TaskIntegration.task_id.in_(task_ids),
         )
-        .order_by(TaskIntegration.task_id, TaskIntegration.created_at.desc())
+        .order_by(
+            TaskIntegration.task_id,
+            TaskIntegration.created_at.desc(),
+            outcome_rank,
+            literal_column("task_integrations.rowid").desc(),
+        )
     )
     latest: dict[str, TaskIntegration] = {}
     for row in result.scalars().all():

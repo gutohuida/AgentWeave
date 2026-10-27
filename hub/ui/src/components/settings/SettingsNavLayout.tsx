@@ -24,6 +24,7 @@ export function SettingsNavLayout<T extends string>({
   items,
   active,
   onSelect,
+  footer,
   children,
 }: {
   title: string
@@ -33,6 +34,9 @@ export function SettingsNavLayout<T extends string>({
   items: ReadonlyArray<SettingsNavItem<T>>
   active: T
   onSelect: (id: T) => void
+  /** A link that ends the section list, to settings of another scope (Project and agent settings
+   *  point at App settings, where the operator's own settings live). */
+  footer?: { label: string; icon: string; onClick: () => void }
   children: React.ReactNode
 }) {
   return (
@@ -66,6 +70,12 @@ export function SettingsNavLayout<T extends string>({
             </li>
           ))}
         </ul>
+        {footer ? (
+          <button type="button" data-slot="settings-nav-footer" className="aw-settings-nav-footer" onClick={footer.onClick}>
+            <Icon name={footer.icon} size={13} />
+            {footer.label}
+          </button>
+        ) : null}
       </nav>
       <div className="aw-settings-scroll">{children}</div>
     </div>

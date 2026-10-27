@@ -29,8 +29,12 @@ export interface NeedItem {
   waiting?: boolean
   /** A question's offered answers, answerable right here. */
   options?: QuestionOption[]
+  /** The control that deals with the row; every row offers at least one that ends it or
+   *  dismisses it (slice I), never only a way to go and look. */
   primary: { label: string; onClick: () => void }
   secondary?: { label: string; onClick: () => void }
+  /** Further controls, shown first (a way to open the task or the mender's thread). */
+  more?: { label: string; onClick: () => void }[]
 }
 
 export interface RunningItem {
@@ -89,6 +93,7 @@ export function OverviewView({
   onOpenLedger,
   onAnswer,
   onOpenQuestions,
+  needsAction,
   taskTotal,
   heldByBudget,
   onOpenTasks,
@@ -115,6 +120,8 @@ export function OverviewView({
   onAnswer?: (need: NeedItem, option: QuestionOption) => void
   /** Answered questions and permission decisions, reachable with nothing open (F636). */
   onOpenQuestions?: () => void
+  /** One control for the whole section (decline every question nobody waits on). */
+  needsAction?: { label: string; onClick: () => void } | null
   /** The ledger's own task total, never the length of a page of it (F202). */
   taskTotal?: number
   /** Turns waiting only for the budget: they need the operator, so they are not "nothing" (F953). */
@@ -186,11 +193,18 @@ export function OverviewView({
           <h2 id="ov-needs" className="aw-ov-heading">
             Needs you {needs.length ? <span className="aw-ov-count" data-tone="amber">{needs.length}</span> : null}
           </h2>
-          {onOpenQuestions ? (
-            <button data-slot="overview-questions" type="button" className="aw-overview-link" data-testid="overview-questions-link" onClick={onOpenQuestions}>
-              Answered questions and permission decisions
-            </button>
-          ) : null}
+          <div className="aw-ov-heading-links">
+            {needsAction ? (
+              <button data-slot="overview-needs-action" type="button" className="aw-overview-link" onClick={needsAction.onClick}>
+                {needsAction.label}
+              </button>
+            ) : null}
+            {onOpenQuestions ? (
+              <button data-slot="overview-questions" type="button" className="aw-overview-link" data-testid="overview-questions-link" onClick={onOpenQuestions}>
+                Answered questions and permission decisions
+              </button>
+            ) : null}
+          </div>
         </div>
         {needs.length === 0 ? (
           <div className="aw-ov-calm">
@@ -238,6 +252,11 @@ export function OverviewView({
                     </p>
                   </div>
                   <div className="aw-ov-need-actions">
+                    {need.more?.map((action) => (
+                      <Button key={action.label} variant="ghost" size="sm" onClick={action.onClick}>
+                        {action.label}
+                      </Button>
+                    ))}
                     {need.secondary ? (
                       <Button variant="ghost" size="sm" onClick={need.secondary.onClick}>
                         {need.secondary.label}

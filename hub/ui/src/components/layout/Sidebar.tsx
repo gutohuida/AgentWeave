@@ -36,6 +36,10 @@ interface SidebarProps {
   /** Open a folder as a project. `open_existing` initialises it if it is not one yet,
    *  so this single action covers both opening and creating. */
   onAddProject: () => void
+  /** The operator's own settings (sound, appearance, the Hub): in the footer on every screen, so
+   *  they are reachable with no project open, where no other settings entry exists. */
+  onOpenAppSettings?: () => void
+  appSettingsActive?: boolean
   /** Collapsed to an icon rail. The operator's choice and only theirs — no destination writes
    *  it (`hub-workspace-shell`: "Navigation collapses only when the operator asks"). */
   compact?: boolean
@@ -99,6 +103,8 @@ export function Sidebar({
   onOpenAgentSettings,
   onAddAgent,
   onAddProject,
+  onOpenAppSettings,
+  appSettingsActive = false,
   compact = false,
   onCompactChange,
   width = SIDEBAR_WIDTH,
@@ -233,6 +239,8 @@ export function Sidebar({
           onOpenProject={onOpenProject}
           onOpenAgent={onOpenAgent}
           onAddProject={onAddProject}
+          onOpenAppSettings={onOpenAppSettings}
+          appSettingsActive={appSettingsActive}
         />
       ) : (
         <>
@@ -373,6 +381,22 @@ export function Sidebar({
               <Icon name="folder_plus" size={14} />
               Add project
             </button>
+            {onOpenAppSettings ? (
+              <button
+                data-slot="rail-foot-button"
+                type="button"
+                className="aw-rail-foot-button aw-rail-foot-settings"
+                data-testid="rail-app-settings"
+                data-active={appSettingsActive ? 'true' : 'false'}
+                aria-current={appSettingsActive ? 'page' : undefined}
+                aria-label="App settings"
+                title="App settings: sound and notifications, appearance, the Hub connection"
+                onClick={onOpenAppSettings}
+              >
+                <Icon name="settings" size={14} />
+                Settings
+              </button>
+            ) : null}
           </div>
         </>
       )}
@@ -395,6 +419,8 @@ function CompactRail({
   onOpenProject,
   onOpenAgent,
   onAddProject,
+  onOpenAppSettings,
+  appSettingsActive,
 }: {
   projects: ProjectSummary[]
   selectedProjectId: string | null
@@ -403,6 +429,8 @@ function CompactRail({
   onOpenProject: (projectId: string) => void
   onOpenAgent: (projectId: string, agent: string) => void
   onAddProject: () => void
+  onOpenAppSettings?: () => void
+  appSettingsActive: boolean
 }) {
   return (
     <>
@@ -471,6 +499,21 @@ function CompactRail({
         >
           <Icon name="folder_plus" size={15} />
         </button>
+        {onOpenAppSettings ? (
+          <button
+            data-slot="icon-button"
+            type="button"
+            className="aw-icon-button"
+            data-testid="rail-app-settings"
+            data-active={appSettingsActive ? 'true' : 'false'}
+            aria-current={appSettingsActive ? 'page' : undefined}
+            onClick={onOpenAppSettings}
+            aria-label="App settings"
+            title="App settings: sound and notifications, appearance, the Hub connection"
+          >
+            <Icon name="settings" size={15} />
+          </button>
+        ) : null}
       </div>
     </>
   )

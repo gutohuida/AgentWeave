@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { VaultScreen } from '@/components/vault/VaultScreen'
@@ -701,5 +702,25 @@ describe('the Vault tab', () => {
     fireEvent.change(screen.getByTestId('vault-upload-dated'), { target: { value: '10/01/2026' } })
     expect(screen.getByTestId('vault-upload-submit')).toBeDisabled()
     expect(screen.getByText('Fix the date first.')).toBeInTheDocument()
+  })
+
+  // F1029: both dialogs are controlled Radix dialogs with no Trigger, so on every close Radix had
+  // nothing to focus and the keyboard dropped to <body>.
+  it.each([
+    ['Add', 'Escape', () => screen.getByTestId('vault-upload-open')],
+    ['Add', 'Cancel', () => screen.getByTestId('vault-upload-open')],
+    ['Vault storage', 'Escape', () => screen.getByRole('button', { name: 'Vault storage' })],
+    ['Vault storage', 'Cancel', () => screen.getByRole('button', { name: 'Vault storage' })],
+  ])('returns focus to %s after closing its dialog with %s (F1029)', async (_name, how, opener) => {
+    const user = userEvent.setup()
+    render(<VaultScreen />, { wrapper })
+    await screen.findByTestId('vault-entry-src-aaaaaaaaaaaa')
+    opener().focus()
+    await user.keyboard('{Enter}')
+    const dialog = await screen.findByRole('dialog')
+    if (how === 'Escape') await user.keyboard('{Escape}')
+    else await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(opener()).toHaveFocus()
   })
 })

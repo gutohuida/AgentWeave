@@ -51,6 +51,7 @@ export const NewConversationSurface = screen(() => import('@/components/agents/N
 export const JobsScreen = screen(() => import('@/components/jobs/JobsScreen'), 'JobsScreen')
 export const ActivityScreen = screen(() => import('@/components/activity/ActivityScreen'), 'ActivityScreen')
 export const ThreadScreen = screen(() => import('@/components/thread/ThreadScreen'), 'ThreadScreen')
+export const AppSettingsScreen = screen(() => import('@/components/settings/AppSettingsScreen'), 'AppSettingsScreen')
 export const ProjectSettingsScreen = screen(() => import('@/components/settings/ProjectSettingsScreen'), 'ProjectSettingsScreen')
 export const VaultScreen = screen(() => import('@/components/vault/VaultScreen'), 'VaultScreen')
 export const SpecPage = screen(() => import('@/components/spec/SpecPage'), 'SpecPage')

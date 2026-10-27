@@ -353,7 +353,7 @@ describe('Project settings → General, applied on change', () => {
   it('groups its rows under headings, Collaboration first and Project last', () => {
     render(<GeneralSection />)
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Collaboration', 'Reach', 'Integration', 'Checkpointing', 'Sound and notifications', 'Project', 'Delete project',
+      'Collaboration', 'Reach', 'Integration', 'Checkpointing', 'Project', 'Delete project',
     ])
   })
 
