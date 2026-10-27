@@ -25,8 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import EventLog, ManagerJob, Runner
 from .model_catalog import default_model, get_provider
-from .runner_provider import has_provider
 from .runner_adapters.one_shot import WorkerUsage
+from .runner_provider import has_provider
 from .utils import persist_event
 
 logger = logging.getLogger(__name__)
