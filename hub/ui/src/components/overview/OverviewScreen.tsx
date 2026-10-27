@@ -113,12 +113,19 @@ export function OverviewScreen({
         colorIndex: colorOf(q.from_agent),
         title: q.question,
         waiting: isWaitedOn(q),
-        detail: q.asker_waiting === false ? 'The turn that asked has ended; nobody is waiting on this answer any more.' : (q.header ?? null),
+        // Only a blocking question whose asking turn ended has lost its waiter. A non-blocking one
+        // is a note — the mender's always are — and nobody ever waited: its answer is delivered as
+        // a later message, so saying nobody is waiting would be false.
+        detail: q.blocking && q.asker_waiting === false ? 'The turn that asked has ended; nobody is waiting on this answer any more.' : (q.header ?? null),
         at: q.created_at,
         // A multi-select or open-ended question is answered where it can be composed in full.
         options: q.multi_select ? undefined : q.options,
+        // The thread it was asked in when the Hub says which: the answer is delivered there.
         primary: q.from_agent
-          ? { label: 'Open conversation', onClick: () => onNavigate(`agent:${q.from_agent}`) }
+          ? {
+              label: 'Open conversation',
+              onClick: () => (q.conversation_id ? openConversation(q.from_agent, q.conversation_id) : onNavigate(`agent:${q.from_agent}`)),
+            }
           : { label: 'Answer', onClick: () => onNavigate('questions') },
       })),
     // A task whose only mover is the operator (`blocked`, `every-task-can-always-be-moved-on`): it

@@ -11,7 +11,7 @@ import pytest
 
 from hub.db.engine import async_session_factory
 from hub.db.models import Run
-from hub.scheduler import DECISION_CLAIM, decide_firing
+from hub.scheduler import DECISION_CLAIM, DECISION_IN_FLIGHT, decide_firing
 
 from .review_evidence import record_review_evidence
 from .test_review_leaves_the_pool import (
@@ -52,9 +52,12 @@ async def test_a_review_waits_while_the_authors_turn_is_still_running(
 
         decision = await decide_firing(db, await _fresh_loop(db, loop.id), default_agent=job.agent)
 
+        # In flight, not deferred and not a stall (F1049): the author's turn is on the task, and
+        # the end of that turn requests the firing that offers the review.
         assert decision.selections == ()
-        assert [task_id for task_id, _ in decision.deferred] == [task.id]
-        assert "still running" in dict(decision.deferred)[task.id]
+        assert decision.kind == DECISION_IN_FLIGHT
+        assert decision.stall_reason is None
+        assert decision._cannot_staff == ((task.id, AUTHOR),)
 
 
 async def test_the_review_is_offered_once_that_turn_has_ended(app, auth_headers, bind_runner):

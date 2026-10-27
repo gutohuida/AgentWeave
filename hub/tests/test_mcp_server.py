@@ -264,6 +264,37 @@ def test_question_tools_bind_asker_and_return_answer(hub, monkeypatch):
     }
 
 
+def test_ask_user_returns_at_once_when_the_hub_recorded_the_questions_as_a_note(hub, monkeypatch):
+    """The Hub's record decides whether to wait, not the argument: the mender's questions are
+    notes whatever it passes, and polling for the answer of a note would hold its turn open until
+    the deadline (`the-mender-wakes-only-for-real-stalls`)."""
+    from hub import mcp_server
+    from hub.mcp_server import ask_user
+
+    # Bounded, so a tool that wrongly polls fails the assertions below instead of waiting 240 s.
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(mcp_server, "QUESTION_ANSWER_TIMEOUT", 0.05)
+    calls, responses = hub
+    responses.append(
+        b'{"batch_id":"qbatch-1","questions":[{"id":"q-1","blocking":false},'
+        b'{"id":"q-2","blocking":false}]}'
+    )
+    question = {
+        "question": "Touch notes.txt?",
+        "header": "Dirty checkout",
+        "options": [{"label": "Leave it"}, {"label": "Stash it"}],
+        "multi_select": False,
+    }
+
+    result = ask_user([question, question])  # `blocking` left True
+
+    assert len(calls) == 1, "no GET /questions/{id}: nothing waits on a note"
+    assert _body(calls[0])["blocking"] is True
+    assert result["question_ids"] == ["q-1", "q-2"]
+    assert result["answered"] is False and "answers" not in result
+    assert "recorded as a note" in result["note"] and "later as a message" in result["note"]
+
+
 def test_request_agent_uses_bound_run_without_requester_field(hub):
     from hub.mcp_server import request_agent
 

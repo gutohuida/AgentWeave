@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -48,6 +49,8 @@ from .db.models import (
     TaskIntegration,
     TaskTransition,
 )
+from .model_catalog import default_model
+from .runner_provider import has_provider
 from .subprocess_windows import no_console_kwargs
 from .utils import persist_event, short_id
 
@@ -324,6 +327,11 @@ async def _withdraw_unread_brief(db: AsyncSession, stall: Stall) -> None:
                     InboundQueueEntry.conversation_id == stall.conversation_id,
                     InboundQueueEntry.agent == MENDER,
                     InboundQueueEntry.state == "queued",
+                    # Only the brief. The operator's answer to a note the mender left is queued into
+                    # this same thread, and the brief tells the mender to end the stall `gave_up`
+                    # right after leaving the note: that answer is not about the stall's end and is
+                    # delivered when the mender's run ends.
+                    InboundQueueEntry.origin_type == "mender",
                 )
             )
         )
@@ -459,23 +467,53 @@ async def ensure_mender(db: AsyncSession, project_id: str) -> "tuple[Optional[Ag
     if chosen is None or chosen.project_id != project_id:
         return None, f"The mender's runner '{row.runner_id}' no longer exists in this project."
     runner = chosen
-    if row.model and row.model != chosen.model:
-        runner = (
-            await db.execute(
-                select(Runner)
-                .where(
-                    Runner.project_id == project_id,
-                    Runner.cli == chosen.cli,
-                    Runner.model == row.model,
+    # **No model chosen means the catalog's default for the runner's CLI, not the runner's own**
+    # (`the-mender-wakes-only-for-real-stalls` D5). On :8000 the operator picked a runner, never a
+    # model, and 42 mender turns in one night ran on that runner's Opus. Mending is reading state
+    # and calling a few routes; the everyday model does it, and a model the operator chose on the
+    # Manager page is kept. Resolved here, on every wake, so no migration moves an existing mender.
+    #
+    # A runner with its own model provider keeps its own model: the catalog's default names a
+    # subscription model that provider may not serve.
+    wanted = (
+        row.model
+        or (None if has_provider(chosen.provider_config) else default_model(chosen.cli))
+        or chosen.model
+    )
+    if wanted and wanted != chosen.model:
+        # The runner the mender is moved to carries the chosen runner's provider and flags: they
+        # are how that runner runs, and only its model differs.
+        candidates = (
+            (
+                await db.execute(
+                    select(Runner)
+                    .where(
+                        Runner.project_id == project_id,
+                        Runner.cli == chosen.cli,
+                        Runner.model == wanted,
+                    )
+                    .order_by(Runner.created_at)
                 )
-                .order_by(Runner.created_at)
             )
-        ).scalars().first() or Runner(
+            .scalars()
+            .all()
+        )
+        runner = next(
+            (
+                candidate
+                for candidate in candidates
+                if (candidate.flags or None) == (chosen.flags or None)
+                and (candidate.provider_config or None) == (chosen.provider_config or None)
+            ),
+            None,
+        ) or Runner(
             id=f"runner-{short_id()}",
             project_id=project_id,
-            name=f"{chosen.cli} — {row.model} (mender)",
+            name=f"{chosen.cli} — {wanted} (mender)",
             cli=chosen.cli,
-            model=row.model,
+            model=wanted,
+            flags=deepcopy(chosen.flags),
+            provider_config=deepcopy(chosen.provider_config),
         )
         db.add(runner)
     agent = (
@@ -705,7 +743,7 @@ async def brief(db: AsyncSession, stall: Stall) -> str:
         '`mend_reset_task(task_id, "under_review", reviewer)` queues that reviewer\'s review turn.',
         "- Read anything: files, git log, the task, the spec.",
         "",
-        "## What you must ask the operator first (ask_user, and wait for the answer)",
+        "## What you must leave the operator a note about, and not do (ask_user)",
         "- Touching uncommitted changes you did not make, anywhere (the project's checkout above "
         "included). Never stash, reset, checkout over, commit or delete someone else's work.",
         "- Rewriting or reverting the main branch, force-pushing, deleting a branch or any work.",
@@ -713,11 +751,16 @@ async def brief(db: AsyncSession, stall: Stall) -> str:
         "- Changing agents, permissions, budgets or project settings.",
         "- Changing product logic beyond the conflicting lines.",
         "- A fix whose checks fail.",
-        "Offer concrete options in the question, and say which you recommend.",
+        "The operator is usually away when you are woken, so nothing waits for them. For each of "
+        "these, leave your question as a note with `ask_user`: it returns at once, and the "
+        "answer reaches you later as a message in this conversation. Do not take the action. "
+        "Offer concrete options in the note, and say which you recommend. Then end the stall "
+        'with `mend_end_stall(stall_id, "gave_up", summary)` and a summary that names the note.',
         "",
         "## How to end",
         "Call `mend_end_stall(stall_id, outcome, summary)` with outcome `fixed` once the agents "
-        "can move again, or `gave_up` with what the operator needs to know. A summary is two or "
+        "can move again, or `gave_up` with what the operator needs to know (and the note you "
+        "left, if you left one). A summary is two or "
         f"three plain sentences. The stall id is {stall.id}.",
     ]
     return "\n".join(lines)

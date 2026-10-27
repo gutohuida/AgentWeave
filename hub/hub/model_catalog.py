@@ -556,6 +556,18 @@ def get_provider(provider: str) -> Optional[ProviderDescriptor]:
     return _effective_catalog().get(provider)
 
 
+def default_model(provider: str) -> Optional[str]:
+    """The id of the model *provider* marks `default`, or `None` when it marks none (or is unknown).
+
+    What "no model chosen" means for a job that runs on the catalog's everyday model rather than on
+    whatever its runner names (the mender: `the-mender-wakes-only-for-real-stalls`).
+    """
+    entry = get_provider(provider)
+    if entry is None:
+        return None
+    return next((m.id for m in entry.models if m.default), None)
+
+
 def undeclared_model_reason(provider: str, model: str) -> str:
     """Why *model* is refused for *provider*, naming what would be accepted (F175, F182).
 
