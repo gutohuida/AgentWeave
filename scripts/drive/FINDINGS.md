@@ -40098,7 +40098,7 @@ Cause (verified): `GapLines` (`hub/ui/src/components/spec/SpecPhaseParts.tsx:20-
 
 ## F1016 (B) -- an operator's "nothing merges" (Main branch cleared) is silently undone the next time the folder is opened: the Hub re-adopts `master`, records no settings change, and drains the approved work that was waiting
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, inline probe after `scripts/drive/s1023_pj_api.py branch`).
+**Status:** fixed 2026-10-27 (slice A: a cleared main branch survives reopen and the Hub's own adoption is a settings event; test_project_main_branch_reopen); opened 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, inline probe after `scripts/drive/s1023_pj_api.py branch`).
 **Source:** drive
 **Theme:** Projects
 **Ready:** yes
@@ -40233,7 +40233,7 @@ Settings -> Delete project... -> type the name -> Enter. `DELETE` 204, the priva
 
 ## F1023 (C) -- rebinding an agent to a runner of another CLI resumes the conversation's old provider session on the new CLI: Copilot starts over with a notice, Claude fails the turn twice ("No conversation found with session ID") before the queue drops the session and silently starts a fresh one
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_rebind.py`, Chromium `scripts/drive/s1023_rm_ui2.py`, shot `testbed/ui-judge/s1023-rm/140238/13_conversation_after_cli_rebind.png`).
+**Status:** fixed 2026-10-27 (slice J, rebinding-an-agents-runner-starts-clean: a session is resumed only by the CLI that created it (migration 0148); test_rebinding_an_agents_runner_starts_clean); opened 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_rebind.py`, Chromium `scripts/drive/s1023_rm_ui2.py`, shot `testbed/ui-judge/s1023-rm/140238/13_conversation_after_cli_rebind.png`).
 **Source:** drive
 **Theme:** Runners & models
 **Ready:** yes
@@ -40261,7 +40261,7 @@ Cause (verified): the agent PATCH changes `runner_id` and leaves every conversat
 
 ## F1024 (C) -- a conversation's per-run model survives the agent's rebind to another CLI and is handed to it as is: Copilot was launched with `--model haiku`, ran `claude-sonnet-5` on a premium request, and the Hub recorded the run as model `haiku`
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_turn.py` then `scripts/drive/s1023_rm_rebind.py`).
+**Status:** fixed 2026-10-27 (slice J: a foreign stored model is withheld and the recorded model is what ran; same test file); opened 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_turn.py` then `scripts/drive/s1023_rm_rebind.py`).
 **Source:** drive
 **Theme:** Runners & models
 **Ready:** yes
@@ -40428,7 +40428,7 @@ Cause (verified): `hub/ui/src/components/layout/PaneResizer.tsx:139-160` sets `f
 
 ## F1038 (B) -- removing a task worktree that holds a `node_modules` junction empties the main checkout's `node_modules`: `git worktree remove --force` follows the junction
 
-**Status:** open 2026-10-23. Found while building `agentweave-calls-you-with-its-own-sound` interactively: `hub/ui/node_modules` was emptied twice in 20 minutes (20:36 and 20:51) while the `:8000` Hub ran this repo's flow tasks. **Recurred 2026-10-27 05:44** on `:8000`: the main checkout's `hub/ui/node_modules` was found empty with that mtime (T4's merge and worktree removal); restored with `npm ci`. Slice A (`worktrees-never-destroy-or-strand-anything`) is being built in Wave 0.
+**Status:** fixed 2026-10-27 (slice A, worktrees-never-destroy-or-strand-anything: every removal unlinks links first, the Hub links nested node_modules itself with a junction fallback; tests test_worktree_removal_links, test_dependency_links_fall_back_to_junctions); opened 2026-10-23. Found while building `agentweave-calls-you-with-its-own-sound` interactively: `hub/ui/node_modules` was emptied twice in 20 minutes (20:36 and 20:51) while the `:8000` Hub ran this repo's flow tasks. **Recurred 2026-10-27 05:44** on `:8000`: the main checkout's `hub/ui/node_modules` was found empty with that mtime (T4's merge and worktree removal); restored with `npm ci`. Slice A (`worktrees-never-destroy-or-strand-anything`) is being built in Wave 0.
 **Source:** drive
 **Theme:** Worktrees
 **Ready:** yes
