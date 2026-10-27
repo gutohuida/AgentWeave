@@ -73,7 +73,8 @@ def handle(o):
         prm = o.get("params") or {}
         ev = prm.get("event") or prm
         typ = ev.get("type") or prm.get("type")
-        if typ and (typ.startswith("subagent") or typ.startswith("session.")):
+        if typ and (typ.startswith("subagent") or typ.startswith("session.") or typ.startswith("assistant.")
+                    or typ.startswith("system.")):
             note("raw", type=typ, agentId=prm.get("agentId") or ev.get("agentId"),
                  data={k: v for k, v in (ev.get("data") or {}).items()
                        if k in ("agentName", "model", "cancelled", "durationMs", "totalToolCalls",
@@ -126,7 +127,11 @@ def drain(seconds):
 
 
 events = ["subagent.started", "subagent.completed", "subagent.failed", "session.model_change",
-          "session.auto_mode_resolved", "session.compaction_start", "session.compaction_complete"]
+          "session.auto_mode_resolved", "session.compaction_start", "session.compaction_complete",
+          # Turn-boundary signals the SDK surface exposes (d1027_copilot_sdk_probe.mjs): does ACP
+          # forward them when subscribed?
+          "assistant.turn_end", "session.idle", "session.background_tasks_changed",
+          "session.usage_info", "system.notification"]
 call("initialize", {"protocolVersion": 1,
                     "clientCapabilities": {"_meta": {"github.com/copilot": {"events": events}}}})
 new = call("session/new", {"cwd": WS, "mcpServers": []})
