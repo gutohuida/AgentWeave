@@ -40555,3 +40555,13 @@ All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's 
 **Tier:** 0
 
 `_latest_integrations_by_task` (`hub/hub/api/v1/tasks.py:557-578`) orders by `(task_id, created_at desc)` and keeps the first row per task. One approval can write more than one `task_integrations` row in the same transaction with an identical `created_at`: on `:8000`, task-8618731d065d has `merged` and `skipped` ("09617d3b6920 is already in master") both at `2026-10-27 03:39:29.548442`, and 26 task/timestamp pairs tie. Which row wins is then up to SQLite, so a task that merged can read "approved but not merged" on the Overview and in its drawer (part of what F1045 shows). **Expected:** the newest is decided by an order that cannot tie (the row's insertion sequence, or the outcome that matters for the approval: a `merged` row in the same approval wins over a `skipped` one). **Test:** two rows for one task with the same `created_at`, `merged` inserted before `skipped`: the route reports `merged`.
+
+## F1052 (C) -- approval drops a declared task whose requirements a hand-made task already serves, even when it is different work
+
+**Status:** open 2026-10-27. Found approving slice F (`the-spec-page-redesigned`) on `:8000`.
+**Source:** drive
+**Theme:** Spec flow
+**Ready:** yes
+**Tier:** 0
+
+`spec_tasks.materialise` (`hub/hub/spec_tasks.py:398-405`) skips a declared task when every requirement it names is already served by a hand-made task, and approval reports it as `already_served`. Slice F declares two tasks, `mock` and `wire`, over the same twelve requirements; the mock was done on 2026-10-26 as hand-made task-dadec899cc91 linked to all twelve, so approving F on 2026-10-27 created nothing (`approval_report`: `created: []`, `already_served: [mock, wire]`). The wiring work is not on the board, and nothing but the report says so. The rule is right for the task a hand-made task *is* (the mock), wrong for a different declared task that happens to serve the same requirements. **Expected:** a declared task is treated as served only when a hand-made task is matched to it (the same key, or a link the operator made), not when the requirement sets merely overlap; the report says which hand-made task served which entry. **Test:** a document with two declared tasks over the same requirements and one hand-made task linked to all of them: approval creates the second.
