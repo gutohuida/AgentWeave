@@ -104,26 +104,30 @@ def test_a_symlinked_agent_workspace_asks_for_the_link_and_nothing_else(repo, tm
     assert (elsewhere / "keep.txt").read_text() == "this must survive\n"
 
 
-def test_a_foreign_registered_worktree_asks_for_the_directory_and_the_prune_is_real(repo):
+def test_a_foreign_registered_worktree_names_its_branch_and_the_prune_is_real(repo):
     """The other half of `ensure_worktree`'s split, and the harder version of it.
 
     The blocking path is a *registered* worktree for another ref rather than a plain directory
-    (which `test_a_blocked_agent_workspace_holds_its_input.py` covers), so removing it leaves
-    `.git/worktrees/<name>` metadata behind -- exactly the state the remedy's second clause
-    promises the next turn handles. Without the prune `ensure_worktree` already runs, the
-    reprovision below fails, so the sentence is measured rather than trusted.
+    (which `test_a_blocked_agent_workspace_holds_its_input.py` covers). Since slice A of
+    `worktrees-never-destroy-or-strand-anything` such a directory is no longer called "not the
+    registered git worktree": a checkout holding nothing the other branch would lose is switched
+    back, and one that would lose something is refused naming both branches. Removing the
+    directory still leaves `.git/worktrees/<name>` metadata behind -- the state the next turn
+    handles with the prune `ensure_worktree` already runs, which the reprovision below measures.
     """
     path = worktrees.worktree_path(repo, AGENT)
     path.parent.mkdir(parents=True, exist_ok=True)
     _git(repo, "worktree", "add", "-b", "someone-else", str(path), "HEAD")
+    (path / "theirs.txt").write_text("work the other branch carries\n")
+    _git(path, "add", "theirs.txt")
+    _git(path, "commit", "-q", "-m", "theirs")
 
     with pytest.raises(worktrees.IsolationUnavailableError) as caught:
         worktrees.ensure_worktree(repo, AGENT)
 
     message = str(caught.value)
-    assert "not the registered git worktree" in message
-    assert f"rm -r {path}" in message
-    assert "prune" in message
+    assert "someone-else" in message and f"agentweave/{AGENT}" in message
+    assert "not the registered git worktree" not in message
     # Not the link remedy: this directory is real, and "remove the link itself" would read as a
     # no-op to an operator standing in front of it.
     assert "symlink" not in message
