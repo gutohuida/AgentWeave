@@ -29,14 +29,14 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional, Set
 
-from sqlalchemy import event, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
 
 from . import spec_documents, spec_lifecycle, spec_service
 from .conversations import get_open_conversation, name_conversation, new_conversation
 from .db.models import Run, SpecDocument, SpecDocumentEvent, Task
 from .inbound_queue import new_entry
+from .sse import defer_broadcast
 from .task_transitions import TERMINAL_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,6 @@ REQUEST_RETIRED = (
     "the agent"
 )
 
-_PENDING_BROADCASTS = "slice_drafting_pending_broadcasts"
 #: Strong references to the scheduling tasks an `after_commit` listener starts, so none is
 #: collected before it runs.
 _in_flight: Set["asyncio.Task[Any]"] = set()
@@ -270,7 +269,7 @@ async def on_task_closed(session: AsyncSession, task: Task) -> None:
             await persist_event(
                 session, document.project_id, OFFER_EVENT, offer, agent=None, commit=False
             )
-            _broadcast_after_commit(session, document.project_id, OFFER_EVENT, offer)
+            defer_broadcast(session, document.project_id, OFFER_EVENT, offer)
     except Exception:  # noqa: BLE001 -- never fail the transition
         logger.warning("could not offer the next slice after %s closed", task.id, exc_info=True)
 
@@ -351,7 +350,7 @@ async def take_offer(
             "request": request.id if request is not None else None,
         },
     )
-    _broadcast_after_commit(
+    defer_broadcast(
         session, document.project_id, ANSWERED_EVENT, {"document": document.path, "taken": True}
     )
     return {**offer, "agent": chosen, "conversation_id": conversation_id, "entry_id": entry.id}
@@ -369,7 +368,7 @@ async def decline_offer(session: AsyncSession, workspace, document: SpecDocument
         actor=spec_lifecycle.Actor(kind="operator", name="operator"),
         detail={"next_slice": offer["next_slice"]["key"]},
     )
-    _broadcast_after_commit(
+    defer_broadcast(
         session, document.project_id, ANSWERED_EVENT, {"document": document.path, "taken": False}
     )
     return offer
@@ -460,45 +459,3 @@ def next_slice_message(
         "not implement anything.",
     ]
     return "\n".join(lines)
-
-
-def _broadcast_after_commit(
-    session: AsyncSession, project_id: str, event_type: str, payload: Dict[str, Any]
-) -> None:
-    """Broadcast once the session's root transaction commits, and never if it does not."""
-    session.sync_session.info.setdefault(_PENDING_BROADCASTS, []).append(
-        (project_id, event_type, payload)
-    )
-
-
-@event.listens_for(Session, "after_commit")
-def _broadcast_pending(session: Session) -> None:
-    if session.in_nested_transaction():
-        return
-    pending = session.info.pop(_PENDING_BROADCASTS, [])
-    if not pending:
-        return
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        logger.warning("no event loop to announce a next-slice offer")
-        return
-    for project_id, event_type, payload in pending:
-        task = loop.create_task(_broadcast(project_id, event_type, payload))
-        _in_flight.add(task)
-        task.add_done_callback(_in_flight.discard)
-
-
-@event.listens_for(Session, "after_transaction_end")
-def _drop_pending(session: Session, transaction) -> None:
-    if transaction.parent is None:
-        session.info.pop(_PENDING_BROADCASTS, None)
-
-
-async def _broadcast(project_id: str, event_type: str, payload: Dict[str, Any]) -> None:
-    from .sse import sse_manager
-
-    try:
-        await sse_manager.broadcast(project_id, event_type, payload)
-    except Exception:  # noqa: BLE001 -- the offer is derived; a missed broadcast loses nothing
-        logger.warning("could not broadcast %s", event_type, exc_info=True)
