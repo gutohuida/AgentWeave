@@ -8,11 +8,13 @@ configuration removed from the environment (D8), stopping at the first failure t
 (a failure main shares does not stop it), and records a `TaskCheckRun` row (D3).
 
 Runs are started in the background, never inside a request (D5): when a task is completed outside a
-turn, when a turn bound to a completed task ends (its work is only committed then), when approval
-finds no current result, and when the project's main tip moves (`refresh`: the Hub's own merge, or
-`watch_main_forever` noticing one made outside it). A run main moved past is ended, recorded
+turn, when a turn bound to a completed task ends (its work is only committed then), and when the
+project's main tip moves (`refresh`: the Hub's own merge, or `watch_main_forever` noticing one made
+outside it) for a task with no pass of its work. A run main moved past is ended, recorded
 `superseded`, and replaced. At most two run at once per Hub, and one per task (D4). The approval gate
-only *reads* what is recorded (`view`), and still counts only a result for the current tip.
+only *reads* what is recorded (`view`) and starts nothing: a task's run is the gate before review,
+and a pass of its work counts on any main tip; landing is gated by the batch's one run on main with
+the queued work merged (`landing_queue`, `approved-work-merges-in-batches`).
 
 A check may name the paths it covers (`paths`): where no file the merged work changes matches one, it
 is not executed and is recorded skipped, which passes.
@@ -1040,6 +1042,11 @@ async def view(
         return CheckView(run.state, run)
     elif run.state == "interrupted":
         state = run.state
+    elif run.state == "passed" and list(run.target_shas or []) == list(target_shas):
+        # A pass of this work counts whatever main tip it ran on (`approved-work-merges-in-
+        # batches`, FR-9): the batch's run on the merged result is the landing gate, and this one
+        # is the gate before review.
+        return CheckView(run.state, run)
     elif (
         run.state == SUPERSEDED
         or run.main_sha != tip
@@ -1204,8 +1211,10 @@ async def request_run(
                 and latest is not None
                 # `error` is the Hub failing to produce a result, not a verdict: retried (F516).
                 and latest.state in ("passed", "failed")
-                and latest.main_sha == tip
                 and list(latest.target_shas or []) == targets
+                # A pass of this work is current on any main tip (`approved-work-merges-in-
+                # batches`, FR-9); a failure is asked again on a new tip, as before.
+                and (latest.main_sha == tip or latest.state == "passed")
             ):
                 return latest.id
             prepared = (
@@ -1522,8 +1531,9 @@ async def refresh(project_id: str) -> None:
 
     Every in-flight run cut from another tip is superseded (and replaced once it has ended), then a
     run is requested for each task waiting for review, oldest completed first, so the semaphore
-    admits them in that order. `request_run` starts nothing for a result already current. Nothing
-    here is a gate: approval still counts only a result for the tip it reads (`view`).
+    admits them in that order. `request_run` starts nothing for a result already current, and a pass
+    of the task's work is current on any tip (`approved-work-merges-in-batches`, FR-9): only a task
+    with no result, an interrupted or errored one, or a failure on an older tip is run again.
     """
     async with async_session_factory() as session:
         project = await session.get(Project, project_id)

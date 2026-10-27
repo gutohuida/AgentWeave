@@ -557,6 +557,14 @@ async def _checks_sentence(session: AsyncSession, task: Task) -> Optional[str]:
         return None
     if view.state == "passed":
         passed = "**This task's checks passed** on the work approval would merge."
+        if view.run is not None and view.reused is None:
+            tip = await blocking.run(project_checks.main_tip, situation.root, situation.main_branch)
+            if tip and view.run.main_sha != tip:
+                # A pass on an earlier tip counts (`approved-work-merges-in-batches`, FR-9).
+                passed = (
+                    f"**This task's checks passed** on {view.run.main_sha[:12]}; the landing "
+                    "re-checks it on main."
+                )
         results = view.reused
         if results is None:
             results = list(view.run.results or []) if view.run is not None else []
@@ -617,9 +625,9 @@ async def _checks_sentence(session: AsyncSession, task: Task) -> Optional[str]:
             # by test (or may not override them): the approval waits on the operator.
             return (
                 f"**This task's checks fail ({names}), and they fail on main too**, so the failure "
-                f"is not this task's work. Last output: {tail!r}. `approved` waits on the "
-                "operator, who lands it with an override reason or fixes main first; do not send "
-                "it back for this."
+                f"is not this task's work. Last output: {tail!r}. Approving queues it; its landing "
+                "waits on the operator, who lands it with an override reason or fixes main first; "
+                "do not send it back for this."
             )
         return (
             f"**This task's checks failed** ({names}) on the work approval would merge, so "
@@ -627,12 +635,13 @@ async def _checks_sentence(session: AsyncSession, task: Task) -> Optional[str]:
         )
     if view.state == "error" and view.run is not None:
         return (
-            f"**This task's checks could not run** ({view.run.error}). Approving runs them "
-            "again, and `approved` is refused until they pass."
+            f"**This task's checks could not run** ({view.run.error}). That does not hold "
+            "approval: approving queues the work, and its landing checks it on main."
         )
     return (
-        "**This task's checks have not finished** on the work approval would merge, so "
-        "`approved` will be refused until they pass. If they fail, " + returns_it
+        "**This task's checks have not finished** on the work approval would merge. That does "
+        "not hold approval: approving queues the work, and its landing checks it on main. If they "
+        "fail with a failure of its own, " + returns_it
     )
 
 

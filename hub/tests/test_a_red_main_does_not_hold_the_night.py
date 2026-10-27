@@ -18,11 +18,11 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
-from hub import project_checks
+from hub import landing_queue, project_checks
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, EventLog, Loop, Project, Run, SpecDocument, Task, TaskTransition
-from hub.requirement_gate import PREEXISTING_CHECKS_HOLD_REMEDY, approval_held_for_operator
+from hub.requirement_gate import approval_held_for_operator
 from hub.worktrees import task_branch_name
 
 from .test_task_integration import commit_on_branch, commits_on, git, make_repo, set_main_branch
@@ -51,6 +51,20 @@ LOOP = "loop-red-main"
 REVIEWER = "reviewer"
 AGENT_TASKS = "/api/v1/agent-actions/tasks/{}"
 TASKS = "/api/v1/projects/proj-test/tasks"
+
+
+@pytest.fixture(autouse=True)
+def _no_landing_timers():
+    yield
+    landing_queue.cancel_timers()
+
+
+async def _landing(app, task_id: str) -> dict:
+    """The task's landing as its drawer reads it (`approved-work-merges-in-batches`)."""
+    read = await app.get(
+        f"{TASKS}/{task_id}/checks", headers={"Authorization": "Bearer aw_live_testkey_abcdefgh"}
+    )
+    return read.json()["landing"]
 
 
 def _flaky_test(counter: Path) -> str:
@@ -252,7 +266,10 @@ async def test_a_reviewers_approval_lands_over_a_red_main(app, tmp_path):
     approved = await _reviewer_approves(app, TASK)
 
     assert approved.status_code == 200, approved.text
+    await landing_queue.drain()
     assert work in commits_on(tmp_path, "main")
+    landing = await _landing(app, TASK)
+    assert landing["state"] == "landed" and landing["batch"]["override_by"] == "hub", landing
     transition = await _approval(TASK)
     assert transition.actor_kind == "run" and transition.actor_agent == REVIEWER
     assert transition.override_by == "hub"
@@ -280,7 +297,9 @@ async def test_no_operator_hold_for_failures_not_its_own(app, tmp_path):
     async with async_session_factory() as session:
         task = await session.get(Task, TASK)
         hold = await approval_held_for_operator(session, task, candidate=REVIEWER)
-    assert hold is not None and hold.remedy == PREEXISTING_CHECKS_HOLD_REMEDY
+    # `approved-work-merges-in-batches` D7: approval no longer waits on main's failure; with the
+    # setting off it is the landing batch that waits for the operator.
+    assert hold is None
 
 
 async def test_different_ids_are_the_tasks(app, tmp_path):
@@ -349,15 +368,15 @@ async def test_a_touched_test_is_the_tasks(app, tmp_path, tmp_path_factory):
 
     [result] = (await _latest_run(TASK)).results
     assert result["touched_tests"] == [TEST_A] and result["preexisting"], result
-    refused = await _reviewer_approves(app, TASK)
-    assert refused.status_code == 409, refused.text
-    assert "fail on main too" in refused.json()["detail"]["message"]
+    # Approval waits on nothing (`approved-work-merges-in-batches` D7); the batch is never landed
+    # over a test the task touched: it waits for the operator.
+    approved = await _reviewer_approves(app, TASK)
+    assert approved.status_code == 200, approved.text
+    assert (await _approval(TASK)).override_reason is None
+    await landing_queue.drain()
+    landing = await _landing(app, TASK)
+    assert landing["state"] == "held" and "fail on main too" in landing["reason"], landing
     assert work not in commits_on(tmp_path, "main")
-    async with async_session_factory() as session:
-        hold = await approval_held_for_operator(
-            session, await session.get(Task, TASK), candidate=REVIEWER
-        )
-    assert hold is not None and hold.remedy == PREEXISTING_CHECKS_HOLD_REMEDY
     assert await _fix_tasks() == []
 
     # A flaky test in a file the task changed fails the run: the task introduced it.
@@ -368,8 +387,6 @@ async def test_a_touched_test_is_the_tasks(app, tmp_path, tmp_path_factory):
     assert run.state == "failed", run.results
     [result] = run.results
     assert result["touched_tests"] == ["test_timing.py::test_flaky"]
-    refused = await _reviewer_approves(app, TASK2)
-    assert refused.status_code == 409, refused.text
     assert await _fix_tasks() == []
 
 
@@ -390,9 +407,11 @@ async def test_a_fix_task_cannot_land_itself(app, tmp_path):
     git(tmp_path, "checkout", "-q", "main")
     await _checked(fix.id)
 
-    refused = await _reviewer_approves(app, fix.id)
-    assert refused.status_code == 409, refused.text
-    assert "fail on main too" in refused.json()["detail"]["message"]
+    approved = await _reviewer_approves(app, fix.id)
+    assert approved.status_code == 200, approved.text
+    await landing_queue.drain()
+    landing = await _landing(app, fix.id)
+    assert landing["state"] == "held", landing
     async with async_session_factory() as session:
         moved = (
             (await session.execute(select(TaskTransition).where(TaskTransition.task_id == fix.id)))
@@ -412,21 +431,24 @@ async def test_the_setting_off_restores_today(app, auth_headers, tmp_path):
     await _configure(auto_override=False)
     await _checked(TASK)
 
-    refused = await _reviewer_approves(app, TASK)
-    assert refused.status_code == 409, refused.text
-    assert "fail on main too" in refused.json()["detail"]["message"]
+    approved = await _reviewer_approves(app, TASK)
+    assert approved.status_code == 200, approved.text
+    await landing_queue.drain()
+    landing = await _landing(app, TASK)
+    assert landing["state"] == "held", landing
+    assert work not in commits_on(tmp_path, "main")
     assert await _fix_tasks() == []
 
-    landed = await app.patch(
-        f"{TASKS}/{TASK}",
-        json={"status": "approved", "override_checks_reason": "main carries the defect"},
+    landed = await app.post(
+        f"{TASKS}/{TASK}/landing/land",
+        json={"reason": "main carries the defect"},
         headers=auth_headers,
     )
     assert landed.status_code == 200, landed.text
     assert work in commits_on(tmp_path, "main")
-    transition = await _approval(TASK)
-    assert transition.override_by == "operator"
-    assert transition.override_reason == "main carries the defect"
+    batch = landed.json()["landing"]["batch"]
+    assert batch["override_by"] == "operator"
+    assert batch["override_reason"] == "main carries the defect"
 
 
 async def test_one_fix_task_for_two_runs_failing_the_same_test_on_main(app, tmp_path):
@@ -531,6 +553,7 @@ async def test_a_fix_task_filed_into_a_production_flow_is_reviewed_and_lands(app
 
     approved = await _reviewer_approves(app, fix.id)
     assert approved.status_code == 200, approved.text
+    await landing_queue.drain()
     assert fixed in commits_on(tmp_path, "main")
     assert getattr(fix, "merges_branch_tip", None) is True, "recorded on the task"
 

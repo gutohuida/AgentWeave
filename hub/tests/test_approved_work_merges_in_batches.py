@@ -33,6 +33,7 @@ def queue():
     must fail on what approval answers rather than at collection."""
     return importlib.import_module("hub.landing_queue")
 
+
 PY = f'"{sys.executable}"'
 
 
@@ -163,7 +164,9 @@ async def batches():
     async with async_session_factory() as session:
         return list(
             (
-                await session.execute(select(models.LandingBatch).order_by(models.LandingBatch.created_at))
+                await session.execute(
+                    select(models.LandingBatch).order_by(models.LandingBatch.created_at)
+                )
             ).scalars()
         )
 
@@ -376,9 +379,7 @@ async def test_a_restart_mid_batch_loses_and_repeats_nothing(
     # Batch one (tasks 3, 4) had moved main to its checked commit when the Hub stopped, before its
     # records were written; batch two (tasks 1, 2) was still checking.
     root = tmp_path
-    built = queue().build_chain(
-        root, base, [(ids[2], [works[2]]), (ids[3], [works[3]])]
-    )
+    built = queue().build_chain(root, base, [(ids[2], [works[2]]), (ids[3], [works[3]])])
     assert built.conflict is None
     git(tmp_path, "merge", "-q", "--ff-only", built.prefixes[-1])
     async with async_session_factory() as session:
@@ -445,4 +446,4 @@ def test_the_hubs_lifespan_reconciles_the_landing_queue():
 
     from hub import main
 
-    assert "queue().reconcile_at_startup" in inspect.getsource(main.lifespan)
+    assert "landing_queue.reconcile_at_startup" in inspect.getsource(main.lifespan)

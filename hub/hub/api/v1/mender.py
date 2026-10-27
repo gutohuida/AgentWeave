@@ -181,13 +181,38 @@ async def mender_land_task(
                     },
                 )
         try:
-            results = await land_resolution(session, task, who, commit)
+            landing = await land_resolution(session, task, who, commit)
         except ResolutionRefusedError as exc:
             await session.rollback()
             raise HTTPException(status_code=409, detail=str(exc)) from exc
     else:
-        results = await retry_integration(session, task, who)
+        landing = await retry_integration(session, task, who)
+    landing_id = landing.id
     await session.commit()
+    # Through the landing queue, as every merge into main is: merged now without checks, in the
+    # next batch with them (`approved-work-merges-in-batches`).
+    from ... import landing_queue
+    from ...db.models import TaskIntegration, TaskLanding
+
+    await landing_queue.settle(actor.project_id)
+    landed = await session.get(TaskLanding, landing_id)
+    await session.refresh(landed)
+    results = []
+    if landed.state not in landing_queue.OPEN:
+        from sqlalchemy import select
+
+        results = list(
+            (
+                await session.execute(
+                    select(TaskIntegration)
+                    .where(
+                        TaskIntegration.task_id == task.id,
+                        TaskIntegration.created_at >= landed.created_at,
+                    )
+                    .order_by(TaskIntegration.created_at)
+                )
+            ).scalars()
+        )
     if any(r.outcome == task_integration.MERGED for r in results):
         # The mend landed: its scratch checkout has done its work. A refusal above, or a merge that
         # failed again, keeps it for the mender's next attempt; a stall that ends removes it too
@@ -198,6 +223,7 @@ async def mender_land_task(
     await sse_manager.broadcast(actor.project_id, "task_integration_retried", payload)
     return {
         "task_id": task.id,
+        "landing": landed.state,
         "results": [
             {"outcome": r.outcome, "reason": r.reason, "commit_sha": r.commit_sha} for r in results
         ],

@@ -18,7 +18,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hub import project_checks
+import pytest
+
+from hub import landing_queue, project_checks
 from hub.db.engine import async_session_factory
 from hub.db.models import Task
 from hub.worktrees import task_branch_name
@@ -27,6 +29,12 @@ from .test_checks_refresh_when_main_moves import _move_main
 from .test_project_checks_gate import _approve
 from .test_project_checks_run import PY, _project, _runs, _task_with_work
 from .test_task_integration import commits_on, git
+
+
+@pytest.fixture(autouse=True)
+def _no_landing_timers():
+    yield
+    landing_queue.cancel_timers()
 
 
 def _counting(name: str, counter: Path, *, fail_first: int = 0) -> dict:
@@ -82,6 +90,8 @@ async def test_a_prerequisite_merged_into_the_branch_is_approved_without_running
 
     approved = await _approve(app, auth_headers, task_id)
     assert approved.status_code == 200, approved.text
+    # Its batch's merged tree is the tree already passed: landed without running again.
+    await landing_queue.drain()
     assert head in commits_on(repo, "main")
     await project_checks.drain()
     assert _executions(counter) == 1, "the identical tree was checked again"
@@ -117,6 +127,9 @@ async def test_a_different_tree_is_checked_again(app, tmp_path, tmp_path_factory
     await project_checks.drain()
 
     _move_main(repo, "unrelated.txt")  # the merged tree now holds a file it did not
+    # A pass of the same work counts on any tip (`approved-work-merges-in-batches`, FR-9), so the
+    # work changes: main brought into the branch, whose tree no run has checked.
+    _bring_in_main(repo, task_id)
     await project_checks.request_run("proj-test", task_id)
     await project_checks.drain()
 
@@ -167,8 +180,11 @@ async def test_a_failure_is_never_reused(app, auth_headers, tmp_path, tmp_path_f
     ran = _executions(counter)
     _bring_in_main(repo, task_id)
 
-    refused = await _approve(app, auth_headers, task_id)
-    assert refused.status_code == 409, refused.text
+    # The failure was on the work before main was brought in: it holds nothing now, and the
+    # batch runs the check again on the same tree rather than reusing the failure.
+    approved = await _approve(app, auth_headers, task_id)
+    assert approved.status_code == 200, approved.text
+    await landing_queue.drain()
     await project_checks.drain()
     assert _executions(counter) > ran, "a failure on the same tree is run again, not reused"
 

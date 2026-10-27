@@ -70,7 +70,7 @@ from ...task_transition_service import (
     GateUnsatisfiedError,
     TransitionRefusedError,
     apply_transition,
-    evaluate_approval,
+    ask_approval_git_first,
     guard_entry_status,
     history_for,
     hub_written_documents,
@@ -1396,8 +1396,11 @@ async def task_checks(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """This task's check runs, newest first (`approval-runs-the-projects-checks`). Read-only."""
-    from ... import project_checks
+    """This task's check runs, newest first (`approval-runs-the-projects-checks`), and its latest
+    landing with its batch (`approved-work-merges-in-batches`, FR the-landing-is-visible): queued
+    with its position, checking with the batch's elapsed and previous durations, held and on what,
+    landed with the commit, or sent back with the failing output. Read-only."""
+    from ... import landing_queue, project_checks
     from ...db.models import Project, TaskCheckRun
 
     task = await session.get(Task, task_id)
@@ -1421,7 +1424,51 @@ async def task_checks(
         ),
         "running": project_checks.is_running(task_id),
         "runs": [project_checks.run_view(run) for run in runs],
+        "landing": await landing_queue.view(session, task_id),
     }
+
+
+class LandHeldRequest(RequestModel):
+    """The operator's one reason for landing a batch held over failures main shares."""
+
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/{task_id}/landing/land")
+async def land_held_landing(
+    task_id: str,
+    body: LandHeldRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Land the batch this task's landing is held in, over failures that also fail on main, with
+    one reason for the whole batch (`approved-work-merges-in-batches`, FR-7). Operator-only: the
+    route sits on the project credential. 409 where the task's landing is not held."""
+    from ... import landing_queue
+
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project[0]:
+        raise HTTPException(status_code=404, detail="Task not found")
+    reason = body.reason.strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail="A reason is required to land over checks.")
+    landing = await landing_queue.latest_landing(session, task_id)
+    if landing is None or landing.state != landing_queue.HELD or not landing.batch_id:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Task {task_id}'s landing is not held for the operator; nothing to land.",
+        )
+    batch_id = landing.batch_id
+    await session.commit()
+    if not await landing_queue.land_held_batch(batch_id, reason):
+        raise HTTPException(
+            status_code=409,
+            detail="The batch could not be landed as it was checked (main moved); it is queued "
+            "again and is checked on the new tip.",
+        )
+    await session.commit()
+    await sse_manager.broadcast(project[0], "task_updated", {"id": task_id, "status": task.status})
+    return {"task_id": task_id, "landing": await landing_queue.view(session, task_id)}
 
 
 @router.post("/{task_id}/checks/run", status_code=202)
@@ -1463,6 +1510,10 @@ async def retry_task_integration(
     except TransitionRefusedError as exc:
         raise HTTPException(status_code=exc.http_status, detail=exc.detail) from exc
     await session.commit()
+    # Through the landing queue: merged now without checks, queued for the next batch with them.
+    from ... import landing_queue
+
+    await landing_queue.settle(project_id)
 
     view = await _integration_view(session, task_id)
     # After the commit: `persist_event` commits, so an event emitted before it would publish a
@@ -2033,6 +2084,12 @@ async def _commit_and_render(
     for both callers. A second copy would be a second place for that to stop being true.
     """
     await session.commit()
+    # What the commit queued lands now in a project without checks, and this answers with its
+    # outcome; with checks the landing is queued and this answers at once
+    # (`approved-work-merges-in-batches`). The checkout of a finished task is released here too.
+    from ... import landing_queue
+
+    await landing_queue.settle(project_id)
     await session.refresh(task)
     await sse_manager.broadcast(project_id, "task_updated", {"id": task.id, "status": task.status})
     for payload in withdrawn_reviews or ():
@@ -2168,12 +2225,11 @@ async def land_task(
     # refusal joins the sequence — not the response, which the transaction already covers.
     # F605: the approval PATCH's override, in the one action that lands; operator-only by the route.
     override = ((body.override_checks_reason if body else None) or "").strip() or None
-    refusal, _policy = await evaluate_approval(
-        session,
-        task,
-        acting_run_id=None,
-        start_checks=True,
-        override_checks_reason=override,
+    # Asked before anything is written, every git answer kept for the approval below to read: the
+    # move to `under_review` is this transaction's first write, and no git runs after it
+    # (`approved-work-merges-in-batches`, D3).
+    answers, refusal = await ask_approval_git_first(
+        session, task, actor, override_checks_reason=override
     )
     if refusal.refuses:
         refusal.for_operator = True  # F731 (6): Land is the operator's door
@@ -2183,7 +2239,7 @@ async def land_task(
     task.assignee = None
     await apply_transition(session, task, "under_review", actor)
     transition = await apply_transition(
-        session, task, "approved", actor, override_checks_reason=override
+        session, task, "approved", actor, override_checks_reason=override, git_answers=answers
     )
     approval_report = list(getattr(transition, "reported_advisories", None) or [])
     # The same two the PATCH route does after a terminal transition, for the same reasons: a reason

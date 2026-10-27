@@ -1139,6 +1139,10 @@ async def close_already_built(
             detail={"message": str(exc), "code": exc.code, **exc.detail},
         ) from exc
     await session.commit()
+    # The tasks approved at fast land through the queue once this commits (`landing_queue`).
+    from ... import landing_queue
+
+    await landing_queue.settle(project_id)
     for task in result["tasks"]:
         await sse_manager.broadcast(
             project_id, "task_updated", {"id": task["id"], "status": task["status"]}

@@ -371,7 +371,11 @@ async def approve_what_was_waiting_for_this_evidence(
             await session.rollback()
             logger.info("Task %s closed as already built was not approved: %s", task_id, exc)
             return None
+        project_id = task.project_id
         await session.commit()
+        from . import landing_queue
+
+        await landing_queue.settle(project_id)
         return task_id
     except Exception:  # noqa: BLE001 - never let an approval undo the decision that asked for it
         logger.warning(

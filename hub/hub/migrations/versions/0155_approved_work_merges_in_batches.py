@@ -108,11 +108,12 @@ def upgrade() -> None:
             sa.Column("created_at", sa.DateTime(), nullable=False),
             sa.Column("ended_at", sa.DateTime(), nullable=True),
         )
-    if "landing_batches" in _tables(conn):
-        if "ix_landing_batches_project" not in _indexes(conn, "landing_batches"):
-            op.create_index(
-                "ix_landing_batches_project", "landing_batches", ["project_id", "created_at"]
-            )
+    if "landing_batches" in _tables(conn) and "ix_landing_batches_project" not in _indexes(
+        conn, "landing_batches"
+    ):
+        op.create_index(
+            "ix_landing_batches_project", "landing_batches", ["project_id", "created_at"]
+        )
     if "task_integrations" in tables:
         have = _columns(conn, "task_integrations")
         for name, kind in _INTEGRATION_COLUMNS:
