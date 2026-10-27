@@ -155,6 +155,10 @@ async def _move(task_id, status, agent, run_id=None):
         task = await db.get(Task, task_id)
         await apply_transition(db, task, status, run_actor(run_id or f"run-{agent}-x", agent))
         await db.commit()
+    # An approval lands through the queue once it commits (`approved-work-merges-in-batches`).
+    from hub import landing_queue
+
+    await landing_queue.settle("proj-test")
 
 
 # ---------------------------------------------------------------------------------------------

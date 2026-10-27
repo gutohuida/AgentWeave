@@ -891,6 +891,10 @@ async def _integrate_what_was_waiting_for_a_branch(session: AsyncSession, projec
             await retry_integration(session, task, operator())
         if waiting:
             await session.commit()
+            # Through the landing queue (`approved-work-merges-in-batches`).
+            from ... import landing_queue
+
+            await landing_queue.settle(project_id)
     except Exception:  # noqa: BLE001 - never let a merge undo the setting that asked for it
         logger.warning(
             "Could not re-attempt integration after naming a main branch for %s",

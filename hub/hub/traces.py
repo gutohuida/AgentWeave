@@ -1328,16 +1328,81 @@ def exited(
         span.status = "ok"
 
 
+class GitAnswers:
+    """Git's answers to read-only questions, asked before a transaction's first write and given
+    back inside it (`approved-work-merges-in-batches`, D3).
+
+    SQLite takes the write lock at a transaction's first write and holds it until the commit, so
+    git asked after that write makes every other writer wait for it. Approval asks its git while
+    nothing is written yet (`asking_git_first`) and its gate reads the same answers once it has
+    written (`answering_from`). A question not asked first is asked for real, as before.
+    """
+
+    def __init__(self) -> None:
+        self._answers: Dict[Any, subprocess.CompletedProcess] = {}
+        self.replaying = False
+        self.misses: List[List[str]] = []
+
+    @staticmethod
+    def key(args: Sequence[str], kwargs: Dict[str, Any]) -> Optional[Tuple[Any, ...]]:
+        if not args or "git" not in os.path.basename(str(args[0])).lower():
+            return None
+        return (str(kwargs.get("cwd")), tuple(str(a) for a in args), kwargs.get("input"))
+
+    def get(self, key: Any) -> Optional[subprocess.CompletedProcess]:
+        return self._answers.get(key)
+
+    def keep(self, key: Any, result: subprocess.CompletedProcess) -> None:
+        self._answers[key] = result
+
+
+_git_answers: "ContextVar[Optional[GitAnswers]]" = ContextVar("aw_git_answers", default=None)
+
+
+@contextmanager
+def asking_git_first(answers: GitAnswers) -> Iterator[GitAnswers]:
+    """Every git command run in this context (threads included) keeps its answer in *answers*."""
+    token = _git_answers.set(answers)
+    try:
+        yield answers
+    finally:
+        _git_answers.reset(token)
+
+
+@contextmanager
+def answering_from(answers: Optional[GitAnswers]) -> Iterator[None]:
+    """A git command run in this context that was asked first is answered from *answers*."""
+    if answers is None:
+        yield
+        return
+    answers.replaying = True
+    token = _git_answers.set(answers)
+    try:
+        yield
+    finally:
+        _git_answers.reset(token)
+        answers.replaying = False
+
+
 def run(
     args: Sequence[str], *, ok_codes: Sequence[int] = (0,), **kwargs: Any
 ) -> subprocess.CompletedProcess:
     """`subprocess.run(args, **kwargs)`, recorded as a `command` span, with no console window.
     *ok_codes* are the exit codes that are an answer, not an error on the span."""
+    answers = _git_answers.get()
+    key = GitAnswers.key(args, kwargs) if answers is not None else None
+    if answers is not None and key is not None and answers.replaying:
+        known = answers.get(key)
+        if known is not None:
+            return known
+        answers.misses.append([str(a) for a in args])
     with command(args) as span:
         result = subprocess.run(  # noqa: S603 -- the caller's argv, as before
             args, **{**no_console_kwargs(), **kwargs}
         )
         exited(span, result.returncode, ok_codes=ok_codes)
+    if answers is not None and key is not None:
+        answers.keep(key, result)
     return result
 
 

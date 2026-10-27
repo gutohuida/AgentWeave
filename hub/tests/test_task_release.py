@@ -279,20 +279,18 @@ async def test_an_uncommitted_change_is_snapshotted_onto_the_branch_before_relea
 
 
 # ---------------------------------------------------------------------------
-# 5.2 — after integration, never before
+# 5.2 — the landing's target is frozen at approval, so release may come first
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_release_happens_after_integration(app, auth_headers, builder, tmp_path, monkeypatch):
-    """5.2. Ordering, asserted rather than argued.
-
-    The spy records what `main` carried *at the moment release was called*. If release ran first,
-    the evidence commit would not be there yet. This is what makes the test discriminate the order
-    at all: `integration_targets` reads the accepted footprint either way, so the merged sha alone
-    would look identical under both orderings — which is precisely why the ordering needs its own
-    observation rather than a comment.
-    """
+async def test_release_does_not_move_the_frozen_target(
+    app, auth_headers, builder, tmp_path, monkeypatch
+):
+    """`approved-work-merges-in-batches` D3: approval freezes its merge targets on the landing, and
+    the checkout is released after the commit, outside any transaction, in either order with the
+    landing. Release snapshots an uncommitted edit onto the task branch; what lands is still the
+    evidence commit the approval froze, never that snapshot (F58's shape)."""
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
@@ -301,17 +299,17 @@ async def test_release_happens_after_integration(app, auth_headers, builder, tmp
     checkout = worktrees.ensure_task_worktree(tmp_path, task, "main")
     work = work_in(checkout, "feature.py", "print('hi')\n", "the task's work")
 
-    # The evidence names the task's own commit. The footprint is taken from the project checkout's
-    # HEAD, so put it there — phase 7 is what makes a task-bound run footprint itself.
     git(tmp_path, "merge", "-q", "--ff-only", work)
     await accept_evidence(app, auth_headers, builder)
     git(tmp_path, "reset", "-q", "--hard", "HEAD~1")
+    # Left uncommitted in the checkout: release snapshots it onto the branch.
+    (checkout / "half-done.py").write_text("x = 1\n", encoding="utf-8")
 
     seen = {}
     real_release = worktrees.release_task_worktree
 
     def spy(repo_root, task_id):
-        seen["main_at_release"] = commits_on(repo_root, "main")
+        seen["released"] = True
         return real_release(repo_root, task_id)
 
     monkeypatch.setattr(worktrees, "release_task_worktree", spy)
@@ -321,18 +319,13 @@ async def test_release_happens_after_integration(app, auth_headers, builder, tmp
 
     latest = approved.json()["latest_integration"]
     assert latest["outcome"] == "merged", latest
-    assert (
-        latest["commit_sha"] == work
-    ), "the evidence commit is what merges, not a release snapshot"
-
-    assert "main_at_release" in seen, "release was never called"
-    assert work in seen["main_at_release"], "release ran before the merge it must follow"
+    assert latest["commit_sha"] == work, "the frozen evidence commit merges, not a snapshot"
+    assert seen.get("released"), "release was never called"
     assert not checkout.exists()
-
-
-# ---------------------------------------------------------------------------
-# 5.4 — reopening, which is the whole reason the branch is kept
-# ---------------------------------------------------------------------------
+    branch = worktrees.task_branch_name(task)
+    snapshot = commits_on(tmp_path, branch)[0]
+    assert snapshot != work, "the uncommitted edit was snapshotted onto the branch"
+    assert snapshot not in commits_on(tmp_path, "main")
 
 
 @pytest.mark.asyncio

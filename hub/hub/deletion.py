@@ -63,6 +63,8 @@ TASK_REFERENCES: List[Reference] = [
     ("task_requirement_references", "task_id", DELETE),
     ("task_transitions", "task_id", DELETE),
     ("task_check_runs", "task_id", DELETE),
+    # Its landings go with it (`approved-work-merges-in-batches`); a batch keeps its record.
+    ("task_landings", "task_id", DELETE),
     ("task_requirement_links", "task_id", DELETE),
     ("run_divergences", "task_id", CLEAR),
     ("requirement_evidence", "task_id", DELETE),

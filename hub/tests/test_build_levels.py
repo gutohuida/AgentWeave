@@ -253,6 +253,13 @@ async def test_flow_fast_approves_once_the_check_run_passes(app, tmp_path):
         "fast",
     )
     assert await _review_entries(task_id) == []
+    # The approval lands through the queue's batch (`approved-work-merges-in-batches`).
+    from hub import landing_queue
+
+    try:
+        await landing_queue.drain()
+    finally:
+        landing_queue.cancel_timers()
     assert work in commits_on(tmp_path, "main")
 
 
@@ -464,13 +471,25 @@ async def test_the_hubs_override_lands_at_fast_and_reviewed_never_at_gated(app, 
     await red._configure()
     await red._checked(red.TASK)
 
+    from hub import landing_queue
+
     approved = await red._reviewer_approves(app, red.TASK)
+    # Approval waits on nothing (`approved-work-merges-in-batches` D7); the batch applies the
+    # level's rule to the failure main shares.
+    assert approved.status_code == 200, approved.text
+    try:
+        await landing_queue.drain()
+    finally:
+        landing_queue.cancel_timers()
+    landing = await red._landing(app, red.TASK)
 
     if level == "gated":
-        assert approved.status_code == 409, approved.text
-        assert "fail on main too" in approved.json()["detail"]["message"]
+        assert landing["state"] == "held", landing
+        assert "fail on main too" in landing["reason"]
         assert work not in commits_on(tmp_path, "main")
+        assert (await red._approval(red.TASK)).override_by is None
     else:
-        assert approved.status_code == 200, approved.text
+        assert landing["state"] == "landed", landing
         assert work in commits_on(tmp_path, "main")
         assert (await red._approval(red.TASK)).override_by == "hub"
+        assert landing["batch"]["override_by"] == "hub"

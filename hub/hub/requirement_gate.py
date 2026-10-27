@@ -216,6 +216,14 @@ class GateRefusal:
     # work merges is *unknown* -- an eighth kind of claim, and not "not checked, approve". One
     # entry, carrying git's own words.
     git_unreadable: List[Dict[str, str]] = field(default_factory=list)
+    # What approval would merge, as the gate resolved it (`task_integration.Target`s), or `None`
+    # where the question could not be asked (no main branch, no repository). Not a refusal: the
+    # approval freezes these on its landing (`approved-work-merges-in-batches`, D3).
+    will_merge: Optional[List[Any]] = None
+    # Whether the task's per-task check run failed with a failure of its own on these targets and
+    # the operator overrode it: that task lands alone, unchecked (`approved-work-merges-in-batches`,
+    # D2).
+    overrode_own_failure: bool = False
 
     @property
     def refuses(self) -> bool:
@@ -1142,14 +1150,19 @@ async def _check_checks(
     refusal: GateRefusal,
     situation: "_MergeSituation",
     *,
-    start_checks: bool,
     override_checks_reason: Optional[str],
 ) -> None:
-    """The project's checks on the work approval would merge (`approval-runs-the-projects-checks`).
+    """The task's own check result on the work approval would merge.
 
-    Reads the recorded result and never runs a check. Only a caller that is approving
-    (*start_checks*) may schedule a run, in the background, for a result that is missing, stale or
-    interrupted (D5); every other caller of the gate reads only.
+    `approved-work-merges-in-batches` (D2, D6): the landing gate is the batch's one check run on
+    main with the queued work merged, so approval no longer waits for a per-task result. A missing,
+    running, errored, interrupted or stale result refuses nothing and starts nothing, and a pass on
+    any earlier main tip counts. What still refuses is the task's own confirmed failure on these
+    same merge targets, whatever main tip it ran on. A failure main shares, or a flake, refuses
+    nothing either: the batch applies slice M's rule to it. Reads only; never runs a check.
+
+    The operator's reason over a failed result lands that task alone, unchecked
+    (`overrode_own_failure`), as approving over failing checks always has.
     """
     from . import project_checks
 
@@ -1158,51 +1171,40 @@ async def _check_checks(
     if view is None:
         return
     run = view.run
-    if view.state in ("failed", "error") and (override_checks_reason or "").strip():
-        refusal.checks_overridden = True  # the operator's typed reason wins over the Hub's
-        return
     if view.state == "passed":
         # A pass that holds a flake of a named test still lands, as before; it is recorded as the
         # Hub's override naming the test (`flake-recorded-on-approval`).
         refusal.automatic_override = await automatic_override(session, task, view)
         return
-    if view.state == "failed":
-        decided = await automatic_override(session, task, view)
-        if decided is not None:
-            refusal.automatic_override = decided
-            return
-    state = view.state
-    previous_error = ""
-    if state == "error" and start_checks:
-        # F516: an error is the Hub failing to produce a result, not a verdict; approving retries.
-        project_checks.schedule(task.project_id, task.id, targets)
-        state = "running"
-        previous_error = (run.error if run is not None else "") or "an unknown error"
-    elif state in ("missing", "stale", "interrupted"):
-        if refusal.unmergeable:
-            # F613: nothing starts over a conflict, so "they start when approval is requested"
-            # would be false; the conflict is the refusal.
-            return
-        if start_checks:
-            # F680: the targets this transaction resolved, not ones re-read from committed state.
-            project_checks.schedule(task.project_id, task.id, targets)
-            state = "running"
-        else:
-            state = "not_run"
-    results = list(run.results or []) if run is not None and view.state == "failed" else []
+    failed_here = view.state == "failed"
+    if not failed_here and run is not None and run.state == "failed" and view.state == "stale":
+        # A verdict on these same targets from an earlier main tip still says what the work does.
+        tip = await asyncio.to_thread(
+            project_checks.main_tip, situation.root, situation.main_branch
+        )
+        if tip is not None:
+            now = await asyncio.to_thread(project_checks.unmerged, situation.root, tip, targets)
+            failed_here = bool(now) and list(run.target_shas or []) == list(now)
+    if not failed_here or run is None:
+        return
+    if (override_checks_reason or "").strip():
+        refusal.checks_overridden = True  # the operator's typed reason wins over the Hub's
+        refusal.overrode_own_failure = True
+        return
+    if not project_checks.own_failure(run.results):
+        # Main's failure or a flake: the Hub's override where M allows it (recorded on the
+        # approval, as before); otherwise the batch holds the landing for the operator.
+        refusal.automatic_override = await automatic_override(session, task, view)
+        return
+    results = list(run.results or [])
     failing = [r for r in results if project_checks.failed(r)]
-    if failing and all(project_checks.preexisting(r) for r in failing):
-        # F605 (fix-D13): main fails the same checks, so this is not the task's; the operator's.
-        state = "preexisting"
     refusal.checks.append(
         {
-            "state": state,
-            "run_id": (
-                run.id if run is not None and view.state in ("failed", "error", "running") else None
-            ),
+            "state": "failed",
+            "run_id": run.id,
             "failing": failing,
-            "error": run.error if run is not None and view.state == "error" else "",
-            "previous_error": previous_error,
+            "error": "",
+            "previous_error": "",
         }
     )
 
@@ -1300,7 +1302,6 @@ async def evaluate(
     task: Task,
     *,
     acting_run_id: Optional[str] = None,
-    start_checks: bool = False,
     override_checks_reason: Optional[str] = None,
 ) -> tuple[GateRefusal, str]:
     """`(refusal, policy_digest)` for moving this task to `approved`.
@@ -1314,8 +1315,8 @@ async def evaluate(
     signature keeps no second surface in step — `task_transition_service.py:555` is the only caller,
     checked rather than assumed.
 
-    *start_checks* is passed only by a caller that is approving (the transition and the land
-    route); *override_checks_reason* only by the operator's approval. See `_check_checks`.
+    *override_checks_reason* is passed only by the operator's approval. No caller starts a check
+    run through the gate (`approved-work-merges-in-batches`, D2). See `_check_checks`.
     """
     refusal = GateRefusal()
     # Both repository-aware checks, and both **above** the early return two statements down. That
@@ -1325,6 +1326,7 @@ async def evaluate(
     if fault is not None:
         refusal.git_unreadable.append({"error": fault})
     if situation is not None:
+        refusal.will_merge = list(situation.will_merge)
         await _check_mergeable(session, task, refusal, situation)
         await _check_unaccepted(session, task, refusal, situation)
         await _check_unlanded(session, task, refusal, situation)
@@ -1333,9 +1335,6 @@ async def evaluate(
             task,
             refusal,
             situation,
-            # F613: work that does not merge cannot be checked; a run started now only errors the
-            # same way. One starts again once the work or main moves.
-            start_checks=start_checks and not refusal.unmergeable,
             override_checks_reason=override_checks_reason,
         )
         await _check_prerequisites_merged(session, task, refusal, situation)

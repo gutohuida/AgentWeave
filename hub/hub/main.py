@@ -593,6 +593,15 @@ async def lifespan(app: FastAPI):
     from .project_checks import interrupt_leftover_runs
 
     await interrupt_leftover_runs()
+    # A landing batch a previous Hub left checking is queued again in order, and one that had moved
+    # main is recorded landed from main's history: nothing lost, nothing merged twice
+    # (`approved-work-merges-in-batches`, FR a-restart-loses-and-repeats-nothing).
+    from . import landing_queue
+
+    try:
+        await landing_queue.reconcile_at_startup()
+    except Exception:  # noqa: BLE001 -- the queue is durable; the next landing looks again
+        logger.warning("could not reconcile the landing queue", exc_info=True)
     await init_scheduler()
     # After the scheduler, which holds the wakes; after both reconciliations, whose rows it reads
     # past (`a-spent-allowance-holds-the-queue`, D5).
@@ -653,6 +662,7 @@ async def lifespan(app: FastAPI):
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await maintenance
     main_watch.cancel()
+    landing_queue.cancel_timers()
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await main_watch
     stall_sweep.cancel()

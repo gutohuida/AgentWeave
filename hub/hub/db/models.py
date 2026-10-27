@@ -3213,6 +3213,11 @@ class TaskIntegration(Base):
     mechanism: Mapped[str] = mapped_column(String(16), nullable=False, default="local")
     actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    # The landing batch that merged it, where one did (`approved-work-merges-in-batches`, 0155), and
+    # the override it landed under where its batch's checks failed only as main does (slice M's
+    # rule at batch level). Both null for every merge made before batches, and without checks.
+    batch_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
@@ -3339,3 +3344,93 @@ class Build(Base):
             postgresql_where=text("state = 'running'"),
         ),
     )
+
+
+class TaskLanding(Base):
+    """One approved task's work on its way to the main branch (`approved-work-merges-in-batches`,
+    migration 0155).
+
+    Approval records the verdict and queues this row with the merge targets frozen at that moment
+    (`targets`, `task_integration.Target` fields); retrying an integration, landing a mend
+    resolution and accepting evidence afterwards queue one too. `landing_queue` is the one writer
+    that moves main: without checks it lands the row right after the commit that queued it; with
+    checks it lands it in a batch (`LandingBatch`) after one check run. A new attempt is a new row,
+    so the rows are the record of every landing a task had.
+
+    `state`: `queued`, `checking` (in a batch being checked), `landing` (main is being moved for
+    it), `held` (waits on a prerequisite named by `waits_on`, or its batch waits for the operator),
+    `landed`, `not_landed` (the merge was skipped or failed: `reason`, and the integration record),
+    or `sent_back` (its batch's checks or a conflict sent the task back: `reason`).
+    """
+
+    __tablename__ = "task_landings"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    task_id: Mapped[str] = mapped_column(String(64), ForeignKey("tasks.id"), nullable=False)
+    # Not a ForeignKey, for the SQLite column-drop reason `Task.spec_document_id` gives.
+    batch_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    # What queued it: `approval`, `retry`, `resolution` or `evidence`.
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="approval")
+    # The frozen merge targets, `[{"commit_sha", "branch", "evidence_id", "requirement_id",
+    # "task_id"}]`; null where approval could not resolve them (no main branch, no repository), so
+    # the landing resolves them itself and records why nothing merged.
+    targets: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Queue order: when it was queued, kept when a batch puts the row back, so it keeps its place.
+    order_key: Mapped[float] = mapped_column(Float, nullable=False)
+    # The operator approved over a failed per-task check: lands alone, ahead of the queue, unchecked.
+    unchecked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    override_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="operator")
+    actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    waits_on: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    landed_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
+    )
+    ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (
+        Index("ix_task_landings_project_state", "project_id", "state", "order_key"),
+        Index("ix_task_landings_task", "task_id", "created_at"),
+    )
+
+
+class LandingBatch(Base):
+    """One batch of queued landings, checked once and landed together (migration 0155).
+
+    Built on main's tip `base_sha`: each task's targets merged in queue order with plumbing, each
+    task's last merge commit a prefix (`prefixes`, one per task in `task_ids`). The checks run once
+    on the last prefix (`merged_sha`), and main is fast-forwarded to exactly that commit. A failure
+    of the batch's own is narrowed over the prefixes (`narrowing`); failures main shares follow the
+    automatic override (`override_reason`, `override_by`) or wait for the operator (`held`).
+
+    `state`: `checking`, `held`, `landing` (main is being moved), `landed`, `failed` (a task was
+    sent back and the rest queued again), `superseded` (main moved under it), or `interrupted` (the
+    Hub stopped while it was checked; its tasks are queued again).
+    """
+
+    __tablename__ = "landing_batches"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    base_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="checking")
+    task_ids: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    prefixes: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    merged_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The check run recorded for the batch (a `TaskCheckRun` on its first task), where one ran.
+    check_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    results: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    narrowing: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    override_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (Index("ix_landing_batches_project", "project_id", "created_at"),)

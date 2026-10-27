@@ -10,13 +10,13 @@ import time
 
 import pytest
 
-from hub import project_checks
+from hub import landing_queue, project_checks
 from hub.db.engine import async_session_factory
 from hub.db.models import Task, TaskTransition
 from hub.worktrees import task_branch_name
 
 from .test_project_checks_gate import _approve
-from .test_project_checks_run import PASS, PY, _project, _runs, _task_with_work
+from .test_project_checks_run import MAIN_FAIL, PASS, PY, _project, _runs, _task_with_work
 from .test_task_integration import commit_on_branch, commits_on, git
 
 pytestmark = pytest.mark.asyncio
@@ -60,36 +60,50 @@ async def _checked(*task_ids):
     await project_checks.drain()
 
 
-# --- FR-1: main moving refreshes the results waiting for review ---------------------------------
+# --- FR-1: main moving refreshes the results waiting for review --------------------------------
+# (`approved-work-merges-in-batches`, FR a-passed-task-check-is-not-rerun-when-main-moves: a pass
+# counts whatever tip it ran on; a task with no result still gets a run.)
 
 
-async def test_landing_a_refreshes_b_without_bs_approval_being_asked(app, auth_headers, tmp_path):
-    """ac-land-a-refreshes-b, the acceptance drive."""
+@pytest.fixture(autouse=True)
+def _no_landing_timers():
+    yield
+    landing_queue.cancel_timers()
+
+
+async def test_main_moving_reruns_no_passed_result_and_runs_a_missing_one(
+    app, auth_headers, tmp_path
+):
+    """stale-pass-not-rerun, the acceptance drive of `stale-pass-counts`."""
     task_a, work_a = await _task_with_work(tmp_path)
-    task_b = "task-c0ffee000002"
+    task_b, task_c = "task-c0ffee000002", "task-c0ffee000003"
     await _another_task(tmp_path, task_b, "other.py")
+    await _another_task(tmp_path, task_c, "third.py")
     await _project([PASS])
-    await _checked(task_a, task_b)
+    await _checked(task_b)
     before = _tip(tmp_path)
     assert [r.state for r in await _runs(task_b)] == ["passed"]
 
     approved = await _approve(app, auth_headers, task_a)
     assert approved.status_code == 200, approved.text
+    await landing_queue.drain()
     assert work_a in commits_on(tmp_path, "main")
     after = _tip(tmp_path)
     assert after != before
 
-    # Nobody has asked to approve B: the refresh is the Hub's own, started by A landing.
+    # A landing moved main: the Hub's own refresh, started by the landing.
+    await project_checks.refresh("proj-test")
     await project_checks.drain()
-    runs = await _runs(task_b)
-    assert [r.state for r in runs] == ["passed", "passed"]
-    assert runs[-1].main_sha == after
+    assert [r.state for r in await _runs(task_b)] == ["passed"], "a pass is not run again"
+    runs_c = await _runs(task_c)
+    assert [r.state for r in runs_c] == ["passed"] and runs_c[0].main_sha == after
 
-    started = time.monotonic()
+    # B's pass on the earlier tip still counts for review and approval.
+    async with async_session_factory() as session:
+        assert await project_checks.review_wait(session, await session.get(Task, task_b)) is None
     approved_b = await _approve(app, auth_headers, task_b)
     assert approved_b.status_code == 200, approved_b.text
-    assert time.monotonic() - started < 30
-    assert len(await _runs(task_b)) == 2, "approval started no run of its own"
+    assert len(await _runs(task_b)) == 1, "approval started no run of its own"
 
 
 async def test_a_task_in_progress_is_not_refreshed(app, tmp_path):
@@ -114,9 +128,11 @@ async def test_a_task_in_progress_is_not_refreshed(app, tmp_path):
 async def test_a_commit_made_with_git_directly_is_refreshed_by_the_watcher(
     app, tmp_path, monkeypatch
 ):
-    """ac-outside-merge: the watcher the Hub starts, run as it runs, with a short interval."""
+    """ac-outside-merge: the watcher the Hub starts, run as it runs, with a short interval. The
+    task's result is a failure main shares, which a new tip asks again (a pass would count on any
+    tip and not be re-run: `approved-work-merges-in-batches`, FR-9)."""
     task_id, _ = await _task_with_work(tmp_path)
-    await _project([PASS])
+    await _project([MAIN_FAIL])
     await _checked(task_id)
     assert project_checks.WATCH_SECONDS <= 60, "the 120s promise needs two looks inside it"
     monkeypatch.setattr(project_checks, "WATCH_SECONDS", 0.2)
@@ -135,7 +151,7 @@ async def test_a_commit_made_with_git_directly_is_refreshed_by_the_watcher(
             await watcher
     await project_checks.drain()
     runs = await _runs(task_id)
-    assert runs[-1].main_sha == tip and runs[-1].state == "passed"
+    assert runs[-1].main_sha == tip and runs[-1].state == "failed"
 
 
 async def test_the_hub_starts_the_watcher():
@@ -267,24 +283,26 @@ async def test_refresh_starts_the_oldest_completed_first(app, tmp_path):
     assert began[third] > began[first] and began[third] > began[second]
 
 
-# --- FR-5: the gate still wants a result for the current tip -------------------------------------
+# --- FR-5, superseded by `approved-work-merges-in-batches` FR-9: a pass on an older tip counts ---
 
 
-async def test_a_green_on_an_older_tip_still_does_not_pass(app, auth_headers, tmp_path):
-    """ac-stale-still-refused: nothing refreshed it (no watcher here), so approval refuses."""
+async def test_a_green_on_an_older_tip_counts_and_is_not_run_again(app, auth_headers, tmp_path):
     task_id, work = await _task_with_work(tmp_path)
     await _project([PASS])
     await _checked(task_id)
     _move_main(tmp_path)
 
-    refused = await _approve(app, auth_headers, task_id)
-    assert refused.status_code == 409, refused.text
-    assert refused.json()["detail"]["checks"][0]["state"] == "running"
-    assert work not in commits_on(tmp_path, "main")
+    approved = await _approve(app, auth_headers, task_id)
+    assert approved.status_code == 200, approved.text
     await project_checks.drain()
+    assert len(await _runs(task_id)) == 1
+    await landing_queue.drain()
+    assert work in commits_on(tmp_path, "main")
 
 
-async def test_a_superseded_result_does_not_pass(app, auth_headers, tmp_path):
+async def test_a_superseded_result_holds_nothing_and_the_batch_checks_it(
+    app, auth_headers, tmp_path
+):
     task_id, work = await _task_with_work(tmp_path)
     await _project([PASS])
     await _checked(task_id)
@@ -294,10 +312,11 @@ async def test_a_superseded_result_does_not_pass(app, auth_headers, tmp_path):
         row.state = "superseded"
         await session.commit()
 
-    refused = await _approve(app, auth_headers, task_id)
-    assert refused.status_code == 409, refused.text
-    assert work not in commits_on(tmp_path, "main")
-    await project_checks.drain()
+    approved = await _approve(app, auth_headers, task_id)
+    assert approved.status_code == 200, approved.text
+    assert work not in commits_on(tmp_path, "main"), "queued for its batch"
+    await landing_queue.drain()
+    assert work in commits_on(tmp_path, "main")
 
 
 # --- FR-7 / FR-8: a check scoped to paths it does not touch is skipped, and passes --------------

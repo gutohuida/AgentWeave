@@ -220,12 +220,52 @@ export interface TaskCheckRun {
   ended_at: string | null
 }
 
+/** The landing batch a task's landing is in (`approved-work-merges-in-batches`). */
+export interface TaskLandingBatch {
+  id: string
+  state: 'checking' | 'held' | 'landing' | 'landed' | 'failed' | 'superseded' | 'interrupted'
+  task_ids: string[]
+  base_sha: string
+  merged_sha: string | null
+  check_run_id: string | null
+  /** How long it has run (or ran), in seconds. */
+  seconds: number
+  /** How long the project's previous finished batch took, if there is one. */
+  previous_seconds: number | null
+  override_reason: string | null
+  override_by: 'hub' | 'operator' | null
+  error: string
+}
+
+/** The task's latest landing: approved work on its way to the main branch. */
+export interface TaskLanding {
+  id: string
+  state: 'queued' | 'checking' | 'landing' | 'held' | 'landed' | 'not_landed' | 'sent_back'
+  kind: 'approval' | 'retry' | 'resolution' | 'evidence'
+  /** Why it was sent back, held or not landed; empty otherwise. */
+  reason: string
+  /** The prerequisite task it waits on, where it is held for one. */
+  waits_on: string | null
+  /** The commit main was moved to when it landed. */
+  landed_sha: string | null
+  override_reason: string | null
+  batch: TaskLandingBatch | null
+  /** Its place in the project's queue (1 is next), while queued. */
+  position: number | null
+  queued_at: string | null
+}
+
 export interface TaskChecks {
   configured: boolean
   running: boolean
   /** Newest first, as the route returns them. */
   runs: TaskCheckRun[]
+  /** Absent from a Hub older than the landing queue. */
+  landing?: TaskLanding | null
 }
+
+/** The landing states the queue is still working on, polled until they settle. */
+export const LANDING_IN_FLIGHT: ReadonlyArray<TaskLanding['state']> = ['queued', 'checking', 'landing']
 
 export function useTaskChecks(taskId: string, enabled: boolean) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
@@ -245,7 +285,28 @@ export function useTaskChecks(taskId: string, enabled: boolean) {
     enabled: isConfigured && !!projectId && enabled,
     // A run takes minutes and announces nothing, so a running one is polled until it ends.
     refetchInterval: (query) =>
-      query.state.data?.running || query.state.data?.runs[0]?.state === 'running' ? 5000 : false,
+      query.state.data?.running ||
+      query.state.data?.runs[0]?.state === 'running' ||
+      LANDING_IN_FLIGHT.includes(query.state.data?.landing?.state ?? 'landed')
+        ? 5000
+        : false,
+  })
+}
+
+/** Land the batch this task's landing is held in, over failures main shares, with one reason. */
+export function useLandHeldLanding(taskId: string) {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (reason: string) =>
+      postJson<{ task_id: string; landing: TaskLanding | null }>(
+        `/api/v1/projects/${projectId}/tasks/${taskId}/landing/land`,
+        { reason },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'task'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
+    },
   })
 }
 

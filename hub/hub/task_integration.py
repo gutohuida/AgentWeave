@@ -153,6 +153,13 @@ GIT_TIMEOUT_SECONDS: contextvars.ContextVar[int] = contextvars.ContextVar(
 )
 DIAGNOSTIC_GIT_TIMEOUT_SECONDS = 5
 
+#: Evidence ids read as accepted though still awaiting: the pieces an approval's verdict is about to
+#: accept, while the approval asks its git questions before its first write
+#: (`approved-work-merges-in-batches`, D3). Empty everywhere else.
+ASSUMED_ACCEPTED: contextvars.ContextVar[frozenset] = contextvars.ContextVar(
+    "assumed_accepted", default=frozenset()
+)
+
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
     return traces.run(
@@ -320,6 +327,12 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
     as before.
     """
     recorder = aliased(Task)
+    assumed = ASSUMED_ACCEPTED.get()
+    state_matches = RequirementEvidence.review_state == review_state
+    if assumed and review_state == requirement_evidence.ACCEPTED:
+        state_matches = or_(state_matches, RequirementEvidence.id.in_(sorted(assumed)))
+    elif assumed and review_state == requirement_evidence.AWAITING:
+        state_matches = state_matches & RequirementEvidence.id.not_in(sorted(assumed))
     rows = (
         await session.execute(
             select(EvidenceFootprint, RequirementEvidence)
@@ -335,7 +348,7 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
             .where(
                 TaskRequirementLink.task_id == task.id,
                 RequirementEvidence.project_id == task.project_id,
-                RequirementEvidence.review_state == review_state,
+                state_matches,
                 EvidenceFootprint.kind == "git",
                 EvidenceFootprint.commit_sha.is_not(None),
                 or_(
@@ -1027,9 +1040,15 @@ async def integrate_what_was_waiting_for_this_evidence(
             return
         waiting = await tasks_awaiting_this_commit(session, evidence)
         for task in waiting:
-            await retry_integration(session, task, actor)
+            await retry_integration(session, task, actor, kind="evidence")
         if waiting:
+            project_id = waiting[0].project_id
             await session.commit()
+            # Through the landing queue: lands now without checks (and this waits for it), in
+            # the next batch with them (`approved-work-merges-in-batches`).
+            from . import landing_queue
+
+            await landing_queue.settle(project_id)
     except Exception:  # noqa: BLE001 - never let a merge undo the decision that asked for it
         logger.warning(
             "Could not integrate the work waiting on evidence %s",

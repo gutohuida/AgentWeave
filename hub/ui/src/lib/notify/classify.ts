@@ -50,6 +50,16 @@ function textFor(type: string, d: Payload): { kind: NotifyKind; text: string; co
         ? { kind: 'done', text: `Checks passed for ${task}: it can be landed` }
         : { kind: 'fail', text: `Checks did not pass for ${task}` }
     }
+    case 'task_landing_changed': {
+      // A batch landed the work, sent it back, or waits for the operator
+      // (`approved-work-merges-in-batches`); the queue's other moves are everyday traffic.
+      const task = str(d, 'task_title') || str(d, 'task_id') || 'A task'
+      const state = str(d, 'state')
+      if (state === 'landed') return { kind: 'done', text: `${task} landed on main` }
+      if (state === 'sent_back') return { kind: 'fail', text: `${task} was sent back by its landing batch` }
+      if (state === 'held') return { kind: 'ask', text: `${task}'s landing is held` }
+      return null
+    }
     case 'stall_recorded':
       return { kind: 'fail', text: str(d, 'reason') ? `Work stalled: ${str(d, 'reason')}` : 'Work stalled' }
     case 'run_failed':

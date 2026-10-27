@@ -35,6 +35,7 @@ from hub.db.models import (
     EvidenceReview,
     InboundQueueEntry,
     JobRun,
+    LandingBatch,
     Loop,
     MainNotice,
     ManagerJob,
@@ -61,6 +62,7 @@ from hub.db.models import (
     TaskDependency,
     TaskDependencyReference,
     TaskIntegration,
+    TaskLanding,
     TaskRequirementLink,
     TaskRequirementReference,
     TaskTransition,
@@ -97,6 +99,9 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "task_requirement_references",
     "task_integrations",
     "task_check_runs",
+    "task_landings",
+    "landing_batches",
+    "builds",
     "spec_rigor_events",
     "spec_requirements",
     "spec_document_events",
@@ -496,6 +501,15 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             error="",
         )
     )
+    session.add(
+        TaskLanding(
+            id=f"landing-{tag}",
+            project_id=project_id,
+            task_id=f"task-{tag}",
+            order_key=1.0,
+        )
+    )
+    session.add(LandingBatch(id=f"batch-{tag}", project_id=project_id, base_sha="0" * 40))
     session.add(
         TaskTransition(
             id=f"transition-{tag}",
