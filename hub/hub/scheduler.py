@@ -592,7 +592,7 @@ def _loop_queue_order() -> tuple:
     """How a loop's queue is ordered when picking the current item (design D3).
 
     An active task, most recently touched, beats an untouched pending one; among pending tasks the
-    **oldest** wins. Shared with `api/v1/jobs.py`'s `_batch_loop_summaries` so the board and the
+    **highest priority**, then the **oldest**, wins. Shared with `api/v1/jobs.py`'s `_batch_loop_summaries` so the board and the
     firing cannot disagree about which item is current — they are the two halves of human-only
     check 13.1, and a shared helper is the only way that check means anything.
 
@@ -611,6 +611,17 @@ def _loop_queue_order() -> tuple:
     return (
         (Task.status != "pending").desc(),
         case((Task.status != "pending", Task.updated), else_=None).desc(),
+        # Pending tasks by priority before age (`a-red-main-does-not-hold-the-night`, FR-7): a fix
+        # task the Hub files mid-flow is `critical` and is staffed ahead of every other pending
+        # task. Spec materialisation writes `medium` for every task, so a spec flow's own order is
+        # unchanged. Non-pending rows tie here (their `updated` above already ordered them).
+        case(
+            (Task.status != "pending", 0),
+            (Task.priority == "critical", 0),
+            (Task.priority == "high", 1),
+            (Task.priority == "low", 3),
+            else_=2,
+        ).asc(),
         Task.created_at.asc(),
     )
 

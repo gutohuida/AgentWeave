@@ -125,6 +125,13 @@ class Project(Base):
     # `{"name", "command", "timeout_seconds"}` the Hub runs on the work a task's approval would
     # merge. Set only by the operator. Null or empty means no checks, and approval is unchanged.
     checks: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Whether the Hub lands an approval over check failures that are provably not the task's --
+    # the same test ids fail on main too, or passed when rerun on their own -- recording its own
+    # override, and files their fix task (`a-red-main-does-not-hold-the-night`, FR-5, migration
+    # 0151). On by default for new and existing projects; off is the behaviour before that change.
+    checks_auto_override: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
 
     # --- Reach (reach-1019, `hub/hub/reach.py`) ---
     # The posture every agent's run gets when neither its conversation nor the agent states one;
@@ -909,6 +916,10 @@ class TaskTransition(Base):
     # Why the operator approved over failing checks (`approval-runs-the-projects-checks` D7). Null
     # on every transition that overrode nothing; only the operator can set it.
     override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Who overrode, where `override_reason` is set: `operator` (their typed reason) or `hub` (the Hub
+    # over failures that were not the task's, `a-red-main-does-not-hold-the-night` D3, migration
+    # 0151). A column of its own, not an actor: the actor stays the approver.
+    override_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     # Which operator action made this move and against what, where one action makes moves the
     # operator did not make one by one: closing a document's tasks as already built names itself
     # and its commits here (`every-task-can-always-be-moved-on` FR-6, migration 0147). Null on every

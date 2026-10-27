@@ -149,3 +149,35 @@ async def test_a_fast_check_is_at_most_two_minutes_and_fast_defaults_off(app, au
     )
     assert plain.status_code == 200, plain.text
     assert (await app.get(URL, headers=auth_headers)).json()["checks"][0]["fast"] is False
+
+
+@pytest.mark.asyncio
+async def test_the_automatic_override_is_on_by_default_and_only_the_operator_turns_it_off(
+    app, auth_headers
+):
+    """setting-defaults-and-saves (`a-red-main-does-not-hold-the-night`, FR-5)."""
+    assert (await app.get(URL, headers=auth_headers)).json()["checks_auto_override"] is True
+
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-checks-override",
+                project_id="proj-test",
+                agent="builder",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token("aw_run_override-secret"),
+            )
+        )
+        await session.commit()
+    agent = {"Authorization": "Bearer aw_run_override-secret"}
+    refused = await app.put(URL, json={"checks_auto_override": False}, headers=agent)
+    assert refused.status_code in (401, 403), refused.text
+    assert (await app.get(URL, headers=auth_headers)).json()["checks_auto_override"] is True
+
+    saved = await app.put(URL, json={"checks_auto_override": False}, headers=auth_headers)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["checks_auto_override"] is False
+    assert (await app.get(URL, headers=auth_headers)).json()["checks_auto_override"] is False
+    async with async_session_factory() as session:
+        assert (await session.get(Project, "proj-test")).checks_auto_override is False

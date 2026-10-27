@@ -785,6 +785,12 @@ ORIGIN_JOB = "job"
 ORIGIN_CHECKS = "checks"
 ORIGINS = frozenset({ORIGIN_ACTOR, ORIGIN_RUNTIME, ORIGIN_JOB, ORIGIN_CHECKS})
 
+#: Who overrode failing checks on an approval (`task_transitions.override_by`): the operator with a
+#: typed reason, or the Hub over failures that were not the task's (`a-red-main-does-not-hold-the-
+#: night`, D3).
+OVERRIDE_BY_OPERATOR = "operator"
+OVERRIDE_BY_HUB = "hub"
+
 
 class _ChecksRefusal:
     """The structured body of a refusal over the project's checks (main.py's handler sends
@@ -1033,6 +1039,7 @@ async def apply_transition(
     policy = ""
     reported: list = []
     overridden: Optional[str] = None
+    override_by: Optional[str] = None
     if to_status == "approved":
         # The acting run, excluded from the gate's liveness check: a turn is never blocked by
         # itself (design D10). `None` for the operator, which excludes nothing.
@@ -1061,6 +1068,16 @@ async def apply_transition(
                 refusal.for_operator = actor.is_operator
                 raise GateUnsatisfiedError(refusal)
         overridden = reason if refusal.checks_overridden else None
+        if overridden is not None:
+            override_by = OVERRIDE_BY_OPERATOR
+        elif refusal.automatic_override is not None:
+            # Failures that are not the task's -- main's, or flakes -- land with the Hub's override
+            # (`a-red-main-does-not-hold-the-night`, D3). Who overrode is a column of its own: the
+            # actor stays the approver, and there is no third actor kind.
+            from .requirement_gate import override_reason_for
+
+            overridden = override_reason_for(refusal.automatic_override)
+            override_by = OVERRIDE_BY_HUB
         # `contract` never refuses, so its unmet and rejected requirements have nowhere to surface
         # unless this call carries them out. Not persisted — a transient attribute on the returned
         # row rather than a column, because this is a report at the moment of approval, not an
@@ -1100,6 +1117,7 @@ async def apply_transition(
         # than a gap in it.
         policy_digest=policy or None,
         override_reason=overridden,
+        override_by=override_by,
         note=note,
     )
     # Not a column — see the comment where `reported` is built. `TaskResponse` reads this off the
@@ -1111,6 +1129,12 @@ async def apply_transition(
     # (`flow_advance`). Never for the job's own moves -- a firing does not re-fire itself.
     if task.loop_id and to_status in flow_advance.HANDOFF_STATUSES and origin != ORIGIN_JOB:
         flow_advance.advance_after_commit(session, task.loop_id)
+    # A task moved to `assigned` outside any flow is started for its assignee once this commits
+    # (`a-red-main-does-not-hold-the-night`, FR-9): nothing else starts it.
+    if to_status == "assigned" and not task.loop_id:
+        from . import assigned_task_start
+
+        assigned_task_start.start_after_commit(session, task.id, actor.run_id)
 
     if origin != ORIGIN_RUNTIME:
         # A divergence is an open condition, not a verdict: work reaching the ledger closes it,

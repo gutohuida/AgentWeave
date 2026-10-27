@@ -318,6 +318,14 @@ async def test_a_flake_is_recorded_on_approval(app, tmp_path, tmp_path_factory):
 
     run = await _latest_run(TASK)
     assert run.state == "passed", run.results
+    # a-fix-task-is-filed: a flake gets its fix task too, which marks the flaky list handled.
+    from hub import flaky_tests
+
+    [fix] = await _fix_tasks()
+    assert "test_timing.py::test_flaky" in fix.title and "flaky" in fix.description
+    async with async_session_factory() as session:
+        listed = await flaky_tests.report(session, "proj-test")
+    assert listed["flaky"] == [] and listed["handled"]["task_id"] == fix.id, listed
     approved = await _reviewer_approves(app, TASK)
 
     assert approved.status_code == 200, approved.text
@@ -325,6 +333,7 @@ async def test_a_flake_is_recorded_on_approval(app, tmp_path, tmp_path_factory):
     assert transition.override_by == "hub"
     reason = transition.override_reason or ""
     assert "test_timing.py::test_flaky" in reason and "passed when rerun on its own" in reason
+    assert fix.id in reason
 
 
 async def test_a_touched_test_is_the_tasks(app, tmp_path, tmp_path_factory):
@@ -385,11 +394,7 @@ async def test_a_fix_task_cannot_land_itself(app, tmp_path):
     assert "fail on main too" in refused.json()["detail"]["message"]
     async with async_session_factory() as session:
         moved = (
-            (
-                await session.execute(
-                    select(TaskTransition).where(TaskTransition.task_id == fix.id)
-                )
-            )
+            (await session.execute(select(TaskTransition).where(TaskTransition.task_id == fix.id)))
             .scalars()
             .all()
         )
@@ -485,8 +490,10 @@ async def test_the_fix_task_heads_the_flows_queue(app, tmp_path):
         loop = await session.get(Loop, LOOP)
         decision = await decide_firing(session, loop, default_agent="builder")
         current = (await _batch_loop_summaries(session, [f"job-{LOOP}"]))[f"job-{LOOP}"]
-    assert [s.task.id for s in decision.selections][:1] == [fix.id], decision
-    assert [t["id"] for t in current.current_tasks][:1] == [fix.id]
+    assert [(s.task.id, s.agent) for s in decision.selections] == [(fix.id, "builder")]
+    # The board's current pending item is the same task (the review in flight is listed too).
+    pending = [t["id"] for t in current.current_tasks if t["status"] == "pending"]
+    assert pending == [fix.id], current.current_tasks
 
 
 async def test_the_reviewers_briefing_says_the_failure_is_not_the_tasks(app, tmp_path):

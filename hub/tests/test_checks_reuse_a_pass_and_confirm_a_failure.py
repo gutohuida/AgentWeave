@@ -307,11 +307,82 @@ def test_a_summary_that_does_not_name_every_failure_gives_no_node_ids():
     assert project_checks.failed_test_ids("Traceback ...\nOSError\n") == []
 
 
-def test_the_gate_command_is_narrowed_to_the_node_ids_keeping_its_options():
+def test_the_gate_command_is_narrowed_to_the_node_ids_keeping_its_options_and_run_serially():
+    """`a-red-main-does-not-hold-the-night` FR-2: the rerun is serial (`-n 0`, no distribution
+    options); every other option is kept."""
     narrowed = project_checks.narrowed_command(
         "py -3.11 -m pytest hub/tests -q -n auto -p no:cacheprovider", ["hub/tests/t.py::a"]
     )
-    assert narrowed == 'py -3.11 -m pytest -q -n auto -p no:cacheprovider -- "hub/tests/t.py::a"'
+    assert narrowed == 'py -3.11 -m pytest -n 0 -q -p no:cacheprovider -- "hub/tests/t.py::a"'
+
+
+def test_the_operators_gate_command_narrows_to_a_serial_run_of_the_id():
+    gate = (
+        "py -3.11 -m pytest hub/tests -q -n auto --dist loadgroup -p no:cacheprovider "
+        "--timeout=600"
+    )
+    narrowed = project_checks.narrowed_command(gate, ["hub/tests/t.py::a"])
+    assert narrowed == (
+        'py -3.11 -m pytest -n 0 -q -p no:cacheprovider --timeout=600 -- "hub/tests/t.py::a"'
+    )
+    for spelled in (
+        "-n=4 --dist=load",
+        "-nauto --maxprocesses 3",
+        "--numprocesses auto --tx popen",
+    ):
+        out = project_checks.narrowed_command(f"pytest tests {spelled} -q", ["t.py::a"])
+        assert out == 'pytest -n 0 -q -- "t.py::a"', (spelled, out)
+    # A command without -n is already serial; `-n 0` would need xdist installed.
+    assert project_checks.narrowed_command("pytest tests -q", ["t.py::a"]) == (
+        'pytest -q -- "t.py::a"'
+    )
+
+
+async def test_main_is_asked_with_the_same_serial_command_narrowed_to_the_failed_ids(
+    app, tmp_path, monkeypatch
+):
+    """same-failure-by-test-id: main runs exactly the ids that failed, with the narrowed command,
+    and its failures by id are stored; a check that names no ids runs whole on main."""
+    repo = tmp_path
+    task_id, _ = await _task_with_work(repo)
+    (repo / "test_red.py").write_text(
+        "def test_red():\n    assert False\n\ndef test_green():\n    pass\n", encoding="utf-8"
+    )
+    git(repo, "add", "test_red.py")
+    git(repo, "commit", "-q", "-m", "a red test on main")
+    command = f"{PY} -m pytest -q -p no:cacheprovider -p no:randomly"
+    unnamed = {
+        "name": "script",
+        "command": f"{PY} -c \"import sys; print('main is broken'); sys.exit(1)\"",
+        "timeout_seconds": 60,
+    }
+    await _project([{"name": "pytest", "command": command, "timeout_seconds": 120}, unnamed])
+    ran: list = []
+    real = project_checks.run_one
+
+    def recording(check, cwd, owner=None):
+        ran.append((Path(cwd).name, check["command"]))
+        return real(check, cwd, owner)
+
+    monkeypatch.setattr(project_checks, "run_one", recording)
+    await project_checks.request_run("proj-test", task_id)
+    await project_checks.drain()
+
+    narrowed = project_checks.narrowed_command(command, ["test_red.py::test_red"])
+    on_main = [c for where, c in ran if where.endswith(".main")]
+    assert on_main == [narrowed, unnamed["command"]], ran
+    [run] = await _runs(task_id)
+    named, whole = run.results
+    assert named["on_main"]["how"] == "tests"
+    assert named["on_main"]["failed_tests"] == ["test_red.py::test_red"]
+    assert named["shared_tests"] == ["test_red.py::test_red"] and named["preexisting"]
+    assert whole["on_main"]["how"] == "check" and whole["preexisting"]
+    assert (
+        project_checks.not_the_tasks(run.results) is None
+    ), "an unnamed failure is never automatic"
+    assert project_checks.not_the_tasks([named]) == [
+        {"check": "pytest", "test": "test_red.py::test_red", "kind": "fails on main"}
+    ]
 
 
 def test_a_command_that_is_not_a_plain_pytest_run_is_not_narrowed():
