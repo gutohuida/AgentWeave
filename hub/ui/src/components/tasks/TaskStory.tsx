@@ -282,9 +282,15 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           }
         >
           {event.override_reason ? (
-            <div className="aw-callout tone-amber" data-testid={`story-override-${event.id}`}>
-              <strong>Approved over failing checks.</strong> {event.override_reason}
-            </div>
+            event.override_by === 'hub' ? (
+              <div className="aw-callout tone-blue" data-testid={`story-override-${event.id}`} data-override-by="hub">
+                <strong>Approved by the Hub over failures that were not this task's.</strong> {event.override_reason}
+              </div>
+            ) : (
+              <div className="aw-callout tone-amber" data-testid={`story-override-${event.id}`} data-override-by="operator">
+                <strong>Approved over failing checks.</strong> {event.override_reason}
+              </div>
+            )
           ) : null}
         </TimelineItem>
       )

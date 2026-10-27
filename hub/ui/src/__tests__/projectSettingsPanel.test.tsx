@@ -46,6 +46,7 @@ function makeSettings(): {
   checkpoint_auto_continue: boolean
   main_branch: string | null
   checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean }> | null
+  checks_auto_override: boolean
 } {
   return {
     name: 'Website',
@@ -65,6 +66,7 @@ function makeSettings(): {
     checkpoint_auto_continue: false,
     main_branch: null,
     checks: null,
+    checks_auto_override: true,
   }
 }
 
@@ -278,6 +280,16 @@ describe('Project settings → General, applied on change', () => {
     await user.click(fast)
     await user.click(within(dialog).getByRole('button', { name: 'Save check' }))
     expect(lastPatch()).toEqual({ checks: [{ name: 'lint', command: 'ruff check .', timeout_seconds: 60 }] })
+  })
+
+  it('offers the switch for landing over failures that are not the task’s, on by default', async () => {
+    const user = userEvent.setup()
+    render(<GeneralSection />)
+    const toggle = screen.getByRole('switch', { name: "Land over failures that are not the task's" })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByText(/also fails on main, or passed when rerun on its own/)).toBeInTheDocument()
+    await user.click(toggle)
+    expect(lastPatch()).toEqual({ checks_auto_override: false })
   })
 
   it('shows the paths of a saved check and keeps them through an edit', async () => {

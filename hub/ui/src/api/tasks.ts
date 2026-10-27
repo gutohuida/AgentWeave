@@ -319,6 +319,9 @@ export type StoryEvent =
       job_kind?: 'flow' | 'loop' | null
       run_id: string | null
       override_reason: string | null
+      /** Who overrode: the operator with a reason, or the Hub over failures that were not the
+       *  task's (`a-red-main-does-not-hold-the-night`). Absent from an older Hub: the operator. */
+      override_by?: 'operator' | 'hub' | null
     }
   | {
       kind: 'run'
