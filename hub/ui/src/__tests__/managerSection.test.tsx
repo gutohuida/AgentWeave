@@ -213,6 +213,25 @@ describe('Project settings → Manager', () => {
     expect(within(distil).getByText(/On, but it has no runner, so it will not run/)).toBeInTheDocument()
   })
 
+  it('names the model the mender runs on when none is chosen, and no other job’s', async () => {
+    const mender = {
+      ...JOB, key: 'mender', title: 'Mender', needs_runner: true, model: null,
+      default_model: { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5' },
+    }
+    const titles = { ...JOB, model: null }
+    manager = (url) => {
+      if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [titles, mender] } }
+      if (url.includes('/manager/activity')) return { status: 200, body: { firings: [] } }
+      return undefined
+    }
+    render(<ManagerSection />, { wrapper })
+
+    await screen.findByTestId('manager-job-mender')
+    await waitFor(() => expect(menuSelect('Mender model')).toHaveTextContent('Sonnet 5.5 (the mender’s default)'))
+    expect(menuSelect('Mender model')).not.toHaveTextContent('The runner’s model')
+    expect(menuSelect('Conversation titles model')).toHaveTextContent('The runner’s model')
+  })
+
   it('sends only what changed when a control is used', async () => {
     const user = userEvent.setup()
     manager = (url, init) => {
