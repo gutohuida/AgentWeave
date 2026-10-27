@@ -83,14 +83,16 @@ async def test_entering_review_still_assigned_to_the_author_is_refused(app):
 
 
 async def test_the_refusal_binds_an_agent_run_too(app):
-    """Not an operator-only rule. The state it prevents is false whoever writes it."""
+    """Not an operator-only rule. The author's own run is refused entering review; any other
+    agent's run may take the work, and becomes its holder (`every-task-can-always-be-moved-on`)."""
     async with async_session_factory() as session:
         task = await _completed_task(session, "task-f70-run", by=AUTHOR, assignee=AUTHOR)
 
         with pytest.raises(ActorNotPermittedError):
-            await apply_transition(
-                session, task, "under_review", run_actor("run-later", "someone-else")
-            )
+            await apply_transition(session, task, "under_review", run_actor("run-later", AUTHOR))
+
+        await apply_transition(session, task, "under_review", run_actor("run-later", REVIEWER))
+        assert task.assignee == REVIEWER
 
 
 async def test_entering_review_assigned_to_a_different_agent_is_allowed(app):

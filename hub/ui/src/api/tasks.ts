@@ -847,6 +847,23 @@ export function useStartWorkOnTask() {
 export type AllowedTransitions = Record<string, string[]>
 
 /**
+ * The moves the Hub will actually allow the operator on this task (`GET .../tasks/{id}/moves`): the
+ * mover decision's answer for this task as it is held, narrower than the map `useAllowedTransitions`
+ * reads, so a menu built from it offers nothing the Hub would refuse.
+ */
+export function useTaskMoves(taskId: string | null) {
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useQuery({
+    queryKey: ['project', projectId, 'tasks', taskId, 'moves'],
+    queryFn: () =>
+      getJson<{ task_id: string; status: string; moves: string[] }>(
+        `/api/v1/projects/${projectId}/tasks/${taskId}/moves`,
+      ),
+    enabled: !!projectId && !!taskId,
+  })
+}
+
+/**
  * The transition map, fetched once for the operator rather than per task.
  *
  * The legal set depends on who is asking, so it deliberately does not ride on the task response —

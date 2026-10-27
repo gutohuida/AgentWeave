@@ -345,7 +345,7 @@ async def test_a_refusal_on_the_second_step_leaves_the_hold_in_place(
     git(tmp_path, "checkout", "-q", "main")
     before = await history(task)
 
-    async def refuse_the_entry(session, task_row_, to_status, actor):
+    async def refuse_the_entry(session, task_row_, to_status, actor, holder=None):
         if to_status == "under_review":
             raise ActorNotPermittedError("no entry to review for this task")
 

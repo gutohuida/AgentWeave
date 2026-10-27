@@ -98,7 +98,7 @@ async def test_an_agent_cannot_approve_the_work_its_own_run_completed(app):
     async with async_session_factory() as session:
         task = await _make_task(session, "task-self", "in_progress")
         await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
-        await apply_transition(session, task, "under_review", run_actor("run-1", "agent-1"))
+        await apply_transition(session, task, "under_review", operator())
         await session.commit()
 
         with pytest.raises(ActorNotPermittedError) as excinfo:
@@ -113,7 +113,7 @@ async def test_a_different_run_may_approve(app):
     async with async_session_factory() as session:
         task = await _make_task(session, "task-other", "in_progress")
         await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
-        await apply_transition(session, task, "under_review", run_actor("run-1", "agent-1"))
+        await apply_transition(session, task, "under_review", operator())
         await apply_transition(session, task, "approved", run_actor("run-2", "agent-2"))
         await session.commit()
 
@@ -137,7 +137,7 @@ async def test_rejection_and_revision_carry_the_same_separation(app, outcome):
     async with async_session_factory() as session:
         task = await _make_task(session, f"task-sep-{outcome}", "in_progress")
         await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
-        await apply_transition(session, task, "under_review", run_actor("run-1", "agent-1"))
+        await apply_transition(session, task, "under_review", operator())
         await session.commit()
 
         with pytest.raises(ActorNotPermittedError):
@@ -169,7 +169,7 @@ async def test_an_agent_cannot_approve_across_a_new_run(app):
     async with async_session_factory() as session:
         task = await _make_task(session, "task-cross-run", "in_progress")
         await apply_transition(session, task, "completed", run_actor("run-turn-1", "claude"))
-        await apply_transition(session, task, "under_review", run_actor("run-turn-2", "claude"))
+        await apply_transition(session, task, "under_review", operator())
         await session.commit()
 
         # A *different run* of the *same agent* must still be refused.
@@ -185,7 +185,7 @@ async def test_a_genuinely_different_agent_may_still_approve(app):
     async with async_session_factory() as session:
         task = await _make_task(session, "task-two-agents", "in_progress")
         await apply_transition(session, task, "completed", run_actor("run-a", "claude"))
-        await apply_transition(session, task, "under_review", run_actor("run-b", "claude"))
+        await apply_transition(session, task, "under_review", operator())
         await apply_transition(session, task, "approved", run_actor("run-c", "codex"))
         await session.commit()
 
@@ -237,7 +237,7 @@ async def test_the_most_recent_completion_is_the_one_that_counts(app):
         await apply_transition(session, task, "revision_needed", run_actor("run-2", "agent-2"))
         await apply_transition(session, task, "in_progress", run_actor("run-3", "agent-3"))
         await apply_transition(session, task, "completed", run_actor("run-3", "agent-3"))
-        await apply_transition(session, task, "under_review", run_actor("run-3", "agent-3"))
+        await apply_transition(session, task, "under_review", operator())
         await session.commit()
 
         # run-3 completed most recently, so run-3 may not approve.
@@ -261,7 +261,7 @@ async def test_the_operator_can_reopen_and_the_earlier_history_survives(app):
     async with async_session_factory() as session:
         task = await _make_task(session, "task-reopen-op", "in_progress")
         await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
-        await apply_transition(session, task, "under_review", run_actor("run-1", "agent-1"))
+        await apply_transition(session, task, "under_review", operator())
         await apply_transition(session, task, "approved", operator())
         await apply_transition(session, task, "revision_needed", operator())
         await session.commit()
@@ -394,7 +394,7 @@ async def test_a_runtime_transition_still_binds_author_reviewer_separation(app):
         await apply_transition(
             session, task, "completed", run_actor("run-a", "worker"), origin="runtime"
         )
-        await apply_transition(session, task, "under_review", run_actor("run-b", "worker"))
+        await apply_transition(session, task, "under_review", operator())
         await session.commit()
 
         with pytest.raises(ActorNotPermittedError):
