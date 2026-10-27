@@ -234,6 +234,7 @@ async def settle(project_id: str) -> None:
 async def drain(project_id: Optional[str] = None) -> None:
     """Land everything queued now, ignoring the gather window, and wait for it (tests, and an
     operator's "land now")."""
+    stuck: Set[str] = set()
     for _ in range(1000):
         projects = [project_id] if project_id else list(_jobs)
         for pid in projects:
@@ -242,13 +243,14 @@ async def drain(project_id: Optional[str] = None) -> None:
             query = select(TaskLanding.project_id).where(TaskLanding.state == QUEUED)
             if project_id:
                 query = query.where(TaskLanding.project_id == project_id)
-            waiting = sorted(set((await session.execute(query)).scalars().all()))
+            waiting = sorted(set((await session.execute(query)).scalars().all()) - stuck)
         if not waiting:
             if all(not [j for j in _jobs.get(pid, ()) if not j.done()] for pid in projects):
                 return
             continue
         for pid in waiting:
-            await _process(pid, ignore_window=True)
+            if not await _process(pid, ignore_window=True):
+                stuck.add(pid)  # a batch the Hub could not check: left for its timer
 
 
 def cancel_timers() -> None:
@@ -276,15 +278,16 @@ def _arm_timer(project_id: str, seconds: float) -> None:
 # --- the loop ------------------------------------------------------------------------------------
 
 
-async def _process(project_id: str, *, ignore_window: bool = False) -> None:
-    """Land what *project_id*'s queue holds, one landing or one batch at a time."""
+async def _process(project_id: str, *, ignore_window: bool = False) -> bool:
+    """Land what *project_id*'s queue holds, one landing or one batch at a time. `False` where it
+    stopped with work still queued (the gather window, or a batch the Hub could not check)."""
     async with _lock(project_id):
         for _ in range(10_000):
             await _release_holds(project_id)
             async with async_session_factory() as session:
                 project = await session.get(Project, project_id)
                 if project is None:
-                    return
+                    return True
                 checks = project_checks.configured_checks(project)
                 queued = list(
                     (
@@ -298,20 +301,54 @@ async def _process(project_id: str, *, ignore_window: bool = False) -> None:
                         )
                     ).scalars()
                 )
+                nowhere = await _landing_nowhere(session, queued)
             if not queued:
-                return
-            first = queued[0]
-            if first.unchecked or not checks or not first.targets:
+                return True
+            alone = (
+                queued[0]
+                if not checks
+                else next(
+                    (
+                        landing
+                        for landing in queued
+                        if landing.unchecked or not landing.targets or landing.task_id in nowhere
+                    ),
+                    None,
+                )
+            )
+            if alone is not None:
                 # Unchecked by the operator's override, a project without checks, or nothing a
-                # check could run on: the merge approval always made, one landing at a time.
-                await land_by_merge(first.id)
+                # check could run on (the landing records why nothing merged): the merge approval
+                # always made, one landing at a time.
+                await land_by_merge(alone.id)
                 continue
             waited = time.time() - min(landing.order_key for landing in queued)
             if not ignore_window and waited < BATCH_GATHER_SECONDS:
                 _arm_timer(project_id, BATCH_GATHER_SECONDS - waited)
-                return
+                return False
             if not await _run_one_batch(project_id, checks, queued):
-                return
+                # The Hub could not produce a result: tried again after a gather window.
+                _arm_timer(project_id, BATCH_GATHER_SECONDS)
+                return False
+        return True
+
+
+async def _landing_nowhere(session: AsyncSession, landings: Sequence[TaskLanding]) -> Set[str]:
+    """The tasks among *landings* whose build lands nowhere (slice D): recorded, never merged."""
+    from .builds import LANDING_NOWHERE
+    from .db.models import Build
+
+    ids = [landing.task_id for landing in landings]
+    if not ids:
+        return set()
+    rows = (
+        await session.execute(
+            select(Task.id)
+            .join(Build, Build.id == Task.build_id)
+            .where(Task.id.in_(ids), Build.landing == LANDING_NOWHERE)
+        )
+    ).all()
+    return {row[0] for row in rows}
 
 
 async def _release_holds(project_id: str) -> None:
