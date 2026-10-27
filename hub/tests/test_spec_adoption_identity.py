@@ -98,7 +98,7 @@ class TestPhase:
             assert identity.unrecognised_phase is None
 
     def test_a_file_still_saying_proposed_is_adopted_exploring_and_says_so(self):
-        """`proposed` was retired (migration 0148): a file written before then names a phase no
+        """`proposed` was retired (migration 0149): a file written before then names a phase no
         row may hold, so it is read as the kind's default, and the value is reported."""
         identity = _read(kind="change-spec", status="proposed")
         assert isinstance(identity, spec_adoption.AdoptableIdentity)

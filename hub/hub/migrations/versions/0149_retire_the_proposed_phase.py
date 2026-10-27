@@ -1,7 +1,7 @@
 """retire the proposed phase, and name the last exploring step `build`
 
-Revision ID: 0148
-Revises: 0147
+Revision ID: 0149
+Revises: 0148
 Create Date: 2026-10-27 12:00:00.000000
 
 `exploring-ends-at-an-approved-plan` (Tier 2: it rewrites live rows). Check reports a document's
@@ -30,8 +30,8 @@ from datetime import datetime, timezone
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0148"
-down_revision = "0147"
+revision = "0149"
+down_revision = "0148"
 branch_labels = None
 depends_on = None
 
@@ -96,7 +96,7 @@ def upgrade() -> None:
                         "project_id": project_id,
                         "kind": "phase",
                         "actor_kind": "system",
-                        "actor": "migration 0148",
+                        "actor": "migration 0149",
                         "origin": "lifecycle",
                         "run_id": None,
                         "detail": {"from": "proposed", "to": "exploring", "reason": _REASON},

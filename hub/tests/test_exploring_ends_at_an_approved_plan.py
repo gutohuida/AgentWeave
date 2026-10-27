@@ -226,9 +226,9 @@ def test_the_migration_moves_proposed_documents_back_to_exploring(tmp_path):
     _run(_create_all_at(db_url))
     with sqlite3.connect(db_file) as conn:
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
-        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0148')")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0149')")
         conn.commit()
-    _downgrade_to(db_url, "0147")
+    _downgrade_to(db_url, "0148")
     with sqlite3.connect(db_file) as conn:
         conn.execute(
             "INSERT INTO projects (id, name, created_at) VALUES ('p', 'p', '2026-01-01T00:00:00Z')"
@@ -263,7 +263,7 @@ def test_the_migration_moves_proposed_documents_back_to_exploring(tmp_path):
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute("UPDATE spec_documents SET phase = 'proposed' WHERE id = 'spdoc-b'")
 
-    _downgrade_to(db_url, "0147")
+    _downgrade_to(db_url, "0148")
     with sqlite3.connect(db_file) as conn:
         conn.execute("UPDATE spec_documents SET phase = 'proposed' WHERE id = 'spdoc-a'")
         conn.commit()

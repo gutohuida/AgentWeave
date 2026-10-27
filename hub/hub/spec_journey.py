@@ -35,7 +35,7 @@ TASKS = "tasks"
 #: The last step: it recommends a build, with a reason for each choice, and the operator decides
 #: when they press Build (`exploring-ends-at-an-approved-plan`, FR-10). It was called `delivery`;
 #: that name is still read wherever a step is named (`OLD_NAMES`), so a project's
-#: `spec/journey.json` written before the rename keeps working, and migration 0148 moved the
+#: `spec/journey.json` written before the rename keeps working, and migration 0149 moved the
 #: documents standing at it.
 BUILD = "build"
 

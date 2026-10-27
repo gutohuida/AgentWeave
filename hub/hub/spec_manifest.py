@@ -37,7 +37,7 @@ ARCHIVED = "archived"
 CURRENT = "current"
 
 #: Phases reached by walking `spec_lifecycle.TRANSITIONS` from a document's creation, plus
-#: `proposed`, which no document enters any more (migration 0148) but which an index or a stored file
+#: `proposed`, which no document enters any more (migration 0149) but which an index or a stored file
 #: written before it may still state: read as a status that was, never written.
 LIFECYCLE_PHASES = {EXPLORING, PROPOSED, APPROVED, ARCHIVED}
 

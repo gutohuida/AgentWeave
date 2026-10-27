@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from .project_workspace import ProjectWorkspace
 
 EXPLORING = "exploring"
-#: Retired 2026-10-27 (`exploring-ends-at-an-approved-plan`, migration 0148): no document enters it.
+#: Retired 2026-10-27 (`exploring-ends-at-an-approved-plan`, migration 0149): no document enters it.
 #: Named only so a request for it is refused with its own code (`proposed_retired`) instead of
 #: reading as an unknown phase. Check reports readiness without moving anything, and approval goes
 #: straight from `exploring`.
