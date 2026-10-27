@@ -792,8 +792,15 @@ async def apply_transition(
     override_checks_reason: Optional[str] = None,
     verdict_reason: Optional[str] = None,
     holder_named: bool = False,
+    note: Optional[str] = None,
+    closing_with: frozenset = frozenset(),
 ) -> Optional[TaskTransition]:
     """Move `task` to `to_status` as `actor`, recording it. Returns None when nothing changed.
+
+    *note* is written on the history row: which operator action made this move, and against what
+    (`already_built`). *closing_with* names the tasks one operator action is closing together as
+    already built; a prerequisite among them does not hold this task back from `in_progress`, because
+    no work is starting -- it is already on the main branch, and so is the prerequisite's.
 
     *holder_named* says the caller has just written `task.assignee` on the operator's instruction
     (the same PATCH that sends the work back, F743), so the send-back does not return it to its
@@ -877,6 +884,10 @@ async def apply_transition(
         from .dependency_gate import evaluate as evaluate_dependencies
 
         dependency_refusal = await evaluate_dependencies(session, task)
+        if closing_with:
+            dependency_refusal.unmet = [
+                entry for entry in dependency_refusal.unmet if entry["id"] not in closing_with
+            ]
         if dependency_refusal.refuses:
             raise DependencyUnmetError(dependency_refusal)
 
@@ -956,6 +967,7 @@ async def apply_transition(
         # than a gap in it.
         policy_digest=policy or None,
         override_reason=overridden,
+        note=note,
     )
     # Not a column — see the comment where `reported` is built. `TaskResponse` reads this off the
     # object this same call returns; nothing else looks for it, and nothing persists it.

@@ -234,6 +234,43 @@ export function useAskReconcile() {
   )
 }
 
+/** One task closed as already built: where it was, where it is now, and the evidence recorded. */
+export interface AlreadyBuiltTask {
+  id: string
+  title: string
+  from_status: string
+  status: string
+  evidence: string[]
+}
+
+export interface AlreadyBuiltResult {
+  document: string
+  commits: string[]
+  tasks: AlreadyBuiltTask[]
+}
+
+/** Close every open task of an approved change as already built, against commits on the main
+ *  branch (`every-task-can-always-be-moved-on` FR-5/FR-6). Each task moves to under review with
+ *  evidence awaiting a decision, and is approved once that evidence is accepted. */
+export function useCloseAlreadyBuilt() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ path, commits }: { path: string; commits: string[] }) =>
+      postJson<AlreadyBuiltResult>(
+        `/api/v1/projects/${projectId}/project/documents/${path}/close-already-built`,
+        { commits },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
+      for (const key of [['specCoverage'], ['specEvidence'], ['task'], ['tasks']]) {
+        queryClient.invalidateQueries({ queryKey: ['project', projectId, ...key] })
+      }
+    },
+  })
+}
+
 export interface SpecDocument {
   path: string
   content: string
