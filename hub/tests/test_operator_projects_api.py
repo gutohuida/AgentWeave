@@ -374,6 +374,9 @@ async def test_project_settings_update_is_validated_and_atomic(app, auth_headers
         # branch nobody chose, written to on the first approval after an upgrade.
         "main_branch": None,
         "checks": None,
+        # Slice M: on by default; a failure that is not the task's own (fails on main too, or a
+        # flake) lands with the Hub's recorded override unless the operator turns this off.
+        "checks_auto_override": True,
     }
     queue_settings = await app.get(
         "/api/v1/projects/proj-test/queue/settings", headers=auth_headers
