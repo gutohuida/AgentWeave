@@ -674,7 +674,11 @@ async def test_rebind_and_back_runs_clean(drive):
         ("copilot", "claude-sonnet-5", True),  # declared by both
         ("claude", "claude-sonnet-5", True),
         ("claude", "haiku", True),  # an alias is a declared choice
-        ("claude", "claude-haiku-4.5", False),  # Copilot's id for it: Claude's is claude-haiku-4-5-*
+        (
+            "claude",
+            "claude-haiku-4.5",
+            False,
+        ),  # Copilot's id for it: Claude's is claude-haiku-4-5-*
         ("codex", "haiku", False),
         ("copilot", "a-model-no-cli-declares", True),  # retired: stays where it is stored
         ("claude", "a-model-no-cli-declares", True),

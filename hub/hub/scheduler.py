@@ -27,6 +27,7 @@ from .conversations import (
     inherit_runtime_overrides,
     name_conversation,
     new_conversation,
+    set_provider_session,
 )
 from .db.engine import async_session_factory
 from .db.models import (
@@ -4505,7 +4506,8 @@ class JobScheduler:
                     project_id=job.project_id, agent=acting_agent, origin="job"
                 )
                 if resume_session_id:
-                    conversation.provider_session_id = resume_session_id
+                    # A job's stored last_session_id: nothing recorded which CLI made it.
+                    set_provider_session(conversation, resume_session_id, None)
                 session.add(conversation)
                 await inherit_runtime_overrides(session, conversation)
             # Named from the job, not its message: a schedule fires the same message repeatedly,

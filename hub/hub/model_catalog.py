@@ -572,6 +572,23 @@ def undeclared_model_reason(provider: str, model: str) -> str:
     return f"{model!r} is not a model {provider!r} declares; expected one of: {declared}"
 
 
+def model_applies_to_cli(cli: str, model: str) -> bool:
+    """Whether a model stored on a conversation is one the bound runner's *cli* can be launched
+    with (`rebinding-an-agents-runner-starts-clean`, D4).
+
+    It is when that CLI declares it, by id or alias (`ProviderDescriptor.model`), or when no CLI in
+    the catalog declares it: a model that left the catalog keeps working where it is stored
+    (`the-copilot-catalog-tracks-the-cli`, D2), and the catalog has no standing to refuse what it
+    never knew. It is not when another CLI declares it and this one does not, as Claude's `haiku`
+    is not a model Copilot offers: passed anyway, Copilot ran its default and the Hub recorded
+    `haiku`.
+    """
+    entry = get_provider(cli)
+    if entry is not None and entry.model(model) is not None:
+        return True
+    return not any(other.model(model) is not None for other in providers())
+
+
 def model_context_window(provider: str, model_id: str) -> Optional[int]:
     """The catalog's declared context window for *model_id*, or None if unknown or undeclared.
 

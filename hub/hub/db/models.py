@@ -459,6 +459,13 @@ class Conversation(Base):
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     provider_session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # The CLI (`claude`, `codex`, `copilot`) whose session `provider_session_id` is, or NULL when
+    # that is not known: a session the operator typed, a job's stored id, one an agent reported
+    # about itself, or one that predates the column and no completed run could attribute. A
+    # session is resumed only by the CLI that made it, so a launch compares this with the bound
+    # runner's CLI (`rebinding-an-agents-runner-starts-clean`). Written only with the session id,
+    # through `conversations.set_provider_session`; a ratchet test refuses any other assignment.
+    provider_session_cli: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     lifecycle: Mapped[str] = mapped_column(String(16), default="open", nullable=False)
     # Null until the conversation's first message names it. Nothing may present the id as a
     # label, so every surface that lists a titleless conversation labels it as new instead.
