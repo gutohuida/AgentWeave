@@ -224,11 +224,21 @@ def _readable_detail(detail: Any) -> str:
     return str(detail)
 
 
+#: How long the adapter waits for the Hub to answer one call.
+HUB_REQUEST_TIMEOUT_SECONDS = 10
+#: How long `update_task(status="completed")` waits: the Hub runs the project's fast checks before it
+#: records a completion, for up to `project_checks.COMPLETION_BUDGET_SECONDS` (120 s), plus the
+#: snapshot and the merged commit. Restated here because this file imports only the stdlib;
+#: `test_checks_run_before_review.py` asserts it exceeds the Hub's budget.
+COMPLETION_REQUEST_TIMEOUT_SECONDS = 150
+
+
 def _hub_request(
     method: str,
     path: str,
     body: Optional[Dict[str, Any]] = None,
     params: Optional[Dict[str, Any]] = None,
+    timeout: float = HUB_REQUEST_TIMEOUT_SECONDS,
 ) -> Any:
     """Make one authenticated request to the Hub API with bound run attribution."""
     base_url = _hub_address()
@@ -244,7 +254,7 @@ def _hub_request(
     request.add_header("Content-Type", "application/json")
     request.add_header("Accept", "application/json")
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             raw = response.read()
         return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
@@ -430,6 +440,12 @@ def update_task(
 ) -> Dict[str, Any]:
     """Update a task's lifecycle status, notes, or the requirements it serves.
 
+    Moving a task to "completed" runs the project's fast checks (lint, format) on your committed
+    work, merged onto the main branch; your uncommitted changes are committed to the task branch
+    first. This can take up to two minutes. When a fast check fails, the completion is refused with
+    their output: fix what it reports and complete the task again. The project's other checks run
+    after, and a review starts only once they pass.
+
     Args:
         task_id: The task's ID.
         status: The new lifecycle status, or omit to leave the status unchanged. One of "pending",
@@ -452,6 +468,11 @@ def update_task(
         body["requirement_ids"] = requirement_ids
     if spec_document is not None:
         body["spec_document"] = spec_document
+    if status == "completed":
+        # The Hub waits for the project's fast checks before it records a completion.
+        return _hub_request(
+            "PATCH", f"/tasks/{task_id}", body, timeout=COMPLETION_REQUEST_TIMEOUT_SECONDS
+        )
     return _hub_request("PATCH", f"/tasks/{task_id}", body)
 
 

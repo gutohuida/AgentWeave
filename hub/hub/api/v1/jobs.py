@@ -1913,6 +1913,22 @@ async def run_job(
                     # Also reached where an in-flight firing's work finished before the re-ask.
                     detail="Failed to fire job",
                 )
+            if (
+                in_flight.checks_waits
+                and not task_attribution.staffing_from_decision(in_flight).unstaffable
+            ):
+                # Waiting only on the project's checks (`checks-run-before-anyone-reviews`, D6):
+                # nobody is working the tasks, the Hub is checking them.
+                waits = "; ".join(
+                    f"{task_id}: {wait.reason}" for task_id, wait in in_flight.checks_waits
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "This loop's finished work is waiting for the project's checks before it "
+                        f"is reviewed ({waits}). Nothing was started, and nothing is wrong."
+                    ),
+                )
             held = await _held_in_flight_reasons(session, project_id, in_flight)
             if held:
                 # Staffed and queued, not worked: the provider is refusing the agent until its
