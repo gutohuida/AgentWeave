@@ -225,6 +225,7 @@ HUB_MCP_TOOLS = frozenset(
         "decide_evidence",
         "get_answer",
         "get_task",
+        "hand_out_task",
         "list_checkpoints",
         "list_evidence",
         "list_tasks",
