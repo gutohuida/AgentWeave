@@ -635,8 +635,15 @@ def _switch_back_or_refuse(
     operator to delete a directory that only needed switching.
     """
     why = _unsafe_to_switch(repo_root, path, record)
+    exists = _resolves(repo_root, f"refs/heads/{branch}")
     if why is None:
-        switched = _run_git(path, "checkout", branch, check=False)
+        if exists:
+            switched = _run_git(path, "checkout", branch, check=False)
+        else:
+            # The agent's own branch is not there yet (nothing provisioned it): cut it from the
+            # main checkout's HEAD, as `ensure_worktree` does for a new checkout.
+            tip = _run_git(repo_root, "rev-parse", "HEAD", check=False).stdout.strip()
+            switched = _run_git(path, "checkout", "-b", branch, tip, check=False)
         if switched.returncode == 0:
             return
         why = f"git said: {switched.stderr.strip()[:300]}"
@@ -644,9 +651,15 @@ def _switch_back_or_refuse(
         f"refusing existing path {path}: it is a registered worktree, but it is on "
         f"{_on_another_branch(record)} and the workspace has to be on {branch}. The Hub did not "
         f"switch it back because {why}. Keep what is there (merge or commit it elsewhere), then "
-        f"switch it back in that checkout (`git -C {path} switch {branch}`); do not delete the "
-        "directory. The next turn uses it as it is."
+        f"switch it back in that checkout ({_switch_command(path, branch, exists)}); do not "
+        "delete the directory. The next turn uses it as it is."
     )
+
+
+def _switch_command(path: Path, branch: str, exists: bool) -> str:
+    """The command that puts the checkout on *branch*: with `-c` when the branch is not there yet,
+    because a bare `switch` of a branch that does not exist is `fatal: invalid reference`."""
+    return f"`git -C {path} switch {'' if exists else '-c '}{branch}`"
 
 
 def ensure_worktree(repo_root: Path, agent: str) -> Path:
@@ -1313,7 +1326,8 @@ def ensure_task_worktree(
             raise IsolationUnavailableError(
                 f"refusing existing path {path}: it is a registered worktree, but it is on "
                 f"{_on_another_branch(record)} and the checkout for {task_id} has to be on "
-                f"{branch}. Switch it back in that checkout (`git -C {path} switch {branch}`) "
+                f"{branch}. Switch it back in that checkout "
+                f"({_switch_command(path, branch, _resolves(repo_root, f'refs/heads/{branch}'))}) "
                 "once nothing on the other branch is lost; do not delete the directory."
             )
         if record is None:
@@ -1770,6 +1784,37 @@ class ReleaseResult:
         return bool(self.unmerged_commits)
 
 
+def _release_nested_mends(repo_root: Path, path: Path) -> Optional[str]:
+    """Remove the mend checkouts nested in the worktree at *path*, each properly, before it goes.
+
+    `git worktree remove --force` of the outer worktree would delete a nested mend checkout with
+    whatever edits are in it and leave its registration behind. So each is removed on its own:
+    its links first, then `git worktree remove` **without** force, which refuses a checkout with
+    uncommitted edits. Returns why the outer worktree must stay (naming what is held), or `None`
+    when no mend is left in it.
+    """
+    mends = path / ".agentweave" / "mends"
+    if not mends.is_dir() or is_link(mends):
+        return None
+    held: List[str] = []
+    for entry in sorted(mends.iterdir()):
+        if remove_links_in(entry):
+            held.append(f"{entry.name} (a link in it could not be removed)")
+            continue
+        removed = _run_git(repo_root, "worktree", "remove", str(entry), check=False)
+        if removed.returncode != 0:
+            held.append(f"{entry.name} ({removed.stderr.strip()[:200] or 'not removed'})")
+            continue
+        _run_git(repo_root, "worktree", "prune", check=False)
+        if entry.name.startswith("task-") and _resolves(repo_root, f"refs/heads/mend/{entry.name}"):
+            _run_git(repo_root, "branch", "-d", f"mend/{entry.name}", check=False)
+    if not held:
+        return None
+    return "its mender's mend checkout(s) still hold work and were left in place: " + "; ".join(
+        held
+    )
+
+
 def release_worktree(repo_root: Path, agent: str) -> ReleaseResult:
     """Release *agent*'s worktree (task 5.4): remove the checkout directory, but
     never the branch, and never silently — any uncommitted change is snapshotted
@@ -1789,6 +1834,15 @@ def release_worktree(repo_root: Path, agent: str) -> ReleaseResult:
     if not path.exists():
         return ReleaseResult(
             released=False, branch=branch, review_checkout_released=review_released
+        )
+
+    held = _release_nested_mends(repo_root, path)
+    if held:
+        return ReleaseResult(
+            released=False,
+            branch=branch,
+            review_checkout_released=review_released,
+            kept_reason=held,
         )
 
     had_uncommitted = _has_uncommitted_changes(path)

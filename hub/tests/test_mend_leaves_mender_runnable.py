@@ -33,6 +33,9 @@ from .test_task_integration import commits_on, git, integrations
 
 MENDER = stalls.MENDER
 
+# conftest stubs this on the module for every other test; the real one is held from import time.
+_REAL_ENSURE_TASK_WORKTREE = worktrees.ensure_task_worktree
+
 
 def _branch_of(checkout: Path) -> str:
     return git(checkout, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
@@ -220,3 +223,88 @@ def test_a_directory_that_is_no_worktree_still_gets_the_old_remedy(repo):
         worktrees.ensure_worktree(repo, MENDER)
 
     assert "not the registered git worktree" in str(caught.value)
+
+
+# --- the stated remedy works, and releasing a mender takes no mend with it ----------------------
+
+MEND_TASK = "task-ab12cd34ef56"
+
+
+def _head(repo: Path) -> str:
+    return git(repo, "rev-parse", "HEAD").stdout.strip()
+
+
+def test_a_mender_on_a_clean_foreign_branch_is_switched_even_when_its_own_is_absent(repo):
+    """`agentweave/mender` does not exist yet: the Hub creates it, as `ensure_worktree` would."""
+    path = worktrees.worktree_path(repo, MENDER)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    git(repo, "worktree", "add", "-b", "someone-else", str(path), "HEAD")
+
+    assert worktrees.ensure_worktree(repo, MENDER) == path
+
+    assert _branch_of(path) == f"agentweave/{MENDER}"
+
+
+def test_the_stated_remedy_works_when_the_agents_own_branch_is_absent(repo):
+    path = worktrees.worktree_path(repo, MENDER)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    git(repo, "worktree", "add", "-b", "someone-else", str(path), "HEAD")
+    (path / "theirs.txt").write_text("work the other branch carries\n", encoding="utf-8")
+    git(path, "add", "theirs.txt")
+    git(path, "commit", "-q", "-m", "theirs")
+    assert git(repo, "rev-parse", "--verify", "--quiet", f"agentweave/{MENDER}").returncode != 0
+
+    with pytest.raises(worktrees.IsolationUnavailableError) as caught:
+        worktrees.ensure_worktree(repo, MENDER)
+
+    stated = re.search(r"`git -C .+? (switch [^`]+)`", str(caught.value))
+    assert stated, str(caught.value)
+    carried_out = git(path, *stated.group(1).split())
+    assert carried_out.returncode == 0, carried_out.stderr
+    assert worktrees.ensure_worktree(repo, MENDER) == path
+    assert _branch_of(path) == f"agentweave/{MENDER}"
+
+
+def test_the_stated_remedy_for_a_foreign_task_checkout_works_when_its_branch_is_absent(repo):
+    path = worktrees.task_worktree_path(repo, MEND_TASK)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    git(repo, "worktree", "add", "-b", "someone-else", str(path), "HEAD")
+
+    with pytest.raises(worktrees.IsolationUnavailableError) as caught:
+        _REAL_ENSURE_TASK_WORKTREE(repo, MEND_TASK, "main")
+
+    stated = re.search(r"`git -C .+? (switch [^`]+)`", str(caught.value))
+    assert stated, str(caught.value)
+    carried_out = git(path, *stated.group(1).split())
+    assert carried_out.returncode == 0, carried_out.stderr
+    assert _REAL_ENSURE_TASK_WORKTREE(repo, MEND_TASK, "main") == path
+
+
+def _mender_with_a_mend(repo: Path) -> tuple[Path, Path]:
+    own = worktrees.ensure_worktree(repo, MENDER)
+    scratch = worktrees.ensure_mend_checkout(repo, MENDER, MEND_TASK, _head(repo))
+    return own, scratch
+
+
+def test_releasing_the_mender_keeps_a_mend_with_uncommitted_edits(repo):
+    own, scratch = _mender_with_a_mend(repo)
+    (scratch / "f.txt").write_text("half a resolution\n", encoding="utf-8")
+
+    result = worktrees.release_worktree(repo, MENDER)
+
+    assert result.released is False
+    assert MEND_TASK in (result.kept_reason or "")
+    assert (scratch / "f.txt").read_text(encoding="utf-8") == "half a resolution\n"
+    assert own.is_dir() and _registered(repo, scratch)
+    assert "prunable" not in git(repo, "worktree", "list").stdout
+
+
+def test_releasing_the_mender_removes_a_clean_mend_properly(repo):
+    own, scratch = _mender_with_a_mend(repo)
+
+    result = worktrees.release_worktree(repo, MENDER)
+
+    assert result.released is True and result.kept_reason is None
+    assert not own.exists() and not scratch.exists()
+    listing = git(repo, "worktree", "list").stdout
+    assert "prunable" not in listing and MEND_TASK not in listing

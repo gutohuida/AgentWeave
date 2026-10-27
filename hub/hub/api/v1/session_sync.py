@@ -235,10 +235,16 @@ async def sync_session(
     for agent_name in removed_agent_names:
         try:
             release_result = worktrees.release_worktree(repo_root, agent_name)
-        except (ValueError, worktrees.GitCommandError):
+        except (ValueError, worktrees.GitCommandError, OSError):
+            # `OSError` covers `LinkRemovalError`: a link that could not be removed leaves the
+            # worktree in place, and that is no reason to fail a roster sync already committed.
             logger.warning("Could not release %r's worktree on removal", agent_name, exc_info=True)
             continue
         if not release_result.released:
+            if release_result.kept_reason:
+                logger.warning(
+                    "Kept %r's worktree on removal: %s", agent_name, release_result.kept_reason
+                )
             continue
         await persist_event(
             session,
