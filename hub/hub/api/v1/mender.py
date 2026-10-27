@@ -280,6 +280,7 @@ async def _hand_to_review(
     refused dispatch leaves the task as it was. The dispatch's own read-only refusals are asked
     first, so the mender is answered now rather than by a turn that never starts.
     """
+    from ... import project_checks
     from ...conversations import inherit_runtime_overrides, name_conversation, new_conversation
     from ...inbound_queue import new_entry
     from ...task_integration import review_target
@@ -289,6 +290,19 @@ async def _hand_to_review(
     refusal = await review_dispatch_refusal(session, task, reviewer=reviewer)
     if refusal is not None:
         raise HTTPException(status_code=refusal[0], detail=refusal[1])
+    # The review waits for the project's checks, here as in a flow and for an agent
+    # (`checks-run-before-anyone-reviews`, D8). The dispatch stages the review as the operator, so
+    # `apply_transition`'s gate for agents would not see this hand-off: it is refused here.
+    wait = await project_checks.review_wait(session, task)
+    if wait is not None:
+        if wait.needs_a_run:
+            project_checks.schedule(task.project_id, task.id)
+        elif wait.state == "failed":
+            project_checks.schedule_return(task.id)
+        raise HTTPException(
+            status_code=409,
+            detail=f"{task.id} cannot be handed to a reviewer yet: {wait.reason}.",
+        )
     target = await review_target(session, task)
     if not target.resolved:
         raise HTTPException(status_code=409, detail=target.refusal)

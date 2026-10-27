@@ -39,9 +39,21 @@ async def _approve(app, auth_headers, task_id, **extra):
 
 
 async def _checked(task_id, checks):
+    """*task_id*'s checks decided, the task left in the status it had.
+
+    Run while the task is held `under_review`: a run deciding a failure of the task's own on
+    *completed* work returns it to its builder (`checks-run-before-anyone-reviews`, D7), and these
+    tests are about what the approval gate then says about a recorded failure."""
     await _project(checks)
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        status, task.status = task.status, "under_review"
+        await session.commit()
     await project_checks.request_run("proj-test", task_id)
     await project_checks.drain()
+    async with async_session_factory() as session:
+        (await session.get(Task, task_id)).status = status
+        await session.commit()
 
 
 @pytest.mark.asyncio

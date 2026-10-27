@@ -23,6 +23,7 @@ from ...checkpoint_policy import agent_window, threshold_error
 from ...db.engine import get_session
 from ...db.models import Agent, AgentHeartbeat, OperatorCredential, Project, Run, Runner
 from ...model_catalog import permission_mode_values, undeclared_model_reason
+from ...project_checks import FAST_CHECK_MAX_SECONDS
 from ...project_lifecycle import ProjectLifecycleService
 from ...project_workspace import (
     ProjectPathError,
@@ -93,8 +94,22 @@ class ProjectCheck(BaseModel):
     # `constraints-dev.txt`). Empty runs it for every task, as before; otherwise it is skipped, and
     # passes, where the merged work changes no file matching one (`checks-wait-less`, FR-6/FR-7).
     paths: List[str] = Field(default_factory=list, max_length=50)
+    # Cheap enough to make a builder wait for (`checks-run-before-anyone-reviews`, FR-1): an agent's
+    # completion runs the fast checks first and is refused with their output when one fails. A
+    # fact about the command, so it is the operator's, beside paths and timeout. Off by default.
+    fast: bool = False
 
     model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def fast_is_bounded(self) -> "ProjectCheck":
+        if self.fast and self.timeout_seconds > FAST_CHECK_MAX_SECONDS:
+            raise ValueError(
+                f"a fast check's timeout_seconds is at most {FAST_CHECK_MAX_SECONDS} seconds "
+                f"(a completion waits for it); {self.name!r} has {self.timeout_seconds}. Lower "
+                f"its timeout or leave it not fast."
+            )
+        return self
 
     @field_validator("name", "command")
     @classmethod

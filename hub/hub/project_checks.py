@@ -77,6 +77,15 @@ WATCH_SECONDS = 30.0
 REUSE_LOOKBACK = 200
 #: A failing check's failed tests are re-run by node id only up to this many; more re-runs the check.
 MAX_RERUN_TESTS = 50
+#: The longest timeout a check marked fast may have (`checks-run-before-anyone-reviews`, FR-1): an
+#: agent's completion waits for the fast checks, so none of them may run for longer than that wait.
+FAST_CHECK_MAX_SECONDS = 120
+#: How long an agent's completion waits for the fast checks (FR-4, D5). After it the completion is
+#: recorded anyway and the checks go on in the same run; a failure found later returns the task
+#: (`return_failed_work`). Warn, don't gate: a slow machine never holds a builder. Measured: a run
+#: went from creation to a recorded ruff failure in 12.5 s, checkout included (chk-663862d5a7d6).
+#: `mcp_server.COMPLETION_REQUEST_TIMEOUT_SECONDS` restates a timeout longer than this.
+COMPLETION_BUDGET_SECONDS = 120.0
 
 #: The Hub's own configuration, never handed to a project's command: its credentials, its database,
 #: its address. A check runs the *project's* tests; the Hub's settings are not the project's.
@@ -91,7 +100,12 @@ _REDACTED = "[redacted]"
 
 
 def configured_checks(project: Optional[Project]) -> List[Dict[str, Any]]:
-    """The project's checks, normalised; empty for none (null and `[]` mean the same)."""
+    """The project's checks, normalised, in the order a run executes them; empty for none (null and
+    `[]` mean the same).
+
+    The fast checks first, then the rest, each group in the operator's order (FR-1, D1): an agent's
+    completion waits for the fast ones, and they are the start of the task's one check run (D2). A
+    check saved before `fast` existed is not fast."""
     if project is None or not project.checks:
         return []
     checks = []
@@ -103,9 +117,12 @@ def configured_checks(project: Optional[Project]) -> List[Dict[str, Any]]:
                     "command": str(check["command"]),
                     "timeout_seconds": int(check.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS),
                     "paths": [str(p) for p in check.get("paths") or [] if str(p).strip()],
+                    "fast": bool(check.get("fast")),
                 }
             )
-    return checks
+    return [check for check in checks if check["fast"]] + [
+        check for check in checks if not check["fast"]
+    ]
 
 
 # --- paths ---------------------------------------------------------------------------------------
@@ -425,7 +442,9 @@ def failure_excerpt(output: str) -> str:
 
 
 def check_digest(check: Dict[str, Any]) -> str:
-    """What makes two runs of a check the same check: everything the operator configured."""
+    """What makes two runs of a check the same check: everything the operator configured that can
+    change its result. Not `fast`, which changes when it runs (D1), so marking a check fast keeps
+    its passes reusable."""
     payload = json.dumps(
         {key: check.get(key) for key in ("name", "command", "timeout_seconds", "paths")},
         sort_keys=True,
@@ -795,6 +814,24 @@ def unmerged(root: Path, tip: str, target_shas: Sequence[str]) -> List[str]:
     return [sha for sha in target_shas if is_reachable_from(root, sha, tip) is not True]
 
 
+async def check_targets(
+    session: AsyncSession, task: Task, root: Path, *, awaiting_review: bool
+) -> List[str]:
+    """The commits a run for *task* checks: what approval would merge, or, for work waiting for
+    its review, the commit the review is given. One answer for every reader -- the run, the
+    completion's fast checks, and the review's wait for them -- so they check the same work."""
+    from . import task_integration
+
+    targets = [t.commit_sha for t in await task_integration.merge_targets(session, task, root)]
+    if not targets and awaiting_review:
+        # Where evidence governs, `merge_targets` names accepted evidence only, and a task waiting
+        # for its reviewer has none yet: the check ran first at the approval gate, after the
+        # verdict (F773). Check the commit the review is given.
+        reviewed = await task_integration.review_target(session, task, root)
+        targets = [reviewed.commit_sha] if reviewed.resolved and reviewed.commit_sha else []
+    return targets
+
+
 async def view(
     session: AsyncSession, task: Task, root: Path, main_branch: str, target_shas: List[str]
 ) -> Optional[CheckView]:
@@ -849,6 +886,27 @@ async def _finish(run_id: str, **fields: Any) -> None:
         await session.commit()
         if fields.get("state") in DECIDED:
             await _announce_finished(session, run)
+    if fields.get("state") in DECIDED:
+        await _after_decided(run_id)
+
+
+async def _after_decided(run_id: str) -> None:
+    """A run has decided: a completed task its own failure fails goes back to its builder (D7);
+    any other verdict asks for its flow's firing, which offers the review it was waiting for (D6,
+    FR-8) within `flow_advance`'s debounce rather than at the next tick. Never raises."""
+    from . import flow_advance
+
+    try:
+        if await return_failed_work(run_id):
+            return  # the return asked for the flow's firing itself (a hand-off move)
+        async with async_session_factory() as session:
+            run = await session.get(TaskCheckRun, run_id)
+            task = await session.get(Task, run.task_id) if run is not None else None
+            loop_id = task.loop_id if task is not None and task.status == "completed" else None
+        if loop_id:
+            flow_advance.request(loop_id)
+    except Exception:  # noqa: BLE001 -- the firing's tick and the stall sweep still look
+        logger.warning("could not act on the decided check run %s", run_id, exc_info=True)
 
 
 async def _announce_finished(session: AsyncSession, run: TaskCheckRun) -> None:
@@ -885,6 +943,12 @@ _seen_tips: Dict[str, str] = {}
 _starting: Set[str] = set()
 _pending: Set["asyncio.Task[Any]"] = set()
 _semaphores: Dict[int, asyncio.Semaphore] = {}
+#: Set, by run id, once the run's fast checks have all decided (or the run ended): what an agent's
+#: completion waits on (D2). Gone once set; a waiter that finds none reads the recorded run.
+_fast_waiters: Dict[str, asyncio.Event] = {}
+#: Recorded in `_superseded` in place of a main tip: the task's work changed under the run (a new
+#: completion), not main.
+_NEW_WORK = "new-work"
 
 
 def _semaphore() -> asyncio.Semaphore:
@@ -922,7 +986,6 @@ async def request_run(
         return None
     _starting.add(task_id)
     try:
-        from . import task_integration
         from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 
         async with async_session_factory() as session:
@@ -939,15 +1002,9 @@ async def request_run(
             if tip is None:
                 return None
             if targets is None:
-                targets = [
-                    t.commit_sha for t in await task_integration.merge_targets(session, task, root)
-                ]
-                if not targets and task.status in ("completed", "under_review"):
-                    # Where evidence governs, `merge_targets` names accepted evidence only, and a
-                    # task waiting for its reviewer has none yet: the check ran first at the
-                    # approval gate, after the verdict (F773). Check the commit the review is given.
-                    reviewed = await task_integration.review_target(session, task, root)
-                    targets = [reviewed.commit_sha] if reviewed.resolved else []
+                targets = await check_targets(
+                    session, task, root, awaiting_review=task.status in AWAITING_REVIEW
+                )
             targets = await asyncio.to_thread(unmerged, root, tip, list(targets))
             if not targets:
                 return None
@@ -987,6 +1044,7 @@ async def request_run(
             session.add(run)
             await session.commit()
             run_id = run.id
+        _fast_waiters[run_id] = asyncio.Event()
         job = asyncio.get_running_loop().create_task(
             traces.within_work(
                 "check_run",
@@ -1040,11 +1098,19 @@ async def _execute(
     checks: List[Dict[str, Any]],
     prepared: Optional[Prepared] = None,
 ) -> None:
-    """*prepared*: see `Prepared`; `None` builds it here, reusing nothing."""
+    """*prepared*: see `Prepared`; `None` builds it here, reusing nothing.
+
+    **The fast checks first, before the semaphore** (`checks-run-before-anyone-reviews`, D2).
+    `configured_checks` puts them at the front; they run as soon as the run starts, and an agent's
+    completion is waiting on them (`_fast_waiters`). Only the rest queue for the semaphore, so a
+    completion never waits behind two 8-16 minute suites. A fast result is a result of this run,
+    so nothing executes twice. The checkout is made once and kept while the rest queue."""
     results: List[Dict[str, Any]] = []
+    path: Optional[Path] = None
 
     async def superseded() -> bool:
-        """Whether main moved past this run; if so it ends recorded `superseded`, not failed."""
+        """Whether main moved past this run, or the task's work did; if so it ends recorded
+        `superseded`, not failed."""
         new_tip = _superseded.get(task_id)
         if new_tip is None:
             return False
@@ -1053,71 +1119,105 @@ async def _execute(
             state=SUPERSEDED,
             results=list(results),
             error=(
-                f"the main branch moved from {main_sha[:12]} to {new_tip[:12]} before this run "
-                "finished; a run on the new tip replaces it"
+                "the task's work changed (it was completed again) before this run finished; a "
+                "run on the new work replaces it"
+                if new_tip == _NEW_WORK
+                else f"the main branch moved from {main_sha[:12]} to {new_tip[:12]} before this "
+                "run finished; a run on the new tip replaces it"
             ),
         )
         return True
 
+    async def run_group(
+        group: Sequence[Tuple[Dict[str, Any], Optional[Dict[str, Any]]]],
+        merged: str,
+        tree: Optional[str],
+        changed: Optional[List[str]],
+        baseline: _MainBaseline,
+    ) -> Optional[str]:
+        """Run *group* in order: `None` to go on, `"stop"` where the task's own failure decided
+        the run, `"superseded"` where main or the work moved past it."""
+        nonlocal path
+        for check, already in group:
+            if await superseded():
+                return "superseded"
+            result = already or skipped(check, changed)
+            if result is None:
+                if path is None:
+                    path = await asyncio.to_thread(_checkout, root, task_id, merged)
+                result = await asyncio.to_thread(run_one, check, path, task_id)
+                if failed(result) and task_id not in _superseded:
+                    # Confirmed on the same tree before main is asked (a flake that passes the
+                    # second time needs no baseline); only a reproduced failure stands.
+                    await asyncio.to_thread(confirm_failure, check, path, result, task_id)
+                    if result.get("flaky"):
+                        # Raised to the operator, not only to the reviewer (`flaky_tests`).
+                        await flaky_tests.record_flake(run_id, result)
+                if failed(result) and task_id not in _superseded:
+                    await baseline.record(check, result)
+                if await superseded():
+                    return "superseded"  # its tree was ended for the move: not a result
+                result.update(tree=tree, check_digest=check_digest(check))
+            results.append(result)
+            await _finish(run_id, merged_sha=merged, results=list(results))
+            if failed(result) and not preexisting(result):
+                # The task's own failure already decides the run; the checks after it would only
+                # make its author wait for them (operator, 2026-10-24). A failure main shares does
+                # not stop it: it is not the task's, and what follows may still be.
+                return "stop"
+        return None
+
     try:
-        async with _semaphore():
-            if await superseded():
+        if await superseded():
+            return
+        if prepared is not None:
+            merged, tree, changed, planned = prepared
+        else:
+            built, why = await asyncio.to_thread(build_merged_commit, root, main_sha, targets)
+            if built is None:
+                await _finish(run_id, state="error", error=why)
                 return
-            if prepared is not None:
-                merged, tree, changed, planned = prepared
-            else:
-                built, why = await asyncio.to_thread(build_merged_commit, root, main_sha, targets)
-                if built is None:
-                    await _finish(run_id, state="error", error=why)
-                    return
-                merged = built
-                tree = await asyncio.to_thread(tree_of, root, merged)
-                changed = await asyncio.to_thread(changed_paths, root, main_sha, merged)
-                planned = [None] * len(checks)
-            path: Optional[Path] = None
-            baseline = _MainBaseline(root, task_id, main_sha)
-            try:
-                for check, already in zip(checks, planned, strict=True):
-                    if await superseded():
-                        return
-                    result = already or skipped(check, changed)
-                    if result is None:
-                        if path is None:
-                            path = await asyncio.to_thread(_checkout, root, task_id, merged)
-                        result = await asyncio.to_thread(run_one, check, path, task_id)
-                        if failed(result) and task_id not in _superseded:
-                            # Confirmed on the same tree before main is asked (a flake that passes
-                            # the second time needs no baseline); only a reproduced failure stands.
-                            await asyncio.to_thread(confirm_failure, check, path, result, task_id)
-                            if result.get("flaky"):
-                                # Raised to the operator, not only to the reviewer (`flaky_tests`).
-                                await flaky_tests.record_flake(run_id, result)
-                        if failed(result) and task_id not in _superseded:
-                            await baseline.record(check, result)
-                        if await superseded():
-                            return  # its tree was ended for the move: not a result
-                        result.update(tree=tree, check_digest=check_digest(check))
-                    results.append(result)
-                    await _finish(run_id, merged_sha=merged, results=list(results))
-                    if failed(result) and not preexisting(result):
-                        # The task's own failure already decides the run; the checks after it
-                        # would only make its author wait for them (operator, 2026-10-24). A
-                        # failure main shares does not stop it: it is not the task's, and what
-                        # follows may still be.
-                        break
-            finally:
-                if path is not None:
-                    await asyncio.to_thread(_remove_checkout, root, path)
-                await baseline.close()
-            if await superseded():
+            merged = built
+            tree = await asyncio.to_thread(tree_of, root, merged)
+            changed = await asyncio.to_thread(changed_paths, root, main_sha, merged)
+            planned = [None] * len(checks)
+        pairs = list(zip(checks, planned, strict=True))
+        split = sum(1 for check in checks if check.get("fast"))
+        baseline = _MainBaseline(root, task_id, main_sha)
+        try:
+            outcome = await run_group(pairs[:split], merged, tree, changed, baseline)
+            if outcome is None:
+                # Every fast check passed: the completion waiting on them goes on now, and the rest
+                # run after it. A fast failure instead ends the run first (the `finally` below
+                # releases the waiter), so the refusal reads a decided run.
+                _fast_decided(run_id)
+            if outcome is None and pairs[split:]:
+                async with _semaphore():
+                    outcome = await run_group(pairs[split:], merged, tree, changed, baseline)
+            if outcome == "superseded":
                 return
-            state = "failed" if any(failed(r) for r in results) else "passed"
-            await _finish(run_id, state=state, merged_sha=merged, results=list(results))
+        finally:
+            if path is not None:
+                await asyncio.to_thread(_remove_checkout, root, path)
+            await baseline.close()
+        if await superseded():
+            return
+        state = "failed" if any(failed(r) for r in results) else "passed"
+        await _finish(run_id, state=state, merged_sha=merged, results=list(results))
     except Exception as exc:  # noqa: BLE001 -- a run must end recorded, never `running` forever
         logger.warning("check run %s failed to complete", run_id, exc_info=True)
         await _finish(
             run_id, state="error", results=list(results), error=f"{type(exc).__name__}: {exc}"
         )
+    finally:
+        _fast_decided(run_id)
+
+
+def _fast_decided(run_id: str) -> None:
+    """Release whoever waits on *run_id*'s fast checks (idempotent)."""
+    event = _fast_waiters.pop(run_id, None)
+    if event is not None:
+        event.set()
 
 
 def schedule(project_id: str, task_id: str, targets: Optional[Sequence[str]] = None) -> None:
@@ -1368,6 +1468,308 @@ async def interrupt_leftover_runs() -> int:
         )
         await session.commit()
         return int(result.rowcount or 0)
+
+
+# --- checks before review (`checks-run-before-anyone-reviews`) -----------------------------------
+
+
+@dataclass
+class CompletionChecks:
+    """What an agent's completion found when it waited for the fast checks (D2-D5)."""
+
+    run_id: str
+    #: Whether every fast check decided within `COMPLETION_BUDGET_SECONDS`.
+    decided: bool
+    #: The fast checks that failed with a failure of the task's own (not one main shares).
+    failing: List[Dict[str, Any]]
+    merged_sha: Optional[str] = None
+
+
+async def _stop_run_on_older_work(task_id: str, targets: List[str]) -> None:
+    """A run still in flight for *task_id* checks work the completion is replacing: end it, recorded
+    `superseded`, so the completion's run checks what it completes (one per task, D4)."""
+    from .pty_runner import terminate_process_tree
+
+    job = _inflight.get(task_id)
+    if job is None or job.done():
+        return
+    _superseded[task_id] = _NEW_WORK
+    proc = _processes.get(task_id)
+    if proc is not None and proc.poll() is None:
+        await asyncio.to_thread(terminate_process_tree, proc.pid)
+    await asyncio.wait({job}, timeout=60)
+
+
+async def _snapshot_task_checkout(root: Path, task: Task, agent: Optional[str]) -> None:
+    """Commit the builder's uncommitted work in the task's checkout, as a turn's end does (D3), so a
+    branch-tip task is checked with its work. Best-effort: the checks then run on what is there."""
+    from . import blocking, worktrees
+
+    checkout = worktrees.task_worktree_path(root, task.id)
+    if not checkout.is_dir():
+        return
+    try:
+        await blocking.run(worktrees.snapshot_worktree, checkout, agent or task.assignee or "agent")
+    except Exception:  # noqa: BLE001 -- a snapshot failure does not stop the completion
+        logger.warning(
+            "could not snapshot the checkout of %s at completion", task.id, exc_info=True
+        )
+
+
+async def fast_checks_at_completion(
+    session: AsyncSession, task: Task, agent: Optional[str]
+) -> Optional[CompletionChecks]:
+    """Start *task*'s check run on the work its review would be given and wait, at most
+    `COMPLETION_BUDGET_SECONDS`, for its fast checks (FR-2, D2-D5). `None` where no fast check is
+    configured, nothing is checkable, or no run could be started: the completion is as before.
+
+    Reads through the caller's session (nothing is staged in it) and starts the run with the targets
+    passed explicitly (F680's pattern): the completing transaction has not committed."""
+    from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
+
+    project = await session.get(Project, task.project_id)
+    checks = configured_checks(project)
+    if project is None or not project.main_branch or not any(c["fast"] for c in checks):
+        return None
+    try:
+        root = (await resolve_project_workspace(session, task.project_id)).root
+    except ProjectWorkspaceError:
+        return None
+    await _snapshot_task_checkout(root, task, agent)
+    targets = await check_targets(session, task, root, awaiting_review=True)
+    tip = await asyncio.to_thread(main_tip, root, project.main_branch)
+    if tip is None:
+        return None
+    targets = await asyncio.to_thread(unmerged, root, tip, targets)
+    if not targets:
+        return None
+    if is_running(task.id):
+        current = await latest_run(session, task.id)
+        if current is None or list(current.target_shas or []) != targets or current.main_sha != tip:
+            await _stop_run_on_older_work(task.id, targets)
+    run_id = await request_run(task.project_id, task.id, targets=targets)
+    if run_id is None:
+        current = await latest_run(session, task.id)
+        if current is None or current.state != "running" or not is_running(task.id):
+            return None
+        run_id = current.id  # the run already in flight on exactly this work
+    decided = True
+    event = _fast_waiters.get(run_id)
+    if event is not None:
+        try:
+            await asyncio.wait_for(event.wait(), timeout=COMPLETION_BUDGET_SECONDS)
+        except asyncio.TimeoutError:
+            decided = False
+    async with async_session_factory() as fresh:
+        run = await fresh.get(TaskCheckRun, run_id)
+    if run is None:
+        return None
+    fast = {check["name"] for check in checks if check["fast"]}
+    failing = [
+        result
+        for result in run.results or []
+        if result.get("name") in fast and failed(result) and not preexisting(result)
+    ]
+    if run.state == "error":
+        failing = []  # the Hub could not produce a result: not the builder's to fix (D6)
+    return CompletionChecks(
+        run_id=run_id, decided=decided, failing=failing, merged_sha=run.merged_sha
+    )
+
+
+def failure_report(
+    results: Sequence[Dict[str, Any]], *, run_id: str, merged_sha: Optional[str]
+) -> str:
+    """The failing checks of a run, the commit checked and their output: what a refused completion
+    says and what a returned task's notes carry (FR-3, FR-7)."""
+    failing = [r for r in results if failed(r) and not preexisting(r)]
+    names = ", ".join(str(r.get("name")) for r in failing) or "a check"
+    commit = (merged_sha or "")[:12] or "the merged work"
+    lines = [
+        f"The project's check{'s' if len(failing) != 1 else ''} {names} failed on {commit} (this "
+        f"task's work merged onto the main branch), check run {run_id}."
+    ]
+    for result in failing:
+        how = (
+            "ran past its timeout"
+            if result.get("timed_out")
+            else f"exited {result.get('exit_code')}"
+        )
+        output = str(result.get("failure_excerpt") or result.get("output_tail") or "").strip()
+        lines.append(f"\n{result.get('name')} {how}:\n{output[-OUTPUT_TAIL_CHARS:]}")
+    return "\n".join(lines)
+
+
+def _duration(seconds: float) -> str:
+    seconds = max(0.0, seconds)
+    return f"{int(seconds)}s" if seconds < 90 else f"{int(round(seconds / 60))}m"
+
+
+async def _previous_duration(session: AsyncSession, task: Task, before: Optional[str]) -> str:
+    """How long the task's previous decided run took, else the project's latest one; `""` if none."""
+    for where in (TaskCheckRun.task_id == task.id, TaskCheckRun.project_id == task.project_id):
+        query = (
+            select(TaskCheckRun)
+            .where(where, TaskCheckRun.state.in_(("passed", "failed")))
+            .where(TaskCheckRun.ended_at.is_not(None))
+            .order_by(TaskCheckRun.started_at.desc())
+            .limit(2)
+        )
+        for run in (await session.execute(query)).scalars():
+            if run.id != before and run.started_at is not None and run.ended_at is not None:
+                return _duration((_aware(run.ended_at) - _aware(run.started_at)).total_seconds())
+    return ""
+
+
+def _aware(moment: datetime) -> datetime:
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=timezone.utc)
+
+
+@dataclass
+class ReviewWait:
+    """Why a review of a completed task waits for its checks (FR-6, D6)."""
+
+    #: `running`, `missing`, `stale`, `interrupted`, or `failed` (the task's own failure).
+    state: str
+    run_id: Optional[str]
+    reason: str
+
+    @property
+    def needs_a_run(self) -> bool:
+        return self.state in ("missing", "stale", "interrupted")
+
+
+async def review_wait(session: AsyncSession, task: Task) -> Optional[ReviewWait]:
+    """Whether a review of *task*'s work must wait for its check run, and why; `None` where it need
+    not (no checks apply, or they passed, or decided with no failure of the task's own, or the Hub
+    could not produce a result -- the reviewer is told that as today). Reads only; starts nothing.
+    """
+    from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
+
+    project = await session.get(Project, task.project_id)
+    if project is None or not project.main_branch or not configured_checks(project):
+        return None
+    try:
+        root = (await resolve_project_workspace(session, task.project_id)).root
+    except ProjectWorkspaceError:
+        return None
+    targets = await check_targets(session, task, root, awaiting_review=True)
+    seen = await view(session, task, root, project.main_branch, targets)
+    if seen is None or seen.state in ("passed", "error"):
+        return None
+    run = seen.run
+    run_id = run.id if run is not None else None
+    if seen.state == "failed":
+        if run is None or not own_failure(run.results):
+            return None  # a failure main shares, or a flake: slice M's, and the review proceeds
+        return ReviewWait(
+            "failed",
+            run_id,
+            f"its checks failed with its own failure (check run {run_id}), so it goes back to "
+            f"its builder rather than to a reviewer",
+        )
+    previous = await _previous_duration(session, task, run_id)
+    took = f" (the previous run took {previous})" if previous else ""
+    if seen.state == "running" and run is not None and run.started_at is not None:
+        ran = (datetime.now(timezone.utc) - _aware(run.started_at)).total_seconds()
+        return ReviewWait(
+            "running",
+            run_id,
+            f"its checks have run {_duration(ran)}{took} (check run {run_id}); its review is "
+            f"offered once they pass",
+        )
+    why = {
+        "missing": "its checks have not run on this work yet",
+        "stale": f"its last check run ({run_id}) was for other work or another main tip",
+        "interrupted": f"its check run {run_id} was interrupted",
+    }.get(seen.state, f"its checks are {seen.state}")
+    return ReviewWait(
+        seen.state,
+        run_id,
+        f"{why}; a run is requested{took}, and its review is offered once it passes",
+    )
+
+
+async def return_failed_work(run_id: str) -> bool:
+    """A completed task whose check run failed with its own failure goes back to its builder,
+    without a review turn (FR-7, D7). Whether it was returned. Never raises.
+
+    Only while the task is still `completed` and the run checked its current review target: work
+    already under review keeps its reviewer (briefed with the failure, as today), and a run on older
+    work proves nothing about the work waiting now. `completed -> revision_needed` is the operator's
+    edge (F832), and the operator configured the checks, so the move is made as the operator, as a
+    job's is, with its own origin `checks` and a note naming the run."""
+    from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
+    from .run_task_binding import withdraw_review_entries_for
+    from .sse import sse_manager
+    from .task_transition_service import ORIGIN_CHECKS, TransitionRefusedError, apply_transition
+    from .task_transitions import operator
+    from .utils import persist_event
+
+    try:
+        async with async_session_factory() as session:
+            run = await session.get(TaskCheckRun, run_id)
+            if run is None or run.state != "failed" or not own_failure(run.results):
+                return False
+            task = await session.get(Task, run.task_id)
+            if task is None or task.status != "completed":
+                return False
+            latest = await latest_run(session, task.id)
+            project = await session.get(Project, task.project_id)
+            if latest is None or latest.id != run.id or project is None or not project.main_branch:
+                return False
+            try:
+                root = (await resolve_project_workspace(session, task.project_id)).root
+            except ProjectWorkspaceError:
+                return False
+            tip = await asyncio.to_thread(main_tip, root, project.main_branch)
+            if tip is None:
+                return False
+            targets = await check_targets(session, task, root, awaiting_review=True)
+            if await asyncio.to_thread(unmerged, root, tip, targets) != list(run.target_shas or []):
+                return False
+            report = failure_report(run.results or [], run_id=run.id, merged_sha=run.merged_sha)
+            try:
+                await apply_transition(
+                    session,
+                    task,
+                    "revision_needed",
+                    operator(),
+                    origin=ORIGIN_CHECKS,
+                    verdict_reason=report,
+                    note=f"the project's checks failed on check run {run.id}",
+                )
+            except TransitionRefusedError:
+                logger.warning("could not return %s for its failed checks", task.id, exc_info=True)
+                return False
+            task.notes = report
+            task.updated = datetime.now(timezone.utc)
+            withdrawn = await withdraw_review_entries_for(session, task)
+            await session.commit()
+            payload = {"id": task.id, "status": task.status}
+            await sse_manager.broadcast(task.project_id, "task_updated", payload)
+            for entry in withdrawn:
+                await sse_manager.broadcast(task.project_id, "queue_entry_withdrawn", entry)
+            await persist_event(
+                session, task.project_id, "task_updated", payload, agent=task.assignee
+            )
+            return True
+    except Exception:  # noqa: BLE001 -- the flow's firing is the backstop (`review_wait`)
+        logger.warning("could not return the work of check run %s", run_id, exc_info=True)
+        return False
+
+
+async def _return_latest(task_id: str) -> None:
+    async with async_session_factory() as session:
+        run = await latest_run(session, task_id)
+    if run is not None:
+        await return_failed_work(run.id)
+
+
+def schedule_return(task_id: str) -> None:
+    """Fire-and-forget: return *task_id* if its latest run already failed with its own failure (the
+    firing's backstop, and a completion recorded after its budget ran out). Never raises."""
+    _background(_return_latest(task_id), f"return {task_id} for its failed checks")
 
 
 def run_view(run: TaskCheckRun) -> Dict[str, Any]:
