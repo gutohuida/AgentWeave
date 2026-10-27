@@ -1211,8 +1211,13 @@ async def automatic_override_allowed(session: AsyncSession, task: Task) -> bool:
     (`a-red-main-does-not-hold-the-night`, FR-5): the project's `checks_auto_override`, on by
     default. **The one place this policy is asked**: slice D adds its per-level rule here
     (`builds.allows_automatic_override(level)`, never at Gated). Never raises."""
+    from .builds import allows_automatic_override
     from .db.models import Project
 
+    # A task in a Gated build is never landed over its checks by the Hub: the operator chose Gated
+    # to judge every landing (`a-build-has-a-driver-a-level-and-its-people`, D5).
+    if task.build_id and not allows_automatic_override(task.level):
+        return False
     try:
         project = await session.get(Project, task.project_id)
     except Exception:  # noqa: BLE001 -- no answer is no override

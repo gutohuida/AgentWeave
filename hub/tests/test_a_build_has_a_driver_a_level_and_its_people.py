@@ -402,6 +402,95 @@ async def test_a_build_that_lands_nowhere_merges_nothing(
     assert "lands nowhere" in (record.reason or "")
 
 
+# ---------------------------------------------------------------------------------------------
+# A finished build ends its loop; deleting a document takes its builds; a racing Build is a 409
+# ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("driver", ["flow", "lead"])
+async def test_a_finished_build_ends_its_loop(app, auth_headers, author_headers, driver):
+    """Every task of a Fast build approved, then two firings: the build reads finished and its loop
+    has ended (completed, its job disabled), for a flow and for a lead. Before the review fix the
+    build's firing returned before the loop's own stop check, and the loop ticked forever."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from hub.db.models import Build
+    from hub.scheduler import JobScheduler
+    from hub.task_transitions import operator
+
+    await _roster_rows("dev", "qa", "lead")
+    await _approved(app, auth_headers, author_headers, _document())
+    settings = {"driver": driver, "level": "fast", "builders": ["dev"]}
+    if driver == "lead":
+        settings["lead"] = "lead"
+    scheduling = patch(
+        "hub.turn_scheduler.schedule_agent",
+        AsyncMock(return_value=MagicMock(waiting_reason=None, terminal_failure=False)),
+    )
+    with scheduling:
+        built = await _build(app, auth_headers, **settings)
+    assert built.status_code == 200, built.text
+    for task in (await _tasks_by_key()).values():
+        async with async_session_factory() as db:
+            row = await db.get(Task, task.id)
+            for status in ("in_progress", "completed", "approved"):
+                await apply_transition(db, row, status, operator())
+            await db.commit()
+
+    (loop,) = await _rows(Loop)
+    for _ in range(2):
+        with scheduling:
+            async with async_session_factory() as db:
+                job = await db.get(AIJob, loop.job_id)
+                await JobScheduler()._do_fire_job(job, "scheduled", db)
+
+    (build,) = await _rows(Build)
+    (loop,) = await _rows(Loop)
+    (job,) = await _rows(AIJob)
+    assert build.state == "finished"
+    assert (loop.ending_state, loop.stopped_at is not None, job.enabled) == (
+        "completed",
+        True,
+        False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_document_deletes_its_builds(app, auth_headers, author_headers):
+    from hub.db.models import Build
+
+    await _roster_rows("dev", "qa")
+    await _approved(app, auth_headers, author_headers, _document())
+    assert (await _build(app, auth_headers, driver="hand")).status_code == 200
+    assert len(await _rows(Build)) == 1
+
+    deleted = await app.delete(f"{BASE}/documents/{PATH}", headers=auth_headers)
+
+    assert deleted.status_code == 200, deleted.text
+    assert await _rows(Build) == []
+
+
+@pytest.mark.asyncio
+async def test_two_racing_builds_answer_409_not_500(app, auth_headers, author_headers, monkeypatch):
+    """Two Build requests that both pass the running-build check: the second meets the partial
+    unique index and is answered 409 build_running, as the check would have answered it."""
+    from hub.api.v1 import spec as spec_api
+
+    await _roster_rows("dev", "qa")
+    await _approved(app, auth_headers, author_headers, _document())
+    assert (await _build(app, auth_headers, driver="hand")).status_code == 200
+
+    async def missed(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(spec_api, "_refuse_a_second_build", missed)
+    second = await _build(app, auth_headers, driver="hand")
+
+    assert second.status_code == 409, second.text
+    assert second.json()["detail"]["code"] == "build_running"
+
+
 async def _evidence_naming(task_id, commit):
     """Evidence for the task's requirement naming *commit*: what approval would merge."""
     async with async_session_factory() as db:

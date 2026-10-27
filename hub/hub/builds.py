@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import spec_rigor
 from .db.models import AIJob, Build, InboundQueueEntry, Loop, Run, Task, TurnUsage
+from .task_transitions import CLAIMABLE_STATUSES, TERMINAL_STATUSES
 from .utils import short_id
 
 logger = logging.getLogger(__name__)
@@ -487,13 +488,33 @@ async def finish_if_done(session: AsyncSession, task: Task) -> None:
             .where(
                 Task.build_id == build.id,
                 Task.id != task.id,
-                Task.status.not_in(("approved", "rejected")),
+                Task.status.not_in(tuple(TERMINAL_STATUSES)),
             )
         )
     ).scalar_one()
     if open_count == 0:
         build.state = FINISHED
         build.stopped_at = datetime.now(timezone.utc)
+        await end_loop_of(session, build)
+
+
+async def end_loop_of(session: AsyncSession, build: Build) -> Optional[AIJob]:
+    """End a finished build's loop as a drained queue ends one: `completed`, its job disabled.
+    Without this the build's firing (which runs before the loop's own stop check) would tick a
+    finished build's loop forever. Returns the job, for the live scheduler to drop; a loop that
+    has already ended is left as it is."""
+    from .loop_ending import QUEUE_DRAINED_REASON, end_loop
+
+    if not build.loop_id:
+        return None
+    loop = await session.get(Loop, build.loop_id)
+    if loop is None:
+        return None
+    job = await session.get(AIJob, loop.job_id)
+    if job is None:
+        return None
+    end_loop(job, loop, reason=QUEUE_DRAINED_REASON, when=now(), completed=True)
+    return job
 
 
 # --- the lead (FR-5) -----------------------------------------------------------------------------
@@ -540,7 +561,7 @@ async def compose_brief(session: AsyncSession, build: Build, title: str) -> str:
         "",
         "Open tasks:",
     ]
-    open_tasks = [t for t in tasks if t.status not in ("approved", "rejected")]
+    open_tasks = [t for t in tasks if t.status not in TERMINAL_STATUSES]
     for task in open_tasks:
         holder = task.assignee or "nobody"
         declared = f", declared builder {task.builder}" if task.builder else ""
@@ -662,7 +683,7 @@ async def hand_out(
         if not target.resolved:
             raise HandOutRefused(str(target.refusal), 409)
     else:
-        if task.status not in ("pending", "assigned", "revision_needed", "in_progress"):
+        if task.status not in CLAIMABLE_STATUSES:
             raise HandOutRefused(
                 f"Task {task_id} is {task.status}; only work not yet finished is handed to a "
                 "builder. Hand a completed task out for review instead.",

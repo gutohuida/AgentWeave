@@ -441,3 +441,36 @@ async def test_gated_refuses_until_every_requirement_has_accepted_evidence(app, 
     refusal, response = await _update(task_id, "approved", "qa")
     assert refusal is None, _said(refusal)
     assert response.status == "approved"
+
+
+# ---------------------------------------------------------------------------------------------
+# checks-hold-at-every-level: slice M's automatic override, per level
+# ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("level", ["fast", "reviewed", "gated"])
+async def test_the_hubs_override_lands_at_fast_and_reviewed_never_at_gated(app, tmp_path, level):
+    """A task whose only failure is shared with a red main (slice M's drive), in a build at *level*,
+    approved by a reviewer through the agent route: Fast and Reviewed land it over the failure as
+    the Hub's override; Gated holds it for the operator ("fail on main too"), nothing merged."""
+    from . import test_a_red_main_does_not_hold_the_night as red
+
+    red._repo(tmp_path)
+    await red._loop()
+    work = await red._task(tmp_path, red.TASK, {"feature.py": "x = 1\n"})
+    build_id = await _build_row(level, loop_id=red.LOOP)
+    await _in_build(red.TASK, build_id, level)
+    await red._configure()
+    await red._checked(red.TASK)
+
+    approved = await red._reviewer_approves(app, red.TASK)
+
+    if level == "gated":
+        assert approved.status_code == 409, approved.text
+        assert "fail on main too" in approved.json()["detail"]["message"]
+        assert work not in commits_on(tmp_path, "main")
+    else:
+        assert approved.status_code == 200, approved.text
+        assert work in commits_on(tmp_path, "main")
+        assert (await red._approval(red.TASK)).override_by == "hub"

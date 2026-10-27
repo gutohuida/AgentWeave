@@ -24,6 +24,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import Field, StringConstraints
 from sqlalchemy import func, literal_column, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
@@ -3580,17 +3581,21 @@ async def _refuse_a_second_build(session: AsyncSession, document) -> None:
     """One running build per document (FR-1): a second start is refused, naming the running one."""
     running = await builds.running_build(session, document.id)
     if running is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "build_running",
-                "message": (
-                    f"build {running.id} of this document is running ({running.driver}, "
-                    f"{running.level}); stop it before starting another"
-                ),
-                "build_id": running.id,
-            },
-        )
+        raise _build_running(running)
+
+
+def _build_running(running) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "build_running",
+            "message": (
+                f"build {running.id} of this document is running ({running.driver}, "
+                f"{running.level}); stop it before starting another"
+            ),
+            "build_id": running.id,
+        },
+    )
 
 
 @dataclasses.dataclass
@@ -3623,8 +3628,17 @@ async def _build(
         )
     started = _Started()
     build = builds.new_build(project_id, document.id, settings)
-    session.add(build)
-    await session.flush()
+    try:
+        async with session.begin_nested():
+            session.add(build)
+            await session.flush()
+    except IntegrityError:
+        # A Build that raced past `_refuse_a_second_build`: the partial unique index answers it,
+        # and the answer is the check's own 409, naming the build that won.
+        running = await builds.running_build(session, document.id)
+        if running is None:
+            raise
+        raise _build_running(running) from None
     await builds.retire_previous_loops(session, document.id, build.id)
     open_tasks = (
         (

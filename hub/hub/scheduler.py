@@ -4929,9 +4929,20 @@ class JobScheduler:
         )
         if build is None:
             return False
+        if build.state == builds.FINISHED:
+            # Every task closed: the loop ends as a drained queue's does, once (a backstop for a
+            # finish recorded before its loop could be ended).
+            await builds.end_loop_of(session, build)
+            await session.commit()
+            await self.remove_job(job.id)
+            return True
         if build.state != builds.RUNNING:
             await session.commit()
             return True
+        if await _loop_stop_reason(session, job):
+            # The loop's own stop conditions (its stop time, a drained queue) are the firing's
+            # ordinary path, which ends it; a build's window and cap are asked only of a live loop.
+            return False
         verdict = await builds.may_hand_out(session, build, builds.now())
         if not verdict.allowed:
             if verdict.stop_reason:
