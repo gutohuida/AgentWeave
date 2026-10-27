@@ -31,8 +31,8 @@ export interface SpecEntry {
 /** Whether the delivery a change-spec document declares can actually be honoured, computed fresh
  *  on every `GET /spec` read rather than stored in the file (design D5,
  *  `a-document-says-how-it-will-be-built-and-approval-starts-it`). Present only for a change-spec
- *  document at `exploring` or `proposed`; absent for every other document, kind or phase, and
- *  absent entirely from a Hub that predates this change (the `:8000` skew). */
+ *  document at `exploring` or `approved` (where Build reads it); absent for every other document,
+ *  kind or phase, and absent entirely from a Hub that predates this change (the `:8000` skew). */
 export interface SpecDeliveryStatus {
   state: 'ok' | 'stale' | 'none' | 'absent'
   agent?: string
@@ -93,13 +93,15 @@ export interface ApprovalDependencyProblem {
   reason: string
 }
 
-/** What approval did about the document's delivery (design D6/D7). `state` is `not_applicable`
- *  for a document that is not a change-spec (only a change declares a delivery), `none` when the
- *  document declared no flow, `not_created` when a flow was declared but could not be made,
- *  `existing` when an unarchived flow already declared the document, and `created` for a new one.
- *  `messages` carries the Hub's own sentences, in the order it returns them. */
+/** What a build did about the document's delivery (design D6/D7; Build since
+ *  `exploring-ends-at-an-approved-plan`). `state` is `not_applicable` for a document that is not a
+ *  change-spec (only a change declares a delivery), `none` when the document declared no flow,
+ *  `not_created` when a flow was declared but could not be made, `existing` when an unarchived flow
+ *  already declared the document, `created` for a new one, and `already_built` when Approve and
+ *  build built nothing because intake recorded the work as built. `messages` carries the Hub's own
+ *  sentences, in the order it returns them. */
 export interface ApprovalFlowOutcome {
-  state: 'created' | 'existing' | 'not_created' | 'none' | 'not_applicable'
+  state: 'created' | 'existing' | 'not_created' | 'none' | 'not_applicable' | 'already_built'
   job_id?: string
   name?: string
   agent?: string
@@ -121,8 +123,38 @@ export interface SpecApprovalOutcome {
   closed_linking_retired?: ApprovalClosedLinkingRetired[]
   no_longer_declared?: ApprovalUndeclaredTask[]
   dependencies_not_honoured: ApprovalDependencyProblem[]
+  /** Only on a report written before approval stopped starting the flow: Build reports it now. */
+  flow?: ApprovalFlowOutcome
+  delivery_agent?: string | null
+  /** Intake recorded the work as already built (`already-built-at-intake`): close its tasks as
+   *  built at these commits instead of building them. */
+  already_built?: SpecAlreadyBuiltOffer
+}
+
+export interface SpecAlreadyBuiltOffer {
+  commits: string[]
+  route: string
+  message: string
+}
+
+/** What the newest Build (or Approve and build) did (`build-is-separate`). */
+export interface SpecBuildOutcome {
   flow: ApprovalFlowOutcome
   delivery_agent?: string | null
+  reviewer?: string | null
+}
+
+/** The build the document recommends, with a reason per choice (`recommend-a-build`): what Build
+ *  and Approve and build open with. Absent on a document that declares no delivery. */
+export interface SpecRecommendedBuild {
+  mode: 'flow' | 'none'
+  agent: string | null
+  reviewer: string | null
+  tester: string | false | null
+  cron: string
+  stop_when_queue_empties: boolean
+  stop_at: string | null
+  reasons: Partial<Record<'mode' | 'agent' | 'reviewer' | 'tester' | 'stop' | 'cron', string>>
 }
 
 /** The roadmap slice a change document specifies (`a-spec-is-written-one-slice-at-a-time`, D7).
@@ -278,6 +310,11 @@ export interface SpecDocument {
   delivery_status?: SpecDeliveryStatus
   fold_state?: SpecFoldState
   approval_outcome?: SpecApprovalOutcome
+  build_outcome?: SpecBuildOutcome
+  recommended_build?: SpecRecommendedBuild
+  /** The version of the content this read shows. An approval names it, and is refused when the
+   *  document changed since (`approve-what-was-seen`). */
+  content_version?: string
   roadmap_slice?: SpecRoadmapSlice
   /** Set only on a retired (archived) capability: why, and the capability that absorbed it (F536). */
   retired?: SpecRetirement
@@ -690,7 +727,7 @@ export interface SpecDocumentRecord {
   kind: string
   /** The authority on where the document stands. The `aw-spec-status` metadata
    *  inside the file is a copy for whoever reads it, never the source. */
-  phase: 'exploring' | 'proposed' | 'approved' | 'archived' | 'current'
+  phase: 'exploring' | 'approved' | 'archived' | 'current'
   /** What happens to work that ignores this document. **Not phase.** Phase asks whether the
    *  operator agreed to it; rigor asks what the system does about work that does not satisfy it.
    *  A `gate` document can still be exploring, and an approved one can still be a sketch. */
@@ -717,7 +754,7 @@ export interface SpecDocumentRecord {
 
 export type SpecSize = 'fix' | 'small' | 'large'
 
-/** One reason a document cannot be proposed yet, and where to look. */
+/** One reason a document cannot be approved yet, and where to look. */
 export interface SpecBlockingFinding {
   code: string
   where: string
@@ -751,7 +788,7 @@ function useSpecMutation<TArgs, TResult>(
 }
 
 /** Start an exploration. The document exists from this moment, which is what
- *  gives "propose" and "approve" something to refer to.
+ *  gives "check" and "approve" something to refer to.
  *
  *  `path` is optional and normally omitted: the Hub mints a placeholder, because
  *  a document is created before anyone knows what it is about and a path derived
@@ -817,19 +854,87 @@ export function useSaveProjectJourney() {
   })
 }
 
-export function useProposeSpecDocument() {
-  return useSpecMutation<
-    { path: string },
-    SpecDocumentRecord & {
-      blocking: SpecBlockingFinding[]
-      /** Gaps proposal let through; approval will list them again. Absent from an older Hub. */
-      warnings?: SpecBlockingFinding[]
-    }
-  >((projectId, { path }) =>
-    postJson(
-      `/api/v1/projects/${projectId}/project/documents/propose?path=${encodeURIComponent(path)}`,
-    ),
-  )
+/** Check a document's readiness and move nothing (`check-never-moves`): the blocking findings and
+ *  warnings the agent's own save returns, so the agent keeps writing while the operator looks. */
+export function useCheckSpecDocument() {
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ path }: { path: string }) =>
+      postJson<
+        SpecDocumentRecord & {
+          blocking: SpecBlockingFinding[]
+          warnings: SpecBlockingFinding[]
+          ready: boolean
+          content_version: string
+        }
+      >(`/api/v1/projects/${projectId}/project/documents/check?path=${encodeURIComponent(path)}`),
+  })
+}
+
+/** What a build route answers: the document, and what the build did. */
+export type SpecBuildResult = SpecDocumentRecord & { build_outcome: SpecBuildOutcome }
+
+/** Build an approved document as its recommended build says (`build-is-separate`), at any time
+ *  after approval. `delivery_agent` replaces a flow delivery's agent for this build (`''`: no flow). */
+export function useBuildSpecDocument() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ path, delivery_agent }: { path: string; delivery_agent?: string }) =>
+      postJson<SpecBuildResult>(
+        `/api/v1/projects/${projectId}/project/documents/build?path=${encodeURIComponent(path)}`,
+        delivery_agent !== undefined ? { delivery_agent } : {},
+      ),
+    onSuccess: () => invalidateAfterPhase(queryClient, projectId),
+  })
+}
+
+/** Approve and build in one action (`approve-and-build`), refused exactly as approving alone is. */
+export function useApproveAndBuildSpecDocument() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({
+      path,
+      content_version,
+      delivery_agent,
+      draft_next_slice,
+      approve_anyway,
+    }: {
+      path: string
+      content_version: string
+      delivery_agent?: string
+      draft_next_slice?: boolean
+      approve_anyway?: boolean
+    }) =>
+      postJson<
+        SpecDocumentRecord & {
+          approval_outcome?: SpecApprovalOutcome
+          build_outcome: SpecBuildOutcome
+          next_slice?: SpecNextSliceOutcome
+          approval_notes?: SpecBlockingFinding[]
+        }
+      >(
+        `/api/v1/projects/${projectId}/project/documents/approve-and-build?path=${encodeURIComponent(path)}`,
+        {
+          reason: '',
+          content_version,
+          ...(delivery_agent !== undefined ? { delivery_agent } : {}),
+          ...(draft_next_slice !== undefined ? { draft_next_slice } : {}),
+          ...(approve_anyway ? { approve_anyway } : {}),
+        },
+      ),
+    onSuccess: () => invalidateAfterPhase(queryClient, projectId),
+  })
+}
+
+/** A phase move or a build may create tasks and a flow, so the loops and jobs keys are refreshed
+ *  with the documents — or the header would keep offering Build beside the flow just made. */
+function invalidateAfterPhase(queryClient: ReturnType<typeof useQueryClient>, projectId: string | null) {
+  queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
+  queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
+  queryClient.invalidateQueries({ queryKey: ['project', projectId, 'loops'] })
+  queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] })
 }
 
 /** Approving, or reopening. There is no agent-facing equivalent of this call. */
@@ -1058,11 +1163,9 @@ export function useSpecRequirement(identifier: string, path: string) {
   })
 }
 
-/** Approving (or reopening). Approving a change-spec document with a flow delivery may create the
- *  flow (design D6, `a-document-says-how-it-will-be-built-and-approval-starts-it`), so this
- *  invalidates the loops and jobs keys on success too — not just `useSpecMutation`'s
- *  `specDocuments`/`specs` — or the phase bar would keep offering "Start a flow…" beside the flow
- *  approval just made. */
+/** Approving, reopening or archiving. Approval lays the tasks out and starts nothing
+ *  (`approval-is-a-plan`); it names the `content_version` the operator loaded and is refused when
+ *  the document changed since (`approve-what-was-seen`). */
 export function useSetSpecPhase() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()
@@ -1071,7 +1174,7 @@ export function useSetSpecPhase() {
       path,
       to,
       reason,
-      delivery_agent,
+      content_version,
       draft_next_slice,
       no_capability_change,
       absorbed_by,
@@ -1089,11 +1192,8 @@ export function useSetSpecPhase() {
       /** Sent only for a document whose `GET /spec` named a `roadmap_slice`: a Hub that returns
        *  that field also accepts this one, and no other Hub is ever sent it (it would 422). */
       draft_next_slice?: boolean
-      /** Sent only when the operator chose one from the stale-delivery strip (design D5b): an
-       *  agent name, or `''` for "No flow". Omitted otherwise — a bundle with no `delivery_status`
-       *  (the strip never appears without it) must never send this to a Hub that predates it,
-       *  which would 422 an unknown field. */
-      delivery_agent?: string
+      /** With `to: 'approved'` only: the version of the document read the operator approved. */
+      content_version?: string
       /** Approve over the gaps a refused approval listed (409 `approval_warnings`). Sent only on
        *  that resend: a Hub that answers `approval_warnings` is the one that accepts it. */
       approve_anyway?: boolean
@@ -1109,19 +1209,14 @@ export function useSetSpecPhase() {
         `/api/v1/projects/${projectId}/project/documents/phase?path=${encodeURIComponent(path)}&to=${encodeURIComponent(to)}`,
         {
           reason: reason ?? '',
-          ...(delivery_agent !== undefined ? { delivery_agent } : {}),
+          ...(content_version !== undefined ? { content_version } : {}),
           ...(draft_next_slice !== undefined ? { draft_next_slice } : {}),
           ...(no_capability_change ? { no_capability_change } : {}),
           ...(absorbed_by ? { absorbed_by } : {}),
           ...(approve_anyway ? { approve_anyway } : {}),
         },
       ),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'loops'] })
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] })
-    },
+    onSuccess: () => invalidateAfterPhase(queryClient, projectId),
   })
 }
 

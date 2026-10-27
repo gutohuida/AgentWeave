@@ -15,6 +15,8 @@ from hub.db.models import Agent, Run, SpecDocument, Task, TaskDependency, TaskDe
 from hub.spec_lifecycle import Actor
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 
@@ -81,14 +83,17 @@ async def approve(app, auth_headers, *, path):
         f"{BASE}/documents/close-exploration", params={"path": path}, headers=auth_headers
     )
     assert closed.status_code in (200, 409), closed.text
-    for phase in ("proposed", "approved"):
-        moved = await app.post(
-            f"{BASE}/documents/phase",
-            params={"path": path, "to": phase},
-            json={"reason": "looks right", "approve_anyway": phase == "approved"},
-            headers=auth_headers,
-        )
-        assert moved.status_code == 200, moved.text
+    moved = await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": path, "to": "approved"},
+        json={
+            "content_version": await content_version(app, auth_headers, path),
+            "reason": "looks right",
+            "approve_anyway": True,
+        },
+        headers=auth_headers,
+    )
+    assert moved.status_code == 200, moved.text
     return moved
 
 
@@ -291,8 +296,8 @@ async def test_an_import_resolves_to_the_existing_task_without_creating_one(
 async def test_an_unresolvable_import_is_preserved_and_reported_not_raised(
     app, auth_headers, author
 ):
-    """The race D7 names: an import checked at `propose()` time can go stale by `approve()` time
-    if the referenced document is reopened in between. `materialise()` must not raise — the
+    """The race D7 names: an import that resolved when the document was written can go stale by
+    `approve()` time if the referenced document is reopened in between. `materialise()` must not raise — the
     approval stands, and the dangling reference is recorded rather than silently dropped."""
     await make_document(
         app,
@@ -319,20 +324,18 @@ async def test_an_unresolvable_import_is_preserved_and_reported_not_raised(
     ]
     await make_document(app, auth_headers, author, path=PATH_IMPORT_USER, tasks=declared)
 
-    # Reach `proposed` while the import still resolves...
+    # Checked while the import still resolves...
     closed = await app.post(
         f"{BASE}/documents/close-exploration",
         params={"path": PATH_IMPORT_USER},
         headers=auth_headers,
     )
     assert closed.status_code in (200, 409), closed.text
-    proposed = await app.post(
-        f"{BASE}/documents/phase",
-        params={"path": PATH_IMPORT_USER, "to": "proposed"},
-        json={"reason": "looks right"},
-        headers=auth_headers,
+    checked = await app.post(
+        f"{BASE}/documents/check", params={"path": PATH_IMPORT_USER}, headers=auth_headers
     )
-    assert proposed.status_code == 200, proposed.text
+    assert checked.status_code == 200, checked.text
+    assert checked.json()["blocking"] == [], checked.text
 
     # ...then the source document is reopened, invalidating the import before approval.
     await reopen(app, auth_headers, path=PATH_IMPORT_SOURCE)
@@ -340,7 +343,11 @@ async def test_an_unresolvable_import_is_preserved_and_reported_not_raised(
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH_IMPORT_USER, "to": "approved"},
-        json={"reason": "looks right", "approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH_IMPORT_USER),
+            "reason": "looks right",
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
     assert approved.status_code == 200, approved.text
@@ -370,7 +377,7 @@ async def test_materialise_never_raises_for_a_malformed_import(app, auth_headers
                 path="spec/changes/dep-malformed/spec.json",
                 title="Malformed",
                 kind="change-spec",
-                phase="proposed",
+                phase="exploring",
             )
         )
         await session.flush()

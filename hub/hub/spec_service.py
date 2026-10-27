@@ -158,7 +158,7 @@ async def save_document(
     (`a-finished-change-is-folded-into-its-capability`); every other kind is unaffected.
 
     Incompleteness is reported, not refused: a document under discussion is
-    incomplete by definition, and it is the transition to `proposed` that cares.
+    incomplete by definition, and it is approval that cares.
     What *is* refused is a submission against an approved document — silently
     rewriting what an operator approved would make the approval meaningless.
 
@@ -1625,7 +1625,6 @@ async def roadmap_states(
 #: How far a slice's change document has come; where several name one slice, the furthest wins.
 _SLICE_PHASE_RANK = {
     spec_lifecycle.EXPLORING: 1,
-    spec_lifecycle.PROPOSED: 2,
     spec_lifecycle.APPROVED: 3,
     spec_lifecycle.ARCHIVED: 4,
 }
@@ -1800,7 +1799,7 @@ NOTE_CODES = frozenset({"roadmap_slice_unclaimed"})
 
 @dataclass(frozen=True)
 class PhaseFindings:
-    """What a move to proposed or approved finds: refusals, which nothing passes, gaps, which the
+    """What an approval finds: refusals, which nothing passes, gaps, which the
     operator may approve over (approve-lists-what-is-missing-and-can-approve-anyway, FR-2/3), and
     notes, which gate nothing (`NOTE_CODES`)."""
 
@@ -1843,11 +1842,10 @@ async def _completeness(
     )
     findings += await _unclaimed_slices(session, workspace, document.project_id, payload)
     if to_phase == spec_lifecycle.APPROVED:
-        # A document whose import source was reopened after it was proposed is approved anyway and
-        # the reference recorded as `document_not_approved` (task-dependencies, settled).
-        # A document proposed before this change (or one whose delivery answer is incomplete) is
-        # approved anyway: an absent or incomplete delivery just means no flow is created, and the
-        # approval report says so (D4) — it is not a reason to refuse approval.
+        # A document whose import source is not approved is approved anyway and the reference
+        # recorded as `document_not_approved` (task-dependencies, settled). A document whose
+        # delivery answer is absent or incomplete is approved anyway: it just means Build creates
+        # no flow, and the build report says so (D4) — it is not a reason to refuse approval.
         excluded_at_approval = {
             "import_not_approved",
             "delivery_unanswered",
@@ -1875,8 +1873,8 @@ def _steps_skipped(
     last = ahead[-1]
     # The full route (F730): without `/api/v1/projects/{id}` it named nothing callable.
     routes = f"POST /api/v1/projects/{document.project_id}/project/documents"
-    # Only an exploring document's step moves, and approval meets this on a proposed one (F752),
-    # where the journey call alone answers 409 `no_journey`.
+    # Only an exploring document's step moves (F752); on any other the journey call alone answers
+    # 409 `no_journey`.
     back = (
         ""
         if document.phase == spec_lifecycle.EXPLORING
@@ -1951,7 +1949,7 @@ async def phase_findings(
     The gaps add what only proposal and approval report: `spec_completeness.approval_gaps` and
     `steps_skipped`. A payload that is missing or invalid raises `SaveRefusedError`, a refusal.
     """
-    if to_phase not in (spec_lifecycle.PROPOSED, spec_lifecycle.APPROVED):
+    if to_phase != spec_lifecycle.APPROVED:
         return PhaseFindings([], [])
     payload, findings = await _completeness(session, workspace, document, to_phase)
     findings = [
@@ -1972,36 +1970,30 @@ async def phase_findings(
     )
 
 
-async def propose(
+async def check(
     session: AsyncSession,
     workspace: ProjectWorkspace,
     document: SpecDocument,
-    *,
-    actor: spec_lifecycle.Actor,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Move a document to `proposed`: `(blocking, warnings)`.
+    """The document's readiness, `(blocking, warnings)`, exactly as the agent's last save of the
+    stored payload reported it, and nothing moved (`exploring-ends-at-an-approved-plan`, FR-1).
 
-    `blocking` is the refusals, and the document stays put when there are any. `warnings` are the
-    gaps, which proposal passes and the operator sees again at approval.
-
-    The checks run inside `transition()` against the payload the document actually carries, so
-    this is the same answer whoever asks. A document whose file no longer parses cannot be
-    proposed at all — there is nothing to check.
+    Read-only: no phase, file, digest or event is written, so the operator can check at any time
+    while an agent keeps saving. It is the save's own report (`_completeness_report`) over the
+    payload on disk, so the two cannot disagree. A document whose file carries no payload, or one
+    that no longer validates, raises `SaveRefusedError`: there is nothing to check.
     """
-    try:
-        event = await spec_lifecycle.transition(
-            session,
-            document,
-            to_phase=spec_lifecycle.PROPOSED,
-            actor=actor,
-            workspace=workspace,
+    stored = spec_documents.read_payload(workspace, document.path)
+    if stored is None:
+        raise SaveRefusedError(
+            "this document carries no payload to check; it has not been written by the Hub",
+            code="no_payload",
         )
-    except spec_lifecycle.PhaseError as exc:
-        if exc.code == "document_incomplete":
-            return exc.blocking, exc.warnings
-        raise
-    await rerender_phase(session, workspace, document)
-    return [], list(event.detail.get("warnings") or [])
+    try:
+        payload = validate_payload(stored)
+    except PayloadError as exc:
+        raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
+    return await _completeness_report(session, workspace, document, payload)
 
 
 async def rerender_phase(

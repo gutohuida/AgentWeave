@@ -11,6 +11,7 @@ from sqlalchemy import select
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument, SpecDocumentEvent
 
+from ._spec_versions import content_version
 from .test_project_spec_steps import THREAT, _steps, _write
 from .test_spec_documents_api import (  # noqa: F401  (run_headers is a fixture)
     BASE,
@@ -37,11 +38,13 @@ def _checked(**overrides):
     return _document(acceptance_criteria=[criterion], **overrides)
 
 
-async def _propose(app, auth_headers):
-    return await app.post(f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers)
+async def _check(app, auth_headers):
+    return await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
 
 
 async def _phase(app, auth_headers, to, **body):
+    if to == "approved":
+        body.setdefault("content_version", await content_version(app, auth_headers, PATH))
     return await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": to},
@@ -71,32 +74,32 @@ async def _listed(app, auth_headers):
     return next(d for d in response.json()["documents"] if d["path"] == PATH)
 
 
-async def _proposed_with_a_gap(app, auth_headers, run_headers):  # noqa: F811
-    """A proposed document whose criterion has no check, so approval has one gap to list."""
+async def _written_with_a_gap(app, auth_headers, run_headers):  # noqa: F811
+    """A document whose criterion has no check, so approval has one gap to list. Returns what the
+    agent's save answered."""
     await _create(app, auth_headers)
-    await _submit(app, run_headers, _document())
-    await _place(step="delivery", size="large")
-    proposed = await _propose(app, auth_headers)
-    assert proposed.json()["proposed"] is True, proposed.text
-    return proposed.json()
+    saved = await _submit(app, run_headers, _document())
+    assert saved.status_code == 200, saved.text
+    await _place(step="build", size="large")
+    return saved.json()
 
 
-# propose-lists
+# check-lists (Check replaced propose: `exploring-ends-at-an-approved-plan`)
 @pytest.mark.asyncio
-async def test_propose_passes_a_gap_and_lists_it_under_warnings(
+async def test_check_lists_what_the_save_listed_and_moves_nothing(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
 ):
-    body = await _proposed_with_a_gap(app, auth_headers, run_headers)
+    saved = await _written_with_a_gap(app, auth_headers, run_headers)
 
-    assert body["phase"] == "proposed"
-    assert body["blocking"] == []
-    assert [w["code"] for w in body["warnings"]] == ["criterion_without_check"]
+    body = (await _check(app, auth_headers)).json()
+
+    assert body["blocking"] == saved["blocking"] == []
+    assert body["warnings"] == saved["warnings"]
+    assert body["phase"] == "exploring"
 
 
 @pytest.mark.asyncio
-async def test_propose_still_holds_a_refusal_and_lists_the_gaps_beside_it(
-    app, auth_headers, run_headers, tmp_path  # noqa: F811
-):
+async def test_check_still_lists_a_refusal(app, auth_headers, run_headers, tmp_path):  # noqa: F811
     await _create(app, auth_headers)
     cycle = [
         {"key": "a", "description": "a", "requirements": ["alpha"], "depends_on": ["b"]},
@@ -104,19 +107,18 @@ async def test_propose_still_holds_a_refusal_and_lists_the_gaps_beside_it(
     ]
     await _submit(app, run_headers, _document(tasks=cycle))
 
-    body = (await _propose(app, auth_headers)).json()
+    body = (await _check(app, auth_headers)).json()
 
-    assert body["proposed"] is False and body["phase"] == "exploring"
+    assert body["ready"] is False and body["phase"] == "exploring"
     assert "dependency_cycle" in {b["code"] for b in body["blocking"]}
-    assert "criterion_without_check" in {w["code"] for w in body["warnings"]}
 
 
 # clean-and-reopen, anyway-400, refusal-holds
 @pytest.mark.asyncio
-async def test_approve_lists_the_gaps_and_stays_proposed_until_approve_anyway(
+async def test_approve_lists_the_gaps_and_stays_exploring_until_approve_anyway(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
 ):
-    await _proposed_with_a_gap(app, auth_headers, run_headers)
+    await _written_with_a_gap(app, auth_headers, run_headers)
 
     refused = await _phase(app, auth_headers, "approved")
 
@@ -125,7 +127,7 @@ async def test_approve_lists_the_gaps_and_stays_proposed_until_approve_anyway(
     assert detail["code"] == "approval_warnings"
     assert [w["code"] for w in detail["warnings"]] == ["criterion_without_check"]
     assert "blocking" not in detail
-    assert await _phase_of() == "proposed"
+    assert await _phase_of() == "exploring"
     assert await _approval_events() == []
 
     approved = await _phase(app, auth_headers, "approved", approve_anyway=True)
@@ -149,26 +151,26 @@ async def test_approve_anyway_sent_as_a_query_parameter_is_refused_not_ignored(
 ):
     """F580: `approve_anyway` is a body field; as a query parameter FastAPI dropped it and the
     caller got the same 409 back, with a message that never said where the field goes."""
-    await _proposed_with_a_gap(app, auth_headers, run_headers)
+    await _written_with_a_gap(app, auth_headers, run_headers)
 
     misplaced = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved", "approve_anyway": "true"},
-        json={"reason": ""},
+        json={"reason": "", "content_version": await content_version(app, auth_headers, PATH)},
         headers=auth_headers,
     )
 
     assert misplaced.status_code == 400, misplaced.text
     assert "approve_anyway" in misplaced.json()["detail"]
     assert "body" in misplaced.json()["detail"]
-    assert await _phase_of() == "proposed"
+    assert await _phase_of() == "exploring"
 
 
 @pytest.mark.asyncio
 async def test_the_approval_warnings_message_says_where_approve_anyway_goes(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
 ):
-    await _proposed_with_a_gap(app, auth_headers, run_headers)
+    await _written_with_a_gap(app, auth_headers, run_headers)
 
     refused = await _phase(app, auth_headers, "approved")
 
@@ -182,8 +184,8 @@ async def test_a_clean_approval_records_that_it_overrode_nothing_and_a_reopen_fo
 ):
     await _create(app, auth_headers)
     await _submit(app, run_headers, _checked())
-    await _place(step="delivery", size="large")
-    assert (await _propose(app, auth_headers)).json()["warnings"] == []
+    await _place(step="build", size="large")
+    assert (await _check(app, auth_headers)).json()["warnings"] == []
 
     approved = await _phase(app, auth_headers, "approved")
 
@@ -202,8 +204,7 @@ async def test_approve_anyway_with_no_gap_still_records_an_empty_list(
 ):
     await _create(app, auth_headers)
     await _submit(app, run_headers, _checked())
-    await _place(step="delivery", size="large")
-    await _propose(app, auth_headers)
+    await _place(step="build", size="large")
 
     approved = await _phase(app, auth_headers, "approved", approve_anyway=True)
 
@@ -212,24 +213,24 @@ async def test_approve_anyway_with_no_gap_still_records_an_empty_list(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("to", ["proposed", "exploring", "archived"])
+@pytest.mark.parametrize("to", ["exploring", "archived"])
 async def test_approve_anyway_on_any_other_move_is_a_400_before_anything_moves(
     app, auth_headers, run_headers, to, tmp_path  # noqa: F811
 ):
-    await _proposed_with_a_gap(app, auth_headers, run_headers)
+    await _written_with_a_gap(app, auth_headers, run_headers)
 
     response = await _phase(app, auth_headers, to, approve_anyway=True)
 
     assert response.status_code == 400, response.text
     assert "approve_anyway" in response.text
-    assert await _phase_of() == "proposed"
+    assert await _phase_of() == "exploring"
 
 
 @pytest.mark.asyncio
 async def test_a_refusal_holds_against_approve_anyway(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
 ):
-    await _proposed_with_a_gap(app, auth_headers, run_headers)
+    await _written_with_a_gap(app, auth_headers, run_headers)
     cycle = [
         {"key": "a", "description": "a", "requirements": ["alpha"], "depends_on": ["b"]},
         {"key": "b", "description": "b", "requirements": ["alpha"], "depends_on": ["a"]},
@@ -242,7 +243,7 @@ async def test_a_refusal_holds_against_approve_anyway(
     detail = response.json()["detail"]
     assert detail["code"] == "document_incomplete"
     assert "dependency_cycle" in {b["code"] for b in detail["blocking"]}
-    assert await _phase_of() == "proposed"
+    assert await _phase_of() == "exploring"
     assert await _approval_events() == []
 
 
@@ -254,7 +255,6 @@ async def test_skipped_journey_steps_are_listed_at_approval(
     _write(tmp_path, _steps(THREAT))
     await _submit(app, run_headers, _checked())
     await _place(step="requirements", size="large")
-    await _propose(app, auth_headers)
 
     refused = await _phase(app, auth_headers, "approved")
 
@@ -289,18 +289,18 @@ async def test_the_operators_write_answers_the_same_file_warning(
 
 
 @pytest.mark.asyncio
-async def test_propose_and_approve_name_same_file_tasks_with_no_order(
+async def test_check_and_approve_name_same_file_tasks_with_no_order(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
 ):
-    """F694: the warning lived only in the save result, so the operator who proposes and approves
+    """F694: the warning lived only in the save result, so the operator who checks and approves
     never saw it, and the two tasks ran in parallel and collided."""
     await _create(app, auth_headers)
     await _submit(app, run_headers, _checked(tasks=_SAME_FILE_TASKS))
-    await _place(step="delivery", size="large")
+    await _place(step="build", size="large")
 
-    proposed = (await _propose(app, auth_headers)).json()
-    assert proposed["proposed"] is True, proposed
-    assert "unordered_file_overlap" in {w["code"] for w in proposed["warnings"]}
+    checked = (await _check(app, auth_headers)).json()
+    assert checked["phase"] == "exploring", checked
+    assert "unordered_file_overlap" in {w["code"] for w in checked["warnings"]}
 
     refused = await _phase(app, auth_headers, "approved")
     assert refused.status_code == 409, refused.text

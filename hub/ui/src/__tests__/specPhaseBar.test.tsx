@@ -27,8 +27,11 @@ async function chooseRigorOption(rigor: string) {
  * module's exports real, so a rename elsewhere fails loudly here.
  */
 const setJourney = vi.fn()
-const propose = vi.fn()
+const check = vi.fn()
 const setPhase = vi.fn()
+const reloadSpec = vi.fn()
+/** The document read the page shows: `content_version` is what an approval names. */
+let specDoc: unknown = { path: 'spec/changes/demo/spec.json', content: '', content_version: 'v1' }
 const setRigor = vi.fn()
 let documents: unknown[] = []
 /** `GET /documents/{path}/rigor-history` answers **oldest first** (`spec_rigor.history_for` orders
@@ -43,7 +46,8 @@ vi.mock('@/api/spec', async (importOriginal) => {
     ...actual,
     useSpecDocuments: () => ({ data: { documents } }),
     useSetSpecJourney: () => ({ mutate: setJourney, isPending: false }),
-    useProposeSpecDocument: () => ({ mutateAsync: propose, isPending: false }),
+    useSpec: () => ({ data: specDoc, isError: false, refetch: reloadSpec }),
+    useCheckSpecDocument: () => ({ mutateAsync: check, isPending: false }),
     useSetSpecPhase: () => ({ mutate: setPhase, isPending: false }),
     useSetSpecRigor: () => ({ mutateAsync: setRigor, isPending: false }),
     useSpecRigorHistory: () =>
@@ -83,15 +87,16 @@ beforeEach(() => {
   rigorEvents = []
   rigorHistoryError = null
   documents = [doc()]
-  propose.mockResolvedValue({ ...doc(), blocking: [] })
+  specDoc = { path: 'spec/changes/demo/spec.json', content: '', content_version: 'v1' }
+  check.mockResolvedValue({ ...doc(), blocking: [], warnings: [], ready: true, content_version: 'v1' })
 })
 
 describe('SpecPhaseBar', () => {
   it('shows the phase the Hub reports, not one read from the document', () => {
-    documents = [doc({ phase: 'proposed' })]
+    documents = [doc({ phase: 'approved' })]
     renderBar()
-    expect(screen.getByTestId('spec-phase')).toHaveAttribute('data-phase', 'proposed')
-    expect(screen.getByTestId('spec-phase')).toHaveTextContent(/^proposed$/i)
+    expect(screen.getByTestId('spec-phase')).toHaveAttribute('data-phase', 'approved')
+    expect(screen.getByTestId('spec-phase')).toHaveTextContent(/^approved$/i)
   })
 
   it('renders nothing for a path the Hub does not track', () => {
@@ -100,14 +105,25 @@ describe('SpecPhaseBar', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('offers proposing while exploring, with no Exploration is complete control (FR-11)', () => {
+  it('offers Check, Approve and Approve and build while exploring, and no Propose', () => {
     renderBar()
-    expect(screen.getByText('Propose')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Check' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve and build…' })).toBeInTheDocument()
+    expect(screen.queryByText('Propose')).not.toBeInTheDocument()
     expect(screen.queryByText('Exploration is complete')).not.toBeInTheDocument()
   })
 
+  it('checks without moving anything: the phase route is never called', async () => {
+    renderBar()
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }))
+    expect(check).toHaveBeenCalledWith({ path: 'spec/changes/demo/spec.json' })
+    expect(setPhase).not.toHaveBeenCalled()
+    expect(await screen.findByTestId('spec-check-clean')).toHaveTextContent('nothing blocks approval')
+  })
+
   describe('the journey (step-journey FR-10)', () => {
-    const SMALL = ['intake', 'requirements-and-acceptance', 'tasks', 'delivery']
+    const SMALL = ['intake', 'requirements-and-acceptance', 'tasks', 'build']
     const exploring = () =>
       doc({ step: 'requirements-and-acceptance', size: 'small', journey: SMALL })
 
@@ -158,8 +174,8 @@ describe('SpecPhaseBar', () => {
       )
     })
 
-    it('is absent once the document is proposed, and on a roadmap', () => {
-      documents = [doc({ phase: 'proposed', step: 'delivery', size: 'small', journey: SMALL })]
+    it('is absent once the document is approved, and on a roadmap', () => {
+      documents = [doc({ phase: 'approved', step: 'build', size: 'small', journey: SMALL })]
       const { unmount } = renderBar()
       expect(screen.queryByTestId('spec-journey')).not.toBeInTheDocument()
       unmount()
@@ -171,8 +187,10 @@ describe('SpecPhaseBar', () => {
 
   it('lists every blocking finding rather than the first', async () => {
     documents = [doc({ explore_closed: true })]
-    propose.mockResolvedValue({
+    check.mockResolvedValue({
       ...doc(),
+      warnings: [],
+      ready: false,
       blocking: [
         { code: 'non_goals_empty', where: 'scope.non_goals', message: 'state what is out of scope' },
         {
@@ -184,7 +202,7 @@ describe('SpecPhaseBar', () => {
     })
     renderBar()
 
-    await userEvent.click(screen.getByText('Propose'))
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }))
 
     await waitFor(() => {
       expect(screen.getByText(/state what is out of scope/)).toBeInTheDocument()
@@ -193,27 +211,49 @@ describe('SpecPhaseBar', () => {
     expect(screen.getByText('scope.non_goals')).toBeInTheDocument()
   })
 
-  it('offers approval only on a proposed document', () => {
-    documents = [doc({ phase: 'proposed' })]
+  it('offers approval straight from exploring', () => {
     renderBar()
-    expect(screen.getByText('Approve')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
   })
 
-  it('does not offer approval while exploring', () => {
+  it('does not offer approval once approved; it offers Build', () => {
+    documents = [doc({ phase: 'approved' })]
     renderBar()
-    expect(screen.queryByText('Approve')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Build…' })).toBeInTheDocument()
   })
 
-  it('approves through the phase route, which has no agent-facing equivalent', async () => {
-    documents = [doc({ phase: 'proposed' })]
+  it('approves through the phase route naming the version it shows', async () => {
     renderBar()
 
-    await userEvent.click(screen.getByText('Approve'))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     expect(setPhase).toHaveBeenCalledWith(
-      { path: 'spec/changes/demo/spec.json', to: 'approved' },
+      { path: 'spec/changes/demo/spec.json', to: 'approved', content_version: 'v1' },
       expect.anything(),
     )
+  })
+
+  it('says the document changed since it was loaded, and reloads it', async () => {
+    setPhase.mockImplementation((_vars: unknown, options: { onError: (e: unknown) => void }) => {
+      options.onError(
+        new ApiError(
+          409,
+          JSON.stringify({
+            detail: {
+              code: 'document_changed',
+              message: 'the document changed since it was loaded; reload it, read what changed, and approve again',
+            },
+          }),
+        ),
+      )
+    })
+    renderBar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
+
+    expect(screen.getByTestId('spec-blocking')).toHaveTextContent('changed since it was loaded')
+    expect(reloadSpec).toHaveBeenCalled()
   })
 
   // F207: approval re-runs the completeness checks and answers 409 with every finding.
@@ -234,10 +274,9 @@ describe('SpecPhaseBar', () => {
     setPhase.mockImplementation((_vars: unknown, options: { onError: (e: unknown) => void }) => {
       options.onError(refusal)
     })
-    documents = [doc({ phase: 'proposed' })]
     renderBar()
 
-    await userEvent.click(screen.getByText('Approve'))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     expect(screen.getByText('requirements[0]')).toBeInTheDocument()
     expect(screen.getByText(/'alpha' has no task/)).toBeInTheDocument()
@@ -250,10 +289,9 @@ describe('SpecPhaseBar', () => {
         new ApiError(422, JSON.stringify({ detail: { code: 'payload_invalid', message: 'the payload is broken' } })),
       )
     })
-    documents = [doc({ phase: 'proposed' })]
     renderBar()
 
-    await userEvent.click(screen.getByText('Approve'))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     expect(screen.getByText(/the payload is broken/)).toBeInTheDocument()
   })
@@ -277,9 +315,9 @@ describe('SpecPhaseBar', () => {
     expect(screen.queryByRole('menuitem', { name: /Reopen/ })).not.toBeInTheDocument()
   })
 
-  // F205: `spec_lifecycle.TRANSITIONS` has archive edges from `exploring` and `proposed` as well,
-  // added for F37's empty mistaken document, and no screen offered them.
-  it.each(['approved', 'exploring', 'proposed'])('offers archiving a %s document', async (phase) => {
+  // F205: `spec_lifecycle.TRANSITIONS` has an archive edge from `exploring` as well, added for
+  // F37's empty mistaken document, and no screen offered it.
+  it.each(['approved', 'exploring'])('offers archiving a %s document', async (phase) => {
     documents = [doc({ phase })]
     renderBar()
     await openMore()
@@ -359,7 +397,7 @@ describe('SpecPhaseBar', () => {
     expect(screen.queryByRole('menuitem', { name: /Reopen/ })).not.toBeInTheDocument()
   })
 
-  it.each(['exploring', 'proposed', 'approved', 'archived', 'current'])(
+  it.each(['exploring', 'approved', 'archived', 'current'])(
     'renders the literal phase name for %s',
     (phase) => {
       documents = [doc({ phase })]

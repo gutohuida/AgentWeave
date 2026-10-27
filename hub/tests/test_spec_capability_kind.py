@@ -15,6 +15,8 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Run
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
 CAP_PATH = "spec/capabilities/demo/spec.json"
@@ -78,10 +80,13 @@ async def test_transition_refuses_any_to_phase_for_a_capability_document(
     )
 
     for to_phase in ("exploring", "proposed", "approved", "archived", "current"):
+        body = {"reason": ""}
+        if to_phase == "approved":
+            body["content_version"] = await content_version(app, auth_headers, CAP_PATH)
         response = await app.post(
             f"{BASE}/documents/phase",
             params={"path": CAP_PATH, "to": to_phase},
-            json={"reason": ""},
+            json=body,
             headers=auth_headers,
         )
         # `current` is no transition target at all: a malformed request (422, F730), not a
@@ -90,9 +95,12 @@ async def test_transition_refuses_any_to_phase_for_a_capability_document(
         assert response.status_code == expected_status, f"to={to_phase} should be refused"
         code = response.json()["detail"]["code"]
         # `archived` is retiring it (F536), refused here only for want of a reason.
-        expected = {"current": "unknown_phase", "archived": "retire_needs_reason"}.get(
-            to_phase, "illegal_transition"
-        )
+        expected = {
+            "current": "unknown_phase",
+            "archived": "retire_needs_reason",
+            # No document enters it any more (`exploring-ends-at-an-approved-plan`).
+            "proposed": "proposed_retired",
+        }.get(to_phase, "illegal_transition")
         assert code == expected, f"to={to_phase} got {code}"
 
 

@@ -91,7 +91,8 @@ JOBS = (
         key=SPEC_VAULT_CHECK,
         title="Spec vault check",
         description=(
-            "Reads each proposed spec document's requirements against the vault's facts and "
+            "Reads a spec document's requirements against the vault's facts when the operator "
+            "checks it, and "
             "warns on the spec page of a requirement that contradicts one. Needs a runner. Off: "
             "only the facts a requirement cites are checked."
         ),

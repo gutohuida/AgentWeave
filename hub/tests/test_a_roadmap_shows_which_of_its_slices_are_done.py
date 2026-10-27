@@ -5,6 +5,8 @@ import re
 
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 ROADMAP = "spec/changes/the-roadmap/spec.json"
 FIRST = "spec/changes/the-first-slice/spec.json"
@@ -53,14 +55,17 @@ async def _write(app, auth_headers, path, title, payload, kind="change-spec"):
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": path}, headers=auth_headers
     )
-    await app.post(f"{BASE}/documents/propose", params={"path": path}, headers=auth_headers)
+    await app.post(f"{BASE}/documents/check", params={"path": path}, headers=auth_headers)
 
 
 async def _approve(app, auth_headers, path, anyway=True):
     return await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},
-        json={"approve_anyway": anyway},
+        json={
+            "content_version": await content_version(app, auth_headers, path),
+            "approve_anyway": anyway,
+        },
         headers=auth_headers,
     )
 
@@ -106,18 +111,13 @@ async def test_a_document_naming_no_slice_is_told_without_being_gated(app, auth_
     stepped = await app.post(
         f"{BASE}/documents/journey",
         params={"path": LOOSE},
-        json={"step": "delivery"},
+        json={"step": "build"},
         headers=auth_headers,
     )
     assert stepped.status_code == 200, stepped.text
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": LOOSE}, headers=auth_headers
     )
-    proposed = await app.post(
-        f"{BASE}/documents/propose", params={"path": LOOSE}, headers=auth_headers
-    )
-    assert proposed.status_code == 200, proposed.text
-    assert "roadmap_slice_unclaimed" in proposed.text, proposed.text
 
     approved = await _approve(app, auth_headers, LOOSE, anyway=False)
 

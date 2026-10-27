@@ -97,7 +97,7 @@ async def request_next_slice(
     roadmap_row = await spec_lifecycle.get_document(session, project_id, roadmap_path)
     # Carried on the request, so the transition that fires it reads no file. The roadmap is
     # approved now; if it is reopened and changed before the slice is built, the turn still tells
-    # the agent to read it, and the new slice's link is checked again when it is proposed.
+    # the agent to read it, and the new slice's link is checked again when it is approved.
     detail = {
         "roadmap": roadmap_path,
         "roadmap_title": roadmap_row.title if roadmap_row is not None else roadmap_path,

@@ -22,6 +22,8 @@ from hub.db.models import Run
 from hub.spec_manifest import load_manifest
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
 
@@ -571,13 +573,15 @@ class TestReindexCorpusRerender:
         await app.post(
             f"{BASE}/documents/close-exploration", params={"path": child_path}, headers=auth_headers
         )
-        await app.post(
-            f"{BASE}/documents/propose", params={"path": child_path}, headers=auth_headers
-        )
+        await app.post(f"{BASE}/documents/check", params={"path": child_path}, headers=auth_headers)
         approved = await app.post(
             f"{BASE}/documents/phase",
             params={"path": child_path, "to": "approved"},
-            json={"reason": "", "approve_anyway": True},
+            json={
+                "content_version": await content_version(app, auth_headers, child_path),
+                "reason": "",
+                "approve_anyway": True,
+            },
             headers=auth_headers,
         )
         assert approved.status_code == 200, approved.text

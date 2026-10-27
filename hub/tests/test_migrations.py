@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0148"
+HEAD_REVISION = "0149"
 
 
 # ---------------------------------------------------------------------------
@@ -2202,9 +2202,17 @@ def test_migration_0074_kinds_do_not_drift_from_spec_payload(tmp_path) -> None:
         "migration 0074's _KINDS has drifted from the model's SPEC_KINDS — the database CHECK and "
         "the Python vocabulary must name the same set"
     )
-    assert set(module._PHASES) == set(
+    # 0149 retired `proposed`: its own restatement is the one the model must match now, and 0074's
+    # is the model's plus the retired phase.
+    assert set(module._PHASES) == set(SPEC_PHASES) | {"proposed"}
+    later_path = migration_path.with_name("0149_retire_the_proposed_phase.py")
+    later_spec = importlib.util.spec_from_file_location("_migration_0149", later_path)
+    assert later_spec is not None and later_spec.loader is not None
+    later = importlib.util.module_from_spec(later_spec)
+    later_spec.loader.exec_module(later)
+    assert set(later._PHASES) == set(
         SPEC_PHASES
-    ), "migration 0074's _PHASES has drifted from the model's SPEC_PHASES"
+    ), "migration 0149's _PHASES has drifted from the model's SPEC_PHASES"
     # The third restatement: the Python-layer validator that decides what a caller may submit.
     assert set(PAYLOAD_KINDS) == set(SPEC_KINDS), (
         "spec_payload.KINDS has drifted from the model's SPEC_KINDS — a kind accepted by the "

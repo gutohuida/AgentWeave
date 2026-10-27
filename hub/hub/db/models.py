@@ -2356,8 +2356,9 @@ class WorkerInvocation(Base):
 # Phase is the document's state, and it is the Hub's to change. It is stored here rather than in
 # the document because the document is a file the operator can edit, and a gate whose value lives
 # where the gated party can write it is not a gate. `aw-spec-status` in the rendered markup is a
-# copy for a human reading the file, never the authority.
-SPEC_PHASES = ("exploring", "proposed", "approved", "archived", "current")
+# copy for a human reading the file, never the authority. `proposed` was retired by migration 0149
+# (`exploring-ends-at-an-approved-plan`): approval goes straight from `exploring`.
+SPEC_PHASES = ("exploring", "approved", "archived", "current")
 
 # Restated from `spec_payload.KINDS` (this module does not import that one, the same way it does
 # not import `spec_lifecycle`'s phase constants) so the CHECK below can state the vocabulary

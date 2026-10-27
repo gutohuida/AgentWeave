@@ -125,8 +125,9 @@ async def test_the_link_is_recorded_as_the_operators(app, auth_headers, tmp_path
 
 
 async def test_a_link_to_an_unapproved_roadmap_is_refused(app, auth_headers, tmp_path):
-    """F705: backfilling a link to a proposed roadmap answered 200, and the link then refused the
-    change's own re-proposal (`roadmap_not_approved`). The backfill holds the rule propose holds."""
+    """F705: backfilling a link to an unapproved roadmap answered 200, and the link then refused
+    the change's own approval (`roadmap_not_approved`). The backfill holds the rule approval holds.
+    """
     unapproved = "spec/roadmaps/later/spec.json"
     await _write(app, auth_headers, unapproved, "Later", ROADMAP_PAYLOAD, kind="roadmap")
     await _write(app, auth_headers, LOOSE, "Loose", _change("Loose"))
@@ -137,7 +138,7 @@ async def test_a_link_to_an_unapproved_roadmap_is_refused(app, auth_headers, tmp
     assert response.status_code == 422, response.text
     detail = response.json()["detail"]
     assert detail["code"] == "roadmap_not_approved"
-    assert "is proposed" in detail["message"]
+    assert "is exploring" in detail["message"]
     assert (tmp_path / LOOSE).read_text(encoding="utf-8") == before
 
 

@@ -39,10 +39,10 @@ from .spec_payload import KINDS, PayloadError, validate_payload
 
 #: Every phase a row may hold. `current` is included and `transition()` never
 #: accepts it — a capability document reaches it through creation only, which is
-#: exactly the door adoption comes through.
+#: exactly the door adoption comes through. `proposed` is not among them (retired, migration 0149):
+#: a file still saying it is adopted at its kind's default phase and reported as unrecognised.
 PHASES = (
     spec_lifecycle.EXPLORING,
-    spec_lifecycle.PROPOSED,
     spec_lifecycle.APPROVED,
     spec_lifecycle.ARCHIVED,
     spec_lifecycle.CURRENT,

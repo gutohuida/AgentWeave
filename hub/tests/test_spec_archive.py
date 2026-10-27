@@ -16,6 +16,8 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Run, SpecDocument, Task
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
 PATH = "spec/changes/archive-demo/spec.json"
@@ -66,11 +68,15 @@ async def _approved_document(app, auth_headers, run_headers, path=PATH):
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": path}, headers=auth_headers
     )
-    await app.post(f"{BASE}/documents/propose", params={"path": path}, headers=auth_headers)
+    await app.post(f"{BASE}/documents/check", params={"path": path}, headers=auth_headers)
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},
-        json={"reason": "", "approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, path),
+            "reason": "",
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
 
@@ -165,13 +171,12 @@ async def test_archiving_does_not_touch_tasks(app, auth_headers, run_headers, tm
 
 
 @pytest.mark.asyncio
-async def test_archiving_a_proposed_document_that_produced_work_is_refused(
+async def test_archiving_an_exploring_document_that_produced_work_is_refused(
     app, auth_headers, run_headers, tmp_path
 ):
     """Still refused, by a different rule (F37).
 
-    `exploring -> archived` and `proposed -> archived` became legal so that a document created by
-    mistake can be retired — but this one carries requirements and tasks, so archiving it here
+    `exploring -> archived` became legal so that a document created by mistake can be retired — but this one carries requirements and tasks, so archiving it here
     would retire work that exists. The refusal moved from the phase map to a guard that asks what
     the document produced, which is the distinction that actually matters.
     """
@@ -182,7 +187,7 @@ async def test_archiving_a_proposed_document_that_produced_work_is_refused(
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
-    await app.post(f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers)
+    await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
 
     response = await app.post(
         f"{BASE}/documents/phase",
@@ -201,8 +206,8 @@ async def test_an_empty_exploring_document_can_be_retired(app, auth_headers, tmp
 
     Confirmed live 2026-08-25: an agent was given a conversation with a document attached, ignored
     it, created a second one, and wrote the specification there. The first was an empty orphan and
-    every exit was closed — `archived` needs `approved`, `approved` needs `proposed`, `proposed`
-    needs requirements it does not have, and `DELETE` is 405. It was not inert either: it left a
+    every exit was closed — `archived` needed `approved`, approval needs requirements it does not
+    have, and `DELETE` is 405. It was not inert either: it left a
     standing spec manifest drift warning nobody could clear.
 
     A document that has produced nothing is a mistake, not abandoned work, and retiring it is the
@@ -295,8 +300,8 @@ async def test_first_approved_at_is_set_once_and_survives_a_reopen(
     again — not on reopening, and not on a second approval."""
     operator = spec_lifecycle.Actor(kind="operator", name="operator")
     path = "spec/changes/first-approved-demo/spec.json"
-    # Created and written through the API so the file carries a complete payload: the move to
-    # `proposed` now runs the completeness checks (F207), and `create_document` alone does not.
+    # Created and written through the API so the file carries a complete payload: approval runs
+    # the completeness checks (F207), and `create_document` alone does not.
     await app.post(
         f"{BASE}/documents",
         json={"path": path, "title": "First approved demo"},
@@ -311,9 +316,6 @@ async def test_first_approved_at_is_set_once_and_survives_a_reopen(
         assert document.first_approved_at is None
 
         await spec_lifecycle.close_exploration(session, document, actor=operator)
-        await spec_lifecycle.transition(
-            session, document, to_phase=spec_lifecycle.PROPOSED, actor=operator, workspace=workspace
-        )
         await spec_lifecycle.transition(
             session,
             document,
@@ -338,9 +340,6 @@ async def test_first_approved_at_is_set_once_and_survives_a_reopen(
 
         # Approve a second time. Still the original timestamp, not a later one.
         await spec_lifecycle.close_exploration(session, document, actor=operator)
-        await spec_lifecycle.transition(
-            session, document, to_phase=spec_lifecycle.PROPOSED, actor=operator, workspace=workspace
-        )
         await spec_lifecycle.transition(
             session,
             document,

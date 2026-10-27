@@ -2,13 +2,13 @@
 
 `a-requirement-is-checked-against-what-the-vault-recorded`, the roadmap's specs-against-the-vault
 slice. Two kinds of warning, both answered by `GET /vault/warnings` and both reported as a
-`vault_warning` gap at proposal and approval -- warnings, never gates:
+`vault_warning` gap at approval -- warnings, never gates:
 
 - **Cited-fact warnings**, derived on read (D2): a requirement's `facts` list names vault facts,
   and `vault.fact_warnings` says which are disputed, superseded, reported or missing. No model,
   no storage; a contradiction recorded a moment ago shows at once.
-- **Conflicts**, judged by the manager's spec-vault-check job (D3, D4): when a document is
-  proposed, or on request, the Hub spawns its model once with every requirement and every fact,
+- **Conflicts**, judged by the manager's spec-vault-check job (D3, D4): when the operator
+  checks a document, or on request, the Hub spawns its model once with every requirement and every fact,
   and keeps the conflicts on the firing's `manager_job_fired` event. **The model names ids and the
   Hub checks them** (D5): a conflict naming a requirement key or a fact id that does not exist is
   dropped. The newest firing for a document is its current judgement, and a conflict whose
@@ -48,6 +48,8 @@ from .worker import run_worker
 logger = logging.getLogger(__name__)
 
 JOB = manager.SPEC_VAULT_CHECK
+#: The automatic trigger: the operator's Check (`POST /project/documents/check`). Named for the
+#: retired propose it replaced, and kept: it is a stored job trigger, not a word anyone reads.
 TRIGGER = "document_proposed"
 REQUESTED = "requested"
 PROMPT_VERSION = "spec-vault-check-2"
@@ -335,7 +337,7 @@ def _kept(plan: Plan, answer: CheckAnswer) -> List[Dict[str, Any]]:
 
 
 def initiator_for(trigger: str) -> str:
-    """Operator work only when the operator asked for the check; the check a proposal starts is
+    """Operator work only when the operator asked for the check; the check a Check starts is
     autonomous, and pauses on a spent budget (F240)."""
     return "operator" if trigger == REQUESTED else "autonomous"
 
